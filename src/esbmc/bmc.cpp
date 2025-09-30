@@ -1126,6 +1126,14 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       ignored += a->ignored();
     }
 
+    // Count remaining assertions after all algorithms have run
+    BigInt remaining_asserts = 0;
+    for (const auto &step : eq->SSA_steps)
+    {
+      if (step.is_assert() && !step.ignore)
+        ++remaining_asserts;
+    }
+
     if (
       options.get_bool_option("program-only") ||
       options.get_bool_option("program-too"))
@@ -1137,7 +1145,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     log_status(
       "Generated {} VCC(s), {} remaining after simplification ({} assignments)",
       solver_result.total_claims,
-      solver_result.remaining_claims,
+      remaining_asserts,
       BigInt(eq->SSA_steps.size()) - ignored);
 
     if (options.get_bool_option("document-subgoals"))
