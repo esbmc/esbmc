@@ -284,7 +284,7 @@ __ESBMC_HIDE:;
     cdst[i] = csrc[i];
     ++i;
   }
-  
+
   return dst;
 }
 
