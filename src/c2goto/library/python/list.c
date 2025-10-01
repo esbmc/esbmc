@@ -151,13 +151,8 @@ static inline bool list_insert(
 
   // Shift all elements from index onwards one position to the right
   size_t elements_to_shift = l->size - index;
-  if (elements_to_shift > 0)
-  {
-    memmove(
-      &l->items[index + 1],
-      &l->items[index],
-      elements_to_shift * sizeof(Object));
-  }
+  memmove(
+    &l->items[index + 1], &l->items[index], elements_to_shift * sizeof(Object));
 
   // Insert the new element
   l->items[index].value = copied_value;
