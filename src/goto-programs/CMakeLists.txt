@@ -30,4 +30,4 @@ target_include_directories(gotoalgorithms
 )
 target_compile_definitions(gotoprograms PUBLIC BOOST_ALL_NO_LIB)
 
-target_link_libraries(gotoprograms pointeranalysis bigint)
+target_link_libraries(gotoprograms pointeranalysis bigint langapi)

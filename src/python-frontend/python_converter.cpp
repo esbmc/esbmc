@@ -4747,7 +4747,7 @@ void python_converter::load_c_intrisics(code_blockt &block)
 
 ///  Only addresses __name__; other Python built-ins such as
 /// __file__, __doc__, __package__ are unsupported
-void python_converter::create_builtin_symbols()
+bool python_converter::create_builtin_symbols()
 {
   // Create __name__ symbol
   symbol_id name_sid(current_python_file, "", "");
@@ -4796,6 +4796,10 @@ void python_converter::create_builtin_symbols()
 
   // Set the value
   exprt name_expr = gen_zero(string_type);
+
+  if (name_expr.operands().empty())
+    return true;
+
   const typet &char_type_ref = string_type.subtype();
 
   for (size_t i = 0; i < name_value.size(); ++i)
@@ -4819,6 +4823,8 @@ void python_converter::create_builtin_symbols()
 
   // Add to symbol table
   symbol_table_.add(name_symbol);
+
+  return false;
 }
 
 void python_converter::convert()
@@ -4838,7 +4844,8 @@ void python_converter::convert()
   current_python_file = main_python_file;
 
   // Create built-in symbols for main module (__name__ = "__main__")
-  create_builtin_symbols();
+  if (create_builtin_symbols())
+    return;
 
   if (!config.options.get_bool_option("no-library"))
   {

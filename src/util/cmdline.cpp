@@ -156,6 +156,16 @@ const char *cmdlinet::getval(const char *option) const
   return value->second.front().c_str();
 }
 
+void cmdlinet::set_option(const char *option, boost::any value)
+{
+  namespace po = boost::program_options;
+  auto it = vm.find(option);
+  if (it != vm.end())
+    vm.erase(it);
+
+  vm.insert({option, po::variable_value(std::move(value), false)});
+}
+
 std::string cmdlinet::expand_user(std::string const path) const
 {
   std::string result = std::string(path);

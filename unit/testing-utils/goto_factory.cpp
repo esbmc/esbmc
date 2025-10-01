@@ -135,7 +135,7 @@ optionst goto_factory::get_default_options(cmdlinet cmd)
   return options;
 }
 
-bool goto_factory::parse(const cmdlinet &cmdline, language_uit &l)
+bool goto_factory::parse(cmdlinet &cmdline, language_uit &l)
 {
   l.context.clear();
   if (l.parse(cmdline))

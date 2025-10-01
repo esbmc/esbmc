@@ -17,9 +17,7 @@
 class unsound_loop_unroller : public goto_functions_algorithm
 {
 public:
-  unsound_loop_unroller() : goto_functions_algorithm(true)
-  {
-  }
+  unsound_loop_unroller();
 
 protected:
   bool runOnLoop(loopst &loop, goto_programt &goto_program) override;
@@ -61,10 +59,7 @@ public:
   /**
    * Note: the default value for unroll_limit is based on testing
    */
-  explicit bounded_loop_unroller(size_t unroll_limit = 1000)
-    : unsound_loop_unroller(), unroll_limit(unroll_limit)
-  {
-  }
+  explicit bounded_loop_unroller(size_t unroll_limit = 1000);
 
   /**
    * @brief Get the number of bounded loops that were detected

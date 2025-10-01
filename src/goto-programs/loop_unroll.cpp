@@ -1,5 +1,9 @@
 #include <goto-programs/loop_unroll.h>
 
+unsound_loop_unroller::unsound_loop_unroller() : goto_functions_algorithm(true)
+{
+}
+
 bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
 {
   int bound = get_loop_bounds(loop);
@@ -66,6 +70,11 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   // now insert copies before loop_exit
   goto_program.destructive_insert(loop_exit, copies);
   return true;
+}
+
+bounded_loop_unroller::bounded_loop_unroller(size_t unroll_limit)
+  : unsound_loop_unroller(), unroll_limit(unroll_limit)
+{
 }
 
 int bounded_loop_unroller::get_loop_bounds(loopst &loop)

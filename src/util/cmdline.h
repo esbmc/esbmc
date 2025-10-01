@@ -7,6 +7,7 @@
 #include <map>
 #include <optional>
 #include <boost/program_options.hpp>
+#include <boost/any.hpp>
 
 /* WORKAROUND: On *BSD macOS the include of some system headers
  * makes the definition of isset as a macro, which conflicts with
@@ -33,6 +34,7 @@ public:
   bool parse(int argc, const char **argv, const struct group_opt_templ *opts);
   const char *getval(const char *option) const;
   const std::list<std::string> &get_values(const char *option) const;
+  void set_option(const char *option, boost::any value);
   bool isset(const char *option) const;
   void clear();
   typedef std::vector<std::string> argst;

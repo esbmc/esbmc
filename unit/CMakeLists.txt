@@ -12,6 +12,7 @@ endif()
 
 if(ENABLE_PYTHON_FRONTEND)
 add_subdirectory (python-frontend)
+add_subdirectory(esbmc)
 endif()
 
 add_subdirectory(util)

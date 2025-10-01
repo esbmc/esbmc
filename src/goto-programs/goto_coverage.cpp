@@ -1,4 +1,5 @@
 #include <goto-programs/goto_coverage.h>
+#include <goto-programs/loop_unroll.h>
 
 size_t goto_coveraget::total_assert = 0;
 size_t goto_coveraget::total_assert_ins = 0;

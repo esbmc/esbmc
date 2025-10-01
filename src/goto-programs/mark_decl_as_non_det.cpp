@@ -1,5 +1,11 @@
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <util/prefix.h>
+
+mark_decl_as_non_det::mark_decl_as_non_det(contextt &context)
+  : goto_functions_algorithm(true), context(context)
+{
+}
+
 bool mark_decl_as_non_det::runOnFunction(
   std::pair<const dstring, goto_functiont> &F)
 {
