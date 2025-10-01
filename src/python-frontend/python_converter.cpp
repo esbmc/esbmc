@@ -4616,7 +4616,9 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       typet type = type_handler_.get_typet(
         element["exc"]["func"]["id"].get<std::string>());
       locationt location = get_location_from_decl(element);
-      if (raise.is_function_call() && raise.type().id() == "constructor")
+      if (
+        raise.is_function_call() &&
+        type_handler_.is_constructor_call(element["exc"]))
       {
         // This logic should be applied to all constructor calls
         // Using sideeffect will convert class(); into
