@@ -84,6 +84,7 @@ if(ENABLE_JIMPLE_FRONTEND)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
+    set(REGRESSIONS_PYTHON_INTENSIVE python-intensive)
     set(REGRESSIONS_NUMPY numpy)
 endif()
 
@@ -176,6 +177,7 @@ if(APPLE)
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_PYTHON_INTENSIVE}
                     ${REGRESSIONS_NUMPY}
                     ltl
                     goto-transcoder
@@ -237,6 +239,7 @@ else()
                     linux
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_PYTHON_INTENSIVE}
                     ${REGRESSIONS_NUMPY}
                     ltl
                     goto-coverage
