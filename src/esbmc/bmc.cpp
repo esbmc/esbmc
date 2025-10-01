@@ -61,16 +61,20 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
   // The next block will initialize the algorithms used for the analysis.
   {
+    // Run cache if user has specified the option
+    if (
+      !options.get_bool_option("no-cache-asserts") &&
+      !options.get_bool_option("forward-condition") &&
+      !options.get_bool_option("k-induction") &&
+      !options.get_bool_option("ltl"))
+      // Store the set between runs
+      algorithms.emplace_back(
+        std::make_unique<assertion_cache>(config.ssa_caching_db));
+
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
     else
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
-
-    // Run cache if user has specified the option
-    if (options.get_bool_option("cache-asserts"))
-      // Store the set between runs
-      algorithms.emplace_back(std::make_unique<assertion_cache>(
-        config.ssa_caching_db, !options.get_bool_option("forward-condition")));
 
     if (opts.get_bool_option("ssa-features-dump"))
       algorithms.emplace_back(std::make_unique<ssa_features>());
@@ -920,6 +924,11 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     if (++interleaving_number > 1)
       log_status("Thread interleavings {}", interleaving_number);
 
+    // Clear the cache between thread interleavings to prevent
+    // incorrect caching of assertions with different thread contexts
+    if (!options.get_bool_option("no-cache-asserts"))
+      config.ssa_caching_db.clear();
+
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
 
@@ -1126,6 +1135,14 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       ignored += a->ignored();
     }
 
+    // Count remaining assertions after all algorithms have run
+    BigInt remaining_asserts = 0;
+    for (const auto &step : eq->SSA_steps)
+    {
+      if (step.is_assert() && !step.ignore)
+        ++remaining_asserts;
+    }
+
     if (
       options.get_bool_option("program-only") ||
       options.get_bool_option("program-too"))
@@ -1137,7 +1154,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     log_status(
       "Generated {} VCC(s), {} remaining after simplification ({} assignments)",
       solver_result.total_claims,
-      solver_result.remaining_claims,
+      remaining_asserts,
       BigInt(eq->SSA_steps.size()) - ignored);
 
     if (options.get_bool_option("document-subgoals"))
