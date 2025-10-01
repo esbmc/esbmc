@@ -36,6 +36,12 @@ public:
     const nlohmann::json &op,
     const exprt &elem);
 
+  exprt build_insert_list_call(
+    const symbolt &list,
+    const exprt &index,
+    const nlohmann::json &op,
+    const exprt &elem);
+
   void add_type_info(
     const std::string &list_symbol_id,
     const std::string &elem_id,
@@ -64,6 +70,14 @@ private:
     const exprt &list,
     const exprt &index,
     const nlohmann::json &element);
+
+  void prepare_list_element_call(
+    const nlohmann::json &op,
+    const exprt &elem,
+    const symbolt *&out_elem_type_sym,
+    const symbolt *&out_elem_symbol,
+    exprt &out_elem_size,
+    locationt &out_location);
 
   symbolt &create_list();
 

@@ -132,6 +132,42 @@ static inline bool list_push_object(List *l, Object *o)
   return list_push(l, o->value, o->type_id, o->size);
 }
 
+/* ---------- insert element at index ---------- */
+static inline bool list_insert(
+  List *l,
+  size_t index,
+  const void *value,
+  size_t type_id,
+  size_t type_size)
+{
+  // If index is beyond the end, just append
+  if (index >= l->size)
+    return list_push(l, value, type_id, type_size);
+
+  // Make a copy of the value
+  void *copied_value = malloc(type_size);
+  __ESBMC_assume(copied_value != NULL);
+  memcpy(copied_value, value, type_size);
+
+  // Shift all elements from index onwards one position to the right
+  size_t elements_to_shift = l->size - index;
+  if (elements_to_shift > 0)
+  {
+    memmove(
+      &l->items[index + 1],
+      &l->items[index],
+      elements_to_shift * sizeof(Object));
+  }
+
+  // Insert the new element
+  l->items[index].value = copied_value;
+  l->items[index].type_id = type_id;
+  l->items[index].size = type_size;
+  l->size++;
+
+  return true;
+}
+
 /* ---------- replace element ---------- */
 static inline bool
 list_replace(List *l, size_t index, const void *new_value, size_t type_id)

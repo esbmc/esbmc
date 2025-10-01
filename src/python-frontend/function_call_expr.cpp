@@ -1072,6 +1072,45 @@ exprt function_call_expr::handle_min_max(
   return result;
 }
 
+exprt function_call_expr::handle_list_insert() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 2)
+    throw std::runtime_error("insert() takes exactly two arguments");
+
+  std::string list_name = get_object_name();
+
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  exprt index_expr = converter_.get_expr(args[0]);
+  exprt value_to_insert = converter_.get_expr(args[1]);
+
+  if (value_to_insert.is_constant())
+  {
+    symbolt &insert_value_symbol = converter_.create_tmp_symbol(
+      call_, "insert_value", size_type(), gen_zero(size_type()));
+    code_declt insert_value(symbol_expr(insert_value_symbol));
+    insert_value.copy_to_operands(value_to_insert);
+    converter_.current_block->copy_to_operands(insert_value);
+  }
+
+  python_list list(converter_, nlohmann::json());
+  list.add_type_info(
+    list_symbol->id.as_string(),
+    value_to_insert.identifier().as_string(),
+    value_to_insert.type());
+
+  return list.build_insert_list_call(
+    *list_symbol, index_expr, call_, value_to_insert);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1082,7 +1121,8 @@ bool function_call_expr::is_list_method_call() const
   // Check if this is a known list method
   return method_name == "append" || method_name == "pop" ||
          method_name == "insert" || method_name == "remove" ||
-         method_name == "clear" || method_name == "extend";
+         method_name == "clear" || method_name == "extend" ||
+         method_name == "insert";
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -1091,6 +1131,8 @@ exprt function_call_expr::handle_list_method() const
 
   if (method_name == "append")
     return handle_list_append();
+  if (method_name == "insert")
+    return handle_list_insert();
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);

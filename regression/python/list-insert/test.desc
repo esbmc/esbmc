@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 25 --force-malloc-success
+^VERIFICATION SUCCESSFUL$
