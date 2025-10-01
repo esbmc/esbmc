@@ -1345,6 +1345,7 @@ exprt function_call_expr::get()
   // Add self as first parameter
   if (function_type_ == FunctionType::Constructor)
   {
+    call.type() = type_handler_.get_typet(func_symbol->name.as_string());
     // Self is the LHS
     if (converter_.current_lhs)
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));

@@ -310,6 +310,8 @@ private:
     const nlohmann::json &method_body,
     struct_typet &clazz);
 
+  exprt get_return_from_func(const char *func_symbol_id);
+
   void create_builtin_symbols();
 
   symbolt *find_function_in_base_classes(
@@ -320,6 +322,10 @@ private:
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
+
+  void copy_instance_attributes(
+    const std::string &src_obj_id,
+    const std::string &target_obj_id);
 
   void update_instance_from_self(
     const std::string &class_name,
@@ -335,10 +341,12 @@ private:
   // helper methods for get_var_assign
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
+
   exprt create_lhs_expression(
     const nlohmann::json &target,
     symbolt *lhs_symbol,
     const locationt &location);
+
   void handle_assignment_type_adjustments(
     symbolt *lhs_symbol,
     exprt &lhs,
