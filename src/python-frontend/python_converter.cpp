@@ -15,6 +15,7 @@
 #include <util/message.h>
 #include <util/encoding.h>
 #include <util/symbolic_types.h>
+#include <util/string_constant.h>
 
 #include <algorithm>
 #include <cmath>
@@ -4612,26 +4613,20 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::RAISE:
     {
-      exprt raise = get_expr(element["exc"]);
       typet type = type_handler_.get_typet(
         element["exc"]["func"]["id"].get<std::string>());
       locationt location = get_location_from_decl(element);
-      if (
-        raise.is_function_call() &&
-        type_handler_.is_constructor_call(element["exc"]))
-      {
-        // This logic should be applied to all constructor calls
-        // Using sideeffect will convert class(); into
-        // DECL tmp; class(tmp);
-        code_function_callt call =
-          to_code_function_call(convert_expression_to_code(raise));
-        side_effect_expr_function_callt tmp;
-        tmp.function() = call.function();
-        tmp.arguments() = call.arguments();
-        tmp.type() = type;
-        tmp.location() = location;
-        raise = tmp;
-      }
+
+      exprt arg = get_expr(element["exc"]["args"][0]);
+      arg = string_constantt(
+        element["exc"]["args"][0]["value"].get<std::string>(),
+        arg.type(),
+        string_constantt::k_default);
+
+      // Construct a constant struct to throw:
+      // raise { .message=&"Error message" }
+      exprt raise("struct", type);
+      raise.copy_to_operands(address_of_exprt(arg));
 
       exprt side = side_effect_exprt("cpp-throw", type);
       side.location() = location;
