@@ -11,7 +11,7 @@ int max(int *arr, unsigned n) {
     unsigned j;
     __ESBMC_loop_invariant(
         i >= 1 && i <= n &&
-        __ESBMC_forall(&j, !(j >= 0 && j < i) || (max_val <= arr[j]))
+        __ESBMC_forall(&j, !(j >= 0 && j < i) || (max_val >= arr[j]))
     );
     
     for (; i < n; i++) {
