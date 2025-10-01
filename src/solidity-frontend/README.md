@@ -17,6 +17,11 @@ solc --ast-compact-json example.sol > example.solast
 
 The frontend expects the contract source file and its AST JSON as inputs.
 
+Note that different versions of `solc` may produce slightly different AST formats and also support different Solidity syntaxes. The frontend is currently developed and tested against **Solidity 0.8.0**.
+
+* For contracts written in **pre-0.5.0** Solidity, ESBMC will report *unsupported version* and terminate at the frontend stage without verification.
+* For contracts in the range **0.5.0–0.7.0**, ESBMC will issue a warning but continue verification. However, due to AST/semantic mismatches, unexpected errors or imprecise results may occur.
+
 ### Bug detection
 
 Enable the solidity frontend with the `--sol` option. Example:
