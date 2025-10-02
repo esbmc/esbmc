@@ -2752,7 +2752,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       type.id() == typet::t_bool || type.id() == typet::t_signedbv ||
       type.id() == typet::t_unsignedbv);
 
-    if (tte.getValue())
+    bool value;
+#if CLANG_VERSION_MAJOR >= 21
+    value = tte.getBoolValue();
+#else
+    value = tte.getValue();
+#endif
+    if (value)
       new_expr = true_exprt();
     else
       new_expr = false_exprt();
