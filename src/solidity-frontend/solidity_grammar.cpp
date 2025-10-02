@@ -622,7 +622,9 @@ const char *parameter_list_to_str(ParameterListT type)
 // rule block
 BlockT get_block_t(const nlohmann::json &block)
 {
-  if ((block["nodeType"] == "Block" || block["nodeType"] == "UncheckedBlock")  &&    block.contains("statements"))
+  if (
+    (block["nodeType"] == "Block" || block["nodeType"] == "UncheckedBlock") &&
+    block.contains("statements"))
   {
     return Statement;
   }
@@ -687,7 +689,7 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return ForStatement;
   }
-  else if (stmt["nodeType"] == "Block" ||stmt["nodeType"] == "UncheckedBlock" )
+  else if (stmt["nodeType"] == "Block" || stmt["nodeType"] == "UncheckedBlock")
   {
     return Block;
   }
