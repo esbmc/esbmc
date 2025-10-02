@@ -1,28 +1,17 @@
-// SPDX-License-Identifier: GPL-3.0
-pragma solidity >=0.5.0;
+pragma solidity ^0.8.24;
 
-contract SolidityTest {
-    uint8 x;
-    uint8 y;
+contract Demo {
+    function f() external pure {
+        uint y = 10;
 
-    constructor() {
-        x = 0;
-        y = 1;
-    }
+        {
+            assert(y == 10);
+            uint y = 20;
+        }
 
-    function A() public returns (uint8) {
-        return 11;
-    }
-
-    function B() public returns (uint8) {
-        return y + A();
-    }
-}
-
-contract Derived is SolidityTest {
-    function getResult() public {
-        SolidityTest xx = new SolidityTest();
-
-        assert(xx.B() == 12);
+        unchecked {
+            assert(y == 10);
+            uint y = 30;
+        }
     }
 }
