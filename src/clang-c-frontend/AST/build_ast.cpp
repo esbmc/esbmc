@@ -70,8 +70,19 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   // Create everything needed to create a CompilerInvocation,
   // copied from ToolInvocation::run
-  llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts =
-    new clang::DiagnosticOptions();
+
+#if CLANG_VERSION_MAJOR >= 21
+  using DiagOptsType = std::shared_ptr<clang::DiagnosticOptions>;
+#else
+  using DiagOptsType = llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions>;
+#endif
+
+  DiagOptsType DiagOpts;
+#if CLANG_VERSION_MAJOR >= 21
+  DiagOpts = std::make_shared<clang::DiagnosticOptions>();
+#else
+  DiagOpts = new clang::DiagnosticOptions();
+#endif
 
   std::vector<const char *> Argv;
   for (const std::string &Str : compiler_args)
@@ -87,11 +98,22 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   clang::ParseDiagnosticArgs(*DiagOpts, ParsedArgs);
 
-  clang::TextDiagnosticPrinter DiagnosticPrinter(llvm::errs(), &*DiagOpts);
+  clang::TextDiagnosticPrinter DiagnosticPrinter(
+    llvm::errs(),
+#if CLANG_VERSION_MAJOR >= 21
+    *DiagOpts
+#else
+    &*DiagOpts
+#endif
+  );
 
   clang::DiagnosticsEngine *Diagnostics = new clang::DiagnosticsEngine(
     llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs>(new clang::DiagnosticIDs()),
+#if CLANG_VERSION_MAJOR >= 21
+    *DiagOpts,
+#else
     &*DiagOpts,
+#endif
     &DiagnosticPrinter,
     false);
 
@@ -127,6 +149,9 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     clang::ASTUnit::LoadFromCompilerInvocationAction(
       std::move(Invocation),
       std::make_shared<clang::PCHContainerOperations>(),
+#if CLANG_VERSION_MAJOR >= 21
+      DiagOpts,
+#endif
       Diagnostics,
       action));
   assert(unit);
