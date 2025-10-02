@@ -132,7 +132,7 @@ exprt python_list::build_push_list_call(
   push_func_call.arguments().push_back(                    // &element
     address_of_exprt(symbol_expr(*elem_info.elem_symbol)));
   push_func_call.arguments().push_back(
-    symbol_expr(*elem_info.elem_type_sym));                   // type hash
+    symbol_expr(*elem_info.elem_type_sym));                  // type hash
   push_func_call.arguments().push_back(elem_info.elem_size); // element size
 
   push_func_call.type() = bool_type();
