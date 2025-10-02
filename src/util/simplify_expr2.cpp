@@ -3088,21 +3088,93 @@ expr2tc same_object2t::do_simplify() const
 
 expr2tc concat2t::do_simplify() const
 {
-  if (!is_constant_int2t(side_1) || !is_constant_int2t(side_2))
+  // First, try existing constant folding
+  if (is_constant_int2t(side_1) && is_constant_int2t(side_2))
+  {
+    const BigInt &value1 = to_constant_int2t(side_1).value;
+    const BigInt &value2 = to_constant_int2t(side_2).value;
+
+    assert(!value1.is_negative());
+    assert(!value2.is_negative());
+
+    BigInt accuml = value1;
+    accuml *= BigInt::power2(side_2->type->get_width());
+    accuml += value2;
+
+    return constant_int2tc(type, accuml);
+  }
+
+  // Detect pattern: nested CONCATs of byte_extracts
+  std::function<void(const expr2tc &, std::vector<expr2tc> &)> collect_leaves;
+  collect_leaves = [&](const expr2tc &e, std::vector<expr2tc> &leaves) {
+    if (is_concat2t(e))
+    {
+      const concat2t &c = to_concat2t(e);
+      collect_leaves(c.side_1, leaves);
+      collect_leaves(c.side_2, leaves);
+    }
+    else
+    {
+      leaves.push_back(e);
+    }
+  };
+
+  std::vector<expr2tc> leaves;
+  collect_leaves(expr2tc(this->clone()), leaves);
+
+  // Quick exit if not enough leaves or not all byte extracts
+  if (leaves.size() < 2)
     return expr2tc();
 
-  const BigInt &value1 = to_constant_int2t(side_1).value;
-  const BigInt &value2 = to_constant_int2t(side_2).value;
+  for (const auto &leaf : leaves)
+  {
+    if (!is_byte_extract2t(leaf) || leaf->type->get_width() != 8)
+      return expr2tc();
+  }
 
-  assert(!value1.is_negative());
-  assert(!value2.is_negative());
+  // Verify all from same source with contiguous offsets
+  const byte_extract2t &first_be = to_byte_extract2t(leaves[0]);
+  expr2tc source = first_be.source_value;
+  bool big_endian = first_be.big_endian;
 
-  // k; Take the values, and concatenate. Side 1 has higher end bits.
-  BigInt accuml = value1;
-  accuml *= BigInt::power2(side_2->type->get_width());
-  accuml += value2;
+  // Only optimize complete reconstructions where widths match
+  if (
+    leaves.size() * 8 != type->get_width() ||
+    source->type->get_width() != type->get_width() || big_endian)
+    return expr2tc();
 
-  return constant_int2tc(type, accuml);
+  std::vector<BigInt> offsets;
+  for (const auto &leaf : leaves)
+  {
+    const byte_extract2t &be = to_byte_extract2t(leaf);
+
+    if (
+      be.source_value != source || be.big_endian != big_endian ||
+      !is_constant_int2t(be.source_offset))
+      return expr2tc();
+
+    offsets.push_back(to_constant_int2t(be.source_offset).value);
+  }
+
+  // Check for contiguous sequence: [n-1, n-2, ..., 1, 0]
+  for (size_t i = 0; i < offsets.size(); i++)
+  {
+    BigInt expected = BigInt(offsets.size() - 1 - i);
+    if (offsets[i] != expected)
+      return expr2tc();
+  }
+
+  if (source->type == type)
+  {
+    // Types match exactly - return as-is
+    return source;
+  }
+  else
+  {
+    // Same width, different types - use bitcast for bit reinterpretation
+    expr2tc result = bitcast2tc(type, source);
+    return result;
+  }
 }
 
 expr2tc extract2t::do_simplify() const
