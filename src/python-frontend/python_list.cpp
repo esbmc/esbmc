@@ -14,13 +14,8 @@
 std::unordered_map<std::string, std::vector<std::pair<std::string, typet>>>
   python_list::list_type_map{};
 
-void python_list::prepare_list_element_call(
-  const nlohmann::json &op,
-  const exprt &elem,
-  const symbolt *&out_elem_type_sym,
-  const symbolt *&out_elem_symbol,
-  exprt &out_elem_size,
-  locationt &out_location)
+list_elem_info
+python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 {
   const type_handler type_handler_ = converter_.get_type_handler();
   locationt location = converter_.get_location_from_decl(op);
@@ -108,10 +103,12 @@ void python_list::prepare_list_element_call(
   exprt elem_size = from_integer(BigInt(elem_size_bytes), size_type());
 
   // Build and return the push function call
-  out_elem_type_sym = &elem_type_sym;
-  out_elem_symbol = &elem_symbol;
-  out_elem_size = elem_size;
-  out_location = location;
+  list_elem_info elem_info;
+  elem_info.elem_type_sym = &elem_type_sym;
+  elem_info.elem_symbol = &elem_symbol;
+  elem_info.elem_size = elem_size;
+  elem_info.location = location;
+  return elem_info;
 }
 
 exprt python_list::build_push_list_call(
@@ -119,11 +116,7 @@ exprt python_list::build_push_list_call(
   const nlohmann::json &op,
   const exprt &elem)
 {
-  const symbolt *elem_type_sym, *elem_symbol;
-  exprt elem_size;
-  locationt location;
-  prepare_list_element_call(
-    op, elem, elem_type_sym, elem_symbol, elem_size, location);
+  list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *push_func_sym =
     converter_.symbol_table().find_symbol("c:list.c@F@list_push");
@@ -137,13 +130,13 @@ exprt python_list::build_push_list_call(
   push_func_call.function() = symbol_expr(*push_func_sym);
   push_func_call.arguments().push_back(symbol_expr(list)); // list
   push_func_call.arguments().push_back(                    // &element
-    address_of_exprt(symbol_expr(*elem_symbol)));
+    address_of_exprt(symbol_expr(*elem_info.elem_symbol)));
   push_func_call.arguments().push_back(
-    symbol_expr(*elem_type_sym));                  // type hash
-  push_func_call.arguments().push_back(elem_size); // element size
+    symbol_expr(*elem_info.elem_type_sym));                   // type hash
+  push_func_call.arguments().push_back(elem_info.elem_size); // element size
 
   push_func_call.type() = bool_type();
-  push_func_call.location() = location;
+  push_func_call.location() = elem_info.location;
 
   return push_func_call;
 }
@@ -154,11 +147,7 @@ exprt python_list::build_insert_list_call(
   const nlohmann::json &op,
   const exprt &elem)
 {
-  const symbolt *elem_type_sym, *elem_symbol;
-  exprt elem_size;
-  locationt location;
-  prepare_list_element_call(
-    op, elem, elem_type_sym, elem_symbol, elem_size, location);
+  list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *insert_func_sym =
     converter_.symbol_table().find_symbol("c:list.c@F@list_insert");
@@ -170,11 +159,11 @@ exprt python_list::build_insert_list_call(
   insert_func_call.arguments().push_back(symbol_expr(list));
   insert_func_call.arguments().push_back(index);
   insert_func_call.arguments().push_back(
-    address_of_exprt(symbol_expr(*elem_symbol)));
-  insert_func_call.arguments().push_back(symbol_expr(*elem_type_sym));
-  insert_func_call.arguments().push_back(elem_size);
+    address_of_exprt(symbol_expr(*elem_info.elem_symbol)));
+  insert_func_call.arguments().push_back(symbol_expr(*elem_info.elem_type_sym));
+  insert_func_call.arguments().push_back(elem_info.elem_size);
   insert_func_call.type() = bool_type();
-  insert_func_call.location() = location;
+  insert_func_call.location() = elem_info.location;
 
   return converter_.convert_expression_to_code(insert_func_call);
 }
