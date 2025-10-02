@@ -272,7 +272,7 @@ bool clang_cpp_convertert::get_type(
       return true;
 
     typet class_type;
-    if (get_type(*mpt.getClass(), class_type))
+    if (get_type(mpt.desugar(), class_type))
       return true;
 
     new_type = gen_pointer_type(sub_type);
