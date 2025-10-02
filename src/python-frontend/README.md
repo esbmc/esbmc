@@ -113,6 +113,13 @@ Below is an overview of ESBMC-Python's key capabilities:
 ### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
 - **Data Structures**: Supports operations on Python's built-in data structures, including lists and strings, with features such as concatenation and bounds checks.
+  - **List Operations**:
+    - **append()**: Add elements to the end of a list.
+    - **insert()**: Insert elements at a specific index position.
+      - When the index equals the list length, the element is appended to the end.
+      - When the index exceeds the list length, the element is appended to the end.
+      - When the index is within bounds, existing elements are shifted right.
+      - Supports insertion into empty lists at index 0.
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
 ### Error Handling and Assertions
@@ -187,7 +194,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 The current version of ESBMC-Python has the following limitations:
 
 - Only `for` loops using the `range()` function are supported.
-- List and String support are partial and limited in functionality.
+- List and String support are partial and limited in functionality. Currently supported list methods include `append()` and `insert()`.
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
