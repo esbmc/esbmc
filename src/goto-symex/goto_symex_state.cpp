@@ -147,6 +147,30 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return false;
 
     const with2t &with = to_with2t(expr);
+
+    // Handle WITH chains for structs where all updates are constants
+    if (is_struct_type(expr->type))
+    {
+      // Check if this is a chain of WITHs with all constant updates
+      bool all_constant_updates = true;
+      expr2tc current = expr;
+
+      while (is_with2t(current))
+      {
+        const with2t &w = to_with2t(current);
+        if (!is_constant_expr(w.update_value))
+        {
+          all_constant_updates = false;
+          break;
+        }
+        current = w.source_value;
+      }
+
+      // If we reached a symbol and all updates were constants, propagate
+      if (all_constant_updates && is_symbol2t(current))
+        return true;
+    }
+
     // For now, we focus on propagating constants for structs only.
     // TODO: enable other type will regress performance, need a TC
     // to reproduce
