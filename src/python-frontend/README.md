@@ -157,9 +157,19 @@ Below is an overview of ESBMC-Python's key capabilities:
   - Both functions `math.floor(x)` and `math.ceil(x)`include built-in assertions to reject infinity and NaN inputs
   - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions
 
+### Random Module Support
+ESBMC-Python supports modeling and verification of the random module functions using nondeterministic values with appropriate constraints:
+- **random.random()**: Returns a nondeterministic floating-point number in the range [0.0, 1.0).
+- **random.uniform(a, b)**: Returns a nondeterministic floating-point number N such that:
+  - If a ≤ b: a ≤ N ≤ b
+  - If a > b: b ≤ N ≤ a
+- **random.getrandbits(k)**: Returns a nondeterministic integer with k random bits.
+- **random.randrange(start, stop=None, step=1)**: Returns a randomly selected integer from the specified range.
+These random functions use nondeterministic modeling with appropriate constraints (`__ESBMC_assume`), allowing ESBMC to explore all possible values within the specified ranges during verification. This enables thorough testing of code that depends on random values.
+
 ### Special Value Detection:
-- **math.isnan(x)**: Returns True if x is NaN (Not a Number)
-- **math.isinf(x)**: Returns True if x is positive or negative infinity
+- **math.isnan(x)**: Returns True if x is NaN (Not a Number).
+- **math.isinf(x)**: Returns True if x is positive or negative infinity.
 - Both functions use ESBMC's internal operations for accurate verification according to the IEEE-754 standard.
 
 ### Exception Handling
@@ -213,6 +223,9 @@ The current version of ESBMC-Python has the following limitations:
   - Custom format specifications for user-defined types are not supported
 - Missing Return Statement Detection Limitations:
   - Does not analyze return statements inside lambda expressions within the main function body.
+- Random Module Limitations:
+  - `random.randrange()` with a single argument (e.g., randrange(10)) is not supported.
+  - Other random module functions (e.g., choice, shuffle, sample, seed) are not yet supported.
 
 ### Example 1: Division by Zero in Python
 
