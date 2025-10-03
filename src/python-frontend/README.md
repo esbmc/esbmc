@@ -90,7 +90,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 - **F-String Support**: Comprehensive support for Python's f-string (formatted string literal) syntax, including:
   - **Basic Variable Interpolation**: f"Hello {name}!" with support for multiple variables in a single f-string
-  - **Built-in Variable Access**: Supports built-in variables like __name__ within f-strings: f"Running as: {__name__}"
+  - **Built-in Variable Access**: Supports built-in variables such as __name__ within f-strings: f"Running as: {__name__}"
   - **Format Specifications**:
     - **Integer formatting**: f"{num:d}" and f"{num:i}"
     - **Float formatting with precision**: f"{val:.2f}", f"{price:.1f}"
@@ -130,10 +130,10 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 - **Module Imports**: Handles import styles and validates their usage.
 - **name Variable**: Supports Python's built-in __name__ variable that contains the name of the current module:
-  - Set to "__main__" when the module is run directly as the main program
-  - Set to the module name when the module is imported
+  - Set to "__main__" when the module is run directly as the main program.
+  - Set to the module name when the module is imported.
   - Enables verification of the common Python idiom if __name__ == "__main__":
-  - Supports proper distinction between main module execution and imported module behavior
+  - Supports proper distinction between main module execution and imported module behavior.
 
 ### Additional Capabilities
 - **Nondeterministic Variables**: Models nondeterminism to explore multiple execution paths.
@@ -149,13 +149,13 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 ### Math Module Support
-- **math.comb(n, k)**: Calculates binomial coefficients `C(n, k) = n! / (k! * (n-k)!)`
-  - Supports verification of combinatorial properties such as symmetry: `C(n, k) = C(n, n-k)`
-  - Includes built-in type checking and input validation (assertion failures for negative inputs or non-integer types)
+- **math.comb(n, k)**: Calculates binomial coefficients `C(n, k) = n! / (k! * (n-k)!)`.
+  - Supports verification of combinatorial properties such as symmetry: `C(n, k) = C(n, n-k)`.
+  - Includes built-in type checking and input validation (assertion failures for negative inputs or non-integer types).
 - **math.floor(x)**: Returns the largest integer less than or equal to x.
-- **math.ceil(x)**: Returns the smallest integer greater than or equal to x
-  - Both functions `math.floor(x)` and `math.ceil(x)`include built-in assertions to reject infinity and NaN inputs
-  - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions
+- **math.ceil(x)**: Returns the smallest integer greater than or equal to x.
+  - Both functions `math.floor(x)` and `math.ceil(x)` include built-in assertions to reject infinity and NaN inputs.
+  - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions.
 
 ### Random Module Support
 ESBMC-Python supports modeling and verification of the random module functions using nondeterministic values with appropriate constraints:
