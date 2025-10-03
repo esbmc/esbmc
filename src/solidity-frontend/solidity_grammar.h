@@ -241,7 +241,6 @@ enum BlockT
   BlockIfStatement,
   BlockWhileStatement,
   BlockExpressionStatement,
-  UncheckedBlock,
   BlockTError
 };
 BlockT get_block_t(const nlohmann::json &block);
