@@ -622,7 +622,9 @@ const char *parameter_list_to_str(ParameterListT type)
 // rule block
 BlockT get_block_t(const nlohmann::json &block)
 {
-  if (block["nodeType"] == "Block" && block.contains("statements"))
+  if (
+    (block["nodeType"] == "Block" || block["nodeType"] == "UncheckedBlock") &&
+    block.contains("statements"))
   {
     return Statement;
   }
@@ -659,7 +661,6 @@ const char *block_to_str(BlockT type)
     ENUM_TO_STR(BlockIfStatement)
     ENUM_TO_STR(BlockWhileStatement)
     ENUM_TO_STR(BlockExpressionStatement)
-    ENUM_TO_STR(UncheckedBlock)
     ENUM_TO_STR(BlockTError)
   default:
   {
@@ -688,7 +689,7 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return ForStatement;
   }
-  else if (stmt["nodeType"] == "Block")
+  else if (stmt["nodeType"] == "Block" || stmt["nodeType"] == "UncheckedBlock")
   {
     return Block;
   }
