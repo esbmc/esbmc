@@ -324,13 +324,21 @@ __ESBMC_HIDE:;
   const char *csrc = src;
   if (dest - src >= n)
   {
-    for (size_t i = 0; i < n; i++)
+    size_t i = 0;
+    while (i < n)
+    {
       cdest[i] = csrc[i];
+      ++i;
+    }
   }
   else
   {
-    for (size_t i = n; i > 0; i--)
+    size_t i = n;
+    while (i > 0)
+    {
       cdest[i - 1] = csrc[i - 1];
+      --i;
+    }
   }
   return dest;
 }

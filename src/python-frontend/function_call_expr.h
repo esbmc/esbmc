@@ -194,6 +194,7 @@ private:
   bool is_list_method_call() const;
   exprt handle_list_method() const;
   exprt handle_list_append() const;
+  exprt handle_list_insert() const;
 
 protected:
   symbol_id function_id_;

@@ -2,6 +2,8 @@
 
 #include <nlohmann/json.hpp>
 #include <util/type.h>
+#include <util/expr.h>
+#include <util/symbol.h>
 #include <set>
 #include <utility>
 
@@ -10,6 +12,14 @@ class symbolt;
 class python_converter;
 
 using TypeInfo = std::vector<std::pair<std::string, typet>>;
+
+struct list_elem_info
+{
+  symbolt *elem_type_sym;
+  symbolt *elem_symbol;
+  exprt elem_size;
+  locationt location;
+};
 
 class python_list
 {
@@ -33,6 +43,12 @@ public:
 
   exprt build_push_list_call(
     const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem);
+
+  exprt build_insert_list_call(
+    const symbolt &list,
+    const exprt &index,
     const nlohmann::json &op,
     const exprt &elem);
 
@@ -64,6 +80,9 @@ private:
     const exprt &list,
     const exprt &index,
     const nlohmann::json &element);
+
+  list_elem_info
+  get_list_element_info(const nlohmann::json &op, const exprt &elem);
 
   symbolt &create_list();
 

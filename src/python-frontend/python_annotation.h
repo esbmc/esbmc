@@ -1325,6 +1325,19 @@ private:
       if (stmt_type == "If" || stmt_type == "While" || stmt_type == "Try")
       {
         add_annotation(element);
+
+        // Process else block if it exists
+        if (
+          stmt_type == "If" && element.contains("orelse") &&
+          !element["orelse"].empty())
+        {
+          // Create a temporary body structure for the else block
+          Json else_body = {{"body", element["orelse"]}};
+          add_annotation(else_body);
+          // Update the original orelse with annotated version
+          element["orelse"] = else_body["body"];
+        }
+
         continue;
       }
 
