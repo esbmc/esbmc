@@ -1,4 +1,5 @@
 CORE
 main.c
+--show-vcc
 
-^VERIFICATION SUCCESSFUL$
+^Generated 1 VCC(s), 0 remaining after simplification (1 assignments)$
