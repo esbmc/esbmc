@@ -123,6 +123,7 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **String Operations**:
     - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns True).
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
+    - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
 ### Error Handling and Assertions
