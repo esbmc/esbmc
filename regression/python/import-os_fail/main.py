@@ -19,6 +19,6 @@ if exists:
   rmdir(q)
 
 try:
-  mkdir(q)
-except FileExistsError:
-  print("FileExistsError")
+  rmdir(f)
+except OSError:
+  assert False
