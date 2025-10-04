@@ -42,7 +42,7 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"lt", "<"},          {"lte", "<="},        {"noteq", "notequal"},
   {"gt", ">"},          {"gte", ">="},        {"and", "and"},
   {"or", "or"},         {"not", "not"},       {"uadd", "unary+"},
-  {"is", "="},          {"isnot", "not"}};
+  {"is", "="},          {"isnot", "not"},     {"in", "="}};
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
   {"AnnAssign", StatementType::VARIABLE_ASSIGN},
@@ -2023,6 +2023,72 @@ exprt python_converter::handle_chained_comparisons_logic(
   return cond;
 }
 
+exprt python_converter::ensure_null_terminated_string(exprt &e)
+{
+  // Already a proper string array - return as is
+  if (e.type().is_array() && e.type().subtype() == char_type())
+    return e;
+
+  // Single character constant - convert to null-terminated string
+  if (e.is_constant() && (e.type().is_signedbv() || e.type().is_unsignedbv()))
+  {
+    BigInt char_val =
+      binary2integer(e.value().as_string(), e.type().is_signedbv());
+
+    // Create a 2-element array: [character, '\0']
+    typet string_type = type_handler_.build_array(char_type(), 2);
+    exprt str_array = gen_zero(string_type);
+
+    // Set the character
+    exprt char_expr = constant_exprt(
+      integer2binary(char_val, 8), integer2string(char_val), char_type());
+    str_array.operands().at(0) = char_expr;
+
+    // Null terminator is already zero from gen_zero
+    return str_array;
+  }
+
+  // For other types, try wrapping in array
+  ensure_string_array(e);
+  return e;
+}
+
+exprt python_converter::handle_string_membership(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  // Convert both operands to proper null-terminated strings
+  exprt lhs_str = ensure_null_terminated_string(lhs);
+  exprt rhs_str = ensure_null_terminated_string(rhs);
+
+  // Get base addresses for C string functions
+  exprt lhs_addr = get_array_base_address(lhs_str);
+  exprt rhs_addr = get_array_base_address(rhs_str);
+
+  // Find strstr symbol - returns pointer to first occurrence or NULL
+  symbolt *strstr_symbol = symbol_table_.find_symbol("c:@F@strstr");
+  if (!strstr_symbol)
+    throw std::runtime_error("strstr function not found for 'in' operator");
+
+  // Call strstr(haystack, needle) - in Python "needle in haystack"
+  side_effect_expr_function_callt strstr_call;
+  strstr_call.function() = symbol_expr(*strstr_symbol);
+  strstr_call.arguments() = {
+    rhs_addr, lhs_addr}; // haystack is rhs, needle is lhs
+  strstr_call.location() = get_location_from_decl(element);
+  strstr_call.type() = gen_pointer_type(char_type());
+
+  // Check if result != NULL (substring found)
+  constant_exprt null_ptr(gen_pointer_type(char_type()));
+  null_ptr.set_value("NULL");
+
+  exprt not_equal("notequal", bool_type());
+  not_equal.copy_to_operands(strstr_call, null_ptr);
+
+  return not_equal;
+}
+
 // Main method with minimal refactoring to preserve original logic
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
@@ -2062,6 +2128,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
+
+  // Handle 'in' operator for string membership testing
+  if (op == "In" && (lhs.type().is_array() || rhs.type().is_array()))
+  {
+    return handle_string_membership(lhs, rhs, element);
+  }
 
   // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
   convert_function_calls_to_side_effects(lhs, rhs);
