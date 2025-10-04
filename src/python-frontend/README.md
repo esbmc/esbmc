@@ -122,10 +122,7 @@ Below is an overview of ESBMC-Python's key capabilities:
       - Supports insertion into empty lists at index 0.
   - **String Operations**:
     - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns True).
-      - Works with both string literals and string variables.
-      - Supports single-character and multi-character substring searches.
-      - Internally uses `strstr()` for efficient substring matching with proper null-termination handling.
-      - Returns a boolean result for use in conditionals and assertions.
+    - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
 ### Error Handling and Assertions
