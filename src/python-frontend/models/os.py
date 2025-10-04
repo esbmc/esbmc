@@ -10,8 +10,11 @@ def listdir(path: str) -> list[str]:
     return directories
 
 
-def makedirs(path: str) -> None:
-    pass
+def makedirs(path: str, exist_ok: bool = False) -> None:
+    if not exist_ok:
+        dir_exists: bool = nondet_bool()
+        if dir_exists:
+            raise FileExistsError("File exists")
 
 
 def remove(path: str) -> None:
