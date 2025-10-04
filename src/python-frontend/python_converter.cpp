@@ -42,7 +42,7 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"lt", "<"},          {"lte", "<="},        {"noteq", "notequal"},
   {"gt", ">"},          {"gte", ">="},        {"and", "and"},
   {"or", "or"},         {"not", "not"},       {"uadd", "unary+"},
-  {"is", "="},          {"isnot", "not"}};
+  {"is", "="},          {"isnot", "not"},     {"in", "="}};
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
   {"AnnAssign", StatementType::VARIABLE_ASSIGN},
@@ -2023,6 +2023,187 @@ exprt python_converter::handle_chained_comparisons_logic(
   return cond;
 }
 
+exprt python_converter::ensure_null_terminated_string(exprt &e)
+{
+  // Already a proper string array - return as is
+  if (e.type().is_array() && e.type().subtype() == char_type())
+    return e;
+
+  // Single character constant - convert to null-terminated string
+  if (e.is_constant() && (e.type().is_signedbv() || e.type().is_unsignedbv()))
+  {
+    BigInt char_val =
+      binary2integer(e.value().as_string(), e.type().is_signedbv());
+
+    // Create a 2-element array: [character, '\0']
+    typet string_type = type_handler_.build_array(char_type(), 2);
+    exprt str_array = gen_zero(string_type);
+
+    // Set the character
+    exprt char_expr = constant_exprt(
+      integer2binary(char_val, 8), integer2string(char_val), char_type());
+    str_array.operands().at(0) = char_expr;
+
+    // Null terminator is already zero from gen_zero
+    return str_array;
+  }
+
+  // For other types, try wrapping in array
+  ensure_string_array(e);
+  return e;
+}
+
+exprt python_converter::handle_string_startswith(
+  const exprt &string_obj,
+  const exprt &prefix_arg,
+  const locationt &location)
+{
+  // Ensure both are proper null-terminated strings
+  exprt string_copy = string_obj;
+  exprt prefix_copy = prefix_arg;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt prefix_expr = ensure_null_terminated_string(prefix_copy);
+
+  // Get string addresses
+  exprt str_addr = get_array_base_address(str_expr);
+  exprt prefix_addr = get_array_base_address(prefix_expr);
+
+  // Calculate prefix length: len(prefix_expr) - 1 (exclude null terminator)
+  const array_typet &prefix_type = to_array_type(prefix_expr.type());
+  exprt prefix_len = prefix_type.size();
+
+  // Subtract 1 for null terminator
+  exprt one = from_integer(1, prefix_len.type());
+  exprt actual_len("-", prefix_len.type());
+  actual_len.copy_to_operands(prefix_len, one);
+
+  // Find strncmp symbol
+  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+  if (!strncmp_symbol)
+    throw std::runtime_error("strncmp function not found for startswith()");
+
+  // Call strncmp(str, prefix, len(prefix))
+  side_effect_expr_function_callt strncmp_call;
+  strncmp_call.function() = symbol_expr(*strncmp_symbol);
+  strncmp_call.arguments() = {str_addr, prefix_addr, actual_len};
+  strncmp_call.location() = location;
+  strncmp_call.type() = int_type();
+
+  // Check if result == 0 (strings match)
+  exprt zero = gen_zero(int_type());
+  exprt equal("=", bool_type());
+  equal.copy_to_operands(strncmp_call, zero);
+
+  return equal;
+}
+
+exprt python_converter::handle_string_endswith(
+  const exprt &string_obj,
+  const exprt &suffix_arg,
+  const locationt &location)
+{
+  // Ensure both are proper null-terminated strings
+  exprt string_copy = string_obj;
+  exprt suffix_copy = suffix_arg;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt suffix_expr = ensure_null_terminated_string(suffix_copy);
+
+  // Get string addresses
+  exprt str_addr = get_array_base_address(str_expr);
+  exprt suffix_addr = get_array_base_address(suffix_expr);
+
+  // Calculate lengths (exclude null terminators)
+  const array_typet &str_type = to_array_type(str_expr.type());
+  const array_typet &suffix_type = to_array_type(suffix_expr.type());
+
+  exprt str_len = str_type.size();
+  exprt suffix_len = suffix_type.size();
+
+  exprt one = from_integer(1, str_len.type());
+
+  // actual_str_len = str_len - 1
+  exprt actual_str_len("-", str_len.type());
+  actual_str_len.copy_to_operands(str_len, one);
+
+  // actual_suffix_len = suffix_len - 1
+  exprt actual_suffix_len("-", suffix_len.type());
+  actual_suffix_len.copy_to_operands(suffix_len, one);
+
+  // Check if suffix is longer than string: if (suffix_len > str_len) return false
+  exprt len_check(">", bool_type());
+  len_check.copy_to_operands(actual_suffix_len, actual_str_len);
+
+  // Calculate offset: str_len - suffix_len
+  exprt offset("-", str_len.type());
+  offset.copy_to_operands(actual_str_len, actual_suffix_len);
+
+  // Get pointer to the position: str + offset
+  exprt offset_ptr("+", gen_pointer_type(char_type()));
+  offset_ptr.copy_to_operands(str_addr, offset);
+
+  // Find strncmp symbol
+  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+  if (!strncmp_symbol)
+    throw std::runtime_error("strncmp function not found for endswith()");
+
+  // Call strncmp(str + offset, suffix, len(suffix))
+  side_effect_expr_function_callt strncmp_call;
+  strncmp_call.function() = symbol_expr(*strncmp_symbol);
+  strncmp_call.arguments() = {offset_ptr, suffix_addr, actual_suffix_len};
+  strncmp_call.location() = location;
+  strncmp_call.type() = int_type();
+
+  // Check if result == 0 (strings match)
+  exprt zero = gen_zero(int_type());
+  exprt strings_equal("=", bool_type());
+  strings_equal.copy_to_operands(strncmp_call, zero);
+
+  // Return: (suffix_len <= str_len) && (strncmp(...) == 0)
+  exprt len_ok("not", bool_type());
+  len_ok.copy_to_operands(len_check);
+
+  exprt result("and", bool_type());
+  result.copy_to_operands(len_ok, strings_equal);
+
+  return result;
+}
+
+exprt python_converter::handle_string_membership(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  // Convert both operands to proper null-terminated strings
+  exprt lhs_str = ensure_null_terminated_string(lhs);
+  exprt rhs_str = ensure_null_terminated_string(rhs);
+
+  // Get base addresses for C string functions
+  exprt lhs_addr = get_array_base_address(lhs_str);
+  exprt rhs_addr = get_array_base_address(rhs_str);
+
+  // Find strstr symbol - returns pointer to first occurrence or NULL
+  symbolt *strstr_symbol = symbol_table_.find_symbol("c:@F@strstr");
+  if (!strstr_symbol)
+    throw std::runtime_error("strstr function not found for 'in' operator");
+
+  // Call strstr(haystack, needle) - in Python "needle in haystack"
+  side_effect_expr_function_callt strstr_call;
+  strstr_call.function() = symbol_expr(*strstr_symbol);
+  strstr_call.arguments() = {
+    rhs_addr, lhs_addr}; // haystack is rhs, needle is lhs
+  strstr_call.location() = get_location_from_decl(element);
+  strstr_call.type() = gen_pointer_type(char_type());
+
+  // Check if result != NULL (substring found)
+  constant_exprt null_ptr(gen_pointer_type(char_type()));
+  null_ptr.set_value("NULL");
+
+  exprt not_equal("notequal", bool_type());
+  not_equal.copy_to_operands(strstr_call, null_ptr);
+
+  return not_equal;
+}
+
 // Main method with minimal refactoring to preserve original logic
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
@@ -2062,6 +2243,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
+
+  // Handle 'in' operator for string membership testing
+  if (op == "In" && (lhs.type().is_array() || rhs.type().is_array()))
+  {
+    return handle_string_membership(lhs, rhs, element);
+  }
 
   // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
   convert_function_calls_to_side_effects(lhs, rhs);

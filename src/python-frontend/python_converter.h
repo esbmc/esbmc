@@ -255,6 +255,23 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  exprt handle_string_membership(
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  exprt ensure_null_terminated_string(exprt &e);
+
+  exprt handle_string_startswith(
+    const exprt &string_obj,
+    const exprt &prefix_arg,
+    const locationt &location);
+
+  exprt handle_string_endswith(
+    const exprt &string_obj,
+    const exprt &suffix_arg,
+    const locationt &location);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,
