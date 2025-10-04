@@ -120,6 +120,12 @@ Below is an overview of ESBMC-Python's key capabilities:
       - When the index exceeds the list length, the element is appended to the end.
       - When the index is within bounds, existing elements are shifted right.
       - Supports insertion into empty lists at index 0.
+  - **String Operations**:
+    - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns True).
+      - Works with both string literals and string variables.
+      - Supports single-character and multi-character substring searches.
+      - Internally uses `strstr()` for efficient substring matching with proper null-termination handling.
+      - Returns a boolean result for use in conditionals and assertions.
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
 ### Error Handling and Assertions
