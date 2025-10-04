@@ -2053,6 +2053,50 @@ exprt python_converter::ensure_null_terminated_string(exprt &e)
   return e;
 }
 
+exprt python_converter::handle_string_startswith(
+  const exprt &string_obj,
+  const exprt &prefix_arg,
+  const locationt &location)
+{
+  // Ensure both are proper null-terminated strings
+  exprt string_copy = string_obj;
+  exprt prefix_copy = prefix_arg;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt prefix_expr = ensure_null_terminated_string(prefix_copy);
+
+  // Get string addresses
+  exprt str_addr = get_array_base_address(str_expr);
+  exprt prefix_addr = get_array_base_address(prefix_expr);
+
+  // Calculate prefix length: len(prefix_expr) - 1 (exclude null terminator)
+  const array_typet &prefix_type = to_array_type(prefix_expr.type());
+  exprt prefix_len = prefix_type.size();
+
+  // Subtract 1 for null terminator
+  exprt one = from_integer(1, prefix_len.type());
+  exprt actual_len("-", prefix_len.type());
+  actual_len.copy_to_operands(prefix_len, one);
+
+  // Find strncmp symbol
+  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+  if (!strncmp_symbol)
+    throw std::runtime_error("strncmp function not found for startswith()");
+
+  // Call strncmp(str, prefix, len(prefix))
+  side_effect_expr_function_callt strncmp_call;
+  strncmp_call.function() = symbol_expr(*strncmp_symbol);
+  strncmp_call.arguments() = {str_addr, prefix_addr, actual_len};
+  strncmp_call.location() = location;
+  strncmp_call.type() = int_type();
+
+  // Check if result == 0 (strings match)
+  exprt zero = gen_zero(int_type());
+  exprt equal("=", bool_type());
+  equal.copy_to_operands(strncmp_call, zero);
+
+  return equal;
+}
+
 exprt python_converter::handle_string_membership(
   exprt &lhs,
   exprt &rhs,

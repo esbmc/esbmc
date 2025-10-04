@@ -236,6 +236,25 @@ exprt function_call_builder::build() const
   if (function_id.get_function() == "__ESBMC_len_single_char")
     return from_integer(1, int_type());
 
+  // Handle startswith() method
+  if (call_["func"]["_type"] == "Attribute")
+  {
+    std::string method_name = call_["func"]["attr"].get<std::string>();
+
+    if (method_name == "startswith")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() != 1)
+        throw std::runtime_error("startswith() requires exactly one argument");
+
+      exprt prefix_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+
+      return converter_.handle_string_startswith(obj_expr, prefix_arg, loc);
+    }
+  }
+
   // Add assume and len functions to symbol table
   if (is_assume_call(function_id) || is_len_call(function_id))
   {

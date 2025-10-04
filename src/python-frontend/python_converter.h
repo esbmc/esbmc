@@ -262,6 +262,11 @@ private:
 
   exprt ensure_null_terminated_string(exprt &e);
 
+  exprt handle_string_startswith(
+    const exprt &string_obj,
+    const exprt &prefix_arg,
+    const locationt &location);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,
