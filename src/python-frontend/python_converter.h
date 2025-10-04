@@ -267,6 +267,11 @@ private:
     const exprt &prefix_arg,
     const locationt &location);
 
+  exprt handle_string_endswith(
+    const exprt &string_obj,
+    const exprt &suffix_arg,
+    const locationt &location);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,

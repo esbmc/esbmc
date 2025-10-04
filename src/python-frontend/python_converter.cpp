@@ -2097,6 +2097,77 @@ exprt python_converter::handle_string_startswith(
   return equal;
 }
 
+exprt python_converter::handle_string_endswith(
+  const exprt &string_obj,
+  const exprt &suffix_arg,
+  const locationt &location)
+{
+  // Ensure both are proper null-terminated strings
+  exprt string_copy = string_obj;
+  exprt suffix_copy = suffix_arg;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt suffix_expr = ensure_null_terminated_string(suffix_copy);
+
+  // Get string addresses
+  exprt str_addr = get_array_base_address(str_expr);
+  exprt suffix_addr = get_array_base_address(suffix_expr);
+
+  // Calculate lengths (exclude null terminators)
+  const array_typet &str_type = to_array_type(str_expr.type());
+  const array_typet &suffix_type = to_array_type(suffix_expr.type());
+
+  exprt str_len = str_type.size();
+  exprt suffix_len = suffix_type.size();
+
+  exprt one = from_integer(1, str_len.type());
+
+  // actual_str_len = str_len - 1
+  exprt actual_str_len("-", str_len.type());
+  actual_str_len.copy_to_operands(str_len, one);
+
+  // actual_suffix_len = suffix_len - 1
+  exprt actual_suffix_len("-", suffix_len.type());
+  actual_suffix_len.copy_to_operands(suffix_len, one);
+
+  // Check if suffix is longer than string: if (suffix_len > str_len) return false
+  exprt len_check(">", bool_type());
+  len_check.copy_to_operands(actual_suffix_len, actual_str_len);
+
+  // Calculate offset: str_len - suffix_len
+  exprt offset("-", str_len.type());
+  offset.copy_to_operands(actual_str_len, actual_suffix_len);
+
+  // Get pointer to the position: str + offset
+  exprt offset_ptr("+", gen_pointer_type(char_type()));
+  offset_ptr.copy_to_operands(str_addr, offset);
+
+  // Find strncmp symbol
+  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+  if (!strncmp_symbol)
+    throw std::runtime_error("strncmp function not found for endswith()");
+
+  // Call strncmp(str + offset, suffix, len(suffix))
+  side_effect_expr_function_callt strncmp_call;
+  strncmp_call.function() = symbol_expr(*strncmp_symbol);
+  strncmp_call.arguments() = {offset_ptr, suffix_addr, actual_suffix_len};
+  strncmp_call.location() = location;
+  strncmp_call.type() = int_type();
+
+  // Check if result == 0 (strings match)
+  exprt zero = gen_zero(int_type());
+  exprt strings_equal("=", bool_type());
+  strings_equal.copy_to_operands(strncmp_call, zero);
+
+  // Return: (suffix_len <= str_len) && (strncmp(...) == 0)
+  exprt len_ok("not", bool_type());
+  len_ok.copy_to_operands(len_check);
+
+  exprt result("and", bool_type());
+  result.copy_to_operands(len_ok, strings_equal);
+
+  return result;
+}
+
 exprt python_converter::handle_string_membership(
   exprt &lhs,
   exprt &rhs,

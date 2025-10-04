@@ -236,7 +236,6 @@ exprt function_call_builder::build() const
   if (function_id.get_function() == "__ESBMC_len_single_char")
     return from_integer(1, int_type());
 
-  // Handle startswith() method
   if (call_["func"]["_type"] == "Attribute")
   {
     std::string method_name = call_["func"]["attr"].get<std::string>();
@@ -252,6 +251,19 @@ exprt function_call_builder::build() const
       locationt loc = converter_.get_location_from_decl(call_);
 
       return converter_.handle_string_startswith(obj_expr, prefix_arg, loc);
+    }
+
+    if (method_name == "endswith")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() != 1)
+        throw std::runtime_error("endswith() requires exactly one argument");
+
+      exprt suffix_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+
+      return converter_.handle_string_endswith(obj_expr, suffix_arg, loc);
     }
   }
 
