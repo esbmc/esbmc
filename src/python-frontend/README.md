@@ -6,7 +6,7 @@ The Python frontend handles the conversion of Python code into an internal repre
 
 1. Generating an Abstract Syntax Tree (AST) in JSON format.
 2. Annotating the AST with type information.
-3. Translating Python statements into a set of symbols in the Intermediate Representation (IRep) format.
+3. Translating Python statements into a set of symbols in the Intermediate Representation (IRep) format of ESBMC.
 
 The ESBMC backend finalizes the conversion by performing symbolic execution on the GOTO program, producing instructions in Single Static Assignment (SSA) form.
 Following symbolic execution, we generate a first-order logic formula, which an SMT solver discharges. </br></br>
