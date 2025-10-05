@@ -2642,7 +2642,58 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   }
 
   function_call_builder call_builder(*this, element);
-  return call_builder.build();
+  exprt call_expr = call_builder.build();
+
+  auto handle_keywords = [&](exprt &call_expr) {
+    if (!element.contains("keywords") || element["keywords"].empty())
+      return;
+
+    const exprt &func =
+      call_expr.operands().size() > 1 ? call_expr.operands()[1] : exprt();
+
+    if (!func.is_symbol())
+      return;
+
+    const symbolt *func_symbol = symbol_table_.find_symbol(func.identifier());
+    if (!func_symbol || !func_symbol->type.is_code())
+      return;
+
+    const code_typet &func_type = to_code_type(func_symbol->type);
+    const code_typet::argumentst &params = func_type.arguments();
+
+    code_function_callt &call = static_cast<code_function_callt &>(call_expr);
+    auto &args = call.arguments();
+
+    std::map<std::string, size_t> param_positions;
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+      std::string param_name = params[i].get_base_name().as_string();
+      assert(!param_name.empty());
+      param_positions[param_name] = i;
+    }
+
+    if (args.size() < params.size())
+      args.resize(params.size(), exprt());
+
+    for (const auto &kw : element["keywords"])
+    {
+      std::string arg_name = kw["arg"].get<std::string>();
+      exprt arg_expr = get_expr(kw["value"]);
+
+      auto it = param_positions.find(arg_name);
+      if (it == param_positions.end())
+      {
+        throw std::runtime_error(
+          "Unknown keyword argument: " + arg_name + " in function " +
+          func_symbol->name.as_string());
+      }
+
+      args[it->second] = arg_expr;
+    }
+  };
+
+  handle_keywords(call_expr);
+  return call_expr;
 }
 
 exprt python_converter::make_char_array_expr(
