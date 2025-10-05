@@ -11,7 +11,7 @@ class Foo:
 
 def main() -> None:
     f = Foo(1, b=2)  # mixed positional + keyword args
-    result:int = f.total()
+    result = f.total()
     assert result == 3
 
 

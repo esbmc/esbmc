@@ -1273,6 +1273,8 @@ private:
       inferred_type = get_type_from_constant(stmt["value"]);
     else if (value_type == "List")
       inferred_type = "list";
+    else if (value_type == "Compare")
+      inferred_type = "bool";
     else if (value_type == "UnaryOp") // Handle negative numbers
     {
       const auto &operand = stmt["value"]["operand"];
