@@ -389,8 +389,14 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
       val = converter_.get_resolved_value(val);
 
     if (val.is_nil())
-      throw std::runtime_error(
-        "Unable to resolve symbol " + arg["id"].get<std::string>());
+    {
+      // Runtime variable: create expression without compile-time evaluation
+      exprt var_expr = converter_.get_expr(arg);
+
+      // Since we can't evaluate at compile time, just convert the variable
+      // The type should already be correct from get_expr
+      return var_expr;
+    }
 
     const auto &const_expr = to_constant_expr(val);
     std::string binary_str = id2string(const_expr.get_value());
