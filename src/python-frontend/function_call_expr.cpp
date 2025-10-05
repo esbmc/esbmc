@@ -1185,8 +1185,37 @@ exprt function_call_expr::handle_list_append() const
   return list.build_push_list_call(*list_symbol, call_, value_to_append);
 }
 
+bool function_call_expr::is_print_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+  return func_name == "print";
+}
+
+exprt function_call_expr::handle_print() const
+{
+  // Process all arguments to ensure expressions are evaluated
+  const auto &args = call_["args"];
+
+  for (const auto &arg_node : args)
+  {
+    // Evaluate each argument expression
+    // This ensures that any side effects or expressions are properly processed
+    converter_.get_expr(arg_node);
+  }
+
+  // Print doesn't return a value, so return a nil expression
+  // This won't affect verification but ensures arguments are evaluated
+  return nil_exprt();
+}
+
 exprt function_call_expr::get()
 {
+  // Handle print() function
+  if (is_print_call())
+  {
+    return handle_print();
+  }
+
   // Handle non-det functions
   if (is_nondet_call())
   {
