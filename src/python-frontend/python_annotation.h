@@ -1158,8 +1158,33 @@ private:
     else
       obj_type = "Any"; // Default fallback type
 
+    // Handle built-in types
     if (type_utils::is_builtin_type(obj_type))
       type = obj_type;
+    else
+    {
+      // Handle user-defined class methods
+      Json class_node = json_utils::find_class(ast_["body"], obj_type);
+      if (!class_node.empty())
+      {
+        const std::string &method_name = call["func"]["attr"];
+
+        // Find the method in the class body
+        for (const Json &member : class_node["body"])
+        {
+          if (member["_type"] == "FunctionDef" && member["name"] == method_name)
+          {
+            // Get return type from annotation
+            if (
+              member.contains("returns") && !member["returns"].is_null() &&
+              member["returns"].contains("id"))
+            {
+              return member["returns"]["id"];
+            }
+          }
+        }
+      }
+    }
 
     return type;
   }
