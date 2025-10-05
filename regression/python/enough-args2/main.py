@@ -4,7 +4,7 @@ class Foo:
         assert self.a == a
 
     def same(self, b: int) -> bool:
-        result:bool = self.a == b
+        result = self.a == b
         assert result == (self.a == b)
         return result
 
@@ -12,7 +12,7 @@ def main() -> None:
         f = Foo(1)
         assert f.a == 1
 
-        r:bool = f.same(b=1)
+        r = f.same(b=1)
         assert r is True
         assert f.a == 1
 
