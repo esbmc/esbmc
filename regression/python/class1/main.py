@@ -1,6 +1,6 @@
 class Person:
     # Class variable (shared by all instances)
-    species:str = "Homo sapiens"
+    species = "Homo sapiens"
 
     # Constructor method
     def __init__(self, weight: int, age: int):
