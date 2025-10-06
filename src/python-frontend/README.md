@@ -191,6 +191,10 @@ These random functions use nondeterministic modeling with appropriate constraint
   - **IndexError**: Raised for sequence index out of range.
   - **KeyError**: Raised for missing dictionary keys.
   - **ZeroDivisionError**: Raised for division by zero operations.
+  - **OSError**: Base class for I/O related errors.
+  - **FileNotFoundError**: Raised when a file or directory is not found (inherits from OSError).
+  - **FileExistsError**: Raised when trying to create a file or directory that already exists (inherits from OSError).
+  - **PermissionError**: Raised when an operation lacks the necessary permissions (inherits from OSError).
 - **Exception Objects**: Exception instances contain message attributes and support string representation via __str__() method.
 - **Exception Raising**: Supports raise statements with exception instantiation and custom error messages.
 
