@@ -46,6 +46,13 @@ private:
 
   bool is_input_call() const;
 
+  bool is_print_call() const;
+
+  /* Processes Python print() statements by evaluating all arguments.
+   * @return nil_exprt since print has no return value
+   */
+  exprt handle_print() const;
+
   // Create an expression that represents non-deterministic string input
   exprt handle_input() const;
 

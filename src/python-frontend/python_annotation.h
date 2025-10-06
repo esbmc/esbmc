@@ -551,6 +551,30 @@ private:
         // Add type annotations within the class member function
         annotate_function(class_member);
       }
+      // Process unannotated class attributes (e.g., species = "Homo sapiens")
+      else if (class_member["_type"] == "Assign")
+      {
+        std::string inferred_type;
+
+        // Infer type from the RHS value
+        if (
+          infer_type(class_member, class_element, inferred_type) ==
+          InferResult::OK)
+        {
+          // Convert Assign to AnnAssign with the inferred type
+          update_assignment_node(class_member, inferred_type);
+        }
+        else
+        {
+          // If type inference fails, throw error with helpful message
+          std::string attr_name =
+            class_member["targets"][0]["id"].template get<std::string>();
+          throw std::runtime_error(
+            "Cannot infer type for class attribute '" + attr_name +
+            "' in class '" + class_element["name"].template get<std::string>() +
+            "'. Please add explicit type annotation.");
+        }
+      }
     }
   }
 

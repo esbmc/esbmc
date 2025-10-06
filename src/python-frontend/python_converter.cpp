@@ -4810,14 +4810,14 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::EXCEPTHANDLER:
     {
-      exprt catch_block = get_block(element["body"]);
+      symbolt *exception_symbol = nullptr;
+      typet exception_type;
 
-      // Check if the exception handler specifies an exception type
+      // Create exception variable symbol before processing body
       if (!element["type"].is_null())
       {
-        typet type =
+        exception_type =
           type_handler_.get_typet(element["type"]["id"].get<std::string>());
-        catch_block.type() = type;
 
         std::string name;
         symbol_id sid = create_symbol_id();
@@ -4830,18 +4830,32 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
           name = "__anon_exc_var_" + location.get_line().as_string();
 
         sid.set_object(name);
+        // Create and add symbol to symbol table
         symbolt symbol = create_symbol(
-          module_name, current_func_name_, sid.to_string(), location, type);
+          module_name,
+          current_func_name_,
+          sid.to_string(),
+          location,
+          exception_type);
         symbol.name = name;
         symbol.lvalue = true;
         symbol.is_extern = false;
         symbol.file_local = false;
-        symbolt *s = symbol_table_.move_symbol_to_context(symbol);
+        exception_symbol = symbol_table_.move_symbol_to_context(symbol);
+      }
 
-        exprt sym = symbol_expr(*s);
+      // Process exception handler body (symbol now exists)
+      exprt catch_block = get_block(element["body"]);
+
+      // Add type and declaration if exception variable was created
+      if (exception_symbol != nullptr)
+      {
+        catch_block.type() = exception_type;
+        exprt sym = symbol_expr(*exception_symbol);
         code_declt decl(sym);
         exprt decl_code = convert_expression_to_code(decl);
-        decl_code.location() = location;
+        decl_code.location() = exception_symbol->location;
+
         codet::operandst &ops = catch_block.operands();
         ops.insert(ops.begin(), decl_code);
       }
