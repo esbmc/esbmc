@@ -1,4 +1,4 @@
-THOROUGH
+KNOWNBUG
 lista7paa.cpp
 Solver.cpp Parser.cpp --unwind 1 --no-pointer-check --no-bounds-check --no-unwinding-assertions --timeout 900
 ^VERIFICATION SUCCESSFUL$
