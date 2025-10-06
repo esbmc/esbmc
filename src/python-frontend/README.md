@@ -171,6 +171,31 @@ ESBMC-Python supports modeling and verification of the random module functions u
 - **random.randrange(start, stop=None, step=1)**: Returns a randomly selected integer from the specified range.
 These random functions use nondeterministic modeling with appropriate constraints (`__ESBMC_assume`), allowing ESBMC to explore all possible values within the specified ranges during verification. This enables thorough testing of code that depends on random values.
 
+### OS Module Support
+ESBMC-Python provides modeling and verification capabilities for Python's os module, enabling verification of file system operations with nondeterministic behavior modeling:
+- **Path Operations**:
+  - **os.path.exists(path)**: Checks if a path exists (file or directory).
+  - **os.path.basename(path)**: Returns the base name of a pathname.
+- **Directory Operations**:
+  - **os.makedirs(path, exist_ok=False)**: Creates a directory and any necessary parent directories.
+    - Supports the `exist_ok` parameter to control behavior when the directory already exists.
+  - **os.mkdir(path)**: Creates a single directory.
+    - Models nondeterministic behavior: may raise `FileExistsError` if the directory already exists.
+    - Enables verification of error handling in directory creation scenarios.
+  - **os.rmdir(path)**: Removes an empty directory.
+    - Models nondeterministic behavior: may raise `OSError` if the directory is not empty.
+    - Enables verification of proper cleanup and error handling in directory removal operations.
+  - **os.listdir(path)**: Lists directory contents.
+- **File Operations**:
+  - **os.remove(path)**: Removes a file.
+    - Models nondeterministic behavior: may raise `FileNotFoundError` if the file does not exist.
+    - Enables verification of error handling in file deletion scenarios.
+  - **os.popen(cmd)**: Opens a pipe to or from a command (modeled for verification).
+- **Nondeterministic Modeling**:
+  - The `os` module functions use nondeterministic modeling to explore different execution paths during verification:
+  - File and directory existence is modeled nondeterministically, allowing ESBMC to verify both success and failure scenarios.
+  - This enables thorough verification of exception handling code that deals with file system operations.
+
 ### Special Value Detection:
 - **math.isnan(x)**: Returns True if x is NaN (Not a Number).
 - **math.isinf(x)**: Returns True if x is positive or negative infinity.
