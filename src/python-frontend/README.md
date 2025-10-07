@@ -107,6 +107,11 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 ### Object-Oriented Programming
 - **Classes**: Supports class definitions, methods, and attributes.
+- **Class Attributes**: Supports class-level attributes (variables shared across all instances):
+  - **Automatic Type Inference**: Unannotated class attributes are automatically type-inferred from their assigned values (e.g., species = "Homo sapiens" is inferred as str).
+  - **Explicit Type Annotations**: Also supports explicit type annotations for class attributes when needed.
+  - **Access Patterns**: Supports both instance-based and class-based attribute access (e.g., `instance.attr` and `ClassName.attr`).
+- **Instance Variables**: Supports instance-specific attributes defined in `__init__` methods.
 - **Inheritance**: Handles inheritance and verifies scenarios involving inheritance issues.
 - **super() calls**: Supports the `super()` function to call methods from a superclass. This allows for the verification of behaviors where a derived class explicitly invokes base class methods, enabling the analysis of polymorphic behavior and the proper propagation of assertions or side effects.
 
@@ -149,6 +154,7 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
   - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables the verification of programs that rely on user input.
+  - **Print**: Supports `print()` statements for output. All arguments are evaluated to ensure proper side-effect handling during verification, though the actual output is not produced.
   - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
@@ -206,6 +212,7 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
 - **Try-Except Blocks**: Supports comprehensive exception handling with try-except syntax for controlling program flow and verifying error conditions.
 - **Multiple Exception Handlers**: Supports multiple except clauses to handle different exception types.
 - **Exception Catching**: Supports catching exceptions with variable binding using except ExceptionType as variable syntax.
+  - **Improved Variable Scope Handling**: Exception variables are declared and scoped within their catch blocks, ensuring correct symbol table management during verification.
 - **Exception Hierarchy**: Implements Python's exception hierarchy where all exceptions inherit from BaseException.
 - **Built-in Exception Classes**:
   - **BaseException**: Base class for all exceptions.
@@ -241,6 +248,7 @@ The current version of ESBMC-Python has the following limitations:
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
+- `print()` evaluates all arguments for side effects but does not produce actual output during verification.
 - `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
 - Exception handling supports the core built-in exception types but may not cover all Python standard library exceptions or custom exception hierarchies with complex inheritance patterns.
 - Built-in variables support is limited to __name__; other Python built-ins such as __file__, __doc__, __package__ are not yet supported.
@@ -259,6 +267,8 @@ The current version of ESBMC-Python has the following limitations:
 - Random Module Limitations:
   - `random.randrange()` with a single argument (e.g., randrange(10)) is not supported.
   - Other random module functions (e.g., choice, shuffle, sample, seed) are not yet supported.
+- Class Attribute Limitations:
+  - Type inference for class attributes requires values that have clear, determinable types. Complex expressions may require explicit type annotations.
 
 ### Example 1: Division by Zero in Python
 
