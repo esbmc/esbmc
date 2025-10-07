@@ -203,6 +203,19 @@ private:
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
 
+  /*
+   * Check if the current function call is to a regular expression module function
+   * Returns true if the function is match, search, or fullmatch from the re module
+   */
+  bool is_re_module_call() const;
+
+  /*
+   * Validate arguments for regular expression module functions
+   * Checks that pattern and string arguments are string types (array or pointer to char)
+   * Returns TypeError exception if validation fails, nil_exprt if validation passes
+   */
+  exprt validate_re_module_args() const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
