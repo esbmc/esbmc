@@ -662,17 +662,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
-  case clang::Stmt::ExprWithCleanupsClass:
-  {
-    const clang::ExprWithCleanups &ewc =
-      static_cast<const clang::ExprWithCleanups &>(stmt);
-
-    if (get_expr(*ewc.getSubExpr(), new_expr))
-      return true;
-
-    break;
-  }
-
   case clang::Stmt::CXXBindTemporaryExprClass:
   {
     const clang::CXXBindTemporaryExpr &cxxbtmp =
