@@ -61,7 +61,9 @@ void goto_k_inductiont::goto_k_induction()
     if (function_loop.get_modified_loop_vars().empty())
       continue;
 
-    if (config.options.get_bool_option("add-symex-value-sets") && function_loop.contains_only_pointers())
+    if (
+      config.options.get_bool_option("add-symex-value-sets") &&
+      function_loop.contains_only_pointers())
       continue;
     // Start the loop conversion
     convert_finite_loop(function_loop);
