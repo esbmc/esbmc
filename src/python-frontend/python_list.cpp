@@ -301,7 +301,7 @@ exprt python_list::handle_range_slice(
     if (src_type.subtype() == char_type())
       logical_len = minus_exprt(array_len, gen_one(size_type()));
 
-    // Helper lambda to process slice bounds (handles null, negative indices)
+    // Process slice bounds (handles null, negative indices)
     auto process_bound =
       [&](const std::string &bound_name, const exprt &default_value) -> exprt {
       if (!slice_node.contains(bound_name) || slice_node[bound_name].is_null())
@@ -378,7 +378,7 @@ exprt python_list::handle_range_slice(
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
-  // Helper to safely get bound expressions (handles null/missing)
+  // Get bound expressions (handles null/missing)
   auto get_list_bound = [&](const std::string &bound_name) -> exprt {
     if (slice_node.contains(bound_name) && !slice_node[bound_name].is_null())
       return converter_.get_expr(slice_node[bound_name]);
@@ -423,7 +423,9 @@ exprt python_list::handle_range_slice(
   const symbolt *push_func =
     converter_.symbol_table().find_symbol("c:list.c@F@list_push_object");
   if (!push_func)
+  {
     throw std::runtime_error("Push function symbol not found");
+  }
 
   side_effect_expr_function_callt push_call;
   push_call.function() = symbol_expr(*push_func);
