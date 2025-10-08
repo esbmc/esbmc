@@ -301,48 +301,27 @@ exprt python_list::handle_range_slice(
     if (src_type.subtype() == char_type())
       logical_len = minus_exprt(array_len, gen_one(size_type()));
 
-    // Handle lower bound (default to 0 if missing/null)
-    exprt lower_expr;
-    if (slice_node.contains("lower") && !slice_node["lower"].is_null())
-    {
-      // Check if the lower bound is negative in the JSON
-      if (
-        slice_node["lower"]["_type"] == "UnaryOp" &&
-        slice_node["lower"]["op"]["_type"] == "USub")
-      {
-        // Negative index: convert to positive (logical_length - abs(value))
-        exprt abs_value = converter_.get_expr(slice_node["lower"]["operand"]);
-        minus_exprt adjusted_lower(logical_len, abs_value);
-        lower_expr = adjusted_lower;
-      }
-      else
-        lower_expr = converter_.get_expr(slice_node["lower"]);
-    }
-    else
-      lower_expr = gen_zero(size_type());
+    // Helper lambda to process slice bounds (handles null, negative indices)
+    auto process_bound =
+      [&](const std::string &bound_name, const exprt &default_value) -> exprt {
+      if (!slice_node.contains(bound_name) || slice_node[bound_name].is_null())
+        return default_value;
 
-    // Handle upper bound (default to array length if missing/null)
-    exprt upper_expr;
-    if (slice_node.contains("upper") && !slice_node["upper"].is_null())
-    {
-      // Check if the upper bound is negative in the JSON
-      if (
-        slice_node["upper"]["_type"] == "UnaryOp" &&
-        slice_node["upper"]["op"]["_type"] == "USub")
+      const auto &bound = slice_node[bound_name];
+
+      // Check if negative index
+      if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
       {
-        // Negative index: convert to positive (logical_length - abs(value))
-        exprt abs_value = converter_.get_expr(slice_node["upper"]["operand"]);
-        minus_exprt adjusted_upper(logical_len, abs_value);
-        upper_expr = adjusted_upper;
+        exprt abs_value = converter_.get_expr(bound["operand"]);
+        return minus_exprt(logical_len, abs_value);
       }
-      else
-        upper_expr = converter_.get_expr(slice_node["upper"]);
-    }
-    else
-    {
-      // Use logical length as upper bound for strings (excludes null terminator)
-      upper_expr = logical_len;
-    }
+
+      return converter_.get_expr(bound);
+    };
+
+    // Process bounds
+    exprt lower_expr = process_bound("lower", gen_zero(size_type()));
+    exprt upper_expr = process_bound("upper", logical_len);
 
     // Calculate slice length
     minus_exprt slice_len(upper_expr, lower_expr);
@@ -395,11 +374,23 @@ exprt python_list::handle_range_slice(
     return symbol_expr(result);
   }
 
+  // Handle list slicing
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
-  const exprt lower_expr = converter_.get_expr(slice_node["lower"]);
-  const exprt upper_expr = converter_.get_expr(slice_node["upper"]);
+  // Helper to safely get bound expressions (handles null/missing)
+  auto get_list_bound = [&](const std::string &bound_name) -> exprt {
+    if (slice_node.contains(bound_name) && !slice_node[bound_name].is_null())
+      return converter_.get_expr(slice_node[bound_name]);
+
+    // For lists, we'd need the list size here, but that's not easily accessible
+    // For now, keep existing behavior - assumes bounds are present
+    throw std::runtime_error(
+      "List slicing with missing bounds not yet supported");
+  };
+
+  const exprt lower_expr = get_list_bound("lower");
+  const exprt upper_expr = get_list_bound("upper");
 
   // Initialize counter: int counter = lower
   symbolt &counter = converter_.create_tmp_symbol(
@@ -432,9 +423,7 @@ exprt python_list::handle_range_slice(
   const symbolt *push_func =
     converter_.symbol_table().find_symbol("c:list.c@F@list_push_object");
   if (!push_func)
-  {
     throw std::runtime_error("Push function symbol not found");
-  }
 
   side_effect_expr_function_callt push_call;
   push_call.function() = symbol_expr(*push_func);
@@ -457,26 +446,32 @@ exprt python_list::handle_range_slice(
   while_loop.copy_to_operands(loop_condition, loop_body);
   converter_.add_instruction(while_loop);
 
-  // Update type map for sliced elements
-  const auto &list_node = json_utils::get_var_value(
-    list_value_["value"]["id"],
-    converter_.current_function_name(),
-    converter_.ast());
-
-  const size_t lower_bound = slice_node["lower"]["value"].get<size_t>();
-  const size_t upper_bound = slice_node["upper"]["value"].get<size_t>();
-
-  // Only update type map for actual lists (not strings or other types)
+  // Update type map for sliced elements (only if bounds are available)
   if (
-    !list_node.is_null() && list_node.contains("value") &&
-    list_node["value"].contains("elts") &&
-    list_node["value"]["elts"].is_array())
+    slice_node.contains("lower") && !slice_node["lower"].is_null() &&
+    slice_node.contains("upper") && !slice_node["upper"].is_null())
   {
-    for (size_t i = lower_bound; i < upper_bound; ++i)
+    const auto &list_node = json_utils::get_var_value(
+      list_value_["value"]["id"],
+      converter_.current_function_name(),
+      converter_.ast());
+
+    const size_t lower_bound = slice_node["lower"]["value"].get<size_t>();
+    const size_t upper_bound = slice_node["upper"]["value"].get<size_t>();
+
+    // Only update type map for actual lists (not strings or other types)
+    if (
+      !list_node.is_null() && list_node.contains("value") &&
+      list_node["value"].contains("elts") &&
+      list_node["value"]["elts"].is_array())
     {
-      const exprt element = converter_.get_expr(list_node["value"]["elts"][i]);
-      list_type_map[sliced_list.id.as_string()].push_back(
-        std::make_pair(element.identifier().as_string(), element.type()));
+      for (size_t i = lower_bound; i < upper_bound; ++i)
+      {
+        const exprt element =
+          converter_.get_expr(list_node["value"]["elts"][i]);
+        list_type_map[sliced_list.id.as_string()].push_back(
+          std::make_pair(element.identifier().as_string(), element.type()));
+      }
     }
   }
 
