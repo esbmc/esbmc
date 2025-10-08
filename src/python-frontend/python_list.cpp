@@ -284,11 +284,113 @@ exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
 {
+  const typet list_type = converter_.get_type_handler().get_list_type();
+
+  // Handle regular array/string slicing (not list slicing)
+  if (array.type() != list_type && array.type().is_array())
+  {
+    const array_typet &src_type = to_array_type(array.type());
+    locationt location = converter_.get_location_from_decl(slice_node);
+
+    // Get array length
+    exprt array_len = src_type.size();
+
+    // For char arrays (strings), exclude the null terminator from length
+    // when calculating negative indices, to match Python string behavior
+    exprt logical_len = array_len;
+    if (src_type.subtype() == char_type())
+      logical_len = minus_exprt(array_len, gen_one(size_type()));
+
+    // Process slice bounds (handles null, negative indices)
+    auto process_bound =
+      [&](const std::string &bound_name, const exprt &default_value) -> exprt {
+      if (!slice_node.contains(bound_name) || slice_node[bound_name].is_null())
+        return default_value;
+
+      const auto &bound = slice_node[bound_name];
+
+      // Check if negative index
+      if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
+      {
+        exprt abs_value = converter_.get_expr(bound["operand"]);
+        return minus_exprt(logical_len, abs_value);
+      }
+
+      return converter_.get_expr(bound);
+    };
+
+    // Process bounds
+    exprt lower_expr = process_bound("lower", gen_zero(size_type()));
+    exprt upper_expr = process_bound("upper", logical_len);
+
+    // Calculate slice length
+    minus_exprt slice_len(upper_expr, lower_expr);
+
+    // Create result array type with extra space for null terminator
+    plus_exprt result_size(slice_len, gen_one(size_type()));
+    array_typet result_type(src_type.subtype(), result_size);
+
+    // Create temporary for sliced array
+    symbolt &result = converter_.create_tmp_symbol(
+      slice_node, "$array_slice$", result_type, exprt());
+
+    code_declt result_decl(symbol_expr(result));
+    result_decl.location() = location;
+    converter_.add_instruction(result_decl);
+
+    // Create loop: for i = 0; i < (upper-lower); i++
+    symbolt &idx = converter_.create_tmp_symbol(
+      slice_node, "$i$", size_type(), gen_zero(size_type()));
+    code_assignt idx_init(symbol_expr(idx), gen_zero(size_type()));
+    converter_.add_instruction(idx_init);
+
+    exprt cond("<", bool_type());
+    cond.copy_to_operands(symbol_expr(idx), slice_len);
+
+    code_blockt body;
+    // result[i] = array[lower + i]
+    plus_exprt src_idx(lower_expr, symbol_expr(idx));
+    index_exprt src(array, src_idx, src_type.subtype());
+    index_exprt dst(symbol_expr(result), symbol_expr(idx), src_type.subtype());
+    code_assignt assign(dst, src);
+    body.copy_to_operands(assign);
+
+    // i++
+    plus_exprt incr(symbol_expr(idx), gen_one(size_type()));
+    code_assignt update(symbol_expr(idx), incr);
+    body.copy_to_operands(update);
+
+    codet loop;
+    loop.set_statement("while");
+    loop.copy_to_operands(cond, body);
+    converter_.add_instruction(loop);
+
+    // Add null terminator at result[slice_len]
+    index_exprt null_pos(symbol_expr(result), slice_len, src_type.subtype());
+    code_assignt add_null(null_pos, gen_zero(src_type.subtype()));
+    add_null.location() = location;
+    converter_.add_instruction(add_null);
+
+    return symbol_expr(result);
+  }
+
+  // Handle list slicing
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
-  const exprt lower_expr = converter_.get_expr(slice_node["lower"]);
-  const exprt upper_expr = converter_.get_expr(slice_node["upper"]);
+  // Get bound expressions (handles null/missing)
+  auto get_list_bound = [&](const std::string &bound_name) -> exprt {
+    if (slice_node.contains(bound_name) && !slice_node[bound_name].is_null())
+      return converter_.get_expr(slice_node[bound_name]);
+
+    // For lists, we'd need the list size here, but that's not easily accessible
+    // For now, keep existing behavior - assumes bounds are present
+    throw std::runtime_error(
+      "List slicing with missing bounds not yet supported");
+  };
+
+  const exprt lower_expr = get_list_bound("lower");
+  const exprt upper_expr = get_list_bound("upper");
 
   // Initialize counter: int counter = lower
   symbolt &counter = converter_.create_tmp_symbol(
@@ -346,20 +448,33 @@ exprt python_list::handle_range_slice(
   while_loop.copy_to_operands(loop_condition, loop_body);
   converter_.add_instruction(while_loop);
 
-  // Update type map for sliced elements
-  const auto &list_node = json_utils::get_var_value(
-    list_value_["value"]["id"],
-    converter_.current_function_name(),
-    converter_.ast());
-
-  const size_t lower_bound = slice_node["lower"]["value"].get<size_t>();
-  const size_t upper_bound = slice_node["upper"]["value"].get<size_t>();
-
-  for (size_t i = lower_bound; i < upper_bound; ++i)
+  // Update type map for sliced elements (only if bounds are available)
+  if (
+    slice_node.contains("lower") && !slice_node["lower"].is_null() &&
+    slice_node.contains("upper") && !slice_node["upper"].is_null())
   {
-    const exprt element = converter_.get_expr(list_node["value"]["elts"][i]);
-    list_type_map[sliced_list.id.as_string()].push_back(
-      std::make_pair(element.identifier().as_string(), element.type()));
+    const auto &list_node = json_utils::get_var_value(
+      list_value_["value"]["id"],
+      converter_.current_function_name(),
+      converter_.ast());
+
+    const size_t lower_bound = slice_node["lower"]["value"].get<size_t>();
+    const size_t upper_bound = slice_node["upper"]["value"].get<size_t>();
+
+    // Only update type map for actual lists (not strings or other types)
+    if (
+      !list_node.is_null() && list_node.contains("value") &&
+      list_node["value"].contains("elts") &&
+      list_node["value"]["elts"].is_array())
+    {
+      for (size_t i = lower_bound; i < upper_bound; ++i)
+      {
+        const exprt element =
+          converter_.get_expr(list_node["value"]["elts"][i]);
+        list_type_map[sliced_list.id.as_string()].push_back(
+          std::make_pair(element.identifier().as_string(), element.type()));
+      }
+    }
   }
 
   return symbol_expr(sliced_list);

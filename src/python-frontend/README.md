@@ -129,6 +129,11 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns True).
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
     - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
+    - **String Slicing**: Comprehensive support for Python's slice notation on strings:
+      - **Basic Slicing**: `string[start:end]` returns a substring from index `start` to `end-1`.
+      - **Omitted Bounds**: Supports slices with omitted start (`string[:end]`) or end (`string[start:]`) indices.
+      - **Negative Indices**: Full support for negative indexing (e.g., `string[-3:]` returns the last three characters).
+      - **Empty Slices**: Correctly handles edge cases such as `string[0:0]` (returns empty string).
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
 ### Error Handling and Assertions
@@ -266,6 +271,7 @@ The current version of ESBMC-Python has the following limitations:
 
 - Only `for` loops using the `range()` function are supported.
 - List and String support are partial and limited in functionality. Currently supported list methods include `append()` and `insert()`.
+- String slicing does not support step values (e.g., string[::2] for every second character is not supported).
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
