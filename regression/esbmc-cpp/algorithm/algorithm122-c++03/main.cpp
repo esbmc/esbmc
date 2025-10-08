@@ -1,1 +1,0 @@
-../algorithm122/main.cpp
