@@ -284,6 +284,67 @@ exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
 {
+  const typet list_type = converter_.get_type_handler().get_list_type();
+
+  // Handle regular array/string slicing (not list slicing)
+  if (array.type() != list_type && array.type().is_array())
+  {
+    const exprt lower_expr = converter_.get_expr(slice_node["lower"]);
+    const exprt upper_expr = converter_.get_expr(slice_node["upper"]);
+
+    // Calculate slice length
+    minus_exprt slice_len(upper_expr, lower_expr);
+
+    // Create result array type with extra space for null terminator
+    const array_typet &src_type = to_array_type(array.type());
+    plus_exprt result_size(slice_len, gen_one(size_type()));
+    array_typet result_type(src_type.subtype(), result_size);
+
+    // Create temporary for sliced array
+    symbolt &result = converter_.create_tmp_symbol(
+      slice_node, "$array_slice$", result_type, exprt());
+    locationt location = converter_.get_location_from_decl(slice_node);
+
+    code_declt result_decl(symbol_expr(result));
+    result_decl.location() = location;
+    converter_.add_instruction(result_decl);
+
+    // Create loop: for i = 0; i < (upper-lower); i++
+    symbolt &idx = converter_.create_tmp_symbol(
+      slice_node, "$i$", size_type(), gen_zero(size_type()));
+    code_assignt idx_init(symbol_expr(idx), gen_zero(size_type()));
+    converter_.add_instruction(idx_init);
+
+    exprt cond("<", bool_type());
+    cond.copy_to_operands(symbol_expr(idx), slice_len);
+
+    code_blockt body;
+    // result[i] = array[lower + i]
+    plus_exprt src_idx(lower_expr, symbol_expr(idx));
+    index_exprt src(array, src_idx, src_type.subtype());
+    index_exprt dst(symbol_expr(result), symbol_expr(idx), src_type.subtype());
+    code_assignt assign(dst, src);
+    body.copy_to_operands(assign);
+
+    // i++
+    plus_exprt incr(symbol_expr(idx), gen_one(size_type()));
+    code_assignt update(symbol_expr(idx), incr);
+    body.copy_to_operands(update);
+
+    codet loop;
+    loop.set_statement("while");
+    loop.copy_to_operands(cond, body);
+    converter_.add_instruction(loop);
+
+    // Add null terminator at result[slice_len]
+    index_exprt null_pos(symbol_expr(result), slice_len, src_type.subtype());
+    code_assignt add_null(null_pos, gen_zero(src_type.subtype()));
+    add_null.location() = location;
+    converter_.add_instruction(add_null);
+
+    return symbol_expr(result);
+  }
+
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
