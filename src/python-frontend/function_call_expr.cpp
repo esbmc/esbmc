@@ -596,8 +596,7 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   const exprt &val = sym->value;
   std::string result;
 
-  auto decode_char = [](const exprt &expr) -> std::optional<char>
-  {
+  auto decode_char = [](const exprt &expr) -> std::optional<char> {
     try
     {
       const auto &const_expr = to_constant_expr(expr);
@@ -1222,8 +1221,7 @@ exprt function_call_expr::validate_re_module_args() const
 {
   const auto &args = call_["args"];
 
-  auto is_string_type = [](const typet &type) -> bool
-  {
+  auto is_string_type = [](const typet &type) -> bool {
     return type.is_array() ||
            (type.is_pointer() && type.subtype() == char_type());
   };
