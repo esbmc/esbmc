@@ -9,7 +9,7 @@ The Python frontend handles the conversion of Python code into an internal repre
 3. Translating Python statements into a set of symbols in the Intermediate Representation (IRep) format of ESBMC.
 
 The ESBMC backend finalizes the conversion by performing symbolic execution on the GOTO program, producing instructions in Single Static Assignment (SSA) form.
-Following symbolic execution, we generate a first-order logic formula, which an SMT solver discharges. </br></br>
+Following symbolic execution, we generate a subset of first-order logical formulas, which an SMT solver discharges. </br></br>
 
 <p align="center">
   <img src="./images/arch.png" alt="ESBMC Architecture" width="65%" />
@@ -84,7 +84,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
-- **Global Variables:** Recognises the `global` keyword for accessing and modifying variables in the global scope from within functions.
+- **Global Variables:** Recognizes the `global` keyword for accessing and modifying variables in the global scope from within functions.
 
 ### String Formatting and Literals
 
@@ -298,8 +298,8 @@ The current version of ESBMC-Python has the following limitations:
   - Type inference for class attributes requires values that have clear, determinable types. Complex expressions may require explicit type annotations.
 - Regular Expression (re) Module Limitations:
   - Only `re.match()`, `re.search()`, and `re.fullmatch()` are supported.
-  - Match objects do not expose group capture methods (e.g., .group(), .groups(), .span()). Match results are only usable for boolean/None testing.
-  - Limited pattern syntax support compared to full Python regex. Complex patterns beyond the explicitly supported constructs may fall back to nondeterministic behavior.
+  - Match objects do not expose group capture methods (e.g., .group(), .groups(), .span()). Match results are only usable for Boolean/None testing.
+  - Limited pattern syntax support compared to full Python regex. Complex patterns beyond the explicitly supported constructs may exhibit nondeterministic behavior.
   - Advanced regex features are not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, and Unicode property escapes.
 
 ### Example 1: Division by Zero in Python
