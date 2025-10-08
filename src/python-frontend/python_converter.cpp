@@ -1545,8 +1545,9 @@ exprt python_converter::handle_type_mismatches(
     return nil_exprt();
   }
 
-  // Mixed types (array vs non-array) = not equal
-  return gen_boolean(op == "NotEq");
+  // Mixed types (array vs non-array)
+  // Let strcmp handle the comparison
+  return nil_exprt();
 }
 
 exprt python_converter::handle_string_comparison(
