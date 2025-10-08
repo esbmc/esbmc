@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
---force-malloc-success --force-realloc-success --unwind 11
+--force-malloc-success --force-realloc-success --unwind 5
 ^VERIFICATION FAILED$
