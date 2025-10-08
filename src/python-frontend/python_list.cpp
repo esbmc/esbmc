@@ -355,11 +355,18 @@ exprt python_list::handle_range_slice(
   const size_t lower_bound = slice_node["lower"]["value"].get<size_t>();
   const size_t upper_bound = slice_node["upper"]["value"].get<size_t>();
 
-  for (size_t i = lower_bound; i < upper_bound; ++i)
+  // Only update type map for actual lists (not strings or other types)
+  if (
+    !list_node.is_null() && list_node.contains("value") &&
+    list_node["value"].contains("elts") &&
+    list_node["value"]["elts"].is_array())
   {
-    const exprt element = converter_.get_expr(list_node["value"]["elts"][i]);
-    list_type_map[sliced_list.id.as_string()].push_back(
-      std::make_pair(element.identifier().as_string(), element.type()));
+    for (size_t i = lower_bound; i < upper_bound; ++i)
+    {
+      const exprt element = converter_.get_expr(list_node["value"]["elts"][i]);
+      list_type_map[sliced_list.id.as_string()].push_back(
+        std::make_pair(element.identifier().as_string(), element.type()));
+    }
   }
 
   return symbol_expr(sliced_list);
