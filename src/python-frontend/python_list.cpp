@@ -289,21 +289,71 @@ exprt python_list::handle_range_slice(
   // Handle regular array/string slicing (not list slicing)
   if (array.type() != list_type && array.type().is_array())
   {
-    const exprt lower_expr = converter_.get_expr(slice_node["lower"]);
-    const exprt upper_expr = converter_.get_expr(slice_node["upper"]);
+    const array_typet &src_type = to_array_type(array.type());
+    locationt location = converter_.get_location_from_decl(slice_node);
+
+    // Get array length
+    exprt array_len = src_type.size();
+
+    // For char arrays (strings), exclude the null terminator from length
+    // when calculating negative indices, to match Python string behavior
+    exprt logical_len = array_len;
+    if (src_type.subtype() == char_type())
+      logical_len = minus_exprt(array_len, gen_one(size_type()));
+
+    // Handle lower bound (default to 0 if missing/null)
+    exprt lower_expr;
+    if (slice_node.contains("lower") && !slice_node["lower"].is_null())
+    {
+      // Check if the lower bound is negative in the JSON
+      if (
+        slice_node["lower"]["_type"] == "UnaryOp" &&
+        slice_node["lower"]["op"]["_type"] == "USub")
+      {
+        // Negative index: convert to positive (logical_length - abs(value))
+        exprt abs_value = converter_.get_expr(slice_node["lower"]["operand"]);
+        minus_exprt adjusted_lower(logical_len, abs_value);
+        lower_expr = adjusted_lower;
+      }
+      else
+        lower_expr = converter_.get_expr(slice_node["lower"]);
+    }
+    else
+      lower_expr = gen_zero(size_type());
+
+    // Handle upper bound (default to array length if missing/null)
+    exprt upper_expr;
+    if (slice_node.contains("upper") && !slice_node["upper"].is_null())
+    {
+      // Check if the upper bound is negative in the JSON
+      if (
+        slice_node["upper"]["_type"] == "UnaryOp" &&
+        slice_node["upper"]["op"]["_type"] == "USub")
+      {
+        // Negative index: convert to positive (logical_length - abs(value))
+        exprt abs_value = converter_.get_expr(slice_node["upper"]["operand"]);
+        minus_exprt adjusted_upper(logical_len, abs_value);
+        upper_expr = adjusted_upper;
+      }
+      else
+        upper_expr = converter_.get_expr(slice_node["upper"]);
+    }
+    else
+    {
+      // Use logical length as upper bound for strings (excludes null terminator)
+      upper_expr = logical_len;
+    }
 
     // Calculate slice length
     minus_exprt slice_len(upper_expr, lower_expr);
 
     // Create result array type with extra space for null terminator
-    const array_typet &src_type = to_array_type(array.type());
     plus_exprt result_size(slice_len, gen_one(size_type()));
     array_typet result_type(src_type.subtype(), result_size);
 
     // Create temporary for sliced array
     symbolt &result = converter_.create_tmp_symbol(
       slice_node, "$array_slice$", result_type, exprt());
-    locationt location = converter_.get_location_from_decl(slice_node);
 
     code_declt result_decl(symbol_expr(result));
     result_decl.location() = location;
