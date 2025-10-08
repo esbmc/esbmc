@@ -109,7 +109,6 @@ static std::string get_op(const std::string &op, const typet &type)
     return it->second;
   }
 
-  // Operator not found — issue a warning and return an empty string.
   log_warning("Unknown operator: {}", op);
   return {};
 }
@@ -2204,7 +2203,6 @@ exprt python_converter::handle_string_membership(
   return not_equal;
 }
 
-// Main method with minimal refactoring to preserve original logic
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -2426,7 +2424,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       bin_expr.op1() = typecast_exprt(rhs, target_type);
   }
 
-  // Handle chained comparisons like: assert 0 <= x <= 1
+  // Handle chained comparisons such as assert 0 <= x <= 1
   if (element.contains("comparators") && element["comparators"].size() > 1)
     return handle_chained_comparisons_logic(element, bin_expr);
 
@@ -2838,7 +2836,7 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
   return false;
 }
 
-// Helper function to extract class name from tag (removes "tag-" prefix)
+// Extract class name from tag (removes "tag-" prefix)
 std::string
 python_converter::extract_class_name_from_tag(const std::string &tag_name)
 {
@@ -2847,7 +2845,7 @@ python_converter::extract_class_name_from_tag(const std::string &tag_name)
   return tag_name;
 }
 
-// Helper function to create normalized self key for cross-method access
+// Create normalized self key for cross-method access
 std::string
 python_converter::create_normalized_self_key(const std::string &class_tag)
 {
@@ -2855,7 +2853,7 @@ python_converter::create_normalized_self_key(const std::string &class_tag)
   return "self@" + class_name;
 }
 
-// Helper function to clean attribute type by removing internal annotations
+// Clean attribute type by removing internal annotations
 typet python_converter::clean_attribute_type(const typet &attr_type)
 {
   typet clean_type = attr_type;
@@ -2865,7 +2863,7 @@ typet python_converter::clean_attribute_type(const typet &attr_type)
   return clean_type;
 }
 
-// Helper function to create member expression with cleaned type
+// Create member expression with cleaned type
 exprt python_converter::create_member_expression(
   const symbolt &symbol,
   const std::string &attr_name,
@@ -2876,7 +2874,7 @@ exprt python_converter::create_member_expression(
     symbol_exprt(symbol.id, symbol.type), attr_name, clean_type);
 }
 
-// Helper function to register instance attribute in maps
+// Register instance attribute in maps
 void python_converter::register_instance_attribute(
   const std::string &symbol_id,
   const std::string &attr_name,
@@ -2894,7 +2892,7 @@ void python_converter::register_instance_attribute(
   }
 }
 
-// Helper function to check if attribute is an instance attribute
+// Check if attribute is an instance attribute
 bool python_converter::is_instance_attribute(
   const std::string &symbol_id,
   const std::string &attr_name,
@@ -3074,9 +3072,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
-    /*if (!is_converting_rhs)
-      return exprt();*/
-
     if (build_static_lists)
     {
       typet size = type_handler_.get_typet(element["elts"]);
@@ -3326,7 +3321,7 @@ size_t python_converter::get_type_size(const nlohmann::json &ast_node)
       }
       else if (ast_node["value"]["value"].is_string())
       {
-        // Direct bytes literal like b'A'
+        // Direct bytes literal such as b'A'
         type_size = ast_node["value"]["value"].get<std::string>().size();
       }
     }
@@ -3400,7 +3395,7 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
     " has no return statement");
 }
 
-// Helper method to extract type information from annotations
+// Extract type information from annotations
 std::pair<std::string, typet>
 python_converter::extract_type_info(const nlohmann::json &var_node)
 {
@@ -3425,7 +3420,7 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
   return {var_type_str, var_typet};
 }
 
-// Helper method to create LHS expression based on target type
+// Create LHS expression based on target type
 exprt python_converter::create_lhs_expression(
   const nlohmann::json &target,
   symbolt *lhs_symbol,
@@ -3447,7 +3442,7 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
-// Helper method to handle post-assignment type adjustments
+// Handle post-assignment type adjustments
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -4235,7 +4230,7 @@ void python_converter::get_function_definition(
   }
   else if (return_node["_type"] == "Tuple")
   {
-    // Handle tuple return types like (int, str)
+    // Handle tuple return types such as (int, str)
     // TODO: we must still handle tuple types!
     type.return_type() = type_handler_.get_typet(std::string("tuple"));
   }
@@ -4585,7 +4580,7 @@ void python_converter::get_return_statements(
   }
 }
 
-// Helper function to create temporary variable for function call results
+// function to create temporary variable for function call results
 symbolt python_converter::create_assert_temp_variable(const locationt &location)
 {
   symbol_id temp_sid = create_symbol_id();
@@ -4603,7 +4598,7 @@ symbolt python_converter::create_assert_temp_variable(const locationt &location)
   return temp_symbol;
 }
 
-// Helper function to create function call statement from function call expression
+// function to create function call statement from function call expression
 code_function_callt create_function_call_statement(
   const exprt &func_call_expr,
   const exprt &lhs_var,
@@ -5129,7 +5124,7 @@ void python_converter::convert()
 
   if (!config.options.get_bool_option("no-library"))
   {
-    // Load operational models -----
+    // Load operational models
     const std::string &ast_output_dir =
       (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
@@ -5197,9 +5192,7 @@ void python_converter::convert()
     }
 
     if (function_node.empty())
-    {
       throw std::runtime_error("Function " + function + " not found");
-    }
 
     code_blockt block;
 
