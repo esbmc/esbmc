@@ -244,6 +244,10 @@ void clang_c_languaget::build_compiler_args(
 
 #if ESBMC_SVCOMP
   compiler_args.push_back("-D__ESBMC_SVCOMP");
+  // No longer show compiler warnings for SV-COMP
+  compiler_args.push_back("-w");
+  compiler_args.push_back("-Wno-incompatible-function-pointer-types");
+  compiler_args.push_back("-Wno-int-conversion");
 #endif
 
   // Increase maximum bracket depth
