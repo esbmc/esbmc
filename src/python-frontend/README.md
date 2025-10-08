@@ -167,6 +167,27 @@ Below is an overview of ESBMC-Python's key capabilities:
   - Both functions `math.floor(x)` and `math.ceil(x)` include built-in assertions to reject infinity and NaN inputs.
   - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions.
 
+### Regular Expression (re) Module Support
+ESBMC-Python provides operational modeling and verification capabilities for Python's re module, enabling pattern-matching verification:
+- **Pattern Matching Functions**:
+  - **re.match(pattern, string)**: Attempts to match a pattern at the beginning of a string. Returns a match object (truthy) on success or None (falsy) on failure.
+  - **re.search(pattern, string)**: Searches for a pattern anywhere within a string. Returns a match object (truthy) if found or None (falsy) if not found.
+  - **re.fullmatch(pattern, string)**: Matches a pattern against the entire string. Returns a match object (truthy) if the whole string matches or None (falsy) otherwise.
+- **Supported Pattern Features**:
+  - **Universal match**: .* pattern (matches any string).
+  - **Empty patterns**: Empty string patterns.
+  - **Literal strings**: Patterns without metacharacters (e.g., "abc", "hello").
+  - **Character class ranges**: [a-z]+, [A-Z]+, [0-9]* patterns with + and * quantifiers
+  - **Digit sequences**: \d+ and \d* patterns (with raw string literals like r"\d+")
+  - **Alternation**: (x|y)z* patterns
+  - **Prefix matching with wildcard**: Patterns ending with .* (e.g., "a.*")
+- **Type Validation**: Built-in runtime type checking ensures both pattern and string arguments are string or bytes-like objects. Invalid types raise TypeError exceptions that can be verified.
+- **Verification Approach**: Uses operational models that combine:
+  - Direct pattern recognition for supported regex constructs.
+  - Literal string matching for patterns without metacharacters.
+  - Nondeterministic behavior modeling for complex patterns, allowing ESBMC to explore both match and non-match scenarios.
+- **Match Object Handling**: Match results can be tested for truthiness (e.g., if re.match(...)) or compared with None using identity operators (e.g., re.search(...) is not None)
+
 ### Random Module Support
 ESBMC-Python supports modeling and verification of the random module functions using nondeterministic values with appropriate constraints:
 - **random.random()**: Returns a nondeterministic floating-point number in the range [0.0, 1.0).
@@ -269,6 +290,11 @@ The current version of ESBMC-Python has the following limitations:
   - Other random module functions (e.g., choice, shuffle, sample, seed) are not yet supported.
 - Class Attribute Limitations:
   - Type inference for class attributes requires values that have clear, determinable types. Complex expressions may require explicit type annotations.
+- Regular Expression (re) Module Limitations:
+  - Only `re.match()`, `re.search()`, and `re.fullmatch()` are supported.
+  - Match objects do not expose group capture methods (e.g., .group(), .groups(), .span()). Match results are only usable for boolean/None testing.
+  - Limited pattern syntax support compared to full Python regex. Complex patterns beyond the explicitly supported constructs may fall back to nondeterministic behavior.
+  - Advanced regex features are not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, and Unicode property escapes.
 
 ### Example 1: Division by Zero in Python
 
