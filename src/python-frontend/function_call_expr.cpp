@@ -1208,6 +1208,42 @@ exprt function_call_expr::handle_print() const
   return nil_exprt();
 }
 
+bool function_call_expr::is_re_module_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+
+  return (func_name == "match" || func_name == "search" ||
+          func_name == "fullmatch") &&
+         call_["func"]["_type"] == "Attribute" && get_object_name() == "re";
+}
+
+exprt function_call_expr::validate_re_module_args() const
+{
+  const auto &args = call_["args"];
+
+  auto is_string_type = [](const typet &type) -> bool {
+    return type.is_array() ||
+           (type.is_pointer() && type.subtype() == char_type());
+  };
+
+  // Validate both pattern and string arguments (indices 0 and 1)
+  for (size_t i = 0; i < std::min(args.size(), size_t(2)); ++i)
+  {
+    exprt arg_expr = converter_.get_expr(args[i]);
+    const typet &arg_type = arg_expr.type();
+
+    if (!is_string_type(arg_type))
+    {
+      std::ostringstream msg;
+      msg << "expected string or bytes-like object, got '"
+          << type_handler_.type_to_string(arg_type) << "'";
+      return gen_exception_raise("TypeError", msg.str());
+    }
+  }
+
+  return nil_exprt(); // Validation passed
+}
+
 exprt function_call_expr::get()
 {
   // Handle print() function
@@ -1293,6 +1329,13 @@ exprt function_call_expr::get()
     type_utils::is_consensus_type(func_name))
   {
     return build_constant_from_arg();
+  }
+
+  if (is_re_module_call())
+  {
+    exprt validation_result = validate_re_module_args();
+    if (!validation_result.is_nil())
+      return validation_result; // Return the TypeError exception
   }
 
   auto &symbol_table = converter_.symbol_table();
