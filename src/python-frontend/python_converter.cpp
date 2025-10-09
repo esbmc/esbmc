@@ -2687,6 +2687,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           func_symbol->name.as_string());
       }
 
+      // Convert array to pointer to match parameter type
+      const typet &param_type = params[it->second].type();
+      if (arg_expr.type().is_array() && param_type.is_pointer())
+        arg_expr = get_array_base_address(arg_expr);
+
       args[it->second] = arg_expr;
     }
   };
