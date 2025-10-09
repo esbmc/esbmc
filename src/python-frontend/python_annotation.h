@@ -142,6 +142,70 @@ public:
   }
 
 private:
+  void find_return_nodes_recursive(const Json &node, std::vector<Json> &returns)
+  {
+    if (node.is_object())
+    {
+      if (node.contains("_type") && node["_type"] == "Return")
+        returns.push_back(node);
+
+      for (auto it = node.begin(); it != node.end(); ++it)
+        find_return_nodes_recursive(it.value(), returns);
+    }
+    else if (node.is_array())
+    {
+      for (const auto &element : node)
+        find_return_nodes_recursive(element, returns);
+    }
+  }
+
+  // Unify int/bool return types to int
+  std::string unify_return_types(const std::vector<std::string> &types)
+  {
+    if (types.empty())
+      return "";
+
+    if (types.size() == 1)
+      return types[0];
+
+    // Check if all types are the same
+    std::string first_type = types[0];
+    bool all_same = true;
+    for (const auto &type : types)
+    {
+      if (type != first_type)
+      {
+        all_same = false;
+        break;
+      }
+    }
+
+    if (all_same)
+      return first_type;
+
+    // Handle int/bool unification: bool is subclass of int in Python
+    bool has_other = false;
+    for (const auto &type : types)
+    {
+      if (type != "int" && type != "bool")
+      {
+        has_other = true;
+        break;
+      }
+    }
+
+    if (!has_other)
+    {
+      log_warning(
+        "Function has mixed int/bool return types. Unifying to 'int' ({}:{})",
+        python_filename_,
+        current_line_);
+      return "int";
+    }
+
+    return "";
+  }
+
   // Method to infer and annotate unannotated function parameters
   void infer_parameter_types(Json &function_element)
   {
@@ -510,28 +574,65 @@ private:
     // Add type annotations within the function
     add_annotation(function_element);
 
-    auto return_node = json_utils::find_return_node(function_element["body"]);
-    if (
-      !return_node.empty() &&
-      (function_element["returns"].is_null() ||
-       config.options.get_bool_option("override-return-annotation")))
+    // Handle return type annotation
+    bool should_infer_return =
+      function_element["returns"].is_null() ||
+      (function_element["returns"].contains("id") &&
+       function_element["returns"]["id"] == "Any") ||
+      config.options.get_bool_option("override-return-annotation");
+
+    if (should_infer_return)
     {
-      std::string inferred_type;
-      if (
-        infer_type(return_node, function_element, inferred_type) ==
-        InferResult::OK)
+      // Find all return statements
+      std::vector<Json> return_nodes;
+      find_return_nodes_recursive(function_element["body"], return_nodes);
+
+      if (!return_nodes.empty())
       {
-        // Update the function node to include the return type annotation
-        function_element["returns"] = {
-          {"_type", "Name"},
-          {"id", inferred_type},
-          {"ctx", {{"_type", "Load"}}},
-          {"lineno", function_element["lineno"]},
-          {"col_offset", function_element["col_offset"]},
-          {"end_lineno", function_element["lineno"]},
-          {"end_col_offset",
-           function_element["col_offset"].template get<int>() +
-             inferred_type.size()}};
+        // Infer type from each return
+        std::vector<std::string> return_types;
+
+        for (const auto &return_node : return_nodes)
+        {
+          if (!return_node.contains("value") || return_node["value"].is_null())
+          {
+            return_types.push_back("NoneType");
+            continue;
+          }
+
+          // Reuse existing infer_type by creating temporary statement
+          Json temp_stmt = {
+            {"_type", "Assign"},
+            {"value", return_node["value"]},
+            {"lineno",
+             return_node.contains("lineno")
+               ? return_node["lineno"].template get<int>()
+               : current_line_}};
+
+          std::string inferred_type;
+          if (
+            infer_type(temp_stmt, function_element, inferred_type) ==
+            InferResult::OK)
+            return_types.push_back(inferred_type);
+        }
+
+        // Unify all return types
+        std::string unified_type = unify_return_types(return_types);
+
+        if (!unified_type.empty())
+        {
+          // Update the function node to include the return type annotation
+          function_element["returns"] = {
+            {"_type", "Name"},
+            {"id", unified_type},
+            {"ctx", {{"_type", "Load"}}},
+            {"lineno", function_element["lineno"]},
+            {"col_offset", function_element["col_offset"]},
+            {"end_lineno", function_element["lineno"]},
+            {"end_col_offset",
+             function_element["col_offset"].template get<int>() +
+               unified_type.size()}};
+        }
       }
     }
 
