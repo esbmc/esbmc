@@ -165,7 +165,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       }
 
       // If we reached a symbol and all updates were constants, propagate
-      if (all_constant_updates)
+      if (all_constant_updates && !is_member2t(current))
         return true;
     }
 
