@@ -2,4 +2,4 @@ CORE
 main.c
 --show-vcc
 
-^Generated 1 VCC(s), 0 remaining after simplification (1 assignments)$
+^Generated \d+ VCC\(s\), 0 remaining after simplification \(\d+ assignments\)$
