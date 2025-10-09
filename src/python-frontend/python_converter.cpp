@@ -1615,11 +1615,17 @@ exprt python_converter::handle_none_comparison(
   const exprt &rhs)
 {
   bool is_eq = (op == "Eq" || op == "Is") ? true : false;
+
+  // Check if lhs is a void pointer (Any type or None)
   if (lhs.type().is_pointer() && lhs.type().subtype().is_empty())
   {
-    const symbolt &lhs_symbol = *find_symbol(lhs.identifier().as_string());
-    if (lhs_symbol.value == rhs)
-      return (is_eq) ? gen_boolean(1) : gen_boolean(0);
+    // Only check symbol value if lhs is actually a symbol
+    if (lhs.is_symbol())
+    {
+      const symbolt *lhs_symbol = find_symbol(lhs.identifier().as_string());
+      if (lhs_symbol && !lhs_symbol->value.is_nil() && lhs_symbol->value == rhs)
+        return (is_eq) ? gen_boolean(1) : gen_boolean(0);
+    }
     return (is_eq) ? gen_boolean(0) : gen_boolean(1);
   }
   return is_eq ? gen_boolean(0) : gen_boolean(1);
@@ -3583,6 +3589,33 @@ void python_converter::get_var_assign(
       sid.set_object(name);
     }
 
+    // If annotation is "Any" and value is a function call, infer type from function
+    if (
+      lhs_type == "Any" && !ast_node["value"].is_null() &&
+      ast_node["value"]["_type"] == "Call")
+    {
+      const auto &func_node = ast_node["value"]["func"];
+      std::string func_name;
+
+      if (func_node["_type"] == "Name")
+        func_name = func_node["id"].get<std::string>();
+      else if (func_node["_type"] == "Attribute")
+        func_name = func_node["attr"].get<std::string>();
+
+      if (!func_name.empty())
+      {
+        symbol_id func_sid(current_python_file, "", func_name);
+        symbolt *func_symbol = symbol_table_.find_symbol(func_sid.to_string());
+
+        if (func_symbol && func_symbol->type.is_code())
+        {
+          const code_typet &func_type = to_code_type(func_symbol->type);
+          current_element_type = func_type.return_type();
+          lhs_type = ""; // Clear to avoid further "Any" processing
+        }
+      }
+    }
+
     // Process RHS before LHS if in function scope
     exprt rhs;
     if (
@@ -4223,8 +4256,69 @@ void python_converter::get_function_definition(
     const nlohmann::json &return_type = (return_node["_type"] == "Subscript")
                                           ? return_node["value"]["id"]
                                           : return_node["id"];
-    // Handles both cases
-    if (return_type == "list" || return_type == "List")
+
+    // Handle "Any" type annotation by inferring from return statements
+    if (return_type == "Any")
+    {
+      bool has_float = false, has_int = false, has_bool = false;
+      std::function<void(const nlohmann::json &)> scan =
+        [&](const nlohmann::json &body) {
+          for (const auto &stmt : body)
+          {
+            if (stmt["_type"] == "Return" && !stmt["value"].is_null())
+            {
+              const auto &val = stmt["value"];
+
+              // Handle constant literals
+              if (val["_type"] == "Constant")
+              {
+                const auto &constant_val = val["value"];
+                if (constant_val.is_number_float())
+                  has_float = true;
+                else if (constant_val.is_number_integer())
+                  has_int = true;
+                else if (constant_val.is_boolean())
+                  has_bool = true;
+                else
+                {
+                  std::string type_name = constant_val.is_string()   ? "string"
+                                          : constant_val.is_null()   ? "null"
+                                          : constant_val.is_object() ? "object"
+                                          : constant_val.is_array()  ? "array"
+                                                                    : "unknown";
+                  throw std::runtime_error(
+                    "Unsupported return type '" + type_name + "' detected");
+                }
+              }
+              else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
+              {
+                // For expressions, we default to double type
+                // TODO: this could be enhanced to do deeper type inference
+                has_float = true;
+              }
+            }
+            if (stmt.contains("body") && stmt["body"].is_array())
+              scan(stmt["body"]);
+            if (stmt.contains("orelse") && stmt["orelse"].is_array())
+              scan(stmt["orelse"]);
+          }
+        };
+      scan(function_node["body"]);
+
+      if (has_float)
+        type.return_type() = double_type();
+      else if (has_int)
+        type.return_type() = int_type();
+      else if (has_bool)
+        type.return_type() = bool_type();
+      else
+      {
+        log_warning("Default to int sice no type could be inferred");
+        type.return_type() = int_type();
+      }
+    }
+    // Handles list types
+    else if (return_type == "list" || return_type == "List")
     {
       type.return_type() = type_handler_.get_list_type();
     }

@@ -202,7 +202,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   const
 {
   if (ast_type == "Any")
-    return empty_typet();
+    return pointer_typet(empty_typet());
 
   // Handle empty string - return empty type without error message
   // This can occur when no type annotation is provided or for internal use
