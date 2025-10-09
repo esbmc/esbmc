@@ -2752,7 +2752,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       type.id() == typet::t_bool || type.id() == typet::t_signedbv ||
       type.id() == typet::t_unsignedbv);
 
-    if (tte.getValue())
+    bool value;
+#if CLANG_VERSION_MAJOR >= 21
+    value = tte.getBoolValue();
+#else
+    value = tte.getValue();
+#endif
+    if (value)
       new_expr = true_exprt();
     else
       new_expr = false_exprt();
@@ -2792,6 +2798,31 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     /* ignore attributes for now */
     if (get_expr(*astmt.getSubStmt(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::ExprWithCleanupsClass:
+  {
+    const clang::ExprWithCleanups &ewc =
+      static_cast<const clang::ExprWithCleanups &>(stmt);
+
+    if (get_expr(*ewc.getSubExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::MaterializeTemporaryExprClass:
+  {
+    const clang::MaterializeTemporaryExpr &mtemp =
+      static_cast<const clang::MaterializeTemporaryExpr &>(stmt);
+
+    // In newer Clang, the C frontend introduces this node,
+    // and it is not certain that it is necessary to create a
+    // temporary object as it is in C++ frontend, need more TCs
+    if (get_expr(*mtemp.getSubExpr(), new_expr))
       return true;
 
     break;
