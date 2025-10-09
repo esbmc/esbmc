@@ -272,8 +272,13 @@ bool clang_cpp_convertert::get_type(
       return true;
 
     typet class_type;
-    if (get_type(mpt.desugar(), class_type))
+#if CLANG_VERSION_MAJOR >= 21
+    if (get_type(*mpt.getQualifier()->getAsType(), class_type))
       return true;
+#else
+    if (get_type(*mpt.getClass(), class_type))
+      return true;
+#endif
 
     new_type = gen_pointer_type(sub_type);
     new_type.set("to-member", class_type);
