@@ -181,7 +181,7 @@ public:
     return default_type;
   }
 
-  // Extract type flags from Union annotation slice
+  // Extract type flags from Union annotation slice: Union[int, bool]
   static TypeFlags extract_union_types(const nlohmann::json &slice)
   {
     TypeFlags flags;
@@ -189,67 +189,61 @@ public:
     if (slice["_type"] == "Tuple" && slice.contains("elts"))
     {
       for (const auto &elem : slice["elts"])
-      {
-        if (elem.contains("id"))
-        {
-          const std::string type_str = elem["id"].get<std::string>();
-          if (type_str == "float")
-            flags.has_float = true;
-          else if (type_str == "int")
-            flags.has_int = true;
-          else if (type_str == "bool")
-            flags.has_bool = true;
-        }
-      }
+        update_type_flags_from_node(elem, flags);
     }
 
     return flags;
   }
 
-  // Extract type flags from PEP 604 union syntax (int | bool)
+  // Extract type flags from PEP 604 union syntax: int | bool
   static TypeFlags extract_binop_union_types(const nlohmann::json &binop_node)
   {
     TypeFlags flags;
 
-    // Extract type from a node
-    auto extract_type = [&flags](const nlohmann::json &node) {
-      if (node["_type"] == "Name" && node.contains("id"))
-      {
-        const std::string type_str = node["id"].get<std::string>();
-        if (type_str == "float")
-          flags.has_float = true;
-        else if (type_str == "int")
-          flags.has_int = true;
-        else if (type_str == "bool")
-          flags.has_bool = true;
-      }
-    };
-
     // Extract from left operand
     if (binop_node.contains("left"))
-      extract_type(binop_node["left"]);
+      update_type_flags_from_node(binop_node["left"], flags);
 
     // Extract from right operand (may be nested BinOp for chained unions)
     if (binop_node.contains("right"))
     {
-      if (binop_node["right"]["_type"] == "BinOp")
+      const auto &right = binop_node["right"];
+      if (right["_type"] == "BinOp")
       {
         // Recursively handle chained unions: int | bool | float
-        TypeFlags right_flags = extract_binop_union_types(binop_node["right"]);
-        flags.has_float = flags.has_float || right_flags.has_float;
-        flags.has_int = flags.has_int || right_flags.has_int;
-        flags.has_bool = flags.has_bool || right_flags.has_bool;
+        TypeFlags right_flags = extract_binop_union_types(right);
+        merge_type_flags(flags, right_flags);
       }
       else
-      {
-        extract_type(binop_node["right"]);
-      }
+        update_type_flags_from_node(right, flags);
     }
 
     return flags;
   }
 
 private:
+  static void
+  update_type_flags_from_node(const nlohmann::json &node, TypeFlags &flags)
+  {
+    if (node["_type"] == "Name" && node.contains("id"))
+    {
+      const std::string type_str = node["id"].get<std::string>();
+      if (type_str == "float")
+        flags.has_float = true;
+      else if (type_str == "int")
+        flags.has_int = true;
+      else if (type_str == "bool")
+        flags.has_bool = true;
+    }
+  }
+
+  static void merge_type_flags(TypeFlags &dest, const TypeFlags &src)
+  {
+    dest.has_float = dest.has_float || src.has_float;
+    dest.has_int = dest.has_int || src.has_int;
+    dest.has_bool = dest.has_bool || src.has_bool;
+  }
+
   static const std::map<std::string, std::string> &consensus_func_to_type()
   {
     static const std::map<std::string, std::string> func_to_type = {
