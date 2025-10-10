@@ -181,7 +181,7 @@ public:
     return default_type;
   }
 
-  // Extract type flags from Union annotation slice: Union[int, bool]
+  // Extract type flags from Union annotation slice
   static TypeFlags extract_union_types(const nlohmann::json &slice)
   {
     TypeFlags flags;
