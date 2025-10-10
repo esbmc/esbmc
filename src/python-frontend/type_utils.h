@@ -206,6 +206,49 @@ public:
     return flags;
   }
 
+  // Extract type flags from PEP 604 union syntax (int | bool)
+  static TypeFlags extract_binop_union_types(const nlohmann::json &binop_node)
+  {
+    TypeFlags flags;
+
+    // Extract type from a node
+    auto extract_type = [&flags](const nlohmann::json &node) {
+      if (node["_type"] == "Name" && node.contains("id"))
+      {
+        const std::string type_str = node["id"].get<std::string>();
+        if (type_str == "float")
+          flags.has_float = true;
+        else if (type_str == "int")
+          flags.has_int = true;
+        else if (type_str == "bool")
+          flags.has_bool = true;
+      }
+    };
+
+    // Extract from left operand
+    if (binop_node.contains("left"))
+      extract_type(binop_node["left"]);
+
+    // Extract from right operand (may be nested BinOp for chained unions)
+    if (binop_node.contains("right"))
+    {
+      if (binop_node["right"]["_type"] == "BinOp")
+      {
+        // Recursively handle chained unions: int | bool | float
+        TypeFlags right_flags = extract_binop_union_types(binop_node["right"]);
+        flags.has_float = flags.has_float || right_flags.has_float;
+        flags.has_int = flags.has_int || right_flags.has_int;
+        flags.has_bool = flags.has_bool || right_flags.has_bool;
+      }
+      else
+      {
+        extract_type(binop_node["right"]);
+      }
+    }
+
+    return flags;
+  }
+
 private:
   static const std::map<std::string, std::string> &consensus_func_to_type()
   {
