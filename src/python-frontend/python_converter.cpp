@@ -4423,6 +4423,16 @@ void python_converter::get_function_definition(
         type_handler_.get_typet(return_type.get<std::string>());
     }
   }
+  else if (return_node["_type"] == "BinOp")
+  {
+    // Handle PEP 604 union syntax: int | bool
+    TypeFlags flags = type_utils::extract_binop_union_types(return_node);
+    type.return_type() =
+      type_utils::select_widest_type(flags, pointer_typet(empty_typet()));
+
+    if (!flags.has_float && !flags.has_int && !flags.has_bool)
+      log_warning("Union with no recognized types, defaulting to pointer");
+  }
   else if (return_node["_type"] == "Tuple")
   {
     // Handle tuple return types such as (int, str)
