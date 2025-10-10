@@ -4317,6 +4317,45 @@ void python_converter::get_function_definition(
         type.return_type() = double_type();
       }
     }
+    else if (return_type == "Union")
+    {
+      // Extract Union member types from slice
+      const auto &slice = return_node["slice"];
+      if (slice["_type"] == "Tuple" && slice.contains("elts"))
+      {
+        // Use type hierarchy: float > int > bool
+        bool has_float = false, has_int = false, has_bool = false;
+
+        for (const auto &elem : slice["elts"])
+        {
+          if (elem.contains("id"))
+          {
+            const std::string type_str = elem["id"].get<std::string>();
+            if (type_str == "float")
+              has_float = true;
+            else if (type_str == "int")
+              has_int = true;
+            else if (type_str == "bool")
+              has_bool = true;
+          }
+        }
+
+        // Select widest type using existing type_handler methods
+        if (has_float)
+          type.return_type() = double_type();
+        else if (has_int)
+          type.return_type() = long_long_int_type();
+        else if (has_bool)
+          type.return_type() = bool_type();
+        else
+          type.return_type() = pointer_typet(empty_typet()); // Union with None
+      }
+      else
+      {
+        log_warning("Malformed Union type, defaulting to Any");
+        type.return_type() = pointer_typet(empty_typet());
+      }
+    }
     // Handles list types
     else if (return_type == "list" || return_type == "List")
     {
