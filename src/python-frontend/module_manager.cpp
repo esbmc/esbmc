@@ -39,7 +39,10 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
         if (node["returns"].is_null())
           continue;
 
-        if (node["returns"]["_type"] == "Subscript")
+        // Handle PEP 604 union syntax: int | bool
+        if (node["returns"]["_type"] == "BinOp")
+          f.return_type_ = "Union";
+        else if (node["returns"]["_type"] == "Subscript")
           f.return_type_ = node["returns"]["value"]["id"];
         else if (node["returns"]["_type"] == "Tuple")
           f.return_type_ = "Tuple";
