@@ -4313,8 +4313,8 @@ void python_converter::get_function_definition(
         type.return_type() = bool_type();
       else
       {
-        log_warning("Default to int sice no type could be inferred");
-        type.return_type() = int_type();
+        log_warning("Default to double sice no type could be inferred");
+        type.return_type() = double_type();
       }
     }
     // Handles list types
