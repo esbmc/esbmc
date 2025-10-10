@@ -1,7 +1,10 @@
 #pragma once
 
+#include <util/c_types.h>
 #include <util/expr.h>
 #include <util/type.h>
+
+#include <nlohmann/json.hpp>
 
 #include <map>
 #include <string>
@@ -42,6 +45,13 @@ enum class ExpressionType
   LIST,
   UNKNOWN,
   FSTRING
+};
+
+struct TypeFlags
+{
+  bool has_float = false;
+  bool has_int = false;
+  bool has_bool = false;
 };
 
 class type_utils
@@ -155,6 +165,45 @@ public:
 
     // No quotes found, return original string
     return str;
+  }
+
+  // Select widest type from flags based on hierarchy: float > int > bool
+  static typet
+  select_widest_type(const TypeFlags &flags, const typet &default_type)
+  {
+    if (flags.has_float)
+      return double_type();
+    if (flags.has_int)
+      return long_long_int_type();
+    if (flags.has_bool)
+      return bool_type();
+
+    return default_type;
+  }
+
+  // Extract type flags from Union annotation slice
+  static TypeFlags extract_union_types(const nlohmann::json &slice)
+  {
+    TypeFlags flags;
+
+    if (slice["_type"] == "Tuple" && slice.contains("elts"))
+    {
+      for (const auto &elem : slice["elts"])
+      {
+        if (elem.contains("id"))
+        {
+          const std::string type_str = elem["id"].get<std::string>();
+          if (type_str == "float")
+            flags.has_float = true;
+          else if (type_str == "int")
+            flags.has_int = true;
+          else if (type_str == "bool")
+            flags.has_bool = true;
+        }
+      }
+    }
+
+    return flags;
   }
 
 private:

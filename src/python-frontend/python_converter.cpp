@@ -4238,6 +4238,142 @@ bool python_converter::function_has_missing_return_paths(
   return true; // No explicit return found
 }
 
+TypeFlags
+python_converter::infer_types_from_returns(const nlohmann::json &function_body)
+{
+  TypeFlags flags;
+
+  std::function<void(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &body) {
+      for (const auto &stmt : body)
+      {
+        if (stmt["_type"] == "Return" && !stmt["value"].is_null())
+        {
+          const auto &val = stmt["value"];
+
+          if (val["_type"] == "Constant")
+          {
+            const auto &constant_val = val["value"];
+            if (constant_val.is_number_float())
+              flags.has_float = true;
+            else if (constant_val.is_number_integer())
+              flags.has_int = true;
+            else if (constant_val.is_boolean())
+              flags.has_bool = true;
+            else
+            {
+              std::string type_name = constant_val.is_string()   ? "string"
+                                      : constant_val.is_null()   ? "null"
+                                      : constant_val.is_object() ? "object"
+                                      : constant_val.is_array()  ? "array"
+                                                                 : "unknown";
+              throw std::runtime_error(
+                "Unsupported return type '" + type_name + "' detected");
+            }
+          }
+          else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
+          {
+            flags.has_float = true; // Default for expressions
+          }
+        }
+
+        if (stmt.contains("body") && stmt["body"].is_array())
+          scan(stmt["body"]);
+        if (stmt.contains("orelse") && stmt["orelse"].is_array())
+          scan(stmt["orelse"]);
+      }
+    };
+
+  scan(function_body);
+  return flags;
+}
+
+void python_converter::process_function_arguments(
+  const nlohmann::json &function_node,
+  code_typet &type,
+  const symbol_id &id,
+  const locationt &location)
+{
+  for (const nlohmann::json &element : function_node["args"]["args"])
+  {
+    std::string arg_name = element["arg"].get<std::string>();
+    typet arg_type;
+
+    if (arg_name == "self")
+      arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
+    else if (arg_name == "cls")
+      arg_type = pointer_typet(empty_typet());
+    else
+    {
+      if (!element.contains("annotation") || element["annotation"].is_null())
+      {
+        throw std::runtime_error(
+          "All parameters in function \"" + current_func_name_ +
+          "\" must be type annotated");
+      }
+      arg_type = get_type_from_annotation(element["annotation"], element);
+    }
+
+    if (arg_type.is_array())
+      arg_type = gen_pointer_type(arg_type.subtype());
+
+    assert(arg_type != typet());
+
+    // Create argument descriptor
+    code_typet::argumentt arg;
+    arg.type() = arg_type;
+    arg.cmt_base_name(arg_name);
+
+    std::string arg_id = id.to_string() + "@" + arg_name;
+    arg.cmt_identifier(arg_id);
+    arg.identifier(arg_id);
+    arg.location() = get_location_from_decl(element);
+
+    type.arguments().push_back(arg);
+
+    // Create parameter symbol
+    symbolt param_symbol = create_symbol(
+      location.get_file().as_string(),
+      arg_name,
+      arg_id,
+      arg.location(),
+      arg_type);
+    param_symbol.lvalue = true;
+    param_symbol.is_parameter = true;
+    param_symbol.file_local = true;
+    param_symbol.static_lifetime = false;
+    param_symbol.is_extern = false;
+    symbol_table_.add(param_symbol);
+  }
+}
+
+void python_converter::validate_return_paths(
+  const nlohmann::json &function_node,
+  const code_typet &type,
+  exprt &function_body)
+{
+  // Skip validation for void returns and constructors
+  if (
+    type.return_type().is_empty() ||
+    type.return_type().id() == typet::t_empty ||
+    type.return_type().id() == "constructor" ||
+    !function_has_missing_return_paths(function_node))
+  {
+    return;
+  }
+
+  locationt loc = get_location_from_decl(function_node);
+
+  code_assertt missing_return_assert;
+  missing_return_assert.assertion() = gen_boolean(false);
+  missing_return_assert.location() = loc;
+  missing_return_assert.location().comment(
+    "Missing return statement detected in function '" + current_func_name_ +
+    "'");
+
+  function_body.copy_to_operands(missing_return_assert);
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -4245,6 +4381,7 @@ void python_converter::get_function_definition(
   code_typet type;
   const nlohmann::json &return_node = function_node["returns"];
 
+  // Determine return type
   if (
     return_node.is_null() ||
     (return_node["_type"] == "Constant" && return_node["value"].is_null()))
@@ -4257,67 +4394,25 @@ void python_converter::get_function_definition(
                                           ? return_node["value"]["id"]
                                           : return_node["id"];
 
-    // Handle "Any" type annotation by inferring from return statements
     if (return_type == "Any")
     {
-      bool has_float = false, has_int = false, has_bool = false;
-      std::function<void(const nlohmann::json &)> scan =
-        [&](const nlohmann::json &body) {
-          for (const auto &stmt : body)
-          {
-            if (stmt["_type"] == "Return" && !stmt["value"].is_null())
-            {
-              const auto &val = stmt["value"];
+      // Infer type from return statements
+      TypeFlags flags = infer_types_from_returns(function_node["body"]);
+      type.return_type() = type_utils::select_widest_type(flags, double_type());
 
-              // Handle constant literals
-              if (val["_type"] == "Constant")
-              {
-                const auto &constant_val = val["value"];
-                if (constant_val.is_number_float())
-                  has_float = true;
-                else if (constant_val.is_number_integer())
-                  has_int = true;
-                else if (constant_val.is_boolean())
-                  has_bool = true;
-                else
-                {
-                  std::string type_name = constant_val.is_string()   ? "string"
-                                          : constant_val.is_null()   ? "null"
-                                          : constant_val.is_object() ? "object"
-                                          : constant_val.is_array()  ? "array"
-                                                                    : "unknown";
-                  throw std::runtime_error(
-                    "Unsupported return type '" + type_name + "' detected");
-                }
-              }
-              else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
-              {
-                // For expressions, we default to double type
-                // TODO: this could be enhanced to do deeper type inference
-                has_float = true;
-              }
-            }
-            if (stmt.contains("body") && stmt["body"].is_array())
-              scan(stmt["body"]);
-            if (stmt.contains("orelse") && stmt["orelse"].is_array())
-              scan(stmt["orelse"]);
-          }
-        };
-      scan(function_node["body"]);
-
-      if (has_float)
-        type.return_type() = double_type();
-      else if (has_int)
-        type.return_type() = int_type();
-      else if (has_bool)
-        type.return_type() = bool_type();
-      else
-      {
-        log_warning("Default to double sice no type could be inferred");
-        type.return_type() = double_type();
-      }
+      if (!flags.has_float && !flags.has_int && !flags.has_bool)
+        log_warning("Default to double since no type could be inferred");
     }
-    // Handles list types
+    else if (return_type == "Union")
+    {
+      // Extract Union member types
+      TypeFlags flags = type_utils::extract_union_types(return_node["slice"]);
+      type.return_type() =
+        type_utils::select_widest_type(flags, pointer_typet(empty_typet()));
+
+      if (!flags.has_float && !flags.has_int && !flags.has_bool)
+        log_warning("Union with no recognized types, defaulting to pointer");
+    }
     else if (return_type == "list" || return_type == "List")
     {
       type.return_type() = type_handler_.get_list_type();
@@ -4336,15 +4431,14 @@ void python_converter::get_function_definition(
   }
   else if (return_node["_type"] == "Constant" || return_node["_type"] == "Str")
   {
-    // Handle string annotations using the helper method
-    std::string type_string = return_node["value"].get<std::string>();
-    type_string = type_utils::remove_quotes(type_string);
+    std::string type_string =
+      type_utils::remove_quotes(return_node["value"].get<std::string>());
     type.return_type() = type_handler_.get_typet(type_string);
   }
   else
     throw std::runtime_error("Return type undefined");
 
-  // Copy caller function name
+  // Setup function context
   const std::string caller_func_name = current_func_name_;
 
   // Function location
@@ -4357,8 +4451,7 @@ void python_converter::get_function_definition(
   if (current_func_name_ == "__init__")
   {
     current_func_name_ = current_class_name_;
-    typet ctor_type("constructor");
-    type.return_type() = ctor_type;
+    type.return_type() = typet("constructor");
   }
 
   symbol_id id = create_symbol_id();
@@ -4366,65 +4459,10 @@ void python_converter::get_function_definition(
   std::string module_name =
     current_python_file.substr(0, current_python_file.find_last_of("."));
 
-  // Iterate over function arguments
-  for (const nlohmann::json &element : function_node["args"]["args"])
-  {
-    // Argument name
-    std::string arg_name = element["arg"].get<std::string>();
-    // Argument type
-    typet arg_type;
+  // Process function arguments
+  process_function_arguments(function_node, type, id, location);
 
-    if (arg_name == "self")
-      arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
-    else if (arg_name == "cls")
-      arg_type = pointer_typet(empty_typet());
-    else
-    {
-      if (!element.contains("annotation") || element["annotation"].is_null())
-      {
-        throw std::runtime_error(
-          "All parameters in function \"" + current_func_name_ +
-          "\" must be type annotated");
-      }
-
-      // Use the helper method to get type from annotation
-      arg_type = get_type_from_annotation(element["annotation"], element);
-    }
-
-    if (arg_type.is_array())
-      arg_type = gen_pointer_type(arg_type.subtype());
-
-    assert(arg_type != typet());
-
-    code_typet::argumentt arg;
-    arg.type() = arg_type;
-
-    arg.cmt_base_name(arg_name);
-
-    // Argument id
-    std::string arg_id = id.to_string() + "@" + arg_name;
-    arg.cmt_identifier(arg_id);
-    arg.identifier(arg_id);
-
-    // Location
-    locationt location = get_location_from_decl(element);
-    arg.location() = location;
-
-    // Push arg
-    type.arguments().push_back(arg);
-
-    // Create and add symbol to symbol_table_
-    symbolt param_symbol = create_symbol(
-      location.get_file().as_string(), arg_name, arg_id, location, arg_type);
-    param_symbol.lvalue = true;
-    param_symbol.is_parameter = true;
-    param_symbol.file_local = true;
-    param_symbol.static_lifetime = false;
-    param_symbol.is_extern = false;
-    symbol_table_.add(param_symbol);
-  }
-
-  // Create symbol
+  // Create and register function symbol
   symbolt symbol = create_symbol(
     module_name, current_func_name_, id.to_string(), location, type);
   symbol.lvalue = true;
@@ -4433,44 +4471,21 @@ void python_converter::get_function_definition(
 
   symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
-  // Function body
+  // Process function body
   exprt function_body = get_block(function_node["body"]);
 
+  // Add ESBMC_Hide label for models/imports
   if (is_loading_models || is_importing_module)
   {
-    // Add __ESBMC_Hide as the first statement of the block
     code_labelt esbmc_hide;
     esbmc_hide.set_label("__ESBMC_HIDE");
     esbmc_hide.code() = code_skipt();
-    auto &func_body_ops = function_body.operands();
-    func_body_ops.insert(func_body_ops.begin(), esbmc_hide);
+    function_body.operands().insert(
+      function_body.operands().begin(), esbmc_hide);
   }
 
-  // Add missing return statement validation
-  // Check if function has non-void return type and missing return paths
-  // Skip constructors (they don't need explicit returns)
-  if (
-    !type.return_type().is_empty() &&
-    type.return_type().id() != typet::t_empty &&
-    type.return_type().id() != "constructor" && // Skip constructors
-    function_has_missing_return_paths(function_node))
-  {
-    // Add assertion that fails to indicate missing return statement
-    locationt missing_return_loc = get_location_from_decl(function_node);
-
-    // Create a false assertion
-    exprt false_expr = gen_boolean(false);
-    code_assertt missing_return_assert;
-    missing_return_assert.assertion() = false_expr;
-    missing_return_assert.location() = missing_return_loc;
-
-    // Add descriptive comment to help users understand the error
-    missing_return_assert.location().comment(
-      "Missing return statement detected in function '" + current_func_name_ +
-      "'");
-
-    function_body.copy_to_operands(missing_return_assert);
-  }
+  // Validate return paths
+  validate_return_paths(function_node, type, function_body);
 
   added_symbol->value = function_body;
 

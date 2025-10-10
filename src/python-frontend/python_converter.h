@@ -2,6 +2,7 @@
 
 #include <python-frontend/global_scope.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/type_utils.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
@@ -308,6 +309,18 @@ private:
   bool
   has_unsupported_side_effects_internal(const exprt &lhs, const exprt &rhs);
 
+  TypeFlags infer_types_from_returns(const nlohmann::json &function_body);
+
+  void process_function_arguments(
+    const nlohmann::json &function_node,
+    code_typet &type,
+    const symbol_id &id,
+    const locationt &location);
+
+  void validate_return_paths(
+    const nlohmann::json &function_node,
+    const code_typet &type,
+    exprt &function_body);
   exprt compare_constants_internal(
     const std::string &op,
     const exprt &lhs,
