@@ -11,6 +11,7 @@
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/message.h>
+#include <util/python_types.h>
 #include <regex>
 #include <stdexcept>
 
@@ -1244,6 +1245,92 @@ exprt function_call_expr::validate_re_module_args() const
   return nil_exprt(); // Validation passed
 }
 
+bool function_call_expr::is_any_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+  return func_name == "any";
+}
+
+exprt function_call_expr::handle_any() const
+{
+  const auto &args = call_["args"];
+
+  if (args.empty())
+    throw std::runtime_error("any() expected at least 1 argument, got 0");
+
+  if (args.size() > 1)
+    throw std::runtime_error("any() takes at most 1 argument");
+
+  const auto &arg = args[0];
+
+  if (arg["_type"] != "List")
+    throw std::runtime_error("any() currently only supports list literals");
+
+  const auto &elts = arg["elts"];
+
+  // Empty list returns False
+  if (elts.empty())
+    return gen_boolean(false);
+
+  // Build an OR expression of all elements' truthiness
+  exprt result;
+  bool first = true;
+
+  for (const auto &elt : elts)
+  {
+    exprt element = converter_.get_expr(elt);
+
+    // Check if element is truthy
+    exprt is_truthy;
+
+    if (element.type() == none_type())
+    {
+      // None is always falsy
+      is_truthy = gen_boolean(false);
+    }
+    else if (element.type().is_bool())
+    {
+      // Bool: use directly
+      is_truthy = element;
+    }
+    else if (
+      element.type().id() == "signedbv" || element.type().id() == "unsignedbv")
+    {
+      // Integer: truthy if != 0
+      exprt zero = gen_zero(element.type());
+      is_truthy = not_exprt(equality_exprt(element, zero));
+    }
+    else if (element.type().id() == "floatbv")
+    {
+      // Float: truthy if != 0.0
+      exprt zero = gen_zero(element.type());
+      is_truthy = not_exprt(equality_exprt(element, zero));
+    }
+    else if (element.type().is_pointer())
+    {
+      // Pointer: truthy if not NULL
+      exprt null_ptr = gen_zero(element.type());
+      is_truthy = not_exprt(equality_exprt(element, null_ptr));
+    }
+    else
+    {
+      // For other types, assume truthy (conservative)
+      is_truthy = gen_boolean(true);
+    }
+
+    // OR with accumulated result
+    if (first)
+    {
+      result = is_truthy;
+      first = false;
+    }
+    else
+      result = or_exprt(result, is_truthy);
+  }
+
+  return result;
+}
+
 exprt function_call_expr::get()
 {
   // Handle print() function
@@ -1271,6 +1358,12 @@ exprt function_call_expr::get()
   if (is_input_call())
   {
     return handle_input();
+  }
+
+  // Handle any() function
+  if (is_any_call())
+  {
+    return handle_any();
   }
 
   // Handle min/max functions
