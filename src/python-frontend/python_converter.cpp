@@ -1614,21 +1614,23 @@ exprt python_converter::handle_none_comparison(
   const exprt &lhs,
   const exprt &rhs)
 {
-  bool is_eq = (op == "Eq" || op == "Is") ? true : false;
+  bool is_eq = (op == "Eq" || op == "Is");
 
-  // Check if lhs is a void pointer (Any type or None)
-  if (lhs.type().is_pointer() && lhs.type().subtype().is_empty())
-  {
-    // Only check symbol value if lhs is actually a symbol
-    if (lhs.is_symbol())
-    {
-      const symbolt *lhs_symbol = find_symbol(lhs.identifier().as_string());
-      if (lhs_symbol && !lhs_symbol->value.is_nil() && lhs_symbol->value == rhs)
-        return (is_eq) ? gen_boolean(1) : gen_boolean(0);
-    }
-    return (is_eq) ? gen_boolean(0) : gen_boolean(1);
-  }
-  return is_eq ? gen_boolean(0) : gen_boolean(1);
+  // Check if we're comparing None with a different type (not None)
+  bool lhs_is_none = (lhs.type() == none_type());
+  bool rhs_is_none = (rhs.type() == none_type());
+
+  // If one is None and the other is NOT None type, they're never equal
+  if (lhs_is_none && !rhs_is_none)
+    return is_eq ? gen_boolean(0) : gen_boolean(1);
+  if (rhs_is_none && !lhs_is_none)
+    return is_eq ? gen_boolean(0) : gen_boolean(1);
+
+  // Both are None type: do actual pointer comparison
+  if (is_eq)
+    return equality_exprt(lhs, rhs);
+  else
+    return not_exprt(equality_exprt(lhs, rhs));
 }
 
 // Helper method to resolve symbol values to constants
@@ -3713,7 +3715,7 @@ void python_converter::get_var_assign(
     {
       locationt location = get_location_from_decl(target);
       std::string module_name = location.get_file().as_string();
-      typet placeholder_type = pointer_typet(empty_typet());
+      typet placeholder_type = any_type();
 
       symbolt symbol = create_symbol(
         module_name, name, sid.to_string(), location, placeholder_type);
@@ -4302,7 +4304,7 @@ void python_converter::process_function_arguments(
     if (arg_name == "self")
       arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
     else if (arg_name == "cls")
-      arg_type = pointer_typet(empty_typet());
+      arg_type = any_type();
     else
     {
       if (!element.contains("annotation") || element["annotation"].is_null())
@@ -4407,8 +4409,7 @@ void python_converter::get_function_definition(
     {
       // Extract Union member types
       TypeFlags flags = type_utils::extract_union_types(return_node["slice"]);
-      type.return_type() =
-        type_utils::select_widest_type(flags, pointer_typet(empty_typet()));
+      type.return_type() = type_utils::select_widest_type(flags, any_type());
 
       if (!flags.has_float && !flags.has_int && !flags.has_bool)
         log_warning("Union with no recognized types, defaulting to pointer");
@@ -4427,8 +4428,7 @@ void python_converter::get_function_definition(
   {
     // Handle PEP 604 union syntax: int | bool
     TypeFlags flags = type_utils::extract_binop_union_types(return_node);
-    type.return_type() =
-      type_utils::select_widest_type(flags, pointer_typet(empty_typet()));
+    type.return_type() = type_utils::select_widest_type(flags, any_type());
 
     if (!flags.has_float && !flags.has_int && !flags.has_bool)
       log_warning("Union with no recognized types, defaulting to pointer");
