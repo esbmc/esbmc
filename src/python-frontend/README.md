@@ -104,7 +104,9 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
 - **Annotations**: Supports type annotations, including:
   - **Basic Type Annotations**: Standard Python types (int, float, bool, str, etc.).
-  - **Union Types**: Supports `Union[Type1, Type2, ...]` from the typing module for functions that can return multiple types.
+  - **Union Types**: Supports both `Union[Type1, Type2, ...]` from the typing module and PEP 604 syntax (`Type1 | Type2`) for functions that can return multiple types.
+    - **Union Syntax Support**: Both `Union[int, bool]` and `int | bool` syntaxes are supported.
+    - **Chained Unions**: Supports chained union types with multiple members (e.g., `int | bool | float`).
     - **Type Widening**: Automatically selects the widest type from Union members based on type hierarchy (`float > int > bool`).
     - **Return Type Inference**: When Union types are used, ESBMC analyzes return statements to determine the appropriate type.
     - **Mixed Type Verification**: Enables verification of functions that conditionally return different types based on runtime conditions.
