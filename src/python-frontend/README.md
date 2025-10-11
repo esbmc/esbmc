@@ -104,6 +104,11 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
 - **Annotations**: Supports type annotations, including:
   - **Basic Type Annotations**: Standard Python types (int, float, bool, str, etc.).
+  - **Any Type**: Supports `Any` from the typing module for functions with dynamic return types.
+    - **Automatic Type Inference**: When `Any` is used as a return type, ESBMC automatically infers the actual type by analyzing return statements in the function body.
+    - **Type Hierarchy**: Uses the same type widening hierarchy as Union types (`float > int > bool`).
+    - **Supported Return Types**: `Any` type functions can return `int`, `float`, `bool`, or expressions (`BinOp`, `UnaryOp`) that evaluate to these types.
+    - **Variable Type Inference**: Variables annotated with `Any` that are assigned from function calls inherit the function's inferred return type.
   - **Union Types**: Supports both `Union[Type1, Type2, ...]` from the typing module and PEP 604 syntax (`Type1 | Type2`) for functions that can return multiple types.
     - **Union Syntax Support**: Both `Union[int, bool]` and `int | bool` syntaxes are supported.
     - **Chained Unions**: Supports chained union types with multiple members (e.g., `int | bool | float`).
@@ -312,7 +317,12 @@ The current version of ESBMC-Python has the following limitations:
     - Union types are resolved to the widest type among their members (`float > int > bool`) at verification time rather than maintaining true union semantics.
     - Union types containing types beyond basic primitives (`int, float, bool`) may default to pointer types.
     - Type narrowing based on runtime type checks within Union-typed functions is not explicitly tracked.
-
+- Any Type Limitations:
+  - Any type inference only supports return values of primitive types: `int`, `float`, `bool`, and expressions that evaluate to these types.
+  - String return values are explicitly not supported and will cause a verification error with the message "Unsupported return type 'string' detected".
+  - Other types (`objects`, `arrays`, `null`) are not supported as return values for Any-typed functions.
+  - Type inference defaults to `double (float)` when no specific type can be determined from return statements.
+  
 ### Example 1: Division by Zero in Python
 
 The following Python program executes without issues in standard Python 3. However, when analyzed using ESBMC, it reveals a hidden bug: a possible division by zero.
