@@ -208,6 +208,11 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 
 void python_converter::update_symbol(const exprt &expr) const
 {
+  // Don't update if expression has no name
+  // prevents corruption of function symbols
+  if (expr.name().empty())
+    return;
+
   // Generate a symbol ID from the expression's name.
   symbol_id sid = create_symbol_id();
   sid.set_object(expr.name().c_str());
@@ -1994,7 +1999,7 @@ exprt python_converter::handle_string_concatenation_with_promotion(
   return handle_string_concatenation(lhs, rhs, left, right);
 }
 
-/// Helper method to handle chained comparisons
+/// Handle chained comparisons
 exprt python_converter::handle_chained_comparisons_logic(
   const nlohmann::json &element,
   exprt &bin_expr)
@@ -2002,7 +2007,7 @@ exprt python_converter::handle_chained_comparisons_logic(
   exprt cond("and", bool_type());
   cond.move_to_operands(bin_expr); // bin_expr compares left and comparators[0]
 
-  for (size_t i = 0; i + 1 < element["comparators"].size(); i += 2)
+  for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
     std::string op(element["ops"][i + 1]["_type"].get<std::string>());
     exprt logical_expr(get_op(op, bool_type()), bool_type());
