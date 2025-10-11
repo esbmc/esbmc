@@ -102,7 +102,12 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
-- **Annotations**: Supports type annotations.
+- **Annotations**: Supports type annotations, including:
+  - **Basic Type Annotations**: Standard Python types (int, float, bool, str, etc.).
+  - **Union Types**: Supports `Union[Type1, Type2, ...]` from the typing module for functions that can return multiple types.
+    - **Type Widening**: Automatically selects the widest type from Union members based on type hierarchy (`float > int > bool`).
+    - **Return Type Inference**: When Union types are used, ESBMC analyzes return statements to determine the appropriate type.
+    - **Mixed Type Verification**: Enables verification of functions that conditionally return different types based on runtime conditions.
 - **Lambda Expressions**: Supports basic lambda expressions that are converted to regular functions and stored as function pointers. Lambda functions can be assigned to variables and called indirectly. Supports single-expression lambdas with multiple parameters.
 
 ### Object-Oriented Programming
@@ -301,6 +306,10 @@ The current version of ESBMC-Python has the following limitations:
   - Match objects do not expose group capture methods (e.g., .group(), .groups(), .span()). Match results are only usable for Boolean/None testing.
   - Limited pattern syntax support compared to full Python regex. Complex patterns beyond the explicitly supported constructs may exhibit nondeterministic behavior.
   - Advanced regex features are not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, and Unicode property escapes.
+  - Union Type Limitations:
+    - Union types are resolved to the widest type among their members (`float > int > bool`) at verification time rather than maintaining true union semantics.
+    - Union types containing types beyond basic primitives (`int, float, bool`) may default to pointer types.
+    - Type narrowing based on runtime type checks within Union-typed functions is not explicitly tracked.
 
 ### Example 1: Division by Zero in Python
 
