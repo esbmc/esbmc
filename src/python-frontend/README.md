@@ -84,6 +84,9 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
+  - **None Type Handling**: Comprehensive support for Python's None value with proper type distinction from other types (`int`, `bool`, `str`, etc.).
+  - **None Comparisons**: Correctly evaluates comparisons and identity checks involving None (e.g., `x is None`, `x == None`, `x != 0`).
+  - **None in Logical Expressions**: Properly handles `None` in boolean contexts where it is falsy (e.g., `None and True` returns `None`, `None or 1` returns `1`).
 - **Global Variables:** Recognizes the `global` keyword for accessing and modifying variables in the global scope from within functions.
 
 ### String Formatting and Literals
