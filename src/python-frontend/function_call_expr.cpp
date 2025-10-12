@@ -1587,24 +1587,49 @@ exprt function_call_expr::get()
   }
   else if (function_type_ == FunctionType::ClassMethod)
   {
-    // Passing a void pointer to the "cls" argument
-    typet t = pointer_typet(empty_typet());
-    call.arguments().push_back(gen_zero(t));
+    // Check if this is an instance method being called through the class
+    // e.g., MyClass.method(instance) where the first param should be 'self'
+    const code_typet &func_type = to_code_type(func_symbol->type);
+    bool first_param_is_self = false;
 
-    // All methods for the int class without parameters acts solely on the encapsulated integer value.
-    // Therefore, we always pass the caller (obj) as a parameter in these functions.
-    // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
-    if (
-      obj_symbol &&
-      type_handler_.get_var_type(obj_symbol->name.as_string()) == "int" &&
-      call_["args"].empty())
+    if (!func_type.arguments().empty())
     {
-      call.arguments().push_back(symbol_expr(*obj_symbol));
+      const std::string &first_param =
+        func_type.arguments()[0].get_base_name().as_string();
+      first_param_is_self = (first_param == "self");
     }
-    else if (call_["func"]["value"]["_type"] == "BinOp")
+
+    // If first parameter is 'self' and we have positional arguments,
+    // the first positional arg should be treated as 'self', not as a regular argument
+    if (
+      first_param_is_self && !call_["args"].empty() &&
+      (!call_.contains("keywords") || call_["keywords"].empty() ||
+       call_["keywords"][0]["arg"] != "self"))
     {
-      // Handling function call from binary expressions like: (x+1).bit_length()
-      call.arguments().push_back(converter_.get_expr(call_["func"]["value"]));
+      // First positional argument will be added in the loop below as 'self'
+      // Don't add a NULL cls parameter
+    }
+    else
+    {
+      // Passing a void pointer to the "cls" argument
+      typet t = pointer_typet(empty_typet());
+      call.arguments().push_back(gen_zero(t));
+
+      // All methods for the int class without parameters acts solely on the encapsulated integer value.
+      // Therefore, we always pass the caller (obj) as a parameter in these functions.
+      // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
+      if (
+        obj_symbol &&
+        type_handler_.get_var_type(obj_symbol->name.as_string()) == "int" &&
+        call_["args"].empty())
+      {
+        call.arguments().push_back(symbol_expr(*obj_symbol));
+      }
+      else if (call_["func"]["value"]["_type"] == "BinOp")
+      {
+        // Handling function call from binary expressions such as: (x+1).bit_length()
+        call.arguments().push_back(converter_.get_expr(call_["func"]["value"]));
+      }
     }
   }
 
