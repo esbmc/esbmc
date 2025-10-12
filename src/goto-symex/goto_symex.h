@@ -466,6 +466,19 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /**
+   * @brief Intrinsic call for C memset function call
+   * 
+   * This will either invoke our operational model (at string.c)
+   * or try to compute the resulting value directly
+   * 
+   * @param art 
+   * @param func_call memset function call
+   */
+  void intrinsic_memcpy(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
   // Function to call a symname function, in case where were not able to optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
