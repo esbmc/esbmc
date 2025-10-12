@@ -3201,21 +3201,37 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           class_type.tag().as_string());
       }
 
-      // Check if this is an instance attribute
-      if (
-        class_type.has_component(attr_name) && is_instance_attribute(
-                                                 symbol->id.as_string(),
-                                                 attr_name,
-                                                 var_name,
-                                                 class_type.tag().as_string()))
+      // Check if this specific instance has explicitly set this attribute
+      bool instance_has_attr = is_instance_attribute(
+        symbol->id.as_string(),
+        attr_name,
+        var_name,
+        class_type.tag().as_string());
+
+      // For LHS (writing): always use instance member and register it
+      if (is_converting_lhs && class_type.has_component(attr_name))
+      {
+        const typet &attr_type = class_type.get_component(attr_name).type();
+        expr = create_member_expression(*symbol, attr_name, attr_type);
+
+        // Register as instance attribute
+        register_instance_attribute(
+          symbol->id.as_string(),
+          attr_name,
+          var_name,
+          class_type.tag().as_string());
+      }
+      // For RHS (reading): use instance member only if explicitly set
+      else if (
+        !is_converting_lhs && instance_has_attr &&
+        class_type.has_component(attr_name))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = create_member_expression(*symbol, attr_name, attr_type);
       }
-      // Fallback to class attribute when instance attribute is not found
+      // Otherwise use class attribute
       else
       {
-        // All class attributes are static symbols with ids in the format: filename@C@classname@varname
         sid.set_function("");
         sid.set_class(extract_class_name_from_tag(obj_type_name));
         sid.set_object(attr_name);
@@ -3223,22 +3239,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!class_attr_symbol)
         {
-          // If no class attribute exists and we're on LHS, create instance attribute
-          if (is_converting_lhs && class_type.has_component(attr_name))
-          {
-            const typet &attr_type = class_type.get_component(attr_name).type();
-            expr = create_member_expression(*symbol, attr_name, attr_type);
-          }
-          else
-          {
-            throw std::runtime_error(
-              "Attribute \"" + attr_name + "\" not found");
-          }
+          throw std::runtime_error("Attribute \"" + attr_name + "\" not found");
         }
-        else
-        {
-          expr = symbol_expr(*class_attr_symbol);
-        }
+
+        expr = symbol_expr(*class_attr_symbol);
       }
     }
 
@@ -3841,6 +3845,27 @@ void python_converter::get_var_assign(
           {
             copy_instance_attributes(
               ret.op0().identifier().as_string(), lhs_symbol->id.as_string());
+          }
+        }
+      }
+
+      // Additionally, copy instance attributes from function arguments to LHS
+      // This handles cases such as: obj2 = func(obj1) where obj1 has instance attributes
+      if (!is_ctor_call)
+      {
+        const code_function_callt &call =
+          static_cast<const code_function_callt &>(rhs);
+        for (const auto &arg : call.arguments())
+        {
+          // Skip address_of wrappers (used for passing objects as self parameters)
+          const exprt *arg_ptr = &arg;
+          if (arg.is_address_of())
+            arg_ptr = &arg.op0();
+
+          if (arg_ptr->is_symbol())
+          {
+            copy_instance_attributes(
+              arg_ptr->identifier().as_string(), lhs_symbol->id.as_string());
           }
         }
       }
