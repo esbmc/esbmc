@@ -170,6 +170,15 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
+  - **any()**: Supports Python's `any()` built-in function with the following behavior:
+    - **List Literals Only**: Currently supports `any()` only with list literals as arguments (e.g., `any([x, True, 0]`)).
+    - **Truthiness Evaluation**: Correctly evaluates truthiness according to Python semantics:
+      - `None` is always falsy.
+      - `bool` values are used directly.
+      - Integers and floats are truthy if non-zero.
+      - Pointers are truthy if not NULL.
+    - **Short-Circuit OR Logic**: Returns `True` if any element in the list is truthy, `False` if all elements are falsy or the list is empty.
+    - **Type Handling**: Handles mixed-type lists with support for nested containers and complex structures containing `None`, integers, floats, and booleans.
   - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables the verification of programs that rely on user input.
   - **Print**: Supports `print()` statements for output. All arguments are evaluated to ensure proper side-effect handling during verification, though the actual output is not produced.
   - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
@@ -286,6 +295,7 @@ The current version of ESBMC-Python has the following limitations:
 - String slicing does not support step values (e.g., string[::2] for every second character is not supported).
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
+- `any()` currently supports only list literals as arguments and does not support other iterable types.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
 - `print()` evaluates all arguments for side effects but does not produce actual output during verification.
 - `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
