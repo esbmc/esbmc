@@ -1512,7 +1512,23 @@ exprt function_call_expr::get()
           // Create symbol expression for the function (forward reference)
           symbol_exprt func_sym(function_id_.to_string(), code_typet());
           call.function() = func_sym;
-          call.type() = empty_typet(); // Will be resolved later
+
+          // Extract return type from function definition in AST
+          typet return_type = empty_typet();
+          const auto &func_node =
+            find_function(converter_.ast()["body"], func_name);
+          if (
+            !func_node.empty() && func_node.contains("returns") &&
+            !func_node["returns"].is_null())
+          {
+            const auto &returns = func_node["returns"];
+            if (returns.contains("id"))
+            {
+              return_type =
+                type_handler_.get_typet(returns["id"].get<std::string>());
+            }
+          }
+          call.type() = return_type;
 
           // Process arguments normally
           for (const auto &arg_node : call_["args"])
