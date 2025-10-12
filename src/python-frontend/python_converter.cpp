@@ -211,7 +211,12 @@ void python_converter::update_symbol(const exprt &expr) const
   // Don't update if expression has no name
   // prevents corruption of function symbols
   if (expr.name().empty())
+  {
+    log_debug(
+      "python-frontend",
+      "[update_symbol]: skipping symbol update since expression has no name");
     return;
+  }
 
   // Generate a symbol ID from the expression's name.
   symbol_id sid = create_symbol_id();
