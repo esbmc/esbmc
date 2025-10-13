@@ -1,5 +1,142 @@
 Release Notes of the ESBMC model checker
 
+*** Release Notes for ESBMC v7.11
+This release of ESBMC v7.11 delivers substantial improvements to the Python frontend with comprehensive type system enhancements, major advances in C/C++ verification and STL support, extensive simplifier optimizations, and critical concurrency bug fixes. The release also includes Solidity frontend improvements, SMT backend updates, and enhanced verification capabilities. Below is a comprehensive summary of the new features, enhancements, and bug fixes:
+
+* New Features
+** Python Frontend
+*** Type System Enhancements
+- Added support for Union type annotations and PEP 604 union syntax (int | bool) (#2849, #2853).
+- Improved type inference for typing.Any, class methods, and comparison operations (#2847, #2829).
+- Enhanced parameter type inference from function calls for unannotated parameters (#2741).
+- Added subscript type inference with comprehensive regression tests (#2705).
+- Enabled strict type checking with mypy for improved code quality (#2754, #2750).
+*** Exception Handling
+- Comprehensive exception handling support, including proper exception object merging (#2719, #2832).
+- Added support for Python's generic Exception type and AssertionError (#2753, #2749).
+- Improved raise expression handling and exception semantics (#2766, #2751).
+- Fixed exception handling with empty variable binding (#2734).
+*** String Operations
+- Added support for string operations including 'in' operator, startswith(), and endswith() methods (#2827).
+- Fixed string slicing semantics with extended regression coverage (#2837).
+- Improved string comparison between pointer and array types (#2841).
+- Fixed string concatenation for various char and string combinations (#2768, #2758).
+- Added initial support for f-strings (JoinedStr) (#2736).
+- Added initial regular expression operational model (#2836).
+*** Built-in Functions and Operators
+- Added support for print() function, input() function, and name built-in variable (#2830, #2696, #2727).
+- Extended support for min(), max(), enumerate(), hasattr(), and chr() for multibyte characters (#2697, #2718, #2674, #2644).
+- Added models for random functions (uniform, getrandbits, randrange) (#2822).
+- Added math module support including floor(), ceil(), comb(), and improved math operations (#2704, #2701).
+- Added os module support for mkdir() and rmdir() with OSError hierarchy (#2824).
+*** Control Flow and Language Features
+- Added initial support for lambda expressions (#2730).
+- Implemented ternary operator support (#2721).
+- Improved handling of keyword arguments and function calls in return statements (#2828, #2717).
+*** List and Collection Operations
+- Added support for heterogeneous lists and append operations (#2767).
+- Implemented list.insert() method and list repetition with variables (#2817, #2711, #2715, #2724).
+- Enhanced list handling for variable-length strings (#2714, #2706).
+- Improved validation of range() in for-loops (#2708).
+*** Import System
+- Fixed import handling for referenced classes and mixed import styles (#2857).
+- Fixed imports for fully qualified names and forward reference handling (#2815, #2738).
+- Added fallback to global scope for unresolved function calls (#2709).
+*** Type Correctness and Internal Improvements
+- Fixed NoneType encoding and added NoneType as a type in get_type_from_constant (#2787, #2650).
+- Fixed array-to-pointer decay for keyword arguments (#2844).
+- Improved constructor handling with temporary variable as self (#2816).
+- Fixed symbol table type updates and multiple assignment handling (#2712, #2710).
+- Added __ESBMC_HIDE to models and __ESBMC_rounding_mode initialization (#2788, #2762).
+- Fixed IEEE floating-point crashes and Python power operation precision (#2748).
+** Solidity Verification
+- Added support for UncheckedBlock keyword (#2819).
+- Added Solidity Frontend README.md documentation (#2818).
+- Fixed pow operation, inheritance handling, and dynamic array & contract typecast (#2802, #2745, #2733).
+- Various bug fixes and regression improvements (#2799, #2731, #2726).
+** C/C++ Verification
+*** Built-in Functions
+- Implemented __atomic_exchange_n builtin for atomic operations (#2809).
+- Added support for __builtin_object_size intrinsic with full regression suite (#2774).
+- Added __builtin_offsetof to clang C language frontend (#2772).
+*** STL and Standard Library Improvements
+- Fixed valarray implementation with symbolic and concrete verification tests (#2778).
+- Optimized map::find() and operators for map and string for faster verification (#2692, #2690).
+- Fixed iterator invalidation in set range erase (#2649).
+- Corrected multiset to allow duplicates and fixed equal_range() (#2646).
+- Fixed iterator memory safety issues in string model (#2645).
+- Fixed deque reverse iterator bugs (#2643).
+- Fixed stack constructor to properly initialize from container (#2648).
+*** C++ Frontend Enhancements
+- Improved sstream operational model and fixed stringstream compilation errors (#2683, #2681).
+- Fixed wallop_type infinite recursion with cycle detection (#2671).
+- Removed unnecessary T() calls for non-default-constructible types (#2668).
+- Added reference adjustments to pre/post-increment/decrement operations (#2729).
+** C Verification
+- Added operational model for nan function (#2667).
+- Improved relation simplification (#2777).
+- Added rename for re-alloc size (#2806).
+- Added check for empty function body (#2658).
+- Improved getenv() operational model (#2653).
+* Simplifier Enhancements
+** Extensive simplification improvements across multiple expression types:
+- Added constant propagation support for struct field updates (#2823).
+- Improved concat2t::do_simplify() to detect byte_extract reconstruction patterns (#2820).
+- Implemented pointer_object2t::do_simplify() and improved same_object2t::do_simplify() (#2795, #2796).
+- Enhanced pointer offset simplification in VCC generation (#2803, #2793).
+- Fixed same_object simplification for typecast expressions (#2791).
+- Added boolean, bitwise, and relational simplification rules (#2790).
+- Added associative simplification for logical AND/OR expressions (#2786).
+- Added arithmetic and bitwise expression simplifications (#2785).
+- Added simplification rules for self-comparisons and idempotent expressions (#2784).
+- General simplifier cleanup (#2794).
+* SMT Backend Enhancements
+- Added CVC5 quantifier support (#2707).
+- Updated to Bitwuzla 0.8.2 solver backend (#2677).
+- Added initial support for byte update operations in integer arithmetic mode (#2804).
+- Standardized dump_smt() interface across solver backends (#2743).
+* Symbolic Execution
+= Added comprehensive realloc regression tests and fixed realloc symbolic model (#2781).
+= Fixed symex_input to only process arguments matching format specifiers (#2800).
+= Fixed static output_count scoping in symex_target_equationt (#2676).
+* Concurrency and Multithreading
+- Fixed critical data races in irep, irep2, and goto trace for parallel solving (#2670, #2680, #2685, #2678).
+- Fixed string container issues for parallel solving (#2647).
+- Don't terminate thread in pthread_exit to match POSIX behavior (#2744).
+- Fixed incremental-smt in multi-property concurrency scenarios (#2665).
+- Fixed parallel solving output issues (#2652).
+* Verification Process
+- Loop Invariants: Added interactive loop invariant support (experimental) and fixed loop invariant scope for nested loops (#2651, #2713).
+- Multi-property Verification: Enhanced verification to process properties individually using claim.cstr (#2655).
+- Witness Support: Added yaml-based violation witness support (#2688).
+* Fixes and Improvements
+** Verification Process
+- Fixed incorrect remaining VCC count after caching (#2814).
+- Fixed assume constant propagation (#2759).
+- Added alignment checks for direct pointer dereferences (#2684).
+- Improved slice unused array updates optimization (#2722).
+- Skip loops transform with pointer only when VSA is enabled (#2833).
+- Fixed handling of missing interval data in goto_contractor (#2663).
+- Fixed assignment and trace optimization issues (#2660, #2669).
+** Operational Models
+- Improved libc models for I/O and error handling (#2798).
+- Optimized strncpy for BMC performance (#2682).
+** Build System and CI
+- Integrated LLVM 21 support (#2821).
+- Corrected build instructions (#2854).
+- Added fallback mirrors for GMP download in CI (#2770).
+- Fixed YAPF checkout for PR from fork repositories (#2760).
+- Fixed macOS build issues (#2739).
+** Testing and Infrastructure
+- Cleaned up test cases and regression tests (#2838).
+- Updated big-int fuzzing test (#2659).
+- Fixed symbol dependencies system for Python frontend (#2782).
+- Added Python code style enforcement with Yapf in CI (#2716).
+- Ensured overflow checks work with incremental mode (#2776).
+- Reverted problematic changes to maintain stability (#2691, #2687).
+* Acknowledgments
+We want to thank the following contributors for this release: @lucasccordeiro, @brcfarias, @XLiZHI, @ChenfengWei0, @Luke-Sanderson, @LukeW1999, @Ben-Eichhoefer, @Anthonysdu, @rafaelsamenezes, @sulaychaudhry, @prototypeC14, @intrigus-lgtm, @DevM-uk, @adilanwar2399, and the entire ESBMC community.
+
 *** Version 7.10
 
 This release of ESBMC v7.10 introduces significant improvements in Python and Solidity frontends, concurrency and SMT modeling, termination analysis, and C/C++ verification. It also includes numerous bug fixes and enhancements to the test infrastructure. Below is a comprehensive summary of the new features, enhancements, and bug fixes:
