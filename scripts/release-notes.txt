@@ -1,7 +1,7 @@
 Release Notes of the ESBMC model checker
 
 *** Release Notes for ESBMC v7.11
-This release of ESBMC v7.11 delivers substantial improvements to the Python frontend with comprehensive type system enhancements, major advances in C/C++ verification and STL support, extensive simplifier optimizations, and critical concurrency bug fixes. The release also includes Solidity frontend improvements, SMT backend updates, and enhanced verification capabilities. Below is a comprehensive summary of the new features, enhancements, and bug fixes:
+This release of ESBMC v7.11 delivers substantial improvements to the Python frontend with comprehensive type system enhancements, major advances in C/C++ verification and STL support, extensive simplifier optimizations, and concurrency bug fixes. The release also includes Solidity frontend improvements, SMT backend updates, and enhanced verification capabilities. Below is a summary of the new features, enhancements, and bug fixes:
 
 * New Features
 ** Python Frontend
@@ -17,7 +17,7 @@ This release of ESBMC v7.11 delivers substantial improvements to the Python fron
 - Improved raise expression handling and exception semantics (#2766, #2751).
 - Fixed exception handling with empty variable binding (#2734).
 *** String Operations
-- Added support for string operations including 'in' operator, startswith(), and endswith() methods (#2827).
+- Added support for string operations, including 'in' operator, startswith(), and endswith() methods (#2827).
 - Fixed string slicing semantics with extended regression coverage (#2837).
 - Improved string comparison between pointer and array types (#2841).
 - Fixed string concatenation for various char and string combinations (#2768, #2758).
@@ -95,12 +95,12 @@ This release of ESBMC v7.11 delivers substantial improvements to the Python fron
 - Updated to Bitwuzla 0.8.2 solver backend (#2677).
 - Added initial support for byte update operations in integer arithmetic mode (#2804).
 - Standardized dump_smt() interface across solver backends (#2743).
-* Symbolic Execution
-= Added comprehensive realloc regression tests and fixed realloc symbolic model (#2781).
-= Fixed symex_input to only process arguments matching format specifiers (#2800).
-= Fixed static output_count scoping in symex_target_equationt (#2676).
-* Concurrency and Multithreading
-- Fixed critical data races in irep, irep2, and goto trace for parallel solving (#2670, #2680, #2685, #2678).
+* Symbolic Execution Enhancements
+- Added comprehensive realloc regression tests and fixed realloc symbolic model (#2781).
+- Fixed symex_input to only process arguments matching format specifiers (#2800).
+- Fixed static output_count scoping in symex_target_equationt (#2676).
+* Concurrency and Multithreading Enhancements
+- Fixed data races in irep, irep2, and goto trace for parallel solving (#2670, #2680, #2685, #2678).
 - Fixed string container issues for parallel solving (#2647).
 - Don't terminate thread in pthread_exit to match POSIX behavior (#2744).
 - Fixed incremental-smt in multi-property concurrency scenarios (#2665).
