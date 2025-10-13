@@ -222,6 +222,11 @@ public:
     return flags;
   }
 
+  static bool is_integer_type(const typet &type)
+  {
+    return type.is_signedbv() || type.is_unsignedbv();
+  }
+
 private:
   static void
   update_type_flags_from_node(const nlohmann::json &node, TypeFlags &flags)

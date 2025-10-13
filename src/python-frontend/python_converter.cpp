@@ -275,7 +275,7 @@ void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
   typet &op_type = op.type();
 
   // Only promote if operand is an integer type
-  if (!(op_type.is_signedbv() || op_type.is_unsignedbv()))
+  if (!(type_utils::is_integer_type(op_type)))
     return;
 
   // Handle constant integers
@@ -318,7 +318,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   // Case 1: Promote RHS integer constant to float if LHS expects a float
   if (
     lhs_type.is_floatbv() && rhs.is_constant() &&
-    (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()))
+    type_utils::is_integer_type(rhs_type))
   {
     try
     {
@@ -344,9 +344,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   }
   // Case 2: For Python assignments, if RHS is float but LHS is integer,
   // promote LHS to float to maintain Python's dynamic typing semantics
-  else if (
-    rhs_type.is_floatbv() &&
-    (lhs_type.is_signedbv() || lhs_type.is_unsignedbv()))
+  else if (rhs_type.is_floatbv() && type_utils::is_integer_type(lhs_type))
   {
     // Update LHS variable type to match RHS float type
     lhs.type() = rhs_type;
@@ -370,17 +368,13 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
       double_type(); // Python default float is double-precision
 
     // Handle constant operands
-    if (
-      lhs_op.is_constant() &&
-      (lhs_op.type().is_signedbv() || lhs_op.type().is_unsignedbv()))
+    if (lhs_op.is_constant() && type_utils::is_integer_type(lhs_op.type()))
       promote_int_to_float(lhs_op, float_type);
     // For non-constant operands, create explicit typecast
     else if (!lhs_op.type().is_floatbv())
       lhs_op = typecast_exprt(lhs_op, float_type);
 
-    if (
-      rhs_op.is_constant() &&
-      (rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()))
+    if (rhs_op.is_constant() && type_utils::is_integer_type(rhs_op.type()))
       promote_int_to_float(rhs_op, float_type);
     else if (!rhs_op.type().is_floatbv())
       rhs_op = typecast_exprt(rhs_op, float_type);
@@ -675,7 +669,7 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   return build_power_expression(lhs, exponent);
 }
 
-// Helper function for efficient exponentiation
+// Function for efficient exponentiation
 exprt python_converter::build_power_expression(
   const exprt &base,
   const BigInt &exp)
@@ -766,7 +760,7 @@ void python_converter::handle_float_division(
 
   auto promote_to_float = [&](exprt &e) {
     const typet &t = e.type();
-    const bool is_integer = t.is_signedbv() || t.is_unsignedbv();
+    const bool is_integer = type_utils::is_integer_type(t);
 
     if (!is_integer)
       return;
@@ -808,9 +802,7 @@ BigInt python_converter::get_string_size(const exprt &expr)
   if (!expr.type().is_array())
   {
     // For non-array types in f-strings, convert them first to get actual size
-    if (
-      expr.is_constant() &&
-      (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+    if (expr.is_constant() && type_utils::is_integer_type(expr.type()))
     {
       // Convert the actual integer to string to get real size
       BigInt value =
@@ -1011,7 +1003,7 @@ exprt python_converter::convert_to_string(const exprt &expr)
   // Handle constants
   if (expr.is_constant())
   {
-    if (t.is_signedbv() || t.is_unsignedbv())
+    if (type_utils::is_integer_type(t))
     {
       BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
       std::string str_value = std::to_string(value.to_int64());
@@ -1190,7 +1182,7 @@ exprt python_converter::handle_string_concatenation(
   if (!lhs_is_empty && rhs_is_empty)
     return lhs;
 
-  // Helper function to extract characters from any source
+  // Extract characters from any source
   auto extract_chars =
     [this](
       const exprt &expr,
@@ -1277,9 +1269,7 @@ exprt python_converter::handle_string_concatenation(
     }
 
     // Handle single character constants
-    if (
-      expr.is_constant() &&
-      (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+    if (expr.is_constant() && type_utils::is_integer_type(expr.type()))
     {
       try
       {
@@ -1643,7 +1633,7 @@ exprt python_converter::handle_none_comparison(
     return not_exprt(equality_exprt(lhs, rhs));
 }
 
-// Helper method to resolve symbol values to constants
+// Resolve symbol values to constants
 exprt python_converter::get_resolved_value(const exprt &expr)
 {
   // Handle direct function call expressions
@@ -1690,7 +1680,7 @@ exprt python_converter::get_resolved_value(const exprt &expr)
   return nil_exprt();
 }
 
-// Helper to resolve function calls (both identity functions and constant-returning functions)
+// Resolve function calls (both identity functions and constant-returning functions)
 exprt python_converter::resolve_function_call(
   const exprt &func_expr,
   const exprt &args_expr)
@@ -1755,7 +1745,7 @@ exprt python_converter::resolve_function_call(
   return nil_exprt();
 }
 
-// Helper to check if a function returns a constant value
+// Check if a function returns a constant value
 exprt python_converter::get_function_constant_return(const exprt &func_value)
 {
   if (!func_value.is_code())
@@ -1811,7 +1801,7 @@ exprt python_converter::get_function_constant_return(const exprt &func_value)
   return nil_exprt();
 }
 
-// Helper to check if a function is an identity function (returns its parameter)
+// Check if a function is an identity function (returns its parameter)
 bool python_converter::is_identity_function(
   const exprt &func_value,
   const std::string &func_identifier)
@@ -1947,7 +1937,7 @@ exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
   return not_expr;
 }
 
-/// Helper method to convert function calls to side effects
+/// Convert function calls to side effects
 void python_converter::convert_function_calls_to_side_effects(
   exprt &lhs,
   exprt &rhs)
@@ -1968,7 +1958,7 @@ void python_converter::convert_function_calls_to_side_effects(
     to_side_effect_call(rhs);
 }
 
-/// Helper method to handle string concatenation with type promotion
+/// Handle string concatenation with type promotion
 exprt python_converter::handle_string_concatenation_with_promotion(
   exprt &lhs,
   exprt &rhs,
@@ -1979,7 +1969,7 @@ exprt python_converter::handle_string_concatenation_with_promotion(
   if (lhs.type().is_array() && !rhs.type().is_array())
   {
     // LHS is array, RHS is single char - promote RHS to string array
-    if (rhs.type().is_signedbv() || rhs.type().is_unsignedbv())
+    if (type_utils::is_integer_type(rhs.type()))
     {
       typet string_type = type_handler_.build_array(char_type(), 2);
       exprt str_array = gen_zero(string_type);
@@ -1991,7 +1981,7 @@ exprt python_converter::handle_string_concatenation_with_promotion(
   else if (!lhs.type().is_array() && rhs.type().is_array())
   {
     // RHS is array, LHS is single char - promote LHS to string array
-    if (lhs.type().is_signedbv() || lhs.type().is_unsignedbv())
+    if (type_utils::is_integer_type(lhs.type()))
     {
       typet string_type = type_handler_.build_array(char_type(), 2);
       exprt str_array = gen_zero(string_type);
@@ -2048,7 +2038,7 @@ exprt python_converter::ensure_null_terminated_string(exprt &e)
     return e;
 
   // Single character constant - convert to null-terminated string
-  if (e.is_constant() && (e.type().is_signedbv() || e.type().is_unsignedbv()))
+  if (e.is_constant() && (type_utils::is_integer_type(e.type())))
   {
     BigInt char_val =
       binary2integer(e.value().as_string(), e.type().is_signedbv());
@@ -2815,7 +2805,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   return make_char_array_expr(string_literal, t);
 }
 
-// Helper function to detect bytes literals
+// Detect bytes literals
 bool python_converter::is_bytes_literal(const nlohmann::json &element)
 {
   // Check if element has encoded_bytes field (explicit bytes)
@@ -3760,9 +3750,7 @@ void python_converter::get_var_assign(
     is_converting_rhs = false;
 
     // Fix for single character string constant assigned to str type variables
-    if (
-      lhs_type == "str" &&
-      (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+    if (lhs_type == "str" && type_utils::is_integer_type(rhs.type()))
     {
       // Check if this is a string constant assignment like s: str = "h"
       if (
@@ -4033,9 +4021,8 @@ void python_converter::get_compound_assign(
     }
     // Check if variable is annotated as str but implemented as single char
     else if (
-      (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
-      (current_element_type.is_signedbv() ||
-       current_element_type.is_unsignedbv()))
+      type_utils::is_integer_type(lhs.type()) &&
+      type_utils::is_integer_type(current_element_type))
     {
       // Check if the variable was declared with str annotation
       nlohmann::json decl_node = get_var_node(var_name, *ast_json);
@@ -4098,13 +4085,9 @@ typet resolve_ternary_type(
     return then_type;
 
   // Enhanced numeric promotion: int < float
-  if (
-    (then_type.is_signedbv() || then_type.is_unsignedbv()) &&
-    else_type.is_floatbv())
+  if (type_utils::is_integer_type(then_type) && else_type.is_floatbv())
     return else_type;
-  if (
-    (else_type.is_signedbv() || else_type.is_unsignedbv()) &&
-    then_type.is_floatbv())
+  if (type_utils::is_integer_type(else_type) && then_type.is_floatbv())
     return then_type;
 
   // Both arrays (strings)
