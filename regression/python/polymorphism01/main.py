@@ -2,7 +2,7 @@ from typing import Union
 
 class Vehicle:
     def move(self) -> str:
-        # Abstract method should raise an error or be marked abstract
+        # This should never be called if only subclasses are instantiated
         raise NotImplementedError("Subclasses must implement this method")
 
 class Car(Vehicle):
@@ -17,16 +17,15 @@ class Airplane(Vehicle):
     def move(self) -> str:
         return "Flying in the sky"
 
-def test_vehicle_movement(vehicle: Vehicle, expected_movement: str) -> None:
-    result: str = vehicle.move()
-    assert result == expected_movement, f"Expected '{expected_movement}', got '{result}'"
-
-# Test cases
+# Test cases - directly test each vehicle type
 car: Car = Car()
+result_car: str = car.move()
+assert result_car == "Driving on the road", f"Expected 'Driving on the road', got '{result_car}'"
+
 boat: Boat = Boat()
+result_boat: str = boat.move()
+assert result_boat == "Sailing on the water", f"Expected 'Sailing on the water', got '{result_boat}'"
+
 airplane: Airplane = Airplane()
-
-test_vehicle_movement(car, "Driving on the road")
-test_vehicle_movement(boat, "Sailing on the water")
-test_vehicle_movement(airplane, "Flying in the sky")
-
+result_airplane: str = airplane.move()
+assert result_airplane == "Flying in the sky", f"Expected 'Flying in the sky', got '{result_airplane}'"
