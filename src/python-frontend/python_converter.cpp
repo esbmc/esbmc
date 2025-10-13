@@ -5,6 +5,7 @@
 #include <python-frontend/function_call_builder.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/module_locator.h>
+#include <python-frontend/string_builder.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -1162,166 +1163,7 @@ exprt python_converter::handle_string_concatenation(
   const nlohmann::json &left,
   const nlohmann::json &right)
 {
-  // Handle edge case: empty string + empty string = empty string
-  bool lhs_is_empty =
-    is_zero_length_array(lhs) ||
-    (lhs.is_constant() && lhs.type().is_array() && lhs.operands().size() <= 1);
-  bool rhs_is_empty =
-    is_zero_length_array(rhs) ||
-    (rhs.is_constant() && rhs.type().is_array() && rhs.operands().size() <= 1);
-
-  // if both are empty, return the first one (already an empty string)
-  if (lhs_is_empty && rhs_is_empty)
-    return lhs;
-
-  // if LHS is empty and RHS is not, return RHS
-  if (lhs_is_empty && !rhs_is_empty)
-    return rhs;
-
-  // if RHS is empty and LHS is not, return LHS
-  if (!lhs_is_empty && rhs_is_empty)
-    return lhs;
-
-  // Extract characters from any source
-  auto extract_chars =
-    [this](
-      const exprt &expr,
-      const nlohmann::json &json_node) -> std::vector<exprt> {
-    std::vector<exprt> chars;
-
-    // Handle JSON string constants first
-    if (
-      json_node.contains("_type") && json_node["_type"] == "Constant" &&
-      json_node.contains("value"))
-    {
-      std::string str_value = json_node["value"].get<std::string>();
-      for (char c : str_value)
-      {
-        if (c == 0)
-          break; // Stop at null terminator
-        BigInt char_val(static_cast<unsigned char>(c));
-        exprt char_expr = constant_exprt(
-          integer2binary(char_val, 8), integer2string(char_val), char_type());
-        chars.push_back(char_expr);
-      }
-      return chars;
-    }
-
-    // Handle symbol expressions
-    if (expr.is_symbol())
-    {
-      symbolt *symbol =
-        symbol_table_.find_symbol(expr.identifier().as_string());
-      if (
-        symbol && symbol->value.is_constant() &&
-        symbol->value.type().is_array())
-      {
-        // Extract characters from symbol value, excluding null terminator
-        const exprt &value = symbol->value;
-        for (size_t i = 0; i < value.operands().size(); ++i)
-        {
-          const exprt &ch = value.operands()[i];
-          if (ch.is_constant())
-          {
-            try
-            {
-              BigInt char_val =
-                binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-              if (char_val == 0)
-                break; // Stop at null terminator
-              chars.push_back(ch);
-            }
-            catch (...)
-            {
-              // If we can't parse the value, just include the character
-              chars.push_back(ch);
-            }
-          }
-        }
-      }
-      return chars;
-    }
-
-    // Handle constant arrays
-    if (expr.is_constant() && expr.type().is_array())
-    {
-      for (size_t i = 0; i < expr.operands().size(); ++i)
-      {
-        const exprt &ch = expr.operands()[i];
-        if (ch.is_constant())
-        {
-          try
-          {
-            BigInt char_val =
-              binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-            if (char_val == 0)
-              break; // Stop at null terminator
-            chars.push_back(ch);
-          }
-          catch (...)
-          {
-            // If we can't parse the value, just include the character
-            chars.push_back(ch);
-          }
-        }
-      }
-      return chars;
-    }
-
-    // Handle single character constants
-    if (expr.is_constant() && type_utils::is_integer_type(expr.type()))
-    {
-      try
-      {
-        BigInt char_val =
-          binary2integer(expr.value().as_string(), expr.type().is_signedbv());
-        if (char_val != 0) // Don't include null characters
-          chars.push_back(expr);
-      }
-      catch (...)
-      {
-        // If we can't parse, include it anyway
-        chars.push_back(expr);
-      }
-      return chars;
-    }
-
-    return chars;
-  };
-
-  // Extract characters from both operands
-  std::vector<exprt> lhs_chars = extract_chars(lhs, left);
-  std::vector<exprt> rhs_chars = extract_chars(rhs, right);
-
-  // Calculate total size: lhs_chars + rhs_chars + null terminator
-  size_t total_size = lhs_chars.size() + rhs_chars.size() + 1;
-
-  // Create result array
-  typet result_type = type_handler_.build_array(char_type(), total_size);
-  exprt result = constant_exprt(
-    array_typet(char_type(), from_integer(total_size, size_type())));
-  result.type() = result_type;
-  result.operands().resize(total_size);
-
-  // Copy LHS characters
-  size_t pos = 0;
-  for (const exprt &ch : lhs_chars)
-    result.operands().at(pos++) = ch;
-
-  // Copy RHS characters
-  for (const exprt &ch : rhs_chars)
-    result.operands().at(pos++) = ch;
-
-  // Add null terminator
-  if (pos < total_size)
-  {
-    BigInt zero(0);
-    exprt null_char = constant_exprt(
-      integer2binary(zero, 8), integer2string(zero), char_type());
-    result.operands().at(pos) = null_char;
-  }
-
-  return result;
+  return string_builder_->concatenate_strings(lhs, rhs, left, right);
 }
 
 bool python_converter::is_zero_length_array(const exprt &expr)
@@ -2033,32 +1875,7 @@ exprt python_converter::handle_chained_comparisons_logic(
 
 exprt python_converter::ensure_null_terminated_string(exprt &e)
 {
-  // Already a proper string array - return as is
-  if (e.type().is_array() && e.type().subtype() == char_type())
-    return e;
-
-  // Single character constant - convert to null-terminated string
-  if (e.is_constant() && (type_utils::is_integer_type(e.type())))
-  {
-    BigInt char_val =
-      binary2integer(e.value().as_string(), e.type().is_signedbv());
-
-    // Create a 2-element array: [character, '\0']
-    typet string_type = type_handler_.build_array(char_type(), 2);
-    exprt str_array = gen_zero(string_type);
-
-    // Set the character
-    exprt char_expr = constant_exprt(
-      integer2binary(char_val, 8), integer2string(char_val), char_type());
-    str_array.operands().at(0) = char_expr;
-
-    // Null terminator is already zero from gen_zero
-    return str_array;
-  }
-
-  // For other types, try wrapping in array
-  ensure_string_array(e);
-  return e;
+  return string_builder_->ensure_null_terminated_string(e);
 }
 
 exprt python_converter::handle_string_startswith(
@@ -2783,23 +2600,18 @@ exprt python_converter::get_literal(const nlohmann::json &element)
 
   if (is_bytes_literal(element))
   {
-    // Handle bytes literal - check for encoded_bytes field first
+    std::vector<uint8_t> bytes;
     if (element.contains("encoded_bytes"))
-      string_literal =
-        base64_decode(element["encoded_bytes"].get<std::string>());
+      bytes = base64_decode(element["encoded_bytes"].get<std::string>());
     else
-      string_literal.assign(str_val.begin(), str_val.end());
+      bytes.assign(str_val.begin(), str_val.end());
 
-    // Set appropriate bytes type
-    t = type_handler_.get_typet("bytes", string_literal.size());
+    return string_builder_->build_raw_byte_array(bytes);
   }
   else
   {
-    // Python str literal - add null terminator
-    string_literal.assign(str_val.begin(), str_val.end());
-    string_literal.push_back('\0');
-
-    t = type_handler_.build_array(char_type(), string_literal.size());
+    // Strings are null-terminated
+    return string_builder_->build_string_literal(str_val);
   }
 
   return make_char_array_expr(string_literal, t);
@@ -5081,6 +4893,7 @@ python_converter::python_converter(
     ast_json(ast),
     global_scope_(gs),
     type_handler_(*this),
+    string_builder_(new string_builder(*this)),
     sym_generator_("python_converter::"),
     ns(_context),
     current_func_name_(""),
@@ -5088,6 +4901,16 @@ python_converter::python_converter(
     current_block(nullptr),
     current_lhs(nullptr)
 {
+}
+
+python_converter::~python_converter()
+{
+  delete string_builder_;
+}
+
+string_builder &python_converter::get_string_builder()
+{
+  return *string_builder_;
 }
 
 void python_converter::append_models_from_directory(
