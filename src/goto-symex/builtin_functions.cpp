@@ -1675,18 +1675,78 @@ static inline expr2tc gen_value_by_byte(
 
 // Computes the equivalent object value when considering a memcpy operation on it
 static inline expr2tc gen_byte_memcpy(
-  const type2tc &type,
   const expr2tc &src,
-  const expr2tc &value,
+  const expr2tc &dst,
   const size_t num_of_bytes,
   const size_t src_offset,
   const size_t dst_offset)
 {
-  return expr2tc();
+  if (is_pointer_type(src) || is_pointer_type(dst))
+    return expr2tc();
+
+  // TODO: Not sure how to deal with different types
+  if (src->type != dst->type)
+    return expr2tc();
+
+  // Example: 0xdeadbeef with offset 1 (src) and 0x12345678 with offset 2 (dst). 1 byte
+  // Result shout be: 0x1234ad78
+
+  // 0x0000
+  expr2tc src_mask = gen_zero(dst->type);
+
+  // 0x0000
+  expr2tc dst_mask = gen_zero(dst->type);
+
+  const auto eight = constant_int2tc(dst->type, BigInt(8));
+  const auto one = constant_int2tc(dst->type, BigInt(1));
+
+  for (unsigned i = 0; i < num_of_bytes; i++)
+  {
+    for (int m = 0; m < 8; m++)
+    {
+      src_mask = shl2tc(dst->type, src_mask, one);
+      src_mask = bitor2tc(dst->type, src_mask, one);
+      dst_mask = shl2tc(dst->type, dst_mask, one);
+      dst_mask = bitor2tc(dst->type, dst_mask, one);
+    }
+  }
+
+  // masks: 0x000000FF
+
+  for (unsigned i = 0; i < dst_offset; i++)
+  {
+    dst_mask = shl2tc(dst->type, dst_mask, eight); // dst_mask: 0x00FF0000
+  }
+
+  dst_mask = bitnot2tc(dst->type, dst_mask);      // dst_mask: 0xFF00FFFF
+  dst_mask = bitand2tc(dst->type, dst, dst_mask); // dst_mask: 0x12005678
+
+  for (unsigned i = 0; i < src_offset; i++)
+  {
+    src_mask = shl2tc(dst->type, src_mask, eight); // src_mask: 0x0000FF00
+  }
+
+  src_mask = bitand2tc(dst->type, src, src_mask); // src_mask: 0x0000de00
+
+  // When dst_offset > src_offset
+  for (unsigned i = src_offset; i < dst_offset; i++)
+  {
+    src_mask = shl2tc(dst->type, src_mask, eight); // src_mask: 0x00de0000
+  }
+
+  // When dst_offsett < src_offset
+  for (unsigned i = dst_offset; i < src_offset; i++)
+  {
+    src_mask = lshr2tc(dst->type, src_mask, eight);
+  }
+
+  auto result = bitor2tc(dst->type, dst_mask, src_mask); // result: 0x12de345678
+
+  simplify(result);
+  return result;
 }
 
 static inline expr2tc do_memcpy_expression(
-  const type2tc &type,
   const expr2tc &dst,
   const size_t &dst_offset,
   const expr2tc &src,
@@ -1696,15 +1756,20 @@ static inline expr2tc do_memcpy_expression(
   if (num_of_bytes == 0)
     return dst;
 
-  if (is_floatbv_type(type) || is_fixedbv_type(type))
-    return expr2tc();
-
-  if (src->type != dst->type)
-    return expr2tc();
-
   // Short-circuit
-  if (!dst_offset && !src_offset)
+  if (
+    dst->type == src->type && !dst_offset && !src_offset &&
+      type_byte_size(dst->type).to_uint64() == num_of_bytes)
     return src;
+
+  if (
+    is_array_type(src->type) || is_array_type(dst->type) ||
+    is_struct_type(dst->type) || is_union_type(dst->type) ||
+      is_struct_type(src->type) || is_union_type(src->type))
+    return expr2tc();
+
+  // Base-case. Primitives!
+  return gen_byte_memcpy(src,dst,num_of_bytes,src_offset,dst_offset);
 }
 
 void offset_simplifier(expr2tc &e)
@@ -1919,12 +1984,14 @@ void goto_symext::intrinsic_memcpy(
     // Time to do the actual copy
     for (const auto &src_item : src_items)
     {
+      // Offset is garanteed to be a constant
+      const uint64_t src_offset =
+        to_constant_int2t(src_item.offset).value.to_uint64();
       const expr2tc new_object = do_memcpy_expression(
-        item.object->type,
         item.object,
-        0,
-        src_item.object,
         number_of_offset,
+        src_item.object,
+        src_offset,
         number_of_bytes);
 
       if (!new_object)
