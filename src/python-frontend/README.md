@@ -84,6 +84,9 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
+  - **None Type Handling**: Comprehensive support for Python's None value with proper type distinction from other types (`int`, `bool`, `str`, etc.).
+  - **None Comparisons**: Correctly evaluates comparisons and identity checks involving None (e.g., `x is None`, `x == None`, `x != 0`).
+  - **None in Logical Expressions**: Properly handles `None` in boolean contexts where it is falsy (e.g., `None and True` returns `None`, `None or 1` returns `1`).
 - **Global Variables:** Recognizes the `global` keyword for accessing and modifying variables in the global scope from within functions.
 
 ### String Formatting and Literals
@@ -102,7 +105,19 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
-- **Annotations**: Supports type annotations.
+- **Annotations**: Supports type annotations, including:
+  - **Basic Type Annotations**: Standard Python types (int, float, bool, str, etc.).
+  - **Any Type**: Supports `Any` from the typing module for functions with dynamic return types.
+    - **Automatic Type Inference**: When `Any` is used as a return type, ESBMC automatically infers the actual type by analyzing return statements in the function body.
+    - **Type Hierarchy**: Uses the same type widening hierarchy as Union types (`float > int > bool`).
+    - **Supported Return Types**: `Any` type functions can return `int`, `float`, `bool`, or expressions (`BinOp`, `UnaryOp`) that evaluate to these types.
+    - **Variable Type Inference**: Variables annotated with `Any` that are assigned from function calls inherit the function's inferred return type.
+  - **Union Types**: Supports both `Union[Type1, Type2, ...]` from the typing module and PEP 604 syntax (`Type1 | Type2`) for functions that can return multiple types.
+    - **Union Syntax Support**: Both `Union[int, bool]` and `int | bool` syntaxes are supported.
+    - **Chained Unions**: Supports chained union types with multiple members (e.g., `int | bool | float`).
+    - **Type Widening**: Automatically selects the widest type from Union members based on type hierarchy (`float > int > bool`).
+    - **Return Type Inference**: When Union types are used, ESBMC analyzes return statements to determine the appropriate type.
+    - **Mixed Type Verification**: Enables verification of functions that conditionally return different types based on runtime conditions.
 - **Lambda Expressions**: Supports basic lambda expressions that are converted to regular functions and stored as function pointers. Lambda functions can be assigned to variables and called indirectly. Supports single-expression lambdas with multiple parameters.
 
 ### Object-Oriented Programming
@@ -158,6 +173,15 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
+  - **any()**: Supports Python's `any()` built-in function with the following behavior:
+    - **List Literals Only**: Currently supports `any()` only with list literals as arguments (e.g., `any([x, True, 0]`)).
+    - **Truthiness Evaluation**: Correctly evaluates truthiness according to Python semantics:
+      - `None` is always falsy.
+      - `bool` values are used directly.
+      - Integers and floats are truthy if non-zero.
+      - Pointers are truthy if not NULL.
+    - **Short-Circuit OR Logic**: Returns `True` if any element in the list is truthy, `False` if all elements are falsy or the list is empty.
+    - **Type Handling**: Handles mixed-type lists with support for nested containers and complex structures containing `None`, integers, floats, and booleans.
   - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables the verification of programs that rely on user input.
   - **Print**: Supports `print()` statements for output. All arguments are evaluated to ensure proper side-effect handling during verification, though the actual output is not produced.
   - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
@@ -274,6 +298,7 @@ The current version of ESBMC-Python has the following limitations:
 - String slicing does not support step values (e.g., string[::2] for every second character is not supported).
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
+- `any()` currently supports only list literals as arguments and does not support other iterable types.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
 - `print()` evaluates all arguments for side effects but does not produce actual output during verification.
 - `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
@@ -301,7 +326,16 @@ The current version of ESBMC-Python has the following limitations:
   - Match objects do not expose group capture methods (e.g., .group(), .groups(), .span()). Match results are only usable for Boolean/None testing.
   - Limited pattern syntax support compared to full Python regex. Complex patterns beyond the explicitly supported constructs may exhibit nondeterministic behavior.
   - Advanced regex features are not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, and Unicode property escapes.
-
+  - Union Type Limitations:
+    - Union types are resolved to the widest type among their members (`float > int > bool`) at verification time rather than maintaining true union semantics.
+    - Union types containing types beyond basic primitives (`int, float, bool`) may default to pointer types.
+    - Type narrowing based on runtime type checks within Union-typed functions is not explicitly tracked.
+- Any Type Limitations:
+  - Any type inference only supports return values of primitive types: `int`, `float`, `bool`, and expressions that evaluate to these types.
+  - String return values are explicitly not supported and will cause a verification error with the message "Unsupported return type 'string' detected".
+  - Other types (`objects`, `arrays`, `null`) are not supported as return values for Any-typed functions.
+  - Type inference defaults to `double (float)` when no specific type can be determined from return statements.
+  
 ### Example 1: Division by Zero in Python
 
 The following Python program executes without issues in standard Python 3. However, when analyzed using ESBMC, it reveals a hidden bug: a possible division by zero.

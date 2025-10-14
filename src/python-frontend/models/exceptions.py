@@ -130,3 +130,25 @@ class PermissionError(OSError):
 
     def __str__(self) -> str:
         return self.message
+
+
+class RuntimeError(Exception):
+    """Base class for runtime errors"""
+    message: str = ""
+
+    def __init__(self, message: str = "Runtime error"):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class NotImplementedError(RuntimeError):
+    """Raised when an abstract method requires implementation"""
+    message: str = ""
+
+    def __init__(self, message: str = "Method not implemented"):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message

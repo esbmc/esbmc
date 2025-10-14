@@ -11,6 +11,7 @@
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/message.h>
+#include <util/python_types.h>
 #include <regex>
 #include <stdexcept>
 
@@ -1244,6 +1245,92 @@ exprt function_call_expr::validate_re_module_args() const
   return nil_exprt(); // Validation passed
 }
 
+bool function_call_expr::is_any_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+  return func_name == "any";
+}
+
+exprt function_call_expr::handle_any() const
+{
+  const auto &args = call_["args"];
+
+  if (args.empty())
+    throw std::runtime_error("any() expected at least 1 argument, got 0");
+
+  if (args.size() > 1)
+    throw std::runtime_error("any() takes at most 1 argument");
+
+  const auto &arg = args[0];
+
+  if (arg["_type"] != "List")
+    throw std::runtime_error("any() currently only supports list literals");
+
+  const auto &elts = arg["elts"];
+
+  // Empty list returns False
+  if (elts.empty())
+    return gen_boolean(false);
+
+  // Build an OR expression of all elements' truthiness
+  exprt result;
+  bool first = true;
+
+  for (const auto &elt : elts)
+  {
+    exprt element = converter_.get_expr(elt);
+
+    // Check if element is truthy
+    exprt is_truthy;
+
+    if (element.type() == none_type())
+    {
+      // None is always falsy
+      is_truthy = gen_boolean(false);
+    }
+    else if (element.type().is_bool())
+    {
+      // Bool: use directly
+      is_truthy = element;
+    }
+    else if (
+      element.type().id() == "signedbv" || element.type().id() == "unsignedbv")
+    {
+      // Integer: truthy if != 0
+      exprt zero = gen_zero(element.type());
+      is_truthy = not_exprt(equality_exprt(element, zero));
+    }
+    else if (element.type().id() == "floatbv")
+    {
+      // Float: truthy if != 0.0
+      exprt zero = gen_zero(element.type());
+      is_truthy = not_exprt(equality_exprt(element, zero));
+    }
+    else if (element.type().is_pointer())
+    {
+      // Pointer: truthy if not NULL
+      exprt null_ptr = gen_zero(element.type());
+      is_truthy = not_exprt(equality_exprt(element, null_ptr));
+    }
+    else
+    {
+      // For other types, assume truthy (conservative)
+      is_truthy = gen_boolean(true);
+    }
+
+    // OR with accumulated result
+    if (first)
+    {
+      result = is_truthy;
+      first = false;
+    }
+    else
+      result = or_exprt(result, is_truthy);
+  }
+
+  return result;
+}
+
 exprt function_call_expr::get()
 {
   // Handle print() function
@@ -1271,6 +1358,12 @@ exprt function_call_expr::get()
   if (is_input_call())
   {
     return handle_input();
+  }
+
+  // Handle any() function
+  if (is_any_call())
+  {
+    return handle_any();
   }
 
   // Handle min/max functions
@@ -1419,7 +1512,23 @@ exprt function_call_expr::get()
           // Create symbol expression for the function (forward reference)
           symbol_exprt func_sym(function_id_.to_string(), code_typet());
           call.function() = func_sym;
-          call.type() = empty_typet(); // Will be resolved later
+
+          // Extract return type from function definition in AST
+          typet return_type = empty_typet();
+          const auto &func_node =
+            find_function(converter_.ast()["body"], func_name);
+          if (
+            !func_node.empty() && func_node.contains("returns") &&
+            !func_node["returns"].is_null())
+          {
+            const auto &returns = func_node["returns"];
+            if (returns.contains("id"))
+            {
+              return_type =
+                type_handler_.get_typet(returns["id"].get<std::string>());
+            }
+          }
+          call.type() = return_type;
 
           // Process arguments normally
           for (const auto &arg_node : call_["args"])
@@ -1478,24 +1587,49 @@ exprt function_call_expr::get()
   }
   else if (function_type_ == FunctionType::ClassMethod)
   {
-    // Passing a void pointer to the "cls" argument
-    typet t = pointer_typet(empty_typet());
-    call.arguments().push_back(gen_zero(t));
+    // Check if this is an instance method being called through the class
+    // e.g., MyClass.method(instance) where the first param should be 'self'
+    const code_typet &func_type = to_code_type(func_symbol->type);
+    bool first_param_is_self = false;
 
-    // All methods for the int class without parameters acts solely on the encapsulated integer value.
-    // Therefore, we always pass the caller (obj) as a parameter in these functions.
-    // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
-    if (
-      obj_symbol &&
-      type_handler_.get_var_type(obj_symbol->name.as_string()) == "int" &&
-      call_["args"].empty())
+    if (!func_type.arguments().empty())
     {
-      call.arguments().push_back(symbol_expr(*obj_symbol));
+      const std::string &first_param =
+        func_type.arguments()[0].get_base_name().as_string();
+      first_param_is_self = (first_param == "self");
     }
-    else if (call_["func"]["value"]["_type"] == "BinOp")
+
+    // If first parameter is 'self' and we have positional arguments,
+    // the first positional arg should be treated as 'self', not as a regular argument
+    if (
+      first_param_is_self && !call_["args"].empty() &&
+      (!call_.contains("keywords") || call_["keywords"].empty() ||
+       call_["keywords"][0]["arg"] != "self"))
     {
-      // Handling function call from binary expressions like: (x+1).bit_length()
-      call.arguments().push_back(converter_.get_expr(call_["func"]["value"]));
+      // First positional argument will be added in the loop below as 'self'
+      // Don't add a NULL cls parameter
+    }
+    else
+    {
+      // Passing a void pointer to the "cls" argument
+      typet t = pointer_typet(empty_typet());
+      call.arguments().push_back(gen_zero(t));
+
+      // All methods for the int class without parameters acts solely on the encapsulated integer value.
+      // Therefore, we always pass the caller (obj) as a parameter in these functions.
+      // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
+      if (
+        obj_symbol &&
+        type_handler_.get_var_type(obj_symbol->name.as_string()) == "int" &&
+        call_["args"].empty())
+      {
+        call.arguments().push_back(symbol_expr(*obj_symbol));
+      }
+      else if (call_["func"]["value"]["_type"] == "BinOp")
+      {
+        // Handling function call from binary expressions such as: (x+1).bit_length()
+        call.arguments().push_back(converter_.get_expr(call_["func"]["value"]));
+      }
     }
   }
 

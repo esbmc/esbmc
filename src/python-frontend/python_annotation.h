@@ -950,6 +950,16 @@ private:
   std::string get_type_from_rhs_variable(const Json &element, const Json &body)
   {
     const auto &value_type = element["value"]["_type"];
+
+    // Handle subscript of string constant (e.g., "hello"[0] returns str)
+    if (
+      value_type == "Subscript" &&
+      element["value"]["value"]["_type"] == "Constant" &&
+      element["value"]["value"]["value"].is_string())
+    {
+      return "str";
+    }
+
     std::string rhs_var_name;
 
     if (value_type == "Name")

@@ -2,6 +2,7 @@
 
 #include <python-frontend/global_scope.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/type_utils.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
@@ -17,6 +18,7 @@ class function_id;
 class symbol_id;
 class function_call_expr;
 class type_handler;
+class string_builder;
 
 class python_converter
 {
@@ -26,7 +28,11 @@ public:
     const nlohmann::json *ast,
     const global_scope &gs);
 
+  ~python_converter();
+
   void convert();
+
+  string_builder &get_string_builder();
 
   const nlohmann::json &ast() const
   {
@@ -38,10 +44,14 @@ public:
     return symbol_table_;
   }
 
-  const type_handler &get_type_handler() const
+  type_handler &get_type_handler()
   {
     return type_handler_;
   }
+
+  bool is_zero_length_array(const exprt &expr);
+
+  void ensure_string_array(exprt &expr);
 
   const std::string &python_file() const
   {
@@ -146,10 +156,6 @@ private:
   exprt handle_power_operator(exprt base, exprt exp);
 
   exprt build_power_expression(const exprt &base, const BigInt &exp);
-
-  bool is_zero_length_array(const exprt &expr);
-
-  void ensure_string_array(exprt &expr);
 
   BigInt get_string_size(const exprt &expr);
 
@@ -308,6 +314,18 @@ private:
   bool
   has_unsupported_side_effects_internal(const exprt &lhs, const exprt &rhs);
 
+  TypeFlags infer_types_from_returns(const nlohmann::json &function_body);
+
+  void process_function_arguments(
+    const nlohmann::json &function_node,
+    code_typet &type,
+    const symbol_id &id,
+    const locationt &location);
+
+  void validate_return_paths(
+    const nlohmann::json &function_node,
+    const code_typet &type,
+    exprt &function_body);
   exprt compare_constants_internal(
     const std::string &op,
     const exprt &lhs,
@@ -389,6 +407,7 @@ private:
   const nlohmann::json *ast_json;
   const global_scope &global_scope_;
   type_handler type_handler_;
+  string_builder *string_builder_;
   symbol_generator sym_generator_;
 
   namespacet ns;

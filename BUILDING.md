@@ -69,7 +69,7 @@ You can either download and unpack a release manually:
 
 ```
 wget https://github.com/esbmc/esbmc/releases/download/v7.10/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz && tar xfJ clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz &&
-ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz) &&
+ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04) &&
 ESBMC_STATIC=ON
 ```
 
