@@ -47,6 +47,32 @@ function_call_expr::function_call_expr(
   get_function_type();
 }
 
+bool function_call_expr::is_string_arg(const nlohmann::json &arg) const
+{
+  // Check type annotation
+  if (arg.contains("type") && arg["type"] == "str")
+    return true;
+
+  // Check if value is a string
+  if (arg.contains("value") && arg["value"].is_string())
+    return true;
+
+  // Check if it's a string constant
+  if (
+    arg["_type"] == "Constant" && arg.contains("value") &&
+    arg["value"].is_string())
+    return true;
+
+  return false;
+}
+
+bool function_call_expr::is_string_type(const typet &type) const
+{
+  // String types are represented as arrays or pointers to char
+  return type.is_array() ||
+         (type.is_pointer() && type.subtype() == char_type());
+}
+
 static std::string get_classname_from_symbol_id(const std::string &symbol_id)
 {
   // This function might return "Base" for a symbol_id as: py:main.py@C@Base@F@foo@self
@@ -513,7 +539,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   int code_point = 0;
 
   // Ensure the argument is a string
-  if (arg.contains("value") && arg["value"].is_string())
+  if (is_string_arg(arg))
   {
     const std::string &s = arg["value"].get<std::string>();
     code_point = decode_utf8_codepoint(s);
@@ -697,12 +723,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   }
 
   // Reject strings early
-  if (arg.contains("type") && arg["type"] == "str")
-    return gen_exception_raise(
-      "TypeError", "bad operand type for abs(): 'str'");
-
-  // Also catch string constants without "type" annotation
-  if (arg.contains("value") && arg["value"].is_string())
+  if (is_string_arg(arg))
     return gen_exception_raise(
       "TypeError", "bad operand type for abs(): 'str'");
 
@@ -819,7 +840,7 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to get the expression type directly, even if symbol lookup failed
       exprt expr = converter_.get_expr(arg);
-      if (expr.type().is_array()) // strings are arrays
+      if (is_string_type(expr.type()))
       {
         std::string var_name = arg["id"].get<std::string>();
         std::string m = "int() conversion may fail - variable" + var_name +
@@ -831,8 +852,7 @@ exprt function_call_expr::build_constant_from_arg() const
   }
 
   // Handle int(): convert string literal to int with validation
-  else if (
-    func_name == "int" && arg.contains("value") && arg["value"].is_string())
+  else if (func_name == "int" && is_string_arg(arg))
   {
     const std::string &str_val = arg["value"].get<std::string>();
 
@@ -865,7 +885,7 @@ exprt function_call_expr::build_constant_from_arg() const
   if (func_name == "int" && arg["value"].is_number_float())
     handle_float_to_int(arg);
 
-  else if (func_name == "float" && arg["value"].is_string())
+  else if (func_name == "float" && is_string_arg(arg))
   {
     std::string str_val = arg["value"].get<std::string>();
 
@@ -927,7 +947,7 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to get the expression type directly, even if symbol lookup failed
       exprt expr = converter_.get_expr(arg);
-      if (expr.type().is_array()) // strings are arrays
+      if (is_string_type(expr.type()))
       {
         std::string var_name = arg["id"].get<std::string>();
         std::string m = "float() conversion may fail - variable" + var_name +
@@ -1198,12 +1218,6 @@ exprt function_call_expr::validate_re_module_args() const
 {
   const auto &args = call_["args"];
 
-  auto is_string_type = [](const typet &type) -> bool {
-    return type.is_array() ||
-           (type.is_pointer() && type.subtype() == char_type());
-  };
-
-  // Validate both pattern and string arguments (indices 0 and 1)
   for (size_t i = 0; i < std::min(args.size(), size_t(2)); ++i)
   {
     exprt arg_expr = converter_.get_expr(args[i]);

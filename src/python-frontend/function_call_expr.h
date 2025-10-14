@@ -238,6 +238,18 @@ private:
     const std::string &prefix,
     std::ios_base &(*base_formatter)(std::ios_base &)) const;
 
+  /**
+   * Check if a JSON argument represents a string value
+   * Handles various representations: type annotation, value type, and constants
+   */
+  bool is_string_arg(const nlohmann::json &arg) const;
+
+  /**
+   * Check if a typet represents a string type
+   * Handles arrays and pointers to char
+   */
+  bool is_string_type(const typet &type) const;
+
   // Handler function type for dispatch table
   using HandlerFunction = std::function<exprt()>;
   using PredicateFunction = std::function<bool()>;
