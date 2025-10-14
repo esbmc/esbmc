@@ -227,6 +227,13 @@ public:
     return type.is_signedbv() || type.is_unsignedbv();
   }
 
+  static bool is_string_type(const typet &type)
+  {
+    // String types are represented as arrays or pointers to char
+    return type.is_array() ||
+           (type.is_pointer() && type.subtype() == char_type());
+  }
+
 private:
   static void
   update_type_flags_from_node(const nlohmann::json &node, TypeFlags &flags)

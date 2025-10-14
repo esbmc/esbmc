@@ -66,13 +66,6 @@ bool function_call_expr::is_string_arg(const nlohmann::json &arg) const
   return false;
 }
 
-bool function_call_expr::is_string_type(const typet &type) const
-{
-  // String types are represented as arrays or pointers to char
-  return type.is_array() ||
-         (type.is_pointer() && type.subtype() == char_type());
-}
-
 static std::string get_classname_from_symbol_id(const std::string &symbol_id)
 {
   // This function might return "Base" for a symbol_id as: py:main.py@C@Base@F@foo@self
@@ -840,7 +833,7 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to get the expression type directly, even if symbol lookup failed
       exprt expr = converter_.get_expr(arg);
-      if (is_string_type(expr.type()))
+      if (type_utils::is_string_type(expr.type()))
       {
         std::string var_name = arg["id"].get<std::string>();
         std::string m = "int() conversion may fail - variable" + var_name +
@@ -947,7 +940,7 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to get the expression type directly, even if symbol lookup failed
       exprt expr = converter_.get_expr(arg);
-      if (is_string_type(expr.type()))
+      if (type_utils::is_string_type(expr.type()))
       {
         std::string var_name = arg["id"].get<std::string>();
         std::string m = "float() conversion may fail - variable" + var_name +
@@ -1223,7 +1216,7 @@ exprt function_call_expr::validate_re_module_args() const
     exprt arg_expr = converter_.get_expr(args[i]);
     const typet &arg_type = arg_expr.type();
 
-    if (!is_string_type(arg_type))
+    if (!type_utils::is_string_type(arg_type))
     {
       std::ostringstream msg;
       msg << "expected string or bytes-like object, got '"

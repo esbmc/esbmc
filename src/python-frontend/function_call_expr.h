@@ -244,12 +244,6 @@ private:
    */
   bool is_string_arg(const nlohmann::json &arg) const;
 
-  /**
-   * Check if a typet represents a string type
-   * Handles arrays and pointers to char
-   */
-  bool is_string_type(const typet &type) const;
-
   // Handler function type for dispatch table
   using HandlerFunction = std::function<exprt()>;
   using PredicateFunction = std::function<bool()>;
