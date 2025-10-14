@@ -1,0 +1,2 @@
+[console_scripts]
+ast2json = ast2json.ast2json:main

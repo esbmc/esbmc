@@ -2040,11 +2040,27 @@ void goto_symext::intrinsic_memcpy(
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
   }
-
+  
   //For now, only support single-object copies
   auto &dst_item = dst_items.front();
   auto &src_item = src_items.front();
 
+  if(is_nil_expr(dst_item.object) || is_nil_expr(src_item.object)){
+    log_debug("memcpy", "Nil object in dereference, falling back to standard memcpy");
+    bump_call(func_call,  "c:@F@__memcpy_impl");
+    return;  
+  }
+  if(is_constant_int2t(dst_item.object) || to_constant_int2t(dst_item.object).value.is_zero()){
+    log_debug("memcpy", "Literal NULL dst object, falling back to standard memcpy");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+
+  }
+  if(is_constant_int2t(src_item.object) || to_constant_int2t(src_item.object).value.is_zero()){
+    log_debug("memcpy", "Literal NULL src object, falling back to standard memcpy");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
   guardt guard = ex_state.cur_state->guard;
   guard.add(dst_item.guard);
   guard.add(src_item.guard);
