@@ -952,9 +952,10 @@ private:
     const auto &value_type = element["value"]["_type"];
 
     // Handle subscript of string constant (e.g., "hello"[0] returns str)
-    if (value_type == "Subscript" &&
-        element["value"]["value"]["_type"] == "Constant" &&
-        element["value"]["value"]["value"].is_string())
+    if (
+      value_type == "Subscript" &&
+      element["value"]["value"]["_type"] == "Constant" &&
+      element["value"]["value"]["value"].is_string())
     {
       return "str";
     }

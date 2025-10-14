@@ -22,6 +22,7 @@ add_library(pythonfrontend STATIC
             function_call_expr.cpp
             numpy_call_expr.cpp
             function_call_builder.cpp
+            string_builder.cpp
             ${CMAKE_SOURCE_DIR}/src/ansi-c/parse_float.cpp
             ${CMAKE_SOURCE_DIR}/src/ansi-c/convert_float_literal.cpp)
 
