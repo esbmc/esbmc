@@ -1449,7 +1449,7 @@ exprt function_call_expr::get()
   assert(!func_symbol_id.empty());
 
   // Find function symbol
-  const symbolt *func_symbol = converter_.find_symbol(func_symbol_id.c_str());
+  const symbolt *func_symbol = converter_.find_symbol(func_symbol_id);
 
   if (func_symbol == nullptr)
   {
@@ -1490,7 +1490,7 @@ exprt function_call_expr::get()
     {
       // Find in global scope
       function_id_.set_class("");
-      func_symbol = converter_.find_symbol(function_id_.to_string().c_str());
+      func_symbol = converter_.find_symbol(function_id_.to_string());
 
       if (!func_symbol)
       {
@@ -1556,7 +1556,7 @@ exprt function_call_expr::get()
         else
         {
           // Not a forward reference - use existing behavior for built-ins/imports/undefined functions
-          log_warning("Undefined function: {}", func_name.c_str());
+          log_warning("Undefined function: {}", func_name);
           return exprt();
         }
       }
@@ -1643,7 +1643,7 @@ exprt function_call_expr::get()
        (arg.type().is_pointer() &&
         arg.type().subtype() == type_handler_.get_list_type())))
     {
-      symbolt *list_symbol = converter_.find_symbol(arg.identifier().c_str());
+      symbolt *list_symbol = converter_.find_symbol(arg.identifier().as_string());
       assert(list_symbol);
 
       const symbolt *list_size_func_sym =
