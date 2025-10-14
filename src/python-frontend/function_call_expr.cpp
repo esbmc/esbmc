@@ -238,13 +238,9 @@ exprt function_call_expr::handle_hasattr() const
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
 {
   std::string str_val = std::to_string(arg["value"].get<int>());
-  // Convert string to vector of unsigned char
-  std::vector<unsigned char> chars(str_val.begin(), str_val.end());
-  // Get type for the array
-  typet t = type_handler_.get_typet("str", chars.size() + 1);
-  // Use helper to generate constant string expression
-  exprt str = converter_.make_char_array_expr(chars, t);
-  return str;
+  typet t = type_handler_.get_typet("str", str_val.size() + 1);
+  return converter_.make_char_array_expr(
+    std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
 }
 
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
@@ -257,9 +253,9 @@ exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
   if (str_val.back() == '.')
     str_val.pop_back();
 
-  std::vector<unsigned char> chars(str_val.begin(), str_val.end());
-  typet t = type_handler_.get_typet("str", chars.size() + 1);
-  return converter_.make_char_array_expr(chars, t);
+  typet t = type_handler_.get_typet("str", str_val.size() + 1);
+  return converter_.make_char_array_expr(
+    std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
 }
 
 size_t function_call_expr::handle_str(nlohmann::json &arg) const
