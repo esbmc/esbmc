@@ -551,6 +551,30 @@ private:
         // Add type annotations within the class member function
         annotate_function(class_member);
       }
+      // Process unannotated class attributes (e.g., species = "Homo sapiens")
+      else if (class_member["_type"] == "Assign")
+      {
+        std::string inferred_type;
+
+        // Infer type from the RHS value
+        if (
+          infer_type(class_member, class_element, inferred_type) ==
+          InferResult::OK)
+        {
+          // Convert Assign to AnnAssign with the inferred type
+          update_assignment_node(class_member, inferred_type);
+        }
+        else
+        {
+          // If type inference fails, throw error with helpful message
+          std::string attr_name =
+            class_member["targets"][0]["id"].template get<std::string>();
+          throw std::runtime_error(
+            "Cannot infer type for class attribute '" + attr_name +
+            "' in class '" + class_element["name"].template get<std::string>() +
+            "'. Please add explicit type annotation.");
+        }
+      }
     }
   }
 
@@ -926,6 +950,16 @@ private:
   std::string get_type_from_rhs_variable(const Json &element, const Json &body)
   {
     const auto &value_type = element["value"]["_type"];
+
+    // Handle subscript of string constant (e.g., "hello"[0] returns str)
+    if (
+      value_type == "Subscript" &&
+      element["value"]["value"]["_type"] == "Constant" &&
+      element["value"]["value"]["value"].is_string())
+    {
+      return "str";
+    }
+
     std::string rhs_var_name;
 
     if (value_type == "Name")
@@ -1158,8 +1192,33 @@ private:
     else
       obj_type = "Any"; // Default fallback type
 
+    // Handle built-in types
     if (type_utils::is_builtin_type(obj_type))
       type = obj_type;
+    else
+    {
+      // Handle user-defined class methods
+      Json class_node = json_utils::find_class(ast_["body"], obj_type);
+      if (!class_node.empty())
+      {
+        const std::string &method_name = call["func"]["attr"];
+
+        // Find the method in the class body
+        for (const Json &member : class_node["body"])
+        {
+          if (member["_type"] == "FunctionDef" && member["name"] == method_name)
+          {
+            // Get return type from annotation
+            if (
+              member.contains("returns") && !member["returns"].is_null() &&
+              member["returns"].contains("id"))
+            {
+              return member["returns"]["id"];
+            }
+          }
+        }
+      }
+    }
 
     return type;
   }
@@ -1248,6 +1307,8 @@ private:
       inferred_type = get_type_from_constant(stmt["value"]);
     else if (value_type == "List")
       inferred_type = "list";
+    else if (value_type == "Compare")
+      inferred_type = "bool";
     else if (value_type == "UnaryOp") // Handle negative numbers
     {
       const auto &operand = stmt["value"]["operand"];

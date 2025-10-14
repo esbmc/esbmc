@@ -46,6 +46,13 @@ private:
 
   bool is_input_call() const;
 
+  bool is_print_call() const;
+
+  /* Processes Python print() statements by evaluating all arguments.
+   * @return nil_exprt since print has no return value
+   */
+  exprt handle_print() const;
+
   // Create an expression that represents non-deterministic string input
   exprt handle_input() const;
 
@@ -195,6 +202,31 @@ private:
   exprt handle_list_method() const;
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
+
+  /*
+   * Check if the current function call is to a regular expression module function
+   * Returns true if the function is match, search, or fullmatch from the re module
+   */
+  bool is_re_module_call() const;
+
+  /*
+   * Validate arguments for regular expression module functions
+   * Checks that pattern and string arguments are string types (array or pointer to char)
+   * Returns TypeError exception if validation fails, nil_exprt if validation passes
+   */
+  exprt validate_re_module_args() const;
+
+  /*
+ * Check if the current function call is to Python's built-in any() function
+ * Returns true if the function name is "any"
+ */
+  bool is_any_call() const;
+
+  /*
+ * Implement Python's any() built-in function
+ * Returns True if any element in the iterable is truthy, False otherwise
+ */
+  exprt handle_any() const;
 
 protected:
   symbol_id function_id_;

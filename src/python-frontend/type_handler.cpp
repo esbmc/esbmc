@@ -7,6 +7,7 @@
 #include <util/context.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/python_types.h>
 
 #include <regex>
 
@@ -202,6 +203,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   const
 {
   if (ast_type == "Any")
+    return any_type();
+
+  // Handle empty string - return empty type without error message
+  // This can occur when no type annotation is provided or for internal use
+  if (ast_type.empty())
     return empty_typet();
 
   // NoneType — represents Python's None value
@@ -268,8 +274,26 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     type_utils::is_python_exceptions(ast_type))
     return symbol_typet("tag-" + ast_type);
 
-  if (ast_type != "Any")
-    log_warning("Unknown or unsupported AST type: {}", ast_type);
+  // Check if it's a defined class in the AST
+  bool is_defined = json_utils::is_class(ast_type, converter_.ast());
+
+  // Check if it's a built-in type (handles tuple, list, dict, etc.)
+  if (!is_defined)
+    is_defined = type_utils::is_builtin_type(ast_type);
+
+  // Check if it's imported
+  if (!is_defined)
+    is_defined = converter_.is_imported_module(ast_type);
+
+  // If still not found, it's a NameError
+  if (!is_defined)
+  {
+    throw std::runtime_error(
+      "NameError: name '" + ast_type + "' is not defined");
+  }
+
+  // Otherwise, it's an unsupported/unhandled type - log warning and continue
+  log_warning("Unknown or unsupported AST type: {}", ast_type);
 
   return empty_typet();
 }

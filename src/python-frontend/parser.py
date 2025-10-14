@@ -59,15 +59,6 @@ def import_module_by_name(module_name, output_dir):
         sys.exit(4)
 
 
-    try:
-        module = importlib.import_module(module_name)
-        return module
-    except ImportError:
-        print("ERROR: Module '{}' not found.".format(module_name))
-        print("Please install it with: pip3 install {}".format(module_name))
-        sys.exit(4)
-
-
 def encode_bytes(value):
     return base64.b64encode(value).decode('ascii')
 
@@ -95,7 +86,25 @@ def expand_star_import(module) -> list[str] | None:
         names = [n for n in dir(module) if not n.startswith('_')]
     return names
 
+
+def get_referenced_classes(node):
+    """
+    Find all classes referenced in a function or class definition.
+    Returns a set of class names that are called as constructors.
+    """
+    referenced = set()
+
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call):
+            # Check if it's a class constructor call (simple Name node)
+            if isinstance(child.func, ast.Name):
+                referenced.add(child.func.id)
+
+    return referenced
+
 import_aliases = {}
+# Track all imports per module to combine them
+module_imports = {}
 
 def process_imports(node, output_dir):
     """
@@ -106,7 +115,6 @@ def process_imports(node, output_dir):
         - output_dir: The directory to save the generated JSON files.
     """
 
-    global import_aliases
 
     if isinstance(node, (ast.Import)):
         for alias_node in node.names:
@@ -124,6 +132,18 @@ def process_imports(node, output_dir):
         if module_name:
             import_aliases[module_name] = module_name
 
+    # Track imports for this module
+    if module_name not in module_imports:
+        module_imports[module_name] = {'import_all': False, 'specific_names': set()}
+
+    if imported_elements is None:
+        # This is an "import module" or "from module import *"; mark to import everything
+        module_imports[module_name]['import_all'] = True
+    else:
+        # Add specific names to the set
+        for elem in imported_elements:
+            module_imports[module_name]['specific_names'].add(elem.name)
+
     # Check if module is available/installed
     if is_imported_model(module_name):
         models_dir = os.path.join(output_dir, "models")
@@ -132,26 +152,40 @@ def process_imports(node, output_dir):
         module = import_module_by_name(module_name, output_dir)
         filename = module.__file__
 
-    if imported_elements is None:  # handle import *
-        try:
-            resolved_import_names = expand_star_import(module) # from __all__ or fallback
-            imported_elements = [ast.alias(n, None) for n in resolved_import_names]
-        except Exception:
-            imported_elements = None  # if it fails, keep None to import everything in the JSON
-
-
-    # Add the full path recovered from importlib to the import node
+    # Don't process the file here; we'll do it once after collecting all imports
     node.full_path = filename
 
-    if filename and not is_standard_library_file(filename):
-        try:
-            with open(filename, "r", encoding="utf-8") as source:
-                tree = ast.parse(source.read())
-                preprocessor = Preprocessor(filename)
-                tree = preprocessor.visit(tree)
-                generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
-        except UnicodeDecodeError:
-            pass
+
+def process_collected_imports(output_dir):
+    """
+    Process all collected imports after scanning the entire main file.
+    This ensures we don't overwrite JSON files multiple times.
+    """
+
+    for module_name, import_info in module_imports.items():
+        # Determine what to import
+        if import_info['import_all']:
+            imported_elements = None
+        else:
+            imported_elements = [ast.alias(name, None) for name in import_info['specific_names']]
+
+        # Get the module file path
+        if is_imported_model(module_name):
+            models_dir = os.path.join(output_dir, "models")
+            filename = os.path.join(models_dir, module_name + ".py")
+        else:
+            module = import_module_by_name(module_name, output_dir)
+            filename = module.__file__
+
+        if filename and not is_standard_library_file(filename):
+            try:
+                with open(filename, "r", encoding="utf-8") as source:
+                    tree = ast.parse(source.read())
+                    preprocessor = Preprocessor(filename)
+                    tree = preprocessor.visit(tree)
+                    generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
+            except UnicodeDecodeError:
+                pass
 
 
 def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
@@ -170,17 +204,28 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
     # Filter elements to be imported from the module
     filtered_nodes = []
     if elements_to_import is not None and elements_to_import:
+        # First pass: collect explicitly imported element names
+        explicitly_imported = {elem_info.name for elem_info in elements_to_import}
+
+        # Collect all referenced classes from explicitly imported functions/classes
+        referenced_classes = set()
+        for node in tree.body:
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+                if node.name in explicitly_imported:
+                    referenced_classes.update(get_referenced_classes(node))
+
+        # Second pass: include explicitly imported items and their referenced classes
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
                 # Always include ESBMC helper functions
                 if node.name in ['ESBMC_range_has_next_', 'ESBMC_range_next_']:
                     filtered_nodes.append(node)
-                else:
-                    for elem_info in elements_to_import:
-                        if node.name == elem_info.name:
-                            filtered_nodes.append(node)
-                            break
-
+                # Include explicitly imported items
+                elif node.name in explicitly_imported:
+                    filtered_nodes.append(node)
+                # Include classes referenced by imported items
+                elif isinstance(node, ast.ClassDef) and node.name in referenced_classes:
+                    filtered_nodes.append(node)
 
     # Convert AST to JSON
     ast2json_module = import_module_by_name("ast2json", "")
@@ -223,7 +268,6 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
         - output_dir: The directory to save the generated JSON files.
 
     """
-    global import_aliases
 
     if isinstance(node, ast.Attribute):
         value = node.value
@@ -302,7 +346,7 @@ def main():
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            # Handle imports
+            # Collect import information
             process_imports(node, output_dir)
         elif isinstance(node, ast.Assign):
             # Add type annotation on assignments
@@ -310,6 +354,9 @@ def main():
         elif isinstance(node, ast.Attribute):
             # Detect and process submodule usage
             detect_and_process_submodules(node, processed_submodules, output_dir)
+
+    # Now process all collected imports once
+    process_collected_imports(output_dir)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)

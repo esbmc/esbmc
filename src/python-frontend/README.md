@@ -6,10 +6,10 @@ The Python frontend handles the conversion of Python code into an internal repre
 
 1. Generating an Abstract Syntax Tree (AST) in JSON format.
 2. Annotating the AST with type information.
-3. Translating Python statements into a set of symbols in the Intermediate Representation (IRep) format.
+3. Translating Python statements into a set of symbols in the Intermediate Representation (IRep) format of ESBMC.
 
 The ESBMC backend finalizes the conversion by performing symbolic execution on the GOTO program, producing instructions in Single Static Assignment (SSA) form.
-Following symbolic execution, we generate a first-order logic formula, which an SMT solver discharges. </br></br>
+Following symbolic execution, we generate a subset of first-order logical formulas, which an SMT solver discharges. </br></br>
 
 <p align="center">
   <img src="./images/arch.png" alt="ESBMC Architecture" width="65%" />
@@ -84,13 +84,16 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
-- **Global Variables:** Recognises the `global` keyword for accessing and modifying variables in the global scope from within functions.
+  - **None Type Handling**: Comprehensive support for Python's None value with proper type distinction from other types (`int`, `bool`, `str`, etc.).
+  - **None Comparisons**: Correctly evaluates comparisons and identity checks involving None (e.g., `x is None`, `x == None`, `x != 0`).
+  - **None in Logical Expressions**: Properly handles `None` in boolean contexts where it is falsy (e.g., `None and True` returns `None`, `None or 1` returns `1`).
+- **Global Variables:** Recognizes the `global` keyword for accessing and modifying variables in the global scope from within functions.
 
 ### String Formatting and Literals
 
 - **F-String Support**: Comprehensive support for Python's f-string (formatted string literal) syntax, including:
   - **Basic Variable Interpolation**: f"Hello {name}!" with support for multiple variables in a single f-string
-  - **Built-in Variable Access**: Supports built-in variables like __name__ within f-strings: f"Running as: {__name__}"
+  - **Built-in Variable Access**: Supports built-in variables such as __name__ within f-strings: f"Running as: {__name__}"
   - **Format Specifications**:
     - **Integer formatting**: f"{num:d}" and f"{num:i}"
     - **Float formatting with precision**: f"{val:.2f}", f"{price:.1f}"
@@ -102,11 +105,28 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
-- **Annotations**: Supports type annotations.
+- **Annotations**: Supports type annotations, including:
+  - **Basic Type Annotations**: Standard Python types (int, float, bool, str, etc.).
+  - **Any Type**: Supports `Any` from the typing module for functions with dynamic return types.
+    - **Automatic Type Inference**: When `Any` is used as a return type, ESBMC automatically infers the actual type by analyzing return statements in the function body.
+    - **Type Hierarchy**: Uses the same type widening hierarchy as Union types (`float > int > bool`).
+    - **Supported Return Types**: `Any` type functions can return `int`, `float`, `bool`, or expressions (`BinOp`, `UnaryOp`) that evaluate to these types.
+    - **Variable Type Inference**: Variables annotated with `Any` that are assigned from function calls inherit the function's inferred return type.
+  - **Union Types**: Supports both `Union[Type1, Type2, ...]` from the typing module and PEP 604 syntax (`Type1 | Type2`) for functions that can return multiple types.
+    - **Union Syntax Support**: Both `Union[int, bool]` and `int | bool` syntaxes are supported.
+    - **Chained Unions**: Supports chained union types with multiple members (e.g., `int | bool | float`).
+    - **Type Widening**: Automatically selects the widest type from Union members based on type hierarchy (`float > int > bool`).
+    - **Return Type Inference**: When Union types are used, ESBMC analyzes return statements to determine the appropriate type.
+    - **Mixed Type Verification**: Enables verification of functions that conditionally return different types based on runtime conditions.
 - **Lambda Expressions**: Supports basic lambda expressions that are converted to regular functions and stored as function pointers. Lambda functions can be assigned to variables and called indirectly. Supports single-expression lambdas with multiple parameters.
 
 ### Object-Oriented Programming
 - **Classes**: Supports class definitions, methods, and attributes.
+- **Class Attributes**: Supports class-level attributes (variables shared across all instances):
+  - **Automatic Type Inference**: Unannotated class attributes are automatically type-inferred from their assigned values (e.g., species = "Homo sapiens" is inferred as str).
+  - **Explicit Type Annotations**: Also supports explicit type annotations for class attributes when needed.
+  - **Access Patterns**: Supports both instance-based and class-based attribute access (e.g., `instance.attr` and `ClassName.attr`).
+- **Instance Variables**: Supports instance-specific attributes defined in `__init__` methods.
 - **Inheritance**: Handles inheritance and verifies scenarios involving inheritance issues.
 - **super() calls**: Supports the `super()` function to call methods from a superclass. This allows for the verification of behaviors where a derived class explicitly invokes base class methods, enabling the analysis of polymorphic behavior and the proper propagation of assertions or side effects.
 
@@ -120,6 +140,15 @@ Below is an overview of ESBMC-Python's key capabilities:
       - When the index exceeds the list length, the element is appended to the end.
       - When the index is within bounds, existing elements are shifted right.
       - Supports insertion into empty lists at index 0.
+  - **String Operations**:
+    - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns True).
+    - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
+    - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
+    - **String Slicing**: Comprehensive support for Python's slice notation on strings:
+      - **Basic Slicing**: `string[start:end]` returns a substring from index `start` to `end-1`.
+      - **Omitted Bounds**: Supports slices with omitted start (`string[:end]`) or end (`string[start:]`) indices.
+      - **Negative Indices**: Full support for negative indexing (e.g., `string[-3:]` returns the last three characters).
+      - **Empty Slices**: Correctly handles edge cases such as `string[0:0]` (returns empty string).
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
 ### Error Handling and Assertions
@@ -130,10 +159,10 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 - **Module Imports**: Handles import styles and validates their usage.
 - **name Variable**: Supports Python's built-in __name__ variable that contains the name of the current module:
-  - Set to "__main__" when the module is run directly as the main program
-  - Set to the module name when the module is imported
+  - Set to "__main__" when the module is run directly as the main program.
+  - Set to the module name when the module is imported.
   - Enables verification of the common Python idiom if __name__ == "__main__":
-  - Supports proper distinction between main module execution and imported module behavior
+  - Supports proper distinction between main module execution and imported module behavior.
 
 ### Additional Capabilities
 - **Nondeterministic Variables**: Models nondeterminism to explore multiple execution paths.
@@ -144,18 +173,49 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
+  - **any()**: Supports Python's `any()` built-in function with the following behavior:
+    - **List Literals Only**: Currently supports `any()` only with list literals as arguments (e.g., `any([x, True, 0]`)).
+    - **Truthiness Evaluation**: Correctly evaluates truthiness according to Python semantics:
+      - `None` is always falsy.
+      - `bool` values are used directly.
+      - Integers and floats are truthy if non-zero.
+      - Pointers are truthy if not NULL.
+    - **Short-Circuit OR Logic**: Returns `True` if any element in the list is truthy, `False` if all elements are falsy or the list is empty.
+    - **Type Handling**: Handles mixed-type lists with support for nested containers and complex structures containing `None`, integers, floats, and booleans.
   - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables the verification of programs that rely on user input.
+  - **Print**: Supports `print()` statements for output. All arguments are evaluated to ensure proper side-effect handling during verification, though the actual output is not produced.
   - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 ### Math Module Support
-- **math.comb(n, k)**: Calculates binomial coefficients `C(n, k) = n! / (k! * (n-k)!)`
-  - Supports verification of combinatorial properties such as symmetry: `C(n, k) = C(n, n-k)`
-  - Includes built-in type checking and input validation (assertion failures for negative inputs or non-integer types)
+- **math.comb(n, k)**: Calculates binomial coefficients `C(n, k) = n! / (k! * (n-k)!)`.
+  - Supports verification of combinatorial properties such as symmetry: `C(n, k) = C(n, n-k)`.
+  - Includes built-in type checking and input validation (assertion failures for negative inputs or non-integer types).
 - **math.floor(x)**: Returns the largest integer less than or equal to x.
-- **math.ceil(x)**: Returns the smallest integer greater than or equal to x
-  - Both functions `math.floor(x)` and `math.ceil(x)`include built-in assertions to reject infinity and NaN inputs
-  - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions
+- **math.ceil(x)**: Returns the smallest integer greater than or equal to x.
+  - Both functions `math.floor(x)` and `math.ceil(x)` include built-in assertions to reject infinity and NaN inputs.
+  - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions.
+
+### Regular Expression (re) Module Support
+ESBMC-Python provides operational modeling and verification capabilities for Python's re module, enabling pattern-matching verification:
+- **Pattern Matching Functions**:
+  - **re.match(pattern, string)**: Attempts to match a pattern at the beginning of a string. Returns a match object (truthy) on success or None (falsy) on failure.
+  - **re.search(pattern, string)**: Searches for a pattern anywhere within a string. Returns a match object (truthy) if found or None (falsy) if not found.
+  - **re.fullmatch(pattern, string)**: Matches a pattern against the entire string. Returns a match object (truthy) if the whole string matches or None (falsy) otherwise.
+- **Supported Pattern Features**:
+  - **Universal match**: .* pattern (matches any string).
+  - **Empty patterns**: Empty string patterns.
+  - **Literal strings**: Patterns without metacharacters (e.g., "abc", "hello").
+  - **Character class ranges**: [a-z]+, [A-Z]+, [0-9]* patterns with + and * quantifiers
+  - **Digit sequences**: \d+ and \d* patterns (with raw string literals like r"\d+")
+  - **Alternation**: (x|y)z* patterns
+  - **Prefix matching with wildcard**: Patterns ending with .* (e.g., "a.*")
+- **Type Validation**: Built-in runtime type checking ensures both pattern and string arguments are string or bytes-like objects. Invalid types raise TypeError exceptions that can be verified.
+- **Verification Approach**: Uses operational models that combine:
+  - Direct pattern recognition for supported regex constructs.
+  - Literal string matching for patterns without metacharacters.
+  - Nondeterministic behavior modeling for complex patterns, allowing ESBMC to explore both match and non-match scenarios.
+- **Match Object Handling**: Match results can be tested for truthiness (e.g., if re.match(...)) or compared with None using identity operators (e.g., re.search(...) is not None)
 
 ### Random Module Support
 ESBMC-Python supports modeling and verification of the random module functions using nondeterministic values with appropriate constraints:
@@ -167,6 +227,31 @@ ESBMC-Python supports modeling and verification of the random module functions u
 - **random.randrange(start, stop=None, step=1)**: Returns a randomly selected integer from the specified range.
 These random functions use nondeterministic modeling with appropriate constraints (`__ESBMC_assume`), allowing ESBMC to explore all possible values within the specified ranges during verification. This enables thorough testing of code that depends on random values.
 
+### OS Module Support
+ESBMC-Python provides modeling and verification capabilities for Python's os module, enabling verification of file system operations with nondeterministic behavior modeling:
+- **Path Operations**:
+  - **os.path.exists(path)**: Checks if a path exists (file or directory).
+  - **os.path.basename(path)**: Returns the base name of a pathname.
+- **Directory Operations**:
+  - **os.makedirs(path, exist_ok=False)**: Creates a directory and any necessary parent directories.
+    - Supports the `exist_ok` parameter to control behavior when the directory already exists.
+  - **os.mkdir(path)**: Creates a single directory.
+    - Models nondeterministic behavior: may raise `FileExistsError` if the directory already exists.
+    - Enables verification of error handling in directory creation scenarios.
+  - **os.rmdir(path)**: Removes an empty directory.
+    - Models nondeterministic behavior: may raise `OSError` if the directory is not empty.
+    - Enables verification of proper cleanup and error handling in directory removal operations.
+  - **os.listdir(path)**: Lists directory contents.
+- **File Operations**:
+  - **os.remove(path)**: Removes a file.
+    - Models nondeterministic behavior: may raise `FileNotFoundError` if the file does not exist.
+    - Enables verification of error handling in file deletion scenarios.
+  - **os.popen(cmd)**: Opens a pipe to or from a command (modeled for verification).
+- **Nondeterministic Modeling**:
+  - The `os` module functions use nondeterministic modeling to explore different execution paths during verification:
+  - File and directory existence is modeled nondeterministically, allowing ESBMC to verify both success and failure scenarios.
+  - This enables thorough verification of exception handling code that deals with file system operations.
+
 ### Special Value Detection:
 - **math.isnan(x)**: Returns True if x is NaN (Not a Number).
 - **math.isinf(x)**: Returns True if x is positive or negative infinity.
@@ -177,6 +262,7 @@ These random functions use nondeterministic modeling with appropriate constraint
 - **Try-Except Blocks**: Supports comprehensive exception handling with try-except syntax for controlling program flow and verifying error conditions.
 - **Multiple Exception Handlers**: Supports multiple except clauses to handle different exception types.
 - **Exception Catching**: Supports catching exceptions with variable binding using except ExceptionType as variable syntax.
+  - **Improved Variable Scope Handling**: Exception variables are declared and scoped within their catch blocks, ensuring correct symbol table management during verification.
 - **Exception Hierarchy**: Implements Python's exception hierarchy where all exceptions inherit from BaseException.
 - **Built-in Exception Classes**:
   - **BaseException**: Base class for all exceptions.
@@ -187,6 +273,10 @@ These random functions use nondeterministic modeling with appropriate constraint
   - **IndexError**: Raised for sequence index out of range.
   - **KeyError**: Raised for missing dictionary keys.
   - **ZeroDivisionError**: Raised for division by zero operations.
+  - **OSError**: Base class for I/O related errors.
+  - **FileNotFoundError**: Raised when a file or directory is not found (inherits from OSError).
+  - **FileExistsError**: Raised when trying to create a file or directory that already exists (inherits from OSError).
+  - **PermissionError**: Raised when an operation lacks the necessary permissions (inherits from OSError).
 - **Exception Objects**: Exception instances contain message attributes and support string representation via __str__() method.
 - **Exception Raising**: Supports raise statements with exception instantiation and custom error messages.
 
@@ -205,9 +295,12 @@ The current version of ESBMC-Python has the following limitations:
 
 - Only `for` loops using the `range()` function are supported.
 - List and String support are partial and limited in functionality. Currently supported list methods include `append()` and `insert()`.
+- String slicing does not support step values (e.g., string[::2] for every second character is not supported).
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
+- `any()` currently supports only list literals as arguments and does not support other iterable types.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
+- `print()` evaluates all arguments for side effects but does not produce actual output during verification.
 - `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
 - Exception handling supports the core built-in exception types but may not cover all Python standard library exceptions or custom exception hierarchies with complex inheritance patterns.
 - Built-in variables support is limited to __name__; other Python built-ins such as __file__, __doc__, __package__ are not yet supported.
@@ -226,7 +319,23 @@ The current version of ESBMC-Python has the following limitations:
 - Random Module Limitations:
   - `random.randrange()` with a single argument (e.g., randrange(10)) is not supported.
   - Other random module functions (e.g., choice, shuffle, sample, seed) are not yet supported.
-
+- Class Attribute Limitations:
+  - Type inference for class attributes requires values that have clear, determinable types. Complex expressions may require explicit type annotations.
+- Regular Expression (re) Module Limitations:
+  - Only `re.match()`, `re.search()`, and `re.fullmatch()` are supported.
+  - Match objects do not expose group capture methods (e.g., .group(), .groups(), .span()). Match results are only usable for Boolean/None testing.
+  - Limited pattern syntax support compared to full Python regex. Complex patterns beyond the explicitly supported constructs may exhibit nondeterministic behavior.
+  - Advanced regex features are not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, and Unicode property escapes.
+  - Union Type Limitations:
+    - Union types are resolved to the widest type among their members (`float > int > bool`) at verification time rather than maintaining true union semantics.
+    - Union types containing types beyond basic primitives (`int, float, bool`) may default to pointer types.
+    - Type narrowing based on runtime type checks within Union-typed functions is not explicitly tracked.
+- Any Type Limitations:
+  - Any type inference only supports return values of primitive types: `int`, `float`, `bool`, and expressions that evaluate to these types.
+  - String return values are explicitly not supported and will cause a verification error with the message "Unsupported return type 'string' detected".
+  - Other types (`objects`, `arrays`, `null`) are not supported as return values for Any-typed functions.
+  - Type inference defaults to `double (float)` when no specific type can be determined from return statements.
+  
 ### Example 1: Division by Zero in Python
 
 The following Python program executes without issues in standard Python 3. However, when analyzed using ESBMC, it reveals a hidden bug: a possible division by zero.

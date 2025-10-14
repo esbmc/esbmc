@@ -10,6 +10,14 @@ const loopst::loop_varst &loopst::get_unmodified_loop_vars() const
   return unmodified_loop_vars;
 }
 
+bool loopst::contains_only_pointers() const
+{
+  for (const auto &it : modified_loop_vars)
+    if (!is_pointer_type(it))
+      return false;
+  return true;
+}
+
 const goto_programt::targett loopst::get_original_loop_exit() const
 {
   return original_loop_exit;

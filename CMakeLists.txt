@@ -10,14 +10,14 @@ cmake_policy(SET CMP0091 NEW)
 project (ESBMC)
 
 set (ESBMC_VERSION_MAJOR 7)
-set (ESBMC_VERSION_MINOR 10)
+set (ESBMC_VERSION_MINOR 11)
 set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
 # The only default solver available is smtlib
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
 
-set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 16)
+set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 21)
 
 #################################
 # Configuration                 #

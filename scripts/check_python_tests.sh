@@ -19,6 +19,8 @@ ignored_dirs=(
   "enumerate15_fail"
   "func-no-params-types-fail"
   "function-option-fail"
+  "github_2843_fail"
+  "github_2843_4_fail"
   "global"
   "integer_squareroot_fail"
   "int_from_bytes"

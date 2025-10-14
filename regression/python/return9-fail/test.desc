@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
 
-^NameError: name 'UnknownType' is not defined$
+^ERROR: NameError: name 'UnknownType' is not defined$

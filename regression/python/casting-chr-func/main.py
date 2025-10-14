@@ -3,3 +3,6 @@ def return_int() -> int:
 
 c = return_int()
 assert chr(c) == "a"
+
+c = 98
+assert chr(c) == "b"

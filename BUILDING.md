@@ -63,14 +63,13 @@ incomplete at this point.
 
 If you are building ESBMC-CHERI, skip the following sections and go straight to Section `Preparing CHERI Clang 13 (experimental)`.
 
-### Preparing external standard Clang (recommended for a static build)
+### Preparing external standard Clang 21 (recommended for a static build)
 
 You can either download and unpack a release manually:
 
 ```
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz &&
-tar xfJ clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz &&
-ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04) &&
+wget https://github.com/esbmc/esbmc/releases/download/v7.10/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz && tar xfJ clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz &&
+ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04) &&
 ESBMC_STATIC=ON
 ```
 
@@ -86,7 +85,7 @@ In this case, you can directly jump to the section "Building ESBMC".
 Remember that it is optional to keep all the features enabled.
 They are optional.
 
-### Preparing distributed Clang (recommended for a shared build)
+### Preparing distributed Clang 16 (recommended for a shared build)
 
 For shared builds, it is recommended to use the system's LLVM/Clang, which on
 Ubuntu 24.04 can be obtained by:
