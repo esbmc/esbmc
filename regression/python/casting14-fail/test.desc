@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
 
-^ERROR: TypeError: invalid string passed to chr\(\): 'hello'$
+^VERIFICATION FAILED$

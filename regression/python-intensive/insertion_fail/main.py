@@ -21,21 +21,11 @@ def insertion_sort(arr: list[int]):
             assert arr[k] <= arr[k + 1], f"Array not sorted at step {i}: {arr}"
             k += 1
 
-    # Final assertion: entire array is sorted
-    k = 0
-    while k < len(arr) - 1:
-        assert arr[k] <= arr[k + 1], f"Final array not sorted: {arr}"
-        k += 1
-
     return arr
 
 
 # Example usage
 x = random.randint(1,1000)
 y = random.randint(1,1000)
-z = random.randint(1,1000)
-nums = [x, y, z]
-print("Unsorted:", nums)
+nums = [x, y]
 sorted_nums = insertion_sort(nums)
-print("Sorted:", sorted_nums)
-

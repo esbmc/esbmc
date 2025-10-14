@@ -10,7 +10,7 @@ ESBMC supports:
 
 - The Clang compiler as its C/C++/CHERI/CUDA frontend;
 - The Soot framework via Jimple as its Java/Kotlin frontend;
-- The [ast](https://docs.python.org/3/library/ast.html) and [ast2json](https://pypi.org/project/ast2json/) modules as its [Python frontend](./src/python-frontend/README.md);
+- The [ast](https://docs.python.org/3/library/ast.html) and [ast2json](https://pypi.org/project/ast2json/) modules as its [Python frontend](./src/python-frontend/README.md); the first SMT-based bounded model checker for Python programs;
 - Implements the Solidity grammar production rules as its Solidity frontend;
 - Supports IEEE floating-point arithmetic for various SMT solvers.
 
@@ -35,6 +35,15 @@ mkdir build && cd build
 cmake .. -DENABLE_Z3=1
 make -j4
 ````
+
+To enable Python frontend support, add the `-DENABLE_PYTHON_FRONTEND=1` flag to the cmake command and ensure you have Python 3 with the `ast2json` module installed:
+
+````
+pip install ast2json
+cmake .. -DENABLE_Z3=1 -DENABLE_PYTHON_FRONTEND=1
+make -j4
+````
+
 
 #### Fedora 40
 
@@ -146,6 +155,8 @@ The Linux/Amd64 line is very important for virtualizing Amd64. Now do docker-com
 
 ### How to use ESBMC
 
+#### Verifying C Programs
+
 As an illustrative example to show some of the ESBMC features, consider the following C code:
 
 ````C
@@ -209,6 +220,62 @@ Bug found (k = 1)
 ````
 
 We refer the user to our [documentation webpage](https://ssvlab.github.io/esbmc/documentation.html) for further examples of the ESBMC's features.
+
+#### Verifying Python Programs
+
+ESBMC-Python supports the verification of Python code with type annotations, detecting errors such as division by zero, indexing errors, arithmetic overflow, and user-defined assertions.
+
+Example Python program to verify:
+
+```python
+import random as rand
+
+def div1(cond: int, x: int) -> int:
+    if (not cond):
+        return 42 // x
+    else:
+       return x // 10
+
+cond:int = rand.random()
+x:int = rand.random()
+
+assert div1(cond, x) != 1
+```
+
+**Command:**
+
+```bash
+$ esbmc main.py
+```
+
+**ESBMC Output:**
+
+```
+[Counterexample]
+
+
+State 1 file main.py line 12 column 8 function random thread 0
+----------------------------------------------------
+  value = 2.619487e-10 (00111101 11110010 00000000 01000000 00000010 00000000 00010000 00001000)
+
+State 3 file main.py line 12 column 8 function random thread 0
+----------------------------------------------------
+  value = 3.454678e-77 (00110000 00010000 00000000 01000000 00000010 00000000 00010000 00000000)
+
+State 5 file main.py line 5 column 8 function div1 thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 5 column 8 function div1
+  division by zero
+  x != 0
+
+
+VERIFICATION FAILED
+```
+
+ESBMC-Python will parse the Python code, generate an Abstract Syntax Tree (AST), perform type inference, and translate it into the GOTO intermediate representation for symbolic execution and verification.
+For detailed information about Python support, please take a look at the [Python Frontend Documentation](https://claude.ai/chat/src/python-frontend/README.md).
+
 
 ### Using Config Files
 
@@ -287,7 +354,7 @@ We provide a short video that explains ESBMC:
 
 https://www.youtube.com/watch?v=uJ5Jn0sxm08&t=2182s
 
-In a workshop between Arm Research and the University of Manchester, this video was delivered as part of a technical talk on exploiting the SAT revolution for automated software verification.
+In a workshop between ARM Research and the University of Manchester, this video was delivered as part of a technical talk on exploiting the SAT revolution for automated software verification.
 
 We offer a post-graduate course in software security that explains the internals of ESBMC. 
 
@@ -297,7 +364,7 @@ This course unit introduces students to basic and advanced approaches to formall
 
 ### Selected Publications
 
-* Charalambous, Y., Tihanyi, N., Jain, R., Sun, Y., Ferrag, M., Cordeiro, L.. [A New Era in Software Security: Towards Self-Healing Software via Large Language Models and Formal Verification](https://arxiv.org/pdf/2305.14752.pdf). 6th ACM/IEEE International Conference on Automation of Software Test (AST), 2025. [DOI](https://doi.org/10.48550/arXiv.2305.14752)
+* Charalambous, Y., Tihanyi, N., Jain, R., Sun, Y., Ferrag, M., Cordeiro, L.: [A New Era in Software Security: Towards Self-Healing Software via Large Language Models and Formal Verification](https://arxiv.org/pdf/2305.14752.pdf). 6th ACM/IEEE International Conference on Automation of Software Test (AST), 2025. [DOI](https://doi.org/10.48550/arXiv.2305.14752)
 
 * Wu, T., Xiong, S., Manino, E., Stockwell, G., Cordeiro, L.: [Verifying Components of Arm® Confidential Computing Architecture with ESBMC](https://ssvlab.github.io/lucasccordeiro/papers/sas2024.pdf). In 31st International Symposium on Static Analysis (SAS), pp. 451-462, 2024. [DOI](https://link.springer.com/chapter/10.1007/978-3-031-74776-2_18)
  
@@ -336,7 +403,7 @@ This course unit introduces students to basic and advanced approaches to formall
    
 ### ESBMC-CHERI Video & Download
 
-This [video](https://youtu.be/CsWHnmU4UMs) describes how to obtain, build and run ESBMC-CHERI on an example.
+This [video](https://youtu.be/CsWHnmU4UMs) describes how to obtain, build, and run ESBMC-CHERI on an example.
 
 A pre-compiled binary for Linux is available in the pre-release
 [ESBMC-CHERI](https://github.com/esbmc/esbmc/releases/tag/v6.9-cheri), for other
