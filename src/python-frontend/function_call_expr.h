@@ -217,16 +217,26 @@ private:
   exprt validate_re_module_args() const;
 
   /*
- * Check if the current function call is to Python's built-in any() function
- * Returns true if the function name is "any"
- */
+   * Check if the current function call is to Python's built-in any() function
+   * Returns true if the function name is "any"
+   */
   bool is_any_call() const;
 
   /*
- * Implement Python's any() built-in function
- * Returns True if any element in the iterable is truthy, False otherwise
- */
+   * Implement Python's any() built-in function
+   * Returns True if any element in the iterable is truthy, False otherwise
+   */
   exprt handle_any() const;
+
+  /**
+   * Convert an integer to a string representation in a specific base
+   * Implements common logic for Python's hex(), oct(), and similar functions
+   */
+  exprt handle_base_conversion(
+    nlohmann::json &arg,
+    const std::string &func_name,
+    const std::string &prefix,
+    std::ios_base &(*base_formatter)(std::ios_base &)) const;
 
 protected:
   symbol_id function_id_;
