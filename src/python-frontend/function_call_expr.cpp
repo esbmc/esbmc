@@ -1311,106 +1311,127 @@ exprt function_call_expr::handle_any() const
   return result;
 }
 
+std::vector<function_call_expr::FunctionHandler>
+function_call_expr::get_dispatch_table()
+{
+  return {// Print function
+          {[this]() { return is_print_call(); },
+           [this]() { return handle_print(); },
+           "print()"},
+
+          // Non-deterministic functions
+          {[this]() { return is_nondet_call(); },
+           [this]() { return build_nondet_call(); },
+           "nondet functions"},
+
+          // Introspection functions (isinstance, hasattr)
+          {[this]() { return is_introspection_call(); },
+           [this]() {
+             if (function_id_.get_function() == "isinstance")
+               return handle_isinstance();
+             else
+               return handle_hasattr();
+           },
+           "isinstance/hasattr"},
+
+          // Input function
+          {[this]() { return is_input_call(); },
+           [this]() { return handle_input(); },
+           "input()"},
+
+          // Any function
+          {[this]() { return is_any_call(); },
+           [this]() { return handle_any(); },
+           "any()"},
+
+          // Min/Max functions
+          {[this]() { return is_min_max_call(); },
+           [this]() {
+             const std::string &func_name = function_id_.get_function();
+             if (func_name == "min")
+               return handle_min_max("min", exprt::i_lt);
+             else
+               return handle_min_max("max", exprt::i_gt);
+           },
+           "min/max"},
+
+          // List methods
+          {[this]() { return is_list_method_call(); },
+           [this]() { return handle_list_method(); },
+           "list methods"},
+
+          // Math module functions
+          {[this]() {
+             const std::string &func_name = function_id_.get_function();
+             return func_name == "__ESBMC_isnan" ||
+                    func_name == "__ESBMC_isinf";
+           },
+           [this]() {
+             const std::string &func_name = function_id_.get_function();
+             const auto &args = call_["args"];
+
+             if (func_name == "__ESBMC_isnan")
+             {
+               if (args.size() != 1)
+                 throw std::runtime_error("isnan() expects exactly 1 argument");
+
+               exprt arg_expr = converter_.get_expr(args[0]);
+               exprt isnan_expr("isnan", bool_typet());
+               isnan_expr.copy_to_operands(arg_expr);
+               return isnan_expr;
+             }
+             else // __ESBMC_isinf
+             {
+               if (args.size() != 1)
+                 throw std::runtime_error("isinf() expects exactly 1 argument");
+
+               exprt arg_expr = converter_.get_expr(args[0]);
+               exprt isinf_expr("isinf", bool_typet());
+               isinf_expr.copy_to_operands(arg_expr);
+               return isinf_expr;
+             }
+           },
+           "isnan/isinf"},
+
+          // Built-in type constructors (int, float, str, bool, etc.)
+          {[this]() {
+             const std::string &func_name = function_id_.get_function();
+             return type_utils::is_builtin_type(func_name) ||
+                    type_utils::is_consensus_type(func_name);
+           },
+           [this]() { return build_constant_from_arg(); },
+           "built-in type constructors"},
+
+          // Regex module validation
+          {[this]() { return is_re_module_call(); },
+           [this]() {
+             exprt validation_result = validate_re_module_args();
+             if (!validation_result.is_nil())
+               return validation_result;
+
+             // If validation passes, handle as general function call
+             return handle_general_function_call();
+           },
+           "re module functions"}};
+}
+
 exprt function_call_expr::get()
 {
-  // Handle print() function
-  if (is_print_call())
+  // Use dispatch table to handle special function types
+  auto dispatch_table = get_dispatch_table();
+
+  for (const auto &handler : dispatch_table)
   {
-    return handle_print();
+    if (handler.predicate())
+      return handler.handler();
   }
 
-  // Handle non-det functions
-  if (is_nondet_call())
-  {
-    return build_nondet_call();
-  }
+  // General function call handling
+  return handle_general_function_call();
+}
 
-  // Handle introspection functions
-  if (is_introspection_call())
-  {
-    if (function_id_.get_function() == "isinstance")
-      return handle_isinstance();
-    else
-      return handle_hasattr();
-  }
-
-  // Handle input() function
-  if (is_input_call())
-  {
-    return handle_input();
-  }
-
-  // Handle any() function
-  if (is_any_call())
-  {
-    return handle_any();
-  }
-
-  // Handle min/max functions
-  if (is_min_max_call())
-  {
-    const std::string &func_name = function_id_.get_function();
-    if (func_name == "min")
-      return handle_min_max("min", exprt::i_lt);
-    else
-      return handle_min_max("max", exprt::i_gt);
-  }
-
-  // Handle list methods
-  if (is_list_method_call())
-  {
-    return handle_list_method();
-  }
-
-  const std::string &func_name = function_id_.get_function();
-
-  // Handle math module functions using ESBMC's built-in operations
-  if (func_name == "__ESBMC_isnan")
-  {
-    const auto &args = call_["args"];
-    if (args.size() != 1)
-      throw std::runtime_error("isnan() expects exactly 1 argument");
-
-    exprt arg_expr = converter_.get_expr(args[0]);
-
-    // Use ESBMC's built-in isnan operation
-    exprt isnan_expr("isnan", bool_typet());
-    isnan_expr.copy_to_operands(arg_expr);
-
-    return isnan_expr;
-  }
-  else if (func_name == "__ESBMC_isinf")
-  {
-    const auto &args = call_["args"];
-    if (args.size() != 1)
-      throw std::runtime_error("isinf() expects exactly 1 argument");
-
-    exprt arg_expr = converter_.get_expr(args[0]);
-
-    // Use ESBMC's built-in isinf operation
-    exprt isinf_expr("isinf", bool_typet());
-    isinf_expr.copy_to_operands(arg_expr);
-
-    return isinf_expr;
-  }
-
-  /* Calls to initialise variables using built-in type functions such as int(1), str("test"), bool(1)
-   * are converted to simple variable assignments, simplifying the handling of built-in type objects.
-   * For example, x = int(1) becomes x = 1. */
-  if (
-    type_utils::is_builtin_type(func_name) ||
-    type_utils::is_consensus_type(func_name))
-  {
-    return build_constant_from_arg();
-  }
-
-  if (is_re_module_call())
-  {
-    exprt validation_result = validate_re_module_args();
-    if (!validation_result.is_nil())
-      return validation_result; // Return the TypeError exception
-  }
-
+exprt function_call_expr::handle_general_function_call()
+{
   auto &symbol_table = converter_.symbol_table();
 
   // Get object symbol
@@ -1441,7 +1462,7 @@ exprt function_call_expr::get()
       func_symbol = converter_.find_function_in_base_classes(
         function_id_.get_class(),
         func_symbol_id,
-        func_name,
+        function_id_.get_function(),
         function_type_ == FunctionType::Constructor);
 
       if (function_type_ == FunctionType::Constructor)
@@ -1462,7 +1483,7 @@ exprt function_call_expr::get()
         // Update obj attributes from self
         converter_.update_instance_from_self(
           get_classname_from_symbol_id(func_symbol->id.as_string()),
-          func_name,
+          function_id_.get_function(),
           obj_symbol_id.to_string());
       }
     }
@@ -1478,8 +1499,8 @@ exprt function_call_expr::get()
         // by searching the AST directly
         bool is_forward_reference = false;
 
-        is_forward_reference =
-          json_utils::search_function_in_ast(converter_.ast(), func_name);
+        is_forward_reference = json_utils::search_function_in_ast(
+          converter_.ast(), function_id_.get_function());
 
         if (is_forward_reference)
         {
@@ -1495,8 +1516,8 @@ exprt function_call_expr::get()
 
           // Extract return type from function definition in AST
           typet return_type = empty_typet();
-          const auto &func_node =
-            find_function(converter_.ast()["body"], func_name);
+          const auto &func_node = find_function(
+            converter_.ast()["body"], function_id_.get_function());
           if (
             !func_node.empty() && func_node.contains("returns") &&
             !func_node["returns"].is_null())
@@ -1536,7 +1557,7 @@ exprt function_call_expr::get()
         else
         {
           // Not a forward reference - use existing behavior for built-ins/imports/undefined functions
-          log_warning("Undefined function: {}", func_name);
+          log_warning("Undefined function: {}", function_id_.get_function());
           return exprt();
         }
       }

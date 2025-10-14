@@ -238,6 +238,23 @@ private:
     const std::string &prefix,
     std::ios_base &(*base_formatter)(std::ios_base &)) const;
 
+  // Handler function type for dispatch table
+  using HandlerFunction = std::function<exprt()>;
+  using PredicateFunction = std::function<bool()>;
+
+  struct FunctionHandler
+  {
+    PredicateFunction predicate;
+    HandlerFunction handler;
+    const char *description; // For debugging/documentation
+  };
+
+  // Initialize dispatch table
+  std::vector<FunctionHandler> get_dispatch_table();
+
+  // General function call handler
+  exprt handle_general_function_call();
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
