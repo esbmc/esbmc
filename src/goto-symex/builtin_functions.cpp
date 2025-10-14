@@ -2007,17 +2007,21 @@ void goto_symext::intrinsic_memcpy(
         code_assign2tc(item.object, new_object), false, assignment_guard);
     }
   }
-  // TODO: what are the semantics for NULL ptr in DST or SRC?
-#if 0
   if (!options.get_bool_option("no-pointer-check"))
   {
     expr2tc null_sym = symbol2tc(dst_arg->type, "NULL");
-    expr2tc obj = same_object2tc(dst_arg, null_sym);
-    expr2tc null_check = not2tc(same_object2tc(dst_arg, null_sym));
-    ex_state.cur_state->guard.guard_expr(null_check);
-    claim(null_check, " dereference failure: NULL pointer");
+
+    expr2tc dst_same = same_object2tc(dst_arg, null_sym);
+    expr2tc dst_null_check = not2tc(same_object2tc(dst_arg, null_sym));
+    ex_state.cur_state->guard.guard_expr(dst_null_check);
+    claim(dst_null_check, " dereference failure: NULL pointer on DST");
+
+    expr2tc src_same = same_object2tc(src_arg, null_sym);
+    expr2tc src_null_check = not2tc(same_object2tc(src_arg, null_sym));
+    ex_state.cur_state->guard.guard_expr(src_null_check);
+    claim(src_null_check, " dereference failure: NULL pointer on SRC");
   }
-#endif
+
 
   expr2tc ret_ref = func_call.ret;
   dereference(ret_ref, dereferencet::READ);
