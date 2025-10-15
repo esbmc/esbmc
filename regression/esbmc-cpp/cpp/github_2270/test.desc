@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.cpp
 --unwind 8 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

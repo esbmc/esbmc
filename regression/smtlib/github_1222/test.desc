@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 gh-1222.c
 --unwind 7 --tuple-node-flattener --no-string-literal  --smtlib --smt-formula-only -D__REGMAP_DEFINED
 ^Encoding to solver time:
