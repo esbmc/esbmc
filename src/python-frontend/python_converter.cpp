@@ -2920,6 +2920,29 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (element["_type"] == "Attribute")
     {
       var_name = element["value"]["id"].get<std::string>();
+
+      // Handle module attribute access (e.g., math.inf)
+      if (is_imported_module(var_name))
+      {
+        std::string attr_name = element["attr"].get<std::string>();
+        std::string module_path = imported_modules[var_name];
+
+        // Construct symbol ID for module member: py:module_path@member_name
+        symbol_id module_sid(module_path, "", "");
+        module_sid.set_object(attr_name);
+
+        symbolt *symbol = find_symbol(module_sid.to_string());
+        if (!symbol)
+        {
+          log_error(
+            "Module member '{}' not found in module '{}'", attr_name, var_name);
+          abort();
+        }
+
+        expr = symbol_expr(*symbol);
+        break;
+      }
+
       if (is_class(var_name, *ast_json))
       {
         // Found a class attribute
