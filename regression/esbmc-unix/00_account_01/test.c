@@ -1,4 +1,4 @@
-THOROUGH <pthread.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>

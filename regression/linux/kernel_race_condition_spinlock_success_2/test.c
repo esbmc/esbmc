@@ -1,4 +1,4 @@
-THOROUGH <ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h>
+#include <ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h>
 #include <assert.h>
 #include <pthread.h>
 int shared_counter = 0;

@@ -1,3 +1,4 @@
-THOROUGHTHOROUGH.c
+THOROUGH
+main.c
 --unwind 3 -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$
