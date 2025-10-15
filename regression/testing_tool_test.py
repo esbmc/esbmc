@@ -44,7 +44,7 @@ class CTest1(ParseTest):
             "./esbmc-unix/00_bbuf_02", "00_bbuf_02")
 
     def _read_file_checks(self, test_obj):
-        self.assertEqual(test_obj.test_mode, "CORE")
+        self.assertEqual(test_obj.test_mode, "THOROUGH")
         self.assertEqual(test_obj.test_file, "main.c")
         self.assertEqual(test_obj.test_args,
                          "--unwind 1 --context-bound 2 --schedule --depth 300 -Wno-error=implicit-function-declaration")
