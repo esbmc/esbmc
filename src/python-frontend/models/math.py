@@ -2,6 +2,7 @@ pi: float = 3.14153
 
 inf: float = float('inf')
 
+
 def comb(n: int, k: int) -> int:
     """
     Calculate binomial coefficient C(n, k) = n! / (k! * (n-k)!)
