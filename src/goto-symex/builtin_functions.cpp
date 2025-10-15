@@ -2040,7 +2040,12 @@ void goto_symext::intrinsic_memcpy(
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
   }
-
+  
+  if (dst_items.size()!= 1 || src_items.size()!=1){
+      log_debug("memcpy", "Multi-object dereference not supported, fallback");
+      bump_call(func_call, "@F@__memcpy_impl");
+      return;
+  }
   //For now, only support single-object copies
   auto &dst_item = dst_items.front();
   auto &src_item = src_items.front();
@@ -2095,6 +2100,7 @@ void goto_symext::intrinsic_memcpy(
     bump_call(func_call, "c:@F@__memcpy_impl"); 
     return;
   }
+
   /*if (!is_constant_int2t(dst_item.offset) || !is_constant_int2t(src_item.offset)){
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
