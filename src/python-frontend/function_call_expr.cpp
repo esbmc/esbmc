@@ -4,6 +4,7 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/string_builder.h>
 #include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
@@ -809,6 +810,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Check if there are no arguments
   if (call_["args"].empty())
   {
+    // Special handling for str() with no arguments: return empty string
+    if (func_name == "str")
+      return converter_.get_string_builder().build_string_literal("");
+
     typet t = type_handler_.get_typet(func_name, 0);
     return exprt("constant", t);
   }
