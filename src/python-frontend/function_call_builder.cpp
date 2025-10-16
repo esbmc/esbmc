@@ -13,6 +13,8 @@ const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
+const std::string kLoopInvariant = "__loop_invariant";
+const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -65,6 +67,10 @@ symbol_id function_call_builder::build_function_id() const
   if (func_type == "Name")
   {
     func_name = func_json["id"];
+
+    // Map Python loop invariant name to ESBMC internal name
+    if (func_name == kLoopInvariant)
+      func_name = kEsbmcLoopInvariant;
   }
   else if (func_type == "Attribute") // Handling obj_name.func_name() calls
   {
@@ -294,6 +300,31 @@ exprt function_call_builder::build() const
       code_typet code_type;
       code_type.return_type() = long_long_int_type();
       code_type.arguments().push_back(pointer_typet(empty_typet()));
+
+      const std::string &python_file = converter_.python_file();
+      const std::string &func_name = function_id.get_function();
+      locationt location = converter_.get_location_from_decl(call_);
+
+      symbolt symbol = converter_.create_symbol(
+        python_file, func_name, func_symbol_id, location, code_type);
+
+      converter_.add_symbol(symbol);
+    }
+  }
+
+  // Add loop invariant symbol to symbol table
+  if (function_id.get_function() == kEsbmcLoopInvariant)
+  {
+    const auto &symbol_table = converter_.symbol_table();
+    const std::string &func_symbol_id = function_id.to_string();
+
+    if (symbol_table.find_symbol(func_symbol_id.c_str()) == nullptr)
+    {
+      code_typet code_type;
+      code_type.return_type() = empty_typet();
+      code_typet::argumentt arg;
+      arg.type() = bool_type();
+      code_type.arguments().push_back(arg);
 
       const std::string &python_file = converter_.python_file();
       const std::string &func_name = function_id.get_function();
