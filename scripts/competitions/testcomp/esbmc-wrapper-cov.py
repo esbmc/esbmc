@@ -199,6 +199,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
       command_line += "--branch-coverage "
     elif coverage == "condition":
       command_line += "--condition-coverage-rm --no-cov-asserts "
+    elif coverage == "branch-function":
+      command_line += "--branch-function-coverage "
   elif prop == Property.reach:
     command_line += "--base-k-step 5 --enable-unreachability-intrinsic "
     if concurrency:
@@ -247,7 +249,7 @@ parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
 parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
 parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
 parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
-parser.add_argument("-o","--coverage", help="run in coverage mode",  choices=["branch", "condition"])
+parser.add_argument("-o","--coverage", help="run in coverage mode",  choices=["branch", "branch-function", "condition"])
 
 args = parser.parse_args()
 
