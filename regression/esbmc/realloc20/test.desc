@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --force-malloc-success --force-realloc-success --function  test_vector_growth --unwind 21
 ^VERIFICATION SUCCESSFUL$

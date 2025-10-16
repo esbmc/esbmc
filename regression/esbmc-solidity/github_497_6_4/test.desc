@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 MyContract_satisfiability_4.solast
 --k-induction --sol MyContract_satisfiability_4.sol --no-standard-checks
 ^VERIFICATION SUCCESSFUL$

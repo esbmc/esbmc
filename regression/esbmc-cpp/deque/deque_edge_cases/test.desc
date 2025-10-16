@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.cpp
 --unwind 2 --overflow-check --timeout 900
 ^VERIFICATION SUCCESSFUL$

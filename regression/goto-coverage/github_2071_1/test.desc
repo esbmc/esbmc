@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --condition-coverage --k-induction --base-k-step 2 --no-standard-checks
 ^Reached Conditions:  22

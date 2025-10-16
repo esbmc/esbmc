@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --unwind 1 --no-unwinding-assertions --k-induction --overflow --z3 -Wno-error=implicit-function-declaration
 
