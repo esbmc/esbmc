@@ -12,9 +12,16 @@
 #include <fstream>
 
 #include <boost/filesystem.hpp>
-#include <boost/process.hpp>
 
-namespace bp = boost::process;
+// Use boost::process v1 on macOS or when Boost >= 1.87
+#if defined(__APPLE__) || (BOOST_VERSION >= 108700)
+  #include <boost/process/v1.hpp>
+  namespace bp = boost::process::v1;
+#else
+  #include <boost/process.hpp>
+  namespace bp = boost::process;
+#endif
+
 namespace fs = boost::filesystem;
 
 extern "C"
