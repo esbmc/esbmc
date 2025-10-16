@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #  undef ERROR
 #endif
 
-#include <ansi-c/c_preprocess.h>
+#include <clang-c-frontend/c_preprocess.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

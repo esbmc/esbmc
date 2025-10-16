@@ -1,16 +1,20 @@
 /*******************************************************************\
 
-Module: ANSI-C Language Conversion
+Module:
 
 Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#ifndef CPROVER_C_TYPECHECK_UNESCAPE_STRING_H
-#define CPROVER_C_TYPECHECK_UNESCAPE_STRING_H
+#ifndef CPROVER_C_PREPROCESS_H
+#define CPROVER_C_PREPROCESS_H
 
 #include <string>
+#include <util/message.h>
 
-void unescape_string(const std::string &src, std::string &dest);
+bool c_preprocess(
+  const std::string &path,
+  std::ostream &outstream,
+  bool is_cpp);
 
 #endif

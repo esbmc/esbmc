@@ -348,10 +348,6 @@ cmake --build . && ninja install
 
 Once it is finished, ESBMC should be available in the _release_ folder.
 
-## Notes on old frontends
-
-In addition to the clang frontends, ESBMC also has two old frontends, `src/ansi-c` for C and `src/cpp` for C++. These old frontends can be built with __cmake__ flag `-DENABLE_OLD_FRONTEND=On`. To use the old frontend for verification, use the ESBMC command line option `--old-frontend`.
-
 # ESBMC Shared Builds
 
 It is also possible to build a non-static version of ESBMC that links to

@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/convert_float_literal.h>
-#include <ansi-c/parse_float.h>
+#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/parse_float.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
