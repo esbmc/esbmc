@@ -6,7 +6,7 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/string_builder.h>
-#include <ansi-c/convert_float_literal.h>
+#include <python-frontend/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
 #include <util/python_types.h>
