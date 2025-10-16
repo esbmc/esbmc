@@ -61,7 +61,6 @@ extern "C"
 #  include <fcntl.h>
 #endif
 
-
 #ifdef ENABLE_GOTO_CONTRACTOR
 #  include <goto-programs/goto_contractor.h>
 #endif
