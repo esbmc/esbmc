@@ -5,7 +5,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <AST/build_ast.h>
-#include <ansi-c/c_preprocess.h>
+#include <clang-c-frontend/c_preprocess.h>
 #include <boost/filesystem.hpp>
 #include <c2goto/cprover_library.h>
 #include <clang-c-frontend/clang_c_adjust.h>
