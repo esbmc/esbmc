@@ -1,0 +1,216 @@
+
+#pragma once
+
+/* while we don't have our own <math.h> work around the fact that libstdc++'s
+ * <math.h> does #include <cmath> and expects all the std::* functions to be
+ * there. But we don't want theirs... */
+#define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
+#if __has_include(<sys/_types.h>) /* FreeBSD nonsense about __char{16,32}_t */
+#  include <sys/_types.h>
+#endif
+
+/* delegates to math.h in the C++ headers */
+#include <math.h>
+#include <type_traits>
+#include <stdlib.h>
+
+namespace std
+{
+
+inline float abs(float num)
+{
+  return ::fabsf(num);
+}
+inline double abs(double num)
+{
+  return ::fabs(num);
+}
+inline long double abs(long double num)
+{
+  return ::fabsl(num);
+}
+
+using ::abs;
+using ::fabs;
+using ::fabsf;
+using ::fabsl;
+
+/* TODO: also declare these in <cstdlib> */
+inline float fabs(float num)
+{
+  return ::fabsf(num);
+}
+inline long double fabs(long double num)
+{
+  return ::fabsl(num);
+}
+
+/* TODO:
+template <typename Integer>
+double fabs(Integer num);
+ */
+
+#define CIMPORT1(name)                                                         \
+  using ::name##f;                                                             \
+  using ::name;                                                                \
+  using ::name##l;                                                             \
+  inline float name(float num)                                                 \
+  {                                                                            \
+    return ::name##f(num);                                                     \
+  }                                                                            \
+  inline long double name(long double num)                                     \
+  {                                                                            \
+    return ::name##l(num);                                                     \
+  }                                                                            \
+  /* TODO: \
+	template <typename Integer> \
+	double name(Integer num); \
+	 */
+
+#define CIMPORT2(name)                                                         \
+  using ::name##f;                                                             \
+  using ::name;                                                                \
+  using ::name##l;                                                             \
+  inline float name(float a, float b)                                          \
+  {                                                                            \
+    return ::name##f(a, b);                                                    \
+  }                                                                            \
+  inline long double name(long double a, long double b)                        \
+  {                                                                            \
+    return ::name##l(a, b);                                                    \
+  }                                                                            \
+  /* TODO: \
+	template <typename Integer> \
+	double name(Integer num); \
+	 */
+
+CIMPORT1(acos)
+CIMPORT1(asin)
+CIMPORT1(atan)
+CIMPORT2(atan2)
+CIMPORT1(cos)
+CIMPORT1(sin)
+CIMPORT1(tan)
+CIMPORT1(cosh)
+CIMPORT1(sinh)
+CIMPORT1(tanh)
+CIMPORT1(exp)
+CIMPORT1(log)
+CIMPORT1(log10)
+CIMPORT1(floor)
+CIMPORT1(ceil)
+CIMPORT1(sqrt)
+CIMPORT2(fmod)
+CIMPORT1(round)
+
+using ::pow;
+#if !defined(__MATHCALL_VEC)
+using ::powf;
+using ::powl;
+inline float pow(float a, float b)
+{
+  return ::powf(a, b);
+}
+inline long double pow(long double a, long double b)
+{
+  return ::powl(a, b);
+}
+#endif
+
+using ::frexp;
+using ::frexpf;
+using ::frexpl;
+inline float frexp(float num, int *exp)
+{
+  return ::frexpf(num, exp);
+}
+inline long double frexp(long double num, int *exp)
+{
+  return ::frexpl(num, exp);
+}
+/* TODO:
+template <typename Integer>
+double frexp(Integer num, int *exp);
+ */
+
+using ::ldexp;
+using ::ldexpf;
+using ::ldexpl;
+inline float ldexp(float num, int exp)
+{
+  return ::ldexpf(num, exp);
+}
+inline long double ldexp(long double num, int exp)
+{
+  return ::ldexpl(num, exp);
+}
+/* TODO:
+template <typename Integer>
+double ldexp(Integer num, int exp);
+ */
+
+using ::modf;
+using ::modff;
+using ::modfl;
+inline float modf(float num, float *iptr)
+{
+  return ::modff(num, iptr);
+}
+inline long double modf(long double num, long double *iptr)
+{
+  return ::modfl(num, iptr);
+}
+/* TODO:
+template <typename Integer>
+double modf(Integer num, double *iptr);
+ */
+
+#undef isnan
+#undef isnormal
+
+#define CIMPORT3(name)                                                         \
+  bool name(float x)                                                           \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }                                                                            \
+  bool name(double x)                                                          \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }                                                                            \
+  bool name(long double x)                                                     \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }
+
+CIMPORT3(isnan);
+CIMPORT3(isnormal);
+
+#undef trunc
+#undef truncf
+#undef truncl
+
+using ::trunc;
+using ::truncf;
+using ::truncl;
+
+float trunc(float x)
+{
+  return ::truncf(x);
+}
+
+long double trunc(long double x)
+{
+  return ::truncl(x);
+}
+
+template <typename T>
+typename std::enable_if<std::is_integral<T>::value, double>::type trunc(T x)
+{
+  return ::trunc(x);
+}
+
+#undef CIMPORT1
+#undef CIMPORT2
+#undef CIMPORT3
+
+} // namespace std

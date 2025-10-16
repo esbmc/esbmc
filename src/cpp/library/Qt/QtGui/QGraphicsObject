@@ -1,0 +1,19 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include "QObject"
+
+class QGraphicsObject
+{
+  QGraphicsObject()
+  {
+  }
+  ~QGraphicsObject()
+  {
+  }
+};

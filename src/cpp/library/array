@@ -1,0 +1,255 @@
+#pragma once
+
+#include "cstddef"
+#include "iterator"
+#include "tuple"
+#include "utility"
+
+namespace std
+{
+#if __cplusplus >= 201103L
+template <typename T, std::size_t N>
+class array
+{
+public:
+  typedef T value_type;
+  typedef std::size_t size_type;
+  typedef std::ptrdiff_t difference_type;
+  typedef value_type &reference;
+  typedef const value_type &const_reference;
+  typedef value_type *pointer;
+  typedef const value_type *const_pointer;
+  typedef std::reverse_iterator<pointer> reverse_iterator;
+  typedef std::reverse_iterator<const_pointer> const_reverse_iterator;
+
+private:
+  value_type elems[N];
+
+public:
+  reference operator[](size_type index)
+  {
+    __ESBMC_assert(index < N, "Index out of bounds");
+    return elems[index];
+  }
+
+  const_reference operator[](size_type index) const
+  {
+    __ESBMC_assert(index < N, "Index out of bounds");
+    return elems[index];
+  }
+
+  reference at(size_type index)
+  {
+    __ESBMC_assert(index < N, "Index out of bounds");
+    return elems[index];
+  }
+
+  const_reference at(size_type index) const
+  {
+    __ESBMC_assert(index < N, "Index out of bounds");
+    return elems[index];
+  }
+
+  constexpr size_type size() const noexcept
+  {
+    return N;
+  }
+
+  reference front()
+  {
+    return elems[0];
+  }
+
+  const_reference front() const
+  {
+    return elems[0];
+  }
+
+  reference back()
+  {
+    return elems[N - 1];
+  }
+
+  const_reference back() const
+  {
+    return elems[N - 1];
+  }
+
+  pointer begin() noexcept
+  {
+    return &elems[0];
+  }
+
+  const_pointer begin() const noexcept
+  {
+    return &elems[0];
+  }
+
+  pointer end() noexcept
+  {
+    return &elems[N];
+  }
+
+  const_pointer end() const noexcept
+  {
+    return &elems[N];
+  }
+
+  const_pointer cbegin() const noexcept
+  {
+    return &elems[0];
+  }
+
+  const_pointer cend() const noexcept
+  {
+    return &elems[N];
+  }
+
+#  if 0
+  reverse_iterator rbegin() noexcept
+  {
+    return std::make_reverse_iterator(end());
+  }
+
+  const_reverse_iterator rbegin() const noexcept
+  {
+    return std::make_reverse_iterator(end());
+  }
+
+  reverse_iterator rend() noexcept
+  {
+    return std::make_reverse_iterator(begin());
+  }
+
+  const_reverse_iterator rend() const noexcept
+  {
+    return std::make_reverse_iterator(begin());
+  }
+
+  const_reverse_iterator crbegin() const noexcept
+  {
+    return std::make_reverse_iterator(cend());
+  }
+
+  const_reverse_iterator crend() const noexcept
+  {
+    return std::make_reverse_iterator(cbegin());
+  }
+#  endif
+
+  void fill(const_reference value)
+  {
+    for (size_type i = 0; i < N; ++i)
+      elems[i] = value;
+  }
+
+  void swap(array &other) noexcept
+  {
+    for (size_type i = 0; i < N; ++i)
+    {
+      value_type temp = elems[i];
+      elems[i] = other.elems[i];
+      other.elems[i] = temp;
+    }
+  }
+
+  pointer data() noexcept
+  {
+    return elems;
+  }
+
+  const_pointer data() const noexcept
+  {
+    return elems;
+  }
+};
+
+template <typename T, std::size_t N>
+void swap(array<T, N> &a, array<T, N> &b) noexcept
+{
+  a.swap(b);
+}
+
+template <typename T, std::size_t N>
+bool operator==(const array<T, N> &a, const array<T, N> &b)
+{
+  for (std::size_t i = 0; i < N; ++i)
+  {
+    if (!(a[i] == b[i]))
+      return false;
+  }
+  return true;
+}
+
+template <typename T, std::size_t N>
+bool operator!=(const array<T, N> &a, const array<T, N> &b)
+{
+  return !(a == b);
+}
+
+template <typename T, std::size_t N>
+bool operator<(const array<T, N> &a, const array<T, N> &b)
+{
+  for (std::size_t i = 0; i < N; ++i)
+  {
+    if (a[i] < b[i])
+      return true;
+    if (b[i] < a[i])
+      return false;
+  }
+  return false;
+}
+
+template <typename T, std::size_t N>
+bool operator<=(const array<T, N> &a, const array<T, N> &b)
+{
+  return !(b < a);
+}
+
+template <typename T, std::size_t N>
+bool operator>(const array<T, N> &a, const array<T, N> &b)
+{
+  return b < a;
+}
+
+template <typename T, std::size_t N>
+bool operator>=(const array<T, N> &a, const array<T, N> &b)
+{
+  return !(a < b);
+}
+
+template <std::size_t I, typename T, std::size_t N>
+T &get(array<T, N> &a) noexcept
+{
+  __ESBMC_assert(I < N, "Index out of bounds");
+  return a[I];
+}
+
+template <std::size_t I, typename T, std::size_t N>
+const T &get(const array<T, N> &a) noexcept
+{
+  __ESBMC_assert(I < N, "Index out of bounds");
+  return a[I];
+}
+
+template <std::size_t I, typename T, std::size_t N>
+T &&get(array<T, N> &&a) noexcept
+{
+  __ESBMC_assert(I < N, "Index out of bounds");
+  return std::move(a[I]);
+}
+
+template <typename T, std::size_t N>
+struct std::tuple_size<array<T, N>> : std::integral_constant<std::size_t, N>
+{
+};
+
+template <std::size_t I, typename T, std::size_t N>
+struct std::tuple_element<I, array<T, N>>
+{
+  typedef T type;
+};
+
+#endif
+
+} // namespace std

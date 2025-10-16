@@ -1,0 +1,16 @@
+/*******************************************************************\
+
+Module: 
+
+Author: Felipe Rodrigues
+
+Date: 
+
+\*******************************************************************/
+
+class QGraphicsTextItem
+{
+public:
+  QGraphicsTextItem();
+  ~QGraphicsTextItem();
+};
