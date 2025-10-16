@@ -86,7 +86,7 @@ class CTest3(ParseTest):
             "./esbmc-unix/00_account_02", "00_account_02")
 
     def _read_file_checks(self, test_obj: TestCase):
-        self.assertEqual(self.test_case.test_mode, "CORE")
+        self.assertEqual(self.test_case.test_mode, "THOROUGH")
         self.assertEqual(self.test_case.test_file, "test.c")
         self.assertEqual(self.test_case.test_args,
                          "account.c --no-slice --context-bound 1 --depth 150")

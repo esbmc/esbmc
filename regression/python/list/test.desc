@@ -1,3 +1,4 @@
-THOROUGHTHOROUGH.py
+THOROUGH
+main.py
 --unwind 9 --force-malloc-success
 ^VERIFICATION SUCCESSFUL$
