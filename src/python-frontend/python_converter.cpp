@@ -2193,14 +2193,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return handle_power_operator(lhs, rhs);
 
   // Determine the result type of the binary operation:
-  // If it's a relational operation (e.g., <, >, ==), the result is a boolean type.
-  // For Python division ("/"), the result is always a float regardless of operand types.
-  // Otherwise, it inherits the type of the left-hand side (lhs).
   typet type;
   if (type_utils::is_relational_op(op))
     type = bool_type();
   else if (op == "Div" || op == "div")
     type = double_type(); // Python division always returns float
+  else if (lhs.type().is_floatbv() || rhs.type().is_floatbv())
+    type =
+      lhs.type().is_floatbv() ? lhs.type() : rhs.type(); // Promote to float
   else
     type = lhs.type();
 
