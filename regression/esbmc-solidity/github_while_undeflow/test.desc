@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 contract.solast
 --k-induction --sol contract.sol --overflow-check
 .*function while_underflow

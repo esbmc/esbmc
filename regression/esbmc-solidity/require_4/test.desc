@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 contract.solast
 --sol contract.sol --contract Robot --function test2 --unwind 3 --no-unwinding-assertions
 ^VERIFICATION FAILED$
