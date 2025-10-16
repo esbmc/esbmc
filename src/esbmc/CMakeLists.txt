@@ -1,6 +1,3 @@
-if(ENABLE_OLD_FRONTEND)
-  set(OLD_FRONTEND_TARGETS ansicfrontend cppfrontend)
-endif()
 
 if(ENABLE_SOLIDITY_FRONTEND)
   # we have set minimium LLVM version to 11

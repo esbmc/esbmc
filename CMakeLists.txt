@@ -113,11 +113,6 @@ include(ExternalDependencies)
 include(OptimizationCCache)
 include(WError)
 
-if(ENABLE_OLD_FRONTEND)
-  find_package(BISON 2.6.1 REQUIRED)
-  find_package(FLEX 2.6.1 REQUIRED)
-  add_definitions(-DENABLE_OLD_FRONTEND)
-endif()
 
 if(ENABLE_SOLIDITY_FRONTEND)
   add_definitions(-DENABLE_SOLIDITY_FRONTEND)

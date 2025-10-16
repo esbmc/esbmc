@@ -143,8 +143,3 @@ struct messaget
     __LINE__,                                                                  \
     FMT_STRING(fmt),                                                           \
     ##__VA_ARGS__)
-
-// TODO: Eventually this will be removed
-#ifdef ENABLE_OLD_FRONTEND
-#  define err_location(E) (E).location().dump()
-#endif
