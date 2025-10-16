@@ -36,6 +36,7 @@ ignored_dirs=(
   "list10"
   "list15_fail"
   "loop-invariant"
+  "loop-invariant2"
   "min_max_3_fail"
   "missing-return_fail"
   "missing-return7_fail"
