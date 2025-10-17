@@ -4034,6 +4034,21 @@ typet python_converter::get_type_from_annotation(
        annotation_node["value"]["id"] == "List"))
       return type_handler_.get_list_type();
 
+    // Handle Optional[T] - extract the inner type T
+    if (
+      annotation_node.contains("value") &&
+      annotation_node["value"]["id"] == "Optional")
+    {
+      if (
+        annotation_node.contains("slice") &&
+        annotation_node["slice"].contains("id"))
+      {
+        std::string inner_type =
+          annotation_node["slice"]["id"].get<std::string>();
+        return type_handler_.get_typet(inner_type);
+      }
+    }
+
     return type_handler_.get_list_type(element);
   }
   else if (
