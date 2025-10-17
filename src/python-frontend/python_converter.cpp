@@ -1458,21 +1458,60 @@ exprt python_converter::handle_none_comparison(
 {
   bool is_eq = (op == "Eq" || op == "Is");
 
-  // Check if we're comparing None with a different type (not None)
-  bool lhs_is_none = (lhs.type() == none_type());
-  bool rhs_is_none = (rhs.type() == none_type());
+  // Detect None constants (pointer to bool with NULL value)
+  bool lhs_is_none_const =
+    (lhs.type() == none_type() && lhs.is_constant() && lhs.value() == "NULL");
+  bool rhs_is_none_const =
+    (rhs.type() == none_type() && rhs.is_constant() &&
+     rhs.value() == "NULL"); // FIXED: was lhs.value()
 
-  // If one is None and the other is NOT None type, they're never equal
-  if (lhs_is_none && !rhs_is_none)
+  // Only constant-fold when comparing two non-symbol constants
+  if (
+    lhs_is_none_const && rhs.is_constant() && !rhs.is_symbol() &&
+    !rhs_is_none_const)
     return is_eq ? gen_boolean(0) : gen_boolean(1);
-  if (rhs_is_none && !lhs_is_none)
+  if (
+    rhs_is_none_const && lhs.is_constant() && !lhs.is_symbol() &&
+    !lhs_is_none_const)
     return is_eq ? gen_boolean(0) : gen_boolean(1);
 
-  // Both are None type: do actual pointer comparison
+  // For runtime comparison: convert None to NULL/zero of matching type
+  exprt lhs_cmp = lhs;
+  exprt rhs_cmp = rhs;
+
+  if (rhs_is_none_const)
+  {
+    if (lhs.type().is_pointer())
+    {
+      // For pointer types (Optional[str]), use NULL pointer
+      constant_exprt null_ptr(lhs.type());
+      null_ptr.set_value("NULL");
+      rhs_cmp = null_ptr;
+    }
+    else if (type_utils::is_integer_type(lhs.type()))
+    {
+      // For integer types (Optional[int]), use 0
+      rhs_cmp = gen_zero(lhs.type());
+    }
+  }
+  else if (lhs_is_none_const)
+  {
+    if (rhs.type().is_pointer())
+    {
+      constant_exprt null_ptr(rhs.type());
+      null_ptr.set_value("NULL");
+      lhs_cmp = null_ptr;
+    }
+    else if (type_utils::is_integer_type(rhs.type()))
+    {
+      lhs_cmp = gen_zero(rhs.type());
+    }
+  }
+
   if (is_eq)
-    return equality_exprt(lhs, rhs);
+    return equality_exprt(lhs_cmp, rhs_cmp);
   else
-    return not_exprt(equality_exprt(lhs, rhs));
+    return not_exprt(equality_exprt(lhs_cmp, rhs_cmp));
 }
 
 // Resolve symbol values to constants
