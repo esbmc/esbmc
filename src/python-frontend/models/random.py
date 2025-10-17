@@ -36,9 +36,12 @@ def getrandbits(k: int) -> int:
     return value
 
 
-def randrange(start: int, stop: int = None, step: int = 1) -> int:
+def randrange(start: int, stop: int = -1, step: int = 1) -> int:
+    # Note: Using -1 as sentinel for Optional parameter since ESBMC cannot
+    # distinguish None from 0 for integer Optional types
+    
     # Handle the single-argument case: randrange(stop)
-    if stop is None:
+    if stop == -1:
         actual_start: int = 0
         actual_stop: int = start
         actual_step: int = 1

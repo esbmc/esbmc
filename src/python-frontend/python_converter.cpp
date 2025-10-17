@@ -1458,12 +1458,12 @@ exprt python_converter::handle_none_comparison(
 {
   bool is_eq = (op == "Eq" || op == "Is");
 
-  // Detect None constants (pointer to bool with NULL value)
+  // Detect None constants
   bool lhs_is_none_const =
     (lhs.type() == none_type() && lhs.is_constant() && lhs.value() == "NULL");
   bool rhs_is_none_const =
     (rhs.type() == none_type() && rhs.is_constant() &&
-     rhs.value() == "NULL"); // FIXED: was lhs.value()
+     rhs.value() == "NULL");
 
   // Only constant-fold when comparing two non-symbol constants
   if (
