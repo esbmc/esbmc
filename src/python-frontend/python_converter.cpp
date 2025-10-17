@@ -4689,6 +4689,29 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       if (!test.type().is_bool())
         test.make_typecast(current_element_type);
 
+      // Attach assertion message if present
+      auto attach_assert_message = [&element](code_assertt &assert_code) {
+        if (element.contains("msg") && !element["msg"].is_null())
+        {
+          std::string msg;
+          if (
+            element["msg"]["_type"] == "Constant" &&
+            element["msg"]["value"].is_string())
+          {
+            msg = element["msg"]["value"].get<std::string>();
+          }
+          else if (element["msg"]["_type"] == "JoinedStr")
+          {
+            // For f-strings, this is just a placeholder
+            // TODO: Full f-string evaluation would require more complex handling
+            msg = "<formatted string message>";
+          }
+
+          if (!msg.empty())
+            assert_code.location().comment(msg);
+        }
+      };
+
       // Check for function calls in assertions (direct or negated)
       const exprt *func_call_expr = nullptr;
       bool is_negated = false;
@@ -4742,6 +4765,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         code_assertt assert_code;
         assert_code.assertion() = assertion_expr;
         assert_code.location() = location;
+        attach_assert_message(assert_code); // Add message if present
         block.move_to_operands(assert_code);
       }
       else
@@ -4750,6 +4774,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         code_assertt assert_code;
         assert_code.assertion() = test;
         assert_code.location() = get_location_from_decl(element);
+        attach_assert_message(assert_code); // Add message if present
         block.move_to_operands(assert_code);
       }
       break;
