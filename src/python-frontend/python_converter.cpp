@@ -2068,10 +2068,21 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  // Handle 'in' operator for string membership testing
-  if (op == "In" && (lhs.type().is_array() || rhs.type().is_array()))
+  // Handle 'in' operator
+  if (op == "In")
   {
-    return handle_string_membership(lhs, rhs, element);
+    typet list_type = type_handler_.get_list_type();
+
+    // Handle list membership: "item" in [list]
+    if (rhs.type() == list_type)
+    {
+      python_list list(*this, element);
+      return list.contains(lhs, rhs);
+    }
+
+    // Handle string membership testing: "substr" in "string"
+    if (lhs.type().is_array() || rhs.type().is_array())
+      return handle_string_membership(lhs, rhs, element);
   }
 
   // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects

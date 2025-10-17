@@ -836,3 +836,48 @@ exprt python_list::list_repetition(
 
   return symbol_expr(*list_symbol);
 }
+
+exprt python_list::contains(const exprt &item, const exprt &list)
+{
+  // Get type and size information for the item
+  list_elem_info item_info = get_list_element_info(list_value_, item);
+
+  // Find the list_contains function
+  const symbolt *list_contains_func =
+    converter_.symbol_table().find_symbol("c:list.c@F@list_contains");
+  if (!list_contains_func)
+    throw std::runtime_error(
+      "list_contains function not found in symbol table");
+
+  // Create a temporary variable to store the result
+  symbolt &contains_ret = converter_.create_tmp_symbol(
+    list_value_, "contains_tmp", bool_type(), gen_boolean(false));
+  code_declt contains_ret_decl(symbol_expr(contains_ret));
+  converter_.add_instruction(contains_ret_decl);
+
+  // Build the function call as a statement
+  code_function_callt contains_call;
+  contains_call.function() = symbol_expr(*list_contains_func);
+  contains_call.lhs() = symbol_expr(contains_ret);
+
+  // Pass the list directly
+  contains_call.arguments().push_back(list);
+
+  // Pass the item by address
+  contains_call.arguments().push_back(
+    address_of_exprt(symbol_expr(*item_info.elem_symbol))); // &item
+
+  contains_call.arguments().push_back(
+    symbol_expr(*item_info.elem_type_sym));                 // item type hash
+  contains_call.arguments().push_back(item_info.elem_size); // item size
+
+  contains_call.type() = bool_type();
+  contains_call.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(contains_call);
+
+  exprt result("=", bool_type());
+  result.copy_to_operands(symbol_expr(contains_ret));
+  result.copy_to_operands(gen_boolean(true));
+
+  return result;
+}
