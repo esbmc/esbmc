@@ -2519,6 +2519,17 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
       args[it->second] = arg_expr;
     }
+
+    // Fill empty arguments with None for optional parameters
+    for (size_t i = 0; i < args.size(); ++i)
+    {
+      if (args[i].is_nil() || args[i].id().empty())
+      {
+        constant_exprt none_expr(none_type());
+        none_expr.set_value("NULL");
+        args[i] = none_expr;
+      }
+    }
   };
 
   handle_keywords(call_expr);
