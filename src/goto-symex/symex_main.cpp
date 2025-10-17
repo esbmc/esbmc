@@ -790,12 +790,12 @@ void goto_symext::run_intrinsic(
       {
         type_byte_size(item.object->type).to_int64();
       }
-      catch (array_type2t::dyn_sized_array_excp *e)
+      catch (const array_type2t::dyn_sized_array_excp &e)
       {
         log_error("__ESBMC_init_object does not support VLAs");
         abort();
       }
-      catch (array_type2t::inf_sized_array_excp *e)
+      catch (const array_type2t::inf_sized_array_excp &e)
       {
         log_error(
           "__ESBMC_init_object does not support infinite-length arrays");
