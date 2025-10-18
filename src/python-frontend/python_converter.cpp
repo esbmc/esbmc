@@ -4101,6 +4101,10 @@ typet python_converter::get_type_from_annotation(
   else if (
     annotation_node["_type"] == "Constant" || annotation_node["_type"] == "Str")
   {
+    // Handle None annotation: Constant with null value
+    if (annotation_node["value"].is_null())
+      return none_type();
+
     // Handle string annotations like "CoordinateData | None" (forward references)
     std::string type_string = annotation_node["value"].get<std::string>();
     type_string = type_utils::remove_quotes(type_string);
