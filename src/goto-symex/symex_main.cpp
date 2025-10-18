@@ -338,6 +338,14 @@ void goto_symext::symex_step(reachability_treet &art)
         return;
       }
 
+      if (id.as_string() == "c:@F@__ESBMC_memcpy")
+      {
+        log_status("Using intrinsic_memcpy for {}", id.as_string());
+        cur_state->source.pc++;
+        intrinsic_memcpy(art, call);
+        return;
+      }
+
       if (id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")
       {
         cur_state->source.pc++;
@@ -601,6 +609,12 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_memset")
   {
     intrinsic_memset(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memcpy")
+  {
+    intrinsic_memcpy(art, func_call);
     return;
   }
 
