@@ -373,6 +373,12 @@ private:
     std::list<std::string> &file_list,
     const std::string &dir_path);
 
+  exprt handle_membership_operator(
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element,
+    bool invert);
+
   // helper methods for get_var_assign
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
