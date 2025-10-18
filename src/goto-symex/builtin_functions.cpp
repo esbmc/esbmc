@@ -1941,7 +1941,7 @@ void goto_symext::intrinsic_memcpy(
     log_debug("memcpy", "NULL pointer operand, falling back");
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
-  }  
+  }
 
   // Only handle constant-size copies for now
   simplify(n);
@@ -1955,8 +1955,10 @@ void goto_symext::intrinsic_memcpy(
   }
   unsigned long num_bytes = to_constant_int2t(n).as_long();
 
-  if (num_bytes == 1){
-    log_debug("memcpy", "Single-byte copy detected, falling back to standard memcpy");
+  if (num_bytes == 1)
+  {
+    log_debug(
+      "memcpy", "Single-byte copy detected, falling back to standard memcpy");
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
   }
@@ -2046,7 +2048,7 @@ void goto_symext::intrinsic_memcpy(
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
   }
-  
+
   //For now, only support single-object copies
   auto &dst_item = dst_items.front();
   auto &src_item = src_items.front();
@@ -2062,21 +2064,27 @@ void goto_symext::intrinsic_memcpy(
 
   simplify(src_item.offset);
 
-  
-  if (is_nil_expr(dst_item.object) || is_nil_expr(src_item.object)) {
-    log_debug("memcpy", "Nil object in dereference, falling back"); 
-    bump_call(func_call, "c:@F@__memcpy_impl"); 
-     return;
+  if (is_nil_expr(dst_item.object) || is_nil_expr(src_item.object))
+  {
+    log_debug("memcpy", "Nil object in dereference, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
   }
 
-  if (is_constant_int2t(dst_item.object) && to_constant_int2t(dst_item.object).value.is_zero()) {
-    log_debug("mempcy", "NULL dst object, falling back"); 
-    bump_call(func_call, "c:@F@__memcpy_impl"); 
-     return;
+  if (
+    is_constant_int2t(dst_item.object) &&
+    to_constant_int2t(dst_item.object).value.is_zero())
+  {
+    log_debug("mempcy", "NULL dst object, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
   }
-  if (is_constant_int2t(src_item.object) && to_constant_int2t(src_item.object).value.is_zero()) {
+  if (
+    is_constant_int2t(src_item.object) &&
+    to_constant_int2t(src_item.object).value.is_zero())
+  {
     log_debug("memcpy", "NULL src object, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl"); 
+    bump_call(func_call, "c:@F@__memcpy_impl");
     return;
   }
 
@@ -2096,7 +2104,7 @@ void goto_symext::intrinsic_memcpy(
       chunk_size = 4;
     else if ((dst_offset % 2 == 0) && (src_offset % 2 == 0))
       chunk_size = 2;
-      
+
     size_t i = 0;
     for (; i + chunk_size <= num_bytes; i += chunk_size)
     {
@@ -2119,13 +2127,11 @@ void goto_symext::intrinsic_memcpy(
       expr2tc dst_idx = index2tc(
         chunk_type,
         dst_item.object,
-        constant_int2tc(
-          get_uint64_type(), BigInt(dst_offset + i)));
+        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
       expr2tc src_idx = index2tc(
         chunk_type,
         src_item.object,
-        constant_int2tc(
-          get_uint64_type(), BigInt(src_offset + i)));
+        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
       expr2tc value = src_idx;
       dereference(value, dereferencet::READ);
       symex_assign(code_assign2tc(dst_idx, value), false, guard);
