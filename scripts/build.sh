@@ -124,7 +124,6 @@ ubuntu_setup () {
     ls -la /usr/local/lib/libgmp* || echo "Warning: GMP libraries not found" &&
 
     BASE_ARGS="$BASE_ARGS \
-        -DENABLE_OLD_FRONTEND=Off \
         -DBUILD_STATIC=$STATIC \
     " &&
     SOLVER_FLAGS="$SOLVER_FLAGS \

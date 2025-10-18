@@ -21,7 +21,6 @@ option(BUILD_STATIC "Build ESBMC in static mode (default: OFF)" OFF)
 option(BUILD_DOC "Build ESBMC documentation" OFF)
 option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
 option(ENABLE_COVERAGE "Generate Coverage Report (default: OFF)" OFF)
-option(ENABLE_OLD_FRONTEND "Enable flex/bison language frontend (default: OFF)" OFF)
 option(ENABLE_SOLIDITY_FRONTEND "Enable Solidity language frontend (default: OFF)" OFF)
 option(ENABLE_GOTO_CONTRACTOR "Enable IBEX in the build (default: OFF)" OFF)
 option(ENABLE_JIMPLE_FRONTEND "Enable Jimple language frontend (default: OFF)" OFF)
@@ -51,6 +50,7 @@ option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
 option(DOWNLOAD_DEPENDENCIES "Download and build dependencies if needed (default: OFF)" OFF)
 option(ACADEMIC_BUILD "Check and Enable libs that available only in Academic builds (default: OFF)" OFF)
 option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
+option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (default: OFF)" OFF)
 
 #############################
 # PRE-BUILT DEPENDENCIES

@@ -61,10 +61,6 @@ extern "C"
 #  include <fcntl.h>
 #endif
 
-#ifdef ENABLE_OLD_FRONTEND
-#  include <ansi-c/c_preprocess.h>
-#endif
-
 #ifdef ENABLE_GOTO_CONTRACTOR
 #  include <goto-programs/goto_contractor.h>
 #endif

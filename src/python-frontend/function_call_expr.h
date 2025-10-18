@@ -217,16 +217,49 @@ private:
   exprt validate_re_module_args() const;
 
   /*
- * Check if the current function call is to Python's built-in any() function
- * Returns true if the function name is "any"
- */
+   * Check if the current function call is to Python's built-in any() function
+   * Returns true if the function name is "any"
+   */
   bool is_any_call() const;
 
   /*
- * Implement Python's any() built-in function
- * Returns True if any element in the iterable is truthy, False otherwise
- */
+   * Implement Python's any() built-in function
+   * Returns True if any element in the iterable is truthy, False otherwise
+   */
   exprt handle_any() const;
+
+  /**
+   * Convert an integer to a string representation in a specific base
+   * Implements common logic for Python's hex(), oct(), and similar functions
+   */
+  exprt handle_base_conversion(
+    nlohmann::json &arg,
+    const std::string &func_name,
+    const std::string &prefix,
+    std::ios_base &(*base_formatter)(std::ios_base &)) const;
+
+  /**
+   * Check if a JSON argument represents a string value
+   * Handles various representations: type annotation, value type, and constants
+   */
+  bool is_string_arg(const nlohmann::json &arg) const;
+
+  // Handler function type for dispatch table
+  using HandlerFunction = std::function<exprt()>;
+  using PredicateFunction = std::function<bool()>;
+
+  struct FunctionHandler
+  {
+    PredicateFunction predicate;
+    HandlerFunction handler;
+    const char *description; // For debugging/documentation
+  };
+
+  // Initialize dispatch table
+  std::vector<FunctionHandler> get_dispatch_table();
+
+  // General function call handler
+  exprt handle_general_function_call();
 
 protected:
   symbol_id function_id_;

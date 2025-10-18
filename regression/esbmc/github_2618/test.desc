@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --parallel-solving --k-induction
 ^VERIFICATION SUCCESSFUL$

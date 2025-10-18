@@ -13,6 +13,8 @@ const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
+const std::string kLoopInvariant = "__loop_invariant";
+const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -65,6 +67,10 @@ symbol_id function_call_builder::build_function_id() const
   if (func_type == "Name")
   {
     func_name = func_json["id"];
+
+    // Map Python loop invariant name to ESBMC internal name
+    if (func_name == kLoopInvariant)
+      func_name = kEsbmcLoopInvariant;
   }
   else if (func_type == "Attribute") // Handling obj_name.func_name() calls
   {
@@ -236,6 +242,22 @@ exprt function_call_builder::build() const
   if (function_id.get_function() == "__ESBMC_len_single_char")
     return from_integer(1, int_type());
 
+  // Special handling for assume calls: convert to code_assume instead of function call
+  if (is_assume_call(function_id))
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error("__ESBMC_assume requires one boolean argument");
+
+    exprt condition = converter_.get_expr(call_["args"][0]);
+
+    // Create code_assume statement
+    codet assume_code("assume");
+    assume_code.copy_to_operands(condition);
+    assume_code.location() = converter_.get_location_from_decl(call_);
+
+    return assume_code;
+  }
+
   if (call_["func"]["_type"] == "Attribute")
   {
     std::string method_name = call_["func"]["attr"].get<std::string>();
@@ -267,8 +289,8 @@ exprt function_call_builder::build() const
     }
   }
 
-  // Add assume and len functions to symbol table
-  if (is_assume_call(function_id) || is_len_call(function_id))
+  // Add len function to symbol table
+  if (is_len_call(function_id))
   {
     const auto &symbol_table = converter_.symbol_table();
     const std::string &func_symbol_id = function_id.to_string();
@@ -276,11 +298,33 @@ exprt function_call_builder::build() const
     if (symbol_table.find_symbol(func_symbol_id.c_str()) == nullptr)
     {
       code_typet code_type;
-      if (is_len_call(function_id))
-      {
-        code_type.return_type() = long_long_int_type();
-        code_type.arguments().push_back(pointer_typet(empty_typet()));
-      }
+      code_type.return_type() = long_long_int_type();
+      code_type.arguments().push_back(pointer_typet(empty_typet()));
+
+      const std::string &python_file = converter_.python_file();
+      const std::string &func_name = function_id.get_function();
+      locationt location = converter_.get_location_from_decl(call_);
+
+      symbolt symbol = converter_.create_symbol(
+        python_file, func_name, func_symbol_id, location, code_type);
+
+      converter_.add_symbol(symbol);
+    }
+  }
+
+  // Add loop invariant symbol to symbol table
+  if (function_id.get_function() == kEsbmcLoopInvariant)
+  {
+    const auto &symbol_table = converter_.symbol_table();
+    const std::string &func_symbol_id = function_id.to_string();
+
+    if (symbol_table.find_symbol(func_symbol_id.c_str()) == nullptr)
+    {
+      code_typet code_type;
+      code_type.return_type() = empty_typet();
+      code_typet::argumentt arg;
+      arg.type() = bool_type();
+      code_type.arguments().push_back(arg);
 
       const std::string &python_file = converter_.python_file();
       const std::string &func_name = function_id.get_function();

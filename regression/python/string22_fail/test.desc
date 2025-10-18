@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.py
 --multi-property
 ^Properties\: 21 verified, \✗ 21 failed$

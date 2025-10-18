@@ -4,6 +4,7 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/string_builder.h>
 #include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
@@ -45,6 +46,25 @@ function_call_expr::function_call_expr(
     function_type_(FunctionType::FreeFunction)
 {
   get_function_type();
+}
+
+bool function_call_expr::is_string_arg(const nlohmann::json &arg) const
+{
+  // Check type annotation
+  if (arg.contains("type") && arg["type"] == "str")
+    return true;
+
+  // Check if value is a string
+  if (arg.contains("value") && arg["value"].is_string())
+    return true;
+
+  // Check if it's a string constant
+  if (
+    arg["_type"] == "Constant" && arg.contains("value") &&
+    arg["value"].is_string())
+    return true;
+
+  return false;
 }
 
 static std::string get_classname_from_symbol_id(const std::string &symbol_id)
@@ -238,13 +258,9 @@ exprt function_call_expr::handle_hasattr() const
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
 {
   std::string str_val = std::to_string(arg["value"].get<int>());
-  // Convert string to vector of unsigned char
-  std::vector<unsigned char> chars(str_val.begin(), str_val.end());
-  // Get type for the array
-  typet t = type_handler_.get_typet("str", chars.size() + 1);
-  // Use helper to generate constant string expression
-  exprt str = converter_.make_char_array_expr(chars, t);
-  return str;
+  typet t = type_handler_.get_typet("str", str_val.size() + 1);
+  return converter_.make_char_array_expr(
+    std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
 }
 
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
@@ -257,9 +273,9 @@ exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
   if (str_val.back() == '.')
     str_val.pop_back();
 
-  std::vector<unsigned char> chars(str_val.begin(), str_val.end());
-  typet t = type_handler_.get_typet("str", chars.size() + 1);
-  return converter_.make_char_array_expr(chars, t);
+  typet t = type_handler_.get_typet("str", str_val.size() + 1);
+  return converter_.make_char_array_expr(
+    std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
 }
 
 size_t function_call_expr::handle_str(nlohmann::json &arg) const
@@ -442,58 +458,21 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   return expr;
 }
 
-exprt function_call_expr::handle_hex(nlohmann::json &arg) const
+exprt function_call_expr::handle_base_conversion(
+  nlohmann::json &arg,
+  const std::string &func_name,
+  const std::string &prefix,
+  std::ios_base &(*base_formatter)(std::ios_base &)) const
 {
   long long int_value = 0;
   bool is_negative = false;
 
+  // Extract integer value from argument
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
   {
     const auto &op = arg["op"];
     const auto &operand = arg["operand"];
 
-    if (
-      op["_type"] == "USub" && operand.contains("value") &&
-      operand["value"].is_number_integer())
-    {
-      is_negative = true;
-      int_value = operand["value"].get<long long>();
-    }
-    else
-      return gen_exception_raise("TypeError", "Unsupported UnaryOp in hex()");
-  }
-  else if (arg.contains("value") && arg["value"].is_number_integer())
-  {
-    int_value = arg["value"].get<long long>();
-    if (int_value < 0)
-      is_negative = true;
-  }
-  else
-    return gen_exception_raise(
-      "TypeError", "hex() argument must be an integer");
-
-  std::ostringstream oss;
-  oss << (is_negative ? "-0x" : "0x") << std::hex << std::nouppercase
-      << std::llabs(int_value);
-  const std::string hex_str = oss.str();
-
-  typet t = type_handler_.get_typet("str", hex_str.size() + 1);
-  std::vector<uint8_t> string_literal(hex_str.begin(), hex_str.end());
-  return converter_.make_char_array_expr(string_literal, t);
-}
-
-exprt function_call_expr::handle_oct(nlohmann::json &arg) const
-{
-  long long int_value = 0;  // Holds the integer value to be converted
-  bool is_negative = false; // Tracks if the number is negative
-
-  // Check if the argument is a unary operation (like -123)
-  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
-  {
-    const auto &op = arg["op"];           // Operator (e.g., USub)
-    const auto &operand = arg["operand"]; // Operand of the unary operator
-
-    // Only support unary subtraction (-) of integer literals
     if (
       op["_type"] == "USub" && operand.contains("value") &&
       operand["value"].is_number_integer())
@@ -505,9 +484,11 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
         is_negative = true;
     }
     else
-      return gen_exception_raise("TypeError", "Unsupported UnaryOp in oct()");
+    {
+      return gen_exception_raise(
+        "TypeError", "Unsupported UnaryOp in " + func_name + "()");
+    }
   }
-  // If it's not a unary operation, expect a plain integer literal
   else if (arg.contains("value") && arg["value"].is_number_integer())
   {
     int_value = arg["value"].get<long long>();
@@ -516,20 +497,35 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
   }
   else
   {
-    // Invalid argument type for oct()
     return gen_exception_raise(
-      "TypeError", "oct() argument must be an integer");
+      "TypeError", func_name + "() argument must be an integer");
   }
 
-  // Convert the absolute value to octal and prepend "0o" (or "-0o")
+  // Convert to string with appropriate base and prefix
   std::ostringstream oss;
-  oss << (is_negative ? "-0o" : "0o") << std::oct << std::llabs(int_value);
-  const std::string oct_str = oss.str();
+  oss << (is_negative ? "-" + prefix : prefix) << base_formatter;
 
-  // Create a string type and return a character array expression
-  typet t = type_handler_.get_typet("str", oct_str.size() + 1);
-  std::vector<uint8_t> string_literal(oct_str.begin(), oct_str.end());
+  // For hex, also apply nouppercase
+  if (func_name == "hex")
+    oss << std::nouppercase;
+
+  oss << std::llabs(int_value);
+  const std::string result_str = oss.str();
+
+  // Create string type and return character array expression
+  typet t = type_handler_.get_typet("str", result_str.size() + 1);
+  std::vector<uint8_t> string_literal(result_str.begin(), result_str.end());
   return converter_.make_char_array_expr(string_literal, t);
+}
+
+exprt function_call_expr::handle_hex(nlohmann::json &arg) const
+{
+  return handle_base_conversion(arg, "hex", "0x", std::hex);
+}
+
+exprt function_call_expr::handle_oct(nlohmann::json &arg) const
+{
+  return handle_base_conversion(arg, "oct", "0o", std::oct);
 }
 
 exprt function_call_expr::handle_ord(nlohmann::json &arg) const
@@ -537,7 +533,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   int code_point = 0;
 
   // Ensure the argument is a string
-  if (arg.contains("value") && arg["value"].is_string())
+  if (is_string_arg(arg))
   {
     const std::string &s = arg["value"].get<std::string>();
     code_point = decode_utf8_codepoint(s);
@@ -721,12 +717,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   }
 
   // Reject strings early
-  if (arg.contains("type") && arg["type"] == "str")
-    return gen_exception_raise(
-      "TypeError", "bad operand type for abs(): 'str'");
-
-  // Also catch string constants without "type" annotation
-  if (arg.contains("value") && arg["value"].is_string())
+  if (is_string_arg(arg))
     return gen_exception_raise(
       "TypeError", "bad operand type for abs(): 'str'");
 
@@ -819,6 +810,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Check if there are no arguments
   if (call_["args"].empty())
   {
+    // Special handling for str() with no arguments: return empty string
+    if (func_name == "str")
+      return converter_.get_string_builder().build_string_literal("");
+
     typet t = type_handler_.get_typet(func_name, 0);
     return exprt("constant", t);
   }
@@ -843,7 +838,7 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to get the expression type directly, even if symbol lookup failed
       exprt expr = converter_.get_expr(arg);
-      if (expr.type().is_array()) // strings are arrays
+      if (type_utils::is_string_type(expr.type()))
       {
         std::string var_name = arg["id"].get<std::string>();
         std::string m = "int() conversion may fail - variable" + var_name +
@@ -855,8 +850,7 @@ exprt function_call_expr::build_constant_from_arg() const
   }
 
   // Handle int(): convert string literal to int with validation
-  else if (
-    func_name == "int" && arg.contains("value") && arg["value"].is_string())
+  else if (func_name == "int" && is_string_arg(arg))
   {
     const std::string &str_val = arg["value"].get<std::string>();
 
@@ -889,7 +883,7 @@ exprt function_call_expr::build_constant_from_arg() const
   if (func_name == "int" && arg["value"].is_number_float())
     handle_float_to_int(arg);
 
-  else if (func_name == "float" && arg["value"].is_string())
+  else if (func_name == "float" && is_string_arg(arg))
   {
     std::string str_val = arg["value"].get<std::string>();
 
@@ -951,7 +945,7 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to get the expression type directly, even if symbol lookup failed
       exprt expr = converter_.get_expr(arg);
-      if (expr.type().is_array()) // strings are arrays
+      if (type_utils::is_string_type(expr.type()))
       {
         std::string var_name = arg["id"].get<std::string>();
         std::string m = "float() conversion may fail - variable" + var_name +
@@ -1222,18 +1216,12 @@ exprt function_call_expr::validate_re_module_args() const
 {
   const auto &args = call_["args"];
 
-  auto is_string_type = [](const typet &type) -> bool {
-    return type.is_array() ||
-           (type.is_pointer() && type.subtype() == char_type());
-  };
-
-  // Validate both pattern and string arguments (indices 0 and 1)
   for (size_t i = 0; i < std::min(args.size(), size_t(2)); ++i)
   {
     exprt arg_expr = converter_.get_expr(args[i]);
     const typet &arg_type = arg_expr.type();
 
-    if (!is_string_type(arg_type))
+    if (!type_utils::is_string_type(arg_type))
     {
       std::ostringstream msg;
       msg << "expected string or bytes-like object, got '"
@@ -1331,106 +1319,127 @@ exprt function_call_expr::handle_any() const
   return result;
 }
 
+std::vector<function_call_expr::FunctionHandler>
+function_call_expr::get_dispatch_table()
+{
+  return {// Print function
+          {[this]() { return is_print_call(); },
+           [this]() { return handle_print(); },
+           "print()"},
+
+          // Non-deterministic functions
+          {[this]() { return is_nondet_call(); },
+           [this]() { return build_nondet_call(); },
+           "nondet functions"},
+
+          // Introspection functions (isinstance, hasattr)
+          {[this]() { return is_introspection_call(); },
+           [this]() {
+             if (function_id_.get_function() == "isinstance")
+               return handle_isinstance();
+             else
+               return handle_hasattr();
+           },
+           "isinstance/hasattr"},
+
+          // Input function
+          {[this]() { return is_input_call(); },
+           [this]() { return handle_input(); },
+           "input()"},
+
+          // Any function
+          {[this]() { return is_any_call(); },
+           [this]() { return handle_any(); },
+           "any()"},
+
+          // Min/Max functions
+          {[this]() { return is_min_max_call(); },
+           [this]() {
+             const std::string &func_name = function_id_.get_function();
+             if (func_name == "min")
+               return handle_min_max("min", exprt::i_lt);
+             else
+               return handle_min_max("max", exprt::i_gt);
+           },
+           "min/max"},
+
+          // List methods
+          {[this]() { return is_list_method_call(); },
+           [this]() { return handle_list_method(); },
+           "list methods"},
+
+          // Math module functions
+          {[this]() {
+             const std::string &func_name = function_id_.get_function();
+             return func_name == "__ESBMC_isnan" ||
+                    func_name == "__ESBMC_isinf";
+           },
+           [this]() {
+             const std::string &func_name = function_id_.get_function();
+             const auto &args = call_["args"];
+
+             if (func_name == "__ESBMC_isnan")
+             {
+               if (args.size() != 1)
+                 throw std::runtime_error("isnan() expects exactly 1 argument");
+
+               exprt arg_expr = converter_.get_expr(args[0]);
+               exprt isnan_expr("isnan", bool_typet());
+               isnan_expr.copy_to_operands(arg_expr);
+               return isnan_expr;
+             }
+             else // __ESBMC_isinf
+             {
+               if (args.size() != 1)
+                 throw std::runtime_error("isinf() expects exactly 1 argument");
+
+               exprt arg_expr = converter_.get_expr(args[0]);
+               exprt isinf_expr("isinf", bool_typet());
+               isinf_expr.copy_to_operands(arg_expr);
+               return isinf_expr;
+             }
+           },
+           "isnan/isinf"},
+
+          // Built-in type constructors (int, float, str, bool, etc.)
+          {[this]() {
+             const std::string &func_name = function_id_.get_function();
+             return type_utils::is_builtin_type(func_name) ||
+                    type_utils::is_consensus_type(func_name);
+           },
+           [this]() { return build_constant_from_arg(); },
+           "built-in type constructors"},
+
+          // Regex module validation
+          {[this]() { return is_re_module_call(); },
+           [this]() {
+             exprt validation_result = validate_re_module_args();
+             if (!validation_result.is_nil())
+               return validation_result;
+
+             // If validation passes, handle as general function call
+             return handle_general_function_call();
+           },
+           "re module functions"}};
+}
+
 exprt function_call_expr::get()
 {
-  // Handle print() function
-  if (is_print_call())
+  // Use dispatch table to handle special function types
+  auto dispatch_table = get_dispatch_table();
+
+  for (const auto &handler : dispatch_table)
   {
-    return handle_print();
+    if (handler.predicate())
+      return handler.handler();
   }
 
-  // Handle non-det functions
-  if (is_nondet_call())
-  {
-    return build_nondet_call();
-  }
+  // General function call handling
+  return handle_general_function_call();
+}
 
-  // Handle introspection functions
-  if (is_introspection_call())
-  {
-    if (function_id_.get_function() == "isinstance")
-      return handle_isinstance();
-    else
-      return handle_hasattr();
-  }
-
-  // Handle input() function
-  if (is_input_call())
-  {
-    return handle_input();
-  }
-
-  // Handle any() function
-  if (is_any_call())
-  {
-    return handle_any();
-  }
-
-  // Handle min/max functions
-  if (is_min_max_call())
-  {
-    const std::string &func_name = function_id_.get_function();
-    if (func_name == "min")
-      return handle_min_max("min", exprt::i_lt);
-    else
-      return handle_min_max("max", exprt::i_gt);
-  }
-
-  // Handle list methods
-  if (is_list_method_call())
-  {
-    return handle_list_method();
-  }
-
-  const std::string &func_name = function_id_.get_function();
-
-  // Handle math module functions using ESBMC's built-in operations
-  if (func_name == "__ESBMC_isnan")
-  {
-    const auto &args = call_["args"];
-    if (args.size() != 1)
-      throw std::runtime_error("isnan() expects exactly 1 argument");
-
-    exprt arg_expr = converter_.get_expr(args[0]);
-
-    // Use ESBMC's built-in isnan operation
-    exprt isnan_expr("isnan", bool_typet());
-    isnan_expr.copy_to_operands(arg_expr);
-
-    return isnan_expr;
-  }
-  else if (func_name == "__ESBMC_isinf")
-  {
-    const auto &args = call_["args"];
-    if (args.size() != 1)
-      throw std::runtime_error("isinf() expects exactly 1 argument");
-
-    exprt arg_expr = converter_.get_expr(args[0]);
-
-    // Use ESBMC's built-in isinf operation
-    exprt isinf_expr("isinf", bool_typet());
-    isinf_expr.copy_to_operands(arg_expr);
-
-    return isinf_expr;
-  }
-
-  /* Calls to initialise variables using built-in type functions such as int(1), str("test"), bool(1)
-   * are converted to simple variable assignments, simplifying the handling of built-in type objects.
-   * For example, x = int(1) becomes x = 1. */
-  if (
-    type_utils::is_builtin_type(func_name) ||
-    type_utils::is_consensus_type(func_name))
-  {
-    return build_constant_from_arg();
-  }
-
-  if (is_re_module_call())
-  {
-    exprt validation_result = validate_re_module_args();
-    if (!validation_result.is_nil())
-      return validation_result; // Return the TypeError exception
-  }
-
+exprt function_call_expr::handle_general_function_call()
+{
   auto &symbol_table = converter_.symbol_table();
 
   // Get object symbol
@@ -1461,7 +1470,7 @@ exprt function_call_expr::get()
       func_symbol = converter_.find_function_in_base_classes(
         function_id_.get_class(),
         func_symbol_id,
-        func_name,
+        function_id_.get_function(),
         function_type_ == FunctionType::Constructor);
 
       if (function_type_ == FunctionType::Constructor)
@@ -1482,7 +1491,7 @@ exprt function_call_expr::get()
         // Update obj attributes from self
         converter_.update_instance_from_self(
           get_classname_from_symbol_id(func_symbol->id.as_string()),
-          func_name,
+          function_id_.get_function(),
           obj_symbol_id.to_string());
       }
     }
@@ -1498,8 +1507,8 @@ exprt function_call_expr::get()
         // by searching the AST directly
         bool is_forward_reference = false;
 
-        is_forward_reference =
-          json_utils::search_function_in_ast(converter_.ast(), func_name);
+        is_forward_reference = json_utils::search_function_in_ast(
+          converter_.ast(), function_id_.get_function());
 
         if (is_forward_reference)
         {
@@ -1515,8 +1524,8 @@ exprt function_call_expr::get()
 
           // Extract return type from function definition in AST
           typet return_type = empty_typet();
-          const auto &func_node =
-            find_function(converter_.ast()["body"], func_name);
+          const auto &func_node = find_function(
+            converter_.ast()["body"], function_id_.get_function());
           if (
             !func_node.empty() && func_node.contains("returns") &&
             !func_node["returns"].is_null())
@@ -1556,7 +1565,7 @@ exprt function_call_expr::get()
         else
         {
           // Not a forward reference - use existing behavior for built-ins/imports/undefined functions
-          log_warning("Undefined function: {}", func_name);
+          log_warning("Undefined function: {}", function_id_.get_function());
           return exprt();
         }
       }
@@ -1643,7 +1652,8 @@ exprt function_call_expr::get()
        (arg.type().is_pointer() &&
         arg.type().subtype() == type_handler_.get_list_type())))
     {
-      symbolt *list_symbol = converter_.find_symbol(arg.identifier().as_string());
+      symbolt *list_symbol =
+        converter_.find_symbol(arg.identifier().as_string());
       assert(list_symbol);
 
       const symbolt *list_size_func_sym =
