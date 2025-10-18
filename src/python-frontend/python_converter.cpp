@@ -1462,7 +1462,20 @@ exprt python_converter::handle_none_comparison(
   bool lhs_is_none = (lhs.type() == none_type());
   bool rhs_is_none = (rhs.type() == none_type());
 
-  // If one is None and the other is NOT None type, they're never equal
+  // None vs any pointer: create NULL of the rhs type
+  if (
+    (lhs_is_none && rhs.type().is_pointer()) ||
+    (rhs_is_none && lhs.type().is_pointer()))
+  {
+    constant_exprt null_ptr(rhs.type());
+    null_ptr.set_value("NULL");
+    if (is_eq)
+      return equality_exprt(rhs, null_ptr);
+    else
+      return not_exprt(equality_exprt(rhs, null_ptr));
+  }
+
+  // None vs non-pointer: constant fold to false/true
   if (lhs_is_none && !rhs_is_none)
     return is_eq ? gen_boolean(0) : gen_boolean(1);
   if (rhs_is_none && !lhs_is_none)
@@ -4067,7 +4080,8 @@ typet python_converter::get_type_from_annotation(
       {
         std::string inner_type =
           annotation_node["slice"]["id"].get<std::string>();
-        return type_handler_.get_typet(inner_type);
+        typet base_type = type_handler_.get_typet(inner_type);
+        return gen_pointer_type(base_type); // Return pointer type
       }
     }
 
