@@ -2053,6 +2053,34 @@ exprt python_converter::handle_string_membership(
   return not_equal;
 }
 
+exprt python_converter::handle_membership_operator(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element,
+  bool invert)
+{
+  typet list_type = type_handler_.get_list_type();
+
+  // Handle list membership: "item" in [list] or "item" not in [list]
+  if (rhs.type() == list_type)
+  {
+    python_list list(*this, element);
+    exprt contains_expr = list.contains(lhs, rhs);
+    return invert ? not_exprt(contains_expr) : contains_expr;
+  }
+
+  // Handle string membership testing: "substr" in "string" or "substr" not in "string"
+  if (lhs.type().is_array() || rhs.type().is_array())
+  {
+    exprt membership_expr = handle_string_membership(lhs, rhs, element);
+    return invert ? not_exprt(membership_expr) : membership_expr;
+  }
+
+  throw std::runtime_error(
+    std::string("Unsupported expression for '") + (invert ? "not in" : "in") +
+    "' operation");
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -2092,22 +2120,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  // Handle 'in' operator
+  // Handle 'in' and 'not in' operators
   if (op == "In")
-  {
-    typet list_type = type_handler_.get_list_type();
+    return handle_membership_operator(lhs, rhs, element, false);
 
-    // Handle list membership: "item" in [list]
-    if (rhs.type() == list_type)
-    {
-      python_list list(*this, element);
-      return list.contains(lhs, rhs);
-    }
-
-    // Handle string membership testing: "substr" in "string"
-    if (lhs.type().is_array() || rhs.type().is_array())
-      return handle_string_membership(lhs, rhs, element);
-  }
+  if (op == "NotIn")
+    return handle_membership_operator(lhs, rhs, element, true);
 
   // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
   convert_function_calls_to_side_effects(lhs, rhs);
