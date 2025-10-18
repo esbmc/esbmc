@@ -1462,13 +1462,37 @@ exprt python_converter::handle_none_comparison(
   bool lhs_is_none = (lhs.type() == none_type());
   bool rhs_is_none = (rhs.type() == none_type());
 
-  // If one is None and the other is NOT None type, they're never equal
+  // None vs any pointer: create NULL of the rhs type
+  // Rationale: In our C/C++ target environment, Optional types (Union[T, None])
+  // and nullable references are represented as pointers. When comparing None
+  // with a pointer type, we must generate a NULL pointer comparison rather than
+  // constant folding, since the pointer's runtime value is unknown.
+  // This correctly handles: Optional[int], Optional[MyClass], list references, etc.
+  if (
+    (lhs_is_none && rhs.type().is_pointer()) ||
+    (rhs_is_none && lhs.type().is_pointer()))
+  {
+    constant_exprt null_ptr(rhs.type());
+    null_ptr.set_value("NULL");
+    if (is_eq)
+      return equality_exprt(rhs, null_ptr);
+    else
+      return not_exprt(equality_exprt(rhs, null_ptr));
+  }
+
+  // None vs non-pointer: constant fold to false/true
+  // Rationale: Non-pointer types in our C/C++ backend (int, bool, float, etc.)
+  // cannot be None - they are concrete values. Therefore, None == <value> is
+  // always false, and None != <value> is always true.
+  // Limitation: This does not model Python objects with custom __eq__ overloads,
+  // as we're targeting static C/C++ semantics, not full Python dynamic dispatch.
   if (lhs_is_none && !rhs_is_none)
     return is_eq ? gen_boolean(0) : gen_boolean(1);
   if (rhs_is_none && !lhs_is_none)
     return is_eq ? gen_boolean(0) : gen_boolean(1);
 
   // Both are None type: do actual pointer comparison
+  // This handles None == None (true) and None != None (false)
   if (is_eq)
     return equality_exprt(lhs, rhs);
   else
@@ -4067,7 +4091,8 @@ typet python_converter::get_type_from_annotation(
       {
         std::string inner_type =
           annotation_node["slice"]["id"].get<std::string>();
-        return type_handler_.get_typet(inner_type);
+        typet base_type = type_handler_.get_typet(inner_type);
+        return gen_pointer_type(base_type); // Return pointer type
       }
     }
 
