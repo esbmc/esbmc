@@ -28,6 +28,21 @@ __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
+_Bool __python_str_isalpha(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0; // NULL or empty string returns false
+
+  while (*s)
+  {
+    if (!isalpha((unsigned char)*s))
+      return 0;
+    s++;
+  }
+  return 1; // All characters are alphabetic
+}
+
 int isblank(int c)
 {
 __ESBMC_HIDE:;

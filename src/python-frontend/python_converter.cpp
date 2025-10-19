@@ -2044,6 +2044,47 @@ exprt python_converter::handle_string_isdigit(
   return isdigit_call;
 }
 
+exprt python_converter::handle_string_isalpha(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Check if this is a single character (from loop iteration or single char variable)
+  // Single characters are represented as integers/characters, not string arrays
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    // This is a single character - call isalpha(char) directly
+    symbolt *isalpha_symbol = symbol_table_.find_symbol("c:@F@isalpha");
+    if (!isalpha_symbol)
+      throw std::runtime_error("isalpha function not found in symbol table");
+
+    side_effect_expr_function_callt isalpha_call;
+    isalpha_call.function() = symbol_expr(*isalpha_symbol);
+    isalpha_call.arguments().push_back(string_obj);
+    isalpha_call.location() = location;
+    isalpha_call.type() = bool_type();
+
+    return isalpha_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *isalpha_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_isalpha");
+  if (!isalpha_str_symbol)
+    throw std::runtime_error("str_isalpha function not found in symbol table");
+
+  side_effect_expr_function_callt isalpha_call;
+  isalpha_call.function() = symbol_expr(*isalpha_str_symbol);
+  isalpha_call.arguments().push_back(str_addr);
+  isalpha_call.location() = location;
+  isalpha_call.type() = bool_type();
+
+  return isalpha_call;
+}
+
 exprt python_converter::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
