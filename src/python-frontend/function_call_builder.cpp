@@ -287,6 +287,18 @@ exprt function_call_builder::build() const
 
       return converter_.handle_string_endswith(obj_expr, suffix_arg, loc);
     }
+
+    if (method_name == "isdigit")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (!call_["args"].empty())
+        throw std::runtime_error("isdigit() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+
+      return converter_.handle_string_isdigit(obj_expr, loc);
+    }
   }
 
   // Add len function to symbol table

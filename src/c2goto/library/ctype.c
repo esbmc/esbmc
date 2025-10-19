@@ -46,6 +46,21 @@ __ESBMC_HIDE:;
   return c >= '0' && c <= '9';
 }
 
+_Bool __python_str_isdigit(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0; // NULL or empty string returns false
+
+  while (*s)
+  {
+    if (!isdigit((unsigned char)*s))
+      return 0;
+    s++;
+  }
+  return 1; // All characters are digits
+}
+
 int isgraph(int c)
 {
 __ESBMC_HIDE:;
