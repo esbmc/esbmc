@@ -154,6 +154,7 @@ const static std::vector<std::string> python_c_models = {
   "list_contains",
   "__python_str_isdigit",
   "__python_str_isalpha",
+  "__python_char_isalpha",
 };
 
 } // namespace

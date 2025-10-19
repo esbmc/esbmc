@@ -2048,14 +2048,15 @@ exprt python_converter::handle_string_isalpha(
   const exprt &string_obj,
   const locationt &location)
 {
-  // Check if this is a single character (from loop iteration or single char variable)
-  // Single characters are represented as integers/characters, not string arrays
+  // Check if this is a single character
   if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
   {
-    // This is a single character - call isalpha(char) directly
-    symbolt *isalpha_symbol = symbol_table_.find_symbol("c:@F@isalpha");
+    // Call Python's single-character version (not C's isalpha)
+    symbolt *isalpha_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_isalpha");
     if (!isalpha_symbol)
-      throw std::runtime_error("isalpha function not found in symbol table");
+      throw std::runtime_error(
+        "__python_char_isalpha function not found in symbol table");
 
     side_effect_expr_function_callt isalpha_call;
     isalpha_call.function() = symbol_expr(*isalpha_symbol);
