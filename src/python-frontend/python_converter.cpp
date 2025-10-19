@@ -2017,6 +2017,81 @@ exprt python_converter::handle_string_endswith(
   return result;
 }
 
+exprt python_converter::handle_string_isdigit(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Ensure it's a proper null-terminated string
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+
+  // Get string type and calculate length
+  const array_typet &str_type = to_array_type(str_expr.type());
+  exprt str_len = str_type.size();
+
+  // Calculate actual length (exclude null terminator)
+  exprt one = from_integer(1, str_len.type());
+  exprt actual_len("-", str_len.type());
+  actual_len.copy_to_operands(str_len, one);
+
+  // Check if string is empty (returns False for empty strings)
+  exprt zero = gen_zero(str_len.type());
+  exprt is_empty("=", bool_type());
+  is_empty.copy_to_operands(actual_len, zero);
+
+  // Build expression checking all characters are digits
+  exprt all_digits = gen_boolean(true);
+
+  if (str_len.is_constant())
+  {
+    BigInt len = binary2integer(str_len.value().as_string(), false);
+    BigInt actual_length = len - 1; // Exclude null terminator
+
+    for (BigInt i = 0; i < actual_length; ++i)
+    {
+      // Get character at index i
+      exprt index_val = from_integer(i, index_type());
+      exprt char_at_i = index_exprt(str_expr, index_val);
+
+      // Check: '0' <= c <= '9'
+      exprt char_0 = from_integer('0', char_type());
+      exprt ge_0(">=", bool_type());
+      ge_0.copy_to_operands(char_at_i, char_0);
+
+      exprt char_9 = from_integer('9', char_type());
+      exprt le_9("<=", bool_type());
+      le_9.copy_to_operands(char_at_i, char_9);
+
+      // Combine: c >= '0' && c <= '9'
+      exprt is_digit("and", bool_type());
+      is_digit.copy_to_operands(ge_0, le_9);
+
+      // Add to conjunction
+      if (i == 0)
+        all_digits = is_digit;
+      else
+      {
+        exprt new_and("and", bool_type());
+        new_and.copy_to_operands(all_digits, is_digit);
+        all_digits = new_and;
+      }
+    }
+  }
+  else
+    throw std::runtime_error("isdigit() called on symbolic-length string");
+
+  // Return: (length > 0) && all_digits
+  exprt not_empty("not", bool_type());
+  not_empty.copy_to_operands(is_empty);
+  not_empty.location() = location;
+
+  exprt result("and", bool_type());
+  result.copy_to_operands(not_empty, all_digits);
+  result.location() = location;
+
+  return result;
+}
+
 exprt python_converter::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
