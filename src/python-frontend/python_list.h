@@ -54,6 +54,12 @@ public:
     const nlohmann::json &op,
     const exprt &elem);
 
+  // Build: result = lhs + rhs   (concatenation)
+  exprt build_concat_list_call(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
   void add_type_info(
     const std::string &list_symbol_id,
     const std::string &elem_id,
