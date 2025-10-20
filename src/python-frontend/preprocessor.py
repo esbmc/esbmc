@@ -10,6 +10,7 @@ class Preprocessor(ast.NodeTransformer):
         self.is_range_loop = False  # Track if we're in a range loop transformation
         self.known_variable_types = {}
         self.range_loop_counter = 0  # Counter for unique variable names in nested range loops
+        self.iterable_loop_counter = 0  # Counter for unique variable names in nested iterable loops
         self.helper_functions_added = False  # Track if helper functions have been added
 
     def _create_helper_functions(self):
@@ -679,11 +680,16 @@ class Preprocessor(ast.NodeTransformer):
 
     def _transform_iterable_for(self, node):
         """
-        Transform general iterable for loops to while loops.
-
-        Handles continue statements correctly by placing index increment
-        at the beginning of the loop body, not the end.
+        Transform general iterable for loops to while loops with unique variable names.
         """
+        # Generate unique variable names for this loop level
+        loop_id = self.iterable_loop_counter
+        self.iterable_loop_counter += 1
+        
+        index_var = f'ESBMC_index_{loop_id}'
+        length_var = f'ESBMC_length_{loop_id}'
+        iter_var_base = 'ESBMC_iter'
+        
         # Handle the target variable name
         if hasattr(node.target, 'id'):
             target_var_name = node.target.id
@@ -704,21 +710,22 @@ class Preprocessor(ast.NodeTransformer):
             iter_var_name = node.iter.id
             setup_statements = []
         else:
-            # For other iterables, create ESBMC_iter copy
-            iter_var_name = 'ESBMC_iter'
-            iter_assign = self._create_iter_assignment(node, annotation_id)
+            # For other iterables, create ESBMC_iter copy with unique name
+            iter_var_name = f'{iter_var_base}_{loop_id}'
+            iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name)
             setup_statements = [iter_assign]
 
-        # Create common setup statements (index and length)
-        index_assign = self._create_index_assignment(node)
-        length_assign = self._create_length_assignment(node, iter_var_name)
+        # Create common setup statements (index and length) with unique names
+        index_assign = self._create_index_assignment(node, index_var)
+        length_assign = self._create_length_assignment(node, iter_var_name, length_var)
         setup_statements.extend([index_assign, length_assign])
 
-        # Create while loop condition
-        while_cond = self._create_while_condition(node)
+        # Create while loop condition with unique variable names
+        while_cond = self._create_while_condition(node, index_var, length_var)
 
-        # Create loop body
-        transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, annotation_id)
+        # Create loop body with unique variable names
+        transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, 
+                                                annotation_id, index_var)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
@@ -733,9 +740,9 @@ class Preprocessor(ast.NodeTransformer):
 
         return result
 
-    def _create_iter_assignment(self, node, annotation_id):
-        """Create ESBMC_iter assignment for non-string parameters."""
-        iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
+    def _create_iter_assignment(self, node, annotation_id, iter_var_name):
+        """Create ESBMC_iter assignment with custom name."""
+        iter_target = self.create_name_node(iter_var_name, ast.Store(), node)
         str_annotation = self.create_name_node(annotation_id, ast.Load(), node)
         iter_assign = ast.AnnAssign(
             target=iter_target,
@@ -746,9 +753,9 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(iter_assign, node)
         return iter_assign
 
-    def _create_index_assignment(self, node):
-        """Create ESBMC_index assignment."""
-        index_target = self.create_name_node('ESBMC_index', ast.Store(), node)
+    def _create_index_assignment(self, node, index_var='ESBMC_index'):
+        """Create ESBMC_index assignment with custom name."""
+        index_target = self.create_name_node(index_var, ast.Store(), node)
         index_value = self.create_constant_node(0, node)
         int_annotation = self.create_name_node('int', ast.Load(), node)
         index_assign = ast.AnnAssign(
@@ -760,9 +767,9 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(index_assign, node)
         return index_assign
 
-    def _create_length_assignment(self, node, iter_var_name):
-        """Create ESBMC_length assignment."""
-        length_target = self.create_name_node('ESBMC_length', ast.Store(), node)
+    def _create_length_assignment(self, node, iter_var_name, length_var='ESBMC_length'):
+        """Create ESBMC_length assignment with custom name."""
+        length_target = self.create_name_node(length_var, ast.Store(), node)
         len_func = self.create_name_node('len', ast.Load(), node)
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
@@ -777,23 +784,24 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(length_assign, node)
         return length_assign
 
-    def _create_while_condition(self, node):
-        """Create while loop condition."""
-        index_left = self.create_name_node('ESBMC_index', ast.Load(), node)
-        length_right = self.create_name_node('ESBMC_length', ast.Load(), node)
+    def _create_while_condition(self, node, index_var='ESBMC_index', length_var='ESBMC_length'):
+        """Create while loop condition with custom variable names."""
+        index_left = self.create_name_node(index_var, ast.Load(), node)
+        length_right = self.create_name_node(length_var, ast.Load(), node)
         lt_op = ast.Lt()
         self.ensure_all_locations(lt_op, node)
         while_cond = ast.Compare(left=index_left, ops=[lt_op], comparators=[length_right])
         self.ensure_all_locations(while_cond, node)
         return while_cond
 
-    def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id):
-        """Create the complete loop body."""
+    def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id, index_var='ESBMC_index'):
+        """Create the complete loop body with custom index variable name."""
         # Item assignment
-        item_assign = self._create_item_assignment(node, target_var_name, iter_var_name, annotation_id)
+        item_assign = self._create_item_assignment(node, target_var_name, iter_var_name, 
+                                                annotation_id, index_var)
 
         # Index increment
-        index_increment = self._create_index_increment(node)
+        index_increment = self._create_index_increment(node, index_var)
 
         # Transform original body
         transformed_original_body = []
@@ -806,11 +814,11 @@ class Preprocessor(ast.NodeTransformer):
 
         return [item_assign, index_increment] + transformed_original_body
 
-    def _create_item_assignment(self, node, target_var_name, iter_var_name, annotation_id):
-        """Create assignment to get current item from iterable."""
+    def _create_item_assignment(self, node, target_var_name, iter_var_name, annotation_id, index_var='ESBMC_index'):
+        """Create assignment to get current item from iterable with custom index variable."""
         item_target = self.create_name_node(target_var_name, ast.Store(), node)
         iter_value = self.create_name_node(iter_var_name, ast.Load(), node)
-        index_slice = self.create_name_node('ESBMC_index', ast.Load(), node)
+        index_slice = self.create_name_node(index_var, ast.Load(), node)
         subscript = ast.Subscript(value=iter_value, slice=index_slice, ctx=ast.Load())
         self.ensure_all_locations(subscript, node)
         element_type = self._get_element_type_from_container(annotation_id)
@@ -824,10 +832,10 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(item_assign, node)
         return item_assign
 
-    def _create_index_increment(self, node):
-        """Create index increment statement."""
-        inc_target = self.create_name_node('ESBMC_index', ast.Store(), node)
-        inc_left = self.create_name_node('ESBMC_index', ast.Load(), node)
+    def _create_index_increment(self, node, index_var='ESBMC_index'):
+        """Create index increment statement with custom index variable name."""
+        inc_target = self.create_name_node(index_var, ast.Store(), node)
+        inc_left = self.create_name_node(index_var, ast.Load(), node)
         inc_right = self.create_constant_node(1, node)
         add_op = ast.Add()
         self.ensure_all_locations(add_op, node)
