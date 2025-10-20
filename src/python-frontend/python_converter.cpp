@@ -2223,6 +2223,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     python_list list(*this, element);
     return list.compare(lhs, rhs, op);
   }
+  // list + list  (concatenation)
+  if (lhs.type() == list_type && rhs.type() == list_type && op == "Add")
+  {
+    python_list list(*this, element);
+    return list.build_concat_list_call(lhs, rhs, element);
+  }
   if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
   {
     // Compute resulting list
