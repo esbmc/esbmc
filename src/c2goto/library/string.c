@@ -286,7 +286,7 @@ __ESBMC_HIDE:;
 void *memcpy(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
- void *hax = &__memcpy_impl;
+  void *hax = &__memcpy_impl;
   (void)hax;
   return __ESBMC_memcpy(dst, src, n);
 }
