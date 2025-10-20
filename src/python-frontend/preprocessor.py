@@ -689,7 +689,7 @@ class Preprocessor(ast.NodeTransformer):
         index_var = f'ESBMC_index_{loop_id}'
         length_var = f'ESBMC_length_{loop_id}'
         iter_var_base = 'ESBMC_iter'
-        
+
         # Handle the target variable name
         if hasattr(node.target, 'id'):
             target_var_name = node.target.id
