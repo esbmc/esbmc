@@ -685,7 +685,7 @@ class Preprocessor(ast.NodeTransformer):
         # Generate unique variable names for this loop level
         loop_id = self.iterable_loop_counter
         self.iterable_loop_counter += 1
-        
+
         index_var = f'ESBMC_index_{loop_id}'
         length_var = f'ESBMC_length_{loop_id}'
         iter_var_base = 'ESBMC_iter'
@@ -724,7 +724,7 @@ class Preprocessor(ast.NodeTransformer):
         while_cond = self._create_while_condition(node, index_var, length_var)
 
         # Create loop body with unique variable names
-        transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, 
+        transformed_body = self._create_loop_body(node, target_var_name, iter_var_name,
                                                 annotation_id, index_var)
 
         # Create the while statement
@@ -797,7 +797,7 @@ class Preprocessor(ast.NodeTransformer):
     def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id, index_var='ESBMC_index'):
         """Create the complete loop body with custom index variable name."""
         # Item assignment
-        item_assign = self._create_item_assignment(node, target_var_name, iter_var_name, 
+        item_assign = self._create_item_assignment(node, target_var_name, iter_var_name,
                                                 annotation_id, index_var)
 
         # Index increment
