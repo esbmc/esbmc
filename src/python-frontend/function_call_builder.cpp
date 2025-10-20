@@ -220,13 +220,29 @@ symbol_id function_call_builder::build_function_id() const
     }
     else
     {
-      auto obj_node =
-        json_utils::find_var_decl(obj_name, current_function_name, ast);
+      // Look up variable type from symbol table instead of AST
+      symbol_id var_sid(python_file, current_class_name, current_function_name);
+      var_sid.set_object(obj_name);
+      symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
-      if (obj_node.empty())
-        throw std::runtime_error("Class " + obj_name + " not found");
+      if (!var_symbol)
+        throw std::runtime_error("Variable " + obj_name + " not found");
 
-      class_name = obj_node["annotation"]["id"].get<std::string>();
+      // Extract class name from the type, following symbol references
+      typet var_type = var_symbol->type.is_pointer()
+                         ? var_symbol->type.subtype()
+                         : var_symbol->type;
+
+      // Follow symbol type references using the converter's namespace
+      var_type = converter_.ns.follow(var_type);
+
+      if (var_type.is_struct())
+      {
+        const struct_typet &struct_type = to_struct_type(var_type);
+        class_name = struct_type.tag().as_string();
+      }
+      else
+        class_name = th.type_to_string(var_type);
     }
   }
 
