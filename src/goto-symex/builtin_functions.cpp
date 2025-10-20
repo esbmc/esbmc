@@ -1759,17 +1759,17 @@ static inline expr2tc do_memcpy_expression(
   // Short-circuit
   if (
     dst->type == src->type && !dst_offset && !src_offset &&
-      type_byte_size(dst->type).to_uint64() == num_of_bytes)
+    type_byte_size(dst->type).to_uint64() == num_of_bytes)
     return src;
 
   if (
     is_array_type(src->type) || is_array_type(dst->type) ||
     is_struct_type(dst->type) || is_union_type(dst->type) ||
-      is_struct_type(src->type) || is_union_type(src->type))
+    is_struct_type(src->type) || is_union_type(src->type))
     return expr2tc();
 
   // Base-case. Primitives!
-  return gen_byte_memcpy(src,dst,num_of_bytes,src_offset,dst_offset);
+  return gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
 }
 
 void offset_simplifier(expr2tc &e)
@@ -2021,7 +2021,6 @@ void goto_symext::intrinsic_memcpy(
     ex_state.cur_state->guard.guard_expr(src_null_check);
     claim(src_null_check, " dereference failure: NULL pointer on SRC");
   }
-
 
   expr2tc ret_ref = func_call.ret;
   dereference(ret_ref, dereferencet::READ);
