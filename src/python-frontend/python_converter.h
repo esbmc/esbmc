@@ -278,6 +278,12 @@ private:
     const exprt &suffix_arg,
     const locationt &location);
 
+  exprt
+  handle_string_isdigit(const exprt &string_obj, const locationt &location);
+
+  exprt
+  handle_string_isalpha(const exprt &string_obj, const locationt &location);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,

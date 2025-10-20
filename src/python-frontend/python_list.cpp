@@ -518,6 +518,10 @@ exprt python_list::handle_index_access(
       const array_typet &t = static_cast<const array_typet &>(array.type());
       BigInt s = binary2integer(t.size().value().c_str(), true);
 
+      // For char arrays (strings), exclude null terminator from logical length
+      if (t.subtype() == char_type())
+        s -= 1;
+
       v += s;
       pos_expr = from_integer(v, pos_expr.type());
     }

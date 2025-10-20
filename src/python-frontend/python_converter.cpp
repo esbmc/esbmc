@@ -2017,6 +2017,75 @@ exprt python_converter::handle_string_endswith(
   return result;
 }
 
+exprt python_converter::handle_string_isdigit(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Ensure it's a proper null-terminated string
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+
+  // Get base address of the string
+  exprt str_addr = get_array_base_address(str_expr);
+
+  // Find the helper function symbol
+  symbolt *isdigit_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_isdigit");
+  if (!isdigit_str_symbol)
+    throw std::runtime_error("str_isdigit function not found in symbol table");
+
+  // Call str_isdigit(str) - returns bool (0 or 1)
+  side_effect_expr_function_callt isdigit_call;
+  isdigit_call.function() = symbol_expr(*isdigit_str_symbol);
+  isdigit_call.arguments().push_back(str_addr);
+  isdigit_call.location() = location;
+  isdigit_call.type() = bool_type();
+
+  return isdigit_call;
+}
+
+exprt python_converter::handle_string_isalpha(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Check if this is a single character
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    // Call Python's single-character version (not C's isalpha)
+    symbolt *isalpha_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_isalpha");
+    if (!isalpha_symbol)
+      throw std::runtime_error(
+        "__python_char_isalpha function not found in symbol table");
+
+    side_effect_expr_function_callt isalpha_call;
+    isalpha_call.function() = symbol_expr(*isalpha_symbol);
+    isalpha_call.arguments().push_back(string_obj);
+    isalpha_call.location() = location;
+    isalpha_call.type() = bool_type();
+
+    return isalpha_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *isalpha_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_isalpha");
+  if (!isalpha_str_symbol)
+    throw std::runtime_error("str_isalpha function not found in symbol table");
+
+  side_effect_expr_function_callt isalpha_call;
+  isalpha_call.function() = symbol_expr(*isalpha_str_symbol);
+  isalpha_call.arguments().push_back(str_addr);
+  isalpha_call.location() = location;
+  isalpha_call.type() = bool_type();
+
+  return isalpha_call;
+}
+
 exprt python_converter::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
