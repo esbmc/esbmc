@@ -144,6 +144,18 @@ void add_race_assertions(
       instruction.make_skip();
       i_it++;
 
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+        t->type = FUNCTION_CALL;
+        code_function_callt call;
+        call.function() =
+          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
+
+        migrate_expr(call, t->code);
+        t->location = original_instruction.location;
+        i_it = ++t;
+      }
+
       // Avoid adding too much thread interleaving by using atomic block
       // yield();
       // atomic {Assert tmp_A == 0; tmp_A = 1; A = n;}
@@ -201,7 +213,7 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      if (config.options.get_bool_option("data-race-check-only"))
+      if (config.options.get_bool_option("data-races-check-only"))
       {
         goto_programt::targett t = goto_program.insert(i_it);
         t->type = FUNCTION_CALL;
