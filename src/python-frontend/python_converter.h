@@ -278,6 +278,12 @@ private:
     const exprt &suffix_arg,
     const locationt &location);
 
+  exprt
+  handle_string_isdigit(const exprt &string_obj, const locationt &location);
+
+  exprt
+  handle_string_isalpha(const exprt &string_obj, const locationt &location);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,
@@ -372,6 +378,12 @@ private:
   void append_models_from_directory(
     std::list<std::string> &file_list,
     const std::string &dir_path);
+
+  exprt handle_membership_operator(
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element,
+    bool invert);
 
   // helper methods for get_var_assign
   std::pair<std::string, typet>

@@ -11,10 +11,6 @@ const mode_table_et mode_table[] = {
 #ifdef ENABLE_JIMPLE_FRONTEND
   LANGAPI_MODE_JIMPLE,
 #endif
-#ifdef ENABLE_OLD_FRONTEND
-  LANGAPI_MODE_C,
-  LANGAPI_MODE_CPP,
-#endif
 #ifdef ENABLE_PYTHON_FRONTEND
   LANGAPI_MODE_PYTHON,
 #endif

@@ -6,7 +6,7 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/string_builder.h>
-#include <ansi-c/convert_float_literal.h>
+#include <python-frontend/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
 #include <util/python_types.h>
@@ -1462,13 +1462,37 @@ exprt python_converter::handle_none_comparison(
   bool lhs_is_none = (lhs.type() == none_type());
   bool rhs_is_none = (rhs.type() == none_type());
 
-  // If one is None and the other is NOT None type, they're never equal
+  // None vs any pointer: create NULL of the rhs type
+  // Rationale: In our C/C++ target environment, Optional types (Union[T, None])
+  // and nullable references are represented as pointers. When comparing None
+  // with a pointer type, we must generate a NULL pointer comparison rather than
+  // constant folding, since the pointer's runtime value is unknown.
+  // This correctly handles: Optional[int], Optional[MyClass], list references, etc.
+  if (
+    (lhs_is_none && rhs.type().is_pointer()) ||
+    (rhs_is_none && lhs.type().is_pointer()))
+  {
+    constant_exprt null_ptr(rhs.type());
+    null_ptr.set_value("NULL");
+    if (is_eq)
+      return equality_exprt(rhs, null_ptr);
+    else
+      return not_exprt(equality_exprt(rhs, null_ptr));
+  }
+
+  // None vs non-pointer: constant fold to false/true
+  // Rationale: Non-pointer types in our C/C++ backend (int, bool, float, etc.)
+  // cannot be None - they are concrete values. Therefore, None == <value> is
+  // always false, and None != <value> is always true.
+  // Limitation: This does not model Python objects with custom __eq__ overloads,
+  // as we're targeting static C/C++ semantics, not full Python dynamic dispatch.
   if (lhs_is_none && !rhs_is_none)
     return is_eq ? gen_boolean(0) : gen_boolean(1);
   if (rhs_is_none && !lhs_is_none)
     return is_eq ? gen_boolean(0) : gen_boolean(1);
 
   // Both are None type: do actual pointer comparison
+  // This handles None == None (true) and None != None (false)
   if (is_eq)
     return equality_exprt(lhs, rhs);
   else
@@ -1993,6 +2017,75 @@ exprt python_converter::handle_string_endswith(
   return result;
 }
 
+exprt python_converter::handle_string_isdigit(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Ensure it's a proper null-terminated string
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+
+  // Get base address of the string
+  exprt str_addr = get_array_base_address(str_expr);
+
+  // Find the helper function symbol
+  symbolt *isdigit_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_isdigit");
+  if (!isdigit_str_symbol)
+    throw std::runtime_error("str_isdigit function not found in symbol table");
+
+  // Call str_isdigit(str) - returns bool (0 or 1)
+  side_effect_expr_function_callt isdigit_call;
+  isdigit_call.function() = symbol_expr(*isdigit_str_symbol);
+  isdigit_call.arguments().push_back(str_addr);
+  isdigit_call.location() = location;
+  isdigit_call.type() = bool_type();
+
+  return isdigit_call;
+}
+
+exprt python_converter::handle_string_isalpha(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Check if this is a single character
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    // Call Python's single-character version (not C's isalpha)
+    symbolt *isalpha_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_isalpha");
+    if (!isalpha_symbol)
+      throw std::runtime_error(
+        "__python_char_isalpha function not found in symbol table");
+
+    side_effect_expr_function_callt isalpha_call;
+    isalpha_call.function() = symbol_expr(*isalpha_symbol);
+    isalpha_call.arguments().push_back(string_obj);
+    isalpha_call.location() = location;
+    isalpha_call.type() = bool_type();
+
+    return isalpha_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *isalpha_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_isalpha");
+  if (!isalpha_str_symbol)
+    throw std::runtime_error("str_isalpha function not found in symbol table");
+
+  side_effect_expr_function_callt isalpha_call;
+  isalpha_call.function() = symbol_expr(*isalpha_str_symbol);
+  isalpha_call.arguments().push_back(str_addr);
+  isalpha_call.location() = location;
+  isalpha_call.type() = bool_type();
+
+  return isalpha_call;
+}
+
 exprt python_converter::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
@@ -2027,6 +2120,34 @@ exprt python_converter::handle_string_membership(
   not_equal.copy_to_operands(strstr_call, null_ptr);
 
   return not_equal;
+}
+
+exprt python_converter::handle_membership_operator(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element,
+  bool invert)
+{
+  typet list_type = type_handler_.get_list_type();
+
+  // Handle list membership: "item" in [list] or "item" not in [list]
+  if (rhs.type() == list_type)
+  {
+    python_list list(*this, element);
+    exprt contains_expr = list.contains(lhs, rhs);
+    return invert ? not_exprt(contains_expr) : contains_expr;
+  }
+
+  // Handle string membership testing: "substr" in "string" or "substr" not in "string"
+  if (lhs.type().is_array() || rhs.type().is_array())
+  {
+    exprt membership_expr = handle_string_membership(lhs, rhs, element);
+    return invert ? not_exprt(membership_expr) : membership_expr;
+  }
+
+  throw std::runtime_error(
+    std::string("Unsupported expression for '") + (invert ? "not in" : "in") +
+    "' operation");
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -2068,11 +2189,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  // Handle 'in' operator for string membership testing
-  if (op == "In" && (lhs.type().is_array() || rhs.type().is_array()))
-  {
-    return handle_string_membership(lhs, rhs, element);
-  }
+  // Handle 'in' and 'not in' operators
+  if (op == "In")
+    return handle_membership_operator(lhs, rhs, element, false);
+
+  if (op == "NotIn")
+    return handle_membership_operator(lhs, rhs, element, true);
 
   // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
   convert_function_calls_to_side_effects(lhs, rhs);
@@ -2100,6 +2222,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   {
     python_list list(*this, element);
     return list.compare(lhs, rhs, op);
+  }
+  // list + list  (concatenation)
+  if (lhs.type() == list_type && rhs.type() == list_type && op == "Add")
+  {
+    python_list list(*this, element);
+    return list.build_concat_list_call(lhs, rhs, element);
   }
   if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
   {
@@ -2193,14 +2321,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return handle_power_operator(lhs, rhs);
 
   // Determine the result type of the binary operation:
-  // If it's a relational operation (e.g., <, >, ==), the result is a boolean type.
-  // For Python division ("/"), the result is always a float regardless of operand types.
-  // Otherwise, it inherits the type of the left-hand side (lhs).
   typet type;
   if (type_utils::is_relational_op(op))
     type = bool_type();
   else if (op == "Div" || op == "div")
     type = double_type(); // Python division always returns float
+  else if (lhs.type().is_floatbv() || rhs.type().is_floatbv())
+    type =
+      lhs.type().is_floatbv() ? lhs.type() : rhs.type(); // Promote to float
   else
     type = lhs.type();
 
@@ -2518,6 +2646,17 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         arg_expr = get_array_base_address(arg_expr);
 
       args[it->second] = arg_expr;
+    }
+
+    // Fill empty arguments with None for optional parameters
+    for (size_t i = 0; i < args.size(); ++i)
+    {
+      if (args[i].is_nil() || args[i].id().empty())
+      {
+        constant_exprt none_expr(none_type());
+        none_expr.set_value("NULL");
+        args[i] = none_expr;
+      }
     }
   };
 
@@ -2920,6 +3059,29 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (element["_type"] == "Attribute")
     {
       var_name = element["value"]["id"].get<std::string>();
+
+      // Handle module attribute access (e.g., math.inf)
+      if (is_imported_module(var_name))
+      {
+        std::string attr_name = element["attr"].get<std::string>();
+        std::string module_path = imported_modules[var_name];
+
+        // Construct symbol ID for module member: py:module_path@member_name
+        symbol_id module_sid(module_path, "", "");
+        module_sid.set_object(attr_name);
+
+        symbolt *symbol = find_symbol(module_sid.to_string());
+        if (!symbol)
+        {
+          log_error(
+            "Module member '{}' not found in module '{}'", attr_name, var_name);
+          abort();
+        }
+
+        expr = symbol_expr(*symbol);
+        break;
+      }
+
       if (is_class(var_name, *ast_json))
       {
         // Found a class attribute
@@ -4011,11 +4173,31 @@ typet python_converter::get_type_from_annotation(
        annotation_node["value"]["id"] == "List"))
       return type_handler_.get_list_type();
 
+    // Handle Optional[T] - extract the inner type T
+    if (
+      annotation_node.contains("value") &&
+      annotation_node["value"]["id"] == "Optional")
+    {
+      if (
+        annotation_node.contains("slice") &&
+        annotation_node["slice"].contains("id"))
+      {
+        std::string inner_type =
+          annotation_node["slice"]["id"].get<std::string>();
+        typet base_type = type_handler_.get_typet(inner_type);
+        return gen_pointer_type(base_type); // Return pointer type
+      }
+    }
+
     return type_handler_.get_list_type(element);
   }
   else if (
     annotation_node["_type"] == "Constant" || annotation_node["_type"] == "Str")
   {
+    // Handle None annotation: Constant with null value
+    if (annotation_node["value"].is_null())
+      return none_type();
+
     // Handle string annotations like "CoordinateData | None" (forward references)
     std::string type_string = annotation_node["value"].get<std::string>();
     type_string = type_utils::remove_quotes(type_string);
@@ -4640,6 +4822,29 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       if (!test.type().is_bool())
         test.make_typecast(current_element_type);
 
+      // Attach assertion message if present
+      auto attach_assert_message = [&element](code_assertt &assert_code) {
+        if (element.contains("msg") && !element["msg"].is_null())
+        {
+          std::string msg;
+          if (
+            element["msg"]["_type"] == "Constant" &&
+            element["msg"]["value"].is_string())
+          {
+            msg = element["msg"]["value"].get<std::string>();
+          }
+          else if (element["msg"]["_type"] == "JoinedStr")
+          {
+            // For f-strings, this is just a placeholder
+            // TODO: Full f-string evaluation would require more complex handling
+            msg = "<formatted string message>";
+          }
+
+          if (!msg.empty())
+            assert_code.location().comment(msg);
+        }
+      };
+
       // Check for function calls in assertions (direct or negated)
       const exprt *func_call_expr = nullptr;
       bool is_negated = false;
@@ -4693,6 +4898,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         code_assertt assert_code;
         assert_code.assertion() = assertion_expr;
         assert_code.location() = location;
+        attach_assert_message(assert_code); // Add message if present
         block.move_to_operands(assert_code);
       }
       else
@@ -4701,6 +4907,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         code_assertt assert_code;
         assert_code.assertion() = test;
         assert_code.location() = get_location_from_decl(element);
+        attach_assert_message(assert_code); // Add message if present
         block.move_to_operands(assert_code);
       }
       break;

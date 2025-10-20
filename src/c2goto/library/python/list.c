@@ -195,3 +195,30 @@ static inline size_t list_hash_string(const char *str)
   }
   return hash;
 }
+
+static bool list_contains(
+  const List *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  if (!l || !item)
+    return false;
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const Object *elem = &l->items[i];
+
+    // Check if types and sizes match
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      // Compare the actual data
+      if (elem->value == item || memcmp(elem->value, item, item_size) == 0)
+        return true;
+    }
+
+    ++i;
+  }
+  return false;
+}

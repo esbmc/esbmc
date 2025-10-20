@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.py
 
 ^ERROR: Type undefined for "__version__"$

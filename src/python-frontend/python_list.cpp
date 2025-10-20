@@ -168,6 +168,125 @@ exprt python_list::build_insert_list_call(
   return converter_.convert_expression_to_code(insert_func_call);
 }
 
+exprt python_list::build_concat_list_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  // Create destination list
+  symbolt &dst_list = create_list();
+  const locationt loc = converter_.get_location_from_decl(element);
+
+  // Helpers we’ll call from the C model
+  const symbolt *size_sym =
+    converter_.symbol_table().find_symbol("c:list.c@F@list_size");
+  const symbolt *at_sym =
+    converter_.symbol_table().find_symbol("c:list.c@F@list_at");
+  const symbolt *push_obj_sym =
+    converter_.symbol_table().find_symbol("c:list.c@F@list_push_object");
+  assert(size_sym && at_sym && push_obj_sym);
+
+  auto copy_list = [&](const exprt &src_list) {
+    // size_t n = list_size(src_list);
+    symbolt &n_sym = converter_.create_tmp_symbol(
+      element, "$n$", size_type(), gen_zero(size_type()));
+    code_declt n_decl(symbol_expr(n_sym));
+    converter_.add_instruction(n_decl);
+
+    code_function_callt get_size;
+    get_size.function() = symbol_expr(*size_sym);
+    // list_size takes const List*, pass address if we have a value
+    if (src_list.type().is_pointer())
+      get_size.arguments().push_back(src_list);
+    else
+      get_size.arguments().push_back(address_of_exprt(src_list));
+    get_size.lhs() = symbol_expr(n_sym);
+    get_size.type() = size_type();
+    get_size.location() = loc;
+    converter_.add_instruction(get_size);
+
+    // for (size_t i = 0; i < n; ++i) { push_object(dst, list_at(src, i)); }
+    symbolt &i_sym = converter_.create_tmp_symbol(
+      element, "$i$", size_type(), gen_zero(size_type()));
+    code_declt i_decl(symbol_expr(i_sym));
+    converter_.add_instruction(i_decl);
+
+    // i = 0
+    code_assignt i_init(symbol_expr(i_sym), gen_zero(size_type()));
+    converter_.add_instruction(i_init);
+
+    // condition: i < n
+    exprt cond("<", bool_type());
+    cond.copy_to_operands(symbol_expr(i_sym), symbol_expr(n_sym));
+
+    // body
+    code_blockt body;
+
+    // tmp_obj = list_at(src_list, i)
+    side_effect_expr_function_callt at_call;
+    at_call.function() = symbol_expr(*at_sym);
+    if (src_list.type().is_pointer())
+      at_call.arguments().push_back(src_list);
+    else
+      at_call.arguments().push_back(address_of_exprt(src_list));
+    at_call.arguments().push_back(symbol_expr(i_sym));
+    at_call.type() =
+      pointer_typet(converter_.get_type_handler().get_list_element_type());
+    at_call.location() = loc;
+
+    symbolt &tmp_obj = converter_.create_tmp_symbol(
+      element,
+      "tmp_list_at",
+      pointer_typet(converter_.get_type_handler().get_list_element_type()),
+      exprt());
+    code_declt tmp_obj_decl(symbol_expr(tmp_obj));
+    tmp_obj_decl.copy_to_operands(at_call);
+    body.copy_to_operands(tmp_obj_decl);
+
+    // list_push_object(dst_list, tmp_obj)
+    side_effect_expr_function_callt push_call;
+    push_call.function() = symbol_expr(*push_obj_sym);
+    push_call.arguments().push_back(symbol_expr(dst_list));
+    push_call.arguments().push_back(symbol_expr(tmp_obj));
+    push_call.type() = bool_type();
+    push_call.location() = loc;
+    body.copy_to_operands(converter_.convert_expression_to_code(push_call));
+
+    // i = i + 1
+    plus_exprt i_inc(symbol_expr(i_sym), gen_one(size_type()));
+    code_assignt i_step(symbol_expr(i_sym), i_inc);
+    body.copy_to_operands(i_step);
+
+    // while (i < n) { ... }
+    codet loop;
+    loop.set_statement("while");
+    loop.copy_to_operands(cond, body);
+    converter_.add_instruction(loop);
+  };
+
+  // Copy lhs then rhs
+  copy_list(lhs);
+  copy_list(rhs);
+
+  // Update list type mapping
+  const std::string dst_id = dst_list.id.as_string();
+  auto copy_type_info = [&](const exprt &src_list) {
+    if (!src_list.is_symbol())
+      return;
+    const std::string key = src_list.identifier().as_string();
+    auto it = list_type_map.find(key);
+    if (it != list_type_map.end())
+    {
+      for (const auto &p : it->second)
+        list_type_map[dst_id].push_back(p);
+    }
+  };
+  copy_type_info(lhs);
+  copy_type_info(rhs);
+
+  return symbol_expr(dst_list);
+}
+
 symbolt &python_list::create_list()
 {
   locationt location = converter_.get_location_from_decl(list_value_);
@@ -518,6 +637,10 @@ exprt python_list::handle_index_access(
       const array_typet &t = static_cast<const array_typet &>(array.type());
       BigInt s = binary2integer(t.size().value().c_str(), true);
 
+      // For char arrays (strings), exclude null terminator from logical length
+      if (t.subtype() == char_type())
+        s -= 1;
+
       v += s;
       pos_expr = from_integer(v, pos_expr.type());
     }
@@ -835,4 +958,49 @@ exprt python_list::list_repetition(
   }
 
   return symbol_expr(*list_symbol);
+}
+
+exprt python_list::contains(const exprt &item, const exprt &list)
+{
+  // Get type and size information for the item
+  list_elem_info item_info = get_list_element_info(list_value_, item);
+
+  // Find the list_contains function
+  const symbolt *list_contains_func =
+    converter_.symbol_table().find_symbol("c:list.c@F@list_contains");
+  if (!list_contains_func)
+    throw std::runtime_error(
+      "list_contains function not found in symbol table");
+
+  // Create a temporary variable to store the result
+  symbolt &contains_ret = converter_.create_tmp_symbol(
+    list_value_, "contains_tmp", bool_type(), gen_boolean(false));
+  code_declt contains_ret_decl(symbol_expr(contains_ret));
+  converter_.add_instruction(contains_ret_decl);
+
+  // Build the function call as a statement
+  code_function_callt contains_call;
+  contains_call.function() = symbol_expr(*list_contains_func);
+  contains_call.lhs() = symbol_expr(contains_ret);
+
+  // Pass the list directly
+  contains_call.arguments().push_back(list);
+
+  // Pass the item by address
+  contains_call.arguments().push_back(
+    address_of_exprt(symbol_expr(*item_info.elem_symbol))); // &item
+
+  contains_call.arguments().push_back(
+    symbol_expr(*item_info.elem_type_sym));                 // item type hash
+  contains_call.arguments().push_back(item_info.elem_size); // item size
+
+  contains_call.type() = bool_type();
+  contains_call.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(contains_call);
+
+  exprt result("=", bool_type());
+  result.copy_to_operands(symbol_expr(contains_ret));
+  result.copy_to_operands(gen_boolean(true));
+
+  return result;
 }

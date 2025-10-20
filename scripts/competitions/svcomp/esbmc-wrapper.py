@@ -261,7 +261,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
 
   # Add witness arg
   witness_name = os.path.basename(benchmark) if esbmc_ci else "witness"
-  command_line += "--witness-output " + witness_name + ".graphml "
+  command_line += "--witness-output-yaml " + witness_name + ".yml "
 
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.termination:
@@ -325,28 +325,6 @@ def verify(strat, prop, concurrency, dargs, esbmc_ci):
   # Parse output
   return res
 
-def witness_to_sha256(benchmark, esbmc_ci):
-  sha256hash = ''
-  with open(benchmark, 'r') as f:
-    data = f.read().encode('utf-8')
-    sha256hash = sha256(data).hexdigest()
-  witness = os.path.basename(benchmark) + ".graphml" if esbmc_ci else "witness.graphml"
-  fin = open(witness, "rt")
-  data = fin.readlines()
-  fin.close()
-
-  fin = open(witness, "wt")
-  for line in data:
-    if '<data key="programhash">' in line:
-      line = line.replace(line[line.index('>')+1:line.index('</data>')], sha256hash)
-
-    if '<data key="creationtime">' in line:
-      time = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-      line = line.replace(line[line.index('>')+1:line.index('</data>')], time)
-    fin.write(line)
-  fin.close()
-  return
-
 # Options
 parser = argparse.ArgumentParser()
 parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choices=[32, 64], default=32)
@@ -402,8 +380,5 @@ else:
   exit(1)
 
 result = verify(strategy, category_property, concurrency, esbmc_dargs, esbmc_ci)
-try:
-  witness_to_sha256(benchmark, esbmc_ci)
-except:
-  pass
+
 print(get_result_string(result))

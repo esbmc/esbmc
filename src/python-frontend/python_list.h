@@ -35,6 +35,8 @@ public:
 
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
+  exprt contains(const exprt &item, const exprt &list);
+
   exprt list_repetition(
     const nlohmann::json &left_node,
     const nlohmann::json &right_node,
@@ -51,6 +53,12 @@ public:
     const exprt &index,
     const nlohmann::json &op,
     const exprt &elem);
+
+  // Build: result = lhs + rhs   (concatenation)
+  exprt build_concat_list_call(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
 
   void add_type_info(
     const std::string &list_symbol_id,

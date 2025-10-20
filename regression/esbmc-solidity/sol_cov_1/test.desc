@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 contract.solast
 --sol contract.sol --k-induction --no-standard-check --assertion-coverage --contract Algo --unbound
 ^Total Asserts: 2
