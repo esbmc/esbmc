@@ -63,44 +63,84 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   converter_.add_instruction(elem_decl);
 
   // Calculate element size in bytes
-  constexpr size_t BITS_PER_BYTE = 8;
-  constexpr size_t DEFAULT_SIZE = 1;
+  exprt elem_size;
 
-  size_t elem_size_bytes = DEFAULT_SIZE;
-  try
+  // For string pointers (char*), calculate length at runtime using strlen
+  if (
+    elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == char_type())
   {
-    if (elem_symbol.type.is_array())
+    // Call strlen to get actual string length
+    const symbolt *strlen_symbol =
+      converter_.symbol_table().find_symbol("c:@F@strlen");
+    if (!strlen_symbol)
     {
-      const size_t subtype_size_bits =
-        std::stoull(elem.type().subtype().width().as_string(), nullptr, 10);
-
-      const array_typet &array_type =
-        static_cast<const array_typet &>(elem_symbol.type);
-
-      const size_t array_length =
-        std::stoull(array_type.size().value().as_string(), nullptr, 2);
-
-      elem_size_bytes = (array_length * subtype_size_bits) / BITS_PER_BYTE;
+      throw std::runtime_error("strlen function not found in symbol table");
     }
-    else
+
+    // Create temp variable to store strlen result
+    symbolt &strlen_result = converter_.create_tmp_symbol(
+      op, "$strlen_result$", size_type(), gen_zero(size_type()));
+    code_declt strlen_decl(symbol_expr(strlen_result));
+    strlen_decl.location() = location;
+    converter_.add_instruction(strlen_decl);
+
+    // Call strlen(elem_symbol)
+    code_function_callt strlen_call;
+    strlen_call.function() = symbol_expr(*strlen_symbol);
+    strlen_call.lhs() = symbol_expr(strlen_result);
+    strlen_call.arguments().push_back(symbol_expr(elem_symbol));
+    strlen_call.type() = size_type();
+    strlen_call.location() = location;
+    converter_.add_instruction(strlen_call);
+
+    // Add 1 for null terminator: size = strlen(s) + 1
+    // Use strlen_result.type to ensure exact type match
+    exprt one_const = from_integer(1, strlen_result.type);
+    elem_size = exprt("+", strlen_result.type);
+    elem_size.copy_to_operands(symbol_expr(strlen_result), one_const);
+  }
+  else
+  {
+    // Handle arrays and other types
+    constexpr size_t BITS_PER_BYTE = 8;
+    constexpr size_t DEFAULT_SIZE = 1;
+
+    size_t elem_size_bytes = DEFAULT_SIZE;
+    try
     {
-      const size_t type_width_bits =
-        std::stoull(elem_symbol.type.width().as_string(), nullptr, 10);
+      if (elem_symbol.type.is_array())
+      {
+        const size_t subtype_size_bits =
+          std::stoull(elem.type().subtype().width().as_string(), nullptr, 10);
 
-      elem_size_bytes = type_width_bits / BITS_PER_BYTE;
+        const array_typet &array_type =
+          static_cast<const array_typet &>(elem_symbol.type);
+
+        const size_t array_length =
+          std::stoull(array_type.size().value().as_string(), nullptr, 2);
+
+        elem_size_bytes = (array_length * subtype_size_bits) / BITS_PER_BYTE;
+      }
+      else
+      {
+        const size_t type_width_bits =
+          std::stoull(elem_symbol.type.width().as_string(), nullptr, 10);
+
+        elem_size_bytes = type_width_bits / BITS_PER_BYTE;
+      }
     }
-  }
-  catch (std::invalid_argument &)
-  {
-    elem_size_bytes = DEFAULT_SIZE;
-  }
+    catch (std::invalid_argument &)
+    {
+      elem_size_bytes = DEFAULT_SIZE;
+    }
 
-  if (elem_size_bytes == 0)
-  {
-    throw std::runtime_error("Element size cannot be zero");
-  }
+    if (elem_size_bytes == 0)
+    {
+      throw std::runtime_error("Element size cannot be zero");
+    }
 
-  exprt elem_size = from_integer(BigInt(elem_size_bytes), size_type());
+    elem_size = from_integer(BigInt(elem_size_bytes), size_type());
+  }
 
   // Build and return the push function call
   list_elem_info elem_info;
@@ -986,9 +1026,21 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   // Pass the list directly
   contains_call.arguments().push_back(list);
 
-  // Pass the item by address
-  contains_call.arguments().push_back(
-    address_of_exprt(symbol_expr(*item_info.elem_symbol))); // &item
+  // For pointer types (e.g., string parameters), use the pointer directly
+  // For value types, take the address
+  exprt item_arg;
+  if (item_info.elem_symbol->type.is_pointer())
+  {
+    // String parameters are pointers - use the pointer value directly
+    item_arg = symbol_expr(*item_info.elem_symbol);
+  }
+  else
+  {
+    // For arrays or other value types, take the address
+    item_arg = address_of_exprt(symbol_expr(*item_info.elem_symbol));
+  }
+
+  contains_call.arguments().push_back(item_arg);
 
   contains_call.arguments().push_back(
     symbol_expr(*item_info.elem_type_sym));                 // item type hash
