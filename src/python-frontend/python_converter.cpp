@@ -3667,9 +3667,19 @@ void python_converter::get_var_assign(
     // Assign logic
     const auto &target = ast_node["targets"][0];
 
-    const auto &name = (target["_type"] == "Subscript")
-                         ? target["value"]["id"].get<std::string>()
-                         : target["id"].get<std::string>();
+    std::string name;
+    const auto &target_type = target["_type"];
+
+    if (target_type == "Subscript")
+      name = target["value"]["id"].get<std::string>();
+    else if (target_type == "Attribute")
+      name = target["attr"].get<std::string>();
+    else if (target_type == "Name")
+      name = target["id"].get<std::string>();
+    else
+      throw std::runtime_error(
+        "Unsupported assignment target type: " +
+        target_type.get<std::string>());
 
     sid.set_object(name);
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
@@ -4190,6 +4200,35 @@ typet python_converter::get_type_from_annotation(
     }
 
     return type_handler_.get_list_type(element);
+  }
+  else if (annotation_node["_type"] == "BinOp")
+  {
+    // Handle union types such as str | None (PEP 604 syntax)
+    const auto &left = annotation_node["left"];
+    const auto &right = annotation_node["right"];
+
+    // Check which side is None
+    bool left_is_none =
+      (left.contains("_type") && left["_type"] == "Constant" &&
+       left.contains("value") && left["value"].is_null());
+    bool right_is_none =
+      (right.contains("_type") && right["_type"] == "Constant" &&
+       right["value"].is_null());
+
+    // Extract the non-None type
+    std::string inner_type;
+    if (right_is_none && left.contains("id"))
+      inner_type = left["id"].get<std::string>();
+    else if (left_is_none && right.contains("id"))
+      inner_type = right["id"].get<std::string>();
+    else
+    {
+      throw std::runtime_error("Unsupported union type pattern in annotation");
+    }
+
+    // Treat T | None the same as Optional[T] - return pointer type
+    typet base_type = type_handler_.get_typet(inner_type);
+    return gen_pointer_type(base_type);
   }
   else if (
     annotation_node["_type"] == "Constant" || annotation_node["_type"] == "Str")
