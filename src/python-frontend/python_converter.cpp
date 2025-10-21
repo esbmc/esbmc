@@ -5315,6 +5315,50 @@ void python_converter::create_builtin_symbols()
   symbol_table_.add(name_symbol);
 }
 
+void python_converter::process_module_imports(
+  const nlohmann::json &module_ast,
+  module_locator &locator)
+{
+  // Process imports in this module first (depth-first)
+  for (const auto &elem : module_ast["body"])
+  {
+    if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
+    {
+      const std::string &module_name = (elem["_type"] == "ImportFrom")
+                                         ? elem["module"]
+                                         : elem["names"][0]["name"];
+
+      // Skip if already imported
+      if (imported_modules.find(module_name) != imported_modules.end())
+        continue;
+
+      std::ifstream imported_file = locator.open_module_file(module_name);
+      if (!imported_file.is_open())
+        continue; // Skip missing modules
+
+      nlohmann::json nested_module_json;
+      imported_file >> nested_module_json;
+
+      std::string nested_python_file =
+        nested_module_json["filename"].get<std::string>();
+      imported_modules.emplace(module_name, nested_python_file);
+
+      // Recursively process nested imports first
+      process_module_imports(nested_module_json, locator);
+
+      // Then process this module's definitions
+      std::string saved_file = current_python_file;
+      current_python_file = nested_python_file;
+
+      create_builtin_symbols();
+      exprt imported_code = get_block(nested_module_json["body"]);
+      convert_expression_to_code(imported_code);
+
+      current_python_file = saved_file;
+    }
+  }
+}
+
 void python_converter::convert()
 {
   code_typet main_type;
@@ -5489,9 +5533,10 @@ void python_converter::convert()
         const std::string &module_name = (elem["_type"] == "ImportFrom")
                                            ? elem["module"]
                                            : elem["names"][0]["name"];
-        std::stringstream module_path;
-        module_path << (*ast_json)["ast_output_dir"].get<std::string>() << "/"
-                    << module_name << ".json";
+
+        // Skip if already processed by recursive import
+        if (imported_modules.find(module_name) != imported_modules.end())
+          continue;
 
         std::ifstream imported_file = locator.open_module_file(module_name);
         if (!imported_file.is_open())
@@ -5506,7 +5551,10 @@ void python_converter::convert()
           imported_module_json["filename"].get<std::string>();
         imported_modules.emplace(module_name, current_python_file);
 
-        // Create built-in symbols for imported module (__name__ = module_name)
+        // Process nested imports recursively first
+        process_module_imports(imported_module_json, locator);
+
+        // Create built-in symbols for imported module
         create_builtin_symbols();
 
         exprt imported_code = get_block(imported_module_json["body"]);

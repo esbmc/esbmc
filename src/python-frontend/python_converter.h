@@ -19,6 +19,7 @@ class symbol_id;
 class function_call_expr;
 class type_handler;
 class string_builder;
+class module_locator;
 
 class python_converter
 {
@@ -354,6 +355,10 @@ private:
   exprt get_return_from_func(const char *func_symbol_id);
 
   void create_builtin_symbols();
+
+  void process_module_imports(
+    const nlohmann::json &module_ast,
+    module_locator &locator);
 
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
