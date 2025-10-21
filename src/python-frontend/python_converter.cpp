@@ -5317,7 +5317,8 @@ void python_converter::create_builtin_symbols()
 
 void python_converter::process_module_imports(
   const nlohmann::json &module_ast,
-  module_locator &locator)
+  module_locator &locator,
+  code_blockt &accumulated_code)
 {
   // Process imports in this module first (depth-first)
   for (const auto &elem : module_ast["body"])
@@ -5344,7 +5345,7 @@ void python_converter::process_module_imports(
       imported_modules.emplace(module_name, nested_python_file);
 
       // Recursively process nested imports first
-      process_module_imports(nested_module_json, locator);
+      process_module_imports(nested_module_json, locator, accumulated_code);
 
       // Then process this module's definitions
       std::string saved_file = current_python_file;
@@ -5353,6 +5354,9 @@ void python_converter::process_module_imports(
       create_builtin_symbols();
       exprt imported_code = get_block(nested_module_json["body"]);
       convert_expression_to_code(imported_code);
+
+      // Accumulate this module's code
+      accumulated_code.copy_to_operands(imported_code);
 
       current_python_file = saved_file;
     }
@@ -5525,6 +5529,9 @@ void python_converter::convert()
     // Convert imported modules
     module_locator locator((*ast_json)["ast_output_dir"].get<std::string>());
 
+    // Accumulate all imports
+    code_blockt all_imports_block;
+
     for (const auto &elem : (*ast_json)["body"])
     {
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
@@ -5552,7 +5559,8 @@ void python_converter::convert()
         imported_modules.emplace(module_name, current_python_file);
 
         // Process nested imports recursively first
-        process_module_imports(imported_module_json, locator);
+        process_module_imports(
+          imported_module_json, locator, all_imports_block);
 
         // Create built-in symbols for imported module
         create_builtin_symbols();
@@ -5560,8 +5568,9 @@ void python_converter::convert()
         exprt imported_code = get_block(imported_module_json["body"]);
         convert_expression_to_code(imported_code);
 
-        // Add imported code to main symbol
-        main_symbol.value.swap(imported_code);
+        // Accumulate imported code instead of overwriting
+        all_imports_block.copy_to_operands(imported_code);
+
         imported_module_json.clear();
       }
     }
@@ -5577,13 +5586,11 @@ void python_converter::convert()
     code_blockt final_block;
     final_block.copy_to_operands(intrinsic_block);
 
-    if (main_symbol.value.is_code())
-    {
-      final_block.copy_to_operands(main_symbol.value);
-      final_block.copy_to_operands(main_code);
-    }
-    else
-      final_block.copy_to_operands(main_code);
+    // Add all accumulated imports
+    if (!all_imports_block.operands().empty())
+      final_block.copy_to_operands(all_imports_block);
+
+    final_block.copy_to_operands(main_code);
 
     main_symbol.value.swap(final_block);
   }

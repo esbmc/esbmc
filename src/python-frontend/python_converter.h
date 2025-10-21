@@ -358,7 +358,8 @@ private:
 
   void process_module_imports(
     const nlohmann::json &module_ast,
-    module_locator &locator);
+    module_locator &locator,
+    code_blockt &accumulated_code);
 
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
