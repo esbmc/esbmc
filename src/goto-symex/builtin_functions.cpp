@@ -1792,13 +1792,8 @@ void offset_simplifier(expr2tc &e)
   }
 }
 
-/** 
- * Optimizes a memcpy call
- *
- * @param art 
- * @param func_call 
- */
 void goto_symext::intrinsic_memcpy(
+
   reachability_treet &art,
   const code_function_call2t &func_call)
 {
@@ -2026,7 +2021,6 @@ void goto_symext::intrinsic_memcpy(
   dereference(ret_ref, dereferencet::READ);
   symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
 
-  return;
 }
 
 /**
