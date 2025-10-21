@@ -4207,26 +4207,41 @@ typet python_converter::get_type_from_annotation(
     const auto &left = annotation_node["left"];
     const auto &right = annotation_node["right"];
 
-    // Check which side is None
-    bool left_is_none =
-      (left.contains("_type") && left["_type"] == "Constant" &&
-       left.contains("value") && left["value"].is_null());
-    bool right_is_none =
-      (right.contains("_type") && right["_type"] == "Constant" &&
-       right["value"].is_null());
+    // Extract a non-None type from potentially nested unions
+    std::function<std::string(const nlohmann::json &)> extract_type =
+      [&](const nlohmann::json &node) -> std::string {
+      if (
+        node.contains("_type") && node["_type"] == "Constant" &&
+        node.contains("value") && node["value"].is_null())
+        return ""; // This is None
 
-    // Extract the non-None type
-    std::string inner_type;
-    if (right_is_none && left.contains("id"))
-      inner_type = left["id"].get<std::string>();
-    else if (left_is_none && right.contains("id"))
-      inner_type = right["id"].get<std::string>();
-    else
+      if (node.contains("id"))
+        return node["id"].get<std::string>();
+
+      // Recursively handle nested BinOp (e.g., bool | str in bool | str | None)
+      if (node.contains("_type") && node["_type"] == "BinOp")
+      {
+        std::string left_type = extract_type(node["left"]);
+        if (!left_type.empty())
+          return left_type;
+        return extract_type(node["right"]);
+      }
+
+      return "";
+    };
+
+    // Extract the first non-None type
+    std::string inner_type = extract_type(left);
+    if (inner_type.empty())
+      inner_type = extract_type(right);
+
+    if (inner_type.empty())
     {
-      throw std::runtime_error("Unsupported union type pattern in annotation");
+      // All types were None or couldn't be extracted - use pointer type
+      return pointer_type();
     }
 
-    // Treat T | None the same as Optional[T] - return pointer type
+    // Treat T | ... | None as Optional[T] - return pointer type
     typet base_type = type_handler_.get_typet(inner_type);
     return gen_pointer_type(base_type);
   }
