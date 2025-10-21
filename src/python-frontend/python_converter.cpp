@@ -5084,7 +5084,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
       exprt arg = get_expr(element["exc"]["args"][0]);
       arg = string_constantt(
-        element["exc"]["args"][0]["value"].get<std::string>(),
+        process_format_spec(element["exc"]["args"][0]),
         arg.type(),
         string_constantt::k_default);
 
