@@ -394,6 +394,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "enable global and local deadlock check with mutex"},
     {"data-races-check", NULL, "enable data races check"},
+    {"data-races-check-only",
+     NULL,
+     "enable data races check and only focus on race checks to reduce "
+     "thread interleaving"},
     {"lock-order-check", NULL, "enable for lock acquisition ordering check"},
     {"atomicity-check", NULL, "enable atomicity check at visible assignments"},
     {"stack-limit",
