@@ -215,6 +215,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "NoneType")
     return pointer_type();
 
+  // Optional[T] - when type string is just "Optional" without inner type
+  // This can occur during type inference. Return pointer type as placeholder.
+  if (ast_type == "Optional")
+    return pointer_type();
+
   // Python float type: IEEE 754 double-precision mapping
   // Python floats are implemented using C double (IEEE 754 double-precision)
   // as per Python documentation. This ensures proper precision, range, and
