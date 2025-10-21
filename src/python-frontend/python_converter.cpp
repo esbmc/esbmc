@@ -2471,7 +2471,9 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
   for (const auto &obj : (*ast_json)["body"])
   {
-    if (obj["_type"] == "ImportFrom" || obj["_type"] == "Import")
+    if (
+      (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
+      obj.contains("full_path"))
     {
       std::regex pattern("py:(.*?)@");
       std::string imported_symbol = std::regex_replace(
@@ -5367,7 +5369,9 @@ void python_converter::process_module_imports(
       current_python_file = nested_python_file;
 
       create_builtin_symbols();
-      exprt imported_code = get_block(nested_module_json["body"]);
+      exprt imported_code = with_ast(&nested_module_json, [&]() {
+        return get_block(nested_module_json["body"]);
+      });
       convert_expression_to_code(imported_code);
 
       // Accumulate this module's code
@@ -5580,7 +5584,10 @@ void python_converter::convert()
         // Create built-in symbols for imported module
         create_builtin_symbols();
 
-        exprt imported_code = get_block(imported_module_json["body"]);
+        exprt imported_code = with_ast(&imported_module_json, [&]() {
+          return get_block(imported_module_json["body"]);
+        });
+
         convert_expression_to_code(imported_code);
 
         // Accumulate imported code instead of overwriting

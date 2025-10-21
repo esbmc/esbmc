@@ -162,7 +162,7 @@ def process_collected_imports(output_dir):
     This ensures we don't overwrite JSON files multiple times.
     """
 
-    for module_name, import_info in module_imports.items():
+    for module_name, import_info in list(module_imports.items()):
         # Determine what to import
         if import_info['import_all']:
             imported_elements = None
@@ -183,6 +183,13 @@ def process_collected_imports(output_dir):
                     tree = ast.parse(source.read())
                     preprocessor = Preprocessor(filename)
                     tree = preprocessor.visit(tree)
+
+                    # Process nested imports inside this module (chained imports)
+                    # This will also set node.full_path for imports found inside imported modules.
+                    for subnode in ast.walk(tree):
+                        if isinstance(subnode, (ast.Import, ast.ImportFrom)):
+                            process_imports(subnode, output_dir)
+
                     generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
             except UnicodeDecodeError:
                 pass
@@ -225,6 +232,11 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
                     filtered_nodes.append(node)
                 # Include classes referenced by imported items
                 elif isinstance(node, ast.ClassDef) and node.name in referenced_classes:
+                    filtered_nodes.append(node)
+
+            # Include annotated assignments (e.g., x: int = 42)
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                if node.target.id in explicitly_imported:
                     filtered_nodes.append(node)
 
     # Convert AST to JSON
