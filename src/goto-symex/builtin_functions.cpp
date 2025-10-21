@@ -2020,7 +2020,6 @@ void goto_symext::intrinsic_memcpy(
   expr2tc ret_ref = func_call.ret;
   dereference(ret_ref, dereferencet::READ);
   symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
-
 }
 
 /**
