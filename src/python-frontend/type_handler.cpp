@@ -290,6 +290,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (!is_defined)
     is_defined = converter_.is_imported_module(ast_type);
 
+  // Look up the type in the symbol table
+  if (!is_defined)
+  {
+    symbolt *s = converter_.find_symbol(std::string("tag-" + ast_type));
+    if (s)
+      return s->type;
+  }
+
   // If still not found, it's a NameError
   if (!is_defined)
   {
