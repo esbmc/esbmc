@@ -3,7 +3,7 @@
 
 def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> int:
     """Match [x-y]+ or [x-y]* patterns"""
-    if pattern_len != 7:
+    if pattern_len != 6:
         return -1
 
     if not (pattern[0] == '[' and pattern[2] == '-' and pattern[4] == ']'):
@@ -31,7 +31,7 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
 
 def try_match_digit_sequence(pattern: str, pattern_len: int, string: str) -> int:
     """Match \d+ or \d* patterns"""
-    if pattern_len != 4:
+    if pattern_len != 3:
         return -1
 
     if pattern[0] != '\\' or pattern[1] != 'd':
@@ -58,7 +58,7 @@ def try_match_digit_sequence(pattern: str, pattern_len: int, string: str) -> int
 
 def try_match_alternation(pattern: str, pattern_len: int, string: str) -> int:
     """Match (x|y)z* patterns"""
-    if pattern_len != 8:
+    if pattern_len != 7:
         return -1
 
     if not (pattern[0] == '(' and pattern[2] == '|' and pattern[4] == ')' and pattern[6] == '*'):
@@ -87,7 +87,7 @@ def match(pattern: str, string: str) -> bool:
         return True
 
     # Universal match ".*"
-    if pattern_len >= 3:
+    if pattern_len >= 2:
         if pattern[0] == '.' and pattern[1] == '*':
             return True
 
@@ -105,9 +105,9 @@ def match(pattern: str, string: str) -> bool:
         return result == 1
 
     # Pattern ending with ".*"
-    if pattern_len >= 4:
-        if pattern[pattern_len - 3] == '.' and pattern[pattern_len - 2] == '*':
-            prefix_len: int = pattern_len - 3
+    if pattern_len >= 3:
+        if pattern[pattern_len - 2] == '.' and pattern[pattern_len - 1] == '*':
+            prefix_len: int = pattern_len - 2
             has_meta_in_prefix: bool = False
             i: int = 0
             while i < prefix_len:
