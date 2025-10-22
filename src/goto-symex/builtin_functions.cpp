@@ -1766,7 +1766,10 @@ static inline expr2tc do_memcpy_expression(
     is_array_type(src->type) || is_array_type(dst->type) ||
     is_struct_type(dst->type) || is_union_type(dst->type) ||
     is_struct_type(src->type) || is_union_type(src->type))
+  {
+    log_debug("memcpy", "Only primitives are supported for now");
     return expr2tc();
+  }
 
   // Base-case. Primitives!
   return gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
