@@ -11,6 +11,35 @@
 #include <util/symbolic_types.h>
 #include <string>
 
+// Extract element type from annotation
+static typet get_elem_type_from_annotation(
+  const nlohmann::json &node,
+  const type_handler &type_handler_)
+{
+  // Check if annotation exists and has the expected structure
+  if (
+    node.contains("annotation") && node["annotation"].is_object() &&
+    node["annotation"].contains("slice") &&
+    node["annotation"]["slice"].is_object() &&
+    node["annotation"]["slice"].contains("id") &&
+    node["annotation"]["slice"]["id"].is_string())
+  {
+    return type_handler_.get_typet(
+      node["annotation"]["slice"]["id"].get<std::string>());
+  }
+
+  // Check for direct type annotation
+  if (
+    node.contains("annotation") && node["annotation"].is_object() &&
+    node["annotation"].contains("id") && node["annotation"]["id"].is_string())
+  {
+    return type_handler_.get_typet(node["annotation"]["id"].get<std::string>());
+  }
+
+  // Return empty type if annotation structure is not as expected
+  return typet();
+}
+
 std::unordered_map<std::string, std::vector<std::pair<std::string, typet>>>
   python_list::list_type_map{};
 
@@ -733,8 +762,11 @@ exprt python_list::handle_index_access(
     }
     else if (list_node["_type"] == "arg")
     {
-      elem_type = converter_.get_type_handler().get_typet(
-        list_node["annotation"]["slice"]["id"].get<std::string>());
+      elem_type =
+        get_elem_type_from_annotation(list_node, converter_.get_type_handler());
+
+      if (elem_type == typet())
+        elem_type = converter_.get_type_handler().get_list_element_type();
     }
     else if (
       slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||
@@ -751,8 +783,11 @@ exprt python_list::handle_index_access(
           converter_.current_function_name(),
           converter_.ast());
 
-        elem_type = converter_.get_type_handler().get_typet(
-          list_value_node["annotation"]["slice"]["id"].get<std::string>());
+        elem_type = get_elem_type_from_annotation(
+          list_value_node, converter_.get_type_handler());
+
+        if (elem_type == typet())
+          elem_type = converter_.get_type_handler().get_list_element_type();
       }
       else
       {
@@ -779,8 +814,11 @@ exprt python_list::handle_index_access(
       // Handle variable-based indexing
       if (!list_node.is_null() && list_node["_type"] == "arg")
       {
-        elem_type = converter_.get_type_handler().get_typet(
-          list_node["annotation"]["slice"]["id"].get<std::string>());
+        elem_type = get_elem_type_from_annotation(
+          list_node, converter_.get_type_handler());
+
+        if (elem_type == typet())
+          elem_type = converter_.get_type_handler().get_list_element_type();
       }
       else
       {
@@ -802,8 +840,11 @@ exprt python_list::handle_index_access(
 
         if (!list_node.is_null() && list_node["_type"] == "arg")
         {
-          elem_type = converter_.get_type_handler().get_typet(
-            list_node["annotation"]["slice"]["id"].get<std::string>());
+          elem_type = get_elem_type_from_annotation(
+            list_node, converter_.get_type_handler());
+
+          if (elem_type == typet())
+            elem_type = converter_.get_type_handler().get_list_element_type();
         }
         else if (elem_type == typet() && list_node.contains("value"))
         {
