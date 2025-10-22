@@ -394,7 +394,8 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
   case type2t::array_id:
   {
     if (array_as_array_of)
-      return constant_array_of2tc(type, gen_zero(to_array_type(type).subtype));
+      return constant_array_of2tc(
+        type, gen_zero(to_array_type(type).subtype, array_as_array_of));
 
     auto arr_type = to_array_type(type);
 
