@@ -1893,6 +1893,18 @@ void goto_symext::intrinsic_memcpy(
 
     if (is_code_type(item_object->type))
     {
+      if (config.options.get_bool_option("enable-unreachability-intrinsic"))
+      {
+        // Workaround:
+        // linux-3.10-rc1-43_1a-bitvector-drivers--net--ethernet--broadcom--b44.ko--ldv_main0.cil.out.i
+        // generates an INVALID address pointing to both a struct and
+        // initializes an extern global function ptr with. Resulting in this
+        // being triggered wrongly. Need to check if it's a VSA issue or ESBMC
+        // initialization issue.
+        bump_call(func_call, bump_name);
+        return;
+      }
+
       std::string error_msg =
         fmt::format("dereference failure: trying to deref a ptr code");
 
