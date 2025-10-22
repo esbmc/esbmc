@@ -3502,14 +3502,26 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
   typet var_typet;
   std::string var_type_str("");
 
-  if (var_node.contains("annotation"))
+  if (var_node.contains("annotation") && !var_node["annotation"].is_null())
   {
     // Get type from annotation node
     size_t type_size = get_type_size(var_node);
-    if (var_node["annotation"]["_type"] == "Subscript")
-      var_type_str = var_node["annotation"]["value"]["id"];
-    else
+    const auto &ann = var_node["annotation"];
+
+    if (ann.contains("_type") && ann["_type"] == "Subscript")
+    {
+      if (ann.contains("value") && ann["value"].contains("id"))
+        var_type_str = ann["value"]["id"];
+    }
+    else if (
+      ann.contains("_type") && ann["_type"] == "Attribute" &&
+      ann.contains("attr"))
+      var_type_str = ann["attr"];
+    else if (ann.contains("id"))
       var_type_str = var_node["annotation"]["id"];
+
+    if (var_type_str.empty())
+      return {var_type_str, var_typet};
 
     if (var_type_str == "list" || var_type_str == "List")
       var_typet = type_handler_.get_list_type();
@@ -4365,6 +4377,9 @@ typet python_converter::get_type_from_annotation(
     type_string = type_utils::remove_quotes(type_string);
     return type_handler_.get_typet(type_string);
   }
+  else if (
+    annotation_node["_type"] == "Attribute" && annotation_node.contains("attr"))
+    return type_handler_.get_typet(annotation_node["attr"].get<std::string>());
   else if (annotation_node.contains("id"))
     return type_handler_.get_typet(annotation_node["id"].get<std::string>());
   else
