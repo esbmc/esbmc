@@ -203,3 +203,21 @@ int toupper(int c)
 __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') ? c - ('a' - 'A') : c;
 }
+
+// Python string lstrip: removes leading whitespace characters
+// Returns a pointer to the first non-whitespace character
+const char *__python_str_lstrip(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return s;
+
+  // Skip leading whitespace
+  while (*s && (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' ||
+                *s == '\f' || *s == '\r'))
+  {
+    s++;
+  }
+
+  return s;
+}

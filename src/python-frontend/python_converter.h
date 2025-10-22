@@ -295,6 +295,8 @@ private:
     const typet &symbol_type,
     const exprt &symbol_value);
 
+  exprt handle_string_lstrip(const exprt &str_expr, const locationt &location);
+
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);

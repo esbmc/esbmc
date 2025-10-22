@@ -351,6 +351,18 @@ exprt function_call_builder::build() const
         return converter_.handle_string_isspace(obj_expr, loc);
       }
     }
+
+    if (method_name == "lstrip")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      // lstrip() takes optional chars argument, but we only support no arguments
+      if (!call_["args"].empty())
+        throw std::runtime_error("lstrip() with arguments not yet supported");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.handle_string_lstrip(obj_expr, loc);
+    }
   }
 
   // Add len function to symbol table
