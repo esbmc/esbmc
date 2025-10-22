@@ -4418,16 +4418,17 @@ void python_converter::process_function_arguments(
     symbol_table_.add(param_symbol);
   };
 
+  // Extract args node to avoid repeated access
+  const nlohmann::json &args_node = function_node["args"];
+
   // Process regular arguments
-  for (const nlohmann::json &element : function_node["args"]["args"])
+  for (const nlohmann::json &element : args_node["args"])
     process_argument(element);
 
   // Process keyword-only arguments (parameters after * separator)
-  if (
-    function_node["args"].contains("kwonlyargs") &&
-    !function_node["args"]["kwonlyargs"].is_null())
+  if (args_node.contains("kwonlyargs") && !args_node["kwonlyargs"].is_null())
   {
-    for (const nlohmann::json &element : function_node["args"]["kwonlyargs"])
+    for (const nlohmann::json &element : args_node["kwonlyargs"])
       process_argument(element);
   }
 }
