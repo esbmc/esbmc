@@ -3,6 +3,7 @@
 #include <python-frontend/global_scope.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/string_handler.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
@@ -33,7 +34,9 @@ public:
 
   void convert();
 
-  string_builder &get_string_builder();
+  string_builder& get_string_builder();  
+  
+  string_handler& get_string_handler() { return string_handler_; }
 
   const nlohmann::json &ast() const
   {
@@ -49,10 +52,6 @@ public:
   {
     return type_handler_;
   }
-
-  bool is_zero_length_array(const exprt &expr);
-
-  void ensure_string_array(exprt &expr);
 
   const std::string &python_file() const
   {
@@ -111,6 +110,15 @@ public:
     const std::vector<unsigned char> &string_literal,
     const typet &t);
 
+  exprt get_literal(const nlohmann::json &element);
+
+  exprt get_expr(const nlohmann::json &element);
+
+  locationt get_location_from_decl(const nlohmann::json &element);
+  
+  exprt handle_string_comparison(const std::string &op, exprt &lhs, exprt &rhs,
+                                  const nlohmann::json &element);
+
 private:
   friend class function_call_expr;
   friend class numpy_call_expr;
@@ -146,10 +154,6 @@ private:
   void
   get_class_definition(const nlohmann::json &class_node, codet &target_block);
 
-  locationt get_location_from_decl(const nlohmann::json &ast_node);
-
-  exprt get_expr(const nlohmann::json &element);
-
   exprt get_unary_operator_expr(const nlohmann::json &element);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
@@ -158,15 +162,11 @@ private:
 
   exprt build_power_expression(const exprt &base, const BigInt &exp);
 
-  BigInt get_string_size(const exprt &expr);
-
   bool is_bytes_literal(const nlohmann::json &element);
 
   exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
 
   exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
-
-  exprt get_array_base_address(const exprt &arr);
 
   exprt get_resolved_value(const exprt &expr);
 
@@ -178,20 +178,9 @@ private:
 
   symbolt create_assert_temp_variable(const locationt &location);
 
-  std::string extract_string_from_array_operands(const exprt &array_expr) const;
-
   exprt get_lambda_expr(const nlohmann::json &element);
 
-  exprt convert_to_string(const exprt &expr);
-
-  exprt get_fstring_expr(const nlohmann::json &element);
-
-  std::string process_format_spec(const nlohmann::json &format_spec);
-
   codet convert_expression_to_code(exprt &expr);
-
-  exprt
-  apply_format_specification(const exprt &expr, const std::string &format);
 
   std::string remove_quotes_from_type_string(const std::string &type_string);
 
@@ -237,57 +226,10 @@ private:
     const exprt &func_value,
     const std::string &func_identifier);
 
-  exprt handle_string_concatenation(
-    const exprt &lhs,
-    const exprt &rhs,
-    const nlohmann::json &left,
-    const nlohmann::json &right);
-
-  exprt handle_string_comparison(
-    const std::string &op,
-    exprt &lhs,
-    exprt &rhs,
-    const nlohmann::json &element);
-
   exprt handle_none_comparison(
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
-
-  exprt handle_string_operations(
-    const std::string &op,
-    exprt &lhs,
-    exprt &rhs,
-    const nlohmann::json &left,
-    const nlohmann::json &right,
-    const nlohmann::json &element);
-
-  exprt handle_string_membership(
-    exprt &lhs,
-    exprt &rhs,
-    const nlohmann::json &element);
-
-  exprt ensure_null_terminated_string(exprt &e);
-
-  exprt handle_string_startswith(
-    const exprt &string_obj,
-    const exprt &prefix_arg,
-    const locationt &location);
-
-  exprt handle_string_endswith(
-    const exprt &string_obj,
-    const exprt &suffix_arg,
-    const locationt &location);
-
-  exprt
-  handle_string_isdigit(const exprt &string_obj, const locationt &location);
-
-  exprt
-  handle_string_isalpha(const exprt &string_obj, const locationt &location);
-
-  exprt handle_string_isspace(const exprt &str_expr, const locationt &location);
-
-  exprt handle_char_isspace(const exprt &char_expr, const locationt &location);
 
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
@@ -295,15 +237,11 @@ private:
     const typet &symbol_type,
     const exprt &symbol_value);
 
-  exprt handle_string_lstrip(const exprt &str_expr, const locationt &location);
-
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
   exprt get_function_call(const nlohmann::json &ast_block);
-
-  exprt get_literal(const nlohmann::json &element);
 
   exprt get_block(const nlohmann::json &ast_block);
 
@@ -417,12 +355,6 @@ private:
   // Helper methods for binary operator expression handling
   void convert_function_calls_to_side_effects(exprt &lhs, exprt &rhs);
 
-  exprt handle_string_concatenation_with_promotion(
-    exprt &lhs,
-    exprt &rhs,
-    const nlohmann::json &left,
-    const nlohmann::json &right);
-
   exprt handle_chained_comparisons_logic(
     const nlohmann::json &element,
     exprt &bin_expr);
@@ -443,6 +375,7 @@ private:
   std::string current_class_name_;
   code_blockt *current_block;
   exprt *current_lhs;
+  string_handler string_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;

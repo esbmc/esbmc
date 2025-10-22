@@ -48,7 +48,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   code_function_callt list_type_hash_func_call;
   list_type_hash_func_call.function() = symbol_expr(*hash_func_symbol);
   list_type_hash_func_call.arguments().push_back(
-    converter_.get_array_base_address(type_name_expr));
+    converter_.get_string_handler().get_array_base_address(type_name_expr));
   list_type_hash_func_call.lhs() = symbol_expr(elem_type_sym);
   list_type_hash_func_call.type() = size_type();
   list_type_hash_func_call.location() = location;
@@ -373,7 +373,8 @@ symbolt &python_list::create_list()
   list_create_func_call.function() = symbol_expr(*create_func_sym);
   list_create_func_call.lhs() = symbol_expr(list_symbol);
   list_create_func_call.arguments().push_back(
-    converter_.get_array_base_address(symbol_expr(inf_array_symbol)));
+    converter_.get_string_handler().get_array_base_address(
+      symbol_expr(inf_array_symbol)));
   list_create_func_call.type() = list_type;
   list_create_func_call.location() = location;
   converter_.add_instruction(list_create_func_call);

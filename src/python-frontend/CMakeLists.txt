@@ -23,6 +23,7 @@ add_library(pythonfrontend STATIC
             numpy_call_expr.cpp
             function_call_builder.cpp
             string_builder.cpp
+            string_handler.cpp
             parse_float.cpp
             convert_float_literal.cpp)
 
