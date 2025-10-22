@@ -110,7 +110,7 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   if (annotation.contains("id"))
     return annotation["id"].get<std::string>();
 
-  if (annotation["_type"] == "Subscript")
+  if (annotation.contains("_type") && annotation["_type"] == "Subscript")
     return annotation["value"]["id"];
 
   return std::string();

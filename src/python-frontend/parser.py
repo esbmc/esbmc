@@ -156,43 +156,113 @@ def process_imports(node, output_dir):
     node.full_path = filename
 
 
+def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
+    """Return file path for module qualname (or None if stdlib/missing)."""
+    try:
+        mod = import_module_by_name(module_qualname, output_dir)
+    except SystemExit:
+        return None
+    filename = mod if isinstance(mod, str) else getattr(mod, "__file__", None)
+    if not filename or is_standard_library_file(filename):
+        return None
+    if not os.path.exists(filename):  # e.g. math.pi is not a submodule
+        return None
+    return filename
+
+
+def parse_file(filename: str) -> ast.AST:
+    """Open, parse, and run Preprocessor on a Python source file."""
+    with open(filename, "r", encoding="utf-8") as src:
+        tree = ast.parse(src.read())
+    return Preprocessor(filename).visit(tree)
+
+
+def emit_file_as_json(
+    filename: str,
+    output_dir: str,
+    module_qualname: str | None = None,
+    elements_to_import=None,
+) -> None:
+    """Generate AST JSON for a file."""
+    tree = parse_file(filename)
+    generate_ast_json(
+        tree,
+        filename,
+        elements_to_import,
+        output_dir,
+        module_qualname=module_qualname,
+    )
+
+
+def emit_module_json(
+    module_qualname: str,
+    output_dir: str,
+    elements_to_import=None,
+) -> None:
+    """Resolve module to file and emit AST JSON."""
+    filename = resolve_module_file(module_qualname, output_dir)
+    if filename:
+        emit_file_as_json(filename, output_dir, module_qualname, elements_to_import)
+
+
 def process_collected_imports(output_dir):
-    """
-    Process all collected imports after scanning the entire main file.
-    This ensures we don't overwrite JSON files multiple times.
-    """
-
     for module_name, import_info in list(module_imports.items()):
-        # Determine what to import
-        if import_info['import_all']:
-            imported_elements = None
-        else:
-            imported_elements = [ast.alias(name, None) for name in import_info['specific_names']]
+        imported_elements = None if import_info['import_all'] \
+            else [ast.alias(name, None) for name in import_info['specific_names']]
 
-        # Get the module file path
-        if is_imported_model(module_name):
-            models_dir = os.path.join(output_dir, "models")
-            filename = os.path.join(models_dir, module_name + ".py")
-        else:
-            module = import_module_by_name(module_name, output_dir)
-            filename = module.__file__
+        # Attempt to resolve and emit JSON for imported submodules (e.g., "pkg.sub")
+        if import_info['specific_names']:
+            for name in list(import_info['specific_names']):
+                emit_module_json(f"{module_name}.{name}", output_dir)
 
-        if filename and not is_standard_library_file(filename):
-            try:
-                with open(filename, "r", encoding="utf-8") as source:
-                    tree = ast.parse(source.read())
-                    preprocessor = Preprocessor(filename)
-                    tree = preprocessor.visit(tree)
+        # Emit the module itself
+        filename = resolve_module_file(module_name, output_dir)
+        if not filename:
+            continue
 
-                    # Process nested imports inside this module (chained imports)
-                    # This will also set node.full_path for imports found inside imported modules.
-                    for subnode in ast.walk(tree):
-                        if isinstance(subnode, (ast.Import, ast.ImportFrom)):
-                            process_imports(subnode, output_dir)
+        # Parse once, fix relative imports, collect nested imports
+        tree = parse_file(filename)
+        for subnode in ast.walk(tree):
+            if isinstance(subnode, (ast.Import, ast.ImportFrom)):
+                fix_relative_import(subnode, module_name)
+                process_imports(subnode, output_dir)
 
-                    generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
-            except UnicodeDecodeError:
-                pass
+        generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
+
+
+def fix_relative_import(node: ast.AST, parent_module: str) -> None:
+    """Convert relative imports like 'from .x import y' to absolute names."""
+
+    # Only handle "from X import Y" nodes
+    if not isinstance(node, ast.ImportFrom):
+        return
+
+    # The "level" attribute counts how many leading dots are used in the import.
+    # Examples:
+    #   from .x import y  → level = 1
+    #   from ..x import y → level = 2
+    #   from math import y → level = 0 (not relative)
+    lvl = getattr(node, "level", 0)
+    if lvl <= 0 or not parent_module:
+        # Nothing to fix if it's already absolute or we don't know the parent module
+        return
+
+    # Split the parent module name into parts, e.g., "pkg.sub" → ["pkg", "sub"]
+    parts = parent_module.split(".")
+
+    # Move up "lvl" levels in the module hierarchy.
+    # Example:
+    #   parent_module = "l.ks", level = 1 → base = "l"
+    #   parent_module = "l", level = 1 → base = "l" (fallback if index <= 0)
+    idx = len(parts) - lvl
+    base = parent_module if idx <= 0 else ".".join(parts[:idx])
+
+    # Rebuild the full absolute module path.
+    # Example:  from .ks import foo  →  from l.ks import foo
+    node.module = f"{base}.{node.module}" if node.module else base
+
+    # Reset level to 0 since it's no longer a relative import.
+    node.level = 0
 
 
 def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
