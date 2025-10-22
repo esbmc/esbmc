@@ -1943,8 +1943,8 @@ void goto_symext::intrinsic_memcpy(
   {
     guardt guard = ex_state.cur_state->guard;
     guard.add(item.guard);
-    expr2tc &item_object = item.object;
-    expr2tc &item_offset = item.offset;
+    // expr2tc &item_object = item.object;
+    // expr2tc &item_offset = item.offset;
 
     cur_state->rename(item.guard);
     cur_state->rename(item.offset);
