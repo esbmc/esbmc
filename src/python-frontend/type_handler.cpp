@@ -215,6 +215,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "NoneType")
     return pointer_type();
 
+  // Optional[T] - when type string is just "Optional" without inner type
+  // This can occur during type inference. Return pointer type as placeholder.
+  if (ast_type == "Optional")
+    return pointer_type();
+
   // Python float type: IEEE 754 double-precision mapping
   // Python floats are implemented using C double (IEEE 754 double-precision)
   // as per Python documentation. This ensures proper precision, range, and
@@ -284,6 +289,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // Check if it's imported
   if (!is_defined)
     is_defined = converter_.is_imported_module(ast_type);
+
+  // Look up the type in the symbol table
+  if (!is_defined)
+  {
+    symbolt *s = converter_.find_symbol(std::string("tag-" + ast_type));
+    if (s)
+      return s->type;
+  }
 
   // If still not found, it's a NameError
   if (!is_defined)

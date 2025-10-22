@@ -2471,7 +2471,9 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
   for (const auto &obj : (*ast_json)["body"])
   {
-    if (obj["_type"] == "ImportFrom" || obj["_type"] == "Import")
+    if (
+      (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
+      obj.contains("full_path"))
     {
       std::regex pattern("py:(.*?)@");
       std::string imported_symbol = std::regex_replace(
@@ -3667,9 +3669,19 @@ void python_converter::get_var_assign(
     // Assign logic
     const auto &target = ast_node["targets"][0];
 
-    const auto &name = (target["_type"] == "Subscript")
-                         ? target["value"]["id"].get<std::string>()
-                         : target["id"].get<std::string>();
+    std::string name;
+    const auto &target_type = target["_type"];
+
+    if (target_type == "Subscript")
+      name = target["value"]["id"].get<std::string>();
+    else if (target_type == "Attribute")
+      name = target["attr"].get<std::string>();
+    else if (target_type == "Name")
+      name = target["id"].get<std::string>();
+    else
+      throw std::runtime_error(
+        "Unsupported assignment target type: " +
+        target_type.get<std::string>());
 
     sid.set_object(name);
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
@@ -4191,6 +4203,50 @@ typet python_converter::get_type_from_annotation(
 
     return type_handler_.get_list_type(element);
   }
+  else if (annotation_node["_type"] == "BinOp")
+  {
+    // Handle union types such as str | None (PEP 604 syntax)
+    const auto &left = annotation_node["left"];
+    const auto &right = annotation_node["right"];
+
+    // Extract a non-None type from potentially nested unions
+    std::function<std::string(const nlohmann::json &)> extract_type =
+      [&](const nlohmann::json &node) -> std::string {
+      if (
+        node.contains("_type") && node["_type"] == "Constant" &&
+        node.contains("value") && node["value"].is_null())
+        return ""; // This is None
+
+      if (node.contains("id"))
+        return node["id"].get<std::string>();
+
+      // Recursively handle nested BinOp (e.g., bool | str in bool | str | None)
+      if (node.contains("_type") && node["_type"] == "BinOp")
+      {
+        std::string left_type = extract_type(node["left"]);
+        if (!left_type.empty())
+          return left_type;
+        return extract_type(node["right"]);
+      }
+
+      return "";
+    };
+
+    // Extract the first non-None type
+    std::string inner_type = extract_type(left);
+    if (inner_type.empty())
+      inner_type = extract_type(right);
+
+    if (inner_type.empty())
+    {
+      // All types were None or couldn't be extracted - use pointer type
+      return pointer_type();
+    }
+
+    // Treat T | ... | None as Optional[T] - return pointer type
+    typet base_type = type_handler_.get_typet(inner_type);
+    return gen_pointer_type(base_type);
+  }
   else if (
     annotation_node["_type"] == "Constant" || annotation_node["_type"] == "Str")
   {
@@ -4308,11 +4364,12 @@ void python_converter::process_function_arguments(
   const symbol_id &id,
   const locationt &location)
 {
-  for (const nlohmann::json &element : function_node["args"]["args"])
-  {
+  // Process a single argument
+  auto process_argument = [&](const nlohmann::json &element) {
     std::string arg_name = element["arg"].get<std::string>();
     typet arg_type;
 
+    // Handle special cases for 'self' and 'cls'
     if (arg_name == "self")
       arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
     else if (arg_name == "cls")
@@ -4328,6 +4385,7 @@ void python_converter::process_function_arguments(
       arg_type = get_type_from_annotation(element["annotation"], element);
     }
 
+    // Convert arrays to pointers
     if (arg_type.is_array())
       arg_type = gen_pointer_type(arg_type.subtype());
 
@@ -4358,6 +4416,20 @@ void python_converter::process_function_arguments(
     param_symbol.static_lifetime = false;
     param_symbol.is_extern = false;
     symbol_table_.add(param_symbol);
+  };
+
+  // Extract args node to avoid repeated access
+  const nlohmann::json &args_node = function_node["args"];
+
+  // Process regular arguments
+  for (const nlohmann::json &element : args_node["args"])
+    process_argument(element);
+
+  // Process keyword-only arguments (parameters after * separator)
+  if (args_node.contains("kwonlyargs") && !args_node["kwonlyargs"].is_null())
+  {
+    for (const nlohmann::json &element : args_node["kwonlyargs"])
+      process_argument(element);
   }
 }
 
@@ -5028,7 +5100,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
       exprt arg = get_expr(element["exc"]["args"][0]);
       arg = string_constantt(
-        element["exc"]["args"][0]["value"].get<std::string>(),
+        process_format_spec(element["exc"]["args"][0]),
         arg.type(),
         string_constantt::k_default);
 
@@ -5276,6 +5348,56 @@ void python_converter::create_builtin_symbols()
   symbol_table_.add(name_symbol);
 }
 
+void python_converter::process_module_imports(
+  const nlohmann::json &module_ast,
+  module_locator &locator,
+  code_blockt &accumulated_code)
+{
+  // Process imports in this module first (depth-first)
+  for (const auto &elem : module_ast["body"])
+  {
+    if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
+    {
+      const std::string &module_name = (elem["_type"] == "ImportFrom")
+                                         ? elem["module"]
+                                         : elem["names"][0]["name"];
+
+      // Skip if already imported
+      if (imported_modules.find(module_name) != imported_modules.end())
+        continue;
+
+      std::ifstream imported_file = locator.open_module_file(module_name);
+      if (!imported_file.is_open())
+        continue; // Skip missing modules
+
+      nlohmann::json nested_module_json;
+      imported_file >> nested_module_json;
+
+      std::string nested_python_file =
+        nested_module_json["filename"].get<std::string>();
+      imported_modules.emplace(module_name, nested_python_file);
+
+      // Recursively process nested imports first
+      process_module_imports(nested_module_json, locator, accumulated_code);
+
+      // Then process this module's definitions
+      std::string saved_file = current_python_file;
+      current_python_file = nested_python_file;
+
+      create_builtin_symbols();
+      exprt imported_code = with_ast(&nested_module_json, [&]() {
+        return get_block(nested_module_json["body"]);
+      });
+      convert_expression_to_code(imported_code);
+
+      // Accumulate this module's code
+      accumulated_code.copy_to_operands(imported_code);
+
+      current_python_file = saved_file;
+    }
+  }
+}
+
 void python_converter::convert()
 {
   code_typet main_type;
@@ -5442,6 +5564,9 @@ void python_converter::convert()
     // Convert imported modules
     module_locator locator((*ast_json)["ast_output_dir"].get<std::string>());
 
+    // Accumulate all imports
+    code_blockt all_imports_block;
+
     for (const auto &elem : (*ast_json)["body"])
     {
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
@@ -5450,9 +5575,10 @@ void python_converter::convert()
         const std::string &module_name = (elem["_type"] == "ImportFrom")
                                            ? elem["module"]
                                            : elem["names"][0]["name"];
-        std::stringstream module_path;
-        module_path << (*ast_json)["ast_output_dir"].get<std::string>() << "/"
-                    << module_name << ".json";
+
+        // Skip if already processed by recursive import
+        if (imported_modules.find(module_name) != imported_modules.end())
+          continue;
 
         std::ifstream imported_file = locator.open_module_file(module_name);
         if (!imported_file.is_open())
@@ -5467,14 +5593,22 @@ void python_converter::convert()
           imported_module_json["filename"].get<std::string>();
         imported_modules.emplace(module_name, current_python_file);
 
-        // Create built-in symbols for imported module (__name__ = module_name)
+        // Process nested imports recursively first
+        process_module_imports(
+          imported_module_json, locator, all_imports_block);
+
+        // Create built-in symbols for imported module
         create_builtin_symbols();
 
-        exprt imported_code = get_block(imported_module_json["body"]);
+        exprt imported_code = with_ast(&imported_module_json, [&]() {
+          return get_block(imported_module_json["body"]);
+        });
+
         convert_expression_to_code(imported_code);
 
-        // Add imported code to main symbol
-        main_symbol.value.swap(imported_code);
+        // Accumulate imported code instead of overwriting
+        all_imports_block.copy_to_operands(imported_code);
+
         imported_module_json.clear();
       }
     }
@@ -5490,13 +5624,11 @@ void python_converter::convert()
     code_blockt final_block;
     final_block.copy_to_operands(intrinsic_block);
 
-    if (main_symbol.value.is_code())
-    {
-      final_block.copy_to_operands(main_symbol.value);
-      final_block.copy_to_operands(main_code);
-    }
-    else
-      final_block.copy_to_operands(main_code);
+    // Add all accumulated imports
+    if (!all_imports_block.operands().empty())
+      final_block.copy_to_operands(all_imports_block);
+
+    final_block.copy_to_operands(main_code);
 
     main_symbol.value.swap(final_block);
   }

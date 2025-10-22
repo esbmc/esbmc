@@ -825,6 +825,9 @@ void execution_statet::get_expr_globals(
   const expr2tc &expr,
   std::set<expr2tc> &globals_list)
 {
+  if (options.get_bool_option("data-races-check-only"))
+    return;
+
   if (is_nil_expr(expr))
     return;
 

@@ -1295,8 +1295,34 @@ private:
       if (stmt["annotation"].contains("value"))
         inferred_type =
           stmt["annotation"]["value"]["id"].template get<std::string>();
-      else
+      else if (stmt["annotation"].contains("id"))
         inferred_type = stmt["annotation"]["id"].template get<std::string>();
+      else if (
+        stmt["annotation"].contains("_type") &&
+        stmt["annotation"]["_type"] == "BinOp")
+      {
+        // Handle union types such as str | None (PEP 604 syntax)
+        const auto &left = stmt["annotation"]["left"];
+        const auto &right = stmt["annotation"]["right"];
+
+        // Check which side is None and extract the other type
+        bool left_is_none =
+          (left.contains("_type") && left["_type"] == "Constant" &&
+           left.contains("value") && left["value"].is_null());
+        bool right_is_none =
+          (right.contains("_type") && right["_type"] == "Constant" &&
+           right.contains("value") && right["value"].is_null());
+
+        if (right_is_none && left.contains("id"))
+          inferred_type = left["id"].template get<std::string>();
+        else if (left_is_none && right.contains("id"))
+          inferred_type = right["id"].template get<std::string>();
+        else
+          return InferResult::UNKNOWN;
+      }
+      else
+        return InferResult::UNKNOWN;
+
       return InferResult::OK;
     }
 
