@@ -44,10 +44,13 @@ public:
     type_handler &type_handler,
     string_builder *str_builder);
 
-  void set_string_builder(string_builder *sb) { string_builder_ = sb; }
+  void set_string_builder(string_builder *sb)
+  {
+    string_builder_ = sb;
+  }
 
   // String size and conversion operations
-  
+
   /**
    * @brief Calculate the size of a string expression
    * @param expr Expression to measure
@@ -97,7 +100,8 @@ public:
    * @param format Format string
    * @return Formatted expression
    */
-  exprt apply_format_specification(const exprt &expr, const std::string &format);
+  exprt
+  apply_format_specification(const exprt &expr, const std::string &format);
 
   /**
    * @brief Convert f-string JSON to expression
@@ -202,9 +206,8 @@ public:
    * @param location Source location
    * @return Boolean expression result
    */
-  exprt handle_string_isdigit(
-    const exprt &string_obj,
-    const locationt &location);
+  exprt
+  handle_string_isdigit(const exprt &string_obj, const locationt &location);
 
   /**
    * @brief Handle str.isalpha() method
@@ -212,9 +215,8 @@ public:
    * @param location Source location
    * @return Boolean expression result
    */
-  exprt handle_string_isalpha(
-    const exprt &string_obj,
-    const locationt &location);
+  exprt
+  handle_string_isalpha(const exprt &string_obj, const locationt &location);
 
   /**
    * @brief Handle str.isspace() method for strings
@@ -222,9 +224,7 @@ public:
    * @param location Source location
    * @return Boolean expression result
    */
-  exprt handle_string_isspace(
-    const exprt &str_expr,
-    const locationt &location);
+  exprt handle_string_isspace(const exprt &str_expr, const locationt &location);
 
   /**
    * @brief Handle char.isspace() method for single characters
@@ -232,9 +232,7 @@ public:
    * @param location Source location
    * @return Boolean expression result
    */
-  exprt handle_char_isspace(
-    const exprt &char_expr,
-    const locationt &location);
+  exprt handle_char_isspace(const exprt &char_expr, const locationt &location);
 
   /**
    * @brief Handle str.lstrip() method
@@ -242,9 +240,7 @@ public:
    * @param location Source location
    * @return Pointer to stripped string
    */
-  exprt handle_string_lstrip(
-    const exprt &str_expr,
-    const locationt &location);
+  exprt handle_string_lstrip(const exprt &str_expr, const locationt &location);
 
   /**
    * @brief Handle 'in' operator for strings

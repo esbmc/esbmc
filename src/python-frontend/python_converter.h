@@ -34,9 +34,12 @@ public:
 
   void convert();
 
-  string_builder& get_string_builder();  
-  
-  string_handler& get_string_handler() { return string_handler_; }
+  string_builder &get_string_builder();
+
+  string_handler &get_string_handler()
+  {
+    return string_handler_;
+  }
 
   const nlohmann::json &ast() const
   {
@@ -115,9 +118,12 @@ public:
   exprt get_expr(const nlohmann::json &element);
 
   locationt get_location_from_decl(const nlohmann::json &element);
-  
-  exprt handle_string_comparison(const std::string &op, exprt &lhs, exprt &rhs,
-                                  const nlohmann::json &element);
+
+  exprt handle_string_comparison(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
 
 private:
   friend class function_call_expr;
