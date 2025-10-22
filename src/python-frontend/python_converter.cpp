@@ -3407,7 +3407,9 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
       if (ann.contains("value") && ann["value"].contains("id"))
         var_type_str = ann["value"]["id"];
     }
-    else if (ann.contains("_type") && ann["_type"] == "Attribute" && ann.contains("attr"))
+    else if (
+      ann.contains("_type") && ann["_type"] == "Attribute" &&
+      ann.contains("attr"))
       var_type_str = ann["attr"];
     else if (ann.contains("id"))
       var_type_str = var_node["annotation"]["id"];
