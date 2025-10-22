@@ -1747,26 +1747,105 @@ static inline expr2tc gen_byte_memcpy(
 }
 
 static inline expr2tc do_memcpy_expression(
-  const expr2tc &dst,
-  const size_t &dst_offset,
-  const expr2tc &src,
-  const size_t &src_offset,
-  const size_t num_of_bytes)
+					   const expr2tc &dst,
+					   const size_t &dst_offset,
+					   const expr2tc &src,
+					   const size_t &src_offset,
+					   const size_t num_of_bytes)
 {
   if (num_of_bytes == 0)
     return dst;
 
   // Short-circuit
   if (
-    dst->type == src->type && !dst_offset && !src_offset &&
-    type_byte_size(dst->type).to_uint64() == num_of_bytes)
+      dst->type == src->type && !dst_offset && !src_offset &&
+	type_byte_size(dst->type).to_uint64() == num_of_bytes)
     return src;
 
+  log_status("Opportunity...");
+  // Python focus...
+  if (is_array_type(dst->type))
+    {
+
+      if (dst->type == src->type)
+	{
+	  log_debug("memcpy", "Easy case same array type");
+	  return expr2tc();
+	}
+      else if (is_array_type(src->type))
+	{
+          log_debug("memcpy", "Two different arrays");
+          return expr2tc();
+	}
+      else if (is_struct_type(src->type) || is_union_type(src->type) )
+	{
+          log_debug("memcpy", "Struct/union");
+          return expr2tc();
+	}
+
+      if (to_array_type(dst->type).subtype != char_type2())
+	{
+          log_debug("memcpy", "No support for non byte arrrays");
+          return expr2tc();
+
+	}
+
+      // SRC is a primitive and DST is an array
+      expr2tc result = gen_zero(dst->type);
+      constant_array2t &data = to_constant_array2t(result);
+
+      uint64_t base_size =
+	type_byte_size(to_array_type(dst->type).subtype).to_uint64();
+      assert(base_size == 1);
+
+      uint64_t bytes_left = num_of_bytes;
+      uint64_t dst_offset_left = dst_offset;
+      uint64_t src_offset_counter = src_offset;
+
+      for (unsigned i = 0; i < data.datatype_members.size(); i++)
+	{
+	  BigInt position(i);
+	  expr2tc local_member = index2tc(
+					  to_array_type(dst->type).subtype,
+					  dst,
+					  constant_int2tc(get_uint32_type(), position));
+	  // Skip offsets
+	  if (dst_offset_left >= base_size)
+	    {
+              data.datatype_members[i] = local_member;
+              dst_offset_left -= base_size;
+              continue;
+	    }
+
+      // If we have an array of bytes, then we arrive here with 0
+      // hopefully there will be no bitfield crazyness going on
+      assert(dst_offset_left == 0);
+
+      uint64_t src_bytes_left = src->type->get_width();
+      // log_status("Need to write {} bytes", bytes_left);
+      // assert(src_bytes_left <= src_offset_counter);
+
+      data.datatype_members[i] = byte_extract2tc(
+        char_type2(),
+        src,
+        gen_ulong(src_offset_counter++),
+        config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+
+      if (!data.datatype_members[i])
+        return expr2tc();
+	}
+      return result;
+    }
+  
   if (
-    is_array_type(src->type) || is_array_type(dst->type) ||
-    is_struct_type(dst->type) || is_union_type(dst->type) ||
-    is_struct_type(src->type) || is_union_type(src->type))
-    return expr2tc();
+      is_array_type(src->type) || is_array_type(dst->type) ||
+	is_struct_type(dst->type) || is_union_type(dst->type) ||
+	is_struct_type(src->type) || is_union_type(src->type))
+    {
+      log_status("missed the opportunity");
+      return expr2tc();
+    }
+  log_status("Used the opportunity");
 
   // Base-case. Primitives!
   return gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
