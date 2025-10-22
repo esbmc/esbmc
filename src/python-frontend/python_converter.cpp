@@ -4364,11 +4364,12 @@ void python_converter::process_function_arguments(
   const symbol_id &id,
   const locationt &location)
 {
-  for (const nlohmann::json &element : function_node["args"]["args"])
-  {
+  // Process a single argument
+  auto process_argument = [&](const nlohmann::json &element) {
     std::string arg_name = element["arg"].get<std::string>();
     typet arg_type;
 
+    // Handle special cases for 'self' and 'cls'
     if (arg_name == "self")
       arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
     else if (arg_name == "cls")
@@ -4384,6 +4385,7 @@ void python_converter::process_function_arguments(
       arg_type = get_type_from_annotation(element["annotation"], element);
     }
 
+    // Convert arrays to pointers
     if (arg_type.is_array())
       arg_type = gen_pointer_type(arg_type.subtype());
 
@@ -4414,6 +4416,19 @@ void python_converter::process_function_arguments(
     param_symbol.static_lifetime = false;
     param_symbol.is_extern = false;
     symbol_table_.add(param_symbol);
+  };
+
+  // Process regular arguments
+  for (const nlohmann::json &element : function_node["args"]["args"])
+    process_argument(element);
+
+  // Process keyword-only arguments (parameters after * separator)
+  if (
+    function_node["args"].contains("kwonlyargs") &&
+    !function_node["args"]["kwonlyargs"].is_null())
+  {
+    for (const nlohmann::json &element : function_node["args"]["kwonlyargs"])
+      process_argument(element);
   }
 }
 
