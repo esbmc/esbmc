@@ -4364,6 +4364,7 @@ void python_converter::process_function_arguments(
   const symbol_id &id,
   const locationt &location)
 {
+  // Process regular positional arguments
   for (const nlohmann::json &element : function_node["args"]["args"])
   {
     std::string arg_name = element["arg"].get<std::string>();
@@ -4414,6 +4415,57 @@ void python_converter::process_function_arguments(
     param_symbol.static_lifetime = false;
     param_symbol.is_extern = false;
     symbol_table_.add(param_symbol);
+  }
+
+  // Process keyword-only arguments (parameters after * separator)
+  if (
+    function_node["args"].contains("kwonlyargs") &&
+    !function_node["args"]["kwonlyargs"].is_null())
+  {
+    for (const nlohmann::json &element : function_node["args"]["kwonlyargs"])
+    {
+      std::string arg_name = element["arg"].get<std::string>();
+      typet arg_type;
+
+      if (!element.contains("annotation") || element["annotation"].is_null())
+      {
+        throw std::runtime_error(
+          "All parameters in function \"" + current_func_name_ +
+          "\" must be type annotated");
+      }
+      arg_type = get_type_from_annotation(element["annotation"], element);
+
+      if (arg_type.is_array())
+        arg_type = gen_pointer_type(arg_type.subtype());
+
+      assert(arg_type != typet());
+
+      // Create argument descriptor
+      code_typet::argumentt arg;
+      arg.type() = arg_type;
+      arg.cmt_base_name(arg_name);
+
+      std::string arg_id = id.to_string() + "@" + arg_name;
+      arg.cmt_identifier(arg_id);
+      arg.identifier(arg_id);
+      arg.location() = get_location_from_decl(element);
+
+      type.arguments().push_back(arg);
+
+      // Create parameter symbol
+      symbolt param_symbol = create_symbol(
+        location.get_file().as_string(),
+        arg_name,
+        arg_id,
+        arg.location(),
+        arg_type);
+      param_symbol.lvalue = true;
+      param_symbol.is_parameter = true;
+      param_symbol.file_local = true;
+      param_symbol.static_lifetime = false;
+      param_symbol.is_extern = false;
+      symbol_table_.add(param_symbol);
+    }
   }
 }
 

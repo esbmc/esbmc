@@ -203,6 +203,15 @@ private:
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
 
+  /**
+   * Process both positional and keyword arguments, matching them to
+   * function parameters in the correct order
+   */
+  void process_arguments_with_keywords(
+    code_function_callt &call,
+    const symbolt *func_symbol,
+    size_t param_offset) const;
+
   /*
    * Check if the current function call is to a regular expression module function
    * Returns true if the function is match, search, or fullmatch from the re module

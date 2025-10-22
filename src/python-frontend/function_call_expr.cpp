@@ -1438,6 +1438,194 @@ exprt function_call_expr::get()
   return handle_general_function_call();
 }
 
+void function_call_expr::process_arguments_with_keywords(
+  code_function_callt &call,
+  const symbolt *func_symbol,
+  size_t param_offset) const
+{
+  const code_typet &func_type = to_code_type(func_symbol->type);
+  const auto &func_params = func_type.arguments();
+
+  // Create a map of parameter names to positions
+  std::map<std::string, size_t> param_positions;
+  for (size_t i = param_offset; i < func_params.size(); i++)
+  {
+    // Extract parameter name from the full identifier
+    // For identifiers like py:main.py@C@Foo@F@foo@s, we want just "s"
+    std::string full_id = func_params[i].get_identifier().as_string();
+    std::string param_name;
+
+    size_t last_at = full_id.rfind('@');
+    if (last_at != std::string::npos)
+      param_name = full_id.substr(last_at + 1);
+    else
+      param_name = func_params[i].get_base_name().as_string();
+
+    param_positions[param_name] = i - param_offset;
+  }
+
+  // Create vector to hold arguments in correct order
+  size_t num_params = func_params.size() - param_offset;
+  std::vector<exprt> ordered_args(num_params);
+
+  // Process positional arguments first
+  size_t positional_count = 0;
+  if (call_.contains("args") && !call_["args"].is_null())
+  {
+    for (const auto &arg_node : call_["args"])
+    {
+      if (positional_count >= num_params)
+        throw std::runtime_error("Too many positional arguments");
+
+      exprt arg = converter_.get_expr(arg_node);
+
+      // Handle special case: __ESBMC_get_object_size with list type
+      if (
+        function_id_.get_function() == "__ESBMC_get_object_size" &&
+        (arg.type() == type_handler_.get_list_type() ||
+         (arg.type().is_pointer() &&
+          arg.type().subtype() == type_handler_.get_list_type())))
+      {
+        symbolt *list_symbol =
+          converter_.find_symbol(arg.identifier().as_string());
+        assert(list_symbol);
+
+        const symbolt *list_size_func_sym =
+          converter_.find_symbol("c:list.c@F@list_size");
+        assert(list_size_func_sym);
+
+        code_function_callt list_size_func_call;
+        list_size_func_call.function() = symbol_expr(*list_size_func_sym);
+        list_size_func_call.arguments().push_back(symbol_expr(*list_symbol));
+        list_size_func_call.type() = signedbv_typet(64);
+
+        // For this special case, return early by adding directly to call
+        call.arguments().push_back(list_size_func_call);
+        return;
+      }
+
+      // Handle function calls used as arguments
+      if (arg.is_code() && arg.is_function_call())
+      {
+        side_effect_expr_function_callt func_call;
+        func_call.function() = arg.op1();
+
+        const exprt &args_expr = to_code(arg).op2();
+        for (const auto &operand : args_expr.operands())
+          func_call.arguments().push_back(operand);
+
+        const exprt &func_expr = arg.op1();
+        if (func_expr.is_symbol())
+        {
+          const symbolt *func_sym =
+            converter_.ns.lookup(to_symbol_expr(func_expr));
+          if (func_sym != nullptr)
+          {
+            const code_typet &ft = to_code_type(func_sym->type);
+            func_call.type() = ft.return_type();
+          }
+        }
+        arg = func_call;
+      }
+
+      // Handle list type info
+      if (arg.type() == type_handler_.get_list_type())
+      {
+        const code_typet &type =
+          static_cast<const code_typet &>(func_symbol->type);
+        if (positional_count + param_offset < type.arguments().size())
+        {
+          const std::string &arg_id = type.arguments()
+                                        .at(positional_count + param_offset)
+                                        .identifier()
+                                        .as_string();
+          python_list::copy_type_info(arg.identifier().as_string(), arg_id);
+        }
+      }
+
+      // Handle array arguments
+      if (arg.type().is_array())
+      {
+        if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+        {
+          arg = string_constantt(
+            arg_node["value"].get<std::string>(),
+            arg.type(),
+            string_constantt::k_default);
+        }
+        ordered_args[positional_count] = address_of_exprt(arg);
+      }
+      else
+      {
+        ordered_args[positional_count] = arg;
+      }
+
+      positional_count++;
+    }
+  }
+
+  // Process keyword arguments
+  if (call_.contains("keywords") && !call_["keywords"].is_null())
+  {
+    for (const auto &keyword : call_["keywords"])
+    {
+      // Skip **kwargs (where arg is null)
+      if (!keyword.contains("arg") || keyword["arg"].is_null())
+        continue;
+
+      std::string param_name = keyword["arg"].get<std::string>();
+
+      // Find the parameter position
+      auto it = param_positions.find(param_name);
+      if (it == param_positions.end())
+      {
+        throw std::runtime_error(
+          "Keyword argument '" + param_name +
+          "' does not match any parameter in function '" +
+          function_id_.get_function() + "'");
+      }
+
+      size_t param_pos = it->second;
+
+      // Check if this position was already filled by a positional argument
+      if (param_pos < positional_count)
+      {
+        throw std::runtime_error(
+          "Keyword argument '" + param_name +
+          "' conflicts with positional argument");
+      }
+
+      exprt arg = converter_.get_expr(keyword["value"]);
+
+      // Handle array arguments
+      if (arg.type().is_array())
+      {
+        if (
+          keyword["value"]["_type"] == "Constant" &&
+          keyword["value"]["value"].is_string())
+        {
+          arg = string_constantt(
+            keyword["value"]["value"].get<std::string>(),
+            arg.type(),
+            string_constantt::k_default);
+        }
+        ordered_args[param_pos] = address_of_exprt(arg);
+      }
+      else
+      {
+        ordered_args[param_pos] = arg;
+      }
+    }
+  }
+
+  // Add all non-null arguments to the call in the correct order
+  for (const auto &arg : ordered_args)
+  {
+    if (!arg.is_nil())
+      call.arguments().push_back(arg);
+  }
+}
+
 exprt function_call_expr::handle_general_function_call()
 {
   auto &symbol_table = converter_.symbol_table();
@@ -1580,6 +1768,9 @@ exprt function_call_expr::handle_general_function_call()
   const typet &return_type = to_code_type(func_symbol->type).return_type();
   call.type() = return_type;
 
+  // Calculate parameter offset based on implicit parameters added
+  size_t param_offset = 0;
+
   // Add self as first parameter
   if (function_type_ == FunctionType::Constructor)
   {
@@ -1587,12 +1778,15 @@ exprt function_call_expr::handle_general_function_call()
     // Self is the LHS
     if (converter_.current_lhs)
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
+
+    param_offset = 1; // Skip 'self' in parameter matching
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
     assert(obj_symbol);
     // Passing object as "self" (first) parameter on instance method calls
     call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    param_offset = 1; // Skip 'self' in parameter matching
   }
   else if (function_type_ == FunctionType::ClassMethod)
   {
@@ -1617,6 +1811,7 @@ exprt function_call_expr::handle_general_function_call()
     {
       // First positional argument will be added in the loop below as 'self'
       // Don't add a NULL cls parameter
+      param_offset = 1;
     }
     else
     {
@@ -1633,12 +1828,16 @@ exprt function_call_expr::handle_general_function_call()
         call_["args"].empty())
       {
         call.arguments().push_back(symbol_expr(*obj_symbol));
+        param_offset = 1;
       }
       else if (call_["func"]["value"]["_type"] == "BinOp")
       {
         // Handling function call from binary expressions such as: (x+1).bit_length()
         call.arguments().push_back(converter_.get_expr(call_["func"]["value"]));
+        param_offset = 1;
       }
+      else
+        param_offset = 1;
     }
   }
 
@@ -1731,6 +1930,9 @@ exprt function_call_expr::handle_general_function_call()
     else
       call.arguments().push_back(arg);
   }
+
+  // Process both positional and keyword arguments
+  process_arguments_with_keywords(call, func_symbol, param_offset);
 
   return std::move(call);
 }
