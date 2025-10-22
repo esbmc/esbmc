@@ -2086,6 +2086,112 @@ exprt python_converter::handle_string_isalpha(
   return isalpha_call;
 }
 
+exprt python_converter::handle_string_isspace(
+  const exprt &str_expr,
+  const locationt &location)
+{
+  symbol_id func_id;
+  func_id.set_prefix("c:");
+  func_id.set_function("__python_str_isspace");
+
+  std::string func_symbol_id = func_id.to_string();
+
+  if (symbol_table().find_symbol(func_symbol_id.c_str()) == nullptr)
+  {
+    code_typet code_type;
+    code_type.return_type() = bool_type();
+
+    code_typet::argumentt arg;
+    arg.type() = pointer_typet(char_type());
+    code_type.arguments().push_back(arg);
+
+    symbolt symbol = create_symbol(
+      "", "__python_str_isspace", func_symbol_id, location, code_type);
+
+    add_symbol(symbol);
+  }
+
+  // Get the string pointer
+  exprt str_ptr = str_expr;
+
+  if (str_expr.is_constant() && str_expr.type().is_array())
+  {
+    str_ptr = exprt("index", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+    str_ptr.copy_to_operands(from_integer(0, int_type()));
+  }
+  else if (str_expr.type().is_array())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    exprt index_expr("index", char_type());
+    index_expr.copy_to_operands(str_expr);
+    index_expr.copy_to_operands(from_integer(0, int_type()));
+    str_ptr.copy_to_operands(index_expr);
+  }
+  else if (!str_expr.type().is_pointer())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+  }
+
+  // Create function call
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt(func_symbol_id, code_typet());
+  call.arguments().push_back(str_ptr);
+  call.type() = bool_type();
+  call.location() = location;
+
+  return call;
+}
+
+exprt python_converter::handle_char_isspace(
+  const exprt &char_expr,
+  const locationt &location)
+{
+  // For single characters, use the standard C isspace() function
+  symbol_id func_id;
+  func_id.set_prefix("c:");
+  func_id.set_function("isspace");
+
+  std::string func_symbol_id = func_id.to_string();
+
+  if (symbol_table().find_symbol(func_symbol_id.c_str()) == nullptr)
+  {
+    code_typet code_type;
+    code_type.return_type() = int_type();
+
+    code_typet::argumentt arg;
+    arg.type() = int_type();
+    code_type.arguments().push_back(arg);
+
+    symbolt symbol =
+      create_symbol("", "isspace", func_symbol_id, location, code_type);
+
+    add_symbol(symbol);
+  }
+
+  // Convert char to int for isspace
+  exprt char_as_int = char_expr;
+  if (char_expr.type() != int_type())
+  {
+    char_as_int = typecast_exprt(char_expr, int_type());
+  }
+
+  // Create function call to C's isspace
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt(func_symbol_id, code_typet());
+  call.arguments().push_back(char_as_int);
+  call.type() = int_type();
+  call.location() = location;
+
+  // Convert result to boolean (isspace returns non-zero for whitespace)
+  exprt result("notequal", bool_type());
+  result.copy_to_operands(call);
+  result.copy_to_operands(from_integer(0, int_type()));
+
+  return result;
+}
+
 exprt python_converter::handle_string_membership(
   exprt &lhs,
   exprt &rhs,

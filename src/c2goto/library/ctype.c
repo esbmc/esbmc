@@ -157,6 +157,28 @@ __ESBMC_HIDE:;
          c == ' ';
 }
 
+// Python string isspace: checks if all characters are whitespace
+_Bool __python_str_isspace(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0; // Empty string is not considered all whitespace in Python
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+
+    // Check for whitespace: space, tab, newline, vertical tab, form feed, carriage return
+    if (!(c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+          c == '\r'))
+      return 0;
+
+    s++;
+  }
+
+  return 1; // All characters are whitespace
+}
+
 int isupper(int c)
 {
 __ESBMC_HIDE:;

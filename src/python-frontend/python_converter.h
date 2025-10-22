@@ -285,6 +285,10 @@ private:
   exprt
   handle_string_isalpha(const exprt &string_obj, const locationt &location);
 
+  exprt handle_string_isspace(const exprt &str_expr, const locationt &location);
+
+  exprt handle_char_isspace(const exprt &char_expr, const locationt &location);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,
