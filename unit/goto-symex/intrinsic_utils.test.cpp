@@ -14,6 +14,8 @@
 
 #include <goto-symex/goto_symex.h>
 
+const mode_table_et mode_table[] = {};
+
 SCENARIO("the memcpy generation can generate valid results", "[symex]")
 {
   expr2tc src;
@@ -31,8 +33,8 @@ SCENARIO("the memcpy generation can generate valid results", "[symex]")
     dst_offset = 0;
 
     result = goto_symex_utils::gen_byte_memcpy(
-      src, dst, number_of_bytes, src_offset, dst_offset);
-
+      dst, src, number_of_bytes, src_offset, dst_offset);
+    
     simplify(result);
 
     REQUIRE(result == dst);

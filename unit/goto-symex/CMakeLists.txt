@@ -1,1 +1,1 @@
-#new_unit_test(intrinsic-utils-test "intrinsic_utils.test.cpp" "symex;solvers;test_goto_factory;gotoprograms;gotoalgorithms;abstract-interpretation;pointeranalysis;filesystem;langapi;util_esbmc;symex")
+new_unit_test(intrinsic-utils-test "intrinsic_utils.test.cpp" "symex;solvers;gotoalgorithms;pointeranalysis;util_esbmc;langapi")
