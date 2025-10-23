@@ -1693,8 +1693,7 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
   if (src->type != dst->type)
     return expr2tc();
 
-  expr2tc src_mask = gen_zero(dst->type);
-
+  expr2tc src_mask = gen_zero(src->type);
   expr2tc dst_mask = gen_zero(dst->type);
 
   const expr2tc eight = constant_int2tc(dst->type, BigInt(8));
