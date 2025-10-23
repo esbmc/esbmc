@@ -27,8 +27,7 @@ SCENARIO("the memcpy generation can generate valid results", "[symex]")
                                const uint32_t dst_value,
                                const uint32_t dst_offset,
                                const size_t number_of_bytes,
-                               const uint32_t expected_value)
-  {
+                               const uint32_t expected_value) {
     const expr2tc src =
       constant_int2tc(get_uint_type(src_width), BigInt(src_value));
     const expr2tc dst =
@@ -55,11 +54,11 @@ SCENARIO("the memcpy generation can generate valid results", "[symex]")
 
   GIVEN("memcpy(&some-int1[2], &some-int2, 2) with different src offsets")
   {
-    primitive_test_case(32, 0x01020304, 2, 32, 0x05060708, 0, 2, 0x05060102 );
+    primitive_test_case(32, 0x01020304, 2, 32, 0x05060708, 0, 2, 0x05060102);
   }
 
   GIVEN("memcpy(&some-int1[2], &some-int2, 2) with different dst offsets")
   {
-    primitive_test_case(32, 0x01020304, 0, 32, 0x05060708, 2, 2, 0x03040708 );
+    primitive_test_case(32, 0x01020304, 0, 32, 0x05060708, 2, 2, 0x03040708);
   }
 }
