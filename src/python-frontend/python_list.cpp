@@ -755,18 +755,10 @@ exprt python_list::handle_index_access(
     }
 
     // Determine element type
-    if (elem_type == typet() && list_node.is_null())
-    {
-      // Handle case where list_node is not found - use default element type
-      elem_type = converter_.get_type_handler().get_list_element_type();
-    }
-    else if (list_node["_type"] == "arg")
+    if (list_node["_type"] == "arg")
     {
       elem_type =
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
-
-      if (elem_type == typet())
-        elem_type = converter_.get_type_handler().get_list_element_type();
     }
     else if (
       slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||
@@ -785,9 +777,6 @@ exprt python_list::handle_index_access(
 
         elem_type = get_elem_type_from_annotation(
           list_value_node, converter_.get_type_handler());
-
-        if (elem_type == typet())
-          elem_type = converter_.get_type_handler().get_list_element_type();
       }
       else
       {
@@ -816,9 +805,6 @@ exprt python_list::handle_index_access(
       {
         elem_type = get_elem_type_from_annotation(
           list_node, converter_.get_type_handler());
-
-        if (elem_type == typet())
-          elem_type = converter_.get_type_handler().get_list_element_type();
       }
       else
       {
@@ -842,9 +828,6 @@ exprt python_list::handle_index_access(
         {
           elem_type = get_elem_type_from_annotation(
             list_node, converter_.get_type_handler());
-
-          if (elem_type == typet())
-            elem_type = converter_.get_type_handler().get_list_element_type();
         }
         else if (elem_type == typet() && list_node.contains("value"))
         {
