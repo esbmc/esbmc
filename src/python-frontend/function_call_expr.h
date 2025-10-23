@@ -202,6 +202,7 @@ private:
   exprt handle_list_method() const;
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
+  exprt handle_list_extend() const;
 
   /*
    * Check if the current function call is to a regular expression module function

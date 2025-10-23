@@ -1134,6 +1134,9 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_append();
   if (method_name == "insert")
     return handle_list_insert();
+  if (method_name == "extend")
+    return handle_list_extend();
+
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);
@@ -1178,6 +1181,30 @@ exprt function_call_expr::handle_list_append() const
     value_to_append.type());
 
   return list.build_push_list_call(*list_symbol, call_, value_to_append);
+}
+
+exprt function_call_expr::handle_list_extend() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error("extend() takes exactly one argument");
+
+  std::string list_name = get_object_name();
+
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  exprt other_list = converter_.get_expr(args[0]);
+
+  python_list list(converter_, nlohmann::json());
+
+  return list.build_extend_list_call(*list_symbol, call_, other_list);
 }
 
 bool function_call_expr::is_print_call() const

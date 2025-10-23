@@ -100,6 +100,7 @@ const static std::vector<std::string> python_c_models = {
   "list_get_as",
   "list_push",
   "list_insert",
+  "list_extend",
   "list_push_object",
   "list_replace",
   "list_pop",

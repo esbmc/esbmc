@@ -222,3 +222,27 @@ static bool list_contains(
   }
   return false;
 }
+
+/* ---------- extend list ---------- */
+static inline void list_extend(List *l, const List *other)
+{
+  if (!l || !other)
+    return;
+
+  size_t i = 0;
+  while (i < other->size)
+  {
+    const Object *elem = &other->items[i];
+
+    void *copied_value = malloc(elem->size);
+    __ESBMC_assume(copied_value != NULL);
+    memcpy(copied_value, elem->value, elem->size);
+
+    l->items[l->size].value = copied_value;
+    l->items[l->size].type_id = elem->type_id;
+    l->items[l->size].size = elem->size;
+    l->size++;
+
+    ++i;
+  }
+}
