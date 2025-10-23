@@ -269,7 +269,7 @@ __ESBMC_HIDE:;
   return cpy;
 }
 
-void *__memcpy_impl(void *dst, const void *src, unsigned long long n)
+void *__memcpy_impl(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
   char *cdst = dst;
