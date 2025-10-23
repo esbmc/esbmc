@@ -39,6 +39,10 @@ def import_module_by_name(module_name, output_dir):
         sys.exit(3)
 
     base_module = module_name.split(".")[0]
+    
+    # Skip typing module - it's for type annotations only
+    if base_module == "typing":
+        return None
 
     if is_imported_model(base_module):
         parts = module_name.split(".")
@@ -150,6 +154,10 @@ def process_imports(node, output_dir):
         filename = os.path.join(models_dir, module_name + ".py")
     else:
         module = import_module_by_name(module_name, output_dir)
+        if module is None:
+            # Module doesn't need processing (e.g., typing)
+            node.full_path = None
+            return
         filename = module.__file__
 
     # Don't process the file here; we'll do it once after collecting all imports
