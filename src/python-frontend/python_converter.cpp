@@ -1773,7 +1773,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   {
     if (
       (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
-      obj.contains("full_path"))
+      obj.contains("full_path") && !obj["full_path"].is_null())
     {
       std::regex pattern("py:(.*?)@");
       std::string imported_symbol = std::regex_replace(
