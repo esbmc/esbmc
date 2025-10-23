@@ -1057,3 +1057,38 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   return result;
 }
+
+exprt python_list::build_extend_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &other_list)
+{
+  const symbolt *extend_func_sym =
+    converter_.symbol_table().find_symbol("c:list.c@F@list_extend");
+  if (!extend_func_sym)
+    throw std::runtime_error("Extend function symbol not found");
+
+  locationt location = converter_.get_location_from_decl(op);
+
+  // Update list_type_map: copy type info from other_list to list
+  const std::string &list_name = list.id.as_string();
+  const std::string &other_list_name = other_list.identifier().as_string();
+
+  // Copy all type entries from other_list to the end of list
+  if (list_type_map.find(other_list_name) != list_type_map.end())
+  {
+    for (const auto &type_entry : list_type_map[other_list_name])
+    {
+      list_type_map[list_name].push_back(type_entry);
+    }
+  }
+
+  code_function_callt extend_func_call;
+  extend_func_call.function() = symbol_expr(*extend_func_sym);
+  extend_func_call.arguments().push_back(symbol_expr(list));
+  extend_func_call.arguments().push_back(other_list);
+  extend_func_call.type() = empty_typet();
+  extend_func_call.location() = location;
+
+  return extend_func_call;
+}

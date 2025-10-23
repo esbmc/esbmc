@@ -54,6 +54,11 @@ public:
     const nlohmann::json &op,
     const exprt &elem);
 
+  exprt build_extend_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &other_list);
+
   // Build: result = lhs + rhs   (concatenation)
   exprt build_concat_list_call(
     const exprt &lhs,
