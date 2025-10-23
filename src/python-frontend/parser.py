@@ -39,8 +39,8 @@ def import_module_by_name(module_name, output_dir):
         sys.exit(3)
 
     base_module = module_name.split(".")[0]
-    
-    # Skip typing module - it's for type annotations only
+
+    # Skip typing module - it's for type annotations only and doesn't need AST processing.
     if base_module == "typing":
         return None
 
@@ -155,8 +155,7 @@ def process_imports(node, output_dir):
     else:
         module = import_module_by_name(module_name, output_dir)
         if module is None:
-            # Module doesn't need processing (e.g., typing)
-            node.full_path = None
+            # Module doesn't need processing (e.g., typing) - don't set full_path
             return
         filename = module.__file__
 
