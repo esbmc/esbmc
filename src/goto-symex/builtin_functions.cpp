@@ -1673,30 +1673,7 @@ static inline expr2tc gen_value_by_byte(
   return gen_byte_expression(type, src, value, num_of_bytes, offset);
 }
 
-/**
- * Computes the equivalent object value when considering a memcpy operation on it.
- *
- * @param src The source expression from which bytes are copied.
- * @param dst The destination expression to which bytes are copied.
- * @param num_of_bytes The number of bytes to copy from src to dst.
- * @param src_offset The offset in src from which the bytes start.
- * @param dst_offset The offset in dst at which the bytes are written.
- *
- * @returns A new expr2tc representing the result of the memcpy operation, or an empty expr2tc if unable construct the object
- *
- * Usage Examples:
- * @code
- * expr2tc src = constant_int2tc(get_uint_type(32), BigInt(0xdeadbeef));
- * expr2tc dst = constant_int2tc(get_uint_type(32), BigInt(0x12345678));
- * size_t num_of_bytes = 1;
- * size_t src_offset = 1;
- * size_t dst_offset = 2;
- *
- * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
- * // result should be constant_int2tc(bitvec_type(32)), BigInt(0x12de345678));
- * @endcode
- */
-static inline expr2tc gen_byte_memcpy(
+expr2tc goto_symex_utils::gen_byte_memcpy(
   const expr2tc &src,
   const expr2tc &dst,
   const size_t num_of_bytes,
@@ -1776,7 +1753,7 @@ static inline expr2tc do_memcpy_expression(
   }
 
   // Base-case. Primitives!
-  return gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
+  return goto_symex_utils::gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
 }
 
 void offset_simplifier(expr2tc &e)
