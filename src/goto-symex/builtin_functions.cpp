@@ -1680,6 +1680,12 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
   const size_t src_offset,
   const size_t dst_offset)
 {
+  // Technically we already did all these checks before, this is just
+  // an extra for DEBUG builds.
+  assert(
+    (src->type->get_width() - src_offset) >= num_of_bytes &&
+    (dst->type->get_width() - dst_offset) >= num_of_bytes);
+
   if (is_pointer_type(src) || is_pointer_type(dst))
     return expr2tc();
 
