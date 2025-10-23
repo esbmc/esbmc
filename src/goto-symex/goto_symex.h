@@ -1227,7 +1227,7 @@ protected:
 
 namespace goto_symex_utils
 {
-  /**
+/**
  * Computes the equivalent object value when considering a memcpy operation on it.
  *
  * @param src The source expression from which bytes are copied.
@@ -1250,12 +1250,12 @@ namespace goto_symex_utils
  * // result should be constant_int2tc(bitvec_type(32)), BigInt(0x12de345678));
  * @endcode
  */
- expr2tc gen_byte_memcpy(
-    const expr2tc &src,
-    const expr2tc &dst,
-    const size_t num_of_bytes,
-    const size_t src_offset,
-    const size_t dst_offset);
-}
+expr2tc gen_byte_memcpy(
+  const expr2tc &src,
+  const expr2tc &dst,
+  const size_t num_of_bytes,
+  const size_t src_offset,
+  const size_t dst_offset);
+} // namespace goto_symex_utils
 
 #endif

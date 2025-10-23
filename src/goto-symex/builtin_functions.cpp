@@ -1753,7 +1753,8 @@ static inline expr2tc do_memcpy_expression(
   }
 
   // Base-case. Primitives!
-  return goto_symex_utils::gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
+  return goto_symex_utils::gen_byte_memcpy(
+    src, dst, num_of_bytes, src_offset, dst_offset);
 }
 
 void offset_simplifier(expr2tc &e)
