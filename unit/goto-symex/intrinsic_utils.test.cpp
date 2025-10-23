@@ -30,8 +30,9 @@ SCENARIO("the memcpy generation can generate valid results", "[symex]")
     src_offset = 0;
     dst_offset = 0;
 
-    result = goto_symex_utils::gen_byte_memcpy(src, dst, number_of_bytes, src_offset, dst_offset);
-    
+    result = goto_symex_utils::gen_byte_memcpy(
+      src, dst, number_of_bytes, src_offset, dst_offset);
+
     simplify(result);
 
     REQUIRE(result == dst);
