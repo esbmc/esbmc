@@ -1673,7 +1673,29 @@ static inline expr2tc gen_value_by_byte(
   return gen_byte_expression(type, src, value, num_of_bytes, offset);
 }
 
-// Computes the equivalent object value when considering a memcpy operation on it
+/**
+ * Computes the equivalent object value when considering a memcpy operation on it.
+ *
+ * @param src The source expression from which bytes are copied.
+ * @param dst The destination expression to which bytes are copied.
+ * @param num_of_bytes The number of bytes to copy from src to dst.
+ * @param src_offset The offset in src from which the bytes start.
+ * @param dst_offset The offset in dst at which the bytes are written.
+ *
+ * @returns A new expr2tc representing the result of the memcpy operation, or an empty expr2tc if unable construct the object
+ *
+ * Usage Examples:
+ * @code
+ * expr2tc src = constant_int2tc(get_uint_type(32), BigInt(0xdeadbeef));
+ * expr2tc dst = constant_int2tc(get_uint_type(32), BigInt(0x12345678));
+ * size_t num_of_bytes = 1;
+ * size_t src_offset = 1;
+ * size_t dst_offset = 2;
+ *
+ * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
+ * // result should be constant_int2tc(bitvec_type(32)), BigInt(0x12de345678));
+ * @endcode
+ */
 static inline expr2tc gen_byte_memcpy(
   const expr2tc &src,
   const expr2tc &dst,
@@ -1688,20 +1710,14 @@ static inline expr2tc gen_byte_memcpy(
   if (src->type != dst->type)
     return expr2tc();
 
-  // Example: 0xdeadbeef with offset 1 (src) and 0x12345678 with offset 2 (dst). 1 byte
-  // Result shout be: 0x1234ad78
-
-  // 0x0000
   expr2tc src_mask = gen_zero(dst->type);
 
-  // 0x0000
   expr2tc dst_mask = gen_zero(dst->type);
 
-  const auto eight = constant_int2tc(dst->type, BigInt(8));
-  const auto one = constant_int2tc(dst->type, BigInt(1));
+  const expr2tc eight = constant_int2tc(dst->type, BigInt(8));
+  const expr2tc one = constant_int2tc(dst->type, BigInt(1));
 
   for (unsigned i = 0; i < num_of_bytes; i++)
-  {
     for (int m = 0; m < 8; m++)
     {
       src_mask = shl2tc(dst->type, src_mask, one);
@@ -1709,39 +1725,27 @@ static inline expr2tc gen_byte_memcpy(
       dst_mask = shl2tc(dst->type, dst_mask, one);
       dst_mask = bitor2tc(dst->type, dst_mask, one);
     }
-  }
-
-  // masks: 0x000000FF
 
   for (unsigned i = 0; i < dst_offset; i++)
-  {
-    dst_mask = shl2tc(dst->type, dst_mask, eight); // dst_mask: 0x00FF0000
-  }
+    dst_mask = shl2tc(dst->type, dst_mask, eight);
 
-  dst_mask = bitnot2tc(dst->type, dst_mask);      // dst_mask: 0xFF00FFFF
-  dst_mask = bitand2tc(dst->type, dst, dst_mask); // dst_mask: 0x12005678
+  dst_mask = bitnot2tc(dst->type, dst_mask);
+  dst_mask = bitand2tc(dst->type, dst, dst_mask);
 
   for (unsigned i = 0; i < src_offset; i++)
-  {
-    src_mask = shl2tc(dst->type, src_mask, eight); // src_mask: 0x0000FF00
-  }
+    src_mask = shl2tc(dst->type, src_mask, eight);
 
-  src_mask = bitand2tc(dst->type, src, src_mask); // src_mask: 0x0000de00
+  src_mask = bitand2tc(dst->type, src, src_mask);
 
   // When dst_offset > src_offset
   for (unsigned i = src_offset; i < dst_offset; i++)
-  {
-    src_mask = shl2tc(dst->type, src_mask, eight); // src_mask: 0x00de0000
-  }
+    src_mask = shl2tc(dst->type, src_mask, eight);
 
   // When dst_offsett < src_offset
   for (unsigned i = dst_offset; i < src_offset; i++)
-  {
     src_mask = lshr2tc(dst->type, src_mask, eight);
-  }
 
-  auto result = bitor2tc(dst->type, dst_mask, src_mask); // result: 0x12de345678
-
+  expr2tc result = bitor2tc(dst->type, dst_mask, src_mask);
   simplify(result);
   return result;
 }
