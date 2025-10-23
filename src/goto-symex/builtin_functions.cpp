@@ -2591,13 +2591,32 @@ void goto_symext::replace_races_check(expr2tc &expr)
 
   if (is_races_check2t(expr))
   {
-    // replace with __ESBMC_races_flag[address_of(var)]
+    // replace with __ESBMC_races_flag[index]
     const races_check2t &obj = to_races_check2t(expr);
 
     expr2tc flag;
     migrate_expr(symbol_expr(*ns.lookup("c:@F@__ESBMC_races_flag")), flag);
 
-    expr2tc index_expr = index2tc(get_bool_type(), flag, obj.value);
+    expr2tc max_offset =
+      constant_int2tc(get_uint_type(config.ansi_c.address_width), 1000);
+    // The reason for not using address directly is that address
+    // is modeled as an nondet value, which depends on the address space constraints.
+    // VCC becomes complex and inefficient in this case.
+
+    // The current method is similar to a two-dimensional array: array[obj][offset]
+    // But we flatten it out: obj * MAX_VALUE + offset
+    // In theory, this should create a unique index for variables.
+    // We need to think carefully about the value of MAX_VALUE
+    // XL: Should we let the user choose this value?
+    expr2tc mul = mul2tc(
+      size_type2(), pointer_object2tc(pointer_type2(), obj.value), max_offset);
+    expr2tc add = add2tc(
+      size_type2(),
+      mul,
+      pointer_offset2tc(get_int_type(config.ansi_c.address_width), obj.value));
+
+    expr2tc index_expr = index2tc(get_bool_type(), flag, add);
+
     expr = index_expr;
   }
 }
