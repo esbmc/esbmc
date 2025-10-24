@@ -969,14 +969,15 @@ exprt string_handler::handle_string_membership(
   // Call strstr(haystack, needle) - in Python "needle in haystack"
   side_effect_expr_function_callt strstr_call;
   strstr_call.function() = symbol_expr(*strstr_symbol);
-  strstr_call.arguments() = {rhs_addr, lhs_addr};
+  strstr_call.arguments() = {
+    rhs_addr, lhs_addr}; // haystack is rhs, needle is lhs
   strstr_call.location() = converter_.get_location_from_decl(element);
   strstr_call.type() = gen_pointer_type(char_type());
 
+  // Check if result != NULL (substring found)
   constant_exprt null_ptr(gen_pointer_type(char_type()));
   null_ptr.set_value("NULL");
 
-  // Check if result != NULL (substring found)
   exprt not_equal("notequal", bool_type());
   not_equal.copy_to_operands(strstr_call, null_ptr);
 
