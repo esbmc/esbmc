@@ -1880,6 +1880,11 @@ void goto_symext::intrinsic_memcpy(
       bump_call(func_call, bump_name);
       return;
     }
+    catch (const array_type2t::inf_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
 
     if (is_code_type(item_object->type))
     {
@@ -1955,6 +1960,11 @@ void goto_symext::intrinsic_memcpy(
       type_size = type_byte_size(item.object->type).to_uint64();
     }
     catch (const array_type2t::dyn_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    catch (const array_type2t::inf_sized_array_excp &)
     {
       bump_call(func_call, bump_name);
       return;
