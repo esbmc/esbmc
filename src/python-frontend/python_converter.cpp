@@ -3566,7 +3566,16 @@ typet python_converter::get_type_from_annotation(
 
     // Treat T | ... | None as Optional[T]
     typet base_type = type_handler_.get_typet(inner_type);
-    // Always use pointer type for union with None to properly represent None
+    // For primitive types (int, float, bool), don't use pointer
+    // Use the base type directly and treat NULL as a special value (0)
+    if (
+      base_type == long_long_int_type() || base_type == long_long_uint_type() ||
+      base_type == double_type() || base_type == bool_type())
+    {
+      return base_type;
+    }
+
+    // For other types (e.g., classes, lists), use pointer type
     return gen_pointer_type(base_type);
   }
   else if (
