@@ -2,6 +2,7 @@
 
 #include <util/c_types.h>
 #include <util/expr.h>
+#include <util/expr_util.h>
 #include <util/type.h>
 
 #include <nlohmann/json.hpp>
@@ -232,6 +233,22 @@ public:
     // String types are represented as arrays or pointers to char
     return type.is_array() ||
            (type.is_pointer() && type.subtype() == char_type());
+  }
+
+  // Handle optional type logic
+  static typet handle_optional_type(const typet &base_type)
+  {
+    // For primitive types (int, float, bool), don't use pointer
+    // Use the base type directly and treat NULL as a special value (0)
+    if (
+      base_type == long_long_int_type() || base_type == long_long_uint_type() ||
+      base_type == double_type() || base_type == bool_type())
+    {
+      return base_type;
+    }
+
+    // For other types (e.g., classes, lists), use pointer type
+    return gen_pointer_type(base_type);
   }
 
 private:

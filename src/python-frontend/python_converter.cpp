@@ -3485,6 +3485,43 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   return std::move(code);
 }
 
+// Extract non-None type from union
+std::string
+python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
+{
+  std::function<std::string(const nlohmann::json &)> extract_type =
+    [&](const nlohmann::json &node) -> std::string {
+    if (
+      node.contains("_type") && node["_type"] == "Constant" &&
+      node.contains("value") && node["value"].is_null())
+      return ""; // This is None
+
+    if (node.contains("id"))
+      return node["id"].get<std::string>();
+
+    // Recursively handle nested BinOp (e.g., bool | str in bool | str | None)
+    if (node.contains("_type") && node["_type"] == "BinOp")
+    {
+      std::string left_type = extract_type(node["left"]);
+      if (!left_type.empty())
+        return left_type;
+      return extract_type(node["right"]);
+    }
+
+    return "";
+  };
+
+  const auto &left = annotation_node["left"];
+  const auto &right = annotation_node["right"];
+
+  // Extract the first non-None type
+  std::string inner_type = extract_type(left);
+  if (inner_type.empty())
+    inner_type = extract_type(right);
+
+  return inner_type;
+}
+
 typet python_converter::get_type_from_annotation(
   const nlohmann::json &annotation_node,
   const nlohmann::json &element)
@@ -3509,7 +3546,8 @@ typet python_converter::get_type_from_annotation(
         std::string inner_type =
           annotation_node["slice"]["id"].get<std::string>();
         typet base_type = type_handler_.get_typet(inner_type);
-        return gen_pointer_type(base_type); // Return pointer type
+        // Always use pointer type for Optional to properly represent None
+        return gen_pointer_type(base_type);
       }
     }
 
@@ -3518,36 +3556,7 @@ typet python_converter::get_type_from_annotation(
   else if (annotation_node["_type"] == "BinOp")
   {
     // Handle union types such as str | None (PEP 604 syntax)
-    const auto &left = annotation_node["left"];
-    const auto &right = annotation_node["right"];
-
-    // Extract a non-None type from potentially nested unions
-    std::function<std::string(const nlohmann::json &)> extract_type =
-      [&](const nlohmann::json &node) -> std::string {
-      if (
-        node.contains("_type") && node["_type"] == "Constant" &&
-        node.contains("value") && node["value"].is_null())
-        return ""; // This is None
-
-      if (node.contains("id"))
-        return node["id"].get<std::string>();
-
-      // Recursively handle nested BinOp (e.g., bool | str in bool | str | None)
-      if (node.contains("_type") && node["_type"] == "BinOp")
-      {
-        std::string left_type = extract_type(node["left"]);
-        if (!left_type.empty())
-          return left_type;
-        return extract_type(node["right"]);
-      }
-
-      return "";
-    };
-
-    // Extract the first non-None type
-    std::string inner_type = extract_type(left);
-    if (inner_type.empty())
-      inner_type = extract_type(right);
+    std::string inner_type = extract_non_none_type(annotation_node);
 
     if (inner_type.empty())
     {
@@ -3555,8 +3564,9 @@ typet python_converter::get_type_from_annotation(
       return pointer_type();
     }
 
-    // Treat T | ... | None as Optional[T] - return pointer type
+    // Treat T | ... | None as Optional[T]
     typet base_type = type_handler_.get_typet(inner_type);
+    // Always use pointer type for union with None to properly represent None
     return gen_pointer_type(base_type);
   }
   else if (
