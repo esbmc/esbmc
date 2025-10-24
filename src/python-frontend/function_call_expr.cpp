@@ -667,10 +667,16 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
     double dval = std::stod(*value_opt);
     return from_double(dval, type_handler_.get_typet("float", 0));
   }
-  catch (const std::exception &e)
+  catch (const std::invalid_argument &)
   {
     log_error(
-      "Failed float conversion from string \"{}\": {}", *value_opt, e.what());
+      "Failed float conversion from string \"{}\": invalid argument", *value_opt);
+    return from_double(0.0, type_handler_.get_typet("float", 0));
+  }
+  catch (const std::out_of_range &)
+  {
+    log_error(
+      "Failed float conversion from string \"{}\": out of range", *value_opt);
     return from_double(0.0, type_handler_.get_typet("float", 0));
   }
 }
@@ -945,10 +951,16 @@ exprt function_call_expr::build_constant_from_arg() const
         double dval = std::stod(arg["value"].get<std::string>());
         return from_double(dval, type_handler_.get_typet("float", 0));
       }
-      catch (const std::exception &e)
+      catch (const std::invalid_argument &)
       {
-        std::string m = "could not convert string to float : " +
+        std::string m = "could not convert string to float : '" +
                         arg["value"].get<std::string>() + "'";
+        return gen_exception_raise("ValueError", m);
+      }
+      catch (const std::out_of_range &)
+      {
+        std::string m = "could not convert string to float : '" +
+                        arg["value"].get<std::string>() + "' (out of range)";
         return gen_exception_raise("ValueError", m);
       }
     }
