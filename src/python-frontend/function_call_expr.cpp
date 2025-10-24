@@ -670,7 +670,8 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
   catch (const std::invalid_argument &)
   {
     log_error(
-      "Failed float conversion from string \"{}\": invalid argument", *value_opt);
+      "Failed float conversion from string \"{}\": invalid argument",
+      *value_opt);
     return from_double(0.0, type_handler_.get_typet("float", 0));
   }
   catch (const std::out_of_range &)
