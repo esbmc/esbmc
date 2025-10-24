@@ -341,6 +341,8 @@ private:
     const nlohmann::json &element,
     bool invert);
 
+  std::string extract_non_none_type(const nlohmann::json &annotation_node);
+
   // helper methods for get_var_assign
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
