@@ -213,6 +213,29 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+bool function_call_expr::is_same_type(
+  const exprt &obj_expr,
+  const nlohmann::json &type_node) const
+{
+  if (type_node["_type"] != "Name")
+    throw std::runtime_error("Unsupported type in isinstance()");
+
+  std::string type_name = type_node["id"];
+  // Get the internal type representation from the type name
+  typet expected_type = type_handler_.get_typet(type_name, 0);
+
+  /* NOTE: Comparing the types directly may be insufficient.
+           Inheritance or type aliases may require deeper analysis. */
+
+  if (base_type_eq(obj_expr.type(), expected_type, converter_.ns))
+    return true;
+
+  if (is_subclass_of(obj_expr.type(), expected_type, converter_.ns))
+    return true;
+
+  return false;
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -223,26 +246,22 @@ exprt function_call_expr::handle_isinstance() const
 
   // Convert the first argument (the object being checked) into an expression
   exprt obj_expr = converter_.get_expr(args[0]);
+  const auto &type_arg = args[1];
 
-  // The second argument must be a simple type name (e.g., int, MyClass)
-  if (args[1]["_type"] != "Name")
+  if (type_arg["_type"] == "Name")
+    return gen_boolean(is_same_type(obj_expr, type_arg));
+  else if (type_arg["_type"] == "Tuple")
+  {
+    const auto &elts = type_arg["elts"];
+    for (const auto &elt : elts)
+    {
+      if (is_same_type(obj_expr, elt))
+        return gen_boolean(true);
+    }
+    return gen_boolean(false);
+  }
+  else
     throw std::runtime_error("Unsupported type format in isinstance()");
-
-  std::string type_name = args[1]["id"];
-
-  // Get the internal type representation from the type name
-  typet expected_type = type_handler_.get_typet(type_name, 0);
-
-  /* NOTE: Comparing the types directly may be insufficient.
-           Inheritance or type aliases may require deeper analysis. */
-
-  bool matches = base_type_eq(obj_expr.type(), expected_type, converter_.ns);
-  if (matches)
-    return gen_boolean(true);
-
-  bool is_subtype =
-    is_subclass_of(obj_expr.type(), expected_type, converter_.ns);
-  return gen_boolean(is_subtype);
 }
 
 exprt function_call_expr::handle_hasattr() const
