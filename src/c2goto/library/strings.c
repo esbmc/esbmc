@@ -1,4 +1,6 @@
-#include <strings.h>
+#if defined(__unix__) || defined(__APPLE__) || defined(__MACH__)
+#  include <strings.h>
+#endif
 
 int ffs(int x)
 {
