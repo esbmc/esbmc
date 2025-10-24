@@ -235,22 +235,6 @@ public:
            (type.is_pointer() && type.subtype() == char_type());
   }
 
-  // Handle optional type logic
-  static typet handle_optional_type(const typet &base_type)
-  {
-    // For primitive types (int, float, bool), don't use pointer
-    // Use the base type directly and treat NULL as a special value (0)
-    if (
-      base_type == long_long_int_type() || base_type == long_long_uint_type() ||
-      base_type == double_type() || base_type == bool_type())
-    {
-      return base_type;
-    }
-
-    // For other types (e.g., classes, lists), use pointer type
-    return gen_pointer_type(base_type);
-  }
-
 private:
   static void
   update_type_flags_from_node(const nlohmann::json &node, TypeFlags &flags)
