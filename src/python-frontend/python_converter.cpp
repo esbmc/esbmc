@@ -1435,8 +1435,14 @@ exprt python_converter::handle_membership_operator(
     return invert ? not_exprt(contains_expr) : contains_expr;
   }
 
+  // Get string type identifiers
+  std::string lhs_type = type_handler_.type_to_string(lhs.type());
+  std::string rhs_type = type_handler_.type_to_string(rhs.type());
+
   // Handle string membership testing: "substr" in "string" or "substr" not in "string"
-  if (lhs.type().is_array() || rhs.type().is_array())
+  if (
+    lhs.type().is_array() || rhs.type().is_array() || lhs_type == "str" ||
+    rhs_type == "str")
   {
     exprt membership_expr =
       string_handler_.handle_string_membership(lhs, rhs, element);

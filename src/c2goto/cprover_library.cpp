@@ -152,6 +152,7 @@ const static std::vector<std::string> python_c_models = {
   "ldexp",
   "log1p_taylor",
   "strstr",
+  "strchr",
   "list_contains",
   "__python_str_isdigit",
   "__python_str_isalpha",
