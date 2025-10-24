@@ -1024,10 +1024,14 @@ class Preprocessor(ast.NodeTransformer):
         # Transformation for int.from_bytes calls
         if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) and node.func.value.id == "int" and node.func.attr == "from_bytes":
             # Replace 'big' argument with True and anything else with False
-            if len(node.args) > 1 and isinstance(node.args[1], ast.Str) and node.args[1].s == 'big':
-                node.args[1] = ast.NameConstant(value=True)
-            else:
-                node.args[1] = ast.NameConstant(value=False)
+            # Only process if there are enough arguments, MacOS has different AST nodes for 'big'
+            if len(node.args) > 1:
+                # Check for both ast.Str and ast.Constant 
+                if (isinstance(node.args[1], ast.Str) and node.args[1].s == 'big') or \
+                   (isinstance(node.args[1], ast.Constant) and node.args[1].value == 'big'):
+                    node.args[1] = ast.Constant(value=True)
+                else:
+                    node.args[1] = ast.Constant(value=False)
 
         # if not a function or preprocessor doesn't have function definition return
         if not isinstance(node.func,ast.Name) or node.func.id not in self.functionParams:
