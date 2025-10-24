@@ -157,7 +157,7 @@ def process_imports(node, output_dir):
         if module is None:
             # Module doesn't need processing (e.g., typing) - don't set full_path
             return
-        
+
         # Check if module has __file__ attribute (built-in C extensions don't)
         if not hasattr(module, '__file__') or module.__file__ is None:
             # Skip built-in C extension modules (e.g., _sre, _socket, etc.)

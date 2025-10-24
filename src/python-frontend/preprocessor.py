@@ -1026,7 +1026,7 @@ class Preprocessor(ast.NodeTransformer):
             # Replace 'big' argument with True and anything else with False
             # Only process if there are enough arguments, MacOS has different AST nodes for 'big'
             if len(node.args) > 1:
-                # Check for both ast.Str and ast.Constant 
+                # Check for both ast.Str and ast.Constant
                 if (isinstance(node.args[1], ast.Str) and node.args[1].s == 'big') or \
                    (isinstance(node.args[1], ast.Constant) and node.args[1].value == 'big'):
                     node.args[1] = ast.Constant(value=True)
