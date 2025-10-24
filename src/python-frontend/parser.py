@@ -162,7 +162,7 @@ def process_imports(node, output_dir):
         if not hasattr(module, '__file__') or module.__file__ is None:
             # Skip built-in C extension modules (e.g., _sre, _socket, etc.)
             return
-        
+
         filename = module.__file__
 
     # Don't process the file here; we'll do it once after collecting all imports
