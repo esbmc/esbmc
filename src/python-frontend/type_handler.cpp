@@ -757,15 +757,23 @@ int type_handler::get_array_dimensions(const nlohmann::json &arr) const
 size_t type_handler::get_type_width(const typet &type) const
 {
   // First try to parse width directly
-  try
+  std::string width_str = type.width().c_str();
+  if (!width_str.empty())
   {
-    return std::stoi(type.width().c_str());
+    try
+    {
+      return std::stoi(width_str);
+    }
+    catch (const std::exception &)
+    {
+      // Fall through to type name inference
+    }
   }
-  catch (const std::exception &)
-  {
-    // If direct parsing fails, try to infer from type name
-    std::string type_str = type.width().as_string();
 
+  // If width is empty or parsing failed, try to infer from type name
+  std::string type_str = type.width().as_string();
+  if (!type_str.empty())
+  {
     // Handle common Python/ESBMC type mappings
     if (type_str == "int32")
       return 32;
@@ -800,8 +808,8 @@ size_t type_handler::get_type_width(const typet &type) const
         // Fall through to default
       }
     }
-
-    // Default to 32 for unknown types
-    return 32;
   }
+
+  // Default to 32 for unknown types
+  return 32;
 }
