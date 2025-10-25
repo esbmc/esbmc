@@ -293,7 +293,8 @@ exprt function_call_builder::build() const
       exprt prefix_arg = converter_.get_expr(call_["args"][0]);
       locationt loc = converter_.get_location_from_decl(call_);
 
-      return converter_.handle_string_startswith(obj_expr, prefix_arg, loc);
+      return converter_.get_string_handler().handle_string_startswith(
+        obj_expr, prefix_arg, loc);
     }
 
     if (method_name == "endswith")
@@ -306,7 +307,8 @@ exprt function_call_builder::build() const
       exprt suffix_arg = converter_.get_expr(call_["args"][0]);
       locationt loc = converter_.get_location_from_decl(call_);
 
-      return converter_.handle_string_endswith(obj_expr, suffix_arg, loc);
+      return converter_.get_string_handler().handle_string_endswith(
+        obj_expr, suffix_arg, loc);
     }
 
     if (method_name == "isdigit")
@@ -318,7 +320,8 @@ exprt function_call_builder::build() const
 
       locationt loc = converter_.get_location_from_decl(call_);
 
-      return converter_.handle_string_isdigit(obj_expr, loc);
+      return converter_.get_string_handler().handle_string_isdigit(
+        obj_expr, loc);
     }
 
     if (method_name == "isalpha")
@@ -328,7 +331,44 @@ exprt function_call_builder::build() const
         throw std::runtime_error("isalpha() takes no arguments");
 
       locationt loc = converter_.get_location_from_decl(call_);
-      return converter_.handle_string_isalpha(obj_expr, loc);
+      return converter_.get_string_handler().handle_string_isalpha(
+        obj_expr, loc);
+    }
+
+    if (method_name == "isspace")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("isspace() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+
+      // Check if this is a single character (from iteration) or a string
+      if (obj_expr.type().is_unsignedbv() || obj_expr.type().is_signedbv())
+      {
+        // Single character - use C's isspace function
+        return converter_.get_string_handler().handle_char_isspace(
+          obj_expr, loc);
+      }
+      else
+      {
+        // String variable - use the string version
+        return converter_.get_string_handler().handle_string_isspace(
+          obj_expr, loc);
+      }
+    }
+
+    if (method_name == "lstrip")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      // lstrip() takes optional chars argument, but we only support no arguments
+      if (!call_["args"].empty())
+        throw std::runtime_error("lstrip() with arguments not yet supported");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_lstrip(
+        obj_expr, loc);
     }
   }
 

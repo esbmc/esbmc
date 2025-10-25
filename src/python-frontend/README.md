@@ -105,6 +105,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
+- **Variadic Parameters**: Supports the `*args` syntax for functions with variable-length argument lists, allowing functions to accept an arbitrary number of positional arguments (e.g., `def func(*args):`).
 - **Annotations**: Supports type annotations, including:
   - **Basic Type Annotations**: Standard Python types (int, float, bool, str, etc.).
   - **Any Type**: Supports `Any` from the typing module for functions with dynamic return types.
@@ -135,6 +136,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Data Structures**: Supports operations on Python's built-in data structures, including lists and strings, with features such as concatenation and bounds checks.
   - **List Operations**:
     - **append()**: Add elements to the end of a list.
+    - **extend()**: Extends a list by appending all elements from an iterable (e.g., `list1.extend(list2)` or `list1.extend([3, 4, 5])`).
     - **insert()**: Insert elements at a specific index position.
       - When the index equals the list length, the element is appended to the end.
       - When the index exceeds the list length, the element is appended to the end.
@@ -146,6 +148,8 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns `True`).
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
     - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
+    - **lstrip() method**: Removes leading whitespace characters from strings (e.g., `"  hello".lstrip()` returns `"hello"`).
+    - **isspace() method**: Returns `True` if all characters in the string are whitespace characters and the string is non-empty, `False` otherwise.
     - **String Slicing**: Comprehensive support for Python's slice notation on strings:
       - **Basic Slicing**: `string[start:end]` returns a substring from index `start` to `end-1`.
       - **Omitted Bounds**: Supports slices with omitted start (`string[:end]`) or end (`string[start:]`) indices.
