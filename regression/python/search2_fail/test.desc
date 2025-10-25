@@ -1,4 +1,4 @@
 THOROUGH
 main.py
---force-malloc-success --unwind 9 --ir
+ --unwind 9 --ir
 ^VERIFICATION FAILED$
