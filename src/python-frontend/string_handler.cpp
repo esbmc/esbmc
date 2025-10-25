@@ -872,7 +872,88 @@ exprt string_handler::handle_string_membership(
   exprt &rhs,
   const nlohmann::json &element)
 {
-  // Convert both operands to proper null-terminated strings
+  bool lhs_is_char_value = false;
+
+  // Get the width of char type from config
+  std::size_t char_width = config.ansi_c.char_width;
+
+  // Check if lhs is a pointer to a single character
+  if (lhs.type().is_pointer())
+  {
+    const typet &subtype = lhs.type().subtype();
+    if (
+      (subtype.is_signedbv() || subtype.is_unsignedbv()) &&
+      bv_width(subtype) == char_width)
+    {
+      lhs_is_char_value = true;
+    }
+  }
+
+  // Check if lhs is a symbol holding a character value
+  if (!lhs_is_char_value && lhs.is_symbol())
+  {
+    const symbolt *sym =
+      symbol_table_.find_symbol(lhs.get_string("identifier"));
+    if (sym)
+    {
+      const typet &value_type = sym->value.type();
+      if (
+        (value_type.is_signedbv() || value_type.is_unsignedbv()) &&
+        bv_width(value_type) == char_width)
+      {
+        lhs_is_char_value = true;
+      }
+    }
+  }
+
+  // Use strchr for single character membership testing
+  if (lhs_is_char_value)
+  {
+    symbolt *strchr_symbol = symbol_table_.find_symbol("c:@F@strchr");
+    if (!strchr_symbol)
+    {
+      // Create strchr symbol if it doesn't exist
+      symbolt new_symbol;
+      new_symbol.name = "strchr";
+      new_symbol.id = "c:@F@strchr";
+      new_symbol.mode = "C";
+      new_symbol.is_extern = true;
+
+      code_typet strchr_type;
+      typet char_ptr = gen_pointer_type(char_type());
+      strchr_type.return_type() = char_ptr;
+      strchr_type.arguments().push_back(code_typet::argumentt(char_ptr));
+      strchr_type.arguments().push_back(code_typet::argumentt(int_type()));
+      new_symbol.type = strchr_type;
+
+      symbol_table_.add(new_symbol);
+      strchr_symbol = symbol_table_.find_symbol("c:@F@strchr");
+    }
+
+    exprt rhs_str = ensure_null_terminated_string(rhs);
+    exprt rhs_addr = get_array_base_address(rhs_str);
+
+    // lhs contains the character value (as void*), cast directly to int
+    typecast_exprt char_as_int(lhs, int_type());
+
+    // Call strchr(string, character)
+    side_effect_expr_function_callt strchr_call;
+    strchr_call.function() = symbol_expr(*strchr_symbol);
+    strchr_call.arguments() = {rhs_addr, char_as_int};
+    strchr_call.location() = converter_.get_location_from_decl(element);
+    strchr_call.type() = gen_pointer_type(char_type());
+
+    // Check if result != NULL (character found)
+    constant_exprt null_ptr(gen_pointer_type(char_type()));
+    null_ptr.set_value("NULL");
+
+    exprt not_equal("notequal", bool_type());
+    not_equal.copy_to_operands(strchr_call, null_ptr);
+
+    return not_equal;
+  }
+
+  // Use strstr for substring membership testing
   exprt lhs_str = ensure_null_terminated_string(lhs);
   exprt rhs_str = ensure_null_terminated_string(rhs);
 

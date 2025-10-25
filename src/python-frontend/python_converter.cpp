@@ -1435,8 +1435,14 @@ exprt python_converter::handle_membership_operator(
     return invert ? not_exprt(contains_expr) : contains_expr;
   }
 
+  // Get string type identifiers
+  std::string lhs_type = type_handler_.type_to_string(lhs.type());
+  std::string rhs_type = type_handler_.type_to_string(rhs.type());
+
   // Handle string membership testing: "substr" in "string" or "substr" not in "string"
-  if (lhs.type().is_array() || rhs.type().is_array())
+  if (
+    lhs.type().is_array() || rhs.type().is_array() || lhs_type == "str" ||
+    rhs_type == "str")
   {
     exprt membership_expr =
       string_handler_.handle_string_membership(lhs, rhs, element);
@@ -3566,7 +3572,16 @@ typet python_converter::get_type_from_annotation(
 
     // Treat T | ... | None as Optional[T]
     typet base_type = type_handler_.get_typet(inner_type);
-    // Always use pointer type for union with None to properly represent None
+    // Primitive types (int, float, bool) are treated as value types.
+    // None is represented internally as a sentinel (0), not a pointer.
+    if (
+      base_type == long_long_int_type() || base_type == long_long_uint_type() ||
+      base_type == double_type() || base_type == bool_type())
+    {
+      return base_type;
+    }
+
+    // For other types (e.g., classes, lists), use pointer type
     return gen_pointer_type(base_type);
   }
   else if (
