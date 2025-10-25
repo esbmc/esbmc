@@ -175,8 +175,7 @@ static inline bool list_pop(List *l)
 {
   if (l->size == 0)
     return false;
-  l->size--;
-  free((void *)l->items[l->size].value); // Free the copied data
+  l->size--;  
   return true;
 }
 
