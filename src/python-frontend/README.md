@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Python frontend handles the conversion of Python code into an internal representation, which is then translated into the GOTO language. This process includes three key steps:
+The Python frontend converts Python code into an internal representation, which is then translated into the GOTO language. This process includes three key steps:
 
 1. Generating an Abstract Syntax Tree (AST) in JSON format.
 2. Annotating the AST with type information.
