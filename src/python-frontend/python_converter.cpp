@@ -3,6 +3,7 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call_builder.h>
+#include <python-frontend/python_annotation.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/string_builder.h>
@@ -4945,6 +4946,11 @@ void python_converter::convert()
 
         // Create built-in symbols for imported module
         create_builtin_symbols();
+
+        // Annotate types in imported module before conversion
+        python_annotation<nlohmann::json> imported_annotator(
+          imported_module_json, const_cast<global_scope &>(global_scope_));
+        imported_annotator.add_type_annotation();
 
         exprt imported_code = with_ast(&imported_module_json, [&]() {
           return get_block(imported_module_json["body"]);
