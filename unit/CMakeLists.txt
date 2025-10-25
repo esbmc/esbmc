@@ -3,6 +3,7 @@ include(TestConfiguration)
 
 add_subdirectory(testing-utils)
 add_subdirectory(goto-programs)
+add_subdirectory(goto-symex)
 add_subdirectory(big-int)
 add_subdirectory(clang-c-frontend)
 

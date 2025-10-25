@@ -104,6 +104,7 @@ def parse_result(the_output, prop):
   memory_leak = "dereference failure: forgotten memory"
   invalid_pointer = "dereference failure: invalid pointer"
   memset_access_oob = "dereference failure: memset of memory segment of size"
+  memcpy_access_oob = "dereference failure on memcpy: reading memory segment"
   access_out = "dereference failure: Access to object out of bounds"
   dereference_null = "dereference failure: NULL pointer"
   expired_variable = "dereference failure: accessed expired variable pointer"
@@ -149,7 +150,7 @@ def parse_result(the_output, prop):
       if free_error in the_output:
         return Result.fail_free
 
-      if access_out in the_output or memset_access_oob in the_output:
+      if access_out in the_output or memset_access_oob or memcpy_access_oob in the_output:
         return Result.fail_deref
 
       if invalid_object in the_output:
