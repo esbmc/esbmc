@@ -175,7 +175,7 @@ static inline bool list_pop(List *l)
 {
   if (l->size == 0)
     return false;
-  l->size--;  
+  l->size--;
   return true;
 }
 
