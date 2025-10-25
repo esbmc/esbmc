@@ -1,4 +1,4 @@
 THOROUGH
 main.py
 
-^ERROR: Type undefined for "__version__"$
+^ERROR: Object \"importlib\.metadata\" not found.$
