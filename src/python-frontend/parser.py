@@ -58,6 +58,14 @@ def import_module_by_name(module_name, output_dir):
         module = importlib.import_module(module_name)
         return module
     except ImportError:
+        # Try importing the parent module if this looks like a class/attribute reference
+        if "." in module_name:
+            parent = ".".join(module_name.split(".")[:-1])
+            try:
+                return importlib.import_module(parent)
+            except ImportError:
+                pass
+
         print("ERROR: Module '{}' not found.".format(module_name))
         print("Please install it with: pip3 install {}".format(module_name))
         sys.exit(4)
@@ -91,18 +99,33 @@ def expand_star_import(module) -> list[str] | None:
     return names
 
 
-def get_referenced_classes(node):
+def get_referenced_names(node):
     """
-    Find all classes referenced in a function or class definition.
-    Returns a set of class names that are called as constructors.
+    Find all functions and classes referenced in a function or class definition.
+    Returns a set of names that are called as functions or used in type annotations.
     """
     referenced = set()
 
     for child in ast.walk(node):
         if isinstance(child, ast.Call):
-            # Check if it's a class constructor call (simple Name node)
+            # Check if it's a direct function/class call (simple Name node)
             if isinstance(child.func, ast.Name):
                 referenced.add(child.func.id)
+
+        # Check for names in type annotations (return types, argument types, etc.)
+        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            # Return type annotation
+            if child.returns and isinstance(child.returns, ast.Name):
+                referenced.add(child.returns.id)
+            # Argument type annotations
+            for arg in child.args.args:
+                if arg.annotation and isinstance(arg.annotation, ast.Name):
+                    referenced.add(arg.annotation.id)
+
+        # Variable annotations (e.g., x: Foo = ...)
+        elif isinstance(child, ast.AnnAssign):
+            if isinstance(child.annotation, ast.Name):
+                referenced.add(child.annotation.id)
 
     return referenced
 
@@ -157,6 +180,12 @@ def process_imports(node, output_dir):
         if module is None:
             # Module doesn't need processing (e.g., typing) - don't set full_path
             return
+
+        # Check if module has __file__ attribute (built-in C extensions don't)
+        if not hasattr(module, '__file__') or module.__file__ is None:
+            # Skip built-in C extension modules (e.g., _sre, _socket, etc.)
+            return
+
         filename = module.__file__
 
     # Don't process the file here; we'll do it once after collecting all imports
@@ -231,21 +260,25 @@ def process_collected_imports(output_dir):
         tree = parse_file(filename)
         for subnode in ast.walk(tree):
             if isinstance(subnode, (ast.Import, ast.ImportFrom)):
-                fix_relative_import(subnode, module_name)
+                rewrite_relative_import(subnode, module_name)
                 process_imports(subnode, output_dir)
 
         generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
 
 
-def fix_relative_import(node: ast.AST, parent_module: str) -> None:
-    """Convert relative imports like 'from .x import y' to absolute names."""
+def rewrite_relative_import(node, parent_module: str | None):
+    """
+    Rewrite a relative ImportFrom node to be absolute.
 
-    # Only handle "from X import Y" nodes
-    if not isinstance(node, ast.ImportFrom):
-        return
+    Example node structure for "from .x import y":
+      node.module = "x"
+      node.level = 1
 
-    # The "level" attribute counts how many leading dots are used in the import.
-    # Examples:
+    We need to compute the absolute module path based on
+    parent_module and node.level, then set node.module to
+    the absolute path and reset node.level to 0.
+    """
+    # node.level indicates the number of leading dots:
     #   from .x import y  → level = 1
     #   from ..x import y → level = 2
     #   from math import y → level = 0 (not relative)
@@ -291,14 +324,14 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
         # First pass: collect explicitly imported element names
         explicitly_imported = {elem_info.name for elem_info in elements_to_import}
 
-        # Collect all referenced classes from explicitly imported functions/classes
-        referenced_classes = set()
+        # Collect all referenced names (functions and classes) from explicitly imported functions/classes
+        referenced_names = set()
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
                 if node.name in explicitly_imported:
-                    referenced_classes.update(get_referenced_classes(node))
+                    referenced_names.update(get_referenced_names(node))
 
-        # Second pass: include explicitly imported items and their referenced classes
+        # Second pass: include explicitly imported items and their referenced functions/classes
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
                 # Always include ESBMC helper functions
@@ -307,8 +340,8 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
                 # Include explicitly imported items
                 elif node.name in explicitly_imported:
                     filtered_nodes.append(node)
-                # Include classes referenced by imported items
-                elif isinstance(node, ast.ClassDef) and node.name in referenced_classes:
+                # Include functions/classes referenced by imported items
+                elif node.name in referenced_names:
                     filtered_nodes.append(node)
 
             # Include annotated assignments (e.g., x: int = 42)
@@ -395,7 +428,7 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
                     if file.endswith('.py'):
                         full_path = os.path.join(root, file)
                         try:
-                            with open(full_path, "r") as f:
+                            with open(full_path, "r", encoding="utf-8") as f:
                                 tree = ast.parse(f.read())
                                 generate_ast_json(tree, full_path, None, output_dir + "/" + base_module)
                         except UnicodeDecodeError:
