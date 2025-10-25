@@ -1379,12 +1379,26 @@ private:
     else if (
       value_type == "Call" && stmt["value"]["func"]["_type"] == "Attribute")
     {
-      // Try get_type_from_call first (for class methods)
+      // Try get_type_from_call first (checks builtin_functions map)
       inferred_type = get_type_from_call(stmt);
 
       // If that didn't work, try get_type_from_method
       if (inferred_type.empty())
         inferred_type = get_type_from_method(stmt["value"]);
+
+      // Handle module.Class() constructor calls (e.g., datetime.datetime(...))
+      // Use the attribute name as the type if nothing else worked
+      if (inferred_type.empty())
+      {
+        const auto &func = stmt["value"]["func"];
+        if (
+          func.contains("attr") && func.contains("value") &&
+          func["value"]["_type"] == "Name" && func["value"].contains("id"))
+        {
+          std::string class_name = func["attr"].template get<std::string>();
+          inferred_type = class_name;
+        }
+      }
     }
     else
       return InferResult::UNKNOWN;
