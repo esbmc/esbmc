@@ -1592,6 +1592,7 @@ private:
   {
     for (const Json &elem : body)
     {
+      // Check if this element is the variable we're looking for
       if (
         elem.contains("_type") &&
         ((elem["_type"] == "AnnAssign" && elem.contains("target") &&
@@ -1600,6 +1601,71 @@ private:
          (elem["_type"] == "arg" && elem["arg"] == node_name)))
       {
         return elem;
+      }
+
+      // Recursively search inside nested blocks
+      if (elem.contains("_type"))
+      {
+        const std::string &elem_type = elem["_type"];
+
+        // Search inside If blocks (both if and else branches)
+        if (elem_type == "If")
+        {
+          if (elem.contains("body") && !elem["body"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["body"]);
+            if (!result.empty())
+              return result;
+          }
+          if (elem.contains("orelse") && !elem["orelse"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["orelse"]);
+            if (!result.empty())
+              return result;
+          }
+        }
+        // Search inside While blocks
+        else if (elem_type == "While")
+        {
+          if (elem.contains("body") && !elem["body"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["body"]);
+            if (!result.empty())
+              return result;
+          }
+        }
+        // Search inside For blocks
+        else if (elem_type == "For")
+        {
+          if (elem.contains("body") && !elem["body"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["body"]);
+            if (!result.empty())
+              return result;
+          }
+        }
+        // Search inside Try blocks
+        else if (elem_type == "Try")
+        {
+          if (elem.contains("body") && !elem["body"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["body"]);
+            if (!result.empty())
+              return result;
+          }
+          if (elem.contains("handlers") && !elem["handlers"].empty())
+          {
+            for (const Json &handler : elem["handlers"])
+            {
+              if (handler.contains("body") && !handler["body"].empty())
+              {
+                Json result = find_annotated_assign(node_name, handler["body"]);
+                if (!result.empty())
+                  return result;
+              }
+            }
+          }
+        }
       }
     }
     return Json();
