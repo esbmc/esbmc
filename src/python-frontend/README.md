@@ -392,7 +392,7 @@ Violated property:
 VERIFICATION FAILED
 ```
 
-ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero), causing an integer division by zero. This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
+ESBMC successfully identifies a path in which the randomly generated variable x evaluates to zero (or very close to zero), leading to an integer division by zero. This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
 
 ````python
 def div1(cond: int, x: int) -> int:
