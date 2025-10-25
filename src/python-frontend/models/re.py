@@ -20,7 +20,7 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
     if string_len == 0:
         return 1 if quantifier == '*' else 0
 
-    i: int = 0
+    i = 0
     while i < string_len:
         c: str = string[i]
         if c < start_char or c > end_char:
@@ -109,27 +109,27 @@ def match(pattern: str, string: str) -> bool:
         if pattern[pattern_len - 2] == '.' and pattern[pattern_len - 1] == '*':
             prefix_len: int = pattern_len - 2
             has_meta_in_prefix: bool = False
-            i: int = 0
+            i = 0
             while i < prefix_len:
                 c: str = pattern[i]
                 if c == '.' or c == '*' or c == '+' or c == '?' or c == '[' or c == ']' or c == '(' or c == ')' or c == '|' or c == '^' or c == '$' or c == '\\':
                     has_meta_in_prefix = True
                     break
-                i: int = i + 1
+                i = i + 1
 
             if not has_meta_in_prefix:
                 if len(string) < prefix_len:
                     return False
-                j: int = 0
+                j = 0
                 while j < prefix_len:
                     if pattern[j] != string[j]:
                         return False
-                    j: int = j + 1
+                    j = j + 1
                 return True
 
     # Check for metacharacters
     has_meta: bool = False
-    k: int = 0
+    k = 0
     while k < pattern_len - 1:
         ch: str = pattern[k]
         if ch == '.' or ch == '*' or ch == '+' or ch == '?' or ch == '[' or ch == ']' or ch == '(' or ch == ')' or ch == '|' or ch == '^' or ch == '$' or ch == '\\':
@@ -142,11 +142,11 @@ def match(pattern: str, string: str) -> bool:
         effective_pattern_len: int = pattern_len - 1
         if len(string) - 1 < effective_pattern_len:
             return False
-        m: int = 0
+        m = 0
         while m < effective_pattern_len:
             if pattern[m] != string[m]:
                 return False
-            m: int = m + 1
+            m = m + 1
         return True
 
     # Nondeterministic fallback
@@ -169,7 +169,7 @@ def search(pattern: str, string: str) -> bool:
 
     # Check if pattern contains regex metacharacters
     has_meta: bool = False
-    i: int = 0
+    i = 0
     while i < pattern_len:
         c: str = pattern[i]
         if c == '.' or c == '*' or c == '+' or c == '?' or c == '[' or c == ']' or c == '(' or c == ')' or c == '|' or c == '^' or c == '$' or c == '\\':
@@ -183,18 +183,18 @@ def search(pattern: str, string: str) -> bool:
             return False
 
         # Try matching at each position in string
-        pos: int = 0
+        pos = 0
         while pos <= len(string) - pattern_len:
             match_found: bool = True
-            j: int = 0
+            j = 0
             while j < pattern_len:
                 if string[pos + j] != pattern[j]:
                     match_found = False
                     break
-                j: int = j + 1
+                j = j + 1
             if match_found:
                 return True
-            pos: int = pos + 1
+            pos = pos + 1
         return False
 
     # For patterns with metacharacters, use nondeterministic behavior
@@ -243,11 +243,11 @@ def fullmatch(pattern: str, string: str) -> bool:
         if len(pattern) != len(string):
             return False
 
-        j: int = 0
+        j = 0
         while j < pattern_len:
             if pattern[j] != string[j]:
                 return False
-            j: int = j + 1
+            j = j + 1
         return True
 
     # For patterns with metacharacters, use nondeterministic behavior
