@@ -6,10 +6,8 @@
  */
 
 #include <big-int/bigint.hh>
-#include <boost/bind/placeholders.hpp>
 #include <boost/crc.hpp>
 #include <boost/functional/hash_fwd.hpp>
-#include <boost/fusion/include/equal_to.hpp>
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
 #include <boost/mp11.hpp>
@@ -1185,7 +1183,7 @@ protected:
 };
 
 // Base instance of irep_methods2. This is a template specialization that
-// matches (via boost::enable_if) when the list of fields to operate on is
+// matches (via std::enable_if) when the list of fields to operate on is
 // now empty. Finish up the remaining computation, if any.
 template <class derived, class baseclass, typename traits, typename fields>
 class irep_methods2<
