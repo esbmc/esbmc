@@ -269,7 +269,7 @@ __ESBMC_HIDE:;
   return cpy;
 }
 
-void *memcpy(void *dst, const void *src, size_t n)
+void *__memcpy_impl(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
   char *cdst = dst;
@@ -281,6 +281,14 @@ __ESBMC_HIDE:;
     ++i;
   }
   return dst;
+}
+
+void *memcpy(void *dst, const void *src, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memcpy_impl;
+  (void)hax;
+  return __ESBMC_memcpy(dst, src, n);
 }
 
 void *__memset_impl(void *s, int c, size_t n)
