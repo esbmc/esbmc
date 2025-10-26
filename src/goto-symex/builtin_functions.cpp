@@ -1747,93 +1747,175 @@ expr2tc goto_symex_utils::do_memcpy_expression(
     dst->type == src->type && !dst_offset && !src_offset &&
     type_byte_size(dst->type).to_uint64() == num_of_bytes)
     return src;
-  
+
   if (is_array_type(dst->type))
+  {
+    expr2tc result = gen_zero(dst->type);
+    constant_array2t &data = to_constant_array2t(result);
+    uint64_t dst_base_size =
+      type_byte_size(to_array_type(dst->type).subtype).to_uint64();
+
+    if (dst_offset % dst_base_size)
     {
-      if (dst->type == src->type)
-	{
-	  log_debug("memcpy", "Easy case same array type");
-	  return expr2tc();
-	}
-      else if (is_array_type(src->type))
-	{
-          log_debug("memcpy", "Two different arrays");
-          return expr2tc();
-	}
-      else if (is_struct_type(src->type) || is_union_type(src->type) )
-	{
-          log_debug("memcpy", "Struct/union");
-          return expr2tc();
-	}
-
-      if (to_array_type(dst->type).subtype != char_type2())
-	{
-          log_debug("memcpy", "No support for non byte arrrays");
-          return expr2tc();
-	}
-
+      // TODO: misalignment
       return expr2tc();
+    }
+
+    uint64_t bytes_left = num_of_bytes;
+    uint64_t dst_offset_left = dst_offset;
+
+    std::optional<unsigned> last_pos_updated;
+
+    // Skip dst offset
+    for (unsigned i = 0; i < data.datatype_members.size(); i++)
+    {
+      BigInt position(i);
+      expr2tc local_member = index2tc(
+        to_array_type(dst->type).subtype,
+        dst,
+        constant_int2tc(get_uint32_type(), position));
+
+      if (dst_offset_left < dst_base_size)
+        break;
+      data.datatype_members[i] = local_member;
+      dst_offset_left -= dst_base_size;
+      last_pos_updated = i;
+    }
+
+    if (is_struct_type(src->type) || is_union_type(src->type))
+    {
+      log_debug("memcpy", "Struct/union");
+      return expr2tc();
+    }
+
+    // Copy indexes until impossible
+    else if (is_array_type(src->type))
+    {
+      if (to_array_type(src->type).subtype != to_array_type(dst->type).subtype)
+        return expr2tc(); // TODO: Different array types, give up!
+
+      uint64_t src_base_size =
+        type_byte_size(to_array_type(src->type).subtype).to_uint64();
+
+      if (src_offset % src_base_size || bytes_left % src_base_size)
+      {
+        // TODO: Misalignment
+        return expr2tc();
+      }
+
+      for (unsigned i = src_offset / src_base_size;
+           i < data.datatype_members.size();
+           i++)
+      {
+        BigInt position(i);
+        expr2tc local_member = index2tc(
+          to_array_type(dst->type).subtype,
+          src,
+          constant_int2tc(get_uint32_type(), position));
+
+        if (bytes_left < src_base_size)
+          break;
+
+        if (!last_pos_updated.has_value())
+          last_pos_updated = 0;
+        else
+          last_pos_updated.value()++;
+
+        data.datatype_members[last_pos_updated.value()] = local_member;
+        bytes_left -= src_base_size;
+      }
+
+      // For now we dont support misalignment... lets be extra sure
+      assert(!bytes_left);
+    }
+    else
+    {
+      // This is a primitive into an array.
+      // for now... only support byte arrays
+      if (dst_base_size != 1)
+        return expr2tc();
+
+      // if we are an array of bytes it should be impossible to reach
+      // here with some offset left
+      assert(dst_offset_left == 0);
+
+      uint64_t src_base_size = type_byte_size(src->type).to_uint64();
+
+      log_status("{} bytes in src, {} bytes left", src_base_size, bytes_left);
+      // SHould been prevented already
+      assert(src_base_size <= bytes_left);
+
+      for (unsigned i = src_offset; i < src_base_size; i++)
+      {
+        auto local_member = byte_extract2tc(
+          to_array_type(dst->type).subtype,
+          src,
+          gen_ulong(i),
+          config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+
+        if (!bytes_left)
+          break;
+
+        if (!last_pos_updated.has_value())
+          last_pos_updated = 0;
+        else
+          last_pos_updated.value()++;
+
+        data.datatype_members[last_pos_updated.value()] =
+          std::move(local_member);
+        bytes_left -= 1;
+      }
+
+      assert(!bytes_left);
+    }
+
+    // last_pos should have a value, otherwise we did not copy anything :)
+    assert(!bytes_left && last_pos_updated.has_value());
+    last_pos_updated.value()++;
+
+    // Copy missing elements, if any
+    for (unsigned i = last_pos_updated.value();
+         i < data.datatype_members.size();
+         i++)
+    {
+      BigInt position(i);
+      expr2tc local_member = index2tc(
+        to_array_type(dst->type).subtype,
+        dst,
+        constant_int2tc(get_uint32_type(), position));
+      data.datatype_members[i] = local_member;
+    }
+
+    log_status("ok");
+    return result;
 #if 0 
       
-      
-      // SRC is a primitive and DST is an array
-      expr2tc result = gen_zero(dst->type);
-      constant_array2t &data = to_constant_array2t(result);
-
-      uint64_t base_size =
-	type_byte_size(to_array_type(dst->type).subtype).to_uint64();
-      assert(base_size == 1);
-
-      uint64_t bytes_left = num_of_bytes;
-      uint64_t dst_offset_left = dst_offset;
-      uint64_t src_offset_counter = src_offset;
-
-      for (unsigned i = 0; i < data.datatype_members.size(); i++)
-	{
-	  BigInt position(i);
-	  expr2tc local_member = index2tc(
-					  to_array_type(dst->type).subtype,
-					  dst,
-					  constant_int2tc(get_uint32_type(), position));
-	  // Skip offsets
-	  if (dst_offset_left >= base_size)
-	    {
-              data.datatype_members[i] = local_member;
-              dst_offset_left -= base_size;
-              continue;
-	    }
-
-      // If we have an array of bytes, then we arrive here with 0
-      // hopefully there will be no bitfield crazyness going on
-      assert(dst_offset_left == 0);
 
       uint64_t src_bytes_left = src->type->get_width();
       // log_status("Need to write {} bytes", bytes_left);
       // assert(src_bytes_left <= src_offset_counter);
 
-      data.datatype_members[i] = byte_extract2tc(
-        char_type2(),
-        src,
-        gen_ulong(src_offset_counter++),
-        config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+      data.datatype_members[i] = 
 
       if (!data.datatype_members[i])
         return expr2tc();
 	}
       return result;
-      #endif
-    }
-  
-  if (  is_array_type(src->type) ||
-	is_struct_type(dst->type) || is_union_type(dst->type) ||
-	is_struct_type(src->type) || is_union_type(src->type))
-    {
-      log_status("missed the opportunity");
-      return expr2tc();
-    }
+#endif
+  }
+
+  if (
+    is_array_type(src->type) || is_struct_type(dst->type) ||
+    is_union_type(dst->type) || is_struct_type(src->type) ||
+    is_union_type(src->type))
+  {
+    log_status("missed the opportunity");
+    return expr2tc();
+  }
 
   assert(!is_array_type(dst->type));
   // Base-case. Primitives!
+  log_status("ok");
   return goto_symex_utils::gen_byte_memcpy(
     src, dst, num_of_bytes, src_offset, dst_offset);
 }
