@@ -9,6 +9,8 @@
    - Primitive memcpy
  \*******************************************************************/
 
+#include "c_types.h"
+#include "fmt/format.h"
 #include <cstdint>
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
@@ -98,27 +100,203 @@ SCENARIO("do_memcpy_expression for primitive types", "[symex]")
   }
 }
 
-#if 0
-SCENARIO("do_memcpy_expression for arrays", "[symex]")
+SCENARIO("do_memcpy_expression for dst arrays and src primitives", "[symex]")
 {
-  auto test_array_case = [](const exprt &src, const exprt &dst, size_t number_of_bytes, const exprt &expected_result)
+  const type2tc t = get_int_type(8);
+  const type2tc arr_t = array_type2tc(t, constant_int2tc(t, BigInt(8)), false);
+  const expr2tc src_primitive =
+    constant_int2tc(get_uint_type(32), BigInt(0xdeadbeef));
+  const expr2tc dst_array = constant_array2tc(
+    arr_t,
+    std::vector<expr2tc>{
+      constant_int2tc(t, BigInt(0x01)),
+      constant_int2tc(t, BigInt(0x02)),
+      constant_int2tc(t, BigInt(0x03)),
+      constant_int2tc(t, BigInt(0x04)),
+      constant_int2tc(t, BigInt(0x05)),
+      constant_int2tc(t, BigInt(0x06)),
+      constant_int2tc(t, BigInt(0x07)),
+      constant_int2tc(t, BigInt(0x08))});
+
+  auto test_case = [](
+                     const expr2tc &src,
+                     const expr2tc &dst,
+                     size_t number_of_bytes,
+                     const expr2tc &expected_result,
+                     size_t dst_offset = 0,
+                     size_t src_offset = 0)
   {
     expr2tc result = goto_symex_utils::do_memcpy_expression(
-      dst, 0, src, 0, number_of_bytes);
+      dst, dst_offset, src, src_offset, number_of_bytes);
+
+    if (!result)
+    {
+      REQUIRE(false);
+    }
 
     simplify(result);
 
     REQUIRE(result == expected_result);
   };
 
-  GIVEN("memcpy(&some-array1[2], &some-array2, 4)")
+  GIVEN("memcpy(some-array, some-int, 4)")
   {
-    exprt src_array1 = constant_array2tc(get_uint_type(32), {0x01, 0x02, 0x03, 0x04});
-    exprt dst_array1 = constant_array2tc(get_uint_type(32), {0x05, 0x06, 0x07, 0x08});
+    const expr2tc expected_array = constant_array2tc(
+      arr_t,
+      std::vector<expr2tc>{
+        constant_int2tc(t, BigInt(0xde)),
+        constant_int2tc(t, BigInt(0xad)),
+        constant_int2tc(t, BigInt(0xbe)),
+        constant_int2tc(t, BigInt(0xef)),
+        constant_int2tc(t, BigInt(0x05)),
+        constant_int2tc(t, BigInt(0x06)),
+        constant_int2tc(t, BigInt(0x07)),
+        constant_int2tc(t, BigInt(0x08))});
+    test_case(src_primitive, dst_array, 4, expected_array);
+  }
+#if 0
+  GIVEN("memcpy(some-array, some-int, 2)")
+  {
+    expr2tc expected_array = constant_array2tc(
+      arr_t,
+      std::vector<expr2tc>{
+        constant_int2tc(t, BigInt(0x01)),
+        constant_int2tc(t, BigInt(0x02)),
+        constant_int2tc(t, BigInt(0x07)),
+        constant_int2tc(t, BigInt(0x08))});
 
-    test_array_case(src_array1, dst_array1, 4, src_array1);
+    test_case(src_primitive, dst_array, 2, expected_array, 2);
+  }
+#endif
+}
+
+SCENARIO("do_memcpy_expression for arrays", "[symex]")
+{
+  const type2tc t = get_uint_type(32);
+  const type2tc arr_t = array_type2tc(t, constant_int2tc(t, BigInt(4)), false);
+  const expr2tc src_array = constant_array2tc(
+    arr_t,
+    std::vector<expr2tc>{
+      constant_int2tc(t, BigInt(0x01)),
+      constant_int2tc(t, BigInt(0x02)),
+      constant_int2tc(t, BigInt(0x03)),
+      constant_int2tc(t, BigInt(0x04))});
+  const expr2tc dst_array = constant_array2tc(
+    arr_t,
+    std::vector<expr2tc>{
+      constant_int2tc(t, BigInt(0x05)),
+      constant_int2tc(t, BigInt(0x06)),
+      constant_int2tc(t, BigInt(0x07)),
+      constant_int2tc(t, BigInt(0x08))});
+
+  auto test_array_case = [](
+                           const expr2tc &src,
+                           const expr2tc &dst,
+                           size_t number_of_bytes,
+                           const expr2tc &expected_result,
+                           size_t src_offset = 0,
+                           size_t dst_offset = 0)
+  {
+    expr2tc result = goto_symex_utils::do_memcpy_expression(
+      dst, dst_offset, src, src_offset, number_of_bytes);
+
+    if (!result)
+    {
+      REQUIRE(false);
+    }
+
+    simplify(result);
+
+    REQUIRE(result == expected_result);
+  };
+
+  auto test_array_fail = [](
+                           const expr2tc &src,
+                           const expr2tc &dst,
+                           size_t number_of_bytes,
+                           size_t src_offset = 0,
+                           size_t dst_offset = 0)
+  {
+    expr2tc result = goto_symex_utils::do_memcpy_expression(
+      dst, dst_offset, src, src_offset, number_of_bytes);
+
+    REQUIRE_FALSE(result);
+  };
+
+  GIVEN("memcpy(some-array, some-array, misalignement)")
+  {
+    test_array_fail(src_array, dst_array, 7);
+    test_array_fail(src_array, dst_array, 8, 2, 0);
+    test_array_fail(src_array, dst_array, 8, 0, 2);
+  }
+
+  GIVEN("memcpy(some-array, some-array, array-size)")
+  {
+    // Should short-circuit!
+    expr2tc expected_array = constant_array2tc(
+      arr_t,
+      std::vector<expr2tc>{
+        constant_int2tc(t, BigInt(0x01)),
+        constant_int2tc(t, BigInt(0x02)),
+        constant_int2tc(t, BigInt(0x03)),
+        constant_int2tc(t, BigInt(0x04))});
+
+    test_array_case(src_array, dst_array, 16, expected_array);
+  }
+
+  GIVEN("memcpy(some-array, some-array, half-array)")
+  {
+    expr2tc expected_array = constant_array2tc(
+      arr_t,
+      std::vector<expr2tc>{
+        constant_int2tc(t, BigInt(0x01)),
+        constant_int2tc(t, BigInt(0x02)),
+        constant_int2tc(t, BigInt(0x07)),
+        constant_int2tc(t, BigInt(0x08))});
+
+    test_array_case(src_array, dst_array, 8, expected_array);
+  }
+
+  GIVEN("memcpy(some-array, some-array, src offset)")
+  {
+    expr2tc expected_array = constant_array2tc(
+      arr_t,
+      std::vector<expr2tc>{
+        constant_int2tc(t, BigInt(0x02)),
+        constant_int2tc(t, BigInt(0x03)),
+        constant_int2tc(t, BigInt(0x07)),
+        constant_int2tc(t, BigInt(0x08))});
+
+    test_array_case(src_array, dst_array, 8, expected_array, 4, 0);
+  }
+
+  GIVEN("memcpy(some-array, some-array, dst offset)")
+  {
+    expr2tc expected_array = constant_array2tc(
+      arr_t,
+      std::vector<expr2tc>{
+        constant_int2tc(t, BigInt(0x05)),
+        constant_int2tc(t, BigInt(0x01)),
+        constant_int2tc(t, BigInt(0x02)),
+        constant_int2tc(t, BigInt(0x08))});
+
+    test_array_case(src_array, dst_array, 8, expected_array, 0, 4);
+  }
+
+  GIVEN("memcpy(some-array, some-array, both offset)")
+  {
+    expr2tc expected_array = constant_array2tc(
+      arr_t,
+      std::vector<expr2tc>{
+        constant_int2tc(t, BigInt(0x05)),
+        constant_int2tc(t, BigInt(0x02)),
+        constant_int2tc(t, BigInt(0x03)),
+        constant_int2tc(t, BigInt(0x08))});
+
+    test_array_case(src_array, dst_array, 8, expected_array, 4, 4);
   }
 }
+#if 0
 
 SCENARIO("do_memcpy_expression for structs", "[symex]")
 {
