@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Python frontend handles the conversion of Python code into an internal representation, which is then translated into the GOTO language. This process includes three key steps:
+The Python frontend converts Python code into an internal representation, which is then translated into the GOTO language. This process includes three key steps:
 
 1. Generating an Abstract Syntax Tree (AST) in JSON format.
 2. Annotating the AST with type information.
@@ -73,7 +73,7 @@ We can infer type from constants, variables with inferred or pre-annotated types
 
 
 ## Symbol Table Generation
-The final step in the frontend involves converting the annotated JSON AST into a symbol table using our C++ IRep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions, and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
+The final step in the frontend is to convert the annotated JSON AST into a symbol table using our C++ IRep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions, and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
 
 ## Features Supported by ESBMC-Python
 
@@ -129,7 +129,7 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Access Patterns**: Supports both instance-based and class-based attribute access (e.g., `instance.attr` and `ClassName.attr`).
 - **Instance Variables**: Supports instance-specific attributes defined in `__init__` methods.
 - **Inheritance**: Handles inheritance and verifies scenarios involving inheritance issues.
-- **super() calls**: Supports the `super()` function to call methods from a superclass. This allows for the verification of behaviors where a derived class explicitly invokes base class methods, enabling the analysis of polymorphic behavior and the proper propagation of assertions or side effects.
+- **super() calls**: Supports the `super()` function to call methods from a superclass. This allows verifying behaviors in which a derived class explicitly invokes base-class methods, enabling the analysis of polymorphic behavior and the proper propagation of assertions or side effects.
 
 ### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
@@ -188,7 +188,7 @@ Below is an overview of ESBMC-Python's key capabilities:
       - Pointers are truthy if not NULL.
     - **Short-Circuit OR Logic**: Returns `True` if any element in the list is truthy, `False` if all elements are falsy or the list is empty.
     - **Type Handling**: Handles mixed-type lists with support for nested containers and complex structures containing `None`, integers, floats, and booleans.
-  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables the verification of programs that rely on user input.
+  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables verifying programs that rely on user input.
   - **Print**: Supports `print()` statements for output. All arguments are evaluated to ensure proper side-effect handling during verification, though the actual output is not produced.
   - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.

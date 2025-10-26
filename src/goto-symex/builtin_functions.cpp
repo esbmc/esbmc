@@ -1744,8 +1744,8 @@ static inline expr2tc do_memcpy_expression(
 
   // Short-circuit
   if (
-      dst->type == src->type && !dst_offset && !src_offset &&
-	type_byte_size(dst->type).to_uint64() == num_of_bytes)
+    dst->type == src->type && !dst_offset && !src_offset &&
+    type_byte_size(dst->type).to_uint64() == num_of_bytes)
     return src;
 
   log_status("Opportunity...");
@@ -2015,7 +2015,6 @@ void goto_symext::intrinsic_memcpy(
     // expr2tc &item_object = item.object;
     // expr2tc &item_offset = item.offset;
 
-
     cur_state->rename(item.guard);
     cur_state->rename(item.offset);
 
@@ -2044,7 +2043,6 @@ void goto_symext::intrinsic_memcpy(
       bump_call(func_call, bump_name);
       return;
     }
-
     bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
                          (number_of_offset > type_size);
     if (

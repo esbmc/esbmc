@@ -1379,12 +1379,26 @@ private:
     else if (
       value_type == "Call" && stmt["value"]["func"]["_type"] == "Attribute")
     {
-      // Try get_type_from_call first (for class methods)
+      // Try get_type_from_call first (checks builtin_functions map)
       inferred_type = get_type_from_call(stmt);
 
       // If that didn't work, try get_type_from_method
       if (inferred_type.empty())
         inferred_type = get_type_from_method(stmt["value"]);
+
+      // Handle module.Class() constructor calls (e.g., datetime.datetime(...))
+      // Use the attribute name as the type if nothing else worked
+      if (inferred_type.empty())
+      {
+        const auto &func = stmt["value"]["func"];
+        if (
+          func.contains("attr") && func.contains("value") &&
+          func["value"]["_type"] == "Name" && func["value"].contains("id"))
+        {
+          std::string class_name = func["attr"].template get<std::string>();
+          inferred_type = class_name;
+        }
+      }
     }
     else
       return InferResult::UNKNOWN;
@@ -1592,6 +1606,7 @@ private:
   {
     for (const Json &elem : body)
     {
+      // Check if this element is the variable we're looking for
       if (
         elem.contains("_type") &&
         ((elem["_type"] == "AnnAssign" && elem.contains("target") &&
@@ -1600,6 +1615,71 @@ private:
          (elem["_type"] == "arg" && elem["arg"] == node_name)))
       {
         return elem;
+      }
+
+      // Recursively search inside nested blocks
+      if (elem.contains("_type"))
+      {
+        const std::string &elem_type = elem["_type"];
+
+        // Search inside If blocks (both if and else branches)
+        if (elem_type == "If")
+        {
+          if (elem.contains("body") && !elem["body"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["body"]);
+            if (!result.empty())
+              return result;
+          }
+          if (elem.contains("orelse") && !elem["orelse"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["orelse"]);
+            if (!result.empty())
+              return result;
+          }
+        }
+        // Search inside While blocks
+        else if (elem_type == "While")
+        {
+          if (elem.contains("body") && !elem["body"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["body"]);
+            if (!result.empty())
+              return result;
+          }
+        }
+        // Search inside For blocks
+        else if (elem_type == "For")
+        {
+          if (elem.contains("body") && !elem["body"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["body"]);
+            if (!result.empty())
+              return result;
+          }
+        }
+        // Search inside Try blocks
+        else if (elem_type == "Try")
+        {
+          if (elem.contains("body") && !elem["body"].empty())
+          {
+            Json result = find_annotated_assign(node_name, elem["body"]);
+            if (!result.empty())
+              return result;
+          }
+          if (elem.contains("handlers") && !elem["handlers"].empty())
+          {
+            for (const Json &handler : elem["handlers"])
+            {
+              if (handler.contains("body") && !handler["body"].empty())
+              {
+                Json result = find_annotated_assign(node_name, handler["body"]);
+                if (!result.empty())
+                  return result;
+              }
+            }
+          }
+        }
       }
     }
     return Json();
