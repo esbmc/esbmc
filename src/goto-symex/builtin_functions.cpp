@@ -1732,7 +1732,7 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
   return result;
 }
 
-static inline expr2tc do_memcpy_expression(
+expr2tc goto_symex_utils::do_memcpy_expression(
   const expr2tc &dst,
   const size_t &dst_offset,
   const expr2tc &src,
@@ -1747,12 +1747,9 @@ static inline expr2tc do_memcpy_expression(
     dst->type == src->type && !dst_offset && !src_offset &&
     type_byte_size(dst->type).to_uint64() == num_of_bytes)
     return src;
-
-  log_status("Opportunity...");
-  // Python focus...
+  
   if (is_array_type(dst->type))
     {
-
       if (dst->type == src->type)
 	{
 	  log_debug("memcpy", "Easy case same array type");
@@ -1773,9 +1770,12 @@ static inline expr2tc do_memcpy_expression(
 	{
           log_debug("memcpy", "No support for non byte arrrays");
           return expr2tc();
-
 	}
 
+      return expr2tc();
+#if 0 
+      
+      
       // SRC is a primitive and DST is an array
       expr2tc result = gen_zero(dst->type);
       constant_array2t &data = to_constant_array2t(result);
@@ -1821,16 +1821,18 @@ static inline expr2tc do_memcpy_expression(
         return expr2tc();
 	}
       return result;
+      #endif
     }
   
-  if (
-      is_array_type(src->type) || is_array_type(dst->type) ||
+  if (  is_array_type(src->type) ||
 	is_struct_type(dst->type) || is_union_type(dst->type) ||
 	is_struct_type(src->type) || is_union_type(src->type))
     {
       log_status("missed the opportunity");
       return expr2tc();
     }
+
+  assert(!is_array_type(dst->type));
   // Base-case. Primitives!
   return goto_symex_utils::gen_byte_memcpy(
     src, dst, num_of_bytes, src_offset, dst_offset);
@@ -2068,7 +2070,7 @@ void goto_symext::intrinsic_memcpy(
       // Offset is garanteed to be a constant
       const uint64_t src_offset =
         to_constant_int2t(src_item.offset).value.to_uint64();
-      const expr2tc new_object = do_memcpy_expression(
+      const expr2tc new_object = goto_symex_utils::do_memcpy_expression(
         item.object,
         number_of_offset,
         src_item.object,

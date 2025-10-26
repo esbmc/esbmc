@@ -1256,6 +1256,31 @@ expr2tc gen_byte_memcpy(
   const size_t num_of_bytes,
   const size_t src_offset,
   const size_t dst_offset);
+
+/**
+ * Performs a memcpy operation between two memory locations.
+ *
+ * This function takes two memory locations (dst and src), and copies
+ * a specified number of bytes from src to dst. It handles both scalar and
+ * vector types, ensuring that the copy is performed correctly for each type.
+ *
+ * @param dst The destination memory location where data will be copied.
+ * @param src The source memory location from which data will be copied.
+ * @param num_of_bytes The number of bytes to copy from src to dst.
+ * @param dst_offset The offset in dst at which the copy should begin.
+ * @param src_offset The offset in src from which the copy should begin.
+ *
+ * @return An expr2tc representing the resulting memory state after the memcpy operation.
+ *         If unable to optimize, an empty expr2tc is returned.
+ */
+expr2tc do_memcpy_expression(const expr2tc &dst,
+
+  const size_t &dst_offset,
+  const expr2tc &src,
+  const size_t &src_offset,
+  const size_t num_of_bytes);
+
 } // namespace goto_symex_utils
+
 
 #endif
