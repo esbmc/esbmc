@@ -1,5 +1,5 @@
 THOROUGH
 main.py
---force-malloc-success --incremental-bmc
+ --incremental-bmc
 
 ^VERIFICATION SUCCESSFUL$

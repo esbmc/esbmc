@@ -1,5 +1,5 @@
 THOROUGH
 main.py
---no-pointer-check --force-malloc-success
+--no-pointer-check 
 
 ^VERIFICATION SUCCESSFUL$

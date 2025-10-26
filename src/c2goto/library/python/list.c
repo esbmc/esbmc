@@ -19,7 +19,7 @@ typedef struct
 /* ---------- create ---------- */
 static inline List *list_create(Object *backing)
 {
-  List *l = malloc(sizeof(List));
+  List *l = __ESBMC_alloca(sizeof(List));
 
   __ESBMC_assume(l != NULL);
 
@@ -111,10 +111,7 @@ static inline bool list_push(List *l, const void *value, size_t type_id)
 static inline bool
 list_push(List *l, const void *value, size_t type_id, size_t type_size)
 {
-  void *copied_value = malloc(type_size);
-
-  // Force malloc to succeed for verification
-  __ESBMC_assume(copied_value != NULL);
+  void *copied_value = __ESBMC_alloca(type_size);
 
   memcpy(copied_value, value, type_size);
 
@@ -145,8 +142,7 @@ static inline bool list_insert(
     return list_push(l, value, type_id, type_size);
 
   // Make a copy of the value
-  void *copied_value = malloc(type_size);
-  __ESBMC_assume(copied_value != NULL);
+  void *copied_value = __ESBMC_alloca(type_size);
   memcpy(copied_value, value, type_size);
 
   // Shift all elements from index onwards one position to the right
@@ -180,7 +176,6 @@ static inline bool list_pop(List *l)
   if (l->size == 0)
     return false;
   l->size--;
-  free((void *)l->items[l->size].value); // Free the copied data
   return true;
 }
 
@@ -234,8 +229,7 @@ static inline void list_extend(List *l, const List *other)
   {
     const Object *elem = &other->items[i];
 
-    void *copied_value = malloc(elem->size);
-    __ESBMC_assume(copied_value != NULL);
+    void *copied_value = __ESBMC_alloca(elem->size);
     memcpy(copied_value, elem->value, elem->size);
 
     l->items[l->size].value = copied_value;
