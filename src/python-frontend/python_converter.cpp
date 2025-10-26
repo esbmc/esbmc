@@ -3110,7 +3110,10 @@ void python_converter::get_var_assign(
       // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in self
       if (is_ctor_call)
       {
-        std::string func_name = ast_node["value"]["func"]["id"];
+        std::string func_name =
+          ast_node["value"]["func"].contains("id")
+            ? ast_node["value"]["func"]["id"].get<std::string>()
+            : ast_node["value"]["func"]["attr"].get<std::string>();
 
         if (base_ctor_called)
         {
@@ -4770,7 +4773,7 @@ void python_converter::convert()
     const std::string &ast_output_dir =
       (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
-      "range", "int", "consensus", "random", "exceptions"};
+      "range", "int", "consensus", "random", "exceptions", "datetime"};
     std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)
