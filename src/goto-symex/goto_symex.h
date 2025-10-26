@@ -1273,7 +1273,8 @@ expr2tc gen_byte_memcpy(
  * @return An expr2tc representing the resulting memory state after the memcpy operation.
  *         If unable to optimize, an empty expr2tc is returned.
  */
-expr2tc do_memcpy_expression(const expr2tc &dst,
+expr2tc do_memcpy_expression(
+  const expr2tc &dst,
 
   const size_t &dst_offset,
   const expr2tc &src,
@@ -1281,6 +1282,5 @@ expr2tc do_memcpy_expression(const expr2tc &dst,
   const size_t num_of_bytes);
 
 } // namespace goto_symex_utils
-
 
 #endif

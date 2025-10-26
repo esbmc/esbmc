@@ -29,8 +29,7 @@ SCENARIO("the memcpy generation can generate valid results", "[symex]")
                                const uint32_t dst_value,
                                const uint32_t dst_offset,
                                const size_t number_of_bytes,
-                               const uint32_t expected_value)
-  {
+                               const uint32_t expected_value) {
     const expr2tc src =
       constant_int2tc(get_uint_type(src_width), BigInt(src_value));
     const expr2tc dst =
@@ -72,8 +71,7 @@ SCENARIO("do_memcpy_expression for primitive types", "[symex]")
                                uint32_t src_value,
                                uint32_t dst_value,
                                size_t number_of_bytes,
-                               uint32_t expected_value)
-  {
+                               uint32_t expected_value) {
     const expr2tc src = constant_int2tc(get_uint_type(32), BigInt(src_value));
     const expr2tc dst = constant_int2tc(get_uint_type(32), BigInt(dst_value));
 
@@ -124,8 +122,7 @@ SCENARIO("do_memcpy_expression for dst arrays and src primitives", "[symex]")
                      size_t number_of_bytes,
                      const expr2tc &expected_result,
                      size_t dst_offset = 0,
-                     size_t src_offset = 0)
-  {
+                     size_t src_offset = 0) {
     expr2tc result = goto_symex_utils::do_memcpy_expression(
       dst, dst_offset, src, src_offset, number_of_bytes);
 
@@ -195,8 +192,7 @@ SCENARIO("do_memcpy_expression for arrays", "[symex]")
                            size_t number_of_bytes,
                            const expr2tc &expected_result,
                            size_t src_offset = 0,
-                           size_t dst_offset = 0)
-  {
+                           size_t dst_offset = 0) {
     expr2tc result = goto_symex_utils::do_memcpy_expression(
       dst, dst_offset, src, src_offset, number_of_bytes);
 
@@ -215,8 +211,7 @@ SCENARIO("do_memcpy_expression for arrays", "[symex]")
                            const expr2tc &dst,
                            size_t number_of_bytes,
                            size_t src_offset = 0,
-                           size_t dst_offset = 0)
-  {
+                           size_t dst_offset = 0) {
     expr2tc result = goto_symex_utils::do_memcpy_expression(
       dst, dst_offset, src, src_offset, number_of_bytes);
 
