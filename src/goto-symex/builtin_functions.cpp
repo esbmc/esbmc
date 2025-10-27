@@ -1840,7 +1840,7 @@ expr2tc goto_symex_utils::do_memcpy_expression(
 
       uint64_t src_base_size = type_byte_size(src->type).to_uint64();
 
-      // SHould been prevented already
+      // Should have been prevented already
       assert(src_base_size <= bytes_left);
 
       for (unsigned i = src_offset; i < src_base_size; i++)
