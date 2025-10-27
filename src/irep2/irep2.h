@@ -152,7 +152,7 @@ class constant_vector2t;
  *  This class extends  shared_ptr's to contain anything that's a subclass
  *  of expr2t. It provides several ways of accessing the contained pointer;
  *  crucially it ensures that the only way to get a non-const reference or
- *  pointer is via the get() method, which call the detach() method. COW behaviour.
+ *  pointer is via the get() method, which calls the detach() method. COW behaviour.
  *
  *  This exists to ensure that we honor the model set forth by the old string
  *  based internal representation - specifically, that if you performed a const
