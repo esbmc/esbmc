@@ -391,10 +391,9 @@ _Bool __ESBMC_is_little_endian();
 
 int __ESBMC_rounding_mode = 0;
 
-void *__ESBMC_memcpy(void *, const void *, unsigned int);
-
-void *__ESBMC_memset(void *, int, unsigned int);
-
+void *__ESBMC_memset(void *, int, __SIZE_TYPE__);
+      void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
+      
 /* same semantics as memcpy(tgt, src, size) where size matches the size of the
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);

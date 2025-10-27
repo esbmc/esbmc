@@ -1,4 +1,4 @@
 THOROUGH
 main.py
---no-pointer-check --force-malloc-success --ir
+--no-pointer-check  --ir
 ^\s*index\s*<\s*l->size\s*$

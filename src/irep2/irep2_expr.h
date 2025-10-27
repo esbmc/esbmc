@@ -1758,6 +1758,7 @@ public:
   constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_array_expr_methods(type, constant_array_id, members)
   {
+    assert(type->type_id == type2t::array_id);
   }
   constant_array2t(const constant_array2t &ref) = default;
 

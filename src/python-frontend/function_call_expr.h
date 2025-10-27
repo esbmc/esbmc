@@ -99,6 +99,9 @@ private:
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
+  bool
+  is_same_type(const exprt &obj_expr, const nlohmann::json &type_node) const;
+
   exprt handle_isinstance() const;
 
   exprt handle_hasattr() const;
@@ -202,6 +205,7 @@ private:
   exprt handle_list_method() const;
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
+  exprt handle_list_extend() const;
 
   /*
    * Check if the current function call is to a regular expression module function

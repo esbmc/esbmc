@@ -213,6 +213,29 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+bool function_call_expr::is_same_type(
+  const exprt &obj_expr,
+  const nlohmann::json &type_node) const
+{
+  if (type_node["_type"] != "Name")
+    throw std::runtime_error("Unsupported type in isinstance()");
+
+  std::string type_name = type_node["id"];
+  // Get the internal type representation from the type name
+  typet expected_type = type_handler_.get_typet(type_name, 0);
+
+  /* NOTE: Comparing the types directly may be insufficient.
+           Inheritance or type aliases may require deeper analysis. */
+
+  if (base_type_eq(obj_expr.type(), expected_type, converter_.ns))
+    return true;
+
+  if (is_subclass_of(obj_expr.type(), expected_type, converter_.ns))
+    return true;
+
+  return false;
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -223,26 +246,22 @@ exprt function_call_expr::handle_isinstance() const
 
   // Convert the first argument (the object being checked) into an expression
   exprt obj_expr = converter_.get_expr(args[0]);
+  const auto &type_arg = args[1];
 
-  // The second argument must be a simple type name (e.g., int, MyClass)
-  if (args[1]["_type"] != "Name")
+  if (type_arg["_type"] == "Name")
+    return gen_boolean(is_same_type(obj_expr, type_arg));
+  else if (type_arg["_type"] == "Tuple")
+  {
+    const auto &elts = type_arg["elts"];
+    for (const auto &elt : elts)
+    {
+      if (is_same_type(obj_expr, elt))
+        return gen_boolean(true);
+    }
+    return gen_boolean(false);
+  }
+  else
     throw std::runtime_error("Unsupported type format in isinstance()");
-
-  std::string type_name = args[1]["id"];
-
-  // Get the internal type representation from the type name
-  typet expected_type = type_handler_.get_typet(type_name, 0);
-
-  /* NOTE: Comparing the types directly may be insufficient.
-           Inheritance or type aliases may require deeper analysis. */
-
-  bool matches = base_type_eq(obj_expr.type(), expected_type, converter_.ns);
-  if (matches)
-    return gen_boolean(true);
-
-  bool is_subtype =
-    is_subclass_of(obj_expr.type(), expected_type, converter_.ns);
-  return gen_boolean(is_subtype);
 }
 
 exprt function_call_expr::handle_hasattr() const
@@ -648,10 +667,17 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
     double dval = std::stod(*value_opt);
     return from_double(dval, type_handler_.get_typet("float", 0));
   }
-  catch (const std::exception &e)
+  catch (const std::invalid_argument &)
   {
     log_error(
-      "Failed float conversion from string \"{}\": {}", *value_opt, e.what());
+      "Failed float conversion from string \"{}\": invalid argument",
+      *value_opt);
+    return from_double(0.0, type_handler_.get_typet("float", 0));
+  }
+  catch (const std::out_of_range &)
+  {
+    log_error(
+      "Failed float conversion from string \"{}\": out of range", *value_opt);
     return from_double(0.0, type_handler_.get_typet("float", 0));
   }
 }
@@ -926,10 +952,16 @@ exprt function_call_expr::build_constant_from_arg() const
         double dval = std::stod(arg["value"].get<std::string>());
         return from_double(dval, type_handler_.get_typet("float", 0));
       }
-      catch (const std::exception &e)
+      catch (const std::invalid_argument &)
       {
-        std::string m = "could not convert string to float : " +
+        std::string m = "could not convert string to float : '" +
                         arg["value"].get<std::string>() + "'";
+        return gen_exception_raise("ValueError", m);
+      }
+      catch (const std::out_of_range &)
+      {
+        std::string m = "could not convert string to float : '" +
+                        arg["value"].get<std::string>() + "' (out of range)";
         return gen_exception_raise("ValueError", m);
       }
     }
@@ -1134,6 +1166,9 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_append();
   if (method_name == "insert")
     return handle_list_insert();
+  if (method_name == "extend")
+    return handle_list_extend();
+
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);
@@ -1178,6 +1213,30 @@ exprt function_call_expr::handle_list_append() const
     value_to_append.type());
 
   return list.build_push_list_call(*list_symbol, call_, value_to_append);
+}
+
+exprt function_call_expr::handle_list_extend() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error("extend() takes exactly one argument");
+
+  std::string list_name = get_object_name();
+
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  exprt other_list = converter_.get_expr(args[0]);
+
+  python_list list(converter_, nlohmann::json());
+
+  return list.build_extend_list_call(*list_symbol, call_, other_list);
 }
 
 bool function_call_expr::is_print_call() const

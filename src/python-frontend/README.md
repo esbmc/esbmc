@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Python frontend handles the conversion of Python code into an internal representation, which is then translated into the GOTO language. This process includes three key steps:
+The Python frontend converts Python code into an internal representation, which is then translated into the GOTO language. This process includes three key steps:
 
 1. Generating an Abstract Syntax Tree (AST) in JSON format.
 2. Annotating the AST with type information.
@@ -73,7 +73,7 @@ We can infer type from constants, variables with inferred or pre-annotated types
 
 
 ## Symbol Table Generation
-The final step in the frontend involves converting the annotated JSON AST into a symbol table using our C++ IRep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions, and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
+The final step in the frontend is to convert the annotated JSON AST into a symbol table using our C++ IRep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions, and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
 
 ## Features Supported by ESBMC-Python
 
@@ -105,6 +105,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
+- **Variadic Parameters**: Supports the `*args` syntax for functions with variable-length argument lists, allowing functions to accept an arbitrary number of positional arguments (e.g., `def func(*args):`).
 - **Annotations**: Supports type annotations, including:
   - **Basic Type Annotations**: Standard Python types (int, float, bool, str, etc.).
   - **Any Type**: Supports `Any` from the typing module for functions with dynamic return types.
@@ -128,23 +129,27 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Access Patterns**: Supports both instance-based and class-based attribute access (e.g., `instance.attr` and `ClassName.attr`).
 - **Instance Variables**: Supports instance-specific attributes defined in `__init__` methods.
 - **Inheritance**: Handles inheritance and verifies scenarios involving inheritance issues.
-- **super() calls**: Supports the `super()` function to call methods from a superclass. This allows for the verification of behaviors where a derived class explicitly invokes base class methods, enabling the analysis of polymorphic behavior and the proper propagation of assertions or side effects.
+- **super() calls**: Supports the `super()` function to call methods from a superclass. This allows verifying behaviors in which a derived class explicitly invokes base-class methods, enabling the analysis of polymorphic behavior and the proper propagation of assertions or side effects.
 
 ### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
 - **Data Structures**: Supports operations on Python's built-in data structures, including lists and strings, with features such as concatenation and bounds checks.
   - **List Operations**:
     - **append()**: Add elements to the end of a list.
+    - **extend()**: Extends a list by appending all elements from an iterable (e.g., `list1.extend(list2)` or `list1.extend([3, 4, 5])`).
     - **insert()**: Insert elements at a specific index position.
       - When the index equals the list length, the element is appended to the end.
       - When the index exceeds the list length, the element is appended to the end.
       - When the index is within bounds, existing elements are shifted right.
       - Supports insertion into empty lists at index 0.
     - **Membership Testing (`in` operator)**: Supports Python's `in` operator for list membership testing (e.g., `2 in [1, 2, 3]` returns `True`).
+    - **Concatenation (+ operator)**: Fully supports the list + list operation (e.g., `[1,2] + [3,4] → [1,2,3,4]`), producing a new list containing all elements of both operands in order.
   - **String Operations**:
     - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns `True`).
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
     - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
+    - **lstrip() method**: Removes leading whitespace characters from strings (e.g., `"  hello".lstrip()` returns `"hello"`).
+    - **isspace() method**: Returns `True` if all characters in the string are whitespace characters and the string is non-empty, `False` otherwise.
     - **String Slicing**: Comprehensive support for Python's slice notation on strings:
       - **Basic Slicing**: `string[start:end]` returns a substring from index `start` to `end-1`.
       - **Omitted Bounds**: Supports slices with omitted start (`string[:end]`) or end (`string[start:]`) indices.
@@ -183,7 +188,7 @@ Below is an overview of ESBMC-Python's key capabilities:
       - Pointers are truthy if not NULL.
     - **Short-Circuit OR Logic**: Returns `True` if any element in the list is truthy, `False` if all elements are falsy or the list is empty.
     - **Type Handling**: Handles mixed-type lists with support for nested containers and complex structures containing `None`, integers, floats, and booleans.
-  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables the verification of programs that rely on user input.
+  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables verifying programs that rely on user input.
   - **Print**: Supports `print()` statements for output. All arguments are evaluated to ensure proper side-effect handling during verification, though the actual output is not produced.
   - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.

@@ -100,6 +100,7 @@ const static std::vector<std::string> python_c_models = {
   "list_get_as",
   "list_push",
   "list_insert",
+  "list_extend",
   "list_push_object",
   "list_replace",
   "list_pop",
@@ -151,10 +152,14 @@ const static std::vector<std::string> python_c_models = {
   "ldexp",
   "log1p_taylor",
   "strstr",
+  "strchr",
   "list_contains",
   "__python_str_isdigit",
   "__python_str_isalpha",
   "__python_char_isalpha",
+  "__python_str_isspace",
+  "isspace",
+  "__python_str_lstrip",
 };
 
 } // namespace

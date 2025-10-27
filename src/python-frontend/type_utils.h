@@ -2,6 +2,7 @@
 
 #include <util/c_types.h>
 #include <util/expr.h>
+#include <util/expr_util.h>
 #include <util/type.h>
 
 #include <nlohmann/json.hpp>

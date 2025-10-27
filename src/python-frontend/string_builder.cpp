@@ -5,8 +5,8 @@
 #include <util/std_code.h>
 #include <util/expr_util.h>
 
-string_builder::string_builder(python_converter &converter)
-  : converter_(converter)
+string_builder::string_builder(python_converter &conv, string_handler *handler)
+  : converter_(conv), str_handler_(handler)
 {
 }
 
@@ -195,7 +195,7 @@ exprt string_builder::ensure_null_terminated_string(exprt &e)
   }
 
   // For other types, fallback to converter's ensure_string_array
-  converter_.ensure_string_array(e);
+  str_handler_->ensure_string_array(e);
   return e;
 }
 
@@ -207,10 +207,10 @@ exprt string_builder::concatenate_strings(
 {
   // Handle edge cases with empty strings
   bool lhs_is_empty =
-    converter_.is_zero_length_array(lhs) ||
+    str_handler_->is_zero_length_array(lhs) ||
     (lhs.is_constant() && lhs.type().is_array() && lhs.operands().size() <= 1);
   bool rhs_is_empty =
-    converter_.is_zero_length_array(rhs) ||
+    str_handler_->is_zero_length_array(rhs) ||
     (rhs.is_constant() && rhs.type().is_array() && rhs.operands().size() <= 1);
 
   if (lhs_is_empty && rhs_is_empty)

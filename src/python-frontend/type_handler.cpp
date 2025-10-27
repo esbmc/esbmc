@@ -110,7 +110,7 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   if (annotation.contains("id"))
     return annotation["id"].get<std::string>();
 
-  if (annotation["_type"] == "Subscript")
+  if (annotation.contains("_type") && annotation["_type"] == "Subscript")
     return annotation["value"]["id"];
 
   return std::string();
@@ -215,6 +215,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "NoneType")
     return pointer_type();
 
+  // Optional[T] - when type string is just "Optional" without inner type
+  // This can occur during type inference. Return pointer type as placeholder.
+  if (ast_type == "Optional")
+    return pointer_type();
+
   // Python float type: IEEE 754 double-precision mapping
   // Python floats are implemented using C double (IEEE 754 double-precision)
   // as per Python documentation. This ensures proper precision, range, and
@@ -284,6 +289,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // Check if it's imported
   if (!is_defined)
     is_defined = converter_.is_imported_module(ast_type);
+
+  // Look up the type in the symbol table
+  if (!is_defined)
+  {
+    symbolt *s = converter_.find_symbol(std::string("tag-" + ast_type));
+    if (s)
+      return s->type;
+  }
 
   // If still not found, it's a NameError
   if (!is_defined)
@@ -744,15 +757,23 @@ int type_handler::get_array_dimensions(const nlohmann::json &arr) const
 size_t type_handler::get_type_width(const typet &type) const
 {
   // First try to parse width directly
-  try
+  std::string width_str = type.width().c_str();
+  if (!width_str.empty())
   {
-    return std::stoi(type.width().c_str());
+    try
+    {
+      return std::stoi(width_str);
+    }
+    catch (const std::exception &)
+    {
+      // Fall through to type name inference
+    }
   }
-  catch (const std::exception &)
-  {
-    // If direct parsing fails, try to infer from type name
-    std::string type_str = type.width().as_string();
 
+  // If width is empty or parsing failed, try to infer from type name
+  std::string type_str = type.width().as_string();
+  if (!type_str.empty())
+  {
     // Handle common Python/ESBMC type mappings
     if (type_str == "int32")
       return 32;
@@ -787,8 +808,8 @@ size_t type_handler::get_type_width(const typet &type) const
         // Fall through to default
       }
     }
-
-    // Default to 32 for unknown types
-    return 32;
   }
+
+  // Default to 32 for unknown types
+  return 32;
 }

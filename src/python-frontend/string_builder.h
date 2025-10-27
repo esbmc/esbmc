@@ -11,13 +11,14 @@
 class python_converter;
 class type_handler;
 class contextt;
+class string_handler;
 
 /// Helper class for building and manipulating string expressions in Python frontend
 /// Handles null-termination, character extraction, and string concatenation
 class string_builder
 {
 public:
-  explicit string_builder(python_converter &converter);
+  explicit string_builder(python_converter &converter, string_handler *handler);
 
   /// Create a null terminator character constant
   exprt make_null_terminator();
@@ -56,6 +57,7 @@ public:
 
 private:
   python_converter &converter_;
+  string_handler *str_handler_;
   contextt &get_symbol_table() const;
   type_handler &get_type_handler();
 };
