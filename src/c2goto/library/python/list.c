@@ -179,18 +179,6 @@ static inline bool list_pop(List *l)
   return true;
 }
 
-/* ---------- type hashing ---------- */
-static inline size_t list_hash_string(const char *str)
-{
-  size_t hash = 5381;
-  int c;
-  while ((c = *str++))
-  {
-    hash = ((hash << 5) + hash) + c;
-  }
-  return hash;
-}
-
 static bool list_contains(
   const List *l,
   const void *item,

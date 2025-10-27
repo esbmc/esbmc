@@ -8,9 +8,10 @@
 #include <util/expr_util.h>
 #include <util/arith_tools.h>
 #include <util/std_code.h>
+#include <util/mp_arith.h>
 #include <util/symbolic_types.h>
 #include <string>
-
+#include <functional>
 // Extract element type from annotation
 static typet get_elem_type_from_annotation(
   const nlohmann::json &node,
@@ -62,27 +63,15 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   // Create and declare temporary symbol for element type
   symbolt &elem_type_sym = converter_.create_tmp_symbol(
     op, "$list_elem_type$", size_type(), type_name_expr);
-  code_declt elem_type_decl(symbol_expr(elem_type_sym));
-  elem_type_decl.location() = location;
-  converter_.add_instruction(elem_type_decl);
-
-  // Call hash function to get type hash
-  const symbolt *hash_func_symbol =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_hash_string");
-  if (!hash_func_symbol)
-  {
-    throw std::runtime_error("Hash function symbol not found");
-  }
-
-  code_function_callt list_type_hash_func_call;
-  list_type_hash_func_call.function() = symbol_expr(*hash_func_symbol);
-  list_type_hash_func_call.arguments().push_back(
-    converter_.get_string_handler().get_array_base_address(type_name_expr));
-  list_type_hash_func_call.lhs() = symbol_expr(elem_type_sym);
-  list_type_hash_func_call.type() = size_type();
-  list_type_hash_func_call.location() = location;
-  converter_.add_instruction(list_type_hash_func_call);
-
+ 
+  // TODO: Eventually we should build a reverse index of hash => type into the context
+  // this will allow better counter examples.
+  constant_exprt hash_value(size_type());
+  hash_value.set_value(integer2binary(std::hash<std::string>{}(elem_type_name), config.ansi_c.address_width));
+  code_assignt hash_assignment(symbol_expr(elem_type_sym), hash_value);
+  hash_assignment.location() = location;
+  converter_.add_instruction(hash_assignment);
+  
   // Create and declare temporary symbol for list element
   symbolt &elem_symbol =
     converter_.create_tmp_symbol(op, "$list_elem$", elem.type(), elem);
