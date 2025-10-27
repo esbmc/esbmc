@@ -491,10 +491,6 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
-  void intrinsic_memcpy(
-    reachability_treet &art,
-    const code_function_call2t &func_call);
-
   /** Implements GCC's __builtin_object_size intrinsic for object size determination
    *
    * @param func_call Function call with 2 operands: pointer and type parameter
