@@ -65,7 +65,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     op, "$list_elem_type$", size_type(), type_name_expr);
 
   // TODO: Eventually we should build a reverse index of hash => type into the context
-  // this will allow better counter examples.
+  // this will allow better verification counter-examples.
   constant_exprt hash_value(size_type());
   hash_value.set_value(integer2binary(
     std::hash<std::string>{}(elem_type_name), config.ansi_c.address_width));
