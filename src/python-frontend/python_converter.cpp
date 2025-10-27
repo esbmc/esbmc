@@ -3947,6 +3947,11 @@ void python_converter::get_attributes_from_self(
       typet type;
       if (annotated_type == "str")
         type = gen_pointer_type(char_type());
+      else if (annotated_type == "Optional")
+      {
+        typet base_type = get_type_from_annotation(stmt["annotation"], stmt);
+        type = gen_pointer_type(base_type);
+      }
       else
         type =
           type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
