@@ -1825,10 +1825,131 @@ void goto_symext::intrinsic_memcpy(
     return;
   }
 
+  cur_state->rename(dst_arg);
+  cur_state->rename(src_arg);
+  
+  simplify(dst_arg);
+  simplify(src_arg);
+
+  //When the value of a pointer is unknown or NULL
+  if (is_nil_expr(dst_arg) || is_nil_expr(src_arg))
+  {
+    log_debug("memcpy", "Source or destination is NULL, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
+
+  if (
+    (is_constant_int2t(dst_arg) && to_constant_int2t(dst_arg).value.is_zero()) ||
+    (is_constant_int2t(src_arg) && to_constant_int2t(src_arg).value.is_zero()))
+  {
+    log_debug("memcpy", "NULL pointer operand, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
+
+  // Only handle constant-size copies for now
+  simplify(n_arg);
+  // Only proceed with this case when the size n is a compile-time constant.
+  // Otherwise, fall back to byte-by-byte copying in __memcpy_impl
+  if (!is_constant_int2t(n_arg))
+  {
+    log_debug("memcpy", "Symbolic size not supported, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }  
   const unsigned long number_of_bytes = to_constant_int2t(n_arg).as_ulong();
 
-  // Now grab all sources
+  if (number_of_bytes == 1)
+  {
+    log_debug(
+      "memcpy", "Single-byte copy detected, falling back to standard memcpy");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
 
+  if (
+    number_of_bytes >= 2 && (is_struct_type(dst_arg->type) || is_pointer_type(dst_arg->type)))
+  {
+    type2tc target_type;
+
+    if (is_pointer_type(dst_arg->type))
+    {
+      target_type = to_pointer_type(dst_arg->type).subtype;
+      dst_arg = dereference2tc(target_type, dst_arg);
+      src_arg = dereference2tc(target_type, src_arg);
+    }
+    else
+    {
+      target_type = dst_arg->type;
+    }
+
+    if (has_bitfields(target_type) || is_packed_struct(target_type))
+    {
+      log_debug("memcpy", "Bitfield or packed struct, falling back");
+      bump_call(func_call, "c:@F@__memcpy_impl");
+      return;
+    }
+
+    log_debug("memcpy", "Using struct copy for {}-byte struct", number_of_bytes);
+
+    if (!is_struct_type(target_type) || !is_struct_type(src_arg->type))
+    {
+      log_debug("memcpy", "Not a struct type after dereference");
+      bump_call(func_call, "c:@F@__memcpy_impl");
+      return;
+    }
+
+    const struct_type2t &dst_struct = to_struct_type(target_type);
+    const struct_type2t &src_struct = to_struct_type(src_arg->type);
+
+    // Verify struct sizes match the copy size
+    if (
+      dst_struct.get_width() != number_of_bytes ||
+      src_struct.get_width() != number_of_bytes)
+    {
+      log_debug("memcpy", "Struct size mismatch, falling back");
+      bump_call(func_call, "c:@F@__memcpy_impl");
+      return;
+    }
+
+    for (unsigned i = 0; i < dst_struct.members.size(); i++)
+    {
+      // Create member expressions for both source and destination
+      expr2tc dst_member =
+        member2tc(dst_struct.members[i], dst_arg, dst_struct.member_names[i]);
+
+      expr2tc src_member =
+        member2tc(src_struct.members[i], src_arg, src_struct.member_names[i]);
+
+      // Copy member by member - this avoids byte loops!
+      symex_assign(code_assign2tc(dst_member, src_member));
+    }
+
+    // Handle return value if exists
+    if (!is_nil_expr(func_call.ret))
+    {
+      symex_assign(code_assign2tc(func_call.ret, dst_arg));
+    }
+    return;
+  }
+
+  log_status("Using intrinsic_memcpy for {}-byte copy", number_of_bytes);
+
+  /*internal_deref_items.clear();
+  expr2tc deref_dst = dereference2tc(get_empty_type(), dst);
+  dereference(deref_dst, dereferencet::INTERNAL);
+  auto dst_items = internal_deref_items;
+
+  internal_deref_items.clear();
+  expr2tc deref_src = dereference2tc(get_empty_type(), src);
+  dereference(deref_src, dereferencet::INTERNAL);
+  auto src_items = internal_deref_items;  */
+
+
+
+  
+  // Now grab all sources
   std::list<dereference_callbackt::internal_item> src_items;
   expr2tc src_deref = dereference2tc(get_empty_type(), src_arg);
   internal_deref_items.clear();
@@ -1836,6 +1957,7 @@ void goto_symext::intrinsic_memcpy(
 
   if (!internal_deref_items.size())
   {
+    log_debug("memcpy", "Source dereference failed");
     bump_call(func_call, bump_name);
     return;
   }
@@ -1909,6 +2031,7 @@ void goto_symext::intrinsic_memcpy(
       continue;
     }
 
+
     // Over reading?
     bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
                          (number_of_offset > type_size);
@@ -1930,9 +2053,10 @@ void goto_symext::intrinsic_memcpy(
     }
   }
 
-  // Readings are sorted... now go for writings
+  std::list<dereference_callbackt::internal_item> dst_items;
   expr2tc dst_deref = dereference2tc(get_empty_type(), dst_arg);
-  dereference(dst_deref, dereferencet::INTERNAL);
+  internal_deref_items.clear();
+  dereference(dst_deref, dereferencet::INTERNAL);  
 
   for (dereference_callbackt::internal_item &item : internal_deref_items)
   {
@@ -2014,6 +2138,44 @@ void goto_symext::intrinsic_memcpy(
         code_assign2tc(item.object, new_object), false, assignment_guard);
     }
   }
+  auto &dst_item = dst_items.front();
+  auto &src_item = src_items.front();
+
+  guardt guard = ex_state.cur_state->guard;
+  guard.add(dst_item.guard);
+  guard.add(src_item.guard);
+
+  cur_state->rename(dst_item.object);
+  cur_state->rename(src_item.object);
+  cur_state->rename(dst_item.offset);
+  cur_state->rename(src_item.offset);  
+ 
+  simplify(src_item.offset);
+
+  if (is_nil_expr(dst_item.object) || is_nil_expr(src_item.object))
+  {
+    log_debug("memcpy", "Nil object in dereference, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }  
+  
+  if (
+    is_constant_int2t(dst_item.object) &&
+    to_constant_int2t(dst_item.object).value.is_zero())
+  {
+    log_debug("mempcy", "NULL dst object, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
+  if (
+    is_constant_int2t(src_item.object) &&
+    to_constant_int2t(src_item.object).value.is_zero())
+  {
+    log_debug("memcpy", "NULL src object, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
+
   if (!options.get_bool_option("no-pointer-check"))
   {
     expr2tc null_sym = symbol2tc(dst_arg->type, "NULL");
@@ -2027,6 +2189,70 @@ void goto_symext::intrinsic_memcpy(
     expr2tc src_null_check = not2tc(same_object2tc(src_arg, null_sym));
     ex_state.cur_state->guard.guard_expr(src_null_check);
     claim(src_null_check, " dereference failure: NULL pointer on SRC");
+  }
+    bool aligned =
+    is_constant_int2t(dst_item.offset) && is_constant_int2t(src_item.offset);
+
+  if (aligned)
+  {
+    uint64_t dst_offset = to_constant_int2t(dst_item.offset).value.to_uint64();
+    uint64_t src_offset = to_constant_int2t(src_item.offset).value.to_uint64();
+
+    unsigned int chunk_size = 1;
+    if ((dst_offset % 8 == 0) && (src_offset % 8 == 0))
+      chunk_size = 8;
+    else if ((dst_offset % 4 == 0) && (src_offset % 4 == 0))
+      chunk_size = 4;
+    else if ((dst_offset % 2 == 0) && (src_offset % 2 == 0))
+      chunk_size = 2;
+
+    size_t i = 0;
+    for (; i + chunk_size <= number_of_bytes; i += chunk_size)
+    {
+      type2tc chunk_type;
+      switch (chunk_size)
+      {
+      case 8:
+        chunk_type = get_uint64_type();
+        break;
+      case 4:
+        chunk_type = get_uint32_type();
+        break;
+      case 2:
+        chunk_type = get_uint16_type();
+        break;
+      default:
+        chunk_type = get_uint8_type();
+        break;
+      }
+      expr2tc dst_idx = index2tc(
+        chunk_type,
+        dst_item.object,
+        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
+      expr2tc src_idx = index2tc(
+        chunk_type,
+        src_item.object,
+        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+      expr2tc value = src_idx;
+      dereference(value, dereferencet::READ);
+      symex_assign(code_assign2tc(dst_idx, value), false, guard);
+    }
+
+    //Copy remaining bytes
+    for (; i < number_of_bytes; i++)
+    {
+      expr2tc dst_idx = index2tc(
+        get_uint8_type(),
+        dst_item.object,
+        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
+      expr2tc src_idx = index2tc(
+        get_uint8_type(),
+        src_item.object,
+        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+      expr2tc value = src_idx;
+      dereference(value, dereferencet::READ);
+      symex_assign(code_assign2tc(dst_idx, value), false, guard);
+    }
   }
 
   expr2tc ret_ref = func_call.ret;
@@ -2265,263 +2491,7 @@ void goto_symext::intrinsic_memset(
   dereference(ret_ref, dereferencet::READ);
   symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
 }
-void goto_symext::intrinsic_memcpy(
-  reachability_treet &art,
-  const code_function_call2t &func_call)
-{
-  assert(func_call.operands.size() == 3 && "Wrong memcpy signature");
 
-  const execution_statet &ex_state = art.get_cur_state();
-  if (ex_state.cur_state->guard.is_false())
-    return;
-
-  expr2tc dst = func_call.operands[0];
-  expr2tc src = func_call.operands[1];
-  expr2tc n = func_call.operands[2];
-
-  cur_state->rename(dst);
-  cur_state->rename(src);
-  cur_state->rename(n);
-
-  //if either operand is literally the constant 0 pointer, defer to our C memcpy
-  simplify(dst);
-  simplify(src);
-
-  //When the value of a pointer is unknown or NULL
-  if (is_nil_expr(dst) || is_nil_expr(src))
-  {
-    log_debug("memcpy", "Source or destination is NULL, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl");
-    return;
-  }
-
-  if (
-    (is_constant_int2t(dst) && to_constant_int2t(dst).value.is_zero()) ||
-    (is_constant_int2t(src) && to_constant_int2t(src).value.is_zero()))
-  {
-    log_debug("memcpy", "NULL pointer operand, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl");
-    return;
-  }
-
-  // Only handle constant-size copies for now
-  simplify(n);
-  // Only proceed with this case when the size n is a compile-time constant.
-  // Otherwise, fall back to byte-by-byte copying in __memcpy_impl
-  if (!is_constant_int2t(n))
-  {
-    log_debug("memcpy", "Symbolic size not supported, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl");
-    return;
-  }
-  unsigned long num_bytes = to_constant_int2t(n).as_long();
-
-  if (num_bytes == 1)
-  {
-    log_debug(
-      "memcpy", "Single-byte copy detected, falling back to standard memcpy");
-    bump_call(func_call, "c:@F@__memcpy_impl");
-    return;
-  }
-
-  if (
-    num_bytes >= 2 && (is_struct_type(dst->type) || is_pointer_type(dst->type)))
-  {
-    type2tc target_type;
-
-    if (is_pointer_type(dst->type))
-    {
-      target_type = to_pointer_type(dst->type).subtype;
-      dst = dereference2tc(target_type, dst);
-      src = dereference2tc(target_type, src);
-    }
-    else
-    {
-      target_type = dst->type;
-    }
-
-    if (has_bitfields(target_type) || is_packed_struct(target_type))
-    {
-      log_debug("memcpy", "Bitfield or packed struct, falling back");
-      bump_call(func_call, "c:@F@__memcpy_impl");
-      return;
-    }
-
-    log_debug("memcpy", "Using struct copy for {}-byte struct", num_bytes);
-
-    if (!is_struct_type(target_type) || !is_struct_type(src->type))
-    {
-      log_debug("memcpy", "Not a struct type after dereference");
-      bump_call(func_call, "c:@F@__memcpy_impl");
-      return;
-    }
-
-    const struct_type2t &dst_struct = to_struct_type(target_type);
-    const struct_type2t &src_struct = to_struct_type(src->type);
-
-    // Verify struct sizes match the copy size
-    if (
-      dst_struct.get_width() != num_bytes ||
-      src_struct.get_width() != num_bytes)
-    {
-      log_debug("memcpy", "Struct size mismatch, falling back");
-      bump_call(func_call, "c:@F@__memcpy_impl");
-      return;
-    }
-
-    for (unsigned i = 0; i < dst_struct.members.size(); i++)
-    {
-      // Create member expressions for both source and destination
-      expr2tc dst_member =
-        member2tc(dst_struct.members[i], dst, dst_struct.member_names[i]);
-
-      expr2tc src_member =
-        member2tc(src_struct.members[i], src, src_struct.member_names[i]);
-
-      // Copy member by member - this avoids byte loops!
-      symex_assign(code_assign2tc(dst_member, src_member));
-    }
-
-    // Handle return value if exists
-    if (!is_nil_expr(func_call.ret))
-    {
-      symex_assign(code_assign2tc(func_call.ret, dst));
-    }
-    return;
-  }
-
-  log_status("Using intrinsic_memcpy for {}-byte copy", num_bytes);
-
-  //Dereference both src and dst
-  internal_deref_items.clear();
-  expr2tc deref_dst = dereference2tc(get_empty_type(), dst);
-  dereference(deref_dst, dereferencet::INTERNAL);
-  auto dst_items = internal_deref_items;
-
-  internal_deref_items.clear();
-  expr2tc deref_src = dereference2tc(get_empty_type(), src);
-  dereference(deref_src, dereferencet::INTERNAL);
-  auto src_items = internal_deref_items;
-
-  if (dst_items.empty() || src_items.empty())
-  {
-    log_debug("memcpy", "Could not dereference src or dst");
-    bump_call(func_call, "c:@F@__memcpy_impl");
-    return;
-  }
-
-  //For now, only support single-object copies
-  auto &dst_item = dst_items.front();
-  auto &src_item = src_items.front();
-
-  guardt guard = ex_state.cur_state->guard;
-  guard.add(dst_item.guard);
-  guard.add(src_item.guard);
-
-  cur_state->rename(dst_item.object);
-  cur_state->rename(src_item.object);
-  cur_state->rename(dst_item.offset);
-  cur_state->rename(src_item.offset);
-
-  simplify(src_item.offset);
-
-  if (is_nil_expr(dst_item.object) || is_nil_expr(src_item.object))
-  {
-    log_debug("memcpy", "Nil object in dereference, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl");
-    return;
-  }
-
-  if (
-    is_constant_int2t(dst_item.object) &&
-    to_constant_int2t(dst_item.object).value.is_zero())
-  {
-    log_debug("mempcy", "NULL dst object, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl");
-    return;
-  }
-  if (
-    is_constant_int2t(src_item.object) &&
-    to_constant_int2t(src_item.object).value.is_zero())
-  {
-    log_debug("memcpy", "NULL src object, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl");
-    return;
-  }
-
-  //Compute alingnment
-  bool aligned =
-    is_constant_int2t(dst_item.offset) && is_constant_int2t(src_item.offset);
-
-  if (aligned)
-  {
-    uint64_t dst_offset = to_constant_int2t(dst_item.offset).value.to_uint64();
-    uint64_t src_offset = to_constant_int2t(src_item.offset).value.to_uint64();
-
-    unsigned int chunk_size = 1;
-    if ((dst_offset % 8 == 0) && (src_offset % 8 == 0))
-      chunk_size = 8;
-    else if ((dst_offset % 4 == 0) && (src_offset % 4 == 0))
-      chunk_size = 4;
-    else if ((dst_offset % 2 == 0) && (src_offset % 2 == 0))
-      chunk_size = 2;
-
-    size_t i = 0;
-    for (; i + chunk_size <= num_bytes; i += chunk_size)
-    {
-      type2tc chunk_type;
-      switch (chunk_size)
-      {
-      case 8:
-        chunk_type = get_uint64_type();
-        break;
-      case 4:
-        chunk_type = get_uint32_type();
-        break;
-      case 2:
-        chunk_type = get_uint16_type();
-        break;
-      default:
-        chunk_type = get_uint8_type();
-        break;
-      }
-      expr2tc dst_idx = index2tc(
-        chunk_type,
-        dst_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
-      expr2tc src_idx = index2tc(
-        chunk_type,
-        src_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
-      expr2tc value = src_idx;
-      dereference(value, dereferencet::READ);
-      symex_assign(code_assign2tc(dst_idx, value), false, guard);
-    }
-
-    //Copy remaining bytes
-    for (; i < num_bytes; i++)
-    {
-      expr2tc dst_idx = index2tc(
-        get_uint8_type(),
-        dst_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
-      expr2tc src_idx = index2tc(
-        get_uint8_type(),
-        src_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
-      expr2tc value = src_idx;
-      dereference(value, dereferencet::READ);
-      symex_assign(code_assign2tc(dst_idx, value), false, guard);
-    }
-  }
-
-  expr2tc ret_ref = func_call.ret;
-  if (!is_nil_expr(ret_ref))
-  {
-    dereference(ret_ref, dereferencet::READ);
-    symex_assign(code_assign2tc(ret_ref, dst), false, cur_state->guard);
-  }
-}
 
 /**
  * @brief This function will try to identify if the offset of dst and src
