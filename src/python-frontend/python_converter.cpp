@@ -1071,8 +1071,8 @@ exprt python_converter::handle_none_comparison(
   // constant folding, since the pointer's runtime value is unknown.
   // This correctly handles: Optional[int], Optional[MyClass], list references, etc.
   if (
-    (lhs_is_none && rhs.type().is_pointer()) ||
-    (rhs_is_none && lhs.type().is_pointer()))
+    (lhs_is_none && rhs.is_symbol() && rhs.type().is_pointer()) ||
+    (rhs_is_none && lhs.is_symbol() && lhs.type().is_pointer()))
   {
     constant_exprt null_ptr(rhs.type());
     null_ptr.set_value("NULL");
