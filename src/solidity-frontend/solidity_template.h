@@ -18,6 +18,7 @@ const std::string sol_header = R"(
 #include <stdbool.h>
 #include <assert.h>
 #include <string.h>
+#include <ctype.h>
 // #include <string>
 // #include <math.h>
 )";
@@ -30,11 +31,15 @@ const std::string sol_header = R"(
 */
 const std::string sol_typedef = R"(
 #if defined(__clang__)  // Ensure we are using Clang
-    #if __clang_major__ >= 15
+    #if __clang_major__ >= 16
         #define BIGINT(bits) _BitInt(bits)
-    #else
+    #elif __clang_major__ >= 11 && __clang_major__ <= 13
         #define BIGINT(bits) _ExtInt(bits)
+    #else
+        #error "Unsupported Clang version: ExtInt and BigInt are not properly supported. Please use Clang 11-13 for ExtInt or Clang 16+ for BigInt."
     #endif
+#else
+    #error "This code requires Clang to compile."
 #endif
 
 typedef BIGINT(256) int256_t;
@@ -99,7 +104,7 @@ uint256_t gasleft()
 {
 __ESBMC_HIDE:;
   gasConsume(); // always less
-  return uint256_t(_gaslimit);
+  return (uint256_t)_gaslimit;
 }
 )";
 
@@ -139,12 +144,12 @@ address_t ripemd160(uint256_t x)
 {
 __ESBMC_HIDE:;
   // UNSAT abstraction
-  return address_t(x);
+  return (address_t)x;
 }
 address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 {
 __ESBMC_HIDE:;
-  return address_t(hash);
+  return (address_t)hash;
 }
 
 // uint256_t _pow(unsigned int base, unsigned int exp) {
@@ -174,20 +179,428 @@ __ESBMC_HIDE:;
 )";
 
 const std::string sol_byte = R"(
-char *u256toa(uint256_t value);
-uint256_t str2uint(const char *str);
-uint256_t byte_concat(uint256_t x, uint256_t y)
+typedef struct BytesPool {
+    unsigned char* pool;
+    size_t pool_cursor;
+} BytesPool;
+
+typedef struct BytesStatic {
+    unsigned char data[32];
+    size_t length;
+} BytesStatic;
+
+typedef struct BytesDynamic {
+    size_t offset;
+    size_t length;
+    size_t capacity;
+    int initialized;
+} BytesDynamic;
+
+void bytes_dynamic_init_check(const int initialized)
 {
 __ESBMC_HIDE:;
-  char *s1 = u256toa(x);
-  char *s2 = u256toa(y);
-  strncat(s1, s2, 256);
-  return str2uint(s1);
+    if (initialized == 0)
+        assert(!"Uninitialized Dynamic Bytes");
+}
+
+void bytes_dynamic_bounds_check(size_t index, size_t length) {
+__ESBMC_HIDE:;
+    if (index >= length)
+        assert(!"Out-of-bounds access on Dynamic Bytes");
+}
+
+unsigned char hex_char_to_nibble(char c) {
+__ESBMC_HIDE:;
+    if ('0' <= c && c <= '9') return c - '0';
+    else if ('a' <= tolower(c) && tolower(c) <= 'f') return tolower(c) - 'a' + 10;
+    else
+        abort();
+    return 0;
+}
+
+BytesStatic bytes_static_from_hex(const char* hex_str, size_t len) {
+__ESBMC_HIDE:;
+    BytesStatic b = {0};
+    size_t hex_len = len - 2;
+    b.length = hex_len / 2;
+    for (size_t i = 0; i < b.length; i++) {
+        unsigned char high = hex_char_to_nibble(hex_str[2 + i * 2]);
+        unsigned char low = hex_char_to_nibble(hex_str[2 + i * 2 + 1]);
+        b.data[i] = (high << 4) | low;
+    }
+    return b;
+}
+
+BytesStatic bytes_static_from_string(const char* str, size_t len) {
+__ESBMC_HIDE:;
+    BytesStatic b = {0};
+    if (len > 32) len = 32;
+    size_t copy_len = strlen(str);
+    if (copy_len > len) copy_len = len;
+    memcpy(b.data, str, copy_len);
+    memset(b.data + copy_len, 0, len - copy_len);
+    b.length = len;
+    return b;
+}
+
+BytesStatic bytes_static_truncate(const BytesStatic* src, size_t new_len) {
+__ESBMC_HIDE:;
+    BytesStatic b = {0};
+    memcpy(b.data, src->data, new_len);
+    b.length = new_len;
+    return b;
+}
+
+BytesStatic bytes_static_and(const BytesStatic* a, const BytesStatic* b) {
+__ESBMC_HIDE:;
+    BytesStatic r = {0};
+    for (size_t i = 0; i < a->length; i++) {
+        r.data[i] = a->data[i] & b->data[i];
+    }
+    r.length = a->length;
+    return r;
+}
+
+BytesStatic bytes_static_or(const BytesStatic* a, const BytesStatic* b) {
+__ESBMC_HIDE:;
+    BytesStatic r = {0};
+    for (size_t i = 0; i < a->length; i++) {
+        r.data[i] = a->data[i] | b->data[i];
+    }
+    r.length = a->length;
+    return r;
+}
+
+BytesStatic bytes_static_xor(const BytesStatic* a, const BytesStatic* b) {
+__ESBMC_HIDE:;
+    BytesStatic r = {0};
+    for (size_t i = 0; i < a->length; i++) {
+        r.data[i] = a->data[i] ^ b->data[i];
+    }
+    r.length = a->length;
+    return r;
+}
+
+uint256_t bytes_static_to_uint(const BytesStatic* b) {
+__ESBMC_HIDE:;
+    uint256_t result = 0;
+    for (size_t i = 0; i < b->length; i++) {
+        result = (result << 8) | b->data[i];
+    }
+    return result;
+}
+
+BytesStatic bytes_static_from_uint(uint256_t val, size_t len) {
+__ESBMC_HIDE:;
+    BytesStatic b = {0};
+    for (size_t i = 0; i < len; i++) {
+        b.data[len - 1 - i] = val & 0xFF;
+        val >>= 8;
+    }
+    b.length = len;
+    return b;
+}
+
+BytesStatic bytes_static_shl(const BytesStatic* src, unsigned shift_bits) {
+__ESBMC_HIDE:;
+    uint256_t val = bytes_static_to_uint(src);
+    val <<= shift_bits;
+    return bytes_static_from_uint(val, src->length);
+}
+
+BytesStatic bytes_static_shr(const BytesStatic* src, unsigned shift_bits) {
+__ESBMC_HIDE:;
+    uint256_t val = bytes_static_to_uint(src);
+    val >>= shift_bits;
+    return bytes_static_from_uint(val, src->length);
+}
+
+uint256_t bytes_static_to_mapping_key(const BytesStatic* b) {
+__ESBMC_HIDE:;
+    return ((uint256_t)b->length << 248) | bytes_static_to_uint(b);
+}
+
+BytesStatic bytes_static_init_zero(size_t len) {
+__ESBMC_HIDE:;
+    BytesStatic b = {0};
+    b.length = len;
+    memset(b.data, 0, len);
+    return b;
+}
+
+BytesDynamic bytes_dynamic_init_zero(size_t len, BytesPool* pool) {
+__ESBMC_HIDE:;
+    BytesDynamic b = {0};
+    b.offset = pool->pool_cursor;
+    b.length = len;
+    b.capacity = len;
+    b.initialized = 1;
+    memset(&pool->pool[b.offset], 0, len);
+    pool->pool_cursor += len;
+    return b;
+}
+
+void bytes_dynamic_init(BytesDynamic* b, const unsigned char* input, size_t len, BytesPool* pool) {
+__ESBMC_HIDE:;
+    b->offset = pool->pool_cursor;
+    b->length = len;
+    b->capacity = len;
+    b->initialized = 1;
+    memcpy(&pool->pool[b->offset], input, len);
+    pool->pool_cursor += len;
+}
+
+void bytes_dynamic_ensure_capacity(BytesDynamic* b, size_t required, BytesPool* pool) {
+__ESBMC_HIDE:;
+    if (required <= b->capacity) return;
+    size_t new_capacity = b->capacity;
+    if (new_capacity == 0) new_capacity = 1;
+    while (new_capacity < required) new_capacity *= 2;
+    size_t new_offset = pool->pool_cursor;
+    memcpy(&pool->pool[new_offset], &pool->pool[b->offset], b->length);
+    b->offset = new_offset;
+    b->capacity = new_capacity;
+    pool->pool_cursor += new_capacity;
+}
+
+BytesDynamic bytes_dynamic_from_static(const BytesStatic* s, BytesPool* pool) {
+__ESBMC_HIDE:;
+    BytesDynamic b = {0};
+    bytes_dynamic_init(&b, s->data, s->length, pool);
+    return b;
+}
+
+BytesDynamic bytes_dynamic_from_string(const char* str, BytesPool* pool) {
+__ESBMC_HIDE:;
+    BytesDynamic b = {0};
+    bytes_dynamic_init(&b, (const unsigned char*)str, strlen(str), pool);
+    return b;
+}
+
+BytesDynamic bytes_dynamic_from_hex(const char* hex_str, size_t len, BytesPool* pool) {
+__ESBMC_HIDE:;
+    size_t hex_len = len - 2;
+    size_t byte_len = hex_len / 2;
+    unsigned char tmp[32] = {0};
+    for (size_t i = 0; i < byte_len; i++) {
+        unsigned char high = hex_char_to_nibble(hex_str[2 + i * 2]);
+        unsigned char low = hex_char_to_nibble(hex_str[2 + i * 2 + 1]);
+        tmp[i] = (high << 4) | low;
+    }
+    BytesDynamic b = {0};
+    bytes_dynamic_init(&b, tmp, byte_len, pool);
+    return b;
+}
+
+BytesStatic bytes_static_truncate_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(src->initialized);
+    BytesStatic b = {0};
+    memcpy(b.data, &pool->pool[src->offset], new_len);
+    b.length = new_len;
+    return b;
+}
+
+BytesDynamic bytes_dynamic_concat(const BytesDynamic* a, const BytesDynamic* b, BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(a->initialized);
+    bytes_dynamic_init_check(b->initialized);
+    BytesDynamic d = {0};
+    d.offset = pool->pool_cursor;
+    d.length = a->length + b->length;
+    d.capacity = d.length;
+    d.initialized = 1;
+    memcpy(&pool->pool[d.offset], &pool->pool[a->offset], a->length);
+    memcpy(&pool->pool[d.offset + a->length], &pool->pool[b->offset], b->length);
+    pool->pool_cursor += d.length;
+    return d;
+}
+
+BytesDynamic bytes_dynamic_copy(const BytesDynamic* src, BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(src->initialized);
+    BytesDynamic d = {0};
+    d.offset = pool->pool_cursor;
+    d.length = src->length;
+    d.capacity = src->length;
+    d.initialized = 1;
+    memcpy(&pool->pool[d.offset], &pool->pool[src->offset], src->length);
+    pool->pool_cursor += d.length;
+    return d;
+}
+
+void bytes_static_set(BytesStatic* b, size_t index, BytesStatic value) {
+__ESBMC_HIDE:;
+    b->data[index] = value.data[0];
+}
+
+void bytes_dynamic_set(BytesDynamic* b, size_t index, BytesStatic value, BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
+    bytes_dynamic_ensure_capacity(b, index + 1, pool);
+    pool->pool[b->offset + index] = value.data[0];
+    if (index >= b->length) {
+        b->length = index + 1;
+    }
+}
+
+BytesStatic bytes_static_get(const BytesStatic* b, size_t index) {
+__ESBMC_HIDE:;
+    BytesStatic r = {0};
+    r.data[0] = b->data[index];
+    r.length = 1;
+    return r;
+}
+
+BytesStatic bytes_dynamic_get(const BytesDynamic* b, const BytesPool* pool, size_t index) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
+    bytes_dynamic_bounds_check(index, b->length);
+    BytesStatic r = {0};
+    r.data[0] = pool->pool[b->offset + index];
+    r.length = 1;
+    return r;
+}
+
+bool bytes_static_equal(const BytesStatic* a, const BytesStatic* b) {
+__ESBMC_HIDE:;
+    if (a->length != b->length) return false;
+    return memcmp(a->data, b->data, a->length) == 0;
+}
+
+bool bytes_dynamic_equal(const BytesDynamic* a, const BytesDynamic* b, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(a->initialized);
+    bytes_dynamic_init_check(b->initialized);
+    if (a->length != b->length) return false;
+    return memcmp(&pool->pool[a->offset], &pool->pool[b->offset], a->length) == 0;
+}
+
+uint256_t bytes_dynamic_to_mapping_key(const BytesDynamic* b, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
+    uint256_t result = 0;
+    for (size_t i = 0; i < b->length; i++) {
+        result = (result << 8) | pool->pool[b->offset + i];
+    }
+    result |= ((uint256_t)b->length) << 248;
+    return result;
+}
+
+void bytes_dynamic_push(BytesDynamic* b, unsigned char value, BytesPool* pool) {
+__ESBMC_HIDE:;
+    if (!b->initialized) {
+        b->offset = pool->pool_cursor;
+        b->length = 0;
+        b->capacity = 4;
+        b->initialized = 1;
+        pool->pool_cursor += b->capacity;
+    }
+    bytes_dynamic_ensure_capacity(b, b->length + 1, pool);
+    pool->pool[b->offset + b->length] = value;
+    b->length++;
+}
+
+void bytes_dynamic_pop(BytesDynamic* b, BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
+    bytes_dynamic_bounds_check(0, b->length);
+    b->length--;
+}
+
+uint256_t bytes_dynamic_to_uint(const BytesDynamic* b, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
+    uint256_t result = 0;
+    for (size_t i = 0; i < b->length; i++) {
+        result = (result << 8) | pool->pool[b->offset + i];
+    }
+    return result;
+}
+
+char* bytes_static_to_string(const BytesStatic* b) {
+__ESBMC_HIDE:;
+    char* out = (char*)malloc(b->length + 1);
+    for (size_t i = 0; i < b->length; i++) {
+        out[i] = (char)b->data[i];
+    }
+    out[b->length] = '\0';
+    return out;
+}
+
+char* bytes_dynamic_to_string(const BytesDynamic* b, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
+    char* out = (char*)malloc(b->length + 1);
+    for (size_t i = 0; i < b->length; i++) {
+        out[i] = (char)pool->pool[b->offset + i];
+    }
+    out[b->length] = '\0';
+    return out;
+}
+
+BytesStatic bytes_static_extend(const BytesStatic* src, size_t new_len) {
+__ESBMC_HIDE:;
+    BytesStatic out = {0};
+    memcpy(out.data, src->data, src->length);
+    memset(out.data + src->length, 0, new_len - src->length);
+    out.length = new_len;
+    return out;
+}
+
+BytesStatic bytes_static_resize(const BytesStatic* src, size_t new_len) {
+__ESBMC_HIDE:;
+    if (new_len == src->length) {
+        return *src;
+    } else if (new_len < src->length) {
+        return bytes_static_truncate(src, new_len);
+    } else {
+        return bytes_static_extend(src, new_len);
+    }
+}
+
+BytesStatic bytes_static_extend_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(src->initialized);
+    BytesStatic b = {0};
+    memcpy(b.data, &pool->pool[src->offset], src->length);
+    memset(b.data + src->length, 0, new_len - src->length);
+    b.length = new_len;
+    return b;
+}
+
+BytesStatic bytes_static_resize_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(src->initialized);
+    if (new_len == src->length) {
+        BytesStatic b = {0};
+        memcpy(b.data, &pool->pool[src->offset], new_len);
+        b.length = new_len;
+        return b;
+    } else if (new_len < src->length) {
+        return bytes_static_truncate_from_dynamic(src, new_len, pool);
+    } else {
+        return bytes_static_extend_from_dynamic(src, new_len, pool);
+    }
+}
+
+BytesPool bytes_pool_init(unsigned char* pool_data) {
+__ESBMC_HIDE:;
+    BytesPool pool = { pool_data, 0 };
+    return pool;
 }
 )";
 
-const std::string sol_funcs =
-  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte;
+const std::string sol_destruct = R"(
+void selfdestruct()
+{
+__ESBMC_HIDE:;
+  exit(0);
+}
+)";
+
+const std::string sol_funcs = blockhash + gasleft + sol_abi + sol_math +
+                              sol_string + sol_byte + sol_destruct;
 
 /// data structure
 
@@ -199,7 +612,7 @@ struct _ESBMC_Mapping
   uint256_t key : 256;
   void *value;
   struct _ESBMC_Mapping *next;
-}__attribute__((packed));
+};
 
 struct mapping_t
 {
@@ -308,68 +721,271 @@ __ESBMC_HIDE:;
 }
 )";
 
-const std::string sol_array = R"(
-// Node structure for linked list
-typedef struct ArrayNode {
-    void *array_ptr;        // Pointer to the stored array
-    size_t length;          // Length of the array
-    struct ArrayNode *next; // Pointer to the next node
-} ArrayNode;
+// used when there is no NewExpression in the source json.
+const std::string sol_mapping_fast = R"(
+struct _ESBMC_Mapping_fast
+{
+  uint256_t key : 256;
+  void *value;
+  struct _ESBMC_Mapping_fast *next;
+} __attribute__((packed));
 
-// Head of the linked list
-ArrayNode *array_list_head = NULL;
+struct mapping_t_fast
+{
+  struct _ESBMC_Mapping_fast *base;
+};
 
-/**
- * Stores/updates an array and its length.
- * If the array already exists, it updates the length.
- */
-void _ESBMC_store_array(void *array, size_t length) {
+void *map_get_raw_fast(struct _ESBMC_Mapping_fast a[], uint256_t key)
+{
 __ESBMC_HIDE:;
-    // Check if array already exists in the list
-    ArrayNode *current = array_list_head;
-    while (current != NULL) {
-        if (current->array_ptr == array) { // Found existing array
-            current->length = length; // Update length
-            return;
-        }
-        current = current->next;
-    }
-
-    // Create a new node
-    ArrayNode *new_node = (ArrayNode *)malloc(sizeof(ArrayNode));
-    new_node->array_ptr = array;
-    new_node->length = length;
-    new_node->next = array_list_head; // Insert at head
-    array_list_head = new_node;
+  struct _ESBMC_Mapping_fast *cur = a[key].next;
+  while (cur)
+  {
+    if (cur->key == key)
+      return cur->value;
+    cur = cur->next;
+  }
+  return NULL;
 }
 
-/**
- * Fetches the length of a stored array.
- * Returns 0 if the array is not found.
- */
-unsigned int _ESBMC_get_array_length(void *array) {
+void map_set_raw_fast(struct _ESBMC_Mapping_fast a[],
+                      uint256_t key, void *val)
+{
 __ESBMC_HIDE:;
-    ArrayNode *current = array_list_head;
-    while (current != NULL) {
-        if (current->array_ptr == array) {
-            return current->length;
+  struct _ESBMC_Mapping_fast *n = (struct _ESBMC_Mapping_fast *)malloc(sizeof *n);
+  n->key = key;
+  n->value = val;
+  n->next = a[key].next;
+  a[key].next = n;
+}
+
+/* uint256_t */
+void map_uint_set_fast(struct mapping_t_fast *m, uint256_t k, uint256_t v)
+{
+__ESBMC_HIDE:;
+  uint256_t *p = (uint256_t *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+uint256_t map_uint_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  uint256_t *p = (uint256_t *)map_get_raw_fast(m->base, k);
+  return p ? *p : (uint256_t)0;
+}
+
+/* int256_t */
+void map_int_set_fast(struct mapping_t_fast *m, uint256_t k, int256_t v)
+{
+__ESBMC_HIDE:;
+  int256_t *p = (int256_t *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+int256_t map_int_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  int256_t *p = (int256_t *)map_get_raw_fast(m->base, k);
+  return p ? *p : (int256_t)0;
+}
+
+/* string */
+void map_string_set_fast(struct mapping_t_fast *m, uint256_t k, char *v)
+{
+__ESBMC_HIDE:;
+  char **p = (char **)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+char *map_string_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  char **p = (char **)map_get_raw_fast(m->base, k);
+  return p ? *p : (char *)0;
+}
+
+/* bool */
+void map_bool_set_fast(struct mapping_t_fast *m, uint256_t k, bool v)
+{
+__ESBMC_HIDE:;
+  bool *p = (bool *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+bool map_bool_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  bool *p = (bool *)map_get_raw_fast(m->base, k);
+  return p ? *p : false;
+}
+
+/* generic */
+void map_generic_set_fast(struct mapping_t_fast *m, uint256_t k, const void *v, size_t sz)
+{
+__ESBMC_HIDE:;
+  void *p = malloc(sz);
+  memcpy(p, v, sz);
+  map_set_raw_fast(m->base, k, p);
+}
+void *map_generic_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  return map_get_raw_fast(m->base, k);
+}
+)";
+
+const std::string sol_array = R"(
+__attribute__((annotate("__ESBMC_inf_size"))) void *esbmc_array_ptrs[1];
+__attribute__((annotate("__ESBMC_inf_size"))) size_t esbmc_array_lengths[1];
+unsigned int esbmc_array_count;
+
+void _ESBMC_array_null_check(int ok) {
+__ESBMC_HIDE:;
+    if (!ok)
+        assert(!"Null Array Pointer");
+}
+
+void _ESBMC_element_null_check(int ok) {
+__ESBMC_HIDE:;
+    if (!ok)
+        assert(!"Null Element Pointer");
+}
+
+void _ESBMC_zero_size_check(int ok) {
+__ESBMC_HIDE:;
+    if (!ok)
+        assert(!"Zero Element Size");
+}
+
+void _ESBMC_pop_empty_check(int ok) {
+__ESBMC_HIDE:;
+    if (!ok)
+        assert(!"Pop From Empty Array");
+}
+
+void _ESBMC_store_array(void *array, size_t length) {
+__ESBMC_HIDE:;
+    _ESBMC_array_null_check(array != 0);
+
+    for (unsigned int i = 0; i < esbmc_array_count; ++i) {
+        if (esbmc_array_ptrs[i] == array) {
+            esbmc_array_lengths[i] = length;
+            return;
         }
-        current = current->next;
     }
+
+    esbmc_array_ptrs[esbmc_array_count] = array;
+    esbmc_array_lengths[esbmc_array_count] = length;
+    esbmc_array_count++;
+}
+
+unsigned int _ESBMC_array_length(void *array) {
+__ESBMC_HIDE:;
+    if (array == NULL)
+        return 0;
+
+    for (unsigned int i = 0; i < esbmc_array_count; ++i) {
+        if (esbmc_array_ptrs[i] == array)
+            return esbmc_array_lengths[i];
+    }
+
+    // not registered
     return 0;
 }
 
-
-void *_ESBMC_arrcpy(void *from_array, size_t from_size, size_t size_of)
-{
+void *_ESBMC_arrcpy(void *from_array, size_t from_size, size_t size_of) {
 __ESBMC_HIDE:;
-  // assert(from_size != 0);
-  if(from_array == NULL || size_of == 0 || from_size == 0)
-    abort();
+    _ESBMC_element_null_check(from_array != 0);
+    _ESBMC_zero_size_check(size_of != 0);
+    _ESBMC_zero_size_check(from_size != 0);
+    size_t bytes = from_size * size_of;
+    void *to_array = malloc(bytes);
+    __builtin_memcpy(to_array, from_array, bytes);
 
-  void *to_array = (void *)calloc(from_size, size_of);
-  memcpy(to_array, from_array, from_size * size_of);
-  return to_array;
+    _ESBMC_store_array(to_array, from_size);
+    return to_array;
+}
+
+void *_ESBMC_array_push(void *array, void *element, size_t size_of_element) {
+__ESBMC_HIDE:;
+    _ESBMC_zero_size_check(size_of_element != 0);
+
+    char *fallback_zero = NULL;
+    if (element == NULL) {
+        fallback_zero = (char *)calloc(1, size_of_element);
+        element = fallback_zero;
+    }
+
+    // Case 1: array is NULL (new array allocation)
+    if (array == NULL) {
+        void *new_array = malloc(size_of_element);
+        for (size_t j = 0; j < size_of_element; ++j)
+            ((char *)new_array)[j] = ((char *)element)[j];
+
+        _ESBMC_store_array(new_array, 1);
+
+        if (fallback_zero != NULL)
+            free(fallback_zero);
+        return new_array;
+    }
+
+    // Case 2: array already registered
+    for (unsigned int i = 0; i < esbmc_array_count; ++i) {
+        if (esbmc_array_ptrs[i] == array) {
+            size_t old_len = esbmc_array_lengths[i];
+            size_t new_len = old_len + 1;
+            void *new_array = realloc(array, new_len * size_of_element);
+
+            for (size_t j = 0; j < size_of_element; ++j)
+                ((char *)new_array)[old_len * size_of_element + j] =
+                    ((char *)element)[j];
+
+            esbmc_array_ptrs[i] = new_array;
+            esbmc_array_lengths[i] = new_len;
+
+            if (fallback_zero != NULL)
+                free(fallback_zero);
+            return new_array;
+        }
+    }
+
+    // Case 3: array is non-NULL but not tracked (edge case fallback)
+    void *new_array = malloc(size_of_element);
+    for (size_t j = 0; j < size_of_element; ++j)
+        ((char *)new_array)[j] = ((char *)element)[j];
+    _ESBMC_store_array(new_array, 1);
+
+    if (fallback_zero != NULL)
+        free(fallback_zero);
+    return new_array;
+}
+
+
+void _ESBMC_array_pop(void *array, size_t size_of_element) {
+__ESBMC_HIDE:;
+    _ESBMC_array_null_check(array != 0);
+    _ESBMC_zero_size_check(size_of_element != 0);
+
+    for (unsigned int i = 0; i < esbmc_array_count; ++i) {
+        if (esbmc_array_ptrs[i] == array) {
+            _ESBMC_pop_empty_check(esbmc_array_lengths[i] > 0);
+
+            esbmc_array_lengths[i]--;
+
+            if (esbmc_array_lengths[i] == 0) {
+                free(esbmc_array_ptrs[i]);
+                esbmc_array_ptrs[i] = 0;
+            } else {
+                void *new_array = realloc(esbmc_array_ptrs[i], esbmc_array_lengths[i] * size_of_element);
+                if (new_array != 0)
+                    esbmc_array_ptrs[i] = new_array;
+            }
+
+            return;
+        }
+    }
+
+    _ESBMC_pop_empty_check(0); // uninitialized array pop
 }
 )";
 
@@ -602,20 +1218,43 @@ __ESBMC_HIDE:;
 }
 
 // string assign
-const char *empty_str = "";
 void _str_assign(char **str1, const char *str2) {
 __ESBMC_HIDE:;
-    if(str1 != NULL)
-      free(*str1);  
-    if (str2 == NULL) {
-      *str1 = NULL;  // Ensure str1 doesn't point to invalid memory
-      return;
+    // Ensure str1 is a valid pointer (not NULL)
+    if (str1 == NULL) {
+        return;  // Early exit if str1 is invalid
     }
-    *str1 = (char *)malloc(strlen(str2) + 1);  
+    // Free *str1 only if it was previously allocated (non-NULL)
+    // if (*str1 != NULL) {
+    //     free(*str1);
+    // }
     
+    // If str2 is NULL, set *str1 to NULL (avoid dangling pointers)
+    if (str2 == NULL) {
+        *str1 = NULL;
+        return;
+    }
+    size_t len = strlen(str2);
+    if (len == SIZE_MAX) {  // Would overflow when adding 1
+        *str1 = NULL;  // Or handle error differently
+        return;
+    }
+    *str1 = (char *)malloc(len + 1);  
     strcpy(*str1, str2);  // force malloc success
 }
+__attribute__((annotate("__ESBMC_inf_size"))) char _ESBMC_rand_str[1];
+char *nondet_string() {
+__ESBMC_HIDE:;
+    size_t len = nondet_uint();
+    // __ESBMC_assume(len < SIZE_MAX);  
 
+    for (size_t i = 0; i < len; ++i) {
+        _ESBMC_rand_str[i] = nondet_char();
+        __ESBMC_assume(_ESBMC_rand_str[i] != '\0');
+    }
+    _ESBMC_rand_str[len] = '\0'; 
+    return _ESBMC_rand_str;
+}
 )";
 
 // get unique random address
@@ -641,7 +1280,7 @@ __ESBMC_HIDE:;
 bool _ESBMC_cmp_cname(const char *c_1, const char *c_2)
 {
 __ESBMC_HIDE:;
-    return strcmp(c_1, c_2) == 0;
+    return c_1 == c_2;
 }
 void *_ESBMC_get_obj(address_t addr, const char *cname)
 {
@@ -689,22 +1328,26 @@ __ESBMC_HIDE:;
 
 // max/min value
 const std::string sol_max_min = R"(
-uint256_t _max(int bitwidth, bool is_signed) {
+uint256_t _max(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
-    if (is_signed) {
-        return (uint256_t(1) << (bitwidth - 1)) - uint256_t(1); // 2^(N-1) - 1
-    } else {
-        return (uint256_t(1) << bitwidth) - uint256_t(1); // 2^N - 1
-    }
+  __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
+  if (is_signed) {
+      return ((uint256_t)1 << (bitwidth - 1)) - (uint256_t)1;
+  } else {
+      if (bitwidth == 256) {
+          return (uint256_t)-1; 
+      }
+      return ((uint256_t)1 << bitwidth) - (uint256_t)1;
+  }
 }
-
-int256_t _min(int bitwidth, bool is_signed) {
+int256_t _min(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
-    if (is_signed) {
-        return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
-    } else {
-        return int256_t(0); // Min of unsigned is always 0
-    }
+  if (is_signed) {
+      __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
+      return -((int256_t)1 << (bitwidth - 1)); // -2^(N-1)
+  } else {
+      return (int256_t)0; // Min of unsigned is always 0
+  }
 }
 
 unsigned int _creationCode()
@@ -737,33 +1380,35 @@ void initialize()
 {
 __ESBMC_HIDE:;
 // we assume it starts from an EOA
-msg_data = uint256_t(nondet_uint());
-msg_sender = address_t(nondet_uint());
+msg_data = (uint256_t)nondet_uint();
+msg_sender = (address_t)nondet_uint();
 msg_sig = nondet_uint();
-msg_value = uint256_t(nondet_uint());
+msg_value = (uint256_t)nondet_uint();
 
-tx_gasprice = uint256_t(nondet_uint());
+tx_gasprice = (uint256_t)nondet_uint();
 // this can only be an EOA's address
-tx_origin = address_t(nondet_uint());
+tx_origin = (address_t)nondet_uint();
 
-block_basefee = uint256_t(nondet_uint());
-block_chainid = uint256_t(nondet_uint());
-block_coinbase = address_t(nondet_uint());
-block_difficulty = uint256_t(nondet_uint());
-block_gaslimit = uint256_t(nondet_uint());
-block_number = uint256_t(nondet_uint());
-block_prevrandao = uint256_t(nondet_uint());
-block_timestamp = uint256_t(nondet_uint());
+block_basefee = (uint256_t)nondet_uint();
+block_chainid = (uint256_t)nondet_uint();
+block_coinbase = (address_t)nondet_uint();
+block_difficulty = (uint256_t)nondet_uint();
+block_gaslimit = (uint256_t)nondet_uint();
+block_number = (uint256_t)nondet_uint();
+block_prevrandao = (uint256_t)nondet_uint();
+block_timestamp = (uint256_t)nondet_uint();
 
 _gaslimit = nondet_uint();
 
-unsigned int sol_max_cnt = 0;
+sol_max_cnt = 0;
+esbmc_array_count = 0;
 }
 )";
 
-const std::string sol_c_library =
-  "extern \"C\" {" + sol_typedef + sol_vars + sol_funcs + sol_mapping +
-  sol_array + sol_unit + sol_ext_library + sol_initialize + "}";
+const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
+                                  sol_funcs + sol_mapping + sol_mapping_fast +
+                                  sol_array + sol_unit + sol_ext_library +
+                                  sol_initialize + "}";
 
 // C++
 const std::string sol_cpp_string = R"(

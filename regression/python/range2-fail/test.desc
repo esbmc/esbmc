@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^VERIFICATION FAILED$
+^ValueError\: range\(\) arg 3 must not be zero$

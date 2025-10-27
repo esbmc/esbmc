@@ -1,0 +1,179 @@
+#pragma once
+
+#include <cstdint>
+
+extern int nondet_int();
+extern unsigned int nondet_uint();
+extern long nondet_long();
+extern unsigned long nondet_ulong();
+extern uint32_t nondet_uint32();
+extern uint64_t nondet_uint64();
+
+namespace nondet_util
+{
+// They are not part of the standard library and were added to simplify
+// the model.
+template <typename T>
+struct nondet_helper;
+
+template <>
+struct nondet_helper<int>
+{
+  static int get()
+  {
+    return nondet_int();
+  }
+};
+
+template <>
+struct nondet_helper<unsigned int>
+{
+  static unsigned int get()
+  {
+    return nondet_uint();
+  }
+};
+
+template <>
+struct nondet_helper<long>
+{
+  static long get()
+  {
+    return nondet_long();
+  }
+};
+
+template <>
+struct nondet_helper<uint64_t>
+{
+  static uint64_t get()
+  {
+    return nondet_uint64();
+  }
+};
+
+} // namespace nondet_util
+
+namespace std
+{
+
+class random_device
+{
+public:
+  using result_type = unsigned int;
+
+  random_device()
+  {
+  }
+
+  result_type operator()()
+  {
+    result_type val = nondet_uint();
+    __ESBMC_assume(val >= min() && val <= max());
+    return val;
+  }
+
+  static constexpr result_type min()
+  {
+    return 0;
+  }
+
+  static constexpr result_type max()
+  {
+    return 0xFFFFFFFFU;
+  }
+};
+
+template <
+  typename UIntType,
+  int w,
+  int n,
+  int m,
+  int r,
+  UIntType a,
+  int u,
+  UIntType d,
+  int s,
+  UIntType b,
+  int t,
+  UIntType c,
+  int l,
+  UIntType f>
+class mersenne_twister_engine
+{
+public:
+  using result_type = UIntType;
+
+  explicit mersenne_twister_engine(result_type seed = 5489u)
+  {
+    // Ignoring seeds
+  }
+
+  result_type operator()()
+  {
+    result_type val = nondet_util::nondet_helper<result_type>::get();
+    __ESBMC_assume(val >= min() && val <= max());
+    return val;
+  }
+
+  static constexpr result_type min()
+  {
+    return 0;
+  }
+
+  static constexpr result_type max()
+  {
+    return static_cast<result_type>(~0);
+  }
+};
+
+typedef mersenne_twister_engine<
+  uint32_t,
+  32,
+  624,
+  397,
+  31,
+  0x9908B0DF,
+  11,
+  0xFFFFFFFF,
+  7,
+  0x9D2C5680,
+  15,
+  0xEFC60000,
+  18,
+  1812433253>
+  mt19937;
+
+template <typename IntType = int>
+class uniform_int_distribution
+{
+public:
+  using result_type = IntType;
+
+  uniform_int_distribution(result_type a, result_type b) : a_(a), b_(b)
+  {
+  }
+
+  template <typename Generator>
+  result_type operator()(Generator &) const
+  {
+    result_type val = nondet_util::nondet_helper<result_type>::get();
+    __ESBMC_assume(val >= a_ && val <= b_);
+    return val;
+  }
+
+  result_type min() const
+  {
+    return a_;
+  }
+
+  result_type max() const
+  {
+    return b_;
+  }
+
+private:
+  result_type a_, b_;
+};
+
+} // namespace std

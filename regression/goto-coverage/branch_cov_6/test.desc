@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --branch-function-coverage --unlimited-goto-unwind --k-induction
 ^Function Entry Points & Branches : 542

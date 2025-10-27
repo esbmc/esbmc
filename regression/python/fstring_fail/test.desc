@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+--multi-property
+^Properties\: 15 verified, \✗ 15 failed$

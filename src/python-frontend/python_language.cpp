@@ -12,9 +12,17 @@
 #include <fstream>
 
 #include <boost/filesystem.hpp>
-#include <boost/process.hpp>
 
+// Use boost::process v1 on macOS or when Boost >= 1.87
+// We use Boost.Process to run the Python interpreter in a separate process.
+#if defined(__APPLE__) || (BOOST_VERSION >= 108700)
+#  include <boost/process/v1.hpp>
+namespace bp = boost::process::v1;
+#else
+#  include <boost/process.hpp>
 namespace bp = boost::process;
+#endif
+
 namespace fs = boost::filesystem;
 
 extern "C"
@@ -147,7 +155,7 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   try
   {
     // Generate symbol table
-    python_converter converter(context, ast, global_scope_);
+    python_converter converter(context, &ast, global_scope_);
     converter.convert();
   }
   catch (const std::runtime_error &e)

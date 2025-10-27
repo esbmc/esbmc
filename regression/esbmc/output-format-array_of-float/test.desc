@@ -3,4 +3,4 @@ main.c
 --witness-output - --compact-trace -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$
 \bA = \{ 0\.000000f \}
->A = \{ 0\.0000000f, 0\.0000000f \};</data>
+>A == \{ 0\.0000000f, 0\.0000000f \};</data>

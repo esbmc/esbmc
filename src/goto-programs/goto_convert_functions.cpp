@@ -171,6 +171,14 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   f.body.update();
 
+  if (config.ansi_c.cheri)
+  {
+    // Hide the cheri ptr compressed and decompressed traces
+    const irep_idt &n = symbol.location.get_file();
+    if (has_suffix(n, "cheri_compressed_cap_common.h"))
+      f.body.hide = true;
+  }
+
   if (hide(f.body))
     f.body.hide = true;
 }
@@ -340,21 +348,60 @@ void goto_convert_functionst::wallop_type(
   typename_mapt &typenames,
   const irep_idt &sname)
 {
-  // If this type doesn't depend on anything, no need to rename anything.
+  std::set<irep_idt> in_progress;
+  wallop_type_impl(name, typenames, sname, in_progress);
+}
+
+// Internal implementation with cycle detection
+void goto_convert_functionst::wallop_type_impl(
+  irep_idt name,
+  typename_mapt &typenames,
+  const irep_idt &sname,
+  std::set<irep_idt> &in_progress)
+{
+  // Check if this type exists in the typenames map
   typename_mapt::iterator it = typenames.find(name);
-  assert(it != typenames.end());
+  if (it == typenames.end())
+  {
+    // Type not found in map - might be a built-in type or already processed
+    return;
+  }
+
   std::set<irep_idt> &deps = it->second;
+
+  // If this type doesn't depend on anything, no need to rename anything.
   if (deps.size() == 0)
     return;
 
-  // Iterate over our dependancies ensuring they're resolved.
-  for (const auto &dep : deps)
-    wallop_type(dep, typenames, sname);
+  // Check if we're already processing this type (cycle detection)
+  if (in_progress.find(name) != in_progress.end())
+  {
+    // We have a cycle - just return without processing to break the cycle
+    // Don't clear dependencies as the original type processing will handle that
+    return;
+  }
+
+  // Mark this type as being processed
+  in_progress.insert(name);
+
+  // Create a copy of dependencies to avoid modification during iteration
+  std::set<irep_idt> deps_copy = deps;
+
+  // Iterate over our dependencies ensuring they're resolved.
+  for (const auto &dep : deps_copy)
+    wallop_type_impl(dep, typenames, sname, in_progress);
 
   // And finally perform renaming.
   symbolt *s = context.find_symbol(name);
-  rename_types(s->type, *s, sname);
+  if (s != nullptr)
+  {
+    rename_types(s->type, *s, sname);
+  }
+
   deps.clear();
+
+  // Remove from in_progress set as we're done processing this type
+  in_progress.erase(name);
 }
 
 void goto_convert_functionst::thrash_type_symbols()

@@ -42,6 +42,23 @@ private:
    */
   bool is_nondet_call() const;
 
+  bool is_introspection_call() const;
+
+  bool is_input_call() const;
+
+  bool is_print_call() const;
+
+  /* Processes Python print() statements by evaluating all arguments.
+   * @return nil_exprt since print has no return value
+   */
+  exprt handle_print() const;
+
+  // Create an expression that represents non-deterministic string input
+  exprt handle_input() const;
+
+  // Helper method for UTF-8 logic
+  int decode_utf8_codepoint(const std::string &utf8_str) const;
+
   /*
    * Creates an expression for a non-deterministic function call.
    */
@@ -81,6 +98,13 @@ private:
    * current filename to construct the full scoped symbol name.
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
+
+  bool
+  is_same_type(const exprt &obj_expr, const nlohmann::json &type_node) const;
+
+  exprt handle_isinstance() const;
+
+  exprt handle_hasattr() const;
 
   /*
    * Handles str-to-int conversions (e.g., int('65')) by reconstructing
@@ -124,7 +148,7 @@ private:
    * Handles chr(int) conversions by creating a single-character
    * string expression from an integer.
    */
-  void handle_chr(nlohmann::json &arg) const;
+  exprt handle_chr(nlohmann::json &arg) const;
 
   /*
    * Handles hexadecimal string arguments (e.g., hex(255) -> "0xff")
@@ -152,6 +176,94 @@ private:
    * the __abs__() method. The function returns an expression representing the absolute value.
    */
   exprt handle_abs(nlohmann::json &arg) const;
+
+  /*
+   * Checks if the current function call is a min() or max() built-in function.
+   * Returns true if the function name matches "min" or "max", false otherwise.
+   */
+  bool is_min_max_call() const;
+
+  /*
+   * Handles min() or max() function calls by generating conditional expressions.
+   * Currently supports exactly 2 arguments.
+   * @TODO: Support multiple arguments.
+   * For min(a, b), generates: a < b ? a : b
+   * For max(a, b), generates: a > b ? a : b
+   * Performs type compatibility checking with automatic int-to-float promotion.
+   */
+  exprt
+  handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
+
+  /*
+   * Convert the exception type to the constructor call
+   * Returns cpp-throw
+   */
+  exprt gen_exception_raise(std::string exc, std::string message) const;
+
+  // List method detection and handling
+  bool is_list_method_call() const;
+  exprt handle_list_method() const;
+  exprt handle_list_append() const;
+  exprt handle_list_insert() const;
+  exprt handle_list_extend() const;
+
+  /*
+   * Check if the current function call is to a regular expression module function
+   * Returns true if the function is match, search, or fullmatch from the re module
+   */
+  bool is_re_module_call() const;
+
+  /*
+   * Validate arguments for regular expression module functions
+   * Checks that pattern and string arguments are string types (array or pointer to char)
+   * Returns TypeError exception if validation fails, nil_exprt if validation passes
+   */
+  exprt validate_re_module_args() const;
+
+  /*
+   * Check if the current function call is to Python's built-in any() function
+   * Returns true if the function name is "any"
+   */
+  bool is_any_call() const;
+
+  /*
+   * Implement Python's any() built-in function
+   * Returns True if any element in the iterable is truthy, False otherwise
+   */
+  exprt handle_any() const;
+
+  /**
+   * Convert an integer to a string representation in a specific base
+   * Implements common logic for Python's hex(), oct(), and similar functions
+   */
+  exprt handle_base_conversion(
+    nlohmann::json &arg,
+    const std::string &func_name,
+    const std::string &prefix,
+    std::ios_base &(*base_formatter)(std::ios_base &)) const;
+
+  /**
+   * Check if a JSON argument represents a string value
+   * Handles various representations: type annotation, value type, and constants
+   */
+  bool is_string_arg(const nlohmann::json &arg) const;
+
+  // Handler function type for dispatch table
+  using HandlerFunction = std::function<exprt()>;
+  using PredicateFunction = std::function<bool()>;
+
+  struct FunctionHandler
+  {
+    PredicateFunction predicate;
+    HandlerFunction handler;
+    const char *description; // For debugging/documentation
+  };
+
+  // Initialize dispatch table
+  std::vector<FunctionHandler> get_dispatch_table();
+
+  // General function call handler
+  exprt handle_general_function_call();
 
 protected:
   symbol_id function_id_;

@@ -13,15 +13,19 @@
 add_library(pythonfrontend STATIC
             python_language.cpp
             python_converter.cpp
+            python_list.cpp
             pythonastgen.c
             module_manager.cpp
+            module_locator.cpp
             symbol_id.cpp
             type_handler.cpp
             function_call_expr.cpp
             numpy_call_expr.cpp
             function_call_builder.cpp
-            ${CMAKE_SOURCE_DIR}/src/ansi-c/parse_float.cpp
-            ${CMAKE_SOURCE_DIR}/src/ansi-c/convert_float_literal.cpp)
+            string_builder.cpp
+            string_handler.cpp
+            parse_float.cpp
+            convert_float_literal.cpp)
 
 target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}

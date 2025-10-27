@@ -48,7 +48,7 @@ if (ENABLE_MATHSAT)
             PRIVATE ${Mathsat_INCLUDE_DIRS}
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solvermsat "${Mathsat_LIB}" fmt::fmt ${GMP_LIB})
+    target_link_libraries(solvermsat "${Mathsat_LIB}" fmt::fmt)
 
     # Add to solver link
     target_link_libraries(solvers INTERFACE solvermsat)

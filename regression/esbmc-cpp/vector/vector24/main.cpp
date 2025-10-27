@@ -4,6 +4,11 @@
 #include <cassert>
 using namespace std;
 
+// g++ -g -O1 -fsanitize=address -fno-omit-frame-pointer main.cpp -o test_asan
+// ./test_asan
+// test_asan: main.cpp:15: int main(): Assertion `*it == 0' failed.
+// Aborted (core dumped)
+
 int main ()
 {
   vector<int> myvector;

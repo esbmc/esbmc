@@ -40,17 +40,24 @@ void irept::detatch()
   if (data == nullptr)
   {
     data = new dt;
+    assert(data->ref_count == 1);
+    return;
   }
-  else if (data->ref_count > 1)
+
+  dt *const old_data = data;
+  old_data->dt_mutex.lock();
+  if (old_data->ref_count == 1)
   {
-    dt *old_data(data);
-    data = new dt(*old_data);
-
-    data->ref_count = 1;
-    remove_ref(old_data);
+    old_data->dt_mutex.unlock();
+    return;
   }
+  dt *new_data = new dt(*old_data);
+  this->data = new_data;
 
-  assert(data->ref_count == 1);
+  data->ref_count = 1;
+
+  old_data->dt_mutex.unlock();
+  remove_ref(old_data);
 }
 #endif
 
@@ -67,13 +74,22 @@ const irept::dt &irept::read() const
 #ifdef SHARING
 void irept::remove_ref(dt *old_data)
 {
+  bool should_delete = false;
+
   if (old_data == nullptr)
     return;
 
-  assert(old_data->ref_count != 0);
+  {
+    // Lock the data block we are about to modify.
+    std::lock_guard<std::mutex> lock(old_data->dt_mutex);
+    assert(old_data->ref_count > 0);
+    old_data->ref_count--;
+    if (old_data->ref_count == 0)
+      should_delete = true;
+  }
 
-  old_data->ref_count--;
-  if (old_data->ref_count == 0)
+  // Delete the data after releasing the lock.
+  if (should_delete)
   {
     delete old_data;
   }

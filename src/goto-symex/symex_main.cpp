@@ -14,7 +14,6 @@
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/pretty.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
 
@@ -198,8 +197,15 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case END_FUNCTION:
-    symex_end_of_function();
+    if (
+      inside_unexpected &&
+      unexpected_end == cur_state->source.pc->function.as_string())
+    {
+      std::string msg = std::string("Unexpected exceptions");
+      claim(gen_false_expr(), msg);
+    }
 
+    symex_end_of_function();
     if (!stack_catch.empty())
     {
       // Get to the correct try (always the last one)
@@ -233,6 +239,14 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case ASSERT:
     symex_assert();
+    cur_state->source.pc++;
+    break;
+
+  case LOOP_INVARIANT:
+    if (options.get_bool_option("loop-invariant"))
+    {
+      symex_loop_invariant();
+    }
     cur_state->source.pc++;
     break;
 
@@ -433,6 +447,33 @@ void goto_symext::symex_assume()
   replace_dynamic_allocation(cond);
 
   assume(cond);
+  expr2tc c = cond;
+  // Recursively remove typecast
+  while (is_typecast2t(c))
+    c = to_typecast2t(c).from;
+
+  // Hack for assume, which allows us to take advantage
+  // of constant propagation in some cases
+  if (is_equality2t(c))
+  {
+    // In the IEEE-754 floating-point number semantics,
+    // there can be situations where the numerical comparison is equal,
+    // but the internal bit patterns are different: +0.0 and -0.0
+
+    // We don't perform constant propagation on it.
+    expr2tc lhs = to_equality2t(c).side_1;
+    expr2tc rhs = to_equality2t(c).side_2;
+    if (
+      is_symbol2t(lhs) && is_constant_expr(rhs) &&
+      !(is_constant_floatbv2t(rhs) &&
+        to_constant_floatbv2t(rhs).value.is_zero()))
+      cur_state->assignment(lhs, rhs);
+    else if (
+      is_symbol2t(rhs) && is_constant_expr(lhs) &&
+      !(is_constant_floatbv2t(lhs) &&
+        to_constant_floatbv2t(lhs).value.is_zero()))
+      cur_state->assignment(rhs, lhs);
+  }
 }
 
 void goto_symext::symex_assert()
@@ -563,9 +604,21 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_memcpy")
+  {
+    intrinsic_memcpy(art, func_call);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_get_object_size")
   {
     intrinsic_get_object_size(func_call, art);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_builtin_object_size")
+  {
+    intrinsic_builtin_object_size(func_call, art);
     return;
   }
 
@@ -743,12 +796,12 @@ void goto_symext::run_intrinsic(
       {
         type_byte_size(item.object->type).to_int64();
       }
-      catch (array_type2t::dyn_sized_array_excp *e)
+      catch (const array_type2t::dyn_sized_array_excp &e)
       {
         log_error("__ESBMC_init_object does not support VLAs");
         abort();
       }
-      catch (array_type2t::inf_sized_array_excp *e)
+      catch (const array_type2t::inf_sized_array_excp &e)
       {
         log_error(
           "__ESBMC_init_object does not support infinite-length arrays");
@@ -883,6 +936,33 @@ void goto_symext::run_intrinsic(
     has_prefix(symname, "c:@F@__ESBMC_atexit_handler"))
   {
     bump_call(func_call, symname);
+    return;
+  }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_track_cheri"))
+  {
+    assert(func_call.operands.size() == 2 && "Wrong signature");
+    expr2tc ptr = func_call.operands[0];
+    expr2tc sz = func_call.operands[1];
+
+    // Rename the size symbol with last known value
+    cur_state->rename(sz);
+
+    expr2tc addr = typecast2tc(ptraddr_type2(), ptr);
+    expr2tc addr_end = add2tc(ptraddr_type2(), addr, sz);
+
+    expr2tc cap_base = capability_base2tc(ptr);
+    expr2tc cap_top = capability_top2tc(ptr);
+    /*
+     * Compiler flag: -cheri-bounds=subobject-safe
+     * For sub objects, CHERI clang should generate 
+     * independent capabilities for it instead of sharing.
+     * 
+     * cheri_base = address 
+     * cheri_top = address + size
+     */
+    symex_assign(code_assign2tc(cap_base, addr), true);
+    symex_assign(code_assign2tc(cap_top, addr_end), true);
     return;
   }
 
@@ -1328,4 +1408,34 @@ void goto_symext::add_memory_leak_checks()
       cond,
       "dereference failure: forgotten memory: " + get_pretty_name(it.name));
   }
+}
+
+void goto_symext::symex_loop_invariant()
+{
+  // this aims to use esbmc to use a single step to prove the loop invariant
+  // Basic guard check - skip if guard is false
+  if (cur_state->guard.is_false())
+    return;
+
+  // Get the loop invariant
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+
+  log_status(
+    "Processing {} loop invariant", instruction.get_loop_invariants().size());
+  for (auto &invariant : instruction.get_loop_invariants())
+  {
+    // rename the variables to match the current symbolic execution state
+    cur_state->rename(invariant);
+
+    // store invariant for later use
+    cur_state->pending_invariants.push_back(invariant);
+
+    log_status("Stored loop invariant");
+  }
+  cur_state->has_loop_invariant = true;
+
+  log_status(
+    "Successfully collected {} loop invariants, marked state for loop "
+    "processing",
+    cur_state->pending_invariants.size());
 }

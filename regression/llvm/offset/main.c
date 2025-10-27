@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stddef.h>
 
 struct S {
   float f;

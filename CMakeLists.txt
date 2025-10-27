@@ -10,14 +10,14 @@ cmake_policy(SET CMP0091 NEW)
 project (ESBMC)
 
 set (ESBMC_VERSION_MAJOR 7)
-set (ESBMC_VERSION_MINOR 9)
+set (ESBMC_VERSION_MINOR 11)
 set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
 # The only default solver available is smtlib
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
 
-set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 16)
+set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 21)
 
 #################################
 # Configuration                 #
@@ -100,7 +100,11 @@ endif()
 
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options iostreams)
+# In boost-1.89, system and filesystem has been remove
+# To support the older version, added "optional" here
+find_package(Boost REQUIRED 
+  COMPONENTS date_time program_options iostreams
+  OPTIONAL_COMPONENTS system filesystem)
 include(FindLocalLLVM)
 
 include(ExternalDependencies)
@@ -109,11 +113,6 @@ include(ExternalDependencies)
 include(OptimizationCCache)
 include(WError)
 
-if(ENABLE_OLD_FRONTEND)
-  find_package(BISON 2.6.1 REQUIRED)
-  find_package(FLEX 2.6.1 REQUIRED)
-  add_definitions(-DENABLE_OLD_FRONTEND)
-endif()
 
 if(ENABLE_SOLIDITY_FRONTEND)
   add_definitions(-DENABLE_SOLIDITY_FRONTEND)

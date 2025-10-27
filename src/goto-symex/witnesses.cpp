@@ -5,9 +5,13 @@
 #include <fstream>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
+#include <util/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 typedef boost::property_tree::ptree xmlnodet;
 
@@ -88,6 +92,45 @@ void grapht::create_initial_edge()
   this->edges.push_back(first_edge);
 }
 
+void yamlt::generate_yaml(optionst &options)
+{
+  YAML::Emitter yaml_emitter;
+  if (this->witness_type == yamlt::VIOLATION)
+    create_violation_yaml_emitter(this->verified_file, options, yaml_emitter);
+  else
+    create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
+
+  if (!this->segments.empty())
+  {
+    yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq;
+
+    for (auto &waypoint : this->segments)
+    {
+      yaml_emitter << YAML::BeginMap;
+      yaml_emitter << YAML::Key << "segment" << YAML::Value << YAML::BeginSeq;
+
+      create_waypoint(waypoint, yaml_emitter);
+
+      yaml_emitter << YAML::EndSeq;
+      yaml_emitter << YAML::EndMap;
+    }
+
+    yaml_emitter << YAML::EndSeq;
+  }
+
+  yaml_emitter << YAML::EndMap;
+  yaml_emitter << YAML::EndSeq;
+
+  const std::string witness_output = options.get_option("witness-output");
+  if (witness_output == "-")
+    std::cout << yaml_emitter.c_str() << std::endl;
+  else
+  {
+    std::ofstream fout(witness_output);
+    fout << yaml_emitter.c_str() << "\n";
+  }
+}
+
 int generate_sha1_hash_for_file(const char *path, std::string &output)
 {
   FILE *file = fopen(path, "rb");
@@ -104,6 +147,29 @@ int generate_sha1_hash_for_file(const char *path, std::string &output)
 
   c.fin();
   output = c.to_string();
+
+  fclose(file);
+  return 0;
+}
+
+int generate_sha256_hash_for_file(const char *path, std::string &output)
+{
+  FILE *file = fopen(path, "rb");
+  if (!file)
+    return -1;
+
+  const size_t bufSize = 32768;
+  char *buffer = (char *)alloca(bufSize);
+
+  picosha2::hash256_one_by_one hasher;
+  hasher.init();
+
+  size_t bytesRead = 0;
+  while ((bytesRead = fread(buffer, 1, bufSize, file)))
+    hasher.process(buffer, buffer + bytesRead);
+
+  hasher.finish();
+  output = picosha2::get_hash_hex_string(hasher);
 
   fclose(file);
   return 0;
@@ -126,6 +192,45 @@ std::string trim(const std::string &str)
   size_t last_non_whitespace = str.find_last_not_of(whitespace_characters);
   size_t length = last_non_whitespace - first_non_whitespace + 1;
   return str.substr(first_non_whitespace, length);
+}
+
+void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
+{
+  waypoint << YAML::BeginMap;
+  waypoint << YAML::Key << "waypoint" << YAML::Value << YAML::BeginMap;
+
+  if (wp.type == waypoint::target)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "target";
+  else if (wp.type == waypoint::assumption)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "assumption";
+
+  waypoint << YAML::Key << "action" << YAML::Value << YAML::DoubleQuoted
+           << "follow";
+
+  if (wp.type == waypoint::assumption)
+  {
+    waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
+    waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
+             << wp.value;
+    waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+             << "c_expression";
+    waypoint << YAML::EndMap;
+  }
+
+  // location
+  waypoint << YAML::Key << "location" << YAML::Value << YAML::BeginMap;
+  waypoint << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
+           << wp.file;
+  waypoint << YAML::Key << "line" << YAML::Value << integer2string(wp.line);
+  waypoint << YAML::Key << "column" << YAML::Value << integer2string(wp.column);
+  waypoint << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
+           << wp.function;
+  waypoint << YAML::EndMap;
+
+  waypoint << YAML::EndMap;
+  waypoint << YAML::EndMap;
 }
 
 void create_node_node(nodet &node, xmlnodet &nodenode)
@@ -607,6 +712,100 @@ void _create_graph_node(
   graphnode.add_child("data", p_creationTime);
 }
 
+void _create_yaml_metadata_emitter(
+  const std::string &verifiedfile,
+  const optionst &options,
+  YAML::Emitter &metadata)
+{
+  metadata << YAML::BeginMap;
+  metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
+           << "2.0";
+
+  // Uuid
+  std::string uuid =
+    boost::uuids::to_string(boost::uuids::random_generator()());
+  metadata << YAML::Key << "uuid" << YAML::Value << YAML::DoubleQuoted << uuid;
+
+  // Creation_time ISO 8601
+  std::time_t t = std::time(nullptr);
+  std::tm local_tm = *std::localtime(&t);
+
+  char creation_time[64];
+  std::strftime(
+    creation_time, sizeof(creation_time), "%Y-%m-%dT%H:%M:%S%z", &local_tm);
+  std::string timestr(creation_time);
+
+  if (timestr.size() >= 5)
+    timestr.insert(timestr.size() - 2, ":");
+  metadata << YAML::Key << "creation_time" << YAML::Value << YAML::DoubleQuoted
+           << timestr;
+
+  // Producer
+  metadata << YAML::Key << "producer" << YAML::BeginMap;
+  std::string producer_str = options.get_option("witness-producer");
+  if (producer_str.empty())
+  {
+    producer_str = "ESBMC";
+    if (
+      options.get_bool_option("k-induction") ||
+      options.get_bool_option("k-induction-parallel"))
+      producer_str += " kind";
+    else if (options.get_bool_option("falsification"))
+      producer_str += " falsi";
+    else if (options.get_bool_option("incremental-bmc"))
+      producer_str += " incr";
+  }
+  metadata << YAML::Key << "name" << YAML::Value << YAML::DoubleQuoted
+           << producer_str;
+  metadata << YAML::Key << "version" << YAML::Value << YAML::DoubleQuoted
+           << ESBMC_VERSION;
+  metadata << YAML::EndMap;
+
+  // Task
+  metadata << YAML::Key << "task" << YAML::BeginMap;
+
+  // Input_files
+  metadata << YAML::Key << "input_files" << YAML::BeginSeq;
+  metadata << YAML::DoubleQuoted << verifiedfile;
+  metadata << YAML::EndSeq;
+
+  // Input_file_hashes
+  std::string file_hash;
+  // sha256
+  generate_sha256_hash_for_file(verifiedfile.c_str(), file_hash);
+  metadata << YAML::Key << "input_file_hashes" << YAML::BeginMap;
+  metadata << YAML::Key << YAML::DoubleQuoted << verifiedfile << YAML::Value
+           << YAML::DoubleQuoted << file_hash;
+  metadata << YAML::EndMap;
+
+  // Specification
+  std::string spec;
+  if (options.get_bool_option("overflow-check"))
+    spec = "G ! overflow";
+  else if (options.get_bool_option("memory-leak-check"))
+  {
+    if (options.get_bool_option("no-reachable-memory-leak"))
+      spec = "G valid-free|valid-deref|valid-memtrack";
+    else
+      spec = "G valid-memcleanup";
+  }
+  else if (options.get_bool_option("data-races-check"))
+    spec = "G ! data-race";
+  else
+    spec = "G ! call(reach_error())";
+
+  metadata << YAML::Key << "specification" << YAML::Value << YAML::DoubleQuoted
+           << spec;
+
+  metadata << YAML::Key << "data_model" << YAML::Value << YAML::DoubleQuoted
+           << (config.ansi_c.word_size == 32 ? "ILP32" : "LP64");
+  metadata << YAML::Key << "language" << YAML::Value << YAML::DoubleQuoted
+           << "C";
+
+  metadata << YAML::EndMap;
+  metadata << YAML::EndMap;
+}
+
 void create_violation_graph_node(
   std::string &verifiedfile,
   optionst &options,
@@ -629,6 +828,34 @@ void create_correctness_graph_node(
   pWitnessType.add("<xmlattr>.key", "witness-type");
   pWitnessType.put_value("correctness_witness");
   graphnode.add_child("data", pWitnessType);
+}
+
+void create_correctness_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root)
+{
+  root << YAML::BeginSeq;
+  root << YAML::BeginMap;
+  root << YAML::Key << "entry_type" << YAML::Value << YAML::DoubleQuoted
+       << "invariant_set";
+
+  root << YAML::Key << "metadata";
+  _create_yaml_metadata_emitter(verifiedfile, options, root);
+}
+
+void create_violation_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root)
+{
+  root << YAML::BeginSeq;
+  root << YAML::BeginMap;
+  root << YAML::Key << "entry_type" << YAML::Value << YAML::DoubleQuoted
+       << "violation_sequence";
+
+  root << YAML::Key << "metadata";
+  _create_yaml_metadata_emitter(verifiedfile, options, root);
 }
 
 static const std::regex
@@ -700,8 +927,10 @@ void check_replace_invalid_assignment(std::string &assignment)
     assignment.clear();
 }
 
-std::string
-get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
+std::string get_formated_assignment(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  bool yaml)
 {
   std::string assignment = "";
   if (
@@ -709,9 +938,10 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
     is_valid_witness_step(ns, step))
   {
     assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
-    assignment += " = ";
+    assignment += " == ";
     assignment += from_expr(ns, "", step.value, presentationt::WITNESS);
-    assignment += ";";
+    if (!yaml)
+      assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
     if (std::regex_match(assignment, regex_array))

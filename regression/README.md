@@ -9,4 +9,8 @@ You can see below some examples that you can from the build directory:
 - `ctest -LE esbmc-cpp*`. Executes all tests except the ones inside esbmc-cpp.
 - `ctest --progress`. Show testing progress in one line.
 
+We also provide a script to validate the Python regression suite. You can run the following command from `ESBMC_Project/esbmc` directory as:
+
+`./scripts/check_python_tests.sh`
+
 See ctest documentation for the list of available commands.

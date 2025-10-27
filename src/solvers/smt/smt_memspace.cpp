@@ -451,7 +451,21 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     {
       expr2tc alive =
         index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
-      e = implies2tc(alive, e);
+
+      // Tong: When dynamic object gets registered/freed in __ESBMC_alloc by
+      // symex_malloc()/symex_free(), the alloc bit "alive" is assigned to 1/0.
+      // However in dataraces check we introduce infinite array to store the address of
+      // shared objects, and if they are not dynamically managed by symex_malloc()/symex_free(),
+      // and it's alloc bit is always 0 by default.
+      // For now we just modify races check.
+
+      if (options.get_bool_option("data-races-check") && cur_dynamic)
+      {
+        expr2tc dynamic = index2tc(get_bool_type(), cur_dynamic, gen_ulong(j));
+        e = implies2tc((or2tc(not2tc(dynamic), alive)), e);
+      }
+      else
+        e = implies2tc(alive, e);
     }
 
     assert_expr(e);

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR\: ValueError\: invalid literal for int\(\) with base 10: \'user_input\'$

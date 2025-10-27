@@ -16,7 +16,6 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
-#include <clang-c-frontend/symbolic_types.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -28,6 +27,8 @@ CC_DIAGNOSTIC_POP()
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/symbolic_types.h>
+
 #include <boost/algorithm/string/replace.hpp>
 
 clang_c_convertert::clang_c_convertert(
@@ -521,7 +522,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
   if (
-    symbol.static_lifetime && !symbol.is_extern &&
+    symbol.static_lifetime &&
     (!vd.hasInit() || is_aggregate_type(vd.getType())))
   {
     // the type might contains symbolic types,
@@ -529,8 +530,17 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value = gen_zero(get_complete_type(t, ns), true);
-    symbol.value.zero_initializer(true);
+    if (symbol.is_extern)
+    {
+      exprt value = exprt("sideeffect", get_complete_type(t, ns));
+      value.statement("nondet");
+      symbol.value = value;
+    }
+    else
+    {
+      symbol.value = gen_zero(get_complete_type(t, ns), true);
+      symbol.value.zero_initializer(true);
+    }
   }
 
   symbolt *added_symbol = nullptr;
@@ -2746,7 +2756,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       type.id() == typet::t_bool || type.id() == typet::t_signedbv ||
       type.id() == typet::t_unsignedbv);
 
-    if (tte.getValue())
+    bool value;
+#if CLANG_VERSION_MAJOR >= 21
+    value = tte.getBoolValue();
+#else
+    value = tte.getValue();
+#endif
+    if (value)
       new_expr = true_exprt();
     else
       new_expr = false_exprt();
@@ -2786,6 +2802,31 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     /* ignore attributes for now */
     if (get_expr(*astmt.getSubStmt(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::ExprWithCleanupsClass:
+  {
+    const clang::ExprWithCleanups &ewc =
+      static_cast<const clang::ExprWithCleanups &>(stmt);
+
+    if (get_expr(*ewc.getSubExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::MaterializeTemporaryExprClass:
+  {
+    const clang::MaterializeTemporaryExpr &mtemp =
+      static_cast<const clang::MaterializeTemporaryExpr &>(stmt);
+
+    // In newer Clang, the C frontend introduces this node,
+    // and it is not certain that it is necessary to create a
+    // temporary object as it is in C++ frontend, need more TCs
+    if (get_expr(*mtemp.getSubExpr(), new_expr))
       return true;
 
     break;
@@ -2880,6 +2921,7 @@ void clang_c_convertert::rewrite_builtin_ref(
     "__builtin_memcpy",
     "__builtin_memmove",
     "__builtin_strcpy",
+    "__builtin_strcmp",
     "__builtin_free",
     "__builtin_strlen",
   };

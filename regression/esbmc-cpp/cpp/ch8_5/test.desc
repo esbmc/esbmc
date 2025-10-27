@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
---unwind 9 --no-unwinding-assertionsk --timeout 900
-^CONVERSION ERROR$
+--unwind 9 --no-unwinding-assertions --timeout 900
+^ERROR: PARSING ERROR$

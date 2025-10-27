@@ -19,6 +19,7 @@ enum ContractBodyElementT
   ErrorDef,    // rule error-definition
   EventDef,    // rule event-definition
   UsingForDef, // rule using-for-directive
+  ModifierDef, // rule modifier-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -44,6 +45,9 @@ enum TypeNameT
 
   // dynamic array type
   DynArrayTypeName,
+
+  // Multi-Dimensional Arrays
+  NestedArrayTypeName,
 
   // Address type
   AddressTypeName,
@@ -72,6 +76,12 @@ enum TypeNameT
 
   // built-in member
   BuiltinTypeName,
+
+  // error
+  ErrorTypeName,
+
+  // user-defined
+  UserDefinedTypeName,
 
   TypeNameTError
 };
@@ -231,7 +241,6 @@ enum BlockT
   BlockIfStatement,
   BlockWhileStatement,
   BlockExpressionStatement,
-  UncheckedBlock,
   BlockTError
 };
 BlockT get_block_t(const nlohmann::json &block);
@@ -248,10 +257,12 @@ enum StatementT
   IfStatement,           // rule if-statement
   WhileStatement,
   StatementTError,
-  ContinueStatement, // rule continue
-  BreakStatement,    // rule break
-  RevertStatement,   // rule revert
-  EmitStatement      // rule emit
+  ContinueStatement,    // rule continue
+  BreakStatement,       // rule break
+  RevertStatement,      // rule revert
+  EmitStatement,        // rule emit
+  PlaceholderStatement, //rule placeholder
+  TryStatement          // rule try
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);
@@ -356,10 +367,14 @@ enum ExpressionT
   // Solidity does NOT provide such rule
   IndexAccess,
 
-  // Create a temporary object by keywords 'ew'
+  // Create a temporary object by keywords 'new'
   // equivalent to clang::Stmt::CXXTemporaryObjectExprClass
   // i.e. Base x = new Base(args);
   NewExpression,
+
+  // Create a temporary object by keywords 'new' with options
+  // i.e. Base x = new Base{value: args}();
+  NewCallExpression,
 
   // Call member functions
   // equivalent toclang::Stmt::CXXMemberCallExprClass
@@ -387,6 +402,9 @@ enum ExpressionT
 
   // Built-in Member Access
   BuiltinMemberCall,
+
+  // Contract Type Member Access
+  TypeMemberCall,
 
   // Null Expression
   NullExpr,

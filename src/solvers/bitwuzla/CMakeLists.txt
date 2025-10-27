@@ -10,7 +10,7 @@ else()
             NAME bitwuzla
             DOWNLOAD_ONLY YES
             GITHUB_REPOSITORY bitwuzla/bitwuzla
-            GIT_TAG 0.8.0)
+            GIT_TAG 0.8.2)
 	  
 	  message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
         message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
@@ -56,12 +56,7 @@ if(ENABLE_BITWUZLA)
     target_include_directories(solverbitw
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-
-    find_library(GMP_LIB gmp)
-    if(NOT GMP_LIB)
-        message(FATAL_ERROR "gmp not found")
-    endif()
-    target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla ${GMP_LIB})
+    target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
 

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+(?m)^.*ERROR: List out of bounds at.*\s*\Z

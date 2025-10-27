@@ -216,6 +216,11 @@ protected:
   void symex_assert();
 
   /**
+   *  Interpret a LOOP_INVARIANT instruction.
+   */
+  void symex_loop_invariant();
+
+  /**
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
    *  @param msg Textual message explaining assertion.
@@ -461,6 +466,19 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /**
+   * @brief Intrinsic call for C memset function call
+   * 
+   * This will either invoke our operational model (at string.c)
+   * or try to compute the resulting value directly
+   * 
+   * @param art 
+   * @param func_call memset function call
+   */
+  void intrinsic_memcpy(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
   // Function to call a symname function, in case where were not able to optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
@@ -470,6 +488,27 @@ protected:
    * If the object is invalid, then this function will return 0
    */
   void intrinsic_get_object_size(
+    const code_function_call2t &func_call,
+    reachability_treet &art);
+
+  /** Implements GCC's __builtin_object_size intrinsic for object size determination
+   *
+   * @param func_call Function call with 2 operands: pointer and type parameter
+   * @param art Reachability tree (unused)
+   *
+   * Returns the size in bytes of the object pointed to by the first argument.
+   *
+   * The type parameter (0–3) controls the result:
+   *   - type 0: maximum accessible size of the whole object
+   *   - type 1: remaining size after the current pointer offset
+   *   - type 2: like type 0, but returns 0 instead of (size_t)-1 if unknown
+   *   - type 3: like type 1, but returns 0 instead of (size_t)-1 if unknown
+   *
+   * Fallback behavior when the object cannot be determined:
+   *   - For type 0/1 → returns (size_t)-1
+   *   - For type 2/3 → returns 0
+   */
+  void intrinsic_builtin_object_size(
     const code_function_call2t &func_call,
     reachability_treet &art);
 
@@ -506,6 +545,192 @@ protected:
   int handle_throw_decl(
     goto_symex_statet::exceptiont *frame,
     const irep_idt &id);
+
+  /**
+   *  Finalize the result of a realloc operation.
+   *  Creates the final assignment of the realloc result pointer to the lhs,
+   *  handling both successful allocation and failure cases. Updates pointer
+   *  tracking and validity information for the newly allocated memory.
+   *  @param lhs Left-hand side expression to receive the realloc result.
+   *  @param result The result pointer expression from realloc.
+   *  @param new_array The newly allocated array symbol.
+   *  @param guard Guard condition for this assignment.
+   *  @param realloc_size The size parameter passed to realloc.
+   */
+  void finalize_realloc_result(
+    const expr2tc &lhs,
+    const expr2tc &result,
+    const expr2tc &new_array,
+    const guardt &guard,
+    const expr2tc &realloc_size);
+
+  /**
+   *  Update pointer validity information after realloc.
+   *  Marks the old pointer as invalid when realloc succeeds, and handles
+   *  the validity state transitions in the pointer tracking arrays.
+   *  @param old_ptr The original pointer being reallocated.
+   *  @param alloc_fail Expression indicating allocation failure condition.
+   *  @param guard Guard condition for this update.
+   */
+  void update_pointer_validity(
+    const expr2tc &old_ptr,
+    const expr2tc &alloc_fail,
+    const guardt &guard);
+
+  /**
+   *  Model allocation failure behavior for realloc.
+   *  Creates conditional logic to handle the case where realloc fails to
+   *  allocate memory, returning NULL while preserving the original pointer's
+   *  validity according to C standard semantics.
+   *  @param result The result pointer from realloc attempt.
+   *  @param old_ptr The original pointer being reallocated.
+   *  @param guard Guard condition for this modeling.
+   *  @return Expression representing the final result considering failure.
+   */
+  expr2tc model_allocation_failure(
+    const expr2tc &result,
+    const expr2tc &old_ptr,
+    const guardt &guard);
+
+  /**
+   *  Create result pointer from newly allocated array.
+   *  Constructs the appropriate pointer expression that points to the base
+   *  of the newly allocated dynamic memory array, with proper type casting.
+   *  @param new_array The newly allocated array symbol.
+   *  @param lhs_type The expected type of the result pointer.
+   *  @return Pointer expression to the new array.
+   */
+  expr2tc
+  create_result_pointer(const expr2tc &new_array, const type2tc &lhs_type);
+
+  /**
+   *  Calculate the number of elements in the old memory object.
+   *  Determines how many elements of the specified type exist in the old
+   *  allocated memory, accounting for whether it's an array type or raw bytes.
+   *  @param old_base_array The base array of the old memory object.
+   *  @param elem_type The type of elements being counted.
+   *  @param old_is_array Whether the old object is a typed array.
+   *  @return Expression representing the number of old elements.
+   */
+  expr2tc calculate_old_element_count(
+    const expr2tc &old_base_array,
+    const type2tc &elem_type,
+    bool old_is_array);
+
+  /**
+   *  Calculate number of elements from byte size.
+   *  Converts a size in bytes to a number of elements by dividing by the
+   *  element size, handling potential rounding and alignment issues.
+   *  @param size_bytes Total size in bytes.
+   *  @param elem_size Size of each element in bytes.
+   *  @return Expression representing the number of elements.
+   */
+  expr2tc
+  calculate_element_count(const expr2tc &size_bytes, const expr2tc &elem_size);
+
+  /**
+   *  Determine fallback element type for realloc.
+   *  When the old object's type cannot be determined, selects an appropriate
+   *  fallback element type based on the realloc context and target type.
+   *  @param code The realloc side effect being processed.
+   *  @param lhs The left-hand side target of the realloc.
+   *  @return Appropriate element type to use as fallback.
+   */
+  type2tc
+  determine_fallback_element_type(const sideeffect2t &code, const expr2tc &lhs);
+
+  /**
+   *  Analyze the old object being reallocated.
+   *  Examines the source pointer to extract information about the existing
+   *  allocation, including element type, base array, array status, and count.
+   *  @param src_ptr The source pointer being reallocated.
+   *  @param elem_type Output parameter for the element type.
+   *  @param old_base_array Output parameter for the base array symbol.
+   *  @param old_is_array Output parameter indicating if it's a typed array.
+   *  @param old_elem_count Output parameter for the element count.
+   *  @return True if analysis succeeded and old object information was found.
+   */
+  bool analyze_old_object(
+    const expr2tc &src_ptr,
+    type2tc &elem_type,
+    expr2tc &old_base_array,
+    bool &old_is_array,
+    expr2tc &old_elem_count);
+
+  /**
+   *  Handle realloc with zero size parameter.
+   *  Implements the special case where realloc is called with size 0, which
+   *  according to C standard may free the memory and return NULL or a unique
+   *  pointer that should not be dereferenced.
+   *  @param lhs Left-hand side expression to receive the result.
+   *  @param code The realloc side effect being processed.
+   *  @param guard Guard condition for this operation.
+   *  @param realloc_size The size parameter (should be zero).
+   *  @return True if zero size case was handled, false otherwise.
+   */
+  bool handle_realloc_zero_size(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard,
+    const expr2tc &realloc_size);
+
+  /**
+   *  Copy a single element between old and new arrays.
+   *  Performs the copying of one element from the old memory location to the
+   *  new one, handling type conversions and array vs non-array access patterns.
+   *  @param old_base_array The source array to copy from.
+   *  @param new_array The destination array to copy to.
+   *  @param idx Index of the element to copy.
+   *  @param elem_type Type of elements in the old array.
+   *  @param new_elem_type Type of elements in the new array.
+   *  @param old_is_array Whether old object is accessed as typed array.
+   *  @param guard Guard condition for this copy operation.
+   */
+  void copy_single_element(
+    const expr2tc &old_base_array,
+    const expr2tc &new_array,
+    const expr2tc &idx,
+    const type2tc &elem_type,
+    const type2tc &new_elem_type,
+    bool old_is_array,
+    const guardt &guard);
+
+  /**
+   *  Copy memory content from old to new allocation.
+   *  Implements the bulk copying of preserved data during realloc, copying
+   *  the minimum of old and new element counts to preserve existing data
+   *  while respecting the new allocation size.
+   *  @param old_base_array The source array containing existing data.
+   *  @param new_array The destination array for copied data.
+   *  @param old_elem_count Number of elements in the old allocation.
+   *  @param new_elem_count Number of elements in the new allocation.
+   *  @param elem_type Type of elements being copied.
+   *  @param old_is_array Whether old object is accessed as typed array.
+   *  @param guard Guard condition for the copy operations.
+   */
+  void copy_memory_content(
+    const expr2tc &old_base_array,
+    const expr2tc &new_array,
+    const expr2tc &old_elem_count,
+    const expr2tc &new_elem_count,
+    const type2tc &elem_type,
+    bool old_is_array,
+    const guardt &guard);
+
+  /**
+   *  Create a new dynamic memory symbol.
+   *  Generates a fresh symbol representing dynamically allocated memory,
+   *  with appropriate array type and symbolic size for use in realloc
+   *  and other dynamic memory operations.
+   *  @param elem_type Type of elements in the dynamic array.
+   *  @param size_expr Expression representing the array size.
+   *  @param name_prefix Prefix for generating the symbol name.
+   *  @return Symbol expression representing the new dynamic memory.
+   */
+  expr2tc create_dynamic_memory_symbol(
+    const type2tc &elem_type,
+    const expr2tc &size_expr,
+    const std::string &name_prefix);
 
   /**
    * Call terminate function handler when needed.
@@ -546,7 +771,10 @@ protected:
    * This function does not return any value; it modifies the symbolic execution state
    * based on the side effect encountered.
    */
-  void handle_sideeffect(const expr2tc &lhs, const sideeffect2t &effect);
+  void handle_sideeffect(
+    const expr2tc &lhs,
+    const sideeffect2t &effect,
+    const guardt &guard);
 
   /**
    * Handle conditional expressions (if2t) in the symbolic execution.
@@ -557,7 +785,10 @@ protected:
    * 
    * This function returns true if there is a sideeffect.
    */
-  bool handle_conditional(const expr2tc &lhs, const if2t &if_effect);
+  bool handle_conditional(
+    const expr2tc &lhs,
+    const if2t &if_effect,
+    const guardt &guard);
 
   /**
    *  Make symbolic assignment.
@@ -773,31 +1004,50 @@ protected:
     const bool hidden);
 
   /** Symbolic implementation of malloc. */
-  expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_malloc(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Implementation of realloc. */
-  void symex_realloc(const expr2tc &lhs, const sideeffect2t &code);
+  void symex_realloc(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Symbolic implementation of alloca. */
-  expr2tc symex_alloca(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_alloca(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Wrapper around for alloca and malloc. */
-  expr2tc
-  symex_mem(const bool is_malloc, const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_mem(
+    const bool is_malloc,
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Pointer modelling update function */
   void track_new_pointer(
     const expr2tc &ptr_obj,
     const type2tc &new_type,
+    const guardt &guard,
     const expr2tc &size = expr2tc());
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const expr2tc &code);
   /** Symbolic implementation of c++'s new. */
-  void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
+  void symex_cpp_new(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
   /** Symbolic implementation of va_arg */
-  void symex_va_arg(const expr2tc &lhs, const sideeffect2t &code);
+  void symex_va_arg(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -887,6 +1137,8 @@ protected:
 
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;
+  /** Store the unexpected function end */
+  irep_idt unexpected_end;
 
   /** Disable return value optimization */
   bool no_return_value_opt;
@@ -972,5 +1224,38 @@ protected:
   dump_internal_state(const std::list<struct internal_item> &data) override;
   bool is_live_variable(const expr2tc &sym) override;
 };
+
+namespace goto_symex_utils
+{
+/**
+ * Computes the equivalent object value when considering a memcpy operation on it.
+ *
+ * @param src The source expression from which bytes are copied.
+ * @param dst The destination expression to which bytes are copied.
+ * @param num_of_bytes The number of bytes to copy from src to dst.
+ * @param src_offset The offset in src from which the bytes start.
+ * @param dst_offset The offset in dst at which the bytes are written.
+ *
+ * @returns A new expr2tc representing the result of the memcpy operation, or an empty expr2tc if unable construct the object
+ *
+ * Usage Examples:
+ * @code
+ * expr2tc src = constant_int2tc(get_uint_type(32), BigInt(0xdeadbeef));
+ * expr2tc dst = constant_int2tc(get_uint_type(32), BigInt(0x12345678));
+ * size_t num_of_bytes = 1;
+ * size_t src_offset = 1;
+ * size_t dst_offset = 2;
+ *
+ * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
+ * // result should be constant_int2tc(bitvec_type(32)), BigInt(0x12de345678));
+ * @endcode
+ */
+expr2tc gen_byte_memcpy(
+  const expr2tc &src,
+  const expr2tc &dst,
+  const size_t num_of_bytes,
+  const size_t src_offset,
+  const size_t dst_offset);
+} // namespace goto_symex_utils
 
 #endif

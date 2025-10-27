@@ -10,7 +10,7 @@ Here are some steps to contributing to the code base:
 
   1. Compile and execute esbmc. [Building](https://github.com/esbmc/esbmc/blob/master/BUILDING.md)
   1. Fork the repository
-  1. Clone the repository git clone git@github.com:YOURNAME/esbmc.git
+  1. Clone the repository: git clone git@github.com:YOURNAME/esbmc.git
   1. Create a branch from the master branch (default branch)
   1. Make your changes
   1. Check the formatting with clang-format (use Clang 11)
@@ -45,7 +45,7 @@ C) Add your changes via commits to the local branch:
 
 ```
 git add path-to-file/file.cpp
-git commit -sm "added opertational model for pthread_equal"
+git commit -sm "added operational model for pthread_equal"
 ```
 
 Note that you can check your changes via `git status`.

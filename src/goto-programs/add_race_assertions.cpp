@@ -213,6 +213,19 @@ void add_race_assertions(
         i_it = ++t;
       }
 
+      if (config.options.get_bool_option("data-races-check-only"))
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+        t->type = FUNCTION_CALL;
+        code_function_callt call;
+        call.function() =
+          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
+
+        migrate_expr(call, t->code);
+        t->location = original_instruction.location;
+        i_it = ++t;
+      }
+
       // now add assignments for what is written -- reset
       // only write operations need to be reset:
       // tmp_A = 0;

@@ -1,4 +1,4 @@
-int main()
+THOROUGH main()
 {
   int i, a[2];
 

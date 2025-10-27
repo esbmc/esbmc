@@ -3,6 +3,10 @@
 #include <cassert>
 using namespace std;
 
+// clang++ main.cpp -o main 
+// main: main.cpp:20: int main(): Assertion `myset.count(3) == 1' failed.
+// Aborted (core dumped)
+
 int main ()
 {
   multiset<int> myset;
@@ -17,7 +21,7 @@ int main ()
   myset.insert(3);
   myset.insert(3);
   myset.insert(3);
-  assert(myset.count(3) == 1);
+  assert(myset.count(3) == 1); // Multisets allow duplicates by definition
   for (i=0;i<10; i++)
   {
     cout << i;

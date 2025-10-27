@@ -12,7 +12,7 @@ The trouble comes from the fact that SMT solvers do not like this one bit. It wo
 
 What ESBMC does instead is use the primitives that SMT provides (bitvectors, arrays, possibly floatbvs) as variables to store values. That means that whenever we have code like this:
 
-```
+```C
  int foo, bar;
  char *baz = (nondet_bool()) ? (char*)&foo : (char *)&bar;
  unsigned int idx = nondet_uint();
@@ -47,7 +47,7 @@ It produces an appropriate guard along the way. If the type of the dereference i
  (void)croix->quux[1].bar;
 ```
 
-Here `dereference_expr_nonscalar` would pick out that 'croix' is being dereferenced, but with a series of indexes and members that identified the field being accessed.
+Here, `dereference_expr_nonscalar` would pick out that 'croix' is being dereferenced, but with a series of indexes and members that identify the field being accessed.
 
 This all feeds into `dereferencet::dereference`, which takes:
 
@@ -58,7 +58,7 @@ This all feeds into `dereferencet::dereference`, which takes:
 * The mode, a read, write, "free" or "give me a list of objects" mode.
 * The offset applied to the address being dereferenced. i.e., if dereferencing a struct field, the offset into the struct.
 
-A list of all variable names that the base expression can point to is fetched. These variable names are `l1` renamed variables: they identify what the C spec might term `storage`, an `lvalue`, or data object. The points-at information comes from `the value_sett` tracking. Each pointed-at object is passed to `build_reference_to`; then they are all chained together with a big `if-then-else`. The resulting expression describes the data being accessed in terms of SMT primitives.
+A list of all variable names that the base expression can point to is fetched. These variable names are `l1` renamed variables: they identify what the C spec might term `storage`, an `lvalue`, or data object. The points-at information comes from `the value_sett` tracking. Each pointed-at object is passed to `build_reference_to`; then they are all chained together using a large `if-then-else` statement. The resulting expression describes the data being accessed in terms of SMT primitives.
 
 All of that is easy, though: the hard stuff is in `dereferencet::build_reference_to`. There we have the core problem of:
 
@@ -71,7 +71,7 @@ We call `build_reference_rec` with that information. Look at the switch statemen
 In the switch-statement, some facts are accumulated about the types we are dealing with into a single flags number, which is switched on. We have to consider:
 
 * The type of the underlying primitive (`flag_src_*`)
-* The type that the dereference needs to evaluate to (`flag_dst_*`), i.e., what data is actually being loaded/stored,
+* The type that the dereference needs to evaluate to (`flag_dst_*`), i.e., what data is being loaded/stored,
 * Whether the offset into the primitive is a constant or not. A constant would be `foo->bar[4]`, non-constant would be `foo->bar[nondet_int()]`.
 
 Take the first one:
@@ -102,7 +102,7 @@ However, it might just as quickly have been a plain integer dereference:
 
 That just so happened to point deep into a structure.
 
-The cases in `build_reference_rec` become increasingly hellish as you go down: for example, `C99` quite happily allows you to make assignments with struct type, and you can point a pointer (almost) anywhere in memory and assign that type in and out. For example:
+The cases in `build_reference_rec` become increasingly complex as you proceed. For example, `C99` quite happily allows you to make assignments with struct type, and you can point a pointer (almost) anywhere in memory and assign that type in and out. For example:
 
 ```
  char *foo = malloc(16);

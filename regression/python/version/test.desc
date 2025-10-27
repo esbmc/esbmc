@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+
+^ERROR: Object \"importlib\.metadata\" not found.$

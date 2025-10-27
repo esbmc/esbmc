@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c 
+--loop-invariant --multi-property --unwind 1 --no-unwinding-assertions
+^VERIFICATION FAILED$

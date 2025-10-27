@@ -44,7 +44,7 @@ class Result:
       return True
     if res == Result.fail_memcleanup:
       return True
-    if res == result.fail_termination: # XXX fbrausse: shouldn't "result" be capitalized?
+    if res == Result.fail_termination:
       return True
     if res == Result.fail_race:
       return True
@@ -104,6 +104,7 @@ def parse_result(the_output, prop):
   memory_leak = "dereference failure: forgotten memory"
   invalid_pointer = "dereference failure: invalid pointer"
   memset_access_oob = "dereference failure: memset of memory segment of size"
+  memcpy_access_oob = "dereference failure on memcpy: reading memory segment"
   access_out = "dereference failure: Access to object out of bounds"
   dereference_null = "dereference failure: NULL pointer"
   expired_variable = "dereference failure: accessed expired variable pointer"
@@ -149,7 +150,7 @@ def parse_result(the_output, prop):
       if free_error in the_output:
         return Result.fail_free
 
-      if access_out in the_output or memset_access_oob in the_output:
+      if access_out in the_output or memset_access_oob or memcpy_access_oob in the_output:
         return Result.fail_deref
 
       if invalid_object in the_output:
@@ -261,7 +262,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
 
   # Add witness arg
   witness_name = os.path.basename(benchmark) if esbmc_ci else "witness"
-  command_line += "--witness-output " + witness_name + ".graphml "
+  command_line += "--witness-output-yaml " + witness_name + ".yml "
 
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.termination:
@@ -290,13 +291,15 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
       command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
-    command_line += "--no-pointer-check --no-bounds-check --data-races-check --no-assertions "
+    command_line += "--no-pointer-check --no-bounds-check --data-races-check-only --no-assertions "
   else:
     print("Unknown property")
     exit(1)
 
   # Add strategy
   if concurrency: # Concurrency only works with incremental
+    command_line += "--incremental-bmc "
+  elif prop == Property.overflow: # Overflow only works with incremental
     command_line += "--incremental-bmc "
   elif strat == "fixed":
     command_line += "--k-induction --max-inductive-step 3 "
@@ -322,28 +325,6 @@ def verify(strat, prop, concurrency, dargs, esbmc_ci):
   res = parse_result(output.decode(), category_property)
   # Parse output
   return res
-
-def witness_to_sha256(benchmark, esbmc_ci):
-  sha256hash = ''
-  with open(benchmark, 'r') as f:
-    data = f.read().encode('utf-8')
-    sha256hash = sha256(data).hexdigest()
-  witness = os.path.basename(benchmark) + ".graphml" if esbmc_ci else "witness.graphml"
-  fin = open(witness, "rt")
-  data = fin.readlines()
-  fin.close()
-
-  fin = open(witness, "wt")
-  for line in data:
-    if '<data key="programhash">' in line:
-      line = line.replace(line[line.index('>')+1:line.index('</data>')], sha256hash)
-
-    if '<data key="creationtime">' in line:
-      time = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-      line = line.replace(line[line.index('>')+1:line.index('</data>')], time)
-    fin.write(line)
-  fin.close()
-  return
 
 # Options
 parser = argparse.ArgumentParser()
@@ -400,8 +381,5 @@ else:
   exit(1)
 
 result = verify(strategy, category_property, concurrency, esbmc_dargs, esbmc_ci)
-try:
-  witness_to_sha256(benchmark, esbmc_ci)
-except:
-  pass
+
 print(get_result_string(result))

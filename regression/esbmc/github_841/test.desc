@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main_esbmc.c
 
 ^VERIFICATION FAILED$
