@@ -218,7 +218,7 @@ SCENARIO("do_memcpy_expression for arrays", "[symex]")
     REQUIRE_FALSE(result);
   };
 
-  GIVEN("memcpy(some-array, some-array, misalignement)")
+  GIVEN("memcpy(some-array, some-array, misalignment)")
   {
     test_array_fail(src_array, dst_array, 7);
     test_array_fail(src_array, dst_array, 8, 2, 0);
