@@ -1275,7 +1275,6 @@ expr2tc gen_byte_memcpy(
  */
 expr2tc do_memcpy_expression(
   const expr2tc &dst,
-
   const size_t &dst_offset,
   const expr2tc &src,
   const size_t &src_offset,
