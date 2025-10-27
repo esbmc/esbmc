@@ -221,6 +221,22 @@ bool function_call_expr::is_same_type(
     throw std::runtime_error("Unsupported type in isinstance()");
 
   std::string type_name = type_node["id"];
+  
+  // Special handling for tuple type checking
+  if (type_name == "tuple")
+  {
+    // Check if object is a tuple by examining struct tag
+    if (obj_expr.type().id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(obj_expr.type());
+      
+      // Check if this is a tuple by examining the tag
+      if (struct_type.tag().as_string().find("tag-tuple") == 0)
+        return true;
+    }
+    return false;
+  }
+  
   // Get the internal type representation from the type name
   typet expected_type = type_handler_.get_typet(type_name, 0);
 
