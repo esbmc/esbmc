@@ -1791,7 +1791,7 @@ exprt function_call_expr::handle_general_function_call()
       call.arguments().push_back(arg);
   }
 
-  return std::move(call);
+  return call;
 }
 
 exprt function_call_expr::gen_exception_raise(

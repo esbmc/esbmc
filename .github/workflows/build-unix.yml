@@ -21,7 +21,6 @@ jobs:
     runs-on: ${{ inputs.operating-system }}
     steps:
     - uses: actions/checkout@v4
-
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }}
     - uses: actions/upload-artifact@v4

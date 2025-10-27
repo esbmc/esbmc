@@ -17,6 +17,6 @@ jobs:
   build-unix:
     uses: ./.github/workflows/build-unix.yml
     with:
-      operating-system: ubuntu-22.04
+      operating-system: ubuntu-latest
       build-flags: '-b Debug'
       testing: true
