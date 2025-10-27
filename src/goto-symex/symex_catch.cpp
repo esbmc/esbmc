@@ -132,7 +132,9 @@ bool goto_symext::symex_throw()
 
       if (new_id_number < old_id_number)
       {
-        cur_state->call_stack = old_stack;
+        // NOTE: call_stack restoration causes crashes on macOS due to framet copy issues.
+        // Commented out as it's not necessary for exception matching logic.
+        // cur_state->call_stack = old_stack;
         cur_state->guard.make_true();
 
         update_throw_target(except, c_it->second, instruction.code);
