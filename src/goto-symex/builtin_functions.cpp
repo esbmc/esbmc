@@ -1972,6 +1972,7 @@ void goto_symext::intrinsic_memcpy(
   cur_state->rename(n_arg);
   if (!n_arg || is_symbol2t(n_arg))
   {
+    log_debug("memcpy", "number of bytes is symbolic");
     bump_call(func_call, bump_name);
     return;
   }
@@ -1979,6 +1980,7 @@ void goto_symext::intrinsic_memcpy(
   simplify(n_arg);
   if (!is_constant_int2t(n_arg))
   {
+    log_debug("memcpy", "number of bytes is non-constant");
     bump_call(func_call, bump_name);
     return;
   }
@@ -1994,6 +1996,7 @@ void goto_symext::intrinsic_memcpy(
 
   if (!internal_deref_items.size())
   {
+    log_debug("memcpy", "no srcs found in VSA");
     bump_call(func_call, bump_name);
     return;
   }
@@ -2014,6 +2017,7 @@ void goto_symext::intrinsic_memcpy(
 
     if (!item_object || !item_offset)
     {
+      log_debug("memcpy", "could not identify src");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2021,6 +2025,7 @@ void goto_symext::intrinsic_memcpy(
     offset_simplifier(item_offset);
     if (!is_constant_int2t(item_offset))
     {
+      log_debug("memcpy", "non consts src offset");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2035,11 +2040,13 @@ void goto_symext::intrinsic_memcpy(
     }
     catch (const array_type2t::dyn_sized_array_excp &)
     {
+      log_debug("memcpy", "non consts src size");
       bump_call(func_call, bump_name);
       return;
     }
     catch (const array_type2t::inf_sized_array_excp &)
     {
+      log_debug("memcpy", "non consts src size");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2105,6 +2112,7 @@ void goto_symext::intrinsic_memcpy(
     offset_simplifier(item.offset);
     if (!is_constant_int2t(item.offset))
     {
+      log_debug("memcpy", "non consts dst offset");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2119,11 +2127,13 @@ void goto_symext::intrinsic_memcpy(
     }
     catch (const array_type2t::dyn_sized_array_excp &)
     {
+      log_debug("memcpy", "no dst array size");
       bump_call(func_call, bump_name);
       return;
     }
     catch (const array_type2t::inf_sized_array_excp &)
     {
+      log_debug("memcpy", "inf dst array size");
       bump_call(func_call, bump_name);
       return;
     }
