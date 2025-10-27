@@ -1784,7 +1784,6 @@ expr2tc goto_symex_utils::do_memcpy_expression(
 
     if (is_struct_type(src->type) || is_union_type(src->type))
     {
-      log_debug("memcpy", "Struct/union");
       return expr2tc();
     }
 
@@ -1841,7 +1840,6 @@ expr2tc goto_symex_utils::do_memcpy_expression(
 
       uint64_t src_base_size = type_byte_size(src->type).to_uint64();
 
-      log_status("{} bytes in src, {} bytes left", src_base_size, bytes_left);
       // SHould been prevented already
       assert(src_base_size <= bytes_left);
 
@@ -1886,22 +1884,7 @@ expr2tc goto_symex_utils::do_memcpy_expression(
       data.datatype_members[i] = local_member;
     }
 
-    log_status("ok");
     return result;
-#if 0 
-      
-
-      uint64_t src_bytes_left = src->type->get_width();
-      // log_status("Need to write {} bytes", bytes_left);
-      // assert(src_bytes_left <= src_offset_counter);
-
-      data.datatype_members[i] = 
-
-      if (!data.datatype_members[i])
-        return expr2tc();
-	}
-      return result;
-#endif
   }
 
   if (
@@ -1909,13 +1892,11 @@ expr2tc goto_symex_utils::do_memcpy_expression(
     is_union_type(dst->type) || is_struct_type(src->type) ||
     is_union_type(src->type))
   {
-    log_status("missed the opportunity");
     return expr2tc();
   }
 
   assert(!is_array_type(dst->type));
   // Base-case. Primitives!
-  log_status("ok");
   return goto_symex_utils::gen_byte_memcpy(
     src, dst, num_of_bytes, src_offset, dst_offset);
 }
