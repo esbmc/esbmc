@@ -63,15 +63,16 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   // Create and declare temporary symbol for element type
   symbolt &elem_type_sym = converter_.create_tmp_symbol(
     op, "$list_elem_type$", size_type(), type_name_expr);
- 
+
   // TODO: Eventually we should build a reverse index of hash => type into the context
   // this will allow better counter examples.
   constant_exprt hash_value(size_type());
-  hash_value.set_value(integer2binary(std::hash<std::string>{}(elem_type_name), config.ansi_c.address_width));
+  hash_value.set_value(integer2binary(
+    std::hash<std::string>{}(elem_type_name), config.ansi_c.address_width));
   code_assignt hash_assignment(symbol_expr(elem_type_sym), hash_value);
   hash_assignment.location() = location;
   converter_.add_instruction(hash_assignment);
-  
+
   // Create and declare temporary symbol for list element
   symbolt &elem_symbol =
     converter_.create_tmp_symbol(op, "$list_elem$", elem.type(), elem);
