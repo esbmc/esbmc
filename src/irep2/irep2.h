@@ -132,7 +132,7 @@
   BOOST_PP_LIST_CONS(forall,                                                   \
   BOOST_PP_LIST_CONS(exists,                                                   \
   BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-
+// clang-format on
 
 // Even crazier forward decls,
 namespace esbmct
