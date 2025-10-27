@@ -1673,6 +1673,367 @@ static inline expr2tc gen_value_by_byte(
   return gen_byte_expression(type, src, value, num_of_bytes, offset);
 }
 
+expr2tc goto_symex_utils::gen_byte_memcpy(
+  const expr2tc &src,
+  const expr2tc &dst,
+  const size_t num_of_bytes,
+  const size_t src_offset,
+  const size_t dst_offset)
+{
+  // Technically we already did all these checks before, this is just
+  // an extra for DEBUG builds.
+  assert(
+    (src->type->get_width() - src_offset) >= num_of_bytes &&
+    (dst->type->get_width() - dst_offset) >= num_of_bytes);
+
+  if (is_pointer_type(src) || is_pointer_type(dst))
+    return expr2tc();
+
+  // TODO: Not sure how to deal with different types
+  if (src->type != dst->type)
+    return expr2tc();
+
+  expr2tc src_mask = gen_zero(src->type);
+  expr2tc dst_mask = gen_zero(dst->type);
+
+  const expr2tc eight = constant_int2tc(dst->type, BigInt(8));
+  const expr2tc one = constant_int2tc(dst->type, BigInt(1));
+
+  for (unsigned i = 0; i < num_of_bytes; i++)
+    for (int m = 0; m < 8; m++)
+    {
+      src_mask = shl2tc(dst->type, src_mask, one);
+      src_mask = bitor2tc(dst->type, src_mask, one);
+      dst_mask = shl2tc(dst->type, dst_mask, one);
+      dst_mask = bitor2tc(dst->type, dst_mask, one);
+    }
+
+  for (unsigned i = 0; i < dst_offset; i++)
+    dst_mask = shl2tc(dst->type, dst_mask, eight);
+
+  dst_mask = bitnot2tc(dst->type, dst_mask);
+  dst_mask = bitand2tc(dst->type, dst, dst_mask);
+
+  for (unsigned i = 0; i < src_offset; i++)
+    src_mask = shl2tc(dst->type, src_mask, eight);
+
+  src_mask = bitand2tc(dst->type, src, src_mask);
+
+  // When dst_offset > src_offset
+  for (unsigned i = src_offset; i < dst_offset; i++)
+    src_mask = shl2tc(dst->type, src_mask, eight);
+
+  // When dst_offsett < src_offset
+  for (unsigned i = dst_offset; i < src_offset; i++)
+    src_mask = lshr2tc(dst->type, src_mask, eight);
+
+  expr2tc result = bitor2tc(dst->type, dst_mask, src_mask);
+  simplify(result);
+  return result;
+}
+
+static inline expr2tc do_memcpy_expression(
+  const expr2tc &dst,
+  const size_t &dst_offset,
+  const expr2tc &src,
+  const size_t &src_offset,
+  const size_t num_of_bytes)
+{
+  if (num_of_bytes == 0)
+    return dst;
+
+  // Short-circuit
+  if (
+    dst->type == src->type && !dst_offset && !src_offset &&
+    type_byte_size(dst->type).to_uint64() == num_of_bytes)
+    return src;
+
+  if (
+    is_array_type(src->type) || is_array_type(dst->type) ||
+    is_struct_type(dst->type) || is_union_type(dst->type) ||
+    is_struct_type(src->type) || is_union_type(src->type))
+  {
+    log_debug("memcpy", "Only primitives are supported for now");
+    return expr2tc();
+  }
+
+  // Base-case. Primitives!
+  return goto_symex_utils::gen_byte_memcpy(
+    src, dst, num_of_bytes, src_offset, dst_offset);
+}
+
+void offset_simplifier(expr2tc &e)
+{
+  simplify(e);
+  if (is_div2t(e))
+  {
+    auto as_div = to_div2t(e);
+    if (is_mul2t(as_div.side_1) && is_constant_int2t(as_div.side_2))
+    {
+      auto as_mul = to_mul2t(as_div.side_1);
+      if (
+        is_constant_int2t(as_mul.side_2) &&
+        (to_constant_int2t(as_mul.side_2).as_ulong() ==
+         to_constant_int2t(as_div.side_2).as_ulong()))
+        // if side_1 of mult is a pointer_offset, then it is just zero
+        if (is_pointer_offset2t(as_mul.side_1))
+          e = constant_int2tc(get_uint64_type(), BigInt(0));
+    }
+  }
+}
+
+void goto_symext::intrinsic_memcpy(
+
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  assert(func_call.operands.size() == 3 && "Wrong memcpy signature");
+
+  using namespace std::string_literals;
+  const auto bump_name = "c:@F@__memcpy_impl"s;
+
+  if (options.get_bool_option("no-simplify"))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  const execution_statet &ex_state = art.get_cur_state();
+  if (ex_state.cur_state->guard.is_false())
+    return;
+
+  expr2tc dst_arg = func_call.operands[0];
+  expr2tc src_arg = func_call.operands[1];
+  expr2tc n_arg = func_call.operands[2];
+
+  // Three steps:
+  // 1. Check if n_arg is constant;
+  // 2. Compute all SRC addresses and memory checks
+  // 3. Compute all DST addresses, memory check and compute operation result
+
+  cur_state->rename(n_arg);
+  if (!n_arg || is_symbol2t(n_arg))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  simplify(n_arg);
+  if (!is_constant_int2t(n_arg))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  const unsigned long number_of_bytes = to_constant_int2t(n_arg).as_ulong();
+
+  // Now grab all sources
+
+  std::list<dereference_callbackt::internal_item> src_items;
+  expr2tc src_deref = dereference2tc(get_empty_type(), src_arg);
+  internal_deref_items.clear();
+  dereference(src_deref, dereferencet::INTERNAL);
+
+  if (!internal_deref_items.size())
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  src_items.splice(src_items.end(), internal_deref_items);
+  assert(internal_deref_items.size() == 0);
+
+  // Sane checks here
+  for (dereference_callbackt::internal_item &item : src_items)
+  {
+    guardt guard = ex_state.cur_state->guard;
+    guard.add(item.guard);
+    expr2tc &item_object = item.object;
+    expr2tc &item_offset = item.offset;
+
+    cur_state->rename(item_object);
+    cur_state->rename(item_offset);
+
+    if (!item_object || !item_offset)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    offset_simplifier(item_offset);
+    if (!is_constant_int2t(item_offset))
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    const uint64_t number_of_offset =
+      to_constant_int2t(item_offset).value.to_uint64();
+
+    uint64_t type_size;
+    try
+    {
+      type_size = type_byte_size(item_object->type).to_uint64();
+    }
+    catch (const array_type2t::dyn_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    catch (const array_type2t::inf_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    if (is_code_type(item_object->type))
+    {
+      if (config.options.get_bool_option("enable-unreachability-intrinsic"))
+      {
+        // Workaround:
+        // linux-3.10-rc1-43_1a-bitvector-drivers--net--ethernet--broadcom--b44.ko--ldv_main0.cil.out.i
+        // generates an INVALID address pointing to both a struct and
+        // initializes an extern global function ptr with. Resulting in this
+        // being triggered wrongly. Need to check if it's a VSA issue or ESBMC
+        // initialization issue.
+        bump_call(func_call, bump_name);
+        return;
+      }
+
+      std::string error_msg =
+        fmt::format("dereference failure: trying to deref a ptr code");
+
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
+      continue;
+    }
+
+    // Over reading?
+    bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
+                         (number_of_offset > type_size);
+    if (
+      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      std::string error_msg = fmt::format(
+        "dereference failure on memcpy: reading memory segment of size {} with "
+        "{} "
+        "bytes",
+        type_size - number_of_offset,
+        number_of_bytes);
+
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
+      continue;
+    }
+  }
+
+  // Readings are sorted... now go for writings
+  expr2tc dst_deref = dereference2tc(get_empty_type(), dst_arg);
+  dereference(dst_deref, dereferencet::INTERNAL);
+
+  for (dereference_callbackt::internal_item &item : internal_deref_items)
+  {
+    guardt guard = ex_state.cur_state->guard;
+    guard.add(item.guard);
+    // expr2tc &item_object = item.object;
+    // expr2tc &item_offset = item.offset;
+
+    cur_state->rename(item.guard);
+    cur_state->rename(item.offset);
+
+    offset_simplifier(item.offset);
+    if (!is_constant_int2t(item.offset))
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    const uint64_t number_of_offset =
+      to_constant_int2t(item.offset).value.to_uint64();
+
+    uint64_t type_size;
+    try
+    {
+      type_size = type_byte_size(item.object->type).to_uint64();
+    }
+    catch (const array_type2t::dyn_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    catch (const array_type2t::inf_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
+                         (number_of_offset > type_size);
+    if (
+      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      std::string error_msg = fmt::format(
+        "dereference failure on memcpy: writing memory segment of size {} with "
+        "{} "
+        "bytes",
+        type_size - number_of_offset,
+        number_of_bytes);
+
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
+      continue;
+    }
+
+    // Time to do the actual copy
+    for (const auto &src_item : src_items)
+    {
+      // Offset is garanteed to be a constant
+      const uint64_t src_offset =
+        to_constant_int2t(src_item.offset).value.to_uint64();
+      const expr2tc new_object = do_memcpy_expression(
+        item.object,
+        number_of_offset,
+        src_item.object,
+        src_offset,
+        number_of_bytes);
+
+      if (!new_object)
+      {
+        bump_call(func_call, bump_name);
+        return;
+      }
+
+      guardt assignment_guard = guard;
+      assignment_guard.add(src_item.guard);
+
+      symex_assign(
+        code_assign2tc(item.object, new_object), false, assignment_guard);
+    }
+  }
+  if (!options.get_bool_option("no-pointer-check"))
+  {
+    expr2tc null_sym = symbol2tc(dst_arg->type, "NULL");
+
+    expr2tc dst_same = same_object2tc(dst_arg, null_sym);
+    expr2tc dst_null_check = not2tc(same_object2tc(dst_arg, null_sym));
+    ex_state.cur_state->guard.guard_expr(dst_null_check);
+    claim(dst_null_check, " dereference failure: NULL pointer on DST");
+
+    expr2tc src_same = same_object2tc(src_arg, null_sym);
+    expr2tc src_null_check = not2tc(same_object2tc(src_arg, null_sym));
+    ex_state.cur_state->guard.guard_expr(src_null_check);
+    claim(src_null_check, " dereference failure: NULL pointer on SRC");
+  }
+
+  expr2tc ret_ref = func_call.ret;
+  dereference(ret_ref, dereferencet::READ);
+  symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
+}
+
 /**
  * @brief This function will try to initialize the object pointed by
  * the address in a smarter way, minimizing the number of assignments.
