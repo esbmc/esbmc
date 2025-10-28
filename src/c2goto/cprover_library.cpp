@@ -93,6 +93,11 @@ static const struct buffer
 // The goto reader will only pick up symbols for these functions and their dependencies
 // This is a Python-specific whitelist invoked when you use set_functions_to_read
 const static std::vector<std::string> python_c_models = {
+  "__ESBMC_get_object_size",
+  "__ESBMC_assume",
+  "__VERIFIER_assume",
+  "__ESBMC_loop_invariant",
+  "strlen",
   "list_create",
   "list_in_bounds",
   "list_at",
@@ -334,7 +339,7 @@ void add_cprover_library(contextt &context, const languaget *language)
     const symbolt *symbol = context.find_symbol(s.id);
     if (
       (language && language->id() == "python") ||
-      (symbol != nullptr && symbol->value.is_nil()))
+      (symbol != nullptr && !symbol->value.is_nil()))
     {
       store_ctx.add(s);
 
