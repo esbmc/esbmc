@@ -9,13 +9,6 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
-const std::string kGetObjectSize = "__ESBMC_get_object_size";
-const std::string kStrlen = "strlen";
-const std::string kEsbmcAssume = "__ESBMC_assume";
-const std::string kVerifierAssume = "__VERIFIER_assume";
-const std::string kLoopInvariant = "__loop_invariant";
-const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
-
 function_call_builder::function_call_builder(
   python_converter &converter,
   const nlohmann::json &call)
@@ -37,13 +30,13 @@ bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
 bool function_call_builder::is_assume_call(const symbol_id &function_id) const
 {
   const std::string &func_name = function_id.get_function();
-  return (func_name == kEsbmcAssume || func_name == kVerifierAssume);
+  return (func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume");
 }
 
 bool function_call_builder::is_len_call(const symbol_id &function_id) const
 {
   const std::string &func_name = function_id.get_function();
-  return func_name == kGetObjectSize || func_name == kStrlen;
+  return func_name == "__ESBMC_get_object_size" || func_name == "strlen";
 }
 
 symbol_id function_call_builder::build_function_id() const
@@ -69,8 +62,8 @@ symbol_id function_call_builder::build_function_id() const
     func_name = func_json["id"];
 
     // Map Python loop invariant name to ESBMC internal name
-    if (func_name == kLoopInvariant)
-      func_name = kEsbmcLoopInvariant;
+    if (func_name == "__loop_invariant")
+      func_name = "__ESBMC_loop_invariant";
   }
   else if (func_type == "Attribute") // Handling obj_name.func_name() calls
   {
@@ -139,7 +132,7 @@ symbol_id function_call_builder::build_function_id() const
   if (func_name == "len")
   {
     const auto &arg = call_["args"][0];
-    func_name = kStrlen;
+    func_name = "strlen";
 
     // Special case: single character string literals should return 1 directly
     if (arg["_type"] == "Constant" && arg["value"].is_string())
@@ -158,7 +151,7 @@ symbol_id function_call_builder::build_function_id() const
     }
 
     if (arg["_type"] == "List")
-      func_name = kGetObjectSize;
+      func_name = "__ESBMC_get_object_size";
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
@@ -189,7 +182,7 @@ symbol_id function_call_builder::build_function_id() const
       if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
         var_type.empty())
-        func_name = kGetObjectSize;
+        func_name = "__ESBMC_get_object_size";
       else if (var_type == "str")
       {
         // Check if this is a single character by looking up the variable
@@ -409,54 +402,6 @@ exprt function_call_builder::build() const
       locationt loc = converter_.get_location_from_decl(call_);
       return converter_.get_string_handler().handle_string_lstrip(
         obj_expr, loc);
-    }
-  }
-
-  // Add len function to symbol table
-  if (is_len_call(function_id))
-  {
-    const auto &symbol_table = converter_.symbol_table();
-    const std::string &func_symbol_id = function_id.to_string();
-
-    if (symbol_table.find_symbol(func_symbol_id.c_str()) == nullptr)
-    {
-      code_typet code_type;
-      code_type.return_type() = long_long_int_type();
-      code_type.arguments().push_back(pointer_typet(empty_typet()));
-
-      const std::string &python_file = converter_.python_file();
-      const std::string &func_name = function_id.get_function();
-      locationt location = converter_.get_location_from_decl(call_);
-
-      symbolt symbol = converter_.create_symbol(
-        python_file, func_name, func_symbol_id, location, code_type);
-
-      converter_.add_symbol(symbol);
-    }
-  }
-
-  // Add loop invariant symbol to symbol table
-  if (function_id.get_function() == kEsbmcLoopInvariant)
-  {
-    const auto &symbol_table = converter_.symbol_table();
-    const std::string &func_symbol_id = function_id.to_string();
-
-    if (symbol_table.find_symbol(func_symbol_id.c_str()) == nullptr)
-    {
-      code_typet code_type;
-      code_type.return_type() = empty_typet();
-      code_typet::argumentt arg;
-      arg.type() = bool_type();
-      code_type.arguments().push_back(arg);
-
-      const std::string &python_file = converter_.python_file();
-      const std::string &func_name = function_id.get_function();
-      locationt location = converter_.get_location_from_decl(call_);
-
-      symbolt symbol = converter_.create_symbol(
-        python_file, func_name, func_symbol_id, location, code_type);
-
-      converter_.add_symbol(symbol);
     }
   }
 
