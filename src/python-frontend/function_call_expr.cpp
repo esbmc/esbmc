@@ -1133,7 +1133,23 @@ std::string function_call_expr::get_object_name() const
 
   std::string obj_name;
   if (subelement["_type"] == "Attribute")
-    obj_name = subelement["attr"].get<std::string>();
+  {
+    /* For attribute chains, use the class name resolved by build_function_id()
+     * 
+     * When we have self.f.foo(), the function ID builder has already determined
+     * that f's type is Foo and stored it in function_id_. We reuse that result
+     * rather than re-extracting "f" which would be incorrect.
+     */
+    if (!function_id_.get_class().empty())
+    {
+      std::string class_name = function_id_.get_class();
+      obj_name = (class_name.find("tag-") == 0) ? class_name.substr(4) : class_name;
+    }
+    else
+    {
+      obj_name = subelement["attr"].get<std::string>();
+    }
+  }
   else if (subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
     obj_name = function_id_.get_class();
   else if (subelement["_type"] == "Call")
