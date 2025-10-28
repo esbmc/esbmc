@@ -3562,8 +3562,10 @@ typet resolve_ternary_type(
     return else_type;
 
   // Incompatible types
-  log_warning(
-    "Ternary branches have incompatible types: {} vs {}, using default {}",
+  log_debug(
+    "python-frontend",
+    "[resolve_ternary_type] Ternary branches have incompatible types: {} vs "
+    "{}, using default {}",
     then_type.id_string(),
     else_type.id_string(),
     default_type.id_string());
