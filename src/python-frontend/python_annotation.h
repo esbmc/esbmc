@@ -1395,8 +1395,15 @@ private:
           func.contains("attr") && func.contains("value") &&
           func["value"]["_type"] == "Name" && func["value"].contains("id"))
         {
-          std::string class_name = func["attr"].template get<std::string>();
-          inferred_type = class_name;
+          std::string attr_name = func["attr"].template get<std::string>();
+
+          // Only use attribute as type if it looks like a constructor call
+          // (i.e., attribute name starts with uppercase)
+          if (!attr_name.empty() && std::isupper(attr_name[0]))
+            inferred_type = attr_name;
+          // For method calls that couldn't be resolved, return UNKNOWN
+          else
+            return InferResult::UNKNOWN;
         }
       }
     }
@@ -1564,7 +1571,8 @@ private:
     element.erase("type_comment");
 
     // Update value fields with the correct offsets - with null safety
-    auto update_offsets = [&inferred_type](Json &value) {
+    auto update_offsets = [&inferred_type](Json &value)
+    {
       if (value.contains("col_offset") && !value["col_offset"].is_null())
       {
         value["col_offset"] =
