@@ -1640,14 +1640,49 @@ exprt function_call_expr::handle_general_function_call()
       }
       else if (function_type_ == FunctionType::InstanceMethod)
       {
-        assert(obj_symbol);
-        assert(func_symbol);
+        if (obj_symbol && func_symbol)
+        {
+          converter_.update_instance_from_self(
+            get_classname_from_symbol_id(func_symbol->id.as_string()),
+            function_id_.get_function(),
+            obj_symbol_id.to_string());
+        }
 
-        // Update obj attributes from self
-        converter_.update_instance_from_self(
-          get_classname_from_symbol_id(func_symbol->id.as_string()),
-          function_id_.get_function(),
-          obj_symbol_id.to_string());
+        // Handle forward reference: method not yet in symbol table
+        if (!func_symbol)
+        {
+          locationt location = converter_.get_location_from_decl(call_);
+          code_function_callt call;
+          call.location() = location;
+          call.function() = symbol_exprt(func_symbol_id, code_typet());
+          call.type() = empty_typet();
+
+          if (obj_symbol)
+            call.arguments().push_back(
+              gen_address_of(symbol_expr(*obj_symbol)));
+
+          for (const auto &arg_node : call_["args"])
+          {
+            exprt arg = converter_.get_expr(arg_node);
+            if (arg.type().is_array())
+            {
+              if (
+                arg_node["_type"] == "Constant" &&
+                arg_node["value"].is_string())
+              {
+                arg = string_constantt(
+                  arg_node["value"].get<std::string>(),
+                  arg.type(),
+                  string_constantt::k_default);
+              }
+              call.arguments().push_back(address_of_exprt(arg));
+            }
+            else
+              call.arguments().push_back(arg);
+          }
+
+          return std::move(call);
+        }
       }
     }
     else
