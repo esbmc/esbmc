@@ -1571,8 +1571,7 @@ private:
     element.erase("type_comment");
 
     // Update value fields with the correct offsets - with null safety
-    auto update_offsets = [&inferred_type](Json &value)
-    {
+    auto update_offsets = [&inferred_type](Json &value) {
       if (value.contains("col_offset") && !value["col_offset"].is_null())
       {
         value["col_offset"] =
