@@ -1716,17 +1716,24 @@ exprt function_call_expr::handle_general_function_call()
           typet return_type = empty_typet();
           const auto &func_node = find_function(
             converter_.ast()["body"], function_id_.get_function());
-          if (
-            !func_node.empty() && func_node.contains("returns") &&
-            !func_node["returns"].is_null())
+          if (!func_node.empty())
           {
-            const auto &returns = func_node["returns"];
-            if (returns.contains("id"))
+            if (
+              func_node.contains("returns") && !func_node["returns"].is_null())
             {
-              return_type =
-                type_handler_.get_typet(returns["id"].get<std::string>());
+              const auto &returns = func_node["returns"];
+              if (returns.contains("id"))
+              {
+                return_type =
+                  type_handler_.get_typet(returns["id"].get<std::string>());
+              }
             }
+            exprt body = converter_.get_block(func_node["body"]);
+            exprt const_return = converter_.get_function_constant_return(body);
+            if (!const_return.is_nil())
+              return const_return;
           }
+
           call.type() = return_type;
 
           // Process arguments normally
