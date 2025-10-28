@@ -1647,7 +1647,7 @@ exprt function_call_expr::handle_general_function_call()
             function_id_.get_function(),
             obj_symbol_id.to_string());
         }
-        
+
         // Handle forward reference: method not yet in symbol table
         if (!func_symbol)
         {
@@ -1658,7 +1658,8 @@ exprt function_call_expr::handle_general_function_call()
           call.type() = empty_typet();
 
           if (obj_symbol)
-            call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+            call.arguments().push_back(
+              gen_address_of(symbol_expr(*obj_symbol)));
 
           for (const auto &arg_node : call_["args"])
           {
