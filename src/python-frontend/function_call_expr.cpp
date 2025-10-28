@@ -306,9 +306,7 @@ exprt function_call_expr::handle_isinstance() const
         //   => cond ? isinstance(then, type) : isinstance(else, type)
         //   => cond ? then_matches : else_matches
         if_exprt result(
-          cond,
-          gen_boolean(then_matches),
-          gen_boolean(else_matches));
+          cond, gen_boolean(then_matches), gen_boolean(else_matches));
         result.type() = type_handler_.get_typet("bool", 0);
         return result;
       }
@@ -340,9 +338,7 @@ exprt function_call_expr::handle_isinstance() const
       else
       {
         if_exprt result(
-          if_expr.cond(),
-          gen_boolean(then_matches),
-          gen_boolean(else_matches));
+          if_expr.cond(), gen_boolean(then_matches), gen_boolean(else_matches));
         result.type() = type_handler_.get_typet("bool", 0);
         return result;
       }
