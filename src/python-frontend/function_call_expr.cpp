@@ -1143,7 +1143,8 @@ std::string function_call_expr::get_object_name() const
     if (!function_id_.get_class().empty())
     {
       std::string class_name = function_id_.get_class();
-      obj_name = (class_name.find("tag-") == 0) ? class_name.substr(4) : class_name;
+      obj_name =
+        (class_name.find("tag-") == 0) ? class_name.substr(4) : class_name;
     }
     else
     {

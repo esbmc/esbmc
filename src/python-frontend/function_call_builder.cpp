@@ -90,20 +90,20 @@ symbol_id function_call_builder::build_function_id() const
        * resolving each component's type by looking up struct members in the
        * symbol table, until we reach the final object whose class we need.
        */
-      
-      std::function<typet(const nlohmann::json&)> resolve_attr_type = 
-        [&](const nlohmann::json &node) -> typet
-      {
+
+      std::function<typet(const nlohmann::json &)> resolve_attr_type =
+        [&](const nlohmann::json &node) -> typet {
         if (node["_type"] == "Name")
         {
           // Base case: resolve variable to its type
           std::string name = node["id"].get<std::string>();
-          
+
           // Skip module names - let the module handling logic deal with them
           if (converter_.is_imported_module(name))
             return typet();
-          
-          symbol_id var_sid(python_file, current_class_name, current_function_name);
+
+          symbol_id var_sid(
+            python_file, current_class_name, current_function_name);
           var_sid.set_object(name);
           symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
           return var_symbol ? var_symbol->type : typet();
@@ -114,30 +114,30 @@ symbol_id function_call_builder::build_function_id() const
           typet base_type = resolve_attr_type(node["value"]);
           if (base_type.id().empty())
             return typet();
-          
+
           // Normalize type (dereference pointers, follow symbol types)
           if (base_type.is_pointer())
             base_type = base_type.subtype();
           if (base_type.id() == "symbol")
             base_type = converter_.ns.follow(base_type);
-          
+
           // Look up the member in the struct
           if (base_type.is_struct())
           {
             const struct_typet &struct_type = to_struct_type(base_type);
             std::string attr = node["attr"].get<std::string>();
-            return struct_type.has_component(attr) 
-              ? struct_type.get_component(attr).type() 
-              : typet();
+            return struct_type.has_component(attr)
+                     ? struct_type.get_component(attr).type()
+                     : typet();
           }
           return typet();
         }
         return typet();
       };
-      
+
       // Resolve the full attribute chain type
       typet obj_type = resolve_attr_type(func_json["value"]);
-      
+
       if (!obj_type.id().empty())
       {
         // Normalize the resolved type
@@ -145,7 +145,7 @@ symbol_id function_call_builder::build_function_id() const
           obj_type = obj_type.subtype();
         if (obj_type.id() == "symbol")
           obj_type = converter_.ns.follow(obj_type);
-        
+
         // Extract class name from struct type
         if (obj_type.is_struct())
         {
