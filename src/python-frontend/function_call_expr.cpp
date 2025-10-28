@@ -260,12 +260,92 @@ exprt function_call_expr::handle_isinstance() const
   if (args.size() != 2)
     throw std::runtime_error("isinstance() expects 2 arguments");
 
-  // Convert the first argument (the object being checked) into an expression
-  exprt obj_expr = converter_.get_expr(args[0]);
+  const auto &obj_arg = args[0];
   const auto &type_arg = args[1];
 
+  // Special handling: check if the object is a variable assigned from IfExp
+  if (
+    obj_arg.contains("_type") && obj_arg["_type"] == "Name" &&
+    obj_arg.contains("id") && type_arg["_type"] == "Name")
+  {
+    std::string var_name = obj_arg["id"].get<std::string>();
+    nlohmann::json var_decl = json_utils::find_var_decl(
+      var_name, converter_.current_function_name(), converter_.ast());
+
+    // Check if variable is assigned from a ternary operator (IfExp)
+    if (
+      !var_decl.empty() && var_decl.contains("value") &&
+      var_decl["value"].contains("_type") &&
+      var_decl["value"]["_type"] == "IfExp")
+    {
+      const auto &ifexp = var_decl["value"];
+
+      // Convert the condition and branches directly from AST
+      exprt cond = converter_.get_expr(ifexp["test"]);
+      exprt then_expr = converter_.get_expr(ifexp["body"]);
+      exprt else_expr = converter_.get_expr(ifexp["orelse"]);
+
+      // Check if each branch matches the type
+      bool then_matches = is_same_type(then_expr, type_arg);
+      bool else_matches = is_same_type(else_expr, type_arg);
+
+      if (then_matches && else_matches)
+      {
+        // Both branches match - always return true
+        return gen_boolean(true);
+      }
+      else if (!then_matches && !else_matches)
+      {
+        // Neither branch matches - always return false
+        return gen_boolean(false);
+      }
+      else
+      {
+        // One branch matches, one doesn't - generate runtime check
+        // isinstance(x, type) where x = (cond ? then : else)
+        //   => cond ? isinstance(then, type) : isinstance(else, type)
+        //   => cond ? then_matches : else_matches
+        if_exprt result(
+          cond, gen_boolean(then_matches), gen_boolean(else_matches));
+        result.type() = type_handler_.get_typet("bool", 0);
+        return result;
+      }
+    }
+  }
+
+  // Convert the first argument (the object being checked) into an expression
+  exprt obj_expr = converter_.get_expr(obj_arg);
+
   if (type_arg["_type"] == "Name")
+  {
+    // Check if the expression itself is an if expression
+    if (obj_expr.id() == "if")
+    {
+      const if_exprt &if_expr = to_if_expr(obj_expr);
+
+      // Check if each branch matches the type
+      bool then_matches = is_same_type(if_expr.true_case(), type_arg);
+      bool else_matches = is_same_type(if_expr.false_case(), type_arg);
+
+      if (then_matches && else_matches)
+      {
+        return gen_boolean(true);
+      }
+      else if (!then_matches && !else_matches)
+      {
+        return gen_boolean(false);
+      }
+      else
+      {
+        if_exprt result(
+          if_expr.cond(), gen_boolean(then_matches), gen_boolean(else_matches));
+        result.type() = type_handler_.get_typet("bool", 0);
+        return result;
+      }
+    }
+
     return gen_boolean(is_same_type(obj_expr, type_arg));
+  }
   else if (type_arg["_type"] == "Tuple")
   {
     const auto &elts = type_arg["elts"];
