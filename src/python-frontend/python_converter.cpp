@@ -82,9 +82,10 @@ static std::string get_op(const std::string &op, const typet &type)
   // Convert the operator to lowercase to allow case-insensitive comparison.
   std::string lower_op = op;
   std::transform(
-    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-      return std::tolower(c);
-    });
+    lower_op.begin(),
+    lower_op.end(),
+    lower_op.begin(),
+    [](unsigned char c) { return std::tolower(c); });
 
   // Special case: if the type is floating-point, use IEEE-specific operators.
   if (type.is_floatbv())
@@ -450,7 +451,8 @@ symbol_id python_converter::create_symbol_id() const
 
 exprt python_converter::compute_math_expr(const exprt &expr) const
 {
-  auto resolve_symbol = [this](const exprt &operand) -> exprt {
+  auto resolve_symbol = [this](const exprt &operand) -> exprt
+  {
     if (operand.is_symbol())
     {
       symbolt *s = symbol_table_.find_symbol(operand.identifier());
@@ -731,9 +733,10 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     // Python-style error: float < str → TypeError
     std::string lower_op = op;
     std::transform(
-      lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-        return std::tolower(c);
-      });
+      lower_op.begin(),
+      lower_op.end(),
+      lower_op.begin(),
+      [](unsigned char c) { return std::tolower(c); });
 
     const auto &loc = bin_expr.location();
     const auto it = operator_map.find(lower_op);
@@ -761,7 +764,8 @@ void python_converter::handle_float_division(
 {
   const typet float_type = double_type();
 
-  auto promote_to_float = [&](exprt &e) {
+  auto promote_to_float = [&](exprt &e)
+  {
     const typet &t = e.type();
     const bool is_integer = type_utils::is_integer_type(t);
 
@@ -847,7 +851,8 @@ bool python_converter::has_unsupported_side_effects_internal(
   const exprt &lhs,
   const exprt &rhs)
 {
-  auto has_unsupported_side_effect = [](const exprt &expr) {
+  auto has_unsupported_side_effect = [](const exprt &expr)
+  {
     return expr.id() == "sideeffect" &&
            expr.get("statement") != "function_call";
   };
@@ -1368,7 +1373,8 @@ void python_converter::convert_function_calls_to_side_effects(
   exprt &lhs,
   exprt &rhs)
 {
-  auto to_side_effect_call = [](exprt &expr) {
+  auto to_side_effect_call = [](exprt &expr)
+  {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
     side_effect.function() = code.function();
@@ -1906,7 +1912,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
 
-  auto handle_keywords = [&](exprt &call_expr) {
+  auto handle_keywords = [&](exprt &call_expr)
+  {
     if (!element.contains("keywords") || element["keywords"].empty())
       return;
 
@@ -3159,6 +3166,33 @@ void python_converter::get_var_assign(
       symbol.is_extern = false;
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
     }
+    // Special handling for function call assignments without type annotations
+    // Convert the RHS first to determine the type, then create the symbol
+    if (
+      !lhs_symbol && !is_global && ast_node.contains("value") &&
+      ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "Call")
+    {
+      // Convert RHS first to get its type
+      is_converting_rhs = true;
+      exprt rhs_expr = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+
+      locationt location = get_location_from_decl(target);
+      std::string module_name = location.get_file().as_string();
+
+      // Use the actual return type from the function call
+      typet inferred_type = rhs_expr.type();
+      if (inferred_type.is_empty())
+        inferred_type = any_type();
+
+      symbolt symbol = create_symbol(
+        module_name, name, sid.to_string(), location, inferred_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+    }
 
     if (!lhs_symbol && !is_global)
       throw std::runtime_error("Type undefined for \"" + name + "\"");
@@ -3626,7 +3660,8 @@ std::string
 python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
 {
   std::function<std::string(const nlohmann::json &)> extract_type =
-    [&](const nlohmann::json &node) -> std::string {
+    [&](const nlohmann::json &node) -> std::string
+  {
     if (
       node.contains("_type") && node["_type"] == "Constant" &&
       node.contains("value") && node["value"].is_null())
@@ -3784,45 +3819,46 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
   TypeFlags flags;
 
   std::function<void(const nlohmann::json &)> scan =
-    [&](const nlohmann::json &body) {
-      for (const auto &stmt : body)
+    [&](const nlohmann::json &body)
+  {
+    for (const auto &stmt : body)
+    {
+      if (stmt["_type"] == "Return" && !stmt["value"].is_null())
       {
-        if (stmt["_type"] == "Return" && !stmt["value"].is_null())
-        {
-          const auto &val = stmt["value"];
+        const auto &val = stmt["value"];
 
-          if (val["_type"] == "Constant")
+        if (val["_type"] == "Constant")
+        {
+          const auto &constant_val = val["value"];
+          if (constant_val.is_number_float())
+            flags.has_float = true;
+          else if (constant_val.is_number_integer())
+            flags.has_int = true;
+          else if (constant_val.is_boolean())
+            flags.has_bool = true;
+          else
           {
-            const auto &constant_val = val["value"];
-            if (constant_val.is_number_float())
-              flags.has_float = true;
-            else if (constant_val.is_number_integer())
-              flags.has_int = true;
-            else if (constant_val.is_boolean())
-              flags.has_bool = true;
-            else
-            {
-              std::string type_name = constant_val.is_string()   ? "string"
-                                      : constant_val.is_null()   ? "null"
-                                      : constant_val.is_object() ? "object"
-                                      : constant_val.is_array()  ? "array"
-                                                                 : "unknown";
-              throw std::runtime_error(
-                "Unsupported return type '" + type_name + "' detected");
-            }
-          }
-          else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
-          {
-            flags.has_float = true; // Default for expressions
+            std::string type_name = constant_val.is_string()   ? "string"
+                                    : constant_val.is_null()   ? "null"
+                                    : constant_val.is_object() ? "object"
+                                    : constant_val.is_array()  ? "array"
+                                                               : "unknown";
+            throw std::runtime_error(
+              "Unsupported return type '" + type_name + "' detected");
           }
         }
-
-        if (stmt.contains("body") && stmt["body"].is_array())
-          scan(stmt["body"]);
-        if (stmt.contains("orelse") && stmt["orelse"].is_array())
-          scan(stmt["orelse"]);
+        else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
+        {
+          flags.has_float = true; // Default for expressions
+        }
       }
-    };
+
+      if (stmt.contains("body") && stmt["body"].is_array())
+        scan(stmt["body"]);
+      if (stmt.contains("orelse") && stmt["orelse"].is_array())
+        scan(stmt["orelse"]);
+    }
+  };
 
   scan(function_body);
   return flags;
@@ -3835,7 +3871,8 @@ void python_converter::process_function_arguments(
   const locationt &location)
 {
   // Process a single argument
-  auto process_argument = [&](const nlohmann::json &element) {
+  auto process_argument = [&](const nlohmann::json &element)
+  {
     std::string arg_name = element["arg"].get<std::string>();
     typet arg_type;
 
@@ -4405,7 +4442,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         test.make_typecast(current_element_type);
 
       // Attach assertion message if present
-      auto attach_assert_message = [&element](code_assertt &assert_code) {
+      auto attach_assert_message = [&element](code_assertt &assert_code)
+      {
         if (element.contains("msg") && !element["msg"].is_null())
         {
           std::string msg;
@@ -4901,9 +4939,9 @@ void python_converter::process_module_imports(
       current_python_file = nested_python_file;
 
       create_builtin_symbols();
-      exprt imported_code = with_ast(&nested_module_json, [&]() {
-        return get_block(nested_module_json["body"]);
-      });
+      exprt imported_code = with_ast(
+        &nested_module_json,
+        [&]() { return get_block(nested_module_json["body"]); });
       convert_expression_to_code(imported_code);
 
       // Accumulate this module's code
@@ -5121,9 +5159,9 @@ void python_converter::convert()
           imported_module_json, const_cast<global_scope &>(global_scope_));
         imported_annotator.add_type_annotation();
 
-        exprt imported_code = with_ast(&imported_module_json, [&]() {
-          return get_block(imported_module_json["body"]);
-        });
+        exprt imported_code = with_ast(
+          &imported_module_json,
+          [&]() { return get_block(imported_module_json["body"]); });
 
         convert_expression_to_code(imported_code);
 
