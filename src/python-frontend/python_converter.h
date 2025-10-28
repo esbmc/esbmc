@@ -265,6 +265,8 @@ private:
 
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
 
+  exprt get_tuple_expr(const nlohmann::json &element);
+
   std::pair<exprt, exprt>
   resolve_comparison_operands_internal(const exprt &lhs, const exprt &rhs);
 

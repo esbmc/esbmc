@@ -133,7 +133,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 ### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
-- **Data Structures**: Supports operations on Python's built-in data structures, including lists and strings, with features such as concatenation and bounds checks.
+- **Data Structures**: Supports operations on Python's built-in data structures, including lists, strings, and tuples, with features such as concatenation and bounds checks.
   - **List Operations**:
     - **append()**: Add elements to the end of a list.
     - **extend()**: Extends a list by appending all elements from an iterable (e.g., `list1.extend(list2)` or `list1.extend([3, 4, 5])`).
@@ -155,6 +155,20 @@ Below is an overview of ESBMC-Python's key capabilities:
       - **Omitted Bounds**: Supports slices with omitted start (`string[:end]`) or end (`string[start:]`) indices.
       - **Negative Indices**: Full support for negative indexing (e.g., `string[-3:]` returns the last three characters).
       - **Empty Slices**: Correctly handles edge cases such as `string[0:0]` (returns empty string).
+  - **Tuple Support**: Support for Python's tuple data structure:
+    - **Tuple Literals**: Supports tuple creation using parentheses syntax (e.g., `(1, 2, 3)`, `(42, "hello", 3.14)`).
+    - **Empty Tuples**: Supports empty tuple literals `()`.
+    - **Single Element Tuples**: Handles single-element tuples with trailing comma (e.g., `(5,)`).
+    - **Mixed Type Tuples**: Supports tuples containing elements of different types (e.g., integers, strings, floats, booleans).
+    - **Nested Tuples**: Support for tuples containing other tuples (e.g., `((1, 2), (3, 4))`).
+    - **Tuple Indexing**: Supports accessing tuple elements using subscript notation with constant indices (e.g., `t[0]`, `t[2]`).
+      - Includes bounds checking to detect out-of-range access.
+    - **Tuple Type Annotations**: Supports both generic tuple annotations and parameterized tuple type hints:
+      - **Generic Annotation**: `t: tuple = (1, 2, 3)` - type inferred from value.
+      - **Parameterized Annotation**: `def foo() -> tuple[int, int]`: - explicitly specifies element types.
+    - **Tuple Equality**: Supports equality comparisons between tuples (e.g., `t1 == (1, 2, 3)`).
+    - **len() Function**: The built-in `len()` function works with tuples to return the number of elements.
+    - **isinstance() Type Checking**: Supports runtime type checking with `isinstance(obj, tuple)`.
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
 ### Error Handling and Assertions
@@ -341,7 +355,14 @@ The current version of ESBMC-Python has the following limitations:
   - String return values are explicitly not supported and will cause a verification error with the message "Unsupported return type 'string' detected".
   - Other types (`objects`, `arrays`, `null`) are not supported as return values for Any-typed functions.
   - Type inference defaults to `double (float)` when no specific type can be determined from return statements.
-  
+- Tuple Limitations:
+  - Tuple indexing requires constant indices; variable indices are not supported (e.g., `t[i]` where `i` is a variable will fail).
+  - Tuple iteration (e.g., `for item in my_tuple:`) is not yet supported.
+  - Tuple methods such as `.count()` and `.index()` are not yet supported.
+  - Tuple concatenation with `+` operator is not yet supported.
+  - Tuple repetition with `*` operator is not yet supported.
+  - Tuple slicing is not yet supported.
+
 ### Example 1: Division by Zero in Python
 
 The following Python program executes without issues in standard Python 3. However, when analyzed using ESBMC, it reveals a hidden bug: a possible division by zero.

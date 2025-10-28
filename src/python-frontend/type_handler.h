@@ -74,6 +74,8 @@ public:
 
   typet get_list_element_type() const;
 
+  typet get_tuple_type(const nlohmann::json &tuple_node) const;
+
   /*
    * Determines the type of an operand in binary operations.
    * @param operand The JSON node representing the operand.
