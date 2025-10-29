@@ -147,6 +147,22 @@ void function_call_expr::get_function_type()
   {
     std::string caller = get_object_name();
 
+    // Check for nested instance attribute (e.g., self.b.a.method())
+    // Exclude module.Class.method() pattern
+    bool is_nested_instance_attr = false;
+    if (call_["func"]["value"]["_type"] == "Attribute")
+    {
+      if (call_["func"]["value"]["value"]["_type"] == "Name")
+      {
+        std::string root_name =
+          call_["func"]["value"]["value"]["id"].get<std::string>();
+        if (!converter_.is_imported_module(root_name))
+        {
+          is_nested_instance_attr = true;
+        }
+      }
+    }
+
     // Handling a function call as a class method call when:
     // (1) The caller corresponds to a class name, for example: MyClass.foo().
     // (2) Calling methods of built-in types, such as int.from_bytes()
@@ -154,9 +170,10 @@ void function_call_expr::get_function_type()
     // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
     // If the caller is a class or a built-in type, the following condition detects a class method call.
     if (
-      is_class(caller, converter_.ast()) ||
-      type_utils::is_builtin_type(caller) ||
-      type_utils::is_builtin_type(type_handler_.get_var_type(caller)))
+      !is_nested_instance_attr &&
+      (is_class(caller, converter_.ast()) ||
+       type_utils::is_builtin_type(caller) ||
+       type_utils::is_builtin_type(type_handler_.get_var_type(caller))))
     {
       function_type_ = FunctionType::ClassMethod;
     }
@@ -1133,7 +1150,24 @@ std::string function_call_expr::get_object_name() const
 
   std::string obj_name;
   if (subelement["_type"] == "Attribute")
-    obj_name = subelement["attr"].get<std::string>();
+  {
+    /* For attribute chains, use the class name resolved by build_function_id()
+     * 
+     * When we have self.f.foo(), the function ID builder has already determined
+     * that f's type is Foo and stored it in function_id_. We reuse that result
+     * rather than re-extracting "f" which would be incorrect.
+     */
+    if (!function_id_.get_class().empty())
+    {
+      std::string class_name = function_id_.get_class();
+      obj_name =
+        (class_name.find("tag-") == 0) ? class_name.substr(4) : class_name;
+    }
+    else
+    {
+      obj_name = subelement["attr"].get<std::string>();
+    }
+  }
   else if (subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
     obj_name = function_id_.get_class();
   else if (subelement["_type"] == "Call")
@@ -1787,9 +1821,27 @@ exprt function_call_expr::handle_general_function_call()
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
-    assert(obj_symbol);
-    // Passing object as "self" (first) parameter on instance method calls
-    call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    if (obj_symbol)
+    {
+      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    }
+    else
+    {
+      // Nested attribute: build expression dynamically
+      if (
+        call_["func"]["_type"] == "Attribute" &&
+        call_["func"].contains("value"))
+      {
+        exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+        call.arguments().push_back(gen_address_of(obj_expr));
+      }
+      else
+      {
+        assert(
+          false &&
+          "InstanceMethod requires obj_symbol or valid attribute chain");
+      }
+    }
   }
   else if (function_type_ == FunctionType::ClassMethod)
   {

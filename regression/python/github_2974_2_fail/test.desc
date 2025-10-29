@@ -1,0 +1,6 @@
+CORE
+main.py
+--no-pointer-check
+^VERIFICATION FAILED$
+
+
