@@ -1075,14 +1075,22 @@ exprt python_converter::handle_none_comparison(
     (lhs_is_none && rhs.is_symbol() && rhs.type().is_pointer()) ||
     (rhs_is_none && lhs.is_symbol() && lhs.type().is_pointer()))
   {
-    typet ptr_type = lhs.type().subtype().is_array() ? lhs.type() : rhs.type();
-    exprt target_expr = lhs.type().subtype().is_array() ? lhs : rhs;
+    // Determine which expression is the pointer and select appropriate type
+    // For array subtypes, use the full pointer type; otherwise use the other type
+    const bool lhs_is_array_ptr =
+      lhs.type().is_pointer() && lhs.type().subtype().is_array();
+    const typet &ptr_type = lhs_is_array_ptr ? lhs.type() : rhs.type();
+    const exprt &ptr_expr = lhs_is_array_ptr ? lhs : rhs;
+
+    // Create NULL pointer of the appropriate type
     constant_exprt null_ptr(ptr_type);
     null_ptr.set_value("NULL");
+
+    // Generate equality or inequality comparison
     if (is_eq)
-      return equality_exprt(target_expr, null_ptr);
+      return equality_exprt(ptr_expr, null_ptr);
     else
-      return not_exprt(equality_exprt(target_expr, null_ptr));
+      return not_exprt(equality_exprt(ptr_expr, null_ptr));
   }
 
   // None vs non-pointer: constant fold to false/true
