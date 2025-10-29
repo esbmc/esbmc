@@ -3393,7 +3393,7 @@ void python_converter::get_var_assign(
         }
       }
 
-      if (!rhs.type().is_pointer() && !rhs.type().is_empty())
+      if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
         rhs.op0() = lhs;
 
       if (rhs.type() == type_handler_.get_list_type())
