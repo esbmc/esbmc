@@ -1018,6 +1018,19 @@ class Preprocessor(ast.NodeTransformer):
                     assignments.append(individual_assign)
             return assignments
 
+    def visit_AnnAssign(self, node):
+        """Track type annotations from annotated assignments like x: int = 5"""
+        # First visit child nodes
+        self.generic_visit(node)
+
+        # Track the type if target is a simple Name and has annotation
+        if isinstance(node.target, ast.Name) and node.annotation is not None:
+            var_name = node.target.id
+            var_type = self._extract_type_from_annotation(node.annotation)
+            self.known_variable_types[var_name] = var_type
+
+        return node
+
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
