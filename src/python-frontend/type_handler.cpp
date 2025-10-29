@@ -279,6 +279,10 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "tuple")
     return empty_typet();
 
+  // Reuse list infrastructure for simplicity for now
+  if (ast_type == "set")
+    return get_list_type();
+
   // Custom user-defined types / classes
   if (
     json_utils::is_class(ast_type, converter_.ast()) ||

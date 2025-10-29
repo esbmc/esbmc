@@ -29,7 +29,7 @@ public:
   {
   }
 
-  exprt get();
+  exprt get(bool is_set = false);
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
