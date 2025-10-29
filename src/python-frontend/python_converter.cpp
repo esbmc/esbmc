@@ -1065,12 +1065,10 @@ exprt python_converter::handle_none_comparison(
   bool lhs_is_none = (lhs.type() == none_type());
   bool rhs_is_none = (rhs.type() == none_type());
 
-  // None vs any pointer: create NULL of the rhs type
-  // Rationale: In our C/C++ target environment, Optional types (Union[T, None])
-  // and nullable references are represented as pointers. When comparing None
-  // with a pointer type, we must generate a NULL pointer comparison rather than
-  // constant folding, since the pointer's runtime value is unknown.
-  // This correctly handles: Optional[int], Optional[MyClass], list references, etc.
+  // None vs pointer comparison: create NULL of the correct pointer type.
+  // Rationale: In our C/C++ target environment, Optional[T] (Union[T, None])
+  // are represented as pointers. Comparing None to such types must yield
+  // a NULL pointer comparison rather than a constant fold.
   if (
     (lhs_is_none && rhs.is_symbol() && rhs.type().is_pointer()) ||
     (rhs_is_none && lhs.is_symbol() && lhs.type().is_pointer()))
