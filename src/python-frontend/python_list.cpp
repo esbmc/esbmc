@@ -401,19 +401,26 @@ symbolt &python_list::create_list()
   return list_symbol;
 }
 
-exprt python_list::get()
+exprt python_list::get(bool is_set)
 {
   symbolt &list_symbol = create_list();
+  list_symbol.is_set = true;
+
   const std::string &list_id = list_symbol.id.as_string();
 
+  // TODO: if same element is added indirectly this will fail
+  //       e.g. (2, 1+1)
+  std::set<exprt> elements;
   for (auto &e : list_value_["elts"])
   {
     exprt elem = converter_.get_expr(e);
+    if (is_set && elements.count(elem))
+      continue;
+
+    elements.insert(elem);
     exprt list_push_func_call =
       build_push_list_call(list_symbol, list_value_, elem);
-
     converter_.add_instruction(list_push_func_call);
-
     list_type_map[list_id].push_back(
       std::make_pair(elem.identifier().as_string(), elem.type()));
   }

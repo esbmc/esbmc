@@ -2370,31 +2370,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
-    // Handle both List and Set
-    if (element["_type"] == "Set")
+    // For now, treat set literals such as lists
+    // Store elements in order they appear (order doesn't matter for sets)
+    if (build_static_lists)
     {
-      // For now, treat set literals such as lists
-      // Store elements in order they appear (order doesn't matter for sets)
-      if (build_static_lists)
-      {
-        typet size = type_handler_.get_typet(element["elts"]);
-        return get_static_array(element, size);
-      }
-
-      python_list list(*this, element);
-      expr = list.get();
+      typet size = type_handler_.get_typet(element["elts"]);
+      return get_static_array(element, size);
     }
-    else
-    {
-      if (build_static_lists)
-      {
-        typet size = type_handler_.get_typet(element["elts"]);
-        return get_static_array(element, size);
-      }
-
-      python_list list(*this, element);
-      expr = list.get();
-    }
+    python_list list(*this, element);
+    expr = list.get(element["_type"] == "Set");
     break;
   }
   case ExpressionType::VARIABLE_REF:

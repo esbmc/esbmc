@@ -25,6 +25,9 @@ public:
   // ANSI-C
   bool lvalue, static_lifetime, file_local, is_extern;
 
+  // For python use
+  bool is_set;
+
   symbolt();
 
   void clear();
