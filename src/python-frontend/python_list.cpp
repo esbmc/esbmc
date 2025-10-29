@@ -459,6 +459,33 @@ exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
   return exprt();
 }
 
+exprt python_list::remove_function_calls_recursive(
+  exprt &e,
+  const nlohmann::json &node)
+{
+  // Bounds might generate intermediate calls, we need to add lhs to all of them.
+  const auto add_lhs_var_bound = [&](exprt &foo) -> exprt
+  {
+    if (!foo.is_function_call())
+      return foo;
+    code_function_callt &call = static_cast<code_function_callt &>(foo);
+    symbolt &lhs = converter_.create_tmp_symbol(
+      node, "__python_function_call_lhs$", size_type(), exprt());
+    call.lhs() = symbol_expr(lhs);
+    converter_.add_instruction(call);
+    return symbol_expr(lhs);
+  };
+
+  auto res = add_lhs_var_bound(e);
+  for (auto &ee : res.operands())
+  {
+    ee = add_lhs_var_bound(ee);
+    remove_function_calls_recursive(ee, node);
+  }
+
+  return res;
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -495,7 +522,8 @@ exprt python_list::handle_range_slice(
         return minus_exprt(logical_len, abs_value);
       }
 
-      return converter_.get_expr(bound);
+      exprt e = converter_.get_expr(bound);
+      return remove_function_calls_recursive(e, slice_node);
     };
 
     // Process bounds
