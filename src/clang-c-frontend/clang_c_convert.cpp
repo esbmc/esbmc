@@ -1310,7 +1310,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     // Unsupported extensions (optional don't care)
   case clang::Type::Complex:
   {
-    // Ok, complex number are not really an extension, but it is only
+    // Ok, complex numbers are not really an extension, but it is only
     // used by extensions though.
     if (config.options.get_bool_option("dont-care-about-missing-extensions"))
       break;
