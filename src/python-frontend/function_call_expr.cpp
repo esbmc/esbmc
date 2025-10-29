@@ -152,10 +152,9 @@ void function_call_expr::get_function_type()
     bool is_nested_instance_attr = false;
     if (call_["func"]["value"]["_type"] == "Attribute")
     {
-      std::string root_name;
       if (call_["func"]["value"]["value"]["_type"] == "Name")
       {
-        root_name = call_["func"]["value"]["value"]["id"].get<std::string>();
+        std::string root_name = call_["func"]["value"]["value"]["id"].get<std::string>();
         if (!converter_.is_imported_module(root_name))
         {
           is_nested_instance_attr = true;
