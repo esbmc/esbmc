@@ -110,4 +110,6 @@ private:
 
   // <list_id, <elem_id, elem_type>>
   static std::unordered_map<std::string, TypeInfo> list_type_map;
+
+  exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
 };
