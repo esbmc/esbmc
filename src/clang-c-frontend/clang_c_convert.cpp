@@ -1478,6 +1478,7 @@ bool clang_c_convertert::get_builtin_type(
       c_type = "_Float16";
       break;
     }
+    // fallthrough
 
   default:
   {
