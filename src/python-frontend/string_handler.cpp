@@ -686,7 +686,26 @@ exprt string_handler::handle_string_isdigit(
   const exprt &string_obj,
   const locationt &location)
 {
-  // Ensure it's a proper null-terminated string
+  // Check if this is a single character
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    // Call Python's single-character version
+    symbolt *isdigit_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_isdigit");
+    if (!isdigit_symbol)
+      throw std::runtime_error(
+        "__python_char_isdigit function not found in symbol table");
+
+    side_effect_expr_function_callt isdigit_call;
+    isdigit_call.function() = symbol_expr(*isdigit_symbol);
+    isdigit_call.arguments().push_back(string_obj);
+    isdigit_call.location() = location;
+    isdigit_call.type() = bool_type();
+
+    return isdigit_call;
+  }
+
+  // For full strings, use the string version
   exprt string_copy = string_obj;
   exprt str_expr = ensure_null_terminated_string(string_copy);
 
