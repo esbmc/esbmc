@@ -182,6 +182,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"IfExp", ExpressionType::IF_EXPR},
     {"Subscript", ExpressionType::SUBSCRIPT},
     {"List", ExpressionType::LIST},
+    {"Set", ExpressionType::LIST},
     {"Lambda", ExpressionType::FUNC_CALL},
     {"JoinedStr", ExpressionType::FSTRING},
     {"Tuple", ExpressionType::TUPLE}};
@@ -1437,7 +1438,8 @@ exprt python_converter::handle_membership_operator(
 {
   typet list_type = type_handler_.get_list_type();
 
-  // Handle list membership: "item" in [list] or "item" not in [list]
+  // Handle set/list membership:
+  // "item" in [list/set] or "item" not in [list/set]
   if (rhs.type() == list_type)
   {
     python_list list(*this, element);
@@ -2368,15 +2370,31 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
-    if (build_static_lists)
+    // Handle both List and Set
+    if (element["_type"] == "Set")
     {
-      typet size = type_handler_.get_typet(element["elts"]);
-      return get_static_array(element, size);
+      // For now, treat set literals such as lists
+      // Store elements in order they appear (order doesn't matter for sets)
+      if (build_static_lists)
+      {
+        typet size = type_handler_.get_typet(element["elts"]);
+        return get_static_array(element, size);
+      }
+
+      python_list list(*this, element);
+      expr = list.get();
     }
+    else
+    {
+      if (build_static_lists)
+      {
+        typet size = type_handler_.get_typet(element["elts"]);
+        return get_static_array(element, size);
+      }
 
-    python_list list(*this, element);
-    expr = list.get();
-
+      python_list list(*this, element);
+      expr = list.get();
+    }
     break;
   }
   case ExpressionType::VARIABLE_REF:
