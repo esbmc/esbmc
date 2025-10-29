@@ -154,7 +154,8 @@ void function_call_expr::get_function_type()
     {
       if (call_["func"]["value"]["value"]["_type"] == "Name")
       {
-        std::string root_name = call_["func"]["value"]["value"]["id"].get<std::string>();
+        std::string root_name =
+          call_["func"]["value"]["value"]["id"].get<std::string>();
         if (!converter_.is_imported_module(root_name))
         {
           is_nested_instance_attr = true;
