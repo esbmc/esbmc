@@ -464,8 +464,7 @@ exprt python_list::remove_function_calls_recursive(
   const nlohmann::json &node)
 {
   // Bounds might generate intermediate calls, we need to add lhs to all of them.
-  const auto add_lhs_var_bound = [&](exprt &foo) -> exprt
-  {
+  const auto add_lhs_var_bound = [&](exprt &foo) -> exprt {
     if (!foo.is_function_call())
       return foo;
     code_function_callt &call = static_cast<code_function_callt &>(foo);
