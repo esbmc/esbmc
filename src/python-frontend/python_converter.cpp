@@ -2147,7 +2147,7 @@ exprt python_converter::create_member_expression(
   typet clean_type = clean_attribute_type(attr_type);
   exprt source = symbol_exprt(symbol.id, symbol.type);
   member_exprt member_expr(source, attr_name, clean_type);
-  
+
   // Apply adjust_member logic (from Clang frontend): insert dereference if source is pointer
   exprt &base = member_expr.struct_op();
   if (base.type().is_pointer())
@@ -2157,7 +2157,7 @@ exprt python_converter::create_member_expression(
     deref.move_to_operands(base);
     base.swap(deref);
   }
-  
+
   return member_expr;
 }
 
@@ -2385,23 +2385,24 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       {
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
-        
+
         typet base_type = base_expr.type();
         if (base_type.is_pointer())
           base_type = base_type.subtype();
         if (base_type.id() == "symbol")
           base_type = ns.follow(base_type);
-        
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
           if (struct_type.has_component(attr_name))
           {
-            const typet &attr_type = struct_type.get_component(attr_name).type();
+            const typet &attr_type =
+              struct_type.get_component(attr_name).type();
             typet clean_type = clean_attribute_type(attr_type);
-            
+
             member_exprt member_expr(base_expr, attr_name, clean_type);
-            
+
             // Insert dereference if needed
             exprt &base = member_expr.struct_op();
             if (base.type().is_pointer())
@@ -2411,12 +2412,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               deref.move_to_operands(base);
               base.swap(deref);
             }
-            
+
             expr = member_expr;
             break;
           }
         }
-        
+
         log_error("Cannot resolve nested attribute: {}", attr_name);
         abort();
       }
@@ -2426,7 +2427,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       else
       {
-        log_error("Unsupported Attribute value type: {}", element["value"]["_type"].get<std::string>());
+        log_error(
+          "Unsupported Attribute value type: {}",
+          element["value"]["_type"].get<std::string>());
         abort();
       }
 

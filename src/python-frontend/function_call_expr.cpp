@@ -146,7 +146,7 @@ void function_call_expr::get_function_type()
   if (call_["func"]["_type"] == "Attribute")
   {
     std::string caller = get_object_name();
-    
+
     // Check for nested instance attribute (e.g., self.b.a.method())
     // Exclude module.Class.method() pattern
     bool is_nested_instance_attr = false;
@@ -1828,14 +1828,18 @@ exprt function_call_expr::handle_general_function_call()
     else
     {
       // Nested attribute: build expression dynamically
-      if (call_["func"]["_type"] == "Attribute" && call_["func"].contains("value"))
+      if (
+        call_["func"]["_type"] == "Attribute" &&
+        call_["func"].contains("value"))
       {
         exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
         call.arguments().push_back(gen_address_of(obj_expr));
       }
       else
       {
-        assert(false && "InstanceMethod requires obj_symbol or valid attribute chain");
+        assert(
+          false &&
+          "InstanceMethod requires obj_symbol or valid attribute chain");
       }
     }
   }
