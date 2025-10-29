@@ -20,7 +20,7 @@ Following symbolic execution, we generate a subset of first-order logical formul
 
 ## AST Generation
 
-The translation of Python code starts by parsing .py files into an AST. This is achieved using the [ast](https://docs.python.org/3/library/ast.html) and [ast2json](https://pypi.org/project/ast2json/) modules, which generate the AST in JSON format. The process runs alongside the Python interpreter, producing a JSON file for each Python file, including imported modules.
+Python code translation starts by parsing `.py` files into an AST. This is achieved using the [ast](https://docs.python.org/3/library/ast.html) and [ast2json](https://pypi.org/project/ast2json/) modules, which convert the AST to JSON. The process runs alongside the Python interpreter, producing a JSON file for each Python file, including imported modules.
 
 This approach's main advantage is that it utilizes a native Python module, ensuring adherence to the language.
 
@@ -28,7 +28,7 @@ This approach's main advantage is that it utilizes a native Python module, ensur
 
 After generating the AST, we add JSON nodes with type information. [PEP 484](https://peps.python.org/pep-0484/) introduced an optional type system, allowing developers to annotate variables using the format **`var-name:type`**.
 
-Our method involves traversing the AST and replacing assignments with their corresponding type-annotated nodes. The figure below shows the representation for <code>x:int = 10</code>.
+Our method traverses the AST and replaces assignments with their corresponding type-annotated nodes. The figure below shows the representation for <code>x:int = 10</code>.
 
 ```json
 {
@@ -365,7 +365,7 @@ The current version of ESBMC-Python has the following limitations:
 
 ### Example 1: Division by Zero in Python
 
-The following Python program executes without issues in standard Python 3. However, when analyzed using ESBMC, it reveals a hidden bug: a possible division by zero.
+The following Python program executes without issues in standard Python 3. However, when analyzed with ESBMC, it reveals a hidden bug: a possible division-by-zero.
 
 ```python
 import random as rand
@@ -413,7 +413,7 @@ Violated property:
 VERIFICATION FAILED
 ```
 
-ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero), causing an integer division by zero. This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
+ESBMC successfully identifies a path in which the randomly generated variable x evaluates to zero (or very close to zero), leading to an integer division by zero. This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
 
 ````python
 def div1(cond: int, x: int) -> int:

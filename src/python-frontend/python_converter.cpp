@@ -1065,22 +1065,30 @@ exprt python_converter::handle_none_comparison(
   bool lhs_is_none = (lhs.type() == none_type());
   bool rhs_is_none = (rhs.type() == none_type());
 
-  // None vs any pointer: create NULL of the rhs type
-  // Rationale: In our C/C++ target environment, Optional types (Union[T, None])
-  // and nullable references are represented as pointers. When comparing None
-  // with a pointer type, we must generate a NULL pointer comparison rather than
-  // constant folding, since the pointer's runtime value is unknown.
-  // This correctly handles: Optional[int], Optional[MyClass], list references, etc.
+  // None vs pointer comparison: create NULL of the correct pointer type.
+  // Rationale: In our C/C++ target environment, Optional[T] (Union[T, None])
+  // are represented as pointers. Comparing None to such types must yield
+  // a NULL pointer comparison rather than a constant fold.
   if (
     (lhs_is_none && rhs.is_symbol() && rhs.type().is_pointer()) ||
     (rhs_is_none && lhs.is_symbol() && lhs.type().is_pointer()))
   {
-    constant_exprt null_ptr(rhs.type());
+    // Determine which expression is the pointer and select appropriate type
+    // For array subtypes, use the full pointer type; otherwise use the other type
+    const bool lhs_is_array_ptr =
+      lhs.type().is_pointer() && lhs.type().subtype().is_array();
+    const typet &ptr_type = lhs_is_array_ptr ? lhs.type() : rhs.type();
+    const exprt &ptr_expr = lhs_is_array_ptr ? lhs : rhs;
+
+    // Create NULL pointer of the appropriate type
+    constant_exprt null_ptr(ptr_type);
     null_ptr.set_value("NULL");
+
+    // Generate equality or inequality comparison
     if (is_eq)
-      return equality_exprt(rhs, null_ptr);
+      return equality_exprt(ptr_expr, null_ptr);
     else
-      return not_exprt(equality_exprt(rhs, null_ptr));
+      return not_exprt(equality_exprt(ptr_expr, null_ptr));
   }
 
   // None vs non-pointer: constant fold to false/true
@@ -1443,6 +1451,7 @@ exprt python_converter::handle_membership_operator(
 
   // Handle string membership testing: "substr" in "string" or "substr" not in "string"
   if (
+    lhs.type().is_pointer() || rhs.type().is_pointer() ||
     lhs.type().is_array() || rhs.type().is_array() || lhs_type == "str" ||
     rhs_type == "str")
   {

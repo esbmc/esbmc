@@ -42,4 +42,4 @@
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename superclass::traits::fields>::type>;
+    boost::mp11::mp_pop_front<typename superclass::traits::fields>>;
