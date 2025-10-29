@@ -1443,6 +1443,7 @@ exprt python_converter::handle_membership_operator(
 
   // Handle string membership testing: "substr" in "string" or "substr" not in "string"
   if (
+    lhs.type().is_pointer() || rhs.type().is_pointer() ||
     lhs.type().is_array() || rhs.type().is_array() || lhs_type == "str" ||
     rhs_type == "str")
   {
