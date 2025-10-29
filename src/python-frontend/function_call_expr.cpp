@@ -221,6 +221,22 @@ bool function_call_expr::is_same_type(
     throw std::runtime_error("Unsupported type in isinstance()");
 
   std::string type_name = type_node["id"];
+
+  // Special handling for tuple type checking
+  if (type_name == "tuple")
+  {
+    // Check if object is a tuple by examining struct tag
+    if (obj_expr.type().id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(obj_expr.type());
+
+      // Check if this is a tuple by examining the tag
+      if (struct_type.tag().as_string().find("tag-tuple") == 0)
+        return true;
+    }
+    return false;
+  }
+
   // Get the internal type representation from the type name
   typet expected_type = type_handler_.get_typet(type_name, 0);
 
@@ -244,12 +260,92 @@ exprt function_call_expr::handle_isinstance() const
   if (args.size() != 2)
     throw std::runtime_error("isinstance() expects 2 arguments");
 
-  // Convert the first argument (the object being checked) into an expression
-  exprt obj_expr = converter_.get_expr(args[0]);
+  const auto &obj_arg = args[0];
   const auto &type_arg = args[1];
 
+  // Special handling: check if the object is a variable assigned from IfExp
+  if (
+    obj_arg.contains("_type") && obj_arg["_type"] == "Name" &&
+    obj_arg.contains("id") && type_arg["_type"] == "Name")
+  {
+    std::string var_name = obj_arg["id"].get<std::string>();
+    nlohmann::json var_decl = json_utils::find_var_decl(
+      var_name, converter_.current_function_name(), converter_.ast());
+
+    // Check if variable is assigned from a ternary operator (IfExp)
+    if (
+      !var_decl.empty() && var_decl.contains("value") &&
+      var_decl["value"].contains("_type") &&
+      var_decl["value"]["_type"] == "IfExp")
+    {
+      const auto &ifexp = var_decl["value"];
+
+      // Convert the condition and branches directly from AST
+      exprt cond = converter_.get_expr(ifexp["test"]);
+      exprt then_expr = converter_.get_expr(ifexp["body"]);
+      exprt else_expr = converter_.get_expr(ifexp["orelse"]);
+
+      // Check if each branch matches the type
+      bool then_matches = is_same_type(then_expr, type_arg);
+      bool else_matches = is_same_type(else_expr, type_arg);
+
+      if (then_matches && else_matches)
+      {
+        // Both branches match - always return true
+        return gen_boolean(true);
+      }
+      else if (!then_matches && !else_matches)
+      {
+        // Neither branch matches - always return false
+        return gen_boolean(false);
+      }
+      else
+      {
+        // One branch matches, one doesn't - generate runtime check
+        // isinstance(x, type) where x = (cond ? then : else)
+        //   => cond ? isinstance(then, type) : isinstance(else, type)
+        //   => cond ? then_matches : else_matches
+        if_exprt result(
+          cond, gen_boolean(then_matches), gen_boolean(else_matches));
+        result.type() = type_handler_.get_typet("bool", 0);
+        return result;
+      }
+    }
+  }
+
+  // Convert the first argument (the object being checked) into an expression
+  exprt obj_expr = converter_.get_expr(obj_arg);
+
   if (type_arg["_type"] == "Name")
+  {
+    // Check if the expression itself is an if expression
+    if (obj_expr.id() == "if")
+    {
+      const if_exprt &if_expr = to_if_expr(obj_expr);
+
+      // Check if each branch matches the type
+      bool then_matches = is_same_type(if_expr.true_case(), type_arg);
+      bool else_matches = is_same_type(if_expr.false_case(), type_arg);
+
+      if (then_matches && else_matches)
+      {
+        return gen_boolean(true);
+      }
+      else if (!then_matches && !else_matches)
+      {
+        return gen_boolean(false);
+      }
+      else
+      {
+        if_exprt result(
+          if_expr.cond(), gen_boolean(then_matches), gen_boolean(else_matches));
+        result.type() = type_handler_.get_typet("bool", 0);
+        return result;
+      }
+    }
+
     return gen_boolean(is_same_type(obj_expr, type_arg));
+  }
   else if (type_arg["_type"] == "Tuple")
   {
     const auto &elts = type_arg["elts"];
@@ -1544,14 +1640,49 @@ exprt function_call_expr::handle_general_function_call()
       }
       else if (function_type_ == FunctionType::InstanceMethod)
       {
-        assert(obj_symbol);
-        assert(func_symbol);
+        if (obj_symbol && func_symbol)
+        {
+          converter_.update_instance_from_self(
+            get_classname_from_symbol_id(func_symbol->id.as_string()),
+            function_id_.get_function(),
+            obj_symbol_id.to_string());
+        }
 
-        // Update obj attributes from self
-        converter_.update_instance_from_self(
-          get_classname_from_symbol_id(func_symbol->id.as_string()),
-          function_id_.get_function(),
-          obj_symbol_id.to_string());
+        // Handle forward reference: method not yet in symbol table
+        if (!func_symbol)
+        {
+          locationt location = converter_.get_location_from_decl(call_);
+          code_function_callt call;
+          call.location() = location;
+          call.function() = symbol_exprt(func_symbol_id, code_typet());
+          call.type() = empty_typet();
+
+          if (obj_symbol)
+            call.arguments().push_back(
+              gen_address_of(symbol_expr(*obj_symbol)));
+
+          for (const auto &arg_node : call_["args"])
+          {
+            exprt arg = converter_.get_expr(arg_node);
+            if (arg.type().is_array())
+            {
+              if (
+                arg_node["_type"] == "Constant" &&
+                arg_node["value"].is_string())
+              {
+                arg = string_constantt(
+                  arg_node["value"].get<std::string>(),
+                  arg.type(),
+                  string_constantt::k_default);
+              }
+              call.arguments().push_back(address_of_exprt(arg));
+            }
+            else
+              call.arguments().push_back(arg);
+          }
+
+          return std::move(call);
+        }
       }
     }
     else
@@ -1585,17 +1716,24 @@ exprt function_call_expr::handle_general_function_call()
           typet return_type = empty_typet();
           const auto &func_node = find_function(
             converter_.ast()["body"], function_id_.get_function());
-          if (
-            !func_node.empty() && func_node.contains("returns") &&
-            !func_node["returns"].is_null())
+          if (!func_node.empty())
           {
-            const auto &returns = func_node["returns"];
-            if (returns.contains("id"))
+            if (
+              func_node.contains("returns") && !func_node["returns"].is_null())
             {
-              return_type =
-                type_handler_.get_typet(returns["id"].get<std::string>());
+              const auto &returns = func_node["returns"];
+              if (returns.contains("id"))
+              {
+                return_type =
+                  type_handler_.get_typet(returns["id"].get<std::string>());
+              }
             }
+            exprt body = converter_.get_block(func_node["body"]);
+            exprt const_return = converter_.get_function_constant_return(body);
+            if (!const_return.is_nil())
+              return const_return;
           }
+
           call.type() = return_type;
 
           // Process arguments normally

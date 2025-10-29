@@ -45,7 +45,8 @@ enum class ExpressionType
   VARIABLE_REF,
   LIST,
   UNKNOWN,
-  FSTRING
+  FSTRING,
+  TUPLE
 };
 
 struct TypeFlags

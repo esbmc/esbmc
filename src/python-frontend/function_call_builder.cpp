@@ -162,6 +162,30 @@ symbol_id function_call_builder::build_function_id() const
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
+      // Check if this is a tuple by looking up the variable's type
+      if (var_type == "tuple" || var_type.empty())
+      {
+        symbol_id var_sid(
+          python_file, current_class_name, current_function_name);
+        var_sid.set_object(arg["id"].get<std::string>());
+        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+
+        if (var_symbol && var_symbol->type.id() == "struct")
+        {
+          const struct_typet &struct_type = to_struct_type(var_symbol->type);
+
+          // Check if this is a tuple by examining the tag
+          if (struct_type.tag().as_string().find("tag-tuple") == 0)
+          {
+            // Mark this as a tuple len() call
+            func_name = "__ESBMC_len_tuple";
+            function_id.clear();
+            function_id.set_prefix("esbmc:");
+            function_id.set_function(func_name);
+            return function_id;
+          }
+        }
+      }
       if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
         var_type.empty())
@@ -262,6 +286,22 @@ exprt function_call_builder::build() const
   // Special handling for single character len() calls
   if (function_id.get_function() == "__ESBMC_len_single_char")
     return from_integer(1, int_type());
+
+  if (function_id.get_function() == "__ESBMC_len_tuple")
+  {
+    const auto &arg = call_["args"][0];
+    exprt obj_expr = converter_.get_expr(arg);
+
+    if (obj_expr.type().id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(obj_expr.type());
+      size_t tuple_len = struct_type.components().size();
+      return from_integer(tuple_len, size_type());
+    }
+
+    // Fallback
+    return from_integer(0, size_type());
+  }
 
   // Special handling for assume calls: convert to code_assume instead of function call
   if (is_assume_call(function_id))
