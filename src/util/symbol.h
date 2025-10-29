@@ -23,7 +23,7 @@ public:
   bool is_type, is_macro, is_parameter;
 
   // ANSI-C
-  bool lvalue, static_lifetime, file_local, is_extern;
+  bool lvalue, static_lifetime, file_local, is_extern, is_thread_local;
 
   // For python use
   bool is_set;
