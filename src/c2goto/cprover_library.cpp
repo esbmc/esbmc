@@ -155,6 +155,7 @@ const static std::vector<std::string> python_c_models = {
   "strchr",
   "list_contains",
   "__python_str_isdigit",
+  "__python_char_isdigit",
   "__python_str_isalpha",
   "__python_char_isalpha",
   "__python_str_isspace",

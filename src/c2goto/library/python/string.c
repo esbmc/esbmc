@@ -59,6 +59,13 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python character isdigit - checks if a single character is a digit
+_Bool __python_char_isdigit(int c)
+{
+__ESBMC_HIDE:;
+  return (c >= '0' && c <= '9');
+}
+
 _Bool __python_str_isdigit(const char *s)
 {
 __ESBMC_HIDE:;
