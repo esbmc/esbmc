@@ -3048,7 +3048,7 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_NonAtomicToAtomic:
     if (config.options.get_bool_option("dont-care-about-missing-extensions"))
       break;
-    // Falltrough otherwise...
+    // Fallthrough otherwise...
 
   default:
   {
