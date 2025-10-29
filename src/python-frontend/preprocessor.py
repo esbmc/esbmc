@@ -770,11 +770,24 @@ class Preprocessor(ast.NodeTransformer):
     def _create_length_assignment(self, node, iter_var_name, length_var='ESBMC_length'):
         """Create ESBMC_length assignment with custom name."""
         length_target = self.create_name_node(length_var, ast.Store(), node)
-        len_func = self.create_name_node('len', ast.Load(), node)
+        int_annotation = self.create_name_node('int', ast.Load(), node)
+
+        # Determine annotation type
+        annotation_id = self._get_iterable_type_annotation(node.iter)
+
+        # For list/set/dict types (pointers), use __ESBMC_get_object_size
+        # For strings (arrays), use len()
+        if annotation_id in ['list', 'set', 'dict']:
+            # Use __ESBMC_get_object_size for pointer-based collections
+            len_func = self.create_name_node('__ESBMC_get_object_size', ast.Load(), node)
+        else:
+            # Use len() for strings and other types
+            len_func = self.create_name_node('len', ast.Load(), node)
+
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
         self.ensure_all_locations(len_call, node)
-        int_annotation = self.create_name_node('int', ast.Load(), node)
+
         length_assign = ast.AnnAssign(
             target=length_target,
             annotation=int_annotation,
