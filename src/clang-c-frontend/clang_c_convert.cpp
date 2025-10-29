@@ -1315,7 +1315,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if (config.options.get_bool_option("dont-care-about-missing-extensions"))
       break;
   }
-
+  // fall through
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
