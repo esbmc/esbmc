@@ -146,6 +146,22 @@ void function_call_expr::get_function_type()
   if (call_["func"]["_type"] == "Attribute")
   {
     std::string caller = get_object_name();
+    
+    // Check for nested instance attribute (e.g., self.b.a.method())
+    // Exclude module.Class.method() pattern
+    bool is_nested_instance_attr = false;
+    if (call_["func"]["value"]["_type"] == "Attribute")
+    {
+      std::string root_name;
+      if (call_["func"]["value"]["value"]["_type"] == "Name")
+      {
+        root_name = call_["func"]["value"]["value"]["id"].get<std::string>();
+        if (!converter_.is_imported_module(root_name))
+        {
+          is_nested_instance_attr = true;
+        }
+      }
+    }
 
     // Handling a function call as a class method call when:
     // (1) The caller corresponds to a class name, for example: MyClass.foo().
@@ -154,9 +170,10 @@ void function_call_expr::get_function_type()
     // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
     // If the caller is a class or a built-in type, the following condition detects a class method call.
     if (
-      is_class(caller, converter_.ast()) ||
-      type_utils::is_builtin_type(caller) ||
-      type_utils::is_builtin_type(type_handler_.get_var_type(caller)))
+      !is_nested_instance_attr &&
+      (is_class(caller, converter_.ast()) ||
+       type_utils::is_builtin_type(caller) ||
+       type_utils::is_builtin_type(type_handler_.get_var_type(caller))))
     {
       function_type_ = FunctionType::ClassMethod;
     }
@@ -1804,9 +1821,23 @@ exprt function_call_expr::handle_general_function_call()
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
-    assert(obj_symbol);
-    // Passing object as "self" (first) parameter on instance method calls
-    call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    if (obj_symbol)
+    {
+      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    }
+    else
+    {
+      // Nested attribute: build expression dynamically
+      if (call_["func"]["_type"] == "Attribute" && call_["func"].contains("value"))
+      {
+        exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+        call.arguments().push_back(gen_address_of(obj_expr));
+      }
+      else
+      {
+        assert(false && "InstanceMethod requires obj_symbol or valid attribute chain");
+      }
+    }
   }
   else if (function_type_ == FunctionType::ClassMethod)
   {
