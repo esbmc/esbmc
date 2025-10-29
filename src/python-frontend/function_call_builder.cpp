@@ -270,7 +270,7 @@ symbol_id function_call_builder::build_function_id() const
       }
       if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
-        var_type.empty())
+        var_type == "set" || var_type == "dict" || var_type.empty())
         func_name = kGetObjectSize;
       else if (var_type == "str")
       {
