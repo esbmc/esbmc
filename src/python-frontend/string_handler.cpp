@@ -1044,3 +1044,44 @@ exprt string_handler::handle_string_islower(
 
   return islower_call;
 }
+
+exprt string_handler::handle_string_lower(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // For single characters, handle directly
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    symbolt *lower_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_lower");
+    if (!lower_symbol)
+      throw std::runtime_error(
+        "__python_char_lower function not found in symbol table");
+
+    side_effect_expr_function_callt lower_call;
+    lower_call.function() = symbol_expr(*lower_symbol);
+    lower_call.arguments().push_back(string_obj);
+    lower_call.location() = location;
+    lower_call.type() = char_type();
+
+    return lower_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *lower_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_lower");
+  if (!lower_str_symbol)
+    throw std::runtime_error("str_lower function not found in symbol table");
+
+  side_effect_expr_function_callt lower_call;
+  lower_call.function() = symbol_expr(*lower_str_symbol);
+  lower_call.arguments().push_back(str_addr);
+  lower_call.location() = location;
+  lower_call.type() = pointer_typet(char_type());
+
+  return lower_call;
+}

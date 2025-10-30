@@ -263,6 +263,14 @@ public:
   exprt
   handle_string_islower(const exprt &string_obj, const locationt &location);
 
+  /**
+   * @brief Handle str.lower() method
+   * @param string_obj String object
+   * @param location Source location
+   * @return Pointer to lowercase string
+   */
+  exprt handle_string_lower(const exprt &string_obj, const locationt &location);
+
   // Utility methods
 
   /**
