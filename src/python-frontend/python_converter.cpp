@@ -3989,6 +3989,42 @@ void python_converter::process_function_arguments(
     param_symbol.static_lifetime = false;
     param_symbol.is_extern = false;
     symbol_table_.add(param_symbol);
+
+    // Register instance attributes for class-typed parameters
+    // When a parameter has a class type (like f: Foo), we need to register
+    // that this parameter symbol has access to the class's instance attributes
+    if (arg_name != "self" && arg_name != "cls")
+    {
+      // Check if this is a class type (pointer to struct or struct)
+      typet base_type = arg_type.is_pointer() ? arg_type.subtype() : arg_type;
+
+      if (base_type.id() == "symbol")
+      {
+        // Follow the symbol to get the actual struct type
+        base_type = ns.follow(base_type);
+      }
+
+      if (base_type.is_struct())
+      {
+        const struct_typet &struct_type = to_struct_type(base_type);
+        std::string class_tag = struct_type.tag().as_string();
+
+        // Copy instance attributes from the class's self to this parameter
+        std::string class_name = extract_class_name_from_tag(class_tag);
+
+        // Build the self symbol ID for this class
+        symbol_id self_sid(
+          location.get_file().as_string(), class_name, class_name);
+        self_sid.set_object("self");
+
+        // Copy instance attributes from class's self to this parameter
+        copy_instance_attributes(self_sid.to_string(), arg_id);
+
+        // Also try the normalized key for cross-method attribute access
+        std::string normalized_key = create_normalized_self_key(class_tag);
+        copy_instance_attributes(normalized_key, arg_id);
+      }
+    }
   };
 
   // Extract args node to avoid repeated access
