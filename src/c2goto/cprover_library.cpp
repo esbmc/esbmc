@@ -161,6 +161,8 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_isspace",
   "isspace",
   "__python_str_lstrip",
+  "__python_char_islower",
+  "__python_str_islower",
 };
 
 } // namespace

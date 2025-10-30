@@ -1178,6 +1178,15 @@ private:
     Json obj_node =
       json_utils::find_var_decl(obj, get_current_func_name(), ast_);
 
+    // Check current function parameters if not found
+    if (
+      obj_node.empty() && current_func != nullptr &&
+      (*current_func).contains("args") &&
+      (*current_func)["args"].contains("args"))
+    {
+      obj_node = find_annotated_assign(obj, (*current_func)["args"]["args"]);
+    }
+
     if (obj_node.empty())
       throw std::runtime_error("Object \"" + obj + "\" not found.");
 

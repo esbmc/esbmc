@@ -254,6 +254,15 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  /**
+   * @brief Handle Python's str.islower() method
+   * @param string_obj Expression representing the string or character to check
+   * @param location Source location for error reporting
+   * @return Boolean expression: true if all cased chars are lowercase, false otherwise
+   */
+  exprt
+  handle_string_islower(const exprt &string_obj, const locationt &location);
+
   // Utility methods
 
   /**
