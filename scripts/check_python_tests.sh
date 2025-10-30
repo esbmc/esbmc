@@ -5,7 +5,6 @@ cd regression/python
 all_passed=true
 
 # List of directories to ignore
-# These tests use ESBMC-specific types/features or have environment-specific issues
 ignored_dirs=(
   "AssertionError1_fail"
   "AssertionError2_fail"
@@ -18,7 +17,6 @@ ignored_dirs=(
   "esbmc-assume"
   "enumerate15"
   "enumerate15_fail"
-  "ethereum_bug-fail"  # Uses uint64 (ESBMC-specific type annotation)
   "func-no-params-types-fail"
   "function-option-fail"
   "github_2843_fail"
@@ -60,7 +58,6 @@ ignored_dirs=(
   "ternary_symbolic"
   "try-fail"
   "verifier-assume"
-  "version"  # Imports jira module with try statements
   "while-random-fail"
   "while-random-fail2"
   "while-random-fail3"
