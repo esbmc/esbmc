@@ -192,7 +192,7 @@ __ESBMC_HIDE:;
   static char buffer[256];
 
   int i = 0;
-  while (s[i] && i < 255)
+  while (i < 255 && s[i])
   {
     if (s[i] >= 'A' && s[i] <= 'Z')
       buffer[i] = s[i] + ('a' - 'A');
