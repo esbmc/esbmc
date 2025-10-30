@@ -150,6 +150,7 @@ macos_setup () {
         python3 -m venv ../esbmc-venv&&
         source ../esbmc-venv/bin/activate&&
         pip install ast2json mypy meson&&
+        pip3 install pyparsing toml tomli jira&&
         deactivate&&
     BASE_ARGS="\
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
