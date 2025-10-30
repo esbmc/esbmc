@@ -143,28 +143,40 @@ macos_setup () {
     if [ $STATIC = ON ]; then
         error "static macOS build is currently not supported"
     fi
+    
+    echo "Installing Homebrew dependencies..."
     brew install \
         z3 gmp csmith boost ninja python3 automake bison flex \
         llvm@$CLANG_VERSION &&
-        echo "Setting up Python environment..."&&
-        python3 -m venv ../esbmc-venv&&
-        source ../esbmc-venv/bin/activate&&
-        pip install ast2json mypy meson&&
-        pip3 install pyparsing toml tomli jira&&
-        meson --version&&
-        python3 -c "import ast2json; print('ast2json imported successfully')"&&
-        mypy --version&&
-        deactivate&&
-    BASE_ARGS="\
+    
+    echo "Installing Python dependencies..."
+    pip3 install meson ast2json mypy &&
+    pip3 install pyparsing toml tomli jira &&
+    
+    echo "Verifying Python installations:"
+    meson --version &&
+    python3 -c "import ast2json; print('ast2json imported successfully')" &&
+    mypy --version &&
+    
+    echo "Setting up environment variables"
+    export PATH="/opt/homebrew/opt/llvm@$CLANG_VERSION/bin:$PATH" &&
+    
+    # Keep original BASE_ARGS and add macOS-specific paths
+    BASE_ARGS="$BASE_ARGS \
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
-        -DCMAKE_BUILD_TYPE=Debug \
-        -GNinja \
-        -DENABLE_python_frontend=On \
-        -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release \
+        -DBUILD_STATIC=$STATIC \
     " &&
-    SOLVER_FLAGS=""
+    
+    # Configure solvers for macOS (similar to CI)
+    SOLVER_FLAGS="$SOLVER_FLAGS \
+        -DENABLE_Z3=On \
+        -DZ3_DIR=/opt/homebrew/opt/z3 \
+        -DENABLE_BOOLECTOR=OFF \
+        -DENABLE_BITWUZLA=OFF \
+        -DENABLE_GOTO_CONTRACTOR=OFF \
+    "
 }
 
 macos_post_setup () {
