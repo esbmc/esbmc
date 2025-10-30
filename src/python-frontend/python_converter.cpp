@@ -3438,6 +3438,10 @@ void python_converter::get_var_assign(
       python_list::copy_type_info(rhs_identifier, lhs_identifier);
     }
 
+    lhs_symbol->type = rhs.type();
+    typet &thetype = lhs.type();
+    thetype = rhs.type();
+     
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
