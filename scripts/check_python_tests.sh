@@ -89,7 +89,7 @@ for dir in */; do
   echo ">>> Testing $dir"
 
   # Run the script and capture both output and exit code
-  output=$(cd "$dir" && python3 main.py 2>&1)
+  output=$(cd "$dir" && python3 main.py )
   result=$?
 
   if [[ "$dir" == *fail* ]]; then
