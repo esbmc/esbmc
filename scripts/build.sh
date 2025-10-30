@@ -143,25 +143,19 @@ macos_setup () {
     if [ $STATIC = ON ]; then
         error "static macOS build is currently not supported"
     fi
-    
-    echo "Installing Homebrew dependencies..."
     brew install \
         z3 gmp csmith boost ninja python3 automake bison flex \
         llvm@$CLANG_VERSION &&
     
-    echo "Installing Python dependencies..."
+    echo "Installing Python dependencies" &&
     pip3 install meson ast2json mypy &&
     pip3 install pyparsing toml tomli jira &&
-    
-    echo "Verifying Python installations:"
+    echo "Verifying Python installations:" &&
     meson --version &&
     python3 -c "import ast2json; print('ast2json imported successfully')" &&
     mypy --version &&
     
-    echo "Setting up environment variables"
-    export PATH="/opt/homebrew/opt/llvm@$CLANG_VERSION/bin:$PATH" &&
-    
-    # Keep original BASE_ARGS and add macOS-specific paths
+    # Append macOS-specific args to BASE_ARGS instead of replacing
     BASE_ARGS="$BASE_ARGS \
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
@@ -169,7 +163,7 @@ macos_setup () {
         -DBUILD_STATIC=$STATIC \
     " &&
     
-    # Configure solvers for macOS (similar to CI)
+    # Configure solvers to match CI setup
     SOLVER_FLAGS="$SOLVER_FLAGS \
         -DENABLE_Z3=On \
         -DZ3_DIR=/opt/homebrew/opt/z3 \
