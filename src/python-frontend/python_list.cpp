@@ -882,10 +882,15 @@ exprt python_list::handle_index_access(
       base.swap(deref);
     }
 
-    // Cast from void* to target type pointer and dereference
+    // Cast from void* to target type pointer
     typecast_exprt tc(obj_value, pointer_typet(elem_type));
 
-    // Dereference to get the actual value
+    // For array types (like strings), return the pointer instead of dereferencing
+    // C doesn't allow dereferencing array types
+    if (elem_type.is_array())
+      return tc;
+
+    // For non-array types, dereference to get the actual value
     dereference_exprt deref(elem_type);
     deref.op0() = tc;
     return deref;
