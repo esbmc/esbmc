@@ -120,3 +120,52 @@ __ESBMC_HIDE:;
 
   return s;
 }
+
+// Python character islower - checks if a single character is lowercase
+_Bool __python_char_islower(int c)
+{
+__ESBMC_HIDE:;
+  return (c >= 'a' && c <= 'z');
+}
+
+// Python string islower - checks if all cased characters are lowercase
+// Returns true if there's at least one lowercase letter and no uppercase letters
+_Bool __python_str_islower(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0; // Empty string returns false
+
+  _Bool has_cased = 0; // Track if we found any cased character
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+
+    // Check for uppercase ASCII letters
+    if (c >= 'A' && c <= 'Z')
+      return 0; // Found uppercase, not all lower
+
+    // Check for lowercase ASCII letters
+    if (c >= 'a' && c <= 'z')
+      has_cased = 1; // Found at least one lowercase letter
+
+    // Handle two-byte UTF-8 sequences for accented letters
+    if (c >= 0xC2 && c <= 0xDF)
+    {
+      unsigned char next = (unsigned char)*(s + 1);
+      if (next >= 0x80 && next <= 0xBF)
+      {
+        // For simplicity, treat valid two-byte UTF-8 as cased characters
+        // In real Python, we'd need full Unicode case mapping
+        has_cased = 1;
+        s += 2;
+        continue;
+      }
+    }
+
+    s++;
+  }
+
+  return has_cased; // True only if we found at least one cased character
+}

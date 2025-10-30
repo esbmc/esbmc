@@ -446,6 +446,17 @@ exprt function_call_builder::build() const
         obj_expr, loc);
     }
 
+    if (method_name == "islower")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("islower() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_islower(
+        obj_expr, loc);
+    }
+
     if (method_name == "isalpha")
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);

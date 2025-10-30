@@ -1002,3 +1002,45 @@ exprt string_handler::handle_string_membership(
 
   return not_equal;
 }
+
+exprt string_handler::handle_string_islower(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Check if this is a single character
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    // Call Python's single-character version
+    symbolt *islower_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_islower");
+    if (!islower_symbol)
+      throw std::runtime_error(
+        "__python_char_islower function not found in symbol table");
+
+    side_effect_expr_function_callt islower_call;
+    islower_call.function() = symbol_expr(*islower_symbol);
+    islower_call.arguments().push_back(string_obj);
+    islower_call.location() = location;
+    islower_call.type() = bool_type();
+
+    return islower_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *islower_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_islower");
+  if (!islower_str_symbol)
+    throw std::runtime_error("str_islower function not found in symbol table");
+
+  side_effect_expr_function_callt islower_call;
+  islower_call.function() = symbol_expr(*islower_str_symbol);
+  islower_call.arguments().push_back(str_addr);
+  islower_call.location() = location;
+  islower_call.type() = bool_type();
+
+  return islower_call;
+}
