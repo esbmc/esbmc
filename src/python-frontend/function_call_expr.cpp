@@ -1948,7 +1948,17 @@ exprt function_call_expr::handle_general_function_call()
         if (func_symbol != nullptr)
         {
           const code_typet &func_type = to_code_type(func_symbol->type);
-          func_call.type() = func_type.return_type();
+          typet return_type = func_type.return_type();
+
+          // Special handling for constructors
+          if (return_type.id() == "constructor")
+          {
+            // For constructors, use the class type instead of "constructor"
+            return_type =
+              type_handler_.get_typet(func_symbol->name.as_string());
+          }
+
+          func_call.type() = return_type;
         }
       }
 
