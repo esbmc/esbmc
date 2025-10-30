@@ -146,12 +146,18 @@ macos_setup () {
     brew install \
         z3 gmp csmith boost ninja python3 automake bison flex \
         llvm@$CLANG_VERSION &&
+        echo "Setting up Python environment..."&&
+        python3 -m venv ../esbmc-venv&&
+        source ../esbmc-venv/bin/activate&&
+        pip install ast2json mypy meson&&
+        deactivate&&
     BASE_ARGS="\
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
         -DCMAKE_BUILD_TYPE=Debug \
         -GNinja \
+        -DENABLE_python_frontend=On \
         -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release \
     " &&
     SOLVER_FLAGS=""
