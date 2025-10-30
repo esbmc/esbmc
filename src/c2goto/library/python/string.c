@@ -170,3 +170,45 @@ __ESBMC_HIDE:;
 
   return has_cased; // True only if we found at least one cased character
 }
+
+// Python character lower - converts a single character to lowercase
+int __python_char_lower(int c)
+{
+__ESBMC_HIDE:;
+  if (c >= 'A' && c <= 'Z')
+    return c + ('a' - 'A');
+  return c;
+}
+
+// Python string lower - converts all characters to lowercase
+// Uses a static buffer for ESBMC verification
+char *__python_str_lower(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  // Use a static buffer (sufficient for verification purposes)
+  static char buffer[256];
+
+  int i = 0;
+  while (i < 255 && s[i])
+  {
+    if (s[i] >= 'A' && s[i] <= 'Z')
+      buffer[i] = s[i] + ('a' - 'A');
+    else
+      buffer[i] = s[i];
+    i++;
+  }
+
+  // Warn if string was truncated
+  if (s[i] != '\0')
+  {
+    // String is longer than buffer - issue warning
+    __ESBMC_assert(0, "String too long for lower() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
