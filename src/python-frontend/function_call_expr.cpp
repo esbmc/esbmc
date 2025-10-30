@@ -1795,9 +1795,11 @@ exprt function_call_expr::handle_general_function_call()
         }
         else
         {
-          // Not a forward reference - use existing behavior for built-ins/imports/undefined functions
-          log_warning("Undefined function: {}", function_id_.get_function());
-          return exprt();
+          const std::string &func_name = function_id_.get_function();
+          log_warning(
+            "Undefined function '{}' - replacing with assert(false)",
+            func_name);
+          return gen_unsupported_function_assert(func_name);
         }
       }
     }
@@ -2013,4 +2015,19 @@ exprt function_call_expr::gen_exception_raise(
   raise.move_to_operands(sym);
 
   return raise;
+}
+
+codet function_call_expr::gen_unsupported_function_assert(
+  const std::string &func_name) const
+{
+  locationt location = converter_.get_location_from_decl(call_);
+  std::string message = "Unsupported function '" + func_name + "' is reached";
+  location.user_provided(true);
+  location.comment(message);
+
+  exprt false_expr = gen_boolean(false);
+  code_assertt assert_code(false_expr);
+  assert_code.location() = location;
+
+  return assert_code;
 }

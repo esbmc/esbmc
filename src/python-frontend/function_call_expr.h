@@ -208,6 +208,12 @@ private:
   exprt handle_list_extend() const;
 
   /*
+   * Replace undefined function calls with assert(false):
+   * if reached, verification fails; if unreached, verification succeeds.
+   */
+  codet gen_unsupported_function_assert(const std::string &func_name) const;
+
+  /*
    * Check if the current function call is to a regular expression module function
    * Returns true if the function is match, search, or fullmatch from the re module
    */
