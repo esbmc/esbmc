@@ -130,6 +130,7 @@ __ESBMC_HIDE:;
 
 // Python string islower - checks if all cased characters are lowercase
 // Returns true if there's at least one lowercase letter and no uppercase letters
+// NOTE: This is a simplified implementation with partial Unicode support!
 _Bool __python_str_islower(const char *s)
 {
 __ESBMC_HIDE:;
