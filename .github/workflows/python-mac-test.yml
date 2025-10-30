@@ -1,0 +1,108 @@
+name: macOS Python Frontend Test
+
+on:
+  workflow_dispatch:    
+
+jobs:
+  macos-python-test:
+    name: macOS Python Test
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Python dependencies
+      run: |
+        echo "Installing Python dependencies: meson, ast2json, mypy"
+        pip3 install meson ast2json mypy
+        pip3 install pyparsing toml tomli jira
+        echo "Verifying installations:"
+        meson --version
+        python3 -c "import ast2json; print('ast2json imported successfully')"
+        mypy --version
+    
+    - name: Install system dependencies
+      run: |
+        echo "Installing Homebrew dependencies"
+        brew install \
+          z3 gmp csmith boost ninja python3 automake bison flex \
+          llvm@16
+    
+    - name: Configure environment
+      run: |
+        echo "Setting up environment variables"
+        export PATH="/opt/homebrew/opt/llvm@16/bin:$PATH"
+        echo "LLVM_DIR=/opt/homebrew/opt/llvm@16" >> $GITHUB_ENV
+        echo "Clang_DIR=/opt/homebrew/opt/llvm@16" >> $GITHUB_ENV
+    
+    - name: Create build directory
+      run: mkdir -p build && cd build
+
+    - name: Configure CMake with Python frontend enabled
+      run: |
+        cd build
+        cmake .. \
+          -DDOWNLOAD_DEPENDENCIES=Off \
+          -GNinja \
+          -DENABLE_PYTHON_FRONTEND=On \
+          -DBUILD_TESTING=On \
+          -DENABLE_REGRESSION=On \
+          -DLLVM_DIR=/opt/homebrew/opt/llvm@16 \
+          -DClang_DIR=/opt/homebrew/opt/llvm@16 \
+          -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release \
+          -DENABLE_Z3=On \
+          -DZ3_DIR=/opt/homebrew/opt/z3 \
+          -DENABLE_BOOLECTOR=OFF \
+          -DENABLE_BITWUZLA=OFF \
+          -DENABLE_GOTO_CONTRACTOR=OFF \
+          -DBUILD_STATIC=OFF
+    
+    - name: Build ESBMC
+      run: |
+        cd build
+        cmake --build . -j4
+        ninja install
+    
+    - name: Verify Python frontend is enabled
+      run: |
+        echo "Checking if ESBMC was built with Python frontend support"
+        ./release/bin/esbmc --version
+        # Try to process a simple Python file
+        echo "print('Hello from ESBMC')" > test_py.py
+        ./release/bin/esbmc test_py.py --print-ast || echo "Python frontend test completed"
+    
+    - name: Run Python regression tests only
+      run: |
+        cd build
+        echo "Running Python regression tests with ctest"
+        ctest -L python -j4 --output-on-failure --progress
+    
+    - name: Run Python test validation script
+      run: |
+        echo "Running comprehensive Python test validation"
+        chmod +x scripts/check_python_tests.sh
+        ./scripts/check_python_tests.sh
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-python-test-results
+        path: |
+          build/Testing/
+          build/*.log
+    
+    - name: Upload ESBMC binary
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: esbmc-macos-python-enabled
+        path: ./release
