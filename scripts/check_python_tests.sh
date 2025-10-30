@@ -5,6 +5,7 @@ cd regression/python
 all_passed=true
 
 # List of directories to ignore
+# These tests use ESBMC-specific types/features or have environment-specific issues
 ignored_dirs=(
   "AssertionError1_fail"
   "AssertionError2_fail"
@@ -17,6 +18,7 @@ ignored_dirs=(
   "esbmc-assume"
   "enumerate15"
   "enumerate15_fail"
+  "ethereum_bug-fail"  # Uses uint64 (ESBMC-specific type annotation)
   "func-no-params-types-fail"
   "function-option-fail"
   "github_2843_fail"
@@ -58,6 +60,7 @@ ignored_dirs=(
   "ternary_symbolic"
   "try-fail"
   "verifier-assume"
+  "version"  # Imports jira module with try statements
   "while-random-fail"
   "while-random-fail2"
   "while-random-fail3"
@@ -88,13 +91,16 @@ for dir in */; do
 
   echo ">>> Testing $dir"
 
-  # Run the script and capture the exit code
-  (cd "$dir" && python3 main.py > /dev/null 2>&1)
+  # Run the script and capture both output and exit code
+  output=$(cd "$dir" && python3 main.py 2>&1)
   result=$?
 
   if [[ "$dir" == *fail* ]]; then
     if [ $result -eq 0 ]; then
       echo "❌ $dir: expected to fail, but executed successfully (exit 0)"
+      echo "   📄 Output:"
+      echo "$output" | sed 's/^/      /'
+      echo ""
       all_passed=false
     else
       echo "✅ $dir: failed as expected (exit $result)"
@@ -104,6 +110,9 @@ for dir in */; do
       echo "✅ $dir: executed successfully (exit 0)"
     else
       echo "❌ $dir: expected to succeed, but failed (exit $result)"
+      echo "   📄 Error output:"
+      echo "$output" | sed 's/^/      /'
+      echo ""
       all_passed=false
     fi
   fi
