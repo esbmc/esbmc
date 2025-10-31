@@ -2072,12 +2072,13 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   {
     // Strings are null-terminated
     exprt result = string_builder_->build_string_literal(str_val);
-    
+
     // When assigning a string literal to a class member that has pointer type,
     // we need to convert the string array to its base address (array-to-pointer decay).
     // This ensures type compatibility: char* = &"string_literal"[0]
-    if (current_lhs && current_lhs->id() == "member" && 
-        current_lhs->type().is_pointer() && result.type().is_array())
+    if (
+      current_lhs && current_lhs->id() == "member" &&
+      current_lhs->type().is_pointer() && result.type().is_array())
     {
       return string_handler_.get_array_base_address(result);
     }
@@ -2549,7 +2550,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           struct_typet::componentt comp = build_component(
             class_type.tag().as_string(), attr_name, current_element_type);
           class_type.components().push_back(comp);
-          
+
           // Update the class symbol's type in the symbol table
           class_symbol->type = class_type;
         }
@@ -4270,7 +4271,7 @@ void python_converter::get_attributes_from_self(
     {
       std::string attr_name = stmt["target"]["attr"];
       std::string annotated_type = stmt["annotation"]["id"].get<std::string>();
-      
+
       typet type;
       if (annotated_type == "str")
       {
