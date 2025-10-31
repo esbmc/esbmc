@@ -1077,7 +1077,8 @@ exprt python_converter::handle_none_comparison(
     // Determine which expression is the pointer and select appropriate type
     // For array subtypes, use the full pointer type; otherwise use the other type
     const bool lhs_is_array_ptr =
-      lhs.type().is_pointer() && lhs.type().subtype().is_array();
+      lhs.type().is_pointer() &&
+      (lhs.type().subtype().is_array() || lhs.type().subtype() == char_type());
     const typet &ptr_type = lhs_is_array_ptr ? lhs.type() : rhs.type();
     const exprt &ptr_expr = lhs_is_array_ptr ? lhs : rhs;
 
