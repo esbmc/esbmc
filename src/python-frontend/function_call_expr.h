@@ -37,6 +37,18 @@ public:
   }
 
 private:
+  // Helper methods for AttributeError detection
+  std::vector<std::string>
+  find_possible_class_types(const symbolt *obj_symbol) const;
+
+  bool method_exists_in_class_hierarchy(
+    const std::string &class_name,
+    const std::string &method_name) const;
+
+  exprt generate_attribute_error(
+    const std::string &method_name,
+    const std::vector<std::string> &possible_classes) const;
+
   /**
    * Determines whether a non-deterministic function is being invoked.
    */
