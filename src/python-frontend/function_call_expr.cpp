@@ -278,20 +278,46 @@ exprt function_call_expr::handle_isinstance() const
     throw std::runtime_error("isinstance() expects 2 arguments");
 
   // Convert the first argument (the object being checked) into an expression
-  exprt obj_expr = converter_.get_expr(args[0]);
+  const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &type_arg = args[1];
 
+  auto build_isinstance = [&](const std::string &type_name) {
+    typet expected_type = type_handler_.get_typet(type_name, 0);
+    exprt zero = gen_zero(expected_type);
+
+    exprt isinstance("isinstance", typet("bool"));
+    isinstance.copy_to_operands(obj_expr);
+    isinstance.move_to_operands(zero);
+    return isinstance;
+  };
+
   if (type_arg["_type"] == "Name")
-    return gen_boolean(is_same_type(obj_expr, type_arg));
+  {
+    std::string type_name = args[1]["id"];
+    return build_isinstance(type_name);
+  }
   else if (type_arg["_type"] == "Tuple")
   {
     const auto &elts = type_arg["elts"];
-    for (const auto &elt : elts)
+
+    std::string first_type = elts[0]["id"];
+    exprt tupe_instance = build_isinstance(first_type);
+
+    for (size_t i = 1; i < elts.size(); ++i)
     {
-      if (is_same_type(obj_expr, elt))
-        return gen_boolean(true);
+      if (elts[i]["_type"] != "Name")
+        throw std::runtime_error("Unsupported type in isinstance()");
+
+      std::string type_name = elts[i]["id"];
+      exprt next_isinstance = build_isinstance(type_name);
+
+      exprt or_expr("or", typet("bool"));
+      or_expr.move_to_operands(tupe_instance);
+      or_expr.move_to_operands(next_isinstance);
+      tupe_instance = or_expr;
     }
-    return gen_boolean(false);
+
+    return tupe_instance;
   }
   else
     throw std::runtime_error("Unsupported type format in isinstance()");
