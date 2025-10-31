@@ -1685,6 +1685,43 @@ exprt function_call_expr::handle_general_function_call()
         // Handle forward reference: method not yet in symbol table
         if (!func_symbol)
         {
+          std::string class_name = function_id_.get_class();
+          std::string method_name = function_id_.get_function();
+
+          // Find all possible class types for this object
+          std::vector<std::string> possible_classes =
+            find_possible_class_types(obj_symbol);
+
+          // If no classes found, use the inferred class name
+          if (possible_classes.empty())
+            possible_classes.push_back(class_name);
+
+          // Check if method exists in any of the possible classes
+          bool method_exists = false;
+          for (const auto &check_class : possible_classes)
+          {
+            if (method_exists_in_class_hierarchy(check_class, method_name))
+            {
+              method_exists = true;
+              break;
+            }
+          }
+
+          // Only report AttributeError if:
+          // 1. Method doesn't exist in the class hierarchy, AND
+          // 2. We're not currently processing a constructor
+          //    (constructors are processed before all methods are in the symbol table)
+          bool is_in_constructor =
+            (converter_.current_function_name() == class_name) ||
+            (converter_.current_function_name() == "__init__");
+
+          if (!method_exists && !is_in_constructor)
+          {
+            // Generate AttributeError
+            return generate_attribute_error(method_name, possible_classes);
+          }
+
+          // Method exists or we're in a constructor - create forward reference
           locationt location = converter_.get_location_from_decl(call_);
           code_function_callt call;
           call.location() = location;
@@ -1948,7 +1985,17 @@ exprt function_call_expr::handle_general_function_call()
         if (func_symbol != nullptr)
         {
           const code_typet &func_type = to_code_type(func_symbol->type);
-          func_call.type() = func_type.return_type();
+          typet return_type = func_type.return_type();
+
+          // Special handling for constructors
+          if (return_type.id() == "constructor")
+          {
+            // For constructors, use the class type instead of "constructor"
+            return_type =
+              type_handler_.get_typet(func_symbol->name.as_string());
+          }
+
+          func_call.type() = return_type;
         }
       }
 
@@ -2028,6 +2075,172 @@ codet function_call_expr::gen_unsupported_function_assert(
   exprt false_expr = gen_boolean(false);
   code_assertt assert_code(false_expr);
   assert_code.location() = location;
+
+  return assert_code;
+}
+
+std::vector<std::string>
+function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
+{
+  std::vector<std::string> possible_classes;
+
+  if (!obj_symbol)
+    return possible_classes;
+
+  typet obj_type = obj_symbol->type;
+  if (obj_type.is_pointer())
+    obj_type = obj_type.subtype();
+  if (obj_type.id() == "symbol")
+    obj_type = converter_.ns.follow(obj_type);
+
+  // If type is a struct, extract the class name from the struct tag
+  if (obj_type.is_struct())
+  {
+    const struct_typet &struct_type = to_struct_type(obj_type);
+    std::string tag = struct_type.tag().as_string();
+    std::string actual_class = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+    possible_classes.push_back(actual_class);
+    return possible_classes;
+  }
+
+  // Type is a primitive (e.g., floatbv) - trace through AST to find actual types
+  std::string var_name = obj_symbol->name.as_string();
+  nlohmann::json var_decl = json_utils::find_var_decl(
+    var_name, converter_.current_function_name(), converter_.ast());
+
+  if (var_decl.empty() || !var_decl.contains("value"))
+    return possible_classes;
+
+  const auto &value = var_decl["value"];
+
+  // Check if assigned from a function call
+  if (value["_type"] != "Call" || value["func"]["_type"] != "Name")
+    return possible_classes;
+
+  std::string func_name = value["func"]["id"].get<std::string>();
+
+  // Look up the function definition
+  const auto &func_node =
+    json_utils::find_function(converter_.ast()["body"], func_name);
+
+  if (
+    func_node.empty() || !func_node.contains("returns") ||
+    func_node["returns"].is_null())
+    return possible_classes;
+
+  const auto &returns = func_node["returns"];
+  if (returns["_type"] != "Name" || !returns.contains("id"))
+    return possible_classes;
+
+  std::string return_type = returns["id"].get<std::string>();
+
+  // If return type is 'Any', analyze the function body to find actual return classes
+  if (return_type == "Any" && func_node.contains("body"))
+  {
+    std::function<void(const nlohmann::json &)> find_returns;
+    find_returns = [&](const nlohmann::json &node) {
+      if (!node.is_object())
+        return;
+
+      std::string node_type = node["_type"].get<std::string>();
+
+      if (node_type == "Return" && node.contains("value"))
+      {
+        const auto &ret_val = node["value"];
+        if (ret_val["_type"] == "Call" && ret_val["func"]["_type"] == "Name")
+        {
+          std::string class_name = ret_val["func"]["id"].get<std::string>();
+          if (json_utils::is_class(class_name, converter_.ast()))
+            possible_classes.push_back(class_name);
+        }
+      }
+      else if (node_type == "If")
+      {
+        // Check both branches
+        if (node.contains("body"))
+          for (const auto &stmt : node["body"])
+            find_returns(stmt);
+        if (node.contains("orelse"))
+          for (const auto &stmt : node["orelse"])
+            find_returns(stmt);
+      }
+    };
+
+    for (const auto &stmt : func_node["body"])
+      find_returns(stmt);
+  }
+
+  return possible_classes;
+}
+
+bool function_call_expr::method_exists_in_class_hierarchy(
+  const std::string &class_name,
+  const std::string &method_name) const
+{
+  const auto &class_node =
+    json_utils::find_class(converter_.ast()["body"], class_name);
+
+  if (class_node.empty())
+    return false;
+
+  // Check if method exists in this class
+  if (json_utils::search_function_in_ast(class_node["body"], method_name))
+    return true;
+
+  // Check base classes
+  if (class_node.contains("bases"))
+  {
+    for (const auto &base : class_node["bases"])
+    {
+      if (base.contains("id"))
+      {
+        std::string base_name = base["id"].get<std::string>();
+        if (method_exists_in_class_hierarchy(base_name, method_name))
+          return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+exprt function_call_expr::generate_attribute_error(
+  const std::string &method_name,
+  const std::vector<std::string> &possible_classes) const
+{
+  locationt location = converter_.get_location_from_decl(call_);
+  std::ostringstream error_msg;
+
+  if (possible_classes.size() > 1)
+  {
+    // Multiple possible classes
+    std::string display_classes;
+    for (size_t i = 0; i < possible_classes.size(); ++i)
+    {
+      if (i > 0)
+        display_classes += ", ";
+      display_classes += "'" + possible_classes[i] + "'";
+    }
+    error_msg << "AttributeError: object has no attribute '" << method_name
+              << "' (possible types: " << display_classes << ")";
+  }
+  else if (possible_classes.size() == 1)
+  {
+    error_msg << "AttributeError: '" << possible_classes[0]
+              << "' object has no attribute '" << method_name << "'";
+  }
+  else
+  {
+    error_msg << "AttributeError: object has no attribute '" << method_name
+              << "'";
+  }
+
+  log_warning("{}", error_msg.str());
+
+  code_assertt assert_code(gen_boolean(false));
+  assert_code.location() = location;
+  assert_code.location().user_provided(true);
+  assert_code.location().comment(error_msg.str());
 
   return assert_code;
 }

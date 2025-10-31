@@ -2071,7 +2071,18 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   else
   {
     // Strings are null-terminated
-    return string_builder_->build_string_literal(str_val);
+    exprt result = string_builder_->build_string_literal(str_val);
+
+    // When assigning a string literal to a class member that has pointer type,
+    // we need to convert the string array to its base address (array-to-pointer decay).
+    // This ensures type compatibility: char* = &"string_literal"[0]
+    if (
+      current_lhs && current_lhs->id() == "member" &&
+      current_lhs->type().is_pointer() && result.type().is_array())
+    {
+      return string_handler_.get_array_base_address(result);
+    }
+    return result;
   }
 
   return make_char_array_expr(string_literal, t);
@@ -2533,12 +2544,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       if (is_converting_lhs)
       {
-        // Add member in the class if not exists
+        // Add member to the class if it doesn't exist yet (dynamic member addition)
         if (!class_type.has_component(attr_name))
         {
           struct_typet::componentt comp = build_component(
             class_type.tag().as_string(), attr_name, current_element_type);
           class_type.components().push_back(comp);
+
+          // Update the class symbol's type in the symbol table
+          class_symbol->type = class_type;
         }
 
         // Register instance attribute for both regular and normalized keys
@@ -3002,14 +3016,28 @@ void python_converter::handle_assignment_type_adjustments(
         lhs.type() = rhs.type();
       }
     }
-    // Array to pointer decay
+    // Array to pointer decay handling
+    // In Python, regular variables undergo array-to-pointer decay (e.g., str variables),
+    // but struct/class members should preserve their array type to enable proper initialization.
     else if (lhs.type().id().empty() && rhs.type().is_array())
     {
-      const typet &element_type = to_array_type(rhs.type()).subtype();
-      typet pointer_type = gen_pointer_type(element_type);
-      lhs_symbol->type = pointer_type;
-      lhs.type() = pointer_type;
-      rhs = string_handler_.get_array_base_address(rhs);
+      if (lhs.id() == "member")
+      {
+        // Struct/class members: preserve array type for proper value semantics
+        // Example: self.name = "Alice" should store the full string array
+        lhs_symbol->type = rhs.type();
+        lhs.type() = rhs.type();
+      }
+      else
+      {
+        // Regular variables: apply array-to-pointer decay
+        // Example: s = "hello" creates a pointer to the string literal
+        const typet &element_type = to_array_type(rhs.type()).subtype();
+        typet pointer_type = gen_pointer_type(element_type);
+        lhs_symbol->type = pointer_type;
+        lhs.type() = pointer_type;
+        rhs = string_handler_.get_array_base_address(rhs);
+      }
     }
     // String and list type size adjustments
     else if (
@@ -4011,6 +4039,42 @@ void python_converter::process_function_arguments(
     param_symbol.static_lifetime = false;
     param_symbol.is_extern = false;
     symbol_table_.add(param_symbol);
+
+    // Register instance attributes for class-typed parameters
+    // When a parameter has a class type (like f: Foo), we need to register
+    // that this parameter symbol has access to the class's instance attributes
+    if (arg_name != "self" && arg_name != "cls")
+    {
+      // Check if this is a class type (pointer to struct or struct)
+      typet base_type = arg_type.is_pointer() ? arg_type.subtype() : arg_type;
+
+      if (base_type.id() == "symbol")
+      {
+        // Follow the symbol to get the actual struct type
+        base_type = ns.follow(base_type);
+      }
+
+      if (base_type.is_struct())
+      {
+        const struct_typet &struct_type = to_struct_type(base_type);
+        std::string class_tag = struct_type.tag().as_string();
+
+        // Copy instance attributes from the class's self to this parameter
+        std::string class_name = extract_class_name_from_tag(class_tag);
+
+        // Build the self symbol ID for this class
+        symbol_id self_sid(
+          location.get_file().as_string(), class_name, class_name);
+        self_sid.set_object("self");
+
+        // Copy instance attributes from class's self to this parameter
+        copy_instance_attributes(self_sid.to_string(), arg_id);
+
+        // Also try the normalized key for cross-method attribute access
+        std::string normalized_key = create_normalized_self_key(class_tag);
+        copy_instance_attributes(normalized_key, arg_id);
+      }
+    }
   };
 
   // Extract args node to avoid repeated access
@@ -4228,11 +4292,20 @@ void python_converter::get_attributes_from_self(
       stmt["target"]["value"]["id"] == "self")
     {
       std::string attr_name = stmt["target"]["attr"];
-      const std::string &annotated_type =
-        stmt["annotation"]["id"].get<std::string>();
+      std::string annotated_type = stmt["annotation"]["id"].get<std::string>();
+
       typet type;
       if (annotated_type == "str")
+      {
+        // String members are represented as char* (pointer type) rather than char[] (array type).
+        // Rationale:
+        // 1. Python strings are immutable references, matching pointer semantics
+        // 2. Pointers allow flexible assignment (e.g., self.msg = param_str)
+        // 3. Avoids C array assignment restrictions in struct members
+        // Note: String literals assigned to these members will be converted to pointers
+        // via array-to-pointer decay in get_literal()
         type = gen_pointer_type(char_type());
+      }
       else if (annotated_type == "Optional")
       {
         typet base_type = get_type_from_annotation(stmt["annotation"], stmt);
