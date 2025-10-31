@@ -3823,6 +3823,53 @@ typet python_converter::get_type_from_annotation(
        annotation_node["value"]["id"] == "List"))
       return type_handler_.get_list_type();
 
+    // Handle Literal[T]: extract the type from the literal value
+    if (
+      annotation_node.contains("value") &&
+      annotation_node["value"]["id"] == "Literal")
+    {
+      // For Literal types, infer the type from the literal value
+      if (annotation_node.contains("slice"))
+      {
+        const auto &slice = annotation_node["slice"];
+
+        // Handle Literal with Constant value (e.g., Literal["foo"])
+        if (slice["_type"] == "Constant")
+        {
+          const auto &value = slice["value"];
+
+          if (value.is_string())
+            return gen_pointer_type(char_type()); // String literal -> char*
+          else if (value.is_number_integer())
+            return long_long_int_type();
+          else if (value.is_boolean())
+            return bool_type();
+          else if (value.is_number_float())
+            return double_type();
+        }
+        // Handle Literal with multiple values (e.g., Literal[1, 2, 3])
+        else if (slice["_type"] == "Tuple" && slice.contains("elts"))
+        {
+          // For multiple literals, use the type of the first one
+          const auto &first_elem = slice["elts"][0];
+          if (first_elem["_type"] == "Constant")
+          {
+            const auto &value = first_elem["value"];
+            if (value.is_string())
+              return gen_pointer_type(char_type());
+            else if (value.is_number_integer())
+              return long_long_int_type();
+            else if (value.is_boolean())
+              return bool_type();
+            else if (value.is_number_float())
+              return double_type();
+          }
+        }
+      }
+      // treat as string pointer (most common case)
+      return gen_pointer_type(char_type());
+    }
+
     // Handle Optional[T] - extract the inner type T
     if (
       annotation_node.contains("value") &&
