@@ -1,5 +1,5 @@
-KNOWNBUG
+CORE
 main.py
 
-^SyntaxError: Unknown keyword argument: z$
+^ERROR: Unknown keyword argument: z in function foo$
 
