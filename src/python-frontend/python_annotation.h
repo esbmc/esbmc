@@ -1144,7 +1144,7 @@ private:
   {
     if (!constant_node.contains("value"))
       return "";
-    
+
     const auto &value = constant_node["value"];
     if (value.is_string())
       return "str";
@@ -1154,7 +1154,7 @@ private:
       return "float";
     else if (value.is_boolean())
       return "bool";
-    
+
     return "";
   }
 
@@ -1173,18 +1173,18 @@ private:
     {
       obj_name = prefix + std::string(".");
     }
-    
+
     // FIX: Handle method calls on constant literals
     // Python allows: " ".join(l), 123.to_bytes(), etc.
     // Before this fix, accessing call["value"]["id"] would crash because
     // Constant nodes don't have an "id" field
     if (call["value"]["_type"] == "Constant")
       return get_type_from_constant(call["value"]);
-    
+
     // Handle normal Name values (variable references)
     if (!call["value"].contains("id"))
       return "";
-      
+
     obj_name += call["value"]["id"].template get<std::string>();
     if (obj_name.find('.') != std::string::npos)
       obj_name = invert_substrings(obj_name);
@@ -1200,29 +1200,32 @@ private:
     // When Python code has " ".join(l), the func["value"] is a Constant node
     // We need to map string method names to their return types directly
     // without looking up the object in the AST (which would fail)
-    if (call["func"].contains("value") && 
-        call["func"]["value"]["_type"] == "Constant")
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"]["_type"] == "Constant")
     {
       std::string obj_type = get_type_from_constant(call["func"]["value"]);
-      
+
       // For string constants, determine return type based on method name
       if (obj_type == "str" && call["func"].contains("attr"))
       {
         const std::string &method = call["func"]["attr"];
         // Methods that return str
-        if (method == "join" || method == "lower" || method == "upper" || 
-            method == "strip" || method == "lstrip" || method == "rstrip" ||
-            method == "format" || method == "replace")
+        if (
+          method == "join" || method == "lower" || method == "upper" ||
+          method == "strip" || method == "lstrip" || method == "rstrip" ||
+          method == "format" || method == "replace")
           return "str";
         // Methods that return bool
-        else if (method == "startswith" || method == "endswith" || 
-                 method == "isdigit" || method == "isalpha" || method == "isspace" ||
-                 method == "islower" || method == "isupper")
+        else if (
+          method == "startswith" || method == "endswith" ||
+          method == "isdigit" || method == "isalpha" || method == "isspace" ||
+          method == "islower" || method == "isupper")
           return "bool";
         // Default for string methods
         return "str";
       }
-      
+
       return obj_type;
     }
 

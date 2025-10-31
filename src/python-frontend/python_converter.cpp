@@ -1139,8 +1139,9 @@ exprt python_converter::handle_str_join(const nlohmann::json &call_json)
 
   // Verify this is an Attribute call (method call syntax: obj.method())
   // and has the value (the separator object)
-  if (!func.contains("_type") || func["_type"] != "Attribute" || 
-      !func.contains("value"))
+  if (
+    !func.contains("_type") || func["_type"] != "Attribute" ||
+    !func.contains("value"))
     throw std::runtime_error("invalid join() call");
 
   // Extract separator: for " ".join(l), func["value"] is the Constant " "
@@ -1152,15 +1153,16 @@ exprt python_converter::handle_str_join(const nlohmann::json &call_json)
 
   // Currently only support Name references (e.g., variable names)
   // TODO: Support direct List literals like " ".join(["a", "b"])
-  if (list_arg.contains("_type") && list_arg["_type"] == "Name" &&
-      list_arg.contains("id"))
+  if (
+    list_arg.contains("_type") && list_arg["_type"] == "Name" &&
+    list_arg.contains("id"))
   {
     std::string var_name = list_arg["id"].get<std::string>();
-    
+
     // Look up the variable in the AST to get its initialization value
-    nlohmann::json var_decl = json_utils::find_var_decl(
-      var_name, current_func_name_, *ast_json);
-    
+    nlohmann::json var_decl =
+      json_utils::find_var_decl(var_name, current_func_name_, *ast_json);
+
     if (var_decl.empty())
       throw std::runtime_error(
         "NameError: name '" + var_name + "' is not defined");
@@ -1171,8 +1173,9 @@ exprt python_converter::handle_str_join(const nlohmann::json &call_json)
 
     const nlohmann::json &list_value = var_decl["value"];
 
-    if (!list_value.contains("_type") || list_value["_type"] != "List" || 
-        !list_value.contains("elts"))
+    if (
+      !list_value.contains("_type") || list_value["_type"] != "List" ||
+      !list_value.contains("elts"))
       throw std::runtime_error("join() requires a list");
 
     // Get the list elements from the AST
@@ -1204,23 +1207,23 @@ exprt python_converter::handle_str_join(const nlohmann::json &call_json)
     // null terminator issues.
     string_builder &sb = get_string_builder();
     std::vector<exprt> all_chars;
-    
+
     // Start with the first element
     std::vector<exprt> first_chars = sb.extract_string_chars(elem_exprs[0]);
     all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
-    
+
     // For each remaining element: add separator, then add element
     for (size_t i = 1; i < elem_exprs.size(); ++i)
     {
       // Insert separator characters
       std::vector<exprt> sep_chars = sb.extract_string_chars(separator);
       all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
-      
+
       // Insert element characters
       std::vector<exprt> elem_chars = sb.extract_string_chars(elem_exprs[i]);
       all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
     }
-    
+
     // Build final null-terminated string from all collected characters
     return sb.build_null_terminated_string(all_chars);
   }
@@ -1971,14 +1974,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // Python syntax: separator.join(iterable), e.g., " ".join(["a", "b"])
   // This handles it before the general function_call_builder to ensure
   // proper AST-based list element extraction
-  if (element["func"]["_type"] == "Attribute" && 
-      element["func"]["attr"] == "join")
+  if (
+    element["func"]["_type"] == "Attribute" &&
+    element["func"]["attr"] == "join")
   {
     const auto &func = element["func"];
     // Check if the caller is a string (Constant like " " or a Name variable)
-    if (func.contains("value") && 
-        (func["value"]["_type"] == "Constant" || 
-         func["value"]["_type"] == "Name"))
+    if (
+      func.contains("value") && (func["value"]["_type"] == "Constant" ||
+                                 func["value"]["_type"] == "Name"))
     {
       return handle_str_join(element);
     }
