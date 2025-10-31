@@ -1085,7 +1085,7 @@ class Preprocessor(ast.NodeTransformer):
                 raise SyntaxError(
                     f"Multiple values for argument '{expectedArgs[i]}'",
                     (self.module_name, node.lineno, node.col_offset, ""))
-        
+
         # append defaults
         for i in range(len(node.args),len(expectedArgs)):
             if expectedArgs[i] in keywords:
