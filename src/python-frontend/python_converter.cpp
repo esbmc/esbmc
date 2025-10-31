@@ -3846,6 +3846,8 @@ typet python_converter::get_type_from_annotation(
             return bool_type();
           else if (value.is_number_float())
             return double_type();
+          else if (value.is_null())
+            return none_type();
         }
         // Handle Literal with multiple values (e.g., Literal[1, 2, 3])
         else if (slice["_type"] == "Tuple" && slice.contains("elts"))
@@ -3866,8 +3868,10 @@ typet python_converter::get_type_from_annotation(
           }
         }
       }
-      // treat as string pointer (most common case)
-      return gen_pointer_type(char_type());
+      throw std::runtime_error(
+        "Unsupported (or malformed) Literal type annotation. "
+        "We currently support constant values (string, int, bool, float, or "
+        "None).");
     }
 
     // Handle Optional[T] - extract the inner type T
