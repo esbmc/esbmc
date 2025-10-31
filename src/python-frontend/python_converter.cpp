@@ -1112,6 +1112,125 @@ exprt python_converter::handle_none_comparison(
     return not_exprt(equality_exprt(lhs, rhs));
 }
 
+/**
+ * @brief Handle str.join() method calls
+ * 
+ * Implements Python's str.join() method by:
+ * 1. Extracting the separator string from the method caller (e.g., " " in " ".join(l))
+ * 2. Getting the list elements from the AST
+ * 3. Building a single concatenated string by extracting all characters
+ *    and inserting separators between elements
+ * 
+ * @param call_json The JSON AST node for the join() call
+ * @return exprt representing the joined string
+ * 
+ * Example: " ".join(["a", "b"]) -> "a b"
+ */
+exprt python_converter::handle_str_join(const nlohmann::json &call_json)
+{
+  // Validate JSON structure: ensure we have the required keys
+  if (!call_json.contains("args") || call_json["args"].empty())
+    throw std::runtime_error("join() missing required argument: 'iterable'");
+
+  if (!call_json.contains("func"))
+    throw std::runtime_error("invalid join() call");
+
+  const auto &func = call_json["func"];
+
+  // Verify this is an Attribute call (method call syntax: obj.method())
+  // and has the value (the separator object)
+  if (
+    !func.contains("_type") || func["_type"] != "Attribute" ||
+    !func.contains("value"))
+    throw std::runtime_error("invalid join() call");
+
+  // Extract separator: for " ".join(l), func["value"] is the Constant " "
+  exprt separator = get_expr(func["value"]);
+  string_handler_.ensure_string_array(separator);
+
+  // Get the list argument (the iterable to join)
+  const nlohmann::json &list_arg = call_json["args"][0];
+
+  // Currently only support Name references (e.g., variable names)
+  // TODO: Support direct List literals like " ".join(["a", "b"])
+  if (
+    list_arg.contains("_type") && list_arg["_type"] == "Name" &&
+    list_arg.contains("id"))
+  {
+    std::string var_name = list_arg["id"].get<std::string>();
+
+    // Look up the variable in the AST to get its initialization value
+    nlohmann::json var_decl =
+      json_utils::find_var_decl(var_name, current_func_name_, *ast_json);
+
+    if (var_decl.empty())
+      throw std::runtime_error(
+        "NameError: name '" + var_name + "' is not defined");
+
+    // Ensure the variable is a list with elements array
+    if (!var_decl.contains("value"))
+      throw std::runtime_error("join() requires a list");
+
+    const nlohmann::json &list_value = var_decl["value"];
+
+    if (
+      !list_value.contains("_type") || list_value["_type"] != "List" ||
+      !list_value.contains("elts"))
+      throw std::runtime_error("join() requires a list");
+
+    // Get the list elements from the AST
+    const auto &elements = list_value["elts"];
+
+    // Edge case: empty list returns empty string
+    if (elements.empty())
+    {
+      typet empty_str = type_handler_.get_typet("str", 1);
+      return gen_zero(empty_str);
+    }
+
+    // Convert JSON elements to ESBMC expressions
+    std::vector<exprt> elem_exprs;
+    for (const auto &elem : elements)
+    {
+      exprt elem_expr = get_expr(elem);
+      string_handler_.ensure_string_array(elem_expr);
+      elem_exprs.push_back(elem_expr);
+    }
+
+    // Edge case: single element returns the element itself (no separator)
+    if (elem_exprs.size() == 1)
+      return elem_exprs[0];
+
+    // Main algorithm: Build the joined string by extracting characters
+    // from all elements and separators, then constructing a single string.
+    // This avoids multiple concatenation operations which could cause
+    // null terminator issues.
+    string_builder &sb = get_string_builder();
+    std::vector<exprt> all_chars;
+
+    // Start with the first element
+    std::vector<exprt> first_chars = sb.extract_string_chars(elem_exprs[0]);
+    all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
+
+    // For each remaining element: add separator, then add element
+    for (size_t i = 1; i < elem_exprs.size(); ++i)
+    {
+      // Insert separator characters
+      std::vector<exprt> sep_chars = sb.extract_string_chars(separator);
+      all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+
+      // Insert element characters
+      std::vector<exprt> elem_chars = sb.extract_string_chars(elem_exprs[i]);
+      all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
+    }
+
+    // Build final null-terminated string from all collected characters
+    return sb.build_null_terminated_string(all_chars);
+  }
+
+  throw std::runtime_error("join() argument must be a list of strings");
+}
+
 // Resolve symbol values to constants
 exprt python_converter::get_resolved_value(const exprt &expr)
 {
@@ -1850,6 +1969,24 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
+
+  // Early detection for str.join() method calls
+  // Python syntax: separator.join(iterable), e.g., " ".join(["a", "b"])
+  // This handles it before the general function_call_builder to ensure
+  // proper AST-based list element extraction
+  if (
+    element["func"]["_type"] == "Attribute" &&
+    element["func"]["attr"] == "join")
+  {
+    const auto &func = element["func"];
+    // Check if the caller is a string (Constant like " " or a Name variable)
+    if (
+      func.contains("value") && (func["value"]["_type"] == "Constant" ||
+                                 func["value"]["_type"] == "Name"))
+    {
+      return handle_str_join(element);
+    }
+  }
 
   // Handle indirect calls through function pointer variables
   if (element["func"]["_type"] == "Name")
