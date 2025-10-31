@@ -3789,6 +3789,19 @@ python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
     if (node.contains("id"))
       return node["id"].get<std::string>();
 
+    // Handle Subscript nodes (like Literal["bar"])
+    // Don't try to extract a string type name - return a marker
+    if (node.contains("_type") && node["_type"] == "Subscript")
+    {
+      if (node.contains("value") && node["value"].contains("id"))
+      {
+        std::string subscript_type = node["value"]["id"].get<std::string>();
+        if (subscript_type == "Literal")
+          return "__LITERAL__"; // Special marker for Literal types
+      }
+      return ""; // Other subscript types
+    }
+
     // Recursively handle nested BinOp (e.g., bool | str in bool | str | None)
     if (node.contains("_type") && node["_type"] == "BinOp")
     {
@@ -4017,6 +4030,22 @@ typet python_converter::get_type_from_annotation(
   {
     // Handle union types such as str | None (PEP 604 syntax)
     std::string inner_type = extract_non_none_type(annotation_node);
+
+    // Special handling for Literal types in unions
+    if (inner_type == "__LITERAL__")
+    {
+      // Find the Literal node and recursively process it
+      const auto &left = annotation_node["left"];
+      const auto &right = annotation_node["right"];
+
+      const auto &literal_node =
+        (left.contains("_type") && left["_type"] == "Subscript" &&
+         left.contains("value") && left["value"]["id"] == "Literal")
+          ? left
+          : right;
+
+      return get_type_from_annotation(literal_node, element);
+    }
 
     if (inner_type.empty())
     {
