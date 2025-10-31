@@ -1101,9 +1101,44 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   contains_call.arguments().push_back(item_arg);
 
-  contains_call.arguments().push_back(
-    symbol_expr(*item_info.elem_type_sym));                 // item type hash
-  contains_call.arguments().push_back(item_info.elem_size); // item size
+  // Use the type and size from the list elements, not from the search item
+  // Get the type information from what was stored in the list
+  const std::string &list_name = list.identifier().as_string();
+  auto type_map_it = list_type_map.find(list_name);
+
+  exprt type_hash = symbol_expr(*item_info.elem_type_sym);
+  exprt elem_size = item_info.elem_size;
+
+  if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+  {
+    // Use the type information from the list's stored elements
+    const typet &stored_type = type_map_it->second[0].second;
+
+    // Recalculate hash for stored type
+    const type_handler type_handler_ = converter_.get_type_handler();
+    const std::string stored_type_name =
+      type_handler_.type_to_string(stored_type);
+    constant_exprt stored_hash(size_type());
+    stored_hash.set_value(integer2binary(
+      std::hash<std::string>{}(stored_type_name), config.ansi_c.address_width));
+    type_hash = stored_hash;
+
+    // Recalculate size for stored type
+    if (stored_type.is_array())
+    {
+      const array_typet &array_type =
+        static_cast<const array_typet &>(stored_type);
+      const size_t array_length =
+        std::stoull(array_type.size().value().as_string(), nullptr, 2);
+      const size_t subtype_size_bits =
+        std::stoull(stored_type.subtype().width().as_string(), nullptr, 10);
+      size_t size_bytes = (array_length * subtype_size_bits) / 8;
+      elem_size = from_integer(BigInt(size_bytes), size_type());
+    }
+  }
+
+  contains_call.arguments().push_back(type_hash); // item type hash from list
+  contains_call.arguments().push_back(elem_size); // item size from list
 
   contains_call.type() = bool_type();
   contains_call.location() = converter_.get_location_from_decl(list_value_);
