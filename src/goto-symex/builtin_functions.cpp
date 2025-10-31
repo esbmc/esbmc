@@ -2630,3 +2630,69 @@ void goto_symext::replace_races_check(expr2tc &expr)
     expr = index_expr;
   }
 }
+
+void goto_symext::replace_python_impl(expr2tc &expr)
+{
+  expr->Foreach_operand([this](expr2tc &e) {
+    if (!is_nil_expr(e))
+      replace_python_impl(e);
+  });
+
+  if (is_isinstance2t(expr))
+  {
+    const isinstance2t &obj = to_isinstance2t(expr);
+    expr2tc value = obj.side_1;
+    expr2tc expect_type = obj.side_2;
+
+    value_setst::valuest value_set;
+    cur_state->value_set.get_value_set(value, value_set);
+
+    for (const auto &obj : value_set)
+    {
+      if (is_object_descriptor2t(obj))
+      {
+        const object_descriptor2t &o = to_object_descriptor2t(obj);
+        value = o.object;
+      }
+      else
+        value = obj;
+    }
+
+    cur_state->rename(value);
+    // Remove all typecast to get the original type
+    while (is_typecast2t(value))
+      value = to_typecast2t(value).from;
+
+    if (is_address_of2t(value))
+      value = to_address_of2t(value).ptr_obj;
+
+    if (is_struct_type(value))
+    {
+      const struct_type2t &struct_type = to_struct_type(value->type);
+
+      // Check if this is a tuple by examining the tag
+      if (is_nil_expr(expect_type))
+      {
+        // find tuple type
+        if (struct_type.name.as_string().find("tag-tuple") == 0)
+          expr = gen_true_expr();
+        else
+          expr = gen_false_expr();
+      }
+
+      return;
+    }
+
+    type2t::type_ids id;
+    if (is_index2t(value))
+      // Special case, str is modeled as a pointer, we need to get its subtype
+      id = to_index2t(value).source_value->type.get()->type_id;
+    else
+      id = value->type.get()->type_id;
+
+    if (id == expect_type->type.get()->type_id)
+      expr = gen_true_expr();
+    else
+      expr = gen_false_expr();
+  }
+}
