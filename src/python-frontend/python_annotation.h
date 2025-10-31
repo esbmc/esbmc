@@ -1174,7 +1174,7 @@ private:
       obj_name = prefix + std::string(".");
     }
 
-    // FIX: Handle method calls on constant literals
+    // Handle method calls on constant literals
     // Python allows: " ".join(l), 123.to_bytes(), etc.
     // Before this fix, accessing call["value"]["id"] would crash because
     // Constant nodes don't have an "id" field
@@ -1196,7 +1196,7 @@ private:
   {
     std::string type("");
 
-    // FIX: Handle method calls on constant literals
+    // Handle method calls on constant literals
     // When Python code has " ".join(l), the func["value"] is a Constant node
     // We need to map string method names to their return types directly
     // without looking up the object in the AST (which would fail)
