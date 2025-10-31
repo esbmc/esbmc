@@ -1101,9 +1101,55 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   contains_call.arguments().push_back(item_arg);
 
-  contains_call.arguments().push_back(
-    symbol_expr(*item_info.elem_type_sym));                 // item type hash
-  contains_call.arguments().push_back(item_info.elem_size); // item size
+  // For void/char pointers from iteration, use stored type info from list
+  exprt type_hash = symbol_expr(*item_info.elem_type_sym);
+  exprt elem_size = item_info.elem_size;
+
+  // Check if item is a pointer (void* or char* - from loop iteration over strings)
+  if (item_info.elem_symbol->type.is_pointer())
+  {
+    const std::string &list_name = list.identifier().as_string();
+    auto type_map_it = list_type_map.find(list_name);
+
+    if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+    {
+      // Look for a string array type (char array) in the list
+      for (const auto &stored_entry : type_map_it->second)
+      {
+        const typet &stored_type = stored_entry.second;
+
+        // Check if stored type is a char array (string)
+        if (stored_type.is_array() && stored_type.subtype() == char_type())
+        {
+          // Use the stored string array type instead of pointer type
+          const type_handler type_handler_ = converter_.get_type_handler();
+          const std::string stored_type_name =
+            type_handler_.type_to_string(stored_type);
+
+          constant_exprt stored_hash(size_type());
+          stored_hash.set_value(integer2binary(
+            std::hash<std::string>{}(stored_type_name),
+            config.ansi_c.address_width));
+          type_hash = stored_hash;
+
+          // Recalculate size for stored array type
+          const array_typet &array_type =
+            static_cast<const array_typet &>(stored_type);
+          const size_t array_length =
+            std::stoull(array_type.size().value().as_string(), nullptr, 2);
+          const size_t subtype_size_bits =
+            std::stoull(stored_type.subtype().width().as_string(), nullptr, 10);
+          size_t size_bytes = (array_length * subtype_size_bits) / 8;
+          elem_size = from_integer(BigInt(size_bytes), size_type());
+
+          break; // Found string array type, use it
+        }
+      }
+    }
+  }
+
+  contains_call.arguments().push_back(type_hash);
+  contains_call.arguments().push_back(elem_size);
 
   contains_call.type() = bool_type();
   contains_call.location() = converter_.get_location_from_decl(list_value_);
