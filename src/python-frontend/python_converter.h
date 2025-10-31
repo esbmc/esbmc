@@ -369,6 +369,9 @@ private:
     const nlohmann::json &element,
     exprt &bin_expr);
 
+  // String method helpers
+  exprt handle_str_join(const nlohmann::json &call_json);
+
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
   const global_scope &global_scope_;
