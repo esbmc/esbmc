@@ -3465,6 +3465,28 @@ void python_converter::get_var_assign(
       const std::string &rhs_identifier = rhs.identifier().as_string();
       python_list::copy_type_info(rhs_identifier, lhs_identifier);
     }
+    else if (
+      rhs.type() != lhs.type() && lhs.type().is_array() &&
+      !rhs.type().is_code())
+    {
+#ifndef NDEBUG
+      const array_typet &thetype = lhs.type();
+      thetype.size().is_constant();
+      // I am curious what else could arrive here. So add a debug
+      // assertion just to prevent us from doing something bad and to
+      // know that we are about to do something weird.
+      assert(thetype.size().is_nil());
+#endif
+      // For VLA is not enough to just update the type, we need to make an explicit
+      // declaration. This lets ESBMC do all the internal initializations
+      lhs_symbol->type = rhs.type();
+
+      code_declt decl(symbol_expr(*lhs_symbol), rhs);
+      decl.location() = location_begin;
+      target_block.copy_to_operands(decl);
+      current_lhs = nullptr;
+      return;
+    }
 
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
