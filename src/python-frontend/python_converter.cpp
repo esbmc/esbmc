@@ -3828,44 +3828,163 @@ typet python_converter::get_type_from_annotation(
       annotation_node.contains("value") &&
       annotation_node["value"]["id"] == "Literal")
     {
-      // For Literal types, infer the type from the literal value
+      // Infer type from a literal constant value
+      auto infer_literal_type = [](const nlohmann::json &value) -> typet {
+        if (value.is_string())
+          return gen_pointer_type(char_type());
+        else if (value.is_number_integer())
+          return long_long_int_type();
+        else if (value.is_boolean())
+          return bool_type();
+        else if (value.is_number_float())
+          return double_type();
+        else if (value.is_null())
+          return none_type();
+
+        return empty_typet(); // Unsupported type
+      };
+
+      // Resolve a slice element to a constant value
+      auto resolve_to_constant =
+        [this](const nlohmann::json &elem) -> nlohmann::json {
+        // Direct constant
+        if (elem["_type"] == "Constant")
+          return elem["value"];
+        // Variable reference: resolve it
+        if (elem["_type"] == "Name" && elem.contains("id"))
+        {
+          std::string var_name = elem["id"].get<std::string>();
+          nlohmann::json var_decl =
+            json_utils::find_var_decl(var_name, "", *ast_json);
+          if (
+            !var_decl.empty() && var_decl.contains("value") &&
+            var_decl["value"]["_type"] == "Constant")
+          {
+            return var_decl["value"]["value"];
+          }
+        }
+        return nlohmann::json(); // Could not resolve
+      };
+
+      // Track type flags from a resolved type
+      auto update_type_flags = [](
+                                 const typet &type,
+                                 TypeFlags &flags,
+                                 bool &has_string,
+                                 bool &has_none) {
+        if (type == gen_pointer_type(char_type()))
+          has_string = true;
+        else if (type == double_type())
+          flags.has_float = true;
+        else if (type == long_long_int_type())
+          flags.has_int = true;
+        else if (type == bool_type())
+          flags.has_bool = true;
+        else if (type == none_type())
+          has_none = true;
+        else if (type == pointer_type())
+        {
+          // Mixed type - mark as having both string and numeric
+          has_string = true;
+          flags.has_int = true;
+        }
+      };
+
       if (annotation_node.contains("slice"))
       {
         const auto &slice = annotation_node["slice"];
-
-        // Handle Literal with Constant value (e.g., Literal["foo"])
+        // Handle nested Literal (e.g., Literal[Literal["foo"]])
+        if (
+          slice["_type"] == "Subscript" && slice.contains("value") &&
+          slice["value"]["id"] == "Literal")
+        {
+          return get_type_from_annotation(slice, element);
+        }
+        // Handle Literal with single value (e.g., Literal["foo"] or Literal[NAME])
         if (slice["_type"] == "Constant")
         {
-          const auto &value = slice["value"];
-
-          if (value.is_string())
-            return gen_pointer_type(char_type()); // String literal -> char*
-          else if (value.is_number_integer())
-            return long_long_int_type();
-          else if (value.is_boolean())
-            return bool_type();
-          else if (value.is_number_float())
-            return double_type();
-          else if (value.is_null())
-            return none_type();
+          typet result = infer_literal_type(slice["value"]);
+          if (!result.is_empty())
+            return result;
         }
-        // Handle Literal with multiple values (e.g., Literal[1, 2, 3])
+        else if (slice["_type"] == "Name")
+        {
+          nlohmann::json resolved_value = resolve_to_constant(slice);
+          if (!resolved_value.is_null())
+          {
+            typet result = infer_literal_type(resolved_value);
+            if (!result.is_empty())
+              return result;
+          }
+          throw std::runtime_error(
+            "Literal annotation references variable '" +
+            slice["id"].get<std::string>() +
+            "' which could not be resolved to a constant value.");
+        }
+        // Handle Literal with multiple values
         else if (slice["_type"] == "Tuple" && slice.contains("elts"))
         {
-          // For multiple literals, use the type of the first one
-          const auto &first_elem = slice["elts"][0];
-          if (first_elem["_type"] == "Constant")
+          const auto &elts = slice["elts"];
+          if (elts.empty())
+            throw std::runtime_error("Empty Literal tuple is not supported.");
+
+          TypeFlags type_flags;
+          bool has_string = false;
+          bool has_none = false;
+
+          for (size_t i = 0; i < elts.size(); ++i)
           {
-            const auto &value = first_elem["value"];
-            if (value.is_string())
-              return gen_pointer_type(char_type());
-            else if (value.is_number_integer())
-              return long_long_int_type();
-            else if (value.is_boolean())
-              return bool_type();
-            else if (value.is_number_float())
-              return double_type();
+            const auto &elem = elts[i];
+            // Handle nested Literal in tuple
+            if (
+              elem["_type"] == "Subscript" && elem.contains("value") &&
+              elem["value"]["id"] == "Literal")
+            {
+              typet nested_type = get_type_from_annotation(elem, element);
+              update_type_flags(nested_type, type_flags, has_string, has_none);
+              continue;
+            }
+            // Try to resolve element to constant
+            nlohmann::json resolved_value = resolve_to_constant(elem);
+            if (resolved_value.is_null())
+            {
+              std::string error_msg =
+                "Literal tuple element at index " + std::to_string(i);
+              if (elem["_type"] == "Name")
+                error_msg +=
+                  " references variable '" + elem["id"].get<std::string>() +
+                  "' which could not be resolved to a constant value.";
+              else
+                error_msg += " is not a constant value.";
+              throw std::runtime_error(error_msg);
+            }
+            typet elem_type = infer_literal_type(resolved_value);
+            if (elem_type.is_empty())
+            {
+              throw std::runtime_error(
+                "Unsupported literal type at index " + std::to_string(i) +
+                " in Literal tuple.");
+            }
+            update_type_flags(elem_type, type_flags, has_string, has_none);
           }
+          // Determine the widest type: string > float > int > bool > None
+          if (has_string)
+          {
+            if (
+              type_flags.has_float || type_flags.has_int || type_flags.has_bool)
+              return pointer_type(); // Mixed string and numeric
+            return gen_pointer_type(char_type());
+          }
+          if (type_flags.has_float)
+            return double_type();
+          if (type_flags.has_int)
+            return long_long_int_type();
+          if (type_flags.has_bool)
+            return bool_type();
+          if (has_none)
+            return none_type();
+          throw std::runtime_error(
+            "Could not determine type for Literal tuple.");
         }
       }
       throw std::runtime_error(
