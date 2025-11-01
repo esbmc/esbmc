@@ -1709,13 +1709,39 @@ exprt function_call_expr::handle_general_function_call()
 
           // Only report AttributeError if:
           // 1. Method doesn't exist in the class hierarchy, AND
-          // 2. We're not currently processing a constructor
-          //    (constructors are processed before all methods are in the symbol table)
-          bool is_in_constructor =
-            (converter_.current_function_name() == class_name) ||
-            (converter_.current_function_name() == "__init__");
+          // 2. We're not currently processing any method in the same class
+          //    (methods may reference other methods not yet in the symbol table)
+          std::string current_func = converter_.current_function_name();
+          bool is_in_same_class = false;
 
-          if (!method_exists && !is_in_constructor)
+          // Check if we're in any method of the target class
+          for (const auto &check_class : possible_classes)
+          {
+            // We're in the same class if:
+            // - current function is the class name (constructor)
+            // - current function is __init__
+            // - the function symbol exists and contains the class marker for this class
+            if (current_func == check_class || current_func == "__init__")
+            {
+              is_in_same_class = true;
+              break;
+            }
+
+            // Check if current function belongs to this class by looking for @C@ClassName pattern
+            std::string class_marker = std::string(CLASS_MARKER) + check_class +
+                                       std::string(FUNCTION_MARKER);
+            const symbolt *current_func_sym =
+              converter_.find_symbol(converter_.create_symbol_id().to_string());
+            if (
+              current_func_sym && current_func_sym->id.as_string().find(
+                                    class_marker) != std::string::npos)
+            {
+              is_in_same_class = true;
+              break;
+            }
+          }
+
+          if (!method_exists && !is_in_same_class)
           {
             // Generate AttributeError
             return generate_attribute_error(method_name, possible_classes);
