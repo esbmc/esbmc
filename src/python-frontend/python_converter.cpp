@@ -4629,6 +4629,16 @@ void python_converter::get_attributes_from_self(
       stmt["target"]["value"]["id"] == "self")
     {
       std::string attr_name = stmt["target"]["attr"];
+
+      // Check if "id" exists before accessing it
+      if (!stmt["annotation"].contains("id"))
+      {
+        log_warning(
+          "Skipping attribute '{}' with unsupported annotation type",
+          attr_name);
+        continue;
+      }
+
       std::string annotated_type = stmt["annotation"]["id"].get<std::string>();
 
       typet type;
