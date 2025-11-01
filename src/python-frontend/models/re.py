@@ -1,11 +1,11 @@
 # Regular Expression Operational Model
-# TODO: Currently, the regex model uses manual pattern recognizers with 
-# nondeterministic fallbacks. A proper string solver would handle 
+# TODO: Currently, the regex model uses manual pattern recognizers with
+# nondeterministic fallbacks. A proper string solver would handle
 # regex operations formally and completely. We'll have to consider the following:
 # 1) We will need to represent strings as first-class types in our intermediate representation.
 # 2) We will need to integrate existing string solvers such as Z3-str, CVC5, or Z3's sequence theory.
 # 3) String constraint solving can be expensive; we may need further strategies for handling large string programs.
-    
+
 def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> int:
     """Match [x-y]+ or [x-y]* patterns"""
     if pattern_len != 6:
