@@ -75,6 +75,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"override-return-annotation",
       NULL,
       "Override return annotation with inferred type"},
+     {"strict-types",
+      NULL,
+      "Enforce strict type checking for function arguments during "
+      "verification"},
    }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND

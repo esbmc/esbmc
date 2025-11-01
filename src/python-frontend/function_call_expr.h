@@ -37,6 +37,14 @@ public:
   }
 
 private:
+  /*
+   * Validates that function call arguments match expected parameter types.
+   * Returns TypeError exception if type mismatch is detected, nil_exprt otherwise.
+   */
+  exprt check_argument_types(
+    const symbolt *func_symbol,
+    const nlohmann::json &args) const;
+
   // Helper methods for AttributeError detection
   std::vector<std::string>
   find_possible_class_types(const symbolt *obj_symbol) const;
