@@ -293,11 +293,20 @@ exprt function_call_expr::handle_isinstance() const
 
   if (type_arg["_type"] == "Name")
   {
+    // isinstance(v, int)
     std::string type_name = args[1]["id"];
+    return build_isinstance(type_name);
+  }
+  else if (type_arg["_type"] == "Constant")
+  {
+    // isintance(v, None)
+    std::string type_name = "NoneType";
     return build_isinstance(type_name);
   }
   else if (type_arg["_type"] == "Tuple")
   {
+    // isinstance(v, (int, str))
+    // converted into instance(v, int) || isinstance(v, str)
     const auto &elts = type_arg["elts"];
 
     std::string first_type = elts[0]["id"];
