@@ -2631,11 +2631,11 @@ void goto_symext::replace_races_check(expr2tc &expr)
   }
 }
 
-void goto_symext::replace_python_impl(expr2tc &expr)
+void goto_symext::simplify_python_builtins(expr2tc &expr)
 {
   expr->Foreach_operand([this](expr2tc &e) {
     if (!is_nil_expr(e))
-      replace_python_impl(e);
+      simplify_python_builtins(e);
   });
 
   if (is_isinstance2t(expr))
