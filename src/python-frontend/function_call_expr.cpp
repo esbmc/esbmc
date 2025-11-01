@@ -1573,14 +1573,6 @@ exprt function_call_expr::handle_general_function_call()
   // Find function symbol
   const symbolt *func_symbol = converter_.find_symbol(func_symbol_id);
 
-  if (func_symbol != nullptr)
-  {
-    // Add type checking here
-    exprt type_error = check_argument_types(func_symbol, call_["args"]);
-    if (!type_error.is_nil())
-      return type_error;
-  }
-
   if (func_symbol == nullptr)
   {
     if (
@@ -1798,6 +1790,13 @@ exprt function_call_expr::handle_general_function_call()
         }
       }
     }
+  }
+
+  if (func_symbol != nullptr)
+  {
+    exprt type_error = check_argument_types(func_symbol, call_["args"]);
+    if (!type_error.is_nil())
+      return type_error;
   }
 
   locationt location = converter_.get_location_from_decl(call_);
@@ -2214,12 +2213,26 @@ exprt function_call_expr::check_argument_types(
   const code_typet &func_type = to_code_type(func_symbol->type);
   const auto &params = func_type.arguments();
 
-  // Skip 'self'/'cls' parameter for instance/class methods
+  // Determine parameter offset based on actual function signature
   size_t param_offset = 0;
-  if (
-    function_type_ == FunctionType::InstanceMethod ||
-    function_type_ == FunctionType::ClassMethod)
+
+  if (function_type_ == FunctionType::InstanceMethod)
+  {
+    // Instance methods always have 'self' as first parameter
     param_offset = 1;
+  }
+  else if (function_type_ == FunctionType::ClassMethod)
+  {
+    // For class methods, check if first parameter is actually 'self' or 'cls'
+    // Static methods are called as ClassMethod but don't have self/cls
+    if (!params.empty())
+    {
+      const std::string &first_param = params[0].get_base_name().as_string();
+      if (first_param == "self" || first_param == "cls")
+        param_offset = 1;
+      // Otherwise it's a static method, param_offset stays 0
+    }
+  }
 
   for (size_t i = 0; i < args.size(); ++i)
   {
