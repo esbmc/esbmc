@@ -6,6 +6,7 @@
 # 2) We will need to integrate existing string solvers such as Z3-str, CVC5, or Z3's sequence theory.
 # 3) String constraint solving can be expensive; we may need further strategies for handling large string programs.
 
+
 def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> int:
     """Match [x-y]+ or [x-y]* patterns"""
     if pattern_len != 6:
@@ -85,9 +86,8 @@ def try_match_two_char_class_range(pattern: str, pattern_len: int, string: str) 
     if pattern_len != 12:
         return -1
 
-    if not (pattern[0] == '^' and pattern[1] == '[' and pattern[3] == '-' and
-            pattern[5] == ']' and pattern[6] == '[' and pattern[8] == '-' and
-            pattern[10] == ']' and pattern[11] == '$'):
+    if not (pattern[0] == '^' and pattern[1] == '[' and pattern[3] == '-' and pattern[5] == ']' and
+            pattern[6] == '[' and pattern[8] == '-' and pattern[10] == ']' and pattern[11] == '$'):
         return -1
 
     start_char1: str = pattern[2]
@@ -120,10 +120,10 @@ def try_match_dot_literal(pattern: str, pattern_len: int, string: str) -> int:
 
     # Second character should be a literal (not a metacharacter)
     literal_char: str = pattern[1]
-    if (literal_char == '.' or literal_char == '*' or literal_char == '+' or
-        literal_char == '?' or literal_char == '[' or literal_char == ']' or
-        literal_char == '(' or literal_char == ')' or literal_char == '|' or
-        literal_char == '^' or literal_char == '$' or literal_char == '\\'):
+    if (literal_char == '.' or literal_char == '*' or literal_char == '+' or literal_char == '?'
+            or literal_char == '[' or literal_char == ']' or literal_char == '('
+            or literal_char == ')' or literal_char == '|' or literal_char == '^'
+            or literal_char == '$' or literal_char == '\\'):
         return -1
 
     string_len: int = len(string)
