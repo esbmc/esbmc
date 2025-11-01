@@ -763,13 +763,11 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     new_rhs.operands.erase(new_rhs.operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs.foreach_operand(
-    [this, &args](const expr2tc &e)
-    {
-      expr2tc tmp = e;
-      do_simplify(tmp);
-      args.push_back(tmp);
-    });
+  new_rhs.foreach_operand([this, &args](const expr2tc &e) {
+    expr2tc tmp = e;
+    do_simplify(tmp);
+    args.push_back(tmp);
+  });
 
   if (!is_nil_expr(lhs))
   {
@@ -2306,8 +2304,7 @@ void goto_symext::intrinsic_builtin_object_size(
   //   - 0 if the object cannot be determined (for type=2 or 3).
   // The type parameter encodes whether we want the full size (0/2)
   // or remaining size after pointer offset (1/3).
-  auto create_fallback_size = [&](bool use_zero)
-  {
+  auto create_fallback_size = [&](bool use_zero) {
     return use_zero ? constant_int2tc(size_type2(), BigInt(0))
                     : constant_int2tc(
                         size_type2(),
@@ -2597,12 +2594,10 @@ void goto_symext::replace_races_check(expr2tc &expr)
 
   // replace RACE_CHECK(&x) with __ESBMC_races_flag[&x]
   // recursion is needed for this case: !RACE_CHECK(&x)
-  expr->Foreach_operand(
-    [this](expr2tc &e)
-    {
-      if (!is_nil_expr(e))
-        replace_races_check(e);
-    });
+  expr->Foreach_operand([this](expr2tc &e) {
+    if (!is_nil_expr(e))
+      replace_races_check(e);
+  });
 
   if (is_races_check2t(expr))
   {
@@ -2638,12 +2633,10 @@ void goto_symext::replace_races_check(expr2tc &expr)
 
 void goto_symext::simplify_python_builtins(expr2tc &expr)
 {
-  expr->Foreach_operand(
-    [this](expr2tc &e)
-    {
-      if (!is_nil_expr(e))
-        simplify_python_builtins(e);
-    });
+  expr->Foreach_operand([this](expr2tc &e) {
+    if (!is_nil_expr(e))
+      simplify_python_builtins(e);
+  });
 
   if (is_isinstance2t(expr))
   {
