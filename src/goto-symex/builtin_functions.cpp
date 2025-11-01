@@ -2676,6 +2676,8 @@ void goto_symext::replace_python_impl(expr2tc &expr)
           expr = gen_true_expr();
         else
           expr = gen_false_expr();
+        
+        return;
       }
 
       // Check sub class
