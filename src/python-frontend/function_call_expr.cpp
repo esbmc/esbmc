@@ -283,11 +283,19 @@ exprt function_call_expr::handle_isinstance() const
 
   auto build_isinstance = [&](const std::string &type_name) {
     typet expected_type = type_handler_.get_typet(type_name, 0);
-    exprt zero = gen_zero(expected_type);
+    exprt t;
+    if (expected_type.is_symbol())
+    {
+      // struct type
+      const symbolt *symbol = converter_.ns.lookup(expected_type);
+      t = symbol_expr(*symbol);
+    }
+    else
+      t = gen_zero(expected_type);
 
     exprt isinstance("isinstance", typet("bool"));
     isinstance.copy_to_operands(obj_expr);
-    isinstance.move_to_operands(zero);
+    isinstance.move_to_operands(t);
     return isinstance;
   };
 
