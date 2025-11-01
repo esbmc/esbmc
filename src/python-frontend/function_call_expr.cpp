@@ -230,45 +230,6 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
-bool function_call_expr::is_same_type(
-  const exprt &obj_expr,
-  const nlohmann::json &type_node) const
-{
-  if (type_node["_type"] != "Name")
-    throw std::runtime_error("Unsupported type in isinstance()");
-
-  std::string type_name = type_node["id"];
-
-  // Special handling for tuple type checking
-  if (type_name == "tuple")
-  {
-    // Check if object is a tuple by examining struct tag
-    if (obj_expr.type().id() == "struct")
-    {
-      const struct_typet &struct_type = to_struct_type(obj_expr.type());
-
-      // Check if this is a tuple by examining the tag
-      if (struct_type.tag().as_string().find("tag-tuple") == 0)
-        return true;
-    }
-    return false;
-  }
-
-  // Get the internal type representation from the type name
-  typet expected_type = type_handler_.get_typet(type_name, 0);
-
-  /* NOTE: Comparing the types directly may be insufficient.
-           Inheritance or type aliases may require deeper analysis. */
-
-  if (base_type_eq(obj_expr.type(), expected_type, converter_.ns))
-    return true;
-
-  if (is_subclass_of(obj_expr.type(), expected_type, converter_.ns))
-    return true;
-
-  return false;
-}
-
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
