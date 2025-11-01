@@ -2647,6 +2647,7 @@ void goto_symext::replace_python_impl(expr2tc &expr)
     value_setst::valuest value_set;
     cur_state->value_set.get_value_set(value, value_set);
 
+    // Find the last value from the value set
     for (const auto &obj : value_set)
     {
       if (is_object_descriptor2t(obj))
@@ -2666,29 +2667,36 @@ void goto_symext::replace_python_impl(expr2tc &expr)
 
     if (is_struct_type(value))
     {
-      const struct_type2t &struct_type = to_struct_type(value->type);
-
       // Check if this is a tuple by examining the tag
       if (is_nil_expr(expect_type))
       {
         // find tuple type
+        const struct_type2t &struct_type = to_struct_type(value->type);
         if (struct_type.name.as_string().find("tag-tuple") == 0)
           expr = gen_true_expr();
         else
           expr = gen_false_expr();
       }
 
+      // Check sub class
+      if (is_subclass_of(expect_type->type, value->type, ns))
+        expr = gen_true_expr();
+      else
+        expr = gen_false_expr();
+
       return;
     }
 
-    type2t::type_ids id;
+    // Basic type comparison
+    // int, str, bool
+    type2tc t;
     if (is_index2t(value))
       // Special case, str is modeled as a array, we need to get its subtype
-      id = to_index2t(value).source_value->type.get()->type_id;
+      t = to_index2t(value).source_value->type;
     else
-      id = value->type.get()->type_id;
+      t = value->type;
 
-    if (id == expect_type->type.get()->type_id)
+    if (base_type_eq(t, expect_type->type, ns))
       expr = gen_true_expr();
     else
       expr = gen_false_expr();
