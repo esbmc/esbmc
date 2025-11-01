@@ -2654,8 +2654,6 @@ void goto_symext::replace_python_impl(expr2tc &expr)
         const object_descriptor2t &o = to_object_descriptor2t(obj);
         value = o.object;
       }
-      else
-        value = obj;
     }
 
     cur_state->rename(value);
@@ -2685,7 +2683,7 @@ void goto_symext::replace_python_impl(expr2tc &expr)
 
     type2t::type_ids id;
     if (is_index2t(value))
-      // Special case, str is modeled as a pointer, we need to get its subtype
+      // Special case, str is modeled as a array, we need to get its subtype
       id = to_index2t(value).source_value->type.get()->type_id;
     else
       id = value->type.get()->type_id;
