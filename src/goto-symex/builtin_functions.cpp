@@ -2676,7 +2676,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
           expr = gen_true_expr();
         else
           expr = gen_false_expr();
-        
+
         return;
       }
 
