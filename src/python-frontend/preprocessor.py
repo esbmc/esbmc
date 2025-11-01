@@ -1078,6 +1078,14 @@ class Preprocessor(ast.NodeTransformer):
             self.generic_visit(node)
             return node
 
+        # Check for conflicts between positional and keyword arguments
+        for i in range(len(node.args)):
+            if i < len(expectedArgs) and expectedArgs[i] in keywords:
+                # Positional argument at position i conflicts with keyword argument
+                raise SyntaxError(
+                    f"Multiple values for argument '{expectedArgs[i]}'",
+                    (self.module_name, node.lineno, node.col_offset, ""))
+
         # append defaults
         for i in range(len(node.args),len(expectedArgs)):
             if expectedArgs[i] in keywords:
