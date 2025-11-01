@@ -75,6 +75,65 @@ def try_match_alternation(pattern: str, pattern_len: int, string: str) -> int:
     return 0
 
 
+def try_match_two_char_class_range(pattern: str, pattern_len: int, string: str) -> int:
+    """Match ^[x-y][x-y]$ patterns (exactly two characters in range)"""
+    if pattern_len != 12:
+        return -1
+
+    if not (pattern[0] == '^' and pattern[1] == '[' and pattern[3] == '-' and
+            pattern[5] == ']' and pattern[6] == '[' and pattern[8] == '-' and
+            pattern[10] == ']' and pattern[11] == '$'):
+        return -1
+
+    start_char1: str = pattern[2]
+    end_char1: str = pattern[4]
+    start_char2: str = pattern[7]
+    end_char2: str = pattern[9]
+
+    string_len: int = len(string)
+
+    # Must be exactly 2 characters
+    if string_len != 2:
+        return 0
+
+    # Check both characters are in their respective ranges
+    if string[0] < start_char1 or string[0] > end_char1:
+        return 0
+    if string[1] < start_char2 or string[1] > end_char2:
+        return 0
+
+    return 1
+
+
+def try_match_dot_literal(pattern: str, pattern_len: int, string: str) -> int:
+    """Match .x patterns (any character followed by literal character)"""
+    if pattern_len != 2:
+        return -1
+
+    if pattern[0] != '.':
+        return -1
+
+    # Second character should be a literal (not a metacharacter)
+    literal_char: str = pattern[1]
+    if (literal_char == '.' or literal_char == '*' or literal_char == '+' or
+        literal_char == '?' or literal_char == '[' or literal_char == ']' or
+        literal_char == '(' or literal_char == ')' or literal_char == '|' or
+        literal_char == '^' or literal_char == '$' or literal_char == '\\'):
+        return -1
+
+    string_len: int = len(string)
+
+    # Must be at least 2 characters
+    if string_len < 2:
+        return 0
+
+    # Second character must match the literal
+    if string[1] != literal_char:
+        return 0
+
+    return 1
+
+
 def match(pattern: str, string: str) -> bool:
     """
     Try to match pattern at the beginning of string
@@ -101,6 +160,14 @@ def match(pattern: str, string: str) -> bool:
         return result == 1
 
     result = try_match_alternation(pattern, pattern_len, string)
+    if result >= 0:
+        return result == 1
+
+    result = try_match_two_char_class_range(pattern, pattern_len, string)
+    if result >= 0:
+        return result == 1
+
+    result = try_match_dot_literal(pattern, pattern_len, string)
     if result >= 0:
         return result == 1
 
@@ -139,7 +206,7 @@ def match(pattern: str, string: str) -> bool:
 
     # Literal pattern matching
     if not has_meta:
-        effective_pattern_len: int = pattern_len - 1
+        effective_pattern_len: int = pattern_len
         if len(string) - 1 < effective_pattern_len:
             return False
         m: int = 0
@@ -225,6 +292,14 @@ def fullmatch(pattern: str, string: str) -> bool:
         return result == 1
 
     result = try_match_alternation(pattern, pattern_len, string)
+    if result >= 0:
+        return result == 1
+
+    result = try_match_two_char_class_range(pattern, pattern_len, string)
+    if result >= 0:
+        return result == 1
+
+    result = try_match_dot_literal(pattern, pattern_len, string)
     if result >= 0:
         return result == 1
 
