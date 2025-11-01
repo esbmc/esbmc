@@ -111,9 +111,6 @@ private:
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
-  bool
-  is_same_type(const exprt &obj_expr, const nlohmann::json &type_node) const;
-
   exprt handle_isinstance() const;
 
   exprt handle_hasattr() const;

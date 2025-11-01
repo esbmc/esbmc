@@ -227,6 +227,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
     dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
+    simplify_python_builtins(tmp);
 
     symex_goto(tmp);
   }
@@ -499,6 +500,7 @@ void goto_symext::symex_assert()
   replace_dynamic_allocation(tmp);
 
   replace_races_check(tmp);
+  simplify_python_builtins(tmp);
 
   claim(tmp, msg);
 }
