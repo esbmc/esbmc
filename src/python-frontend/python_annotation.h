@@ -1139,25 +1139,6 @@ private:
     return result;
   }
 
-  // Helper: Get type name from a constant value (e.g., "str" for string literal)
-  std::string get_type_from_constant(const Json &constant_node) const
-  {
-    if (!constant_node.contains("value"))
-      return "";
-
-    const auto &value = constant_node["value"];
-    if (value.is_string())
-      return "str";
-    else if (value.is_number_integer())
-      return "int";
-    else if (value.is_number_float())
-      return "float";
-    else if (value.is_boolean())
-      return "bool";
-
-    return "";
-  }
-
   std::string get_object_name(const Json &call, const std::string &prefix)
   {
     if (call["value"]["_type"] == "Attribute")
