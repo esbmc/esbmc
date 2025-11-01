@@ -179,7 +179,9 @@ get_object_alias(const JsonType &ast, const std::string &obj_name)
 template <typename JsonType>
 const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
-  for (auto &element : block["body"])
+  const JsonType &body = (block.contains("body") ? block["body"] : block);
+
+  for (auto &element : body)
   {
     // Check for annotated assignment (AnnAssign)
     if (
@@ -195,6 +197,9 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
       element["targets"][0].contains("id") &&
       element["targets"][0]["id"] == var_name)
       return element;
+
+    if (element["_type"] == "If")
+      return get_var_node(var_name, element["body"]);
   }
 
   if (block.contains("args"))
@@ -215,9 +220,11 @@ const JsonType find_var_decl(
 {
   JsonType ref;
 
+  const JsonType &body = (ast.contains("body") ? ast["body"] : ast);
+
   if (!function.empty())
   {
-    for (const auto &elem : ast["body"])
+    for (const auto &elem : body)
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == function)
         ref = get_var_node(var_name, elem);
