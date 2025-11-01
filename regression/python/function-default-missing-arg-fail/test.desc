@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^VERIFICATION FAILED$
+^TypeError: returns\_y\(\) missing 1 required positional argument: \'x\'$

@@ -1086,21 +1086,34 @@ class Preprocessor(ast.NodeTransformer):
                     f"Multiple values for argument '{expectedArgs[i]}'",
                     (self.module_name, node.lineno, node.col_offset, ""))
 
+        # First, collect all missing required arguments
+        missing_args = []
+        for i in range(len(node.args), len(expectedArgs)):
+            if expectedArgs[i] not in keywords and (functionName, expectedArgs[i]) not in self.functionDefaults:
+                missing_args.append(expectedArgs[i])
+
+        # If there are missing arguments, raise TypeError before processing defaults
+        if missing_args:
+            if len(missing_args) == 1:
+                raise TypeError(
+                    f"{functionName}() missing 1 required positional argument: '{missing_args[0]}'"
+                )
+            else:
+                args_str = ' and '.join([f"'{arg}'" for arg in missing_args])
+                raise TypeError(
+                    f"{functionName}() missing {len(missing_args)} required positional arguments: {args_str}"
+                )
+
         # append defaults
-        for i in range(len(node.args),len(expectedArgs)):
+        for i in range(len(node.args), len(expectedArgs)):
             if expectedArgs[i] in keywords:
                 node.args.append(keywords[expectedArgs[i]])
             elif (functionName, expectedArgs[i]) in self.functionDefaults:
                 default_val = self.functionDefaults[(functionName, expectedArgs[i])]
-                if isinstance(default_val,ast.Name):
+                if isinstance(default_val, ast.Name):
                     node.args.append(default_val)
                 else:
-                    node.args.append(ast.Constant(value = default_val))
-            else:
-                print(f"WARNING: {functionName}() missing required positional argument: '{expectedArgs[i]}'\n")
-                print(f"* file: {self.module_name}\n* line {node.lineno}\n* function: {functionName}\n* column: {node.col_offset} ")
-                break # breaking means not enough arguments, solver should reject
-
+                    node.args.append(ast.Constant(value=default_val))
 
         self.generic_visit(node)
         return node # transformed node
