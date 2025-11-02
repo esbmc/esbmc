@@ -300,6 +300,17 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
 - **Exception Objects**: Exception instances contain message attributes and support string representation via __str__() method.
 - **Exception Raising**: Supports raise statements with exception instantiation and custom error messages.
 
+### Strict Type Checking
+ESBMC-Python provides an optional strict type-checking mode that enforces type compatibility for function arguments at verification time. 
+- **Command-Line Option**:
+  - **--strict-types**: Enables strict type checking for function arguments during verification. When this flag is provided, ESBMC validates that all arguments passed to functions match their declared parameter types.
+- **Behavior**:
+  - **Type Validation**: Checks that each argument's type matches the corresponding parameter's type annotation.
+  - **Instance Methods**: Automatically accounts for the implicit self parameter in instance methods.
+  - **Class Methods**: Automatically accounts for the implicit cls parameter in class methods.
+  - **Static Methods**: Validates all parameters without implicit parameter handling.
+  - **Type Errors**: When a type mismatch is detected, it generates a `TypeError` exception with a descriptive message indicating which argument has an incompatible type.
+
 ### Code Quality and Control Flow Analysis
 
 - **Missing Return Statement Detection**: ESBMC-Python performs static analysis to detect functions with missing return statements:
