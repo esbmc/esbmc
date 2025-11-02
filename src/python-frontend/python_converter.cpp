@@ -4189,9 +4189,7 @@ typet python_converter::get_type_from_annotation(
     // List types are already pointers
     // Don't wrap list_type in another pointer; we just return it directly
     if (base_type == type_handler_.get_list_type())
-    {
       return base_type;
-    }
 
     // For other types (e.g., classes, lists), use pointer type
     return gen_pointer_type(base_type);

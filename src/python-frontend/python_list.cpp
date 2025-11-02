@@ -18,55 +18,55 @@ static typet get_elem_type_from_annotation(
   const nlohmann::json &node,
   const type_handler &type_handler_)
 {
-  // Check if annotation exists and has the expected structure
-  if (
-    node.contains("annotation") && node["annotation"].is_object() &&
-    node["annotation"].contains("slice") &&
-    node["annotation"]["slice"].is_object() &&
-    node["annotation"]["slice"].contains("id") &&
-    node["annotation"]["slice"]["id"].is_string())
+  // Extract element type from a Subscript node such as list[T]
+  auto extract_subscript_elem = [&](const nlohmann::json &ann) -> typet {
+    if (
+      ann.contains("slice") && ann["slice"].is_object() &&
+      ann["slice"].contains("id") && ann["slice"]["id"].is_string())
+    {
+      return type_handler_.get_typet(ann["slice"]["id"].get<std::string>());
+    }
+    return typet();
+  };
+
+  if (!node.contains("annotation") || !node["annotation"].is_object())
+    return typet();
+
+  const auto &annotation = node["annotation"];
+
+  // Case 1: Direct subscript annotation like list[str]
+  if (annotation.contains("slice"))
   {
-    return type_handler_.get_typet(
-      node["annotation"]["slice"]["id"].get<std::string>());
+    typet elem_type = extract_subscript_elem(annotation);
+    if (elem_type != typet())
+      return elem_type;
   }
 
-  // Handle union types like list[str] | None
-  if (
-    node.contains("annotation") && node["annotation"].is_object() &&
-    node["annotation"]["_type"] == "BinOp")
+  // Case 2: Union type annotation such as list[str] | None
+  if (annotation["_type"] == "BinOp")
   {
-    // Check left side for Subscript (list[T])
-    if (
-      node["annotation"]["left"].contains("_type") &&
-      node["annotation"]["left"]["_type"] == "Subscript" &&
-      node["annotation"]["left"].contains("slice") &&
-      node["annotation"]["left"]["slice"].contains("id"))
+    // Try left side first (e.g., handles list[str] | None)
+    if (annotation["left"]["_type"] == "Subscript")
     {
-      return type_handler_.get_typet(
-        node["annotation"]["left"]["slice"]["id"].get<std::string>());
+      typet elem_type = extract_subscript_elem(annotation["left"]);
+      if (elem_type != typet())
+        return elem_type;
     }
 
-    // Check right side for Subscript (list[T])
-    if (
-      node["annotation"]["right"].contains("_type") &&
-      node["annotation"]["right"]["_type"] == "Subscript" &&
-      node["annotation"]["right"].contains("slice") &&
-      node["annotation"]["right"]["slice"].contains("id"))
+    // Try right side (e.g., handles None | list[str])
+    if (annotation["right"]["_type"] == "Subscript")
     {
-      return type_handler_.get_typet(
-        node["annotation"]["right"]["slice"]["id"].get<std::string>());
+      typet elem_type = extract_subscript_elem(annotation["right"]);
+      if (elem_type != typet())
+        return elem_type;
     }
   }
 
-  // Check for direct type annotation
-  if (
-    node.contains("annotation") && node["annotation"].is_object() &&
-    node["annotation"].contains("id") && node["annotation"]["id"].is_string())
-  {
-    return type_handler_.get_typet(node["annotation"]["id"].get<std::string>());
-  }
+  // Case 3: Direct type annotation such as str, int
+  if (annotation.contains("id") && annotation["id"].is_string())
+    return type_handler_.get_typet(annotation["id"].get<std::string>());
 
-  // Return empty type if annotation structure is not as expected
+  // Return empty type if annotation structure is not recognized
   return typet();
 }
 
