@@ -3151,9 +3151,13 @@ void python_converter::handle_assignment_type_adjustments(
       lhs.type() = pointer_type;
       rhs = string_handler_.get_array_base_address(rhs);
     }
-    else if (lhs.type().is_pointer() && rhs.type().is_array())
+    else if (
+      lhs.type().is_pointer() && rhs.type().is_array() &&
+      lhs.type() != type_handler_.get_list_type())
     {
       // Array to pointer typecast
+      // skip the list type until the list is moved to symex
+      // TODO: remove list condition
       rhs = string_handler_.get_array_base_address(rhs);
     }
     // String and list type size adjustments
