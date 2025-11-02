@@ -3143,10 +3143,17 @@ void python_converter::handle_assignment_type_adjustments(
     // Array to pointer decay
     else if (lhs.type().id().empty() && rhs.type().is_array())
     {
+      // TODO: This case is used to infer an unknown type.
+      // Should we model it uniformly using char* ?
       const typet &element_type = to_array_type(rhs.type()).subtype();
       typet pointer_type = gen_pointer_type(element_type);
       lhs_symbol->type = pointer_type;
       lhs.type() = pointer_type;
+      rhs = string_handler_.get_array_base_address(rhs);
+    }
+    else if (lhs.type().is_pointer() && rhs.type().is_array())
+    {
+      // Array to pointer typecast
       rhs = string_handler_.get_array_base_address(rhs);
     }
     // String and list type size adjustments
@@ -4600,7 +4607,7 @@ void python_converter::get_attributes_from_self(
       stmt["_type"] == "AnnAssign" && stmt["target"]["_type"] == "Attribute" &&
       stmt["target"]["value"]["id"] == "self")
     {
-      std::string attr_name = stmt["target"]["attr"];
+      const std::string &attr_name = stmt["target"]["attr"];
 
       // Check if "id" exists before accessing it
       if (!stmt["annotation"].contains("id"))
@@ -4611,7 +4618,8 @@ void python_converter::get_attributes_from_self(
         continue;
       }
 
-      std::string annotated_type = stmt["annotation"]["id"].get<std::string>();
+      const std::string &annotated_type =
+        stmt["annotation"]["id"].get<std::string>();
 
       typet type;
       if (annotated_type == "str")
