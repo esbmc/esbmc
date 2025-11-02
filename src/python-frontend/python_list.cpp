@@ -12,6 +12,7 @@
 #include <util/symbolic_types.h>
 #include <string>
 #include <functional>
+
 // Extract element type from annotation
 static typet get_elem_type_from_annotation(
   const nlohmann::json &node,
@@ -27,6 +28,34 @@ static typet get_elem_type_from_annotation(
   {
     return type_handler_.get_typet(
       node["annotation"]["slice"]["id"].get<std::string>());
+  }
+
+  // Handle union types like list[str] | None
+  if (
+    node.contains("annotation") && node["annotation"].is_object() &&
+    node["annotation"]["_type"] == "BinOp")
+  {
+    // Check left side for Subscript (list[T])
+    if (
+      node["annotation"]["left"].contains("_type") &&
+      node["annotation"]["left"]["_type"] == "Subscript" &&
+      node["annotation"]["left"].contains("slice") &&
+      node["annotation"]["left"]["slice"].contains("id"))
+    {
+      return type_handler_.get_typet(
+        node["annotation"]["left"]["slice"]["id"].get<std::string>());
+    }
+
+    // Check right side for Subscript (list[T])
+    if (
+      node["annotation"]["right"].contains("_type") &&
+      node["annotation"]["right"]["_type"] == "Subscript" &&
+      node["annotation"]["right"].contains("slice") &&
+      node["annotation"]["right"]["slice"].contains("id"))
+    {
+      return type_handler_.get_typet(
+        node["annotation"]["right"]["slice"]["id"].get<std::string>());
+    }
   }
 
   // Check for direct type annotation
