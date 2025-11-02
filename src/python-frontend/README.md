@@ -815,6 +815,145 @@ Key Benefits of Missing Return Detection:
 
 This analysis helps prevent `TypeError` exceptions that would occur at runtime when the missing return path is executed, as Python implicitly returns None for functions without explicit return statements.
 
+### Example 7: Strict Type Checking
+
+This example demonstrates ESBMC-Python's strict type checking feature, which enforces type compatibility for function arguments at verification time:
+
+```python
+def greet(name: str) -> str:
+    return name
+
+def add(a: int, b: int) -> int:
+    return a + b
+
+def process_data(value: int, factor: float, label: str) -> float:
+    return value * factor
+
+result1 = add(5, 10)  # Correct - both arguments are int
+assert result1 == 15
+
+result3 = add(5, "10")  # TypeError: second argument is str, expected int
+
+result4: str = greet(42)  # TypeError: argument is int, expected str
+
+result5 = process_data("wrong", 2.5, "label")  # TypeError: first argument is str, expected int
+```
+
+**Command (without strict type checking):**
+```bash
+$ esbmc main.py
+```
+
+**ESBMC Output:**
+```
+Converting
+Generating GOTO Program
+GOTO program creation time: 1.345s
+GOTO program processing time: 0.026s
+Starting Bounded Model Checking
+Symex completed in: 0.006s (13 assignments)
+Caching time: 0.000s (removed 0 assertions)
+Slicing time: 0.002s (removed 13 assignments)
+Generated 1 VCC(s), 0 remaining after simplification (0 assignments)
+BMC program time: 0.007s
+
+VERIFICATION SUCCESSFUL
+```
+
+**Command (with strict type checking):**
+```bash
+$ esbmc main.py --strict-types --multi-property
+```
+
+**ESBMC Output:**
+```
+Converting
+Generating GOTO Program
+GOTO program creation time: 1.433s
+GOTO program processing time: 0.029s
+Starting Bounded Model Checking
+ERROR: Exception thrown of type TypeError at file main.py line 13
+ERROR: Exception thrown of type TypeError at file main.py line 15
+ERROR: Exception thrown of type TypeError at file main.py line 17
+Symex completed in: 0.002s (10 assignments)
+Caching time: 0.000s (removed 2 assertions)
+Slicing time: 0.000s (removed 7 assignments)
+Generated 4 VCC(s), 1 remaining after simplification (1 assignments)
+No solver specified; defaulting to Boolector
+Slicing time: 0.000s (removed 0 assignments)
+No solver specified; defaulting to Boolector
+Solving claim 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 17 column 0' with solver Boolector 3.2.2
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.002s
+✗ FAILED: 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 17 column 0'
+
+[Counterexample]
+
+
+State 1 file main.py line 17 column 0 thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 17 column 0
+  Throwing an exception of type TypeError but there is not catch for it.
+
+Slicing time: 0.000s (removed 0 assignments)
+No solver specified; defaulting to Boolector
+Solving claim 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 15 column 0' with solver Boolector 3.2.2
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.000s
+✗ FAILED: 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 15 column 0'
+
+[Counterexample]
+
+
+State 1 file main.py line 15 column 0 thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 15 column 0
+  Throwing an exception of type TypeError but there is not catch for it.
+
+Slicing time: 0.000s (removed 0 assignments)
+No solver specified; defaulting to Boolector
+Solving claim 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 13 column 0' with solver Boolector 3.2.2
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.000s
+✗ FAILED: 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 13 column 0'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 0 thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 13 column 0
+  Throwing an exception of type TypeError but there is not catch for it.
+
+Properties: 3 verified, ✗ 3 failed
+Solver: Boolector 3.2.2 • Decision procedure total time: 0.002s • Avg: 0.000s/property
+
+VERIFICATION FAILED
+```
+
+In this example, ESBMC with `--strict-types` successfully detects all type mismatches during the parsing phase and generates corresponding verification failures:
+- **Line 13**: `add(5, "10")` - Argument 2 has incompatible type "str"; expected "int"
+- **Line 15**: `greet(42)` - Argument 1 has incompatible type "int"; expected "str"
+- **Line 17**: `process_data("wrong", 2.5, "label")` - Argument 1 has incompatible type "str"; expected "int"
+
+**Key Benefits of Strict Type Checking:**
+- **Early Detection**: Type errors are identified during the parsing phase with clear diagnostic messages.
+- **Type Safety Enforcement**: Catches type mismatches at verification time rather than runtime.
+- **Exception Modeling**: Type errors are modeled as uncaught `TypeError` exceptions, triggering verification failures.
+- **Descriptive Error Messages**: Provides a clear indication of which argument has a type error and what types were expected vs. actual.
+- **Optional Feature**: Disabled by default to allow flexible verification; enable only when type safety is critical.
+
+This feature helps prevent `TypeError` exceptions that would occur at runtime when incompatible types are passed to functions, improving code reliability through static type verification.
+
 # Numpy Formal Verification with ESBMC
 
 ## What We Are Trying to Verify
