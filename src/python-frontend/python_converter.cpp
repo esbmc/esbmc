@@ -5766,7 +5766,7 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
   // Let's try to be smart and guess the type;
   // In the future this could be trivial with an Python Obj struct
   // 1. If there are no non-null constants, then guess any.
-  // 2. If there is only one type of constant, the guest it.
+  // 2. If there is only one type of constant, then guess it.
   // 3. If there is more than one type of constant, the abort.
 
   typet found_type = empty_typet();
