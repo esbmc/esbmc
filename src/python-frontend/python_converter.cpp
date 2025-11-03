@@ -5774,7 +5774,7 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
 
   for (exprt e : bool_op.operands())
   {
-    // First try to solving the underlining type...
+    // First, try to solve the underlying type...
     if (!e.is_constant() && !e.is_symbol())
       e = extract_type_from_boolean_op(e);
 
