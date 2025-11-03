@@ -100,10 +100,10 @@ void yamlt::generate_yaml(optionst &options)
   else
     create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
+  yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq;
+
   if (!this->segments.empty())
   {
-    yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq;
-
     for (auto &waypoint : this->segments)
     {
       yaml_emitter << YAML::BeginMap;
@@ -114,9 +114,9 @@ void yamlt::generate_yaml(optionst &options)
       yaml_emitter << YAML::EndSeq;
       yaml_emitter << YAML::EndMap;
     }
-
-    yaml_emitter << YAML::EndSeq;
   }
+
+  yaml_emitter << YAML::EndSeq;
 
   yaml_emitter << YAML::EndMap;
   yaml_emitter << YAML::EndSeq;
@@ -1139,7 +1139,8 @@ void generate_testcase(
   // We should only show the symbol one time
   std::unordered_set<std::string> nondet;
 
-  auto generate_input = [&test_case, &smt_conv, &nondet](const expr2tc &expr) {
+  auto generate_input = [&test_case, &smt_conv, &nondet](const expr2tc &expr)
+  {
     if (!expr || !is_symbol2t(expr))
       return;
     const symbol2t &sym = to_symbol2t(expr);
