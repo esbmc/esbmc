@@ -15,7 +15,7 @@ setup_folder () {
 
     curl -L https://zenodo.org/records/16682497/files/CPAchecker-4.1-unix.zip?download=1 -o cpa.zip
     unzip cpa.zip
-    mv CPAchecker* cpachecker && cd cpachecker
+    mv CPAchecker* cpachecker && cd cpachecker/bin
     cp $HOME/cpachecker.xml .
     echo "Configuration done. See files below"
     ls -l
