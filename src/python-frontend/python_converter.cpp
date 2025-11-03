@@ -3450,7 +3450,7 @@ void python_converter::get_var_assign(
       locationt location = get_location_from_decl(target);
       std::string module_name = location.get_file().as_string();
 
-      // Use the actual return type from the function call
+      // Use the actual return type from the boolean operation (BoolOp expression)
       typet inferred_type = rhs_expr.type();
       if (inferred_type.is_empty())
         inferred_type = any_type();
