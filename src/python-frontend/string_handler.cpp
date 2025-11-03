@@ -1060,6 +1060,11 @@ exprt string_handler::handle_string_membership(
     }
   }
 
+  // TODO: This falls back to C's strstr for non-constant strings,
+  // which is unsound if 'lhs' or 'rhs' contain embedded nulls ('\0').
+  // For full Python semantics, a null-aware 'strstr' for
+  // symbolic/non-constant strings is required.
+
   // Get base addresses for C string functions
   exprt lhs_addr = get_array_base_address(lhs_str);
   exprt rhs_addr = get_array_base_address(rhs_str);
