@@ -5793,7 +5793,7 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
     }
   }
 
-  // Arrays are special, they have a length property which we don't care right now
+  // Arrays are special, they have a length property which we don't care about right now
   if (found_type.is_array())
     return gen_zero(any_type());
 
