@@ -201,11 +201,38 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(get_op(op, bool_type()), bool_type());
 
+  bool contains_non_boolean = false;
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
   {
     exprt operand_expr = get_expr(operand);
     logical_expr.copy_to_operands(operand_expr);
+    contains_non_boolean |= !operand_expr.is_boolean();
+  }
+
+  // Shockingly enough, a BoolOp may not return a boolean.
+  if (contains_non_boolean)
+  {
+    typet t = extract_type_from_boolean_op(logical_expr).type();
+
+    // Are we dealing with an actual bool expression?
+    if (t.is_bool())
+      return logical_expr;
+    // Result expression starts from last operand as default else branch
+    exprt result_expr = logical_expr.operands().back();
+    for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
+    {
+      const exprt &current = logical_expr.operands()[i];
+      exprt if_expr("if", t);
+      if (logical_expr.is_and())
+        if_expr.copy_to_operands(current, result_expr, current);
+      else
+        if_expr.copy_to_operands(current, current, result_expr);
+
+      result_expr = if_expr;
+    }
+
+    return result_expr;
   }
   return logical_expr;
 }
@@ -3409,11 +3436,38 @@ void python_converter::get_var_assign(
       symbol.is_extern = false;
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
     }
+    // Special handling for boolop
+    if (
+      !lhs_symbol && !is_global && ast_node.contains("value") &&
+      ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "BoolOp")
+    {
+      // Convert RHS first to get its type
+      is_converting_rhs = true;
+      exprt rhs_expr = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+
+      locationt location = get_location_from_decl(target);
+      std::string module_name = location.get_file().as_string();
+
+      // Use the actual return type from the function call
+      typet inferred_type = rhs_expr.type();
+      if (inferred_type.is_empty())
+        inferred_type = any_type();
+
+      symbolt symbol = create_symbol(
+        module_name, name, sid.to_string(), location, inferred_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+      lhs_symbol->dump();
+    }
 
     if (!lhs_symbol && !is_global)
       throw std::runtime_error("Type undefined for \"" + name + "\"");
 
-    lhs = symbol_expr(*lhs_symbol);
+    lhs = create_lhs_expression(target, lhs_symbol, location_begin);
   }
 
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
@@ -4653,6 +4707,22 @@ void python_converter::get_attributes_from_self(
         class_components.end())
         class_components.push_back(comp);
     }
+    else if (
+      stmt["_type"] == "Assign" && stmt["targets"][0]["_type"] == "Attribute" &&
+      stmt["targets"][0]["value"]["id"] == "self")
+    {
+      // A member is initialized with something that might be not annotated
+      typet type = any_type();
+      const std::string &attr_name = stmt["targets"][0]["attr"];
+      struct_typet::componentt comp =
+        build_component(current_class_name_, attr_name, type);
+
+      auto &class_components = clazz.components();
+      if (
+        std::find(class_components.begin(), class_components.end(), comp) ==
+        class_components.end())
+        class_components.push_back(comp);
+    }
   }
 }
 
@@ -5686,4 +5756,47 @@ void python_converter::convert()
     throw std::runtime_error(
       "The main function is already defined in another module");
   }
+}
+
+exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
+{
+  // Only OR and AND are special
+  if (!bool_op.is_and() && !bool_op.is_or())
+    return gen_zero(bool_type());
+
+  // Let's try to be smart and guess the type;
+  // In the future this could be trivial with an Python Obj struct
+  // 1. If there are no non-null constants, then guess any.
+  // 2. If there is only one type of constant, the guest it.
+  // 3. If there is more than one type of constant, the abort.
+
+  typet found_type = empty_typet();
+  assert(found_type.is_empty());
+
+  for (exprt e : bool_op.operands())
+  {
+    // First try to solving the underlining type...
+    if (!e.is_constant() && !e.is_symbol())
+      e = extract_type_from_boolean_op(e);
+
+    assert(e.is_constant() || e.is_symbol());
+
+    if (!e.is_pointer() && e.is_constant())
+    {
+      if (found_type.is_empty())
+        found_type = e.type();
+      else if (found_type != e.type() && !e.type().is_array())
+      {
+        log_error("Boolean expression with more than one constant type");
+        bool_op.dump();
+        abort();
+      }
+    }
+  }
+
+  // Arrays are special, they have a length property which we don't care right now
+  if (found_type.is_array())
+    return gen_zero(any_type());
+
+  return found_type.is_empty() ? gen_zero(any_type()) : gen_zero(found_type);
 }

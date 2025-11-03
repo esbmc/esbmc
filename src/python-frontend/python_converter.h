@@ -405,4 +405,6 @@ private:
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;
   bool is_right = false;
+
+  exprt extract_type_from_boolean_op(const exprt &bool_op);
 };
