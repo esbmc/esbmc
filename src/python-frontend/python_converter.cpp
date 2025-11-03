@@ -4805,6 +4805,8 @@ void python_converter::get_class_definition(
   symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
   // Iterate over base classes
+  // Track if class has user-defined base classes for later constructor generation logic
+  bool has_user_defined_base = false;
   irept::subt &base_ids = clazz.add("bases").get_sub();
   for (auto &base_class : class_node["bases"])
   {
@@ -4816,6 +4818,9 @@ void python_converter::get_class_definition(
       type_utils::is_builtin_type(base_class_name) ||
       type_utils::is_consensus_type(base_class_name))
       continue;
+
+    // Mark that this class has a user-defined base
+    has_user_defined_base = true;
 
     // Get class definition from symbols table
     symbolt *class_symbol = symbol_table_.find_symbol("tag-" + base_class_name);
@@ -4831,36 +4836,87 @@ void python_converter::get_class_definition(
       clazz.components().emplace_back(component);
   }
 
-  // Pre-scan: Ensure all classes referenced in method return types are defined
+  // Pre-scan: Ensure all classes referenced in method return types and 
+  // constructor parameter types are defined
   // Only handle string forward references like -> 'Bar' (PEP 484)
   for (auto &class_member : class_node["body"])
   {
     if (class_member["_type"] != "FunctionDef")
       continue;
 
+    // Scan return type annotations
     const nlohmann::json &returns = class_member["returns"];
-    
-    // Check for string forward references: -> 'Bar' or -> "Bar"
-    if (returns.is_null() || !returns.contains("value") ||
-        returns["value"].is_null() ||
-        (returns["_type"] != "Constant" && returns["_type"] != "Str"))
-      continue;
-
-    std::string referenced_class =
-      type_utils::remove_quotes(returns["value"].get<std::string>());
-
-    // Skip if already in symbol table
-    if (symbol_table_.find_symbol("tag-" + referenced_class))
-      continue;
-
-    // Find and process the referenced class definition
-    const auto &ref_class_node =
-      find_class((*ast_json)["body"], referenced_class);
-    if (!ref_class_node.empty())
+    if (!returns.is_null() && returns.contains("value") &&
+        !returns["value"].is_null() &&
+        (returns["_type"] == "Constant" || returns["_type"] == "Str"))
     {
-      std::string saved_class = current_class_name_;
-      get_class_definition(ref_class_node, target_block);
-      current_class_name_ = saved_class;
+      std::string referenced_class =
+        type_utils::remove_quotes(returns["value"].get<std::string>());
+
+      // Skip if already in symbol table
+      if (!symbol_table_.find_symbol("tag-" + referenced_class))
+      {
+        // Find and process the referenced class definition
+        const auto &ref_class_node =
+          find_class((*ast_json)["body"], referenced_class);
+        if (!ref_class_node.empty())
+        {
+          std::string saved_class = current_class_name_;
+          get_class_definition(ref_class_node, target_block);
+          current_class_name_ = saved_class;
+        }
+      }
+    }
+
+    // Scan constructor/method parameter type annotations
+    // This handles cases like Bar.__init__(self, f: Foo)
+    if (class_member.contains("args") && class_member["args"].contains("args"))
+    {
+      for (const auto &arg : class_member["args"]["args"])
+      {
+        if (!arg.contains("annotation") || arg["annotation"].is_null())
+          continue;
+
+        const nlohmann::json &annotation = arg["annotation"];
+        
+        // Handle string forward references in parameter types
+        if ((annotation["_type"] == "Constant" || annotation["_type"] == "Str") &&
+            annotation.contains("value") && !annotation["value"].is_null())
+        {
+          std::string referenced_class =
+            type_utils::remove_quotes(annotation["value"].get<std::string>());
+
+          if (!symbol_table_.find_symbol("tag-" + referenced_class))
+          {
+            const auto &ref_class_node =
+              find_class((*ast_json)["body"], referenced_class);
+            if (!ref_class_node.empty())
+            {
+              std::string saved_class = current_class_name_;
+              get_class_definition(ref_class_node, target_block);
+              current_class_name_ = saved_class;
+            }
+          }
+        }
+        // Handle direct name references in parameter types
+        else if (annotation["_type"] == "Name" && annotation.contains("id"))
+        {
+          std::string referenced_class = annotation["id"].get<std::string>();
+
+          if (!symbol_table_.find_symbol("tag-" + referenced_class) &&
+              !type_utils::is_builtin_type(referenced_class))
+          {
+            const auto &ref_class_node =
+              find_class((*ast_json)["body"], referenced_class);
+            if (!ref_class_node.empty())
+            {
+              std::string saved_class = current_class_name_;
+              get_class_definition(ref_class_node, target_block);
+              current_class_name_ = saved_class;
+            }
+          }
+        }
+      }
     }
   }
 
@@ -4917,6 +4973,56 @@ void python_converter::get_class_definition(
       class_attr_symbol->static_lifetime = true;
     }
   }
+
+  // Check if the class has an __init__ method
+  // If not, generate a default constructor (but only if no base class is present,
+  // as derived classes should inherit the base constructor)
+  bool has_init = false;
+  for (const auto &method : clazz.methods())
+  {
+    if (method.get_name() == current_class_name_)
+    {
+      has_init = true;
+      break;
+    }
+  }
+
+  // Only generate default constructor like __init__(self) -> None if:
+  // 1. Class has no __init__ method AND
+  // 2. Class has no user-defined base class (to avoid overriding inherited constructor)
+  if (!has_init && !has_user_defined_base)
+  {
+    // Generate a default constructor: __init__(self) -> None
+    code_typet function_type;
+    function_type.return_type() = none_type();
+
+    code_typet::argumentt self_param;
+    self_param.type() = gen_pointer_type(clazz);
+    self_param.cmt_base_name("self");
+    function_type.arguments().push_back(self_param);
+
+    locationt location = get_location_from_decl(class_node);
+    std::string module_name = location.get_file().as_string();
+    
+    symbol_id sid;
+    sid.set_filename(module_name);
+    sid.set_class(current_class_name_);
+    sid.set_function(current_class_name_);
+
+    // Use helper function to create symbol with standard fields
+    symbolt constructor_symbol = create_symbol(
+      module_name, current_class_name_, sid.to_string(), location, function_type);
+    constructor_symbol.value = code_blockt(); // Empty body
+    constructor_symbol.lvalue = true;
+
+    symbol_table_.add(constructor_symbol);
+
+    // Add the constructor to the class methods list
+    struct_typet::componentt method(
+      constructor_symbol.name, constructor_symbol.type);
+    clazz.methods().push_back(method);
+  }
+
   added_symbol->type = clazz;
   current_class_name_.clear();
 }
