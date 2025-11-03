@@ -577,6 +577,59 @@ exprt handle_floor_division(
   return floor_div;
 }
 
+/// Handles floating-point modulo operations with Python semantics.
+/// Python's % operator: result has the sign of the divisor (y)
+/// Formula: x % y = x - floor(x/y) * y
+/// This differs from C's fmod() where result has the sign of the dividend (x)
+exprt python_converter::handle_modulo_operator(
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
+  // Find required function symbols
+  symbolt *floor_symbol = symbol_table_.find_symbol("c:@F@floor");
+  if (!floor_symbol)
+    throw std::runtime_error("floor function not found in symbol table");
+
+  // Promote both operands to double if needed
+  exprt double_lhs = lhs;
+  exprt double_rhs = rhs;
+
+  if (!lhs.type().is_floatbv())
+  {
+    double_lhs = exprt("typecast", double_type());
+    double_lhs.copy_to_operands(lhs);
+  }
+
+  if (!rhs.type().is_floatbv())
+  {
+    double_rhs = exprt("typecast", double_type());
+    double_rhs.copy_to_operands(rhs);
+  }
+
+  // Create division: x / y
+  exprt div_expr("ieee_div", double_type());
+  div_expr.copy_to_operands(double_lhs, double_rhs);
+
+  // Create floor(x / y)
+  side_effect_expr_function_callt floor_call;
+  floor_call.function() = symbol_expr(*floor_symbol);
+  floor_call.arguments() = {div_expr};
+  floor_call.type() = double_type();
+  floor_call.location() = get_location_from_decl(element);
+
+  // Create floor(x/y) * y
+  exprt mult_expr("ieee_mul", double_type());
+  mult_expr.copy_to_operands(floor_call, double_rhs);
+
+  // Create x - floor(x/y) * y
+  exprt result_expr("ieee_sub", double_type());
+  result_expr.copy_to_operands(double_lhs, mult_expr);
+  result_expr.location() = get_location_from_decl(element);
+
+  return result_expr;
+}
+
 exprt python_converter::handle_power_operator_sym(exprt base, exprt exp)
 {
   // Find the pow function symbol
@@ -1785,6 +1838,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Replace ** operation with the resultant constant.
   if (op == "Pow" || op == "power")
     return handle_power_operator(lhs, rhs);
+
+  // Handle floating-point modulo with Python semantics
+  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
+    return handle_modulo_operator(lhs, rhs, element);
 
   // Determine the result type of the binary operation:
   typet type;

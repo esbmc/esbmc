@@ -166,6 +166,9 @@ private:
 
   exprt handle_power_operator(exprt base, exprt exp);
 
+  exprt
+  handle_modulo_operator(exprt lhs, exprt rhs, const nlohmann::json &element);
+
   exprt build_power_expression(const exprt &base, const BigInt &exp);
 
   bool is_bytes_literal(const nlohmann::json &element);
