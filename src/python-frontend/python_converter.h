@@ -370,6 +370,11 @@ private:
   // String method helpers
   exprt handle_str_join(const nlohmann::json &call_json);
 
+  // Forward reference helpers
+  void process_forward_reference(
+    const nlohmann::json &annotation,
+    codet &target_block);
+
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
   const global_scope &global_scope_;
