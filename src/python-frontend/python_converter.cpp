@@ -4469,50 +4469,35 @@ void python_converter::get_class_definition(
   }
 
   // Pre-scan: Ensure all classes referenced in method return types are defined
+  // Only handle string forward references like -> 'Bar' (PEP 484)
   for (auto &class_member : class_node["body"])
   {
-    if (class_member["_type"] == "FunctionDef")
+    if (class_member["_type"] != "FunctionDef")
+      continue;
+
+    const nlohmann::json &returns = class_member["returns"];
+    
+    // Check for string forward references: -> 'Bar' or -> "Bar"
+    if (returns.is_null() || !returns.contains("value") ||
+        returns["value"].is_null() ||
+        (returns["_type"] != "Constant" && returns["_type"] != "Str"))
+      continue;
+
+    std::string referenced_class =
+      type_utils::remove_quotes(returns["value"].get<std::string>());
+
+    // Skip if already in symbol table
+    if (symbol_table_.find_symbol("tag-" + referenced_class))
+      continue;
+
+    // Find and process the referenced class definition
+    const auto &ref_class_node =
+      find_class((*ast_json)["body"], referenced_class);
+    if (!ref_class_node.empty())
     {
-      const nlohmann::json &returns = class_member["returns"];
-      if (!returns.is_null() && returns.contains("value") &&
-          !returns["value"].is_null() &&
-          (returns["_type"] == "Constant" || returns["_type"] == "Str"))
-      {
-        // Handle string forward references like -> 'Bar'
-        std::string referenced_class =
-          type_utils::remove_quotes(returns["value"].get<std::string>());
-        
-        if (!symbol_table_.find_symbol("tag-" + referenced_class))
-        {
-          const auto &ref_class_node =
-            find_class((*ast_json)["body"], referenced_class);
-          if (!ref_class_node.empty())
-          {
-            std::string current_class = current_class_name_;
-            get_class_definition(ref_class_node, target_block);
-            current_class_name_ = current_class;
-          }
-        }
-      }
-      else if (
-        !returns.is_null() && returns.contains("id") &&
-        !(returns["_type"] == "Constant" && returns["value"].is_null()))
-      {
-        // Handle regular type references like -> Bar
-        std::string referenced_class = returns["id"].get<std::string>();
-        
-        if (!symbol_table_.find_symbol("tag-" + referenced_class))
-        {
-          const auto &ref_class_node =
-            find_class((*ast_json)["body"], referenced_class);
-          if (!ref_class_node.empty())
-          {
-            std::string current_class = current_class_name_;
-            get_class_definition(ref_class_node, target_block);
-            current_class_name_ = current_class;
-          }
-        }
-      }
+      std::string saved_class = current_class_name_;
+      get_class_definition(ref_class_node, target_block);
+      current_class_name_ = saved_class;
     }
   }
 
