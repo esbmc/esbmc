@@ -147,6 +147,22 @@ void function_call_expr::get_function_type()
   {
     std::string caller = get_object_name();
 
+    // Check for nested instance attribute (e.g., self.b.a.method())
+    // Exclude module.Class.method() pattern
+    bool is_nested_instance_attr = false;
+    if (call_["func"]["value"]["_type"] == "Attribute")
+    {
+      if (call_["func"]["value"]["value"]["_type"] == "Name")
+      {
+        std::string root_name =
+          call_["func"]["value"]["value"]["id"].get<std::string>();
+        if (!converter_.is_imported_module(root_name))
+        {
+          is_nested_instance_attr = true;
+        }
+      }
+    }
+
     // Handling a function call as a class method call when:
     // (1) The caller corresponds to a class name, for example: MyClass.foo().
     // (2) Calling methods of built-in types, such as int.from_bytes()
@@ -154,9 +170,10 @@ void function_call_expr::get_function_type()
     // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
     // If the caller is a class or a built-in type, the following condition detects a class method call.
     if (
-      is_class(caller, converter_.ast()) ||
-      type_utils::is_builtin_type(caller) ||
-      type_utils::is_builtin_type(type_handler_.get_var_type(caller)))
+      !is_nested_instance_attr &&
+      (is_class(caller, converter_.ast()) ||
+       type_utils::is_builtin_type(caller) ||
+       type_utils::is_builtin_type(type_handler_.get_var_type(caller))))
     {
       function_type_ = FunctionType::ClassMethod;
     }
@@ -213,45 +230,6 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
-bool function_call_expr::is_same_type(
-  const exprt &obj_expr,
-  const nlohmann::json &type_node) const
-{
-  if (type_node["_type"] != "Name")
-    throw std::runtime_error("Unsupported type in isinstance()");
-
-  std::string type_name = type_node["id"];
-
-  // Special handling for tuple type checking
-  if (type_name == "tuple")
-  {
-    // Check if object is a tuple by examining struct tag
-    if (obj_expr.type().id() == "struct")
-    {
-      const struct_typet &struct_type = to_struct_type(obj_expr.type());
-
-      // Check if this is a tuple by examining the tag
-      if (struct_type.tag().as_string().find("tag-tuple") == 0)
-        return true;
-    }
-    return false;
-  }
-
-  // Get the internal type representation from the type name
-  typet expected_type = type_handler_.get_typet(type_name, 0);
-
-  /* NOTE: Comparing the types directly may be insufficient.
-           Inheritance or type aliases may require deeper analysis. */
-
-  if (base_type_eq(obj_expr.type(), expected_type, converter_.ns))
-    return true;
-
-  if (is_subclass_of(obj_expr.type(), expected_type, converter_.ns))
-    return true;
-
-  return false;
-}
-
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -260,101 +238,64 @@ exprt function_call_expr::handle_isinstance() const
   if (args.size() != 2)
     throw std::runtime_error("isinstance() expects 2 arguments");
 
-  const auto &obj_arg = args[0];
+  // Convert the first argument (the object being checked) into an expression
+  const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &type_arg = args[1];
 
-  // Special handling: check if the object is a variable assigned from IfExp
-  if (
-    obj_arg.contains("_type") && obj_arg["_type"] == "Name" &&
-    obj_arg.contains("id") && type_arg["_type"] == "Name")
-  {
-    std::string var_name = obj_arg["id"].get<std::string>();
-    nlohmann::json var_decl = json_utils::find_var_decl(
-      var_name, converter_.current_function_name(), converter_.ast());
-
-    // Check if variable is assigned from a ternary operator (IfExp)
-    if (
-      !var_decl.empty() && var_decl.contains("value") &&
-      var_decl["value"].contains("_type") &&
-      var_decl["value"]["_type"] == "IfExp")
+  auto build_isinstance = [&](const std::string &type_name) {
+    typet expected_type = type_handler_.get_typet(type_name, 0);
+    exprt t;
+    if (expected_type.is_symbol())
     {
-      const auto &ifexp = var_decl["value"];
-
-      // Convert the condition and branches directly from AST
-      exprt cond = converter_.get_expr(ifexp["test"]);
-      exprt then_expr = converter_.get_expr(ifexp["body"]);
-      exprt else_expr = converter_.get_expr(ifexp["orelse"]);
-
-      // Check if each branch matches the type
-      bool then_matches = is_same_type(then_expr, type_arg);
-      bool else_matches = is_same_type(else_expr, type_arg);
-
-      if (then_matches && else_matches)
-      {
-        // Both branches match - always return true
-        return gen_boolean(true);
-      }
-      else if (!then_matches && !else_matches)
-      {
-        // Neither branch matches - always return false
-        return gen_boolean(false);
-      }
-      else
-      {
-        // One branch matches, one doesn't - generate runtime check
-        // isinstance(x, type) where x = (cond ? then : else)
-        //   => cond ? isinstance(then, type) : isinstance(else, type)
-        //   => cond ? then_matches : else_matches
-        if_exprt result(
-          cond, gen_boolean(then_matches), gen_boolean(else_matches));
-        result.type() = type_handler_.get_typet("bool", 0);
-        return result;
-      }
+      // struct type
+      const symbolt *symbol = converter_.ns.lookup(expected_type);
+      t = symbol_expr(*symbol);
     }
-  }
+    else
+      t = gen_zero(expected_type);
 
-  // Convert the first argument (the object being checked) into an expression
-  exprt obj_expr = converter_.get_expr(obj_arg);
+    exprt isinstance("isinstance", typet("bool"));
+    isinstance.copy_to_operands(obj_expr);
+    isinstance.move_to_operands(t);
+    return isinstance;
+  };
 
   if (type_arg["_type"] == "Name")
   {
-    // Check if the expression itself is an if expression
-    if (obj_expr.id() == "if")
-    {
-      const if_exprt &if_expr = to_if_expr(obj_expr);
-
-      // Check if each branch matches the type
-      bool then_matches = is_same_type(if_expr.true_case(), type_arg);
-      bool else_matches = is_same_type(if_expr.false_case(), type_arg);
-
-      if (then_matches && else_matches)
-      {
-        return gen_boolean(true);
-      }
-      else if (!then_matches && !else_matches)
-      {
-        return gen_boolean(false);
-      }
-      else
-      {
-        if_exprt result(
-          if_expr.cond(), gen_boolean(then_matches), gen_boolean(else_matches));
-        result.type() = type_handler_.get_typet("bool", 0);
-        return result;
-      }
-    }
-
-    return gen_boolean(is_same_type(obj_expr, type_arg));
+    // isinstance(v, int)
+    std::string type_name = args[1]["id"];
+    return build_isinstance(type_name);
+  }
+  else if (type_arg["_type"] == "Constant")
+  {
+    // isintance(v, None)
+    std::string type_name = "NoneType";
+    return build_isinstance(type_name);
   }
   else if (type_arg["_type"] == "Tuple")
   {
+    // isinstance(v, (int, str))
+    // converted into instance(v, int) || isinstance(v, str)
     const auto &elts = type_arg["elts"];
-    for (const auto &elt : elts)
+
+    std::string first_type = elts[0]["id"];
+    exprt tupe_instance = build_isinstance(first_type);
+
+    for (size_t i = 1; i < elts.size(); ++i)
     {
-      if (is_same_type(obj_expr, elt))
-        return gen_boolean(true);
+      if (elts[i]["_type"] != "Name")
+        throw std::runtime_error("Unsupported type in isinstance()");
+
+      std::string type_name = elts[i]["id"];
+      exprt next_isinstance = build_isinstance(type_name);
+
+      exprt or_expr("or", typet("bool"));
+      or_expr.move_to_operands(tupe_instance);
+      or_expr.move_to_operands(next_isinstance);
+      tupe_instance = or_expr;
     }
-    return gen_boolean(false);
+
+    return tupe_instance;
   }
   else
     throw std::runtime_error("Unsupported type format in isinstance()");
@@ -1133,7 +1074,24 @@ std::string function_call_expr::get_object_name() const
 
   std::string obj_name;
   if (subelement["_type"] == "Attribute")
-    obj_name = subelement["attr"].get<std::string>();
+  {
+    /* For attribute chains, use the class name resolved by build_function_id()
+     * 
+     * When we have self.f.foo(), the function ID builder has already determined
+     * that f's type is Foo and stored it in function_id_. We reuse that result
+     * rather than re-extracting "f" which would be incorrect.
+     */
+    if (!function_id_.get_class().empty())
+    {
+      std::string class_name = function_id_.get_class();
+      obj_name =
+        (class_name.find("tag-") == 0) ? class_name.substr(4) : class_name;
+    }
+    else
+    {
+      obj_name = subelement["attr"].get<std::string>();
+    }
+  }
   else if (subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
     obj_name = function_id_.get_class();
   else if (subelement["_type"] == "Call")
@@ -1651,6 +1609,69 @@ exprt function_call_expr::handle_general_function_call()
         // Handle forward reference: method not yet in symbol table
         if (!func_symbol)
         {
+          std::string class_name = function_id_.get_class();
+          std::string method_name = function_id_.get_function();
+
+          // Find all possible class types for this object
+          std::vector<std::string> possible_classes =
+            find_possible_class_types(obj_symbol);
+
+          // If no classes found, use the inferred class name
+          if (possible_classes.empty())
+            possible_classes.push_back(class_name);
+
+          // Check if method exists in any of the possible classes
+          bool method_exists = false;
+          for (const auto &check_class : possible_classes)
+          {
+            if (method_exists_in_class_hierarchy(check_class, method_name))
+            {
+              method_exists = true;
+              break;
+            }
+          }
+
+          // Only report AttributeError if:
+          // 1. Method doesn't exist in the class hierarchy, AND
+          // 2. We're not currently processing any method in the same class
+          //    (methods may reference other methods not yet in the symbol table)
+          std::string current_func = converter_.current_function_name();
+          bool is_in_same_class = false;
+
+          // Check if we're in any method of the target class
+          for (const auto &check_class : possible_classes)
+          {
+            // We're in the same class if:
+            // - current function is the class name (constructor)
+            // - current function is __init__
+            // - the function symbol exists and contains the class marker for this class
+            if (current_func == check_class || current_func == "__init__")
+            {
+              is_in_same_class = true;
+              break;
+            }
+
+            // Check if current function belongs to this class by looking for @C@ClassName pattern
+            std::string class_marker = std::string(CLASS_MARKER) + check_class +
+                                       std::string(FUNCTION_MARKER);
+            const symbolt *current_func_sym =
+              converter_.find_symbol(converter_.create_symbol_id().to_string());
+            if (
+              current_func_sym && current_func_sym->id.as_string().find(
+                                    class_marker) != std::string::npos)
+            {
+              is_in_same_class = true;
+              break;
+            }
+          }
+
+          if (!method_exists && !is_in_same_class)
+          {
+            // Generate AttributeError
+            return generate_attribute_error(method_name, possible_classes);
+          }
+
+          // Method exists or we're in a constructor - create forward reference
           locationt location = converter_.get_location_from_decl(call_);
           code_function_callt call;
           call.location() = location;
@@ -1761,12 +1782,21 @@ exprt function_call_expr::handle_general_function_call()
         }
         else
         {
-          // Not a forward reference - use existing behavior for built-ins/imports/undefined functions
-          log_warning("Undefined function: {}", function_id_.get_function());
-          return exprt();
+          const std::string &func_name = function_id_.get_function();
+          log_warning(
+            "Undefined function '{}' - replacing with assert(false)",
+            func_name);
+          return gen_unsupported_function_assert(func_name);
         }
       }
     }
+  }
+
+  if (func_symbol != nullptr)
+  {
+    exprt type_error = check_argument_types(func_symbol, call_["args"]);
+    if (!type_error.is_nil())
+      return type_error;
   }
 
   locationt location = converter_.get_location_from_decl(call_);
@@ -1787,9 +1817,27 @@ exprt function_call_expr::handle_general_function_call()
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
-    assert(obj_symbol);
-    // Passing object as "self" (first) parameter on instance method calls
-    call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    if (obj_symbol)
+    {
+      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    }
+    else
+    {
+      // Nested attribute: build expression dynamically
+      if (
+        call_["func"]["_type"] == "Attribute" &&
+        call_["func"].contains("value"))
+      {
+        exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+        call.arguments().push_back(gen_address_of(obj_expr));
+      }
+      else
+      {
+        assert(
+          false &&
+          "InstanceMethod requires obj_symbol or valid attribute chain");
+      }
+    }
   }
   else if (function_type_ == FunctionType::ClassMethod)
   {
@@ -1894,7 +1942,17 @@ exprt function_call_expr::handle_general_function_call()
         if (func_symbol != nullptr)
         {
           const code_typet &func_type = to_code_type(func_symbol->type);
-          func_call.type() = func_type.return_type();
+          typet return_type = func_type.return_type();
+
+          // Special handling for constructors
+          if (return_type.id() == "constructor")
+          {
+            // For constructors, use the class type instead of "constructor"
+            return_type =
+              type_handler_.get_typet(func_symbol->name.as_string());
+          }
+
+          func_call.type() = return_type;
         }
       }
 
@@ -1961,4 +2019,251 @@ exprt function_call_expr::gen_exception_raise(
   raise.move_to_operands(sym);
 
   return raise;
+}
+
+codet function_call_expr::gen_unsupported_function_assert(
+  const std::string &func_name) const
+{
+  locationt location = converter_.get_location_from_decl(call_);
+  std::string message = "Unsupported function '" + func_name + "' is reached";
+  location.user_provided(true);
+  location.comment(message);
+
+  exprt false_expr = gen_boolean(false);
+  code_assertt assert_code(false_expr);
+  assert_code.location() = location;
+
+  return assert_code;
+}
+
+std::vector<std::string>
+function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
+{
+  std::vector<std::string> possible_classes;
+
+  if (!obj_symbol)
+    return possible_classes;
+
+  typet obj_type = obj_symbol->type;
+  if (obj_type.is_pointer())
+    obj_type = obj_type.subtype();
+  if (obj_type.id() == "symbol")
+    obj_type = converter_.ns.follow(obj_type);
+
+  // If type is a struct, extract the class name from the struct tag
+  if (obj_type.is_struct())
+  {
+    const struct_typet &struct_type = to_struct_type(obj_type);
+    std::string tag = struct_type.tag().as_string();
+    std::string actual_class = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+    possible_classes.push_back(actual_class);
+    return possible_classes;
+  }
+
+  // Type is a primitive (e.g., floatbv) - trace through AST to find actual types
+  std::string var_name = obj_symbol->name.as_string();
+  nlohmann::json var_decl = json_utils::find_var_decl(
+    var_name, converter_.current_function_name(), converter_.ast());
+
+  if (var_decl.empty() || !var_decl.contains("value"))
+    return possible_classes;
+
+  const auto &value = var_decl["value"];
+
+  // Check if assigned from a function call
+  if (value["_type"] != "Call" || value["func"]["_type"] != "Name")
+    return possible_classes;
+
+  std::string func_name = value["func"]["id"].get<std::string>();
+
+  // Look up the function definition
+  const auto &func_node =
+    json_utils::find_function(converter_.ast()["body"], func_name);
+
+  if (
+    func_node.empty() || !func_node.contains("returns") ||
+    func_node["returns"].is_null())
+    return possible_classes;
+
+  const auto &returns = func_node["returns"];
+  if (returns["_type"] != "Name" || !returns.contains("id"))
+    return possible_classes;
+
+  std::string return_type = returns["id"].get<std::string>();
+
+  // If return type is 'Any', analyze the function body to find actual return classes
+  if (return_type == "Any" && func_node.contains("body"))
+  {
+    std::function<void(const nlohmann::json &)> find_returns;
+    find_returns = [&](const nlohmann::json &node) {
+      if (!node.is_object())
+        return;
+
+      std::string node_type = node["_type"].get<std::string>();
+
+      if (node_type == "Return" && node.contains("value"))
+      {
+        const auto &ret_val = node["value"];
+        if (ret_val["_type"] == "Call" && ret_val["func"]["_type"] == "Name")
+        {
+          std::string class_name = ret_val["func"]["id"].get<std::string>();
+          if (json_utils::is_class(class_name, converter_.ast()))
+            possible_classes.push_back(class_name);
+        }
+      }
+      else if (node_type == "If")
+      {
+        // Check both branches
+        if (node.contains("body"))
+          for (const auto &stmt : node["body"])
+            find_returns(stmt);
+        if (node.contains("orelse"))
+          for (const auto &stmt : node["orelse"])
+            find_returns(stmt);
+      }
+    };
+
+    for (const auto &stmt : func_node["body"])
+      find_returns(stmt);
+  }
+
+  return possible_classes;
+}
+
+bool function_call_expr::method_exists_in_class_hierarchy(
+  const std::string &class_name,
+  const std::string &method_name) const
+{
+  const auto &class_node =
+    json_utils::find_class(converter_.ast()["body"], class_name);
+
+  if (class_node.empty())
+    return false;
+
+  // Check if method exists in this class
+  if (json_utils::search_function_in_ast(class_node["body"], method_name))
+    return true;
+
+  // Check base classes
+  if (class_node.contains("bases"))
+  {
+    for (const auto &base : class_node["bases"])
+    {
+      if (base.contains("id"))
+      {
+        std::string base_name = base["id"].get<std::string>();
+        if (method_exists_in_class_hierarchy(base_name, method_name))
+          return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+exprt function_call_expr::generate_attribute_error(
+  const std::string &method_name,
+  const std::vector<std::string> &possible_classes) const
+{
+  locationt location = converter_.get_location_from_decl(call_);
+  std::ostringstream error_msg;
+
+  if (possible_classes.size() > 1)
+  {
+    // Multiple possible classes
+    std::string display_classes;
+    for (size_t i = 0; i < possible_classes.size(); ++i)
+    {
+      if (i > 0)
+        display_classes += ", ";
+      display_classes += "'" + possible_classes[i] + "'";
+    }
+    error_msg << "AttributeError: object has no attribute '" << method_name
+              << "' (possible types: " << display_classes << ")";
+  }
+  else if (possible_classes.size() == 1)
+  {
+    error_msg << "AttributeError: '" << possible_classes[0]
+              << "' object has no attribute '" << method_name << "'";
+  }
+  else
+  {
+    error_msg << "AttributeError: object has no attribute '" << method_name
+              << "'";
+  }
+
+  log_warning("{}", error_msg.str());
+
+  code_assertt assert_code(gen_boolean(false));
+  assert_code.location() = location;
+  assert_code.location().user_provided(true);
+  assert_code.location().comment(error_msg.str());
+
+  return assert_code;
+}
+
+exprt function_call_expr::check_argument_types(
+  const symbolt *func_symbol,
+  const nlohmann::json &args) const
+{
+  // Only perform type checking if --strict-types is enabled
+  if (!config.options.get_bool_option("strict-types"))
+    return nil_exprt();
+
+  const code_typet &func_type = to_code_type(func_symbol->type);
+  const auto &params = func_type.arguments();
+
+  // Determine parameter offset based on actual function signature
+  size_t param_offset = 0;
+
+  if (function_type_ == FunctionType::InstanceMethod)
+  {
+    // Instance methods always have 'self' as first parameter
+    param_offset = 1;
+  }
+  else if (function_type_ == FunctionType::ClassMethod)
+  {
+    // For class methods, check if first parameter is actually 'self' or 'cls'
+    // Static methods are called as ClassMethod but don't have self/cls
+    if (!params.empty())
+    {
+      const std::string &first_param = params[0].get_base_name().as_string();
+      if (first_param == "self" || first_param == "cls")
+        param_offset = 1;
+      // Otherwise it's a static method, param_offset stays 0
+    }
+  }
+
+  for (size_t i = 0; i < args.size(); ++i)
+  {
+    size_t param_idx = i + param_offset;
+    if (param_idx >= params.size())
+      break;
+
+    exprt arg = converter_.get_expr(args[i]);
+    const typet &expected_type = params[param_idx].type();
+    const typet &actual_type = arg.type();
+
+    // Check for type mismatch
+    if (!base_type_eq(expected_type, actual_type, converter_.ns))
+    {
+      std::string expected_str = type_handler_.type_to_string(expected_type);
+      std::string actual_str = type_handler_.type_to_string(actual_type);
+
+      std::ostringstream msg;
+      msg << "TypeError: Argument " << (i + 1) << " has incompatible type '"
+          << actual_str << "'; expected '" << expected_str << "'";
+
+      exprt exception = gen_exception_raise("TypeError", msg.str());
+
+      // Add location information from the call
+      locationt loc = converter_.get_location_from_decl(call_);
+      exception.location() = loc;
+      exception.location().user_provided(true);
+
+      return exception;
+    }
+  }
+
+  return nil_exprt();
 }

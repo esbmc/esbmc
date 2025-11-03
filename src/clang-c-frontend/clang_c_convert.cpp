@@ -516,6 +516,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.is_extern = vd.hasExternalStorage();
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
+  symbol.is_thread_local = vd.getTLSKind() != clang::VarDecl::TLS_None;
 
   if (
     symbol.static_lifetime &&

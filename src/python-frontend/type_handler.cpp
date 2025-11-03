@@ -279,6 +279,16 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "tuple")
     return empty_typet();
 
+  // list — handle list type annotations
+  // For generic "list" without element types, return the list type
+  // so the actual element type is inferred from context
+  if (ast_type == "list")
+    return get_list_type();
+
+  // Reuse list infrastructure for simplicity for now
+  if (ast_type == "set")
+    return get_list_type();
+
   // Custom user-defined types / classes
   if (
     json_utils::is_class(ast_type, converter_.ast()) ||

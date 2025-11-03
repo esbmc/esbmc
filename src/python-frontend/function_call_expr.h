@@ -37,6 +37,26 @@ public:
   }
 
 private:
+  /*
+   * Validates that function call arguments match expected parameter types.
+   * Returns TypeError exception if type mismatch is detected, nil_exprt otherwise.
+   */
+  exprt check_argument_types(
+    const symbolt *func_symbol,
+    const nlohmann::json &args) const;
+
+  // Helper methods for AttributeError detection
+  std::vector<std::string>
+  find_possible_class_types(const symbolt *obj_symbol) const;
+
+  bool method_exists_in_class_hierarchy(
+    const std::string &class_name,
+    const std::string &method_name) const;
+
+  exprt generate_attribute_error(
+    const std::string &method_name,
+    const std::vector<std::string> &possible_classes) const;
+
   /**
    * Determines whether a non-deterministic function is being invoked.
    */
@@ -98,9 +118,6 @@ private:
    * current filename to construct the full scoped symbol name.
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
-
-  bool
-  is_same_type(const exprt &obj_expr, const nlohmann::json &type_node) const;
 
   exprt handle_isinstance() const;
 
@@ -206,6 +223,12 @@ private:
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;
+
+  /*
+   * Replace undefined function calls with assert(false):
+   * if reached, verification fails; if unreached, verification succeeds.
+   */
+  codet gen_unsupported_function_assert(const std::string &func_name) const;
 
   /*
    * Check if the current function call is to a regular expression module function

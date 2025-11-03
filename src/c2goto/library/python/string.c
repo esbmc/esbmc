@@ -59,6 +59,13 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python character isdigit - checks if a single character is a digit
+_Bool __python_char_isdigit(int c)
+{
+__ESBMC_HIDE:;
+  return (c >= '0' && c <= '9');
+}
+
 _Bool __python_str_isdigit(const char *s)
 {
 __ESBMC_HIDE:;
@@ -112,4 +119,96 @@ __ESBMC_HIDE:;
   }
 
   return s;
+}
+
+// Python character islower - checks if a single character is lowercase
+_Bool __python_char_islower(int c)
+{
+__ESBMC_HIDE:;
+  return (c >= 'a' && c <= 'z');
+}
+
+// Python string islower - checks if all cased characters are lowercase
+// Returns true if there's at least one lowercase letter and no uppercase letters
+// NOTE: This is a simplified implementation with partial Unicode support!
+_Bool __python_str_islower(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0; // Empty string returns false
+
+  _Bool has_cased = 0; // Track if we found any cased character
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+
+    // Check for uppercase ASCII letters
+    if (c >= 'A' && c <= 'Z')
+      return 0; // Found uppercase, not all lower
+
+    // Check for lowercase ASCII letters
+    if (c >= 'a' && c <= 'z')
+      has_cased = 1; // Found at least one lowercase letter
+
+    // Handle two-byte UTF-8 sequences for accented letters
+    if (c >= 0xC2 && c <= 0xDF)
+    {
+      unsigned char next = (unsigned char)*(s + 1);
+      if (next >= 0x80 && next <= 0xBF)
+      {
+        // For simplicity, treat valid two-byte UTF-8 as cased characters
+        // In real Python, we'd need full Unicode case mapping
+        has_cased = 1;
+        s += 2;
+        continue;
+      }
+    }
+
+    s++;
+  }
+
+  return has_cased; // True only if we found at least one cased character
+}
+
+// Python character lower - converts a single character to lowercase
+int __python_char_lower(int c)
+{
+__ESBMC_HIDE:;
+  if (c >= 'A' && c <= 'Z')
+    return c + ('a' - 'A');
+  return c;
+}
+
+// Python string lower - converts all characters to lowercase
+// Uses a static buffer for ESBMC verification
+char *__python_str_lower(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  // Use a static buffer (sufficient for verification purposes)
+  static char buffer[256];
+
+  int i = 0;
+  while (i < 255 && s[i])
+  {
+    if (s[i] >= 'A' && s[i] <= 'Z')
+      buffer[i] = s[i] + ('a' - 'A');
+    else
+      buffer[i] = s[i];
+    i++;
+  }
+
+  // Warn if string was truncated
+  if (s[i] != '\0')
+  {
+    // String is longer than buffer - issue warning
+    __ESBMC_assert(0, "String too long for lower() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
 }

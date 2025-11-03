@@ -515,6 +515,8 @@ protected:
   /* Handles dereferencing between threads and is used only in data race checks. **/
   void replace_races_check(expr2tc &expr);
 
+  void simplify_python_builtins(expr2tc &expr);
+
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 
