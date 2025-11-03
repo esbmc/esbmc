@@ -1146,8 +1146,33 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       exprt new_expr = false_exprt();
       expr.swap(new_expr);
     }
+    // intrinsics headers
+    else if (
+      (identifier == "__builtin_elementwise_add_sat" ||
+       identifier == "__builtin_elementwise_sub_sat" ||
+       identifier == "__builtin_elementwise_max" ||
+       identifier == "__builtin_elementwise_min" ||
+       identifier == "__builtin_elementwise_abs" ||
+       identifier == "__builtin_elementwise_popcount" ||
+       identifier == "__builtin_reduce_add" ||
+       identifier == "__builtin_reduce_mul" ||
+       identifier == "__builtin_reduce_and" ||
+       identifier == "__builtin_reduce_or" ||
+       identifier == "__builtin_reduce_max" ||
+       identifier == "__builtin_reduce_min") &&
+      config.options.get_bool_option("dont-care-about-missing-extensions"))
+    {
+      auto nondet = sideeffect2tc(
+        migrate_type(expr.type()),
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        type2tc(),
+        sideeffect2t::nondet);
+      exprt new_expr = migrate_expr_back(nondet);
+      expr.swap(new_expr);
+    }
   }
-
   // Restore location
   expr.location() = location;
 }
