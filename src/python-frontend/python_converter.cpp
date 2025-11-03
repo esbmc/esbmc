@@ -3461,7 +3461,6 @@ void python_converter::get_var_assign(
       symbol.file_local = true;
       symbol.is_extern = false;
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
-      lhs_symbol->dump();
     }
 
     if (!lhs_symbol && !is_global)
