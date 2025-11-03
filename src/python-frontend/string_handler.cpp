@@ -1,5 +1,6 @@
 #include <python-frontend/string_handler.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
@@ -1084,4 +1085,54 @@ exprt string_handler::handle_string_lower(
   lower_call.type() = pointer_typet(char_type());
 
   return lower_call;
+}
+
+exprt string_handler::handle_string_split(
+  const exprt &string_obj,
+  const exprt &separator,
+  const locationt &location)
+{
+  // Ensure string is null-terminated
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  // Custom separators are not yet supported
+  if (!separator.is_nil())
+  {
+    log_warning("str.split() with custom separator not yet supported");
+
+    // Create an empty list as a placeholder for unsupported case
+    nlohmann::json dummy_list;
+    dummy_list["elts"] = nlohmann::json::array();
+    python_list list_builder(converter_, dummy_list);
+
+    return list_builder.get(false);
+  }
+
+  // Create an empty list that will be populated by the C split function
+  nlohmann::json dummy_list;
+  dummy_list["elts"] = nlohmann::json::array();
+  python_list list_builder(converter_, dummy_list);
+  exprt result_list = list_builder.get(false);
+
+  // Find the __python_str_split function symbol
+  std::string func_symbol_id = ensure_string_function_symbol(
+    "__python_str_split",
+    empty_typet(), // void return type
+    {pointer_typet(type_handler_.get_list_type()), pointer_typet(char_type())},
+    location);
+
+  // Create function call to populate the list
+  code_function_callt call;
+  call.function() = symbol_exprt(func_symbol_id, code_typet());
+  // Pass list pointer and string pointer
+  call.arguments().push_back(result_list);
+  call.arguments().push_back(str_addr);
+  call.type() = empty_typet(); // void function
+  call.location() = location;
+
+  converter_.add_instruction(call);
+
+  return result_list;
 }

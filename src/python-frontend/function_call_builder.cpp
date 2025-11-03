@@ -513,6 +513,21 @@ exprt function_call_builder::build() const
       return converter_.get_string_handler().handle_string_lstrip(
         obj_expr, loc);
     }
+
+    if (method_name == "split")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      // Get optional separator argument (default: whitespace)
+      exprt sep_arg;
+      if (!call_["args"].empty())
+        sep_arg = converter_.get_expr(call_["args"][0]);
+
+      locationt loc = converter_.get_location_from_decl(call_);
+
+      return converter_.get_string_handler().handle_string_split(
+        obj_expr, sep_arg, loc);
+    }
   }
 
   // Add len function to symbol table

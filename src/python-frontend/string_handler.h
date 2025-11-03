@@ -287,6 +287,11 @@ public:
    */
   exprt get_array_base_address(const exprt &arr);
 
+  exprt handle_string_split(
+    const exprt &string_obj,
+    const exprt &separator,
+    const locationt &location);
+
 private:
   python_converter &converter_;
   contextt &symbol_table_;

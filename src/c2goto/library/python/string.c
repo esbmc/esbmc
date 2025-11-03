@@ -1,4 +1,5 @@
-#include <ctype.h>
+#include <string.h>
+#include <stdlib.h>
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 // NOTE: For multi-byte characters (e.g., from iteration), the frontend must
@@ -211,4 +212,20 @@ __ESBMC_HIDE:;
   buffer[i] = '\0';
 
   return buffer;
+}
+
+// Minimal stub for str.split() - returns a list structure
+// Note: This is a placeholder that prevents crashes but doesn't fully implement split
+void *__python_str_split(const char *s)
+{
+__ESBMC_HIDE:;
+  // In a real implementation, this would:
+  // 1. Count tokens separated by whitespace
+  // 2. Allocate a list structure
+  // 3. Populate it with the tokens
+
+  // For now, return a non-deterministic pointer
+  // This allows verification to continue without full list support
+  void *result;
+  return result;
 }
