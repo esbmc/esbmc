@@ -966,6 +966,100 @@ exprt string_handler::handle_string_membership(
   exprt lhs_str = ensure_null_terminated_string(lhs);
   exprt rhs_str = ensure_null_terminated_string(rhs);
 
+  // Obtain the actual array expression (handle both constants and symbols)
+  auto get_array_expr = [this](const exprt &e) -> const exprt * {
+    if (e.is_constant() && e.type().is_array())
+      return &e;
+    if (e.is_symbol())
+    {
+      const symbolt *sym = symbol_table_.find_symbol(e.identifier());
+      if (sym && sym->value.is_constant() && sym->value.type().is_array())
+        return &sym->value;
+    }
+    return nullptr;
+  };
+
+  const exprt *needle_array = get_array_expr(lhs_str);
+  const exprt *haystack_array = get_array_expr(rhs_str);
+
+  // Special case: Check if needle starts with '\0'
+  // Python strings with null characters are valid, but we need to handle
+  // the C null-terminator semantics vs Python string semantics
+  if (needle_array && haystack_array)
+  {
+    const exprt::operandst &needle_ops = needle_array->operands();
+    const exprt::operandst &haystack_ops = haystack_array->operands();
+
+    // Check if needle starts with '\0'
+    if (!needle_ops.empty() && needle_ops[0].is_constant())
+    {
+      BigInt first_val = binary2integer(
+        needle_ops[0].value().as_string(), needle_ops[0].type().is_signedbv());
+
+      if (first_val == 0)
+      {
+        // Check if haystack has any embedded nulls (before the final terminator)
+        bool has_embedded_null = false;
+        for (size_t i = 0; i + 1 < haystack_ops.size(); ++i)
+        {
+          if (haystack_ops[i].is_constant())
+          {
+            BigInt val = binary2integer(
+              haystack_ops[i].value().as_string(),
+              haystack_ops[i].type().is_signedbv());
+            if (val == 0)
+            {
+              has_embedded_null = true;
+              break;
+            }
+          }
+        }
+
+        // If haystack has no embedded nulls, needle starting with '\0' won't be found
+        if (!has_embedded_null)
+          return gen_boolean(false);
+
+        if (needle_ops.size() > 2)
+        {
+          // Needle is like '\0x' or '\0abc' - need to search for this pattern
+          // in haystack that may contain embedded nulls
+          bool found = false;
+          for (size_t h = 0; h + needle_ops.size() <= haystack_ops.size(); ++h)
+          {
+            bool match = true;
+            for (size_t n = 0; n + 1 < needle_ops.size(); ++n)
+            {
+              if (
+                !haystack_ops[h + n].is_constant() ||
+                !needle_ops[n].is_constant())
+              {
+                match = false;
+                break;
+              }
+              BigInt h_val = binary2integer(
+                haystack_ops[h + n].value().as_string(),
+                haystack_ops[h + n].type().is_signedbv());
+              BigInt n_val = binary2integer(
+                needle_ops[n].value().as_string(),
+                needle_ops[n].type().is_signedbv());
+              if (h_val != n_val)
+              {
+                match = false;
+                break;
+              }
+            }
+            if (match)
+            {
+              found = true;
+              break;
+            }
+          }
+          return gen_boolean(found);
+        }
+      }
+    }
+  }
+
   // Get base addresses for C string functions
   exprt lhs_addr = get_array_base_address(lhs_str);
   exprt rhs_addr = get_array_base_address(rhs_str);
