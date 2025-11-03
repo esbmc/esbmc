@@ -4782,6 +4782,54 @@ void python_converter::get_attributes_from_self(
   }
 }
 
+void python_converter::process_forward_reference(
+  const nlohmann::json &annotation,
+  codet &target_block)
+{
+  if (annotation.is_null())
+    return;
+
+  std::string referenced_class;
+
+  // Handle string forward references: e.g. 'Bar'
+  if ((annotation["_type"] == "Constant" || annotation["_type"] == "Str") &&
+      annotation.contains("value") && !annotation["value"].is_null())
+  {
+    referenced_class =
+      type_utils::remove_quotes(annotation["value"].get<std::string>());
+  }
+  // Handle direct name references: Bar
+  else if (annotation["_type"] == "Name" && annotation.contains("id"))
+  {
+    referenced_class = annotation["id"].get<std::string>();
+    
+    // Skip built-in types like int, str, float, etc.
+    if (type_utils::is_builtin_type(referenced_class))
+      return;
+  }
+  else
+  {
+    // Not a forward reference we need to handle
+    return;
+  }
+
+  // Skip if the class is already in the symbol table
+  if (symbol_table_.find_symbol("tag-" + referenced_class))
+    return;
+
+  // Find and process the referenced class definition
+  const auto &ref_class_node =
+    find_class((*ast_json)["body"], referenced_class);
+  
+  if (!ref_class_node.empty())
+  {
+    // Save and restore current class context
+    std::string saved_class = current_class_name_;
+    get_class_definition(ref_class_node, target_block);
+    current_class_name_ = saved_class;
+  }
+}
+
 void python_converter::get_class_definition(
   const nlohmann::json &class_node,
   codet &target_block)
@@ -4838,83 +4886,29 @@ void python_converter::get_class_definition(
 
   // Pre-scan: Ensure all classes referenced in method return types and 
   // constructor parameter types are defined
-  // Only handle string forward references like -> 'Bar' (PEP 484)
+  // Handles both string forward references ('Bar') and direct name references (Foo)
+  // This supports PEP 484 forward references and ensures proper dependency ordering
   for (auto &class_member : class_node["body"])
   {
     if (class_member["_type"] != "FunctionDef")
       continue;
 
-    // Scan return type annotations
-    const nlohmann::json &returns = class_member["returns"];
-    if (!returns.is_null() && returns.contains("value") &&
-        !returns["value"].is_null() &&
-        (returns["_type"] == "Constant" || returns["_type"] == "Str"))
+    // Scan return type annotations for forward references
+    // Handles: def method(self) -> 'Bar': ...  or  def method(self) -> Foo: ...
+    if (!class_member["returns"].is_null())
     {
-      std::string referenced_class =
-        type_utils::remove_quotes(returns["value"].get<std::string>());
-
-      // Skip if already in symbol table
-      if (!symbol_table_.find_symbol("tag-" + referenced_class))
-      {
-        // Find and process the referenced class definition
-        const auto &ref_class_node =
-          find_class((*ast_json)["body"], referenced_class);
-        if (!ref_class_node.empty())
-        {
-          std::string saved_class = current_class_name_;
-          get_class_definition(ref_class_node, target_block);
-          current_class_name_ = saved_class;
-        }
-      }
+      process_forward_reference(class_member["returns"], target_block);
     }
 
-    // Scan constructor/method parameter type annotations
-    // This handles cases like Bar.__init__(self, f: Foo)
+    // Scan constructor/method parameter type annotations for forward references
+    // Handles: def __init__(self, f: Foo): ...  or  def method(self, b: 'Bar'): ...
     if (class_member.contains("args") && class_member["args"].contains("args"))
     {
       for (const auto &arg : class_member["args"]["args"])
       {
-        if (!arg.contains("annotation") || arg["annotation"].is_null())
-          continue;
-
-        const nlohmann::json &annotation = arg["annotation"];
-        
-        // Handle string forward references in parameter types
-        if ((annotation["_type"] == "Constant" || annotation["_type"] == "Str") &&
-            annotation.contains("value") && !annotation["value"].is_null())
+        if (arg.contains("annotation") && !arg["annotation"].is_null())
         {
-          std::string referenced_class =
-            type_utils::remove_quotes(annotation["value"].get<std::string>());
-
-          if (!symbol_table_.find_symbol("tag-" + referenced_class))
-          {
-            const auto &ref_class_node =
-              find_class((*ast_json)["body"], referenced_class);
-            if (!ref_class_node.empty())
-            {
-              std::string saved_class = current_class_name_;
-              get_class_definition(ref_class_node, target_block);
-              current_class_name_ = saved_class;
-            }
-          }
-        }
-        // Handle direct name references in parameter types
-        else if (annotation["_type"] == "Name" && annotation.contains("id"))
-        {
-          std::string referenced_class = annotation["id"].get<std::string>();
-
-          if (!symbol_table_.find_symbol("tag-" + referenced_class) &&
-              !type_utils::is_builtin_type(referenced_class))
-          {
-            const auto &ref_class_node =
-              find_class((*ast_json)["body"], referenced_class);
-            if (!ref_class_node.empty())
-            {
-              std::string saved_class = current_class_name_;
-              get_class_definition(ref_class_node, target_block);
-              current_class_name_ = saved_class;
-            }
-          }
+          process_forward_reference(arg["annotation"], target_block);
         }
       }
     }
