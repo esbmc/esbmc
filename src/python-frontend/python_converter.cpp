@@ -4831,6 +4831,54 @@ void python_converter::get_class_definition(
       clazz.components().emplace_back(component);
   }
 
+  // Pre-scan: Ensure all classes referenced in method return types are defined
+  for (auto &class_member : class_node["body"])
+  {
+    if (class_member["_type"] == "FunctionDef")
+    {
+      const nlohmann::json &returns = class_member["returns"];
+      if (!returns.is_null() && returns.contains("value") &&
+          !returns["value"].is_null() &&
+          (returns["_type"] == "Constant" || returns["_type"] == "Str"))
+      {
+        // Handle string forward references like -> 'Bar'
+        std::string referenced_class =
+          type_utils::remove_quotes(returns["value"].get<std::string>());
+        
+        if (!symbol_table_.find_symbol("tag-" + referenced_class))
+        {
+          const auto &ref_class_node =
+            find_class((*ast_json)["body"], referenced_class);
+          if (!ref_class_node.empty())
+          {
+            std::string current_class = current_class_name_;
+            get_class_definition(ref_class_node, target_block);
+            current_class_name_ = current_class;
+          }
+        }
+      }
+      else if (
+        !returns.is_null() && returns.contains("id") &&
+        !(returns["_type"] == "Constant" && returns["value"].is_null()))
+      {
+        // Handle regular type references like -> Bar
+        std::string referenced_class = returns["id"].get<std::string>();
+        
+        if (!symbol_table_.find_symbol("tag-" + referenced_class))
+        {
+          const auto &ref_class_node =
+            find_class((*ast_json)["body"], referenced_class);
+          if (!ref_class_node.empty())
+          {
+            std::string current_class = current_class_name_;
+            get_class_definition(ref_class_node, target_block);
+            current_class_name_ = current_class;
+          }
+        }
+      }
+    }
+  }
+
   // Iterate over class members
   for (auto &class_member : class_node["body"])
   {
