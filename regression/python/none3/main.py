@@ -23,5 +23,5 @@ assert (x is None)
 # Check None inside logical expressions
 assert not (x and True)
 assert (x or True)
-assert (x or 1) == 1
+assert (x or 2) == 2
 assert not (x and 1)

@@ -201,11 +201,38 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(get_op(op, bool_type()), bool_type());
 
+  bool contains_non_boolean = false;
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
   {
     exprt operand_expr = get_expr(operand);
     logical_expr.copy_to_operands(operand_expr);
+    contains_non_boolean |= !operand_expr.is_boolean();
+  }
+
+  // Shockingly enough, a BoolOp may not return a boolean.
+  if (contains_non_boolean)
+  {
+    typet t = extract_type_from_boolean_op(logical_expr).type();
+
+    // Are we dealing with an actual bool expression?
+    if (t.is_bool())
+      return logical_expr;
+    // Result expression starts from last operand as default else branch
+    exprt result_expr = logical_expr.operands().back();
+    for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
+    {
+      const exprt &current = logical_expr.operands()[i];
+      exprt if_expr("if", t);
+      if (logical_expr.is_and())
+        if_expr.copy_to_operands(current, result_expr, current);
+      else
+        if_expr.copy_to_operands(current, current, result_expr);
+
+      result_expr = if_expr;
+    }
+
+    return result_expr;
   }
   return logical_expr;
 }
@@ -548,6 +575,59 @@ exprt handle_floor_division(
   floor_div.copy_to_operands(bin_expr, if_expr); //bin_expr contains lhs/rhs
 
   return floor_div;
+}
+
+/// Handles floating-point modulo operations with Python semantics.
+/// Python's % operator: result has the sign of the divisor (y)
+/// Formula: x % y = x - floor(x/y) * y
+/// This differs from C's fmod() where result has the sign of the dividend (x)
+exprt python_converter::handle_modulo_operator(
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
+  // Find required function symbols
+  symbolt *floor_symbol = symbol_table_.find_symbol("c:@F@floor");
+  if (!floor_symbol)
+    throw std::runtime_error("floor function not found in symbol table");
+
+  // Promote both operands to double if needed
+  exprt double_lhs = lhs;
+  exprt double_rhs = rhs;
+
+  if (!lhs.type().is_floatbv())
+  {
+    double_lhs = exprt("typecast", double_type());
+    double_lhs.copy_to_operands(lhs);
+  }
+
+  if (!rhs.type().is_floatbv())
+  {
+    double_rhs = exprt("typecast", double_type());
+    double_rhs.copy_to_operands(rhs);
+  }
+
+  // Create division: x / y
+  exprt div_expr("ieee_div", double_type());
+  div_expr.copy_to_operands(double_lhs, double_rhs);
+
+  // Create floor(x / y)
+  side_effect_expr_function_callt floor_call;
+  floor_call.function() = symbol_expr(*floor_symbol);
+  floor_call.arguments() = {div_expr};
+  floor_call.type() = double_type();
+  floor_call.location() = get_location_from_decl(element);
+
+  // Create floor(x/y) * y
+  exprt mult_expr("ieee_mul", double_type());
+  mult_expr.copy_to_operands(floor_call, double_rhs);
+
+  // Create x - floor(x/y) * y
+  exprt result_expr("ieee_sub", double_type());
+  result_expr.copy_to_operands(double_lhs, mult_expr);
+  result_expr.location() = get_location_from_decl(element);
+
+  return result_expr;
 }
 
 exprt python_converter::handle_power_operator_sym(exprt base, exprt exp)
@@ -1758,6 +1838,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Replace ** operation with the resultant constant.
   if (op == "Pow" || op == "power")
     return handle_power_operator(lhs, rhs);
+
+  // Handle floating-point modulo with Python semantics
+  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
+    return handle_modulo_operator(lhs, rhs, element);
 
   // Determine the result type of the binary operation:
   typet type;
@@ -3409,11 +3493,37 @@ void python_converter::get_var_assign(
       symbol.is_extern = false;
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
     }
+    // Special handling for boolop
+    if (
+      !lhs_symbol && !is_global && ast_node.contains("value") &&
+      ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "BoolOp")
+    {
+      // Convert RHS first to get its type
+      is_converting_rhs = true;
+      exprt rhs_expr = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+
+      locationt location = get_location_from_decl(target);
+      std::string module_name = location.get_file().as_string();
+
+      // Use the actual return type from the boolean operation (BoolOp expression)
+      typet inferred_type = rhs_expr.type();
+      if (inferred_type.is_empty())
+        inferred_type = any_type();
+
+      symbolt symbol = create_symbol(
+        module_name, name, sid.to_string(), location, inferred_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+    }
 
     if (!lhs_symbol && !is_global)
       throw std::runtime_error("Type undefined for \"" + name + "\"");
 
-    lhs = symbol_expr(*lhs_symbol);
+    lhs = create_lhs_expression(target, lhs_symbol, location_begin);
   }
 
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
@@ -3870,6 +3980,17 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // Resolve result type based on branch types
     typet result_type =
       resolve_ternary_type(then.type(), else_expr.type(), current_element_type);
+
+    // Handle array-to-pointer conversion for ternary expressions
+    // When assigning to a pointer (e.g., str field), convert array branches to pointers
+    if (
+      then.type().is_array() && else_expr.type().is_array() && current_lhs &&
+      current_lhs->type().is_pointer())
+    {
+      then = string_handler_.get_array_base_address(then);
+      else_expr = string_handler_.get_array_base_address(else_expr);
+      result_type = then.type(); // Use pointer type as result
+    }
 
     // Create fully symbolic if expression
     exprt if_expr("if", result_type);
@@ -4644,6 +4765,22 @@ void python_converter::get_attributes_from_self(
         type =
           type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
 
+      struct_typet::componentt comp =
+        build_component(current_class_name_, attr_name, type);
+
+      auto &class_components = clazz.components();
+      if (
+        std::find(class_components.begin(), class_components.end(), comp) ==
+        class_components.end())
+        class_components.push_back(comp);
+    }
+    else if (
+      stmt["_type"] == "Assign" && stmt["targets"][0]["_type"] == "Attribute" &&
+      stmt["targets"][0]["value"]["id"] == "self")
+    {
+      // A member is initialized with something that might be not annotated
+      typet type = any_type();
+      const std::string &attr_name = stmt["targets"][0]["attr"];
       struct_typet::componentt comp =
         build_component(current_class_name_, attr_name, type);
 
@@ -5686,4 +5823,47 @@ void python_converter::convert()
     throw std::runtime_error(
       "The main function is already defined in another module");
   }
+}
+
+exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
+{
+  // Only OR and AND are special
+  if (!bool_op.is_and() && !bool_op.is_or())
+    return gen_zero(bool_type());
+
+  // Let's try to be smart and guess the type;
+  // In the future this could be trivial with an Python Obj struct
+  // 1. If there are no non-null constants, then guess any.
+  // 2. If there is only one type of constant, then guess it.
+  // 3. If there is more than one type of constant, then abort.
+
+  typet found_type = empty_typet();
+  assert(found_type.is_empty());
+
+  for (exprt e : bool_op.operands())
+  {
+    // First, try to solve the underlying type...
+    if (!e.is_constant() && !e.is_symbol())
+      e = extract_type_from_boolean_op(e);
+
+    assert(e.is_constant() || e.is_symbol());
+
+    if (!e.is_pointer() && e.is_constant())
+    {
+      if (found_type.is_empty())
+        found_type = e.type();
+      else if (found_type != e.type() && !e.type().is_array())
+      {
+        log_error("Boolean expression with more than one constant type");
+        bool_op.dump();
+        abort();
+      }
+    }
+  }
+
+  // Arrays are special, they have a length property which we don't care about right now
+  if (found_type.is_array())
+    return gen_zero(any_type());
+
+  return found_type.is_empty() ? gen_zero(any_type()) : gen_zero(found_type);
 }
