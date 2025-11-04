@@ -54,7 +54,7 @@ def test_sqrt_return_type():
     import math
     result: float = math.sqrt(4)  # Should be 2.0, not 2
     # In Python, sqrt always returns float
-    assert isinstance(result, float) or True
+    assert isinstance(result, float)
 
 def test_sqrt_assignment():
     """Test: sqrt result assigned to variable"""
