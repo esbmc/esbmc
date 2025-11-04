@@ -280,7 +280,7 @@ exprt python_math::handle_floor_division(
   const exprt &bin_expr)
 {
   typet div_type = bin_expr.type();
-  
+
   // remainder = num % den;
   exprt remainder("mod", div_type);
   remainder.copy_to_operands(lhs, rhs);
@@ -288,7 +288,7 @@ exprt python_math::handle_floor_division(
   // Get num signal
   exprt is_num_neg("<", bool_type());
   is_num_neg.copy_to_operands(lhs, gen_zero(div_type));
-  
+
   // Get den signal
   exprt is_den_neg("<", bool_type());
   is_den_neg.copy_to_operands(rhs, gen_zero(div_type));
@@ -303,7 +303,7 @@ exprt python_math::handle_floor_division(
 
   exprt cond("and", bool_type());
   cond.copy_to_operands(pos_remainder, diff_signals);
-  
+
   exprt if_expr("if", div_type);
   if_expr.copy_to_operands(cond, gen_one(div_type), gen_zero(div_type));
 
@@ -314,10 +314,8 @@ exprt python_math::handle_floor_division(
   return floor_div;
 }
 
-void python_math::handle_float_division(
-  exprt &lhs,
-  exprt &rhs,
-  exprt &bin_expr) const
+void python_math::handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr)
+  const
 {
   const typet float_type = double_type();
 
@@ -360,7 +358,8 @@ void python_math::handle_float_division(
   bin_expr.id("ieee_div");
 }
 
-void python_math::promote_int_to_float(exprt &op, const typet &target_type) const
+void python_math::promote_int_to_float(exprt &op, const typet &target_type)
+  const
 {
   typet &op_type = op.type();
 
@@ -386,7 +385,8 @@ void python_math::promote_int_to_float(exprt &op, const typet &target_type) cons
     catch (const std::exception &e)
     {
       log_error(
-        "math_handler_.promote_int_to_float: Failed to promote constant to float: {}",
+        "math_handler_.promote_int_to_float: Failed to promote constant to "
+        "float: {}",
         e.what());
       return;
     }
@@ -399,4 +399,3 @@ void python_math::promote_int_to_float(exprt &op, const typet &target_type) cons
   if (op.is_symbol())
     converter.update_symbol(op);
 }
-

@@ -38,10 +38,7 @@ public:
    * @param ctx Reference to the symbol table context
    * @param th Reference to the type handler
    */
-  python_math(
-    python_converter &conv,
-    contextt &ctx,
-    type_handler &th);
+  python_math(python_converter &conv, contextt &ctx, type_handler &th);
 
   /**
    * @brief Compute a mathematical expression with constant operands
