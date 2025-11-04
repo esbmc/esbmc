@@ -4,7 +4,7 @@
 #include <util/string_container.h>
 
 unsigned string_containert::get(const std::string_view &s)
-{  
+{
   {
     std::shared_lock lock(string_container_mutex);
     hash_tablet::iterator it = hash_table.find(s);

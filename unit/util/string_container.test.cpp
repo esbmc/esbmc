@@ -293,15 +293,13 @@ TEST_CASE(
 
   for (int i = 0; i < 10; ++i)
   {
-    threads.emplace_back(
-      [&mutex, &instances]()
+    threads.emplace_back([&mutex, &instances]() {
+      auto &inst = get_string_container();
       {
-        auto &inst = get_string_container();
-        {
-          std::lock_guard<std::mutex> lock(mutex);
-          instances.insert(&inst);
-        }
-      });
+        std::lock_guard<std::mutex> lock(mutex);
+        instances.insert(&inst);
+      }
+    });
   }
 
   for (auto &t : threads)
@@ -429,16 +427,14 @@ TEST_CASE(
 
   for (int i = 0; i < 10; ++i)
   {
-    threads.emplace_back(
-      [&, i]()
+    threads.emplace_back([&, i]() {
+      std::string str = "thread_" + std::to_string(i);
+      unsigned id = container[str];
       {
-        std::string str = "thread_" + std::to_string(i);
-        unsigned id = container[str];
-        {
-          std::lock_guard<std::mutex> lock(mutex);
-          ids[i] = id;
-        }
-      });
+        std::lock_guard<std::mutex> lock(mutex);
+        ids[i] = id;
+      }
+    });
   }
 
   for (auto &t : threads)
@@ -464,15 +460,13 @@ TEST_CASE(
 
   for (int i = 0; i < 100; ++i)
   {
-    threads.emplace_back(
-      [&, i]()
+    threads.emplace_back([&, i]() {
+      unsigned id = container["shared"];
       {
-        unsigned id = container["shared"];
-        {
-          std::lock_guard<std::mutex> lock(mutex);
-          retrieved_ids[i] = id;
-        }
-      });
+        std::lock_guard<std::mutex> lock(mutex);
+        retrieved_ids[i] = id;
+      }
+    });
   }
 
   for (auto &t : threads)
@@ -501,28 +495,26 @@ TEST_CASE(
 
   for (int t = 0; t < NUM_THREADS; ++t)
   {
-    threads.emplace_back(
-      [&, t]()
+    threads.emplace_back([&, t]() {
+      for (int i = 0; i < STRINGS_PER_THREAD; ++i)
       {
-        for (int i = 0; i < STRINGS_PER_THREAD; ++i)
+        std::string str =
+          "thread_" + std::to_string(t) + "_str_" + std::to_string(i);
+        unsigned id = container[str];
+
+        // Also do some lookups
+        for (int j = 0; j < 10; ++j)
         {
-          std::string str =
-            "thread_" + std::to_string(t) + "_str_" + std::to_string(i);
-          unsigned id = container[str];
-
-          // Also do some lookups
-          for (int j = 0; j < 10; ++j)
-          {
-            unsigned lookup_id = container[str];
-            REQUIRE(lookup_id == id);
-          }
-
-          {
-            std::lock_guard<std::mutex> lock(mutex);
-            all_ids.insert(id);
-          }
+          unsigned lookup_id = container[str];
+          REQUIRE(lookup_id == id);
         }
-      });
+
+        {
+          std::lock_guard<std::mutex> lock(mutex);
+          all_ids.insert(id);
+        }
+      }
+    });
   }
 
   for (auto &t : threads)
