@@ -12,8 +12,6 @@ namespace clang
 class ASTUnit;
 } // namespace clang
 
-//#include <clang/Frontend/ASTUnit.h>
-
 class clang_c_languaget : public languaget
 {
 public:
