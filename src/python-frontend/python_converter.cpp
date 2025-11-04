@@ -2791,10 +2791,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           var_name,
           class_type.tag().as_string());
       }
-      // For RHS (reading): use instance member only if explicitly set
+      // For RHS (reading): use instance member if explicitly set OR if symbol is a parameter
+      // This allows parameter objects like 'f: Foo' to access instance attributes
       else if (
-        !is_converting_lhs && instance_has_attr &&
-        class_type.has_component(attr_name))
+        !is_converting_lhs && 
+        class_type.has_component(attr_name) &&
+        (instance_has_attr || symbol->is_parameter))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = create_member_expression(*symbol, attr_name, attr_type);
@@ -4884,7 +4886,19 @@ void python_converter::get_class_definition(
       clazz.components().emplace_back(component);
   }
 
-  // Pre-scan: Ensure all classes referenced in method return types and 
+  // Pre-scan step 1: Collect all class attributes from method bodies first
+  // This ensures attributes are available when processing forward references
+  for (auto &class_member : class_node["body"])
+  {
+    if (class_member["_type"] == "FunctionDef")
+    {
+      get_attributes_from_self(class_member["body"], clazz);
+    }
+  }
+  // Update the class type with collected attributes
+  added_symbol->type = clazz;
+
+  // Pre-scan step 2: Ensure all classes referenced in method return types and 
   // constructor parameter types are defined
   // Handles both string forward references ('Bar') and direct name references (Foo)
   // This supports PEP 484 forward references and ensures proper dependency ordering
@@ -4920,9 +4934,6 @@ void python_converter::get_class_definition(
     // Process methods
     if (class_member["_type"] == "FunctionDef")
     {
-      get_attributes_from_self(class_member["body"], clazz);
-      added_symbol->type = clazz;
-
       std::string method_name = class_member["name"].get<std::string>();
       if (method_name == "__init__")
         method_name = current_class_name_;
@@ -4935,6 +4946,7 @@ void python_converter::get_class_definition(
 
       struct_typet::componentt method(added_method.name(), added_method.type());
       clazz.methods().push_back(method);
+      added_symbol->type = clazz;
       current_func_name_.clear();
     }
     // Process class attributes
