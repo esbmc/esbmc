@@ -2794,8 +2794,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // For RHS (reading): use instance member if explicitly set OR if symbol is a parameter
       // This allows parameter objects like 'f: Foo' to access instance attributes
       else if (
-        !is_converting_lhs && 
-        class_type.has_component(attr_name) &&
+        !is_converting_lhs && class_type.has_component(attr_name) &&
         (instance_has_attr || symbol->is_parameter))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
@@ -4805,8 +4804,9 @@ void python_converter::process_forward_reference(
   std::string referenced_class;
 
   // Handle string forward references: e.g. 'Bar'
-  if ((annotation["_type"] == "Constant" || annotation["_type"] == "Str") &&
-      annotation.contains("value") && !annotation["value"].is_null())
+  if (
+    (annotation["_type"] == "Constant" || annotation["_type"] == "Str") &&
+    annotation.contains("value") && !annotation["value"].is_null())
   {
     referenced_class =
       type_utils::remove_quotes(annotation["value"].get<std::string>());
@@ -4815,7 +4815,7 @@ void python_converter::process_forward_reference(
   else if (annotation["_type"] == "Name" && annotation.contains("id"))
   {
     referenced_class = annotation["id"].get<std::string>();
-    
+
     // Skip built-in types like int, str, float, etc.
     if (type_utils::is_builtin_type(referenced_class))
       return;
@@ -4833,7 +4833,7 @@ void python_converter::process_forward_reference(
   // Find and process the referenced class definition
   const auto &ref_class_node =
     find_class((*ast_json)["body"], referenced_class);
-  
+
   if (!ref_class_node.empty())
   {
     // Save and restore current class context
@@ -4909,7 +4909,7 @@ void python_converter::get_class_definition(
   // Update the class type with collected attributes
   added_symbol->type = clazz;
 
-  // Pre-scan step 2: Ensure all classes referenced in method return types and 
+  // Pre-scan step 2: Ensure all classes referenced in method return types and
   // constructor parameter types are defined
   // Handles both string forward references ('Bar') and direct name references (Foo)
   // This supports PEP 484 forward references and ensures proper dependency ordering
@@ -5020,7 +5020,7 @@ void python_converter::get_class_definition(
 
     locationt location = get_location_from_decl(class_node);
     std::string module_name = location.get_file().as_string();
-    
+
     symbol_id sid;
     sid.set_filename(module_name);
     sid.set_class(current_class_name_);
@@ -5028,7 +5028,11 @@ void python_converter::get_class_definition(
 
     // Use helper function to create symbol with standard fields
     symbolt constructor_symbol = create_symbol(
-      module_name, current_class_name_, sid.to_string(), location, function_type);
+      module_name,
+      current_class_name_,
+      sid.to_string(),
+      location,
+      function_type);
     constructor_symbol.value = code_blockt(); // Empty body
     constructor_symbol.lvalue = true;
 

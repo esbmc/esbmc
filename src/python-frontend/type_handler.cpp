@@ -43,7 +43,7 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
    * rhs corresponds to the name of a class. */
 
   // First, check if the class is defined in the AST (handles forward references)
-  // example: class Foo: -> "Bar": 
+  // example: class Foo: -> "Bar":
   // Bar is a class here defined later
   if (json_utils::is_class(func_name, converter_.ast()))
     return true;

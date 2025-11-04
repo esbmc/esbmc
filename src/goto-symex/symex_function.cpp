@@ -109,7 +109,7 @@ unsigned goto_symext::argument_assignments(
           // Check if the pointer points to the expected struct type
           const pointer_type2t &ptr_type = to_pointer_type(f_rhs_type);
           type2tc ptr_subtype = ptr_type.subtype;
-          
+
           // Resolve symbol types
           while (is_symbol_type(ptr_subtype))
           {
@@ -120,12 +120,13 @@ unsigned goto_symext::argument_assignments(
             else
               break;
           }
-          
+
           // If pointer points to the expected struct type, allow it
           if (!base_type_eq(f_arg_type, ptr_subtype, ns))
           {
             log_error(
-              "function call: argument \"{}\" type mismatch: got {}, expected {}",
+              "function call: argument \"{}\" type mismatch: got {}, expected "
+              "{}",
               id2string(identifier),
               get_type_id((*it1)->type),
               get_type_id(arg_type));

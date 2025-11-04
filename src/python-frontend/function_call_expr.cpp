@@ -2277,25 +2277,29 @@ exprt function_call_expr::check_argument_types(
     const typet &actual_type = arg.type();
 
     // Check for type mismatch
-    bool types_compatible = base_type_eq(expected_type, actual_type, converter_.ns);
-    
+    bool types_compatible =
+      base_type_eq(expected_type, actual_type, converter_.ns);
+
     // Special handling for Python object semantics:
     // Allow pointer types to match struct parameter types, since Python objects
     // are passed by reference (pointer semantics), but parameters are declared
     // with struct types (e.g., def __init__(self, f: Foo))
-    if (!types_compatible && actual_type.is_pointer() && !expected_type.is_pointer())
+    if (
+      !types_compatible && actual_type.is_pointer() &&
+      !expected_type.is_pointer())
     {
       // Check if the pointer's subtype matches the expected type
       typet ptr_subtype = actual_type.subtype();
-      
+
       // Resolve symbol types
       if (ptr_subtype.id() == "symbol")
         ptr_subtype = converter_.ns.follow(ptr_subtype);
-      
+
       // If the pointer points to the expected type, allow it
-      types_compatible = base_type_eq(expected_type, ptr_subtype, converter_.ns);
+      types_compatible =
+        base_type_eq(expected_type, ptr_subtype, converter_.ns);
     }
-    
+
     if (!types_compatible)
     {
       std::string expected_str = type_handler_.type_to_string(expected_type);
