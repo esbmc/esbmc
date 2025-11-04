@@ -3,6 +3,7 @@
 
 #include <util/language.h>
 
+
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
@@ -11,6 +12,8 @@ namespace clang
 {
 class ASTUnit;
 } // namespace clang
+
+//#include <clang/Frontend/ASTUnit.h>
 
 class clang_c_languaget : public languaget
 {
@@ -52,6 +55,7 @@ public:
   }
 
   clang_c_languaget();
+  ~clang_c_languaget();
 
 protected:
   virtual std::string internal_additions();
