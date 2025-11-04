@@ -399,3 +399,28 @@ void python_math::promote_int_to_float(exprt &op, const typet &target_type)
   if (op.is_symbol())
     converter.update_symbol(op);
 }
+
+exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
+{
+  // Find the sqrt function symbol from C math library
+  symbolt *sqrt_symbol = symbol_table.find_symbol("c:@F@sqrt");
+  if (!sqrt_symbol)
+    throw std::runtime_error("sqrt function not found in symbol table");
+
+  // Promote operand to double if needed (sqrt always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt sqrt_call;
+  sqrt_call.function() = symbol_expr(*sqrt_symbol);
+  sqrt_call.arguments() = {double_operand};
+  sqrt_call.type() = double_type();
+  sqrt_call.location() = converter.get_location_from_decl(element);
+
+  return sqrt_call;
+}

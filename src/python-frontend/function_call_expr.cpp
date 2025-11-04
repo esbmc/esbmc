@@ -1546,6 +1546,35 @@ function_call_expr::get_dispatch_table()
            },
            "isnan/isinf"},
 
+          // Math module functions
+          {[this]() {
+             // Check if this is a math module function
+             const std::string &func_name = function_id_.get_function();
+
+             // Check if calling from math module
+             bool is_math_module = false;
+             if (call_["func"]["_type"] == "Attribute")
+             {
+               std::string caller = get_object_name();
+               is_math_module = (caller == "math");
+             }
+
+             return is_math_module && func_name == "sqrt";
+           },
+           [this]() {
+             // Handle math.sqrt()
+             const auto &args = call_["args"];
+
+             if (args.size() != 1)
+               throw std::runtime_error("sqrt() expects exactly 1 argument");
+
+             exprt arg_expr = converter_.get_expr(args[0]);
+
+             // Delegate to python_math
+             return converter_.get_math_handler().handle_sqrt(arg_expr, call_);
+           },
+           "math.sqrt()"},
+
           // Built-in type constructors (int, float, str, bool, etc.)
           {[this]() {
              const std::string &func_name = function_id_.get_function();

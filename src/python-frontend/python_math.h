@@ -151,6 +151,26 @@ public:
    * @param target_type The target floating-point type
    */
   void promote_int_to_float(exprt &op, const typet &target_type) const;
+
+  /**
+   * @brief Handle square root operation (math.sqrt)
+   * 
+   * Implements Python's math.sqrt() function by creating a call to C's sqrt().
+   * Always returns a float (double) result. Negative inputs will produce
+   * domain errors at runtime (matching Python behavior).
+   * 
+   * @param operand The value to take square root of (promoted to float if needed)
+   * @param element JSON AST node for location information (optional)
+   * @return Function call expression to sqrt()
+   * @throws std::runtime_error if sqrt symbol not found in symbol table
+   * 
+   * Examples:
+   *   math.sqrt(4) -> 2.0
+   *   math.sqrt(2) -> 1.414...
+   *   math.sqrt(0) -> 0.0
+   *   math.sqrt(-1) -> domain error at runtime
+   */
+  exprt handle_sqrt(exprt operand, const nlohmann::json &element);
 };
 
 #endif
