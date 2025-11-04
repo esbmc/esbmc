@@ -3,7 +3,6 @@
 
 #include <util/language.h>
 
-
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
