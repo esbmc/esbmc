@@ -3983,6 +3983,17 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     typet result_type =
       resolve_ternary_type(then.type(), else_expr.type(), current_element_type);
 
+    // Handle array-to-pointer conversion for ternary expressions
+    // When assigning to a pointer (e.g., str field), convert array branches to pointers
+    if (
+      then.type().is_array() && else_expr.type().is_array() && current_lhs &&
+      current_lhs->type().is_pointer())
+    {
+      then = string_handler_.get_array_base_address(then);
+      else_expr = string_handler_.get_array_base_address(else_expr);
+      result_type = then.type(); // Use pointer type as result
+    }
+
     // Create fully symbolic if expression
     exprt if_expr("if", result_type);
     if_expr.copy_to_operands(cond, then, else_expr);
