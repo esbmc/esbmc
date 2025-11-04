@@ -48,6 +48,7 @@ public:
   // the pointer is guaranteed to be stable
   const char *c_str(size_t no) const
   {
+    std::shared_lock lock(string_container_mutex);
     assert(no < strings.size());
     return strings[no].c_str();
   }
