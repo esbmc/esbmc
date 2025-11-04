@@ -29,13 +29,13 @@ on:
         type: choice
         description: Run-set to use (be sure to set mode to "RunSet")
         options:
-        - SV-COMP25_unreach-call
-        - SV-COMP25_no-data-race
-        - SV-COMP25_valid-memcleanup
-        - SV-COMP25_valid-memsafety
-        - SV-COMP25_termination
-        - SV-COMP25_no-overflow
-        - SV-COMP25_ConcurrencySafety
+        - SV-COMP26_unreach-call
+        - SV-COMP26_no-data-race
+        - SV-COMP26_valid-memcleanup
+        - SV-COMP26_valid-memsafety
+        - SV-COMP26_termination
+        - SV-COMP26_no-overflow
+        - SV-COMP26_ConcurrencySafety
         - Custom
       task:
         type: choice
@@ -122,7 +122,7 @@ jobs:
         if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'Custom' }}
         run: cp ./esbmc-src/scripts/competitions/svcomp/custom-reach.set $HOME/sv-benchmarks/c/ && mv ./esbmc-src/scripts/competitions/svcomp/custom.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
       - name: Set up the Concurrency runset
-        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP26_ConcurrencySafety' }}
         run: mv ./esbmc-src/scripts/competitions/svcomp/ConcurrencySafety.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
       - name: Run Benchexec (Full)
         if: ${{ inputs.mode == 'Full' }}
@@ -131,13 +131,13 @@ jobs:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
       - name: Run Benchexec (ConcurrencyRunSet)
-        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP26_ConcurrencySafety' }}
         run: ./esbmc-src/scripts/benchexec.sh -f
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
       - name: Run Benchexec (RunSet)
-        if: ${{ inputs.mode == 'RunSet'  && inputs.runset != 'SV-COMP25_ConcurrencySafety'}}
+        if: ${{ inputs.mode == 'RunSet'  && inputs.runset != 'SV-COMP26_ConcurrencySafety'}}
         run: ./esbmc-src/scripts/benchexec.sh -r ${{ inputs.runset }}
         env:
           TIMEOUT: ${{ inputs.timeout }}

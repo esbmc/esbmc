@@ -7,8 +7,9 @@
   <resultfiles>**/*.graphml</resultfiles>
   
   <option name="-s">kinduction</option>
+  <option name="--ci"/>
 
-  <rundefinition name="SV-COMP25_unreach-call">
+  <rundefinition name="SV-COMP26_unreach-call">
     <tasks name="ReachSafety-Arrays">
       <includesfile>$HOME/sv-benchmarks/c/Arrays.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
@@ -107,14 +108,14 @@
     </tasks>
   </rundefinition>
 
-  <rundefinition name="SV-COMP25_no-data-race">
+  <rundefinition name="SV-COMP26_no-data-race">
     <tasks name="NoDataRace-Main">
       <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/no-data-race.prp</propertyfile>
     </tasks>
   </rundefinition>
 
-  <rundefinition name="SV-COMP25_valid-memcleanup">
+  <rundefinition name="SV-COMP26_valid-memcleanup">
     <tasks name="MemSafety-MemCleanup">
       <includesfile>$HOME/sv-benchmarks/c/Heap.set</includesfile>
       <includesfile>$HOME/sv-benchmarks/c/Juliet.set</includesfile>
@@ -129,7 +130,7 @@
     </tasks>
   </rundefinition>
 
-  <rundefinition name="SV-COMP25_valid-memsafety">
+  <rundefinition name="SV-COMP26_valid-memsafety">
     <tasks name="MemSafety-Arrays">
       <includesfile>$HOME/sv-benchmarks/c/Arrays.set</includesfile>
       <includesfile>$HOME/sv-benchmarks/c/Heap-Termination.set</includesfile>
@@ -181,7 +182,7 @@
     </tasks>
   </rundefinition>
 
-  <rundefinition name="SV-COMP25_no-overflow">
+  <rundefinition name="SV-COMP26_no-overflow">
     <tasks name="NoOverflows-Main">
       <includesfile>$HOME/sv-benchmarks/c/Arrays.set</includesfile>
       <includesfile>$HOME/sv-benchmarks/c/BitVectors.set</includesfile>
@@ -227,7 +228,7 @@
     </tasks>
   </rundefinition>
 
-  <rundefinition name="SV-COMP25_termination">
+  <rundefinition name="SV-COMP26_termination">
     <tasks name="Termination-BitVectors">
       <includesfile>$HOME/sv-benchmarks/c/BitVectors-Termination.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/termination.prp</propertyfile>
