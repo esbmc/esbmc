@@ -171,59 +171,61 @@ TEST_CASE("mixed types: multiple insertions", "[mixed][basic]")
 // string_view Tests (Disabled until implementation)
 // ============================================================================
 
-#if 0
-TEST_CASE("std::string_view: basic insertion", "[string_view][basic]") {
-    string_containert container;
-    
-    std::string_view view1 = "view_test";
-    std::string_view view2 = "another_view";
-    
-    unsigned id1 = container[view1];
-    unsigned id2 = container[view2];
-    
-    REQUIRE(id1 != id2);
-    REQUIRE(container.c_str(id1) == std::string("view_test"));
-    REQUIRE(container.c_str(id2) == std::string("another_view"));
+TEST_CASE("std::string_view: basic insertion", "[string_view][basic]")
+{
+  string_containert container;
+
+  std::string_view view1 = "view_test";
+  std::string_view view2 = "another_view";
+
+  unsigned id1 = container[view1];
+  unsigned id2 = container[view2];
+
+  REQUIRE(id1 != id2);
+  REQUIRE(container.c_str(id1) == std::string("view_test"));
+  REQUIRE(container.c_str(id2) == std::string("another_view"));
 }
 
-TEST_CASE("std::string_view: substring view", "[string_view][basic]") {
-    string_containert container;
-    
-    std::string full = "hello_world";
-    std::string_view view(full.data() + 6, 5);  // "world"
-    
-    unsigned id = container[view];
-    REQUIRE(container.c_str(id) == std::string("world"));
+TEST_CASE("std::string_view: substring view", "[string_view][basic]")
+{
+  string_containert container;
+
+  std::string full = "hello_world";
+  std::string_view view(full.data() + 6, 5); // "world"
+
+  unsigned id = container[view];
+  REQUIRE(container.c_str(id) == std::string("world"));
 }
 
-TEST_CASE("std::string_view: duplicate strings", "[string_view][basic]") {
-    string_containert container;
-    
-    std::string source = "duplicate";
-    std::string_view view1(source);
-    std::string_view view2(source);
-    
-    unsigned id1 = container[view1];
-    unsigned id2 = container[view2];
-    
-    REQUIRE(id1 == id2);
+TEST_CASE("std::string_view: duplicate strings", "[string_view][basic]")
+{
+  string_containert container;
+
+  std::string source = "duplicate";
+  std::string_view view1(source);
+  std::string_view view2(source);
+
+  unsigned id1 = container[view1];
+  unsigned id2 = container[view2];
+
+  REQUIRE(id1 == id2);
 }
 
-TEST_CASE("mixed types with string_view", "[string_view][mixed]") {
-    string_containert container;
-    
-    const char *c_str = "mixed";
-    std::string cpp_str = "mixed";
-    std::string_view sv = "mixed";
-    
-    unsigned id1 = container[c_str];
-    unsigned id2 = container[cpp_str];
-    unsigned id3 = container[sv];
-    
-    REQUIRE(id1 == id2);
-    REQUIRE(id2 == id3);
+TEST_CASE("mixed types with string_view", "[string_view][mixed]")
+{
+  string_containert container;
+
+  const char *c_str = "mixed";
+  std::string cpp_str = "mixed";
+  std::string_view sv = "mixed";
+
+  unsigned id1 = container[c_str];
+  unsigned id2 = container[cpp_str];
+  unsigned id3 = container[sv];
+
+  REQUIRE(id1 == id2);
+  REQUIRE(id2 == id3);
 }
-#endif
 
 // ============================================================================
 // Operator[] Tests
