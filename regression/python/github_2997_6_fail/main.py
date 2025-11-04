@@ -13,6 +13,6 @@ class Vector:
 
 p = Point(3, 4)
 v = p.copy_to_vector()
-assert v.x == 3
-assert v.y == 4
+assert v.x == 4
+assert v.y == 3
 

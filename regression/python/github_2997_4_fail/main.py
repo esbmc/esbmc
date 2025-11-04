@@ -1,14 +1,18 @@
-class Foo:  
-    def __init__(self, x: int) -> None:  
-        self.x = x  
-  
-    def bar(self) -> 'Bar':  
-        return Bar(self)  
-  
-class Bar:  
-    def __init__(self, f: Foo) -> None:  
-        self.x: int = f.x  
+class Point:
+    def __init__(self, x: int, y: int) -> None:
+        self.x: int = x
+        self.y: int = y
+    
+    def copy_to_vector(self) -> 'Vector':
+        return Vector(self)
 
-f = Foo(1)
-b = f.bar()
-assert b.x == 2
+class Vector:
+    def __init__(self, p: Point) -> None:
+        self.x: int = p.x
+        self.y: int = p.y
+
+p = Point(3, 4)
+v = p.copy_to_vector()
+assert v.x == 5
+assert v.y == 6
+

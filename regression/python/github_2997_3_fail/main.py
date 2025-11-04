@@ -11,4 +11,4 @@ class Bar:
 
 f = Foo(1)
 b = f.bar()
-assert b.x == 1
+assert b.x == 2
