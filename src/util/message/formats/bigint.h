@@ -2,7 +2,7 @@
 // WHAT THIS FILE IS ABOUT!!!
 
 #ifndef ESBMC_FORMATS_START_ASSERTION
-#  error Do not include this header directly, use <util/message/format.h>
+#error Do not include this header directly, use <util/message/format.h>
 #endif
 
 // BigInt Specialization
@@ -26,7 +26,7 @@ struct fmt::formatter<BigInt>
 
   // This will teach fmt how to convert BigInt into a str.
   template <typename FormatContext>
-  auto format(const BigInt &p, FormatContext &ctx)
+  auto format(const BigInt &p, FormatContext &ctx) const
   {
     int base;
     switch (presentation)
