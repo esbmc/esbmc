@@ -1198,6 +1198,36 @@ exprt function_call_expr::handle_list_insert() const
     *list_symbol, index_expr, call_, value_to_insert);
 }
 
+exprt function_call_expr::handle_list_clear() const
+{
+  // Get the list object name
+  std::string list_name = get_object_name();
+
+  // Find the list symbol
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  // Find the list_clear C function
+  const symbolt *clear_func =
+    converter_.symbol_table().find_symbol("c:list.c@F@list_clear");
+  if (!clear_func)
+    throw std::runtime_error("Clear function symbol not found");
+
+  // Build function call
+  code_function_callt clear_call;
+  clear_call.function() = symbol_expr(*clear_func);
+  clear_call.arguments().push_back(symbol_expr(*list_symbol));
+  clear_call.type() = empty_typet();
+  clear_call.location() = converter_.get_location_from_decl(call_);
+
+  return clear_call;
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1222,6 +1252,8 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_insert();
   if (method_name == "extend")
     return handle_list_extend();
+  if (method_name == "clear")
+    return handle_list_clear();
 
   // Add other methods as needed
 

@@ -223,6 +223,7 @@ private:
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;
+  exprt handle_list_clear() const;
 
   /*
    * Replace undefined function calls with assert(false):

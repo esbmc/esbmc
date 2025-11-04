@@ -166,6 +166,9 @@ private:
 
   exprt handle_power_operator(exprt base, exprt exp);
 
+  exprt
+  handle_modulo_operator(exprt lhs, exprt rhs, const nlohmann::json &element);
+
   exprt build_power_expression(const exprt &base, const BigInt &exp);
 
   bool is_bytes_literal(const nlohmann::json &element);
@@ -405,4 +408,6 @@ private:
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;
   bool is_right = false;
+
+  exprt extract_type_from_boolean_op(const exprt &bool_op);
 };
