@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <fmt/format.h>
 #include <fmt/color.h>
+#include <fmt/ranges.h>
 #include <util/message/format.h>
 #include <ctime>
 #include <chrono>

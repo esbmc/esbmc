@@ -57,7 +57,7 @@ jobs:
     name: arm64 darwin build
     with:
       operating-system: macos-latest
-      build-flags: '-c 15'
+      build-flags: '-c 21'
       testing: false
 
   build-cheri:
