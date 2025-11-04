@@ -75,6 +75,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"override-return-annotation",
       NULL,
       "Override return annotation with inferred type"},
+     {"strict-types",
+      NULL,
+      "Enforce strict type checking for function arguments during "
+      "verification"},
    }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
@@ -121,7 +125,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"warning,W",
      boost::program_options::value<std::vector<std::string>>(),
      "enable specific frontend warnings, disable with \"no-\" prefix, or pass "
-     "options directly to the C/C++ frontends with the form -Wc,OPT1,OPT2,..."},
+     "options directly to the C/C++ frontends with the form "
+     "-Wc,OPT1,OPT2,..."},
     {"std",
      boost::program_options::value<std::string>()->value_name("version"),
      "set C/C++ standard version"},
@@ -178,6 +183,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"file-output",
      boost::program_options::value<std::string>(),
      "redirects every message into a file (no stdout/stderr)"},
+    {"dont-care-about-missing-extensions",
+     NULL,
+     "Don't crash on unsupported extensions."},
     {"witness-output",
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
      "generate the verification result witness in GraphML format; use '-' for "

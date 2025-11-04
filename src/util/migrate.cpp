@@ -1525,6 +1525,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = races_check2tc(op0);
   }
+  else if (expr.id() == "isinstance")
+  {
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    new_expr_ref = isinstance2tc(op0, op1);
+  }
   else if (expr.id() == "capability_base")
   {
     expr2tc op0;
@@ -2876,6 +2882,14 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt theexpr("races_check", thetype);
     theexpr.copy_to_operands(op0);
     return theexpr;
+  }
+  case expr2t::isinstance_id:
+  {
+    const isinstance2t &ins = to_isinstance2t(ref);
+    exprt back("isinstance", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ins.side_1));
+    back.copy_to_operands(migrate_expr_back(ins.side_2));
+    return back;
   }
   case expr2t::deallocated_obj_id:
   {

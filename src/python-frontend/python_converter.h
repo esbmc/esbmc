@@ -166,6 +166,9 @@ private:
 
   exprt handle_power_operator(exprt base, exprt exp);
 
+  exprt
+  handle_modulo_operator(exprt lhs, exprt rhs, const nlohmann::json &element);
+
   exprt build_power_expression(const exprt &base, const BigInt &exp);
 
   bool is_bytes_literal(const nlohmann::json &element);
@@ -264,6 +267,8 @@ private:
   void promote_int_to_float(exprt &op, const typet &target_type) const;
 
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
+
+  exprt get_tuple_expr(const nlohmann::json &element);
 
   std::pair<exprt, exprt>
   resolve_comparison_operands_internal(const exprt &lhs, const exprt &rhs);
@@ -367,6 +372,9 @@ private:
     const nlohmann::json &element,
     exprt &bin_expr);
 
+  // String method helpers
+  exprt handle_str_join(const nlohmann::json &call_json);
+
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
   const global_scope &global_scope_;
@@ -400,4 +408,6 @@ private:
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;
   bool is_right = false;
+
+  exprt extract_type_from_boolean_op(const exprt &bool_op);
 };

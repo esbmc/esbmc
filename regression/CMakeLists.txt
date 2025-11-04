@@ -83,6 +83,8 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
     set(REGRESSIONS_PYTHON_INTENSIVE python-intensive)
     set(REGRESSIONS_NUMPY numpy)
+    set(REGRESSIONS_HUMANEVAL humaneval)
+    set(REGRESSIONS_QUIXBUGS quixbugs)
 endif()
 
 if(ESBMC_CHERI_CLANG)
@@ -176,6 +178,8 @@ if(APPLE)
                     ${REGRESSIONS_PYTHON}
                     ${REGRESSIONS_PYTHON_INTENSIVE}
                     ${REGRESSIONS_NUMPY}
+                    ${REGRESSIONS_HUMANEVAL}
+                    ${REGRESSIONS_QUIXBUGS}
                     ltl
                     goto-transcoder
                     loop-invariants
@@ -238,6 +242,8 @@ else()
                     ${REGRESSIONS_PYTHON}
                     ${REGRESSIONS_PYTHON_INTENSIVE}
                     ${REGRESSIONS_NUMPY}
+                    ${REGRESSIONS_HUMANEVAL}
+                    ${REGRESSIONS_QUIXBUGS}
                     ltl
                     goto-coverage
                     goto-transcoder
@@ -263,5 +269,3 @@ foreach(regression IN LISTS REGRESSIONS)
     endif()
     add_esbmc_regression("${regression}" "${MODES}")
 endforeach()
-
-

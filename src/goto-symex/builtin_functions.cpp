@@ -1978,6 +1978,7 @@ void goto_symext::intrinsic_memcpy(
 
     if (!item_object || !item_offset)
     {
+      log_debug("memcpy", "Offset or object is null, falling back");
       bump_call(func_call, bump_name);
       return;
     }
@@ -1985,6 +1986,7 @@ void goto_symext::intrinsic_memcpy(
     offset_simplifier(item_offset);
     if (!is_constant_int2t(item_offset))
     {
+      log_debug("memcpy", "Item offset is not constant, falling back");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2056,7 +2058,12 @@ void goto_symext::intrinsic_memcpy(
   std::list<dereference_callbackt::internal_item> dst_items;
   expr2tc dst_deref = dereference2tc(get_empty_type(), dst_arg);
   internal_deref_items.clear();
-  dereference(dst_deref, dereferencet::INTERNAL);  
+  dereference(dst_deref, dereferencet::INTERNAL);
+  
+  if (internal_deref_items.empty()){
+    bump_call(func_call, bump_name);
+    return;
+  }  
 
   for (dereference_callbackt::internal_item &item : internal_deref_items)
   {
@@ -2138,7 +2145,7 @@ void goto_symext::intrinsic_memcpy(
         code_assign2tc(item.object, new_object), false, assignment_guard);
     }
   }
-  auto &dst_item = dst_items.front();
+  auto &dst_item = internal_deref_items.front();
   auto &src_item = src_items.front();
 
   guardt guard = ex_state.cur_state->guard;
@@ -2887,5 +2894,81 @@ void goto_symext::replace_races_check(expr2tc &expr)
     expr2tc index_expr = index2tc(get_bool_type(), flag, add);
 
     expr = index_expr;
+  }
+}
+
+void goto_symext::simplify_python_builtins(expr2tc &expr)
+{
+  expr->Foreach_operand([this](expr2tc &e) {
+    if (!is_nil_expr(e))
+      simplify_python_builtins(e);
+  });
+
+  if (is_isinstance2t(expr))
+  {
+    const isinstance2t &obj = to_isinstance2t(expr);
+    expr2tc value = obj.side_1;
+    expr2tc expect_type = obj.side_2;
+
+    value_setst::valuest value_set;
+    cur_state->value_set.get_value_set(value, value_set);
+
+    // Find the last value from the value set
+    for (const auto &obj : value_set)
+    {
+      if (is_object_descriptor2t(obj))
+      {
+        const object_descriptor2t &o = to_object_descriptor2t(obj);
+        value = o.object;
+      }
+    }
+
+    cur_state->rename(value);
+    // Remove all typecast to get the original type
+    while (is_typecast2t(value))
+      value = to_typecast2t(value).from;
+
+    if (is_address_of2t(value))
+      value = to_address_of2t(value).ptr_obj;
+
+    if (is_struct_type(value))
+    {
+      // Check if this is a tuple by examining the tag
+      if (is_nil_expr(expect_type))
+      {
+        // find tuple type
+        const struct_type2t &struct_type = to_struct_type(value->type);
+        if (struct_type.name.as_string().find("tag-tuple") == 0)
+          expr = gen_true_expr();
+        else
+          expr = gen_false_expr();
+
+        return;
+      }
+
+      // Check sub class
+      if (
+        base_type_eq(expect_type->type, value->type, ns) ||
+        is_subclass_of(expect_type->type, value->type, ns))
+        expr = gen_true_expr();
+      else
+        expr = gen_false_expr();
+
+      return;
+    }
+
+    // Basic type comparison
+    // int, str, bool
+    type2tc t;
+    if (is_index2t(value))
+      // Special case, str is modeled as a array, we need to get its subtype
+      t = to_index2t(value).source_value->type;
+    else
+      t = value->type;
+
+    if (base_type_eq(t, expect_type->type, ns))
+      expr = gen_true_expr();
+    else
+      expr = gen_false_expr();
   }
 }

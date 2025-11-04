@@ -97,6 +97,7 @@ const static std::vector<std::string> python_c_models = {
   "list_in_bounds",
   "list_at",
   "list_cat",
+  "list_clear",
   "list_get_as",
   "list_push",
   "list_insert",
@@ -155,12 +156,17 @@ const static std::vector<std::string> python_c_models = {
   "strchr",
   "list_contains",
   "__python_str_isdigit",
+  "__python_char_isdigit",
   "__python_str_isalpha",
   "__python_char_isalpha",
   "__python_str_isspace",
   "isspace",
   "__python_str_lstrip",
-};
+  "__python_char_islower",
+  "__python_str_islower",
+  "__python_char_lower",
+  "__python_str_lower",
+  "fmod"};
 
 } // namespace
 

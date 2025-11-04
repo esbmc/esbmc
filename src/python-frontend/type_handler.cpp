@@ -273,6 +273,22 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return build_array(char_type(), type_size); // Array of characters
   }
 
+  // tuple — handle tuple type annotations
+  // For generic "tuple" without element types, return empty type
+  // so the actual type is inferred from the tuple value
+  if (ast_type == "tuple")
+    return empty_typet();
+
+  // list — handle list type annotations
+  // For generic "list" without element types, return the list type
+  // so the actual element type is inferred from context
+  if (ast_type == "list")
+    return get_list_type();
+
+  // Reuse list infrastructure for simplicity for now
+  if (ast_type == "set")
+    return get_list_type();
+
   // Custom user-defined types / classes
   if (
     json_utils::is_class(ast_type, converter_.ast()) ||
@@ -355,6 +371,29 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 
       typet subtype = get_typet(elements[0]);
       return build_array(subtype, elements.size());
+    }
+
+    // Handle Python AST Tuple node
+    // Converts tuple expressions such as (1, 2) or ("hello", 42, 3.14) to struct types
+    if (elem["_type"] == "Tuple" && elem.contains("elts"))
+    {
+      struct_typet tuple_type;
+      const auto &elements = elem["elts"];
+
+      // Build a struct component for each tuple element
+      for (size_t i = 0; i < elements.size(); i++)
+      {
+        // Recursively get the type of each element
+        typet elem_type = get_typet(elements[i]);
+
+        // Create a named component for this element
+        // Component names follow pattern: element_0, element_1, element_2, ...
+        std::string comp_name = "element_" + std::to_string(i);
+        struct_typet::componentt comp(comp_name, elem_type);
+        tuple_type.components().push_back(comp);
+      }
+
+      return tuple_type;
     }
   }
 
@@ -812,4 +851,27 @@ size_t type_handler::get_type_width(const typet &type) const
 
   // Default to 32 for unknown types
   return 32;
+}
+
+typet type_handler::get_tuple_type(const nlohmann::json &tuple_node) const
+{
+  struct_typet tuple_type;
+
+  // Handle tuple expressions
+  if (tuple_node.contains("_type") && tuple_node["_type"] == "Tuple")
+  {
+    if (tuple_node.contains("elts"))
+    {
+      const auto &elts = tuple_node["elts"];
+      for (size_t i = 0; i < elts.size(); i++)
+      {
+        typet elem_type = get_typet(elts[i]);
+        std::string comp_name = "element_" + std::to_string(i);
+        struct_typet::componentt comp(comp_name, elem_type);
+        tuple_type.components().push_back(comp);
+      }
+    }
+  }
+
+  return tuple_type;
 }

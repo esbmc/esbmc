@@ -217,10 +217,27 @@ const JsonType find_var_decl(
 
   if (!function.empty())
   {
+    // Search in top-level functions
     for (const auto &elem : ast["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == function)
         ref = get_var_node(var_name, elem);
+
+      // Search in class methods
+      if (elem["_type"] == "ClassDef" && elem.contains("body"))
+      {
+        for (const auto &class_member : elem["body"])
+        {
+          if (
+            class_member["_type"] == "FunctionDef" &&
+            class_member["name"] == function)
+          {
+            ref = get_var_node(var_name, class_member);
+            if (!ref.empty())
+              return ref;
+          }
+        }
+      }
     }
   }
 

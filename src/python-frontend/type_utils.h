@@ -45,7 +45,8 @@ enum class ExpressionType
   VARIABLE_REF,
   LIST,
   UNKNOWN,
-  FSTRING
+  FSTRING,
+  TUPLE
 };
 
 struct TypeFlags
@@ -65,8 +66,9 @@ public:
       name == "chr" || name == "hex" || name == "oct" || name == "ord" ||
       name == "abs" || name == "tuple" || name == "list" || name == "dict" ||
       name == "set" || name == "frozenset" || name == "bytes" ||
-      name == "bytearray" || name == "range" || name == "complex" ||
-      name == "type" || name == "object" || name == "None");
+      name == "set" || name == "bytearray" || name == "range" ||
+      name == "complex" || name == "type" || name == "object" ||
+      name == "None");
   }
 
   static bool is_consensus_type(const std::string &name)
@@ -123,7 +125,7 @@ public:
            func_name == "det" || func_name == "matmul" || func_name == "pow" ||
            func_name == "log" || func_name == "pow_by_squaring" ||
            func_name == "log2" || func_name == "log1p_taylor" ||
-           func_name == "ldexp";
+           func_name == "ldexp" || func_name == "fmod";
   }
 
   static bool is_ordered_comparison(const std::string &op)
