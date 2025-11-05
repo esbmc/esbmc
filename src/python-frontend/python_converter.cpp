@@ -4419,6 +4419,72 @@ void python_converter::get_attributes_from_self(
   }
 }
 
+// Find class definition
+const nlohmann::json& python_converter::find_class(
+  const nlohmann::json &body,
+  const std::string &class_name) const
+{
+  static const nlohmann::json empty_json = nlohmann::json::object();
+  
+  for (const auto &item : body)
+  {
+    if (item["_type"] == "ClassDef" && 
+        item["name"].get<std::string>() == class_name)
+    {
+      return item;
+    }
+  }
+  return empty_json;
+}
+
+// Process forward reference
+void python_converter::process_forward_reference(
+  const nlohmann::json &annotation,
+  codet &target_block)
+{
+  if (annotation.is_null())
+    return;
+
+  std::string referenced_class;
+
+  // Process string form of forward reference: 'Bar'
+  if (
+    (annotation["_type"] == "Constant" || annotation["_type"] == "Str") &&
+    annotation.contains("value") && !annotation["value"].is_null())
+  {
+    referenced_class =
+      type_utils::remove_quotes(annotation["value"].get<std::string>());
+  }
+  // Process direct name reference: Bar
+  else if (annotation["_type"] == "Name" && annotation.contains("id"))
+  {
+    referenced_class = annotation["id"].get<std::string>();
+
+    // Skip built-in types
+    if (type_utils::is_builtin_type(referenced_class))
+      return;
+  }
+  else
+  {
+    return;
+  }
+
+  // If class is already in symbol table, skip
+  std::string class_id = "tag-" + referenced_class;
+  if (symbol_table_.find_symbol(class_id))
+    return;
+
+  // Find and process referenced class definition
+  const auto &ref_class_node = find_class((*ast_json)["body"], referenced_class);
+  
+  if (!ref_class_node.empty())
+  {
+    std::string saved_class = current_class_name_;
+    get_class_definition(ref_class_node, target_block);
+    current_class_name_ = saved_class;
+  }
+}
+
 void python_converter::get_class_definition(
   const nlohmann::json &class_node,
   codet &target_block)
@@ -4496,8 +4562,41 @@ void python_converter::get_class_definition(
     if (class_member["_type"] == "FunctionDef")
     {
       get_attributes_from_self(class_member["body"], clazz);
-      added_symbol->type = clazz;
+    }
+  }
+  added_symbol->type = clazz;
 
+  // Pre-scan for forward references
+  for (auto &class_member : class_node["body"])
+  {
+    if (class_member["_type"] != "FunctionDef")
+      continue;
+
+    // Scan return type annotations for forward references
+    if (!class_member["returns"].is_null())
+    {
+      process_forward_reference(class_member["returns"], target_block);
+    }
+
+    // Scan parameter type annotations for forward references
+    if (class_member.contains("args") && class_member["args"].contains("args"))
+    {
+      for (const auto &arg : class_member["args"]["args"])
+      {
+        if (arg.contains("annotation") && !arg["annotation"].is_null())
+        {
+          process_forward_reference(arg["annotation"], target_block);
+        }
+      }
+    }
+  }
+
+  // Continue processing class members
+  for (auto &class_member : class_node["body"])
+  {
+    // Process methods
+    if (class_member["_type"] == "FunctionDef")
+    {
       std::string method_name = class_member["name"].get<std::string>();
       if (method_name == "__init__")
         method_name = current_class_name_;
