@@ -1215,3 +1215,14 @@ exprt python_list::build_extend_list_call(
 
   return extend_func_call;
 }
+
+exprt python_list::get_empty_set()
+{
+  // Create an empty list structure for the set
+  symbolt &list_symbol = create_list();
+  list_symbol.is_set = true;
+
+  // No elements to add for empty set
+  // Type information will be determined when elements are added
+  return symbol_expr(list_symbol);
+}

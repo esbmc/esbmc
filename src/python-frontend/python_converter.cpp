@@ -1729,6 +1729,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
+  // Handle empty set() creation
+  if (
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "set" &&
+    (!element.contains("args") || element["args"].empty()))
+  {
+    // Create an empty set (modeled as list)
+    python_list list(*this, element);
+    return list.get_empty_set();
+  }
+
   const std::string function = config.options.get_option("function");
   // To verify a specific function, it is necessary to load the definitions of functions it calls.
   if (!function.empty() && !is_loading_models)
