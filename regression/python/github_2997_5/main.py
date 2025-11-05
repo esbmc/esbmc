@@ -19,4 +19,4 @@ class C:
 a = A(7)
 b = a.create_b()
 c = b.create_c()
-assert c.val == 10
+assert c.val == 7
