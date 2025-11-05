@@ -46,9 +46,9 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   // example: class Foo: -> "Bar":
   // Bar is a class here defined later
   if (json_utils::is_class(func_name, converter_.ast()))
-  return true;
+    return true;
 
-// Then check the symbol table for already-processed classes
+  // Then check the symbol table for already-processed classes
   bool is_ctor_call = false;
 
   const contextt &symbol_table = converter_.symbol_table();

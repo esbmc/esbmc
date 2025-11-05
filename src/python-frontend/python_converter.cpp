@@ -4420,16 +4420,17 @@ void python_converter::get_attributes_from_self(
 }
 
 // Find class definition
-const nlohmann::json& python_converter::find_class(
+const nlohmann::json &python_converter::find_class(
   const nlohmann::json &body,
   const std::string &class_name) const
 {
   static const nlohmann::json empty_json = nlohmann::json::object();
-  
+
   for (const auto &item : body)
   {
-    if (item["_type"] == "ClassDef" && 
-        item["name"].get<std::string>() == class_name)
+    if (
+      item["_type"] == "ClassDef" &&
+      item["name"].get<std::string>() == class_name)
     {
       return item;
     }
@@ -4475,8 +4476,9 @@ void python_converter::process_forward_reference(
     return;
 
   // Find and process referenced class definition
-  const auto &ref_class_node = find_class((*ast_json)["body"], referenced_class);
-  
+  const auto &ref_class_node =
+    find_class((*ast_json)["body"], referenced_class);
+
   if (!ref_class_node.empty())
   {
     std::string saved_class = current_class_name_;
@@ -4506,8 +4508,8 @@ void python_converter::get_class_definition(
     incomplete_type.tag(current_class_name_);
     incomplete_type.incomplete(true);
 
-    symbolt symbol =
-      create_symbol(module_name, current_class_name_, id, location_begin, incomplete_type);
+    symbolt symbol = create_symbol(
+      module_name, current_class_name_, id, location_begin, incomplete_type);
     symbol.is_type = true;
 
     // Add incomplete type before processing members (for recursive references)
@@ -4519,7 +4521,7 @@ void python_converter::get_class_definition(
   /* Avoid infinite recursion: skip if already complete or being defined */
   if (!added_symbol->type.incomplete())
     return;
-  
+
   // Mark as processing to prevent recursion
   added_symbol->type.remove(irept::a_incomplete);
 
@@ -4671,7 +4673,7 @@ void python_converter::get_class_definition(
 
     locationt location = get_location_from_decl(class_node);
     std::string module_name = location.get_file().as_string();
-    
+
     symbol_id sid;
     sid.set_filename(module_name);
     sid.set_class(current_class_name_);
@@ -4679,7 +4681,11 @@ void python_converter::get_class_definition(
 
     // Use helper function to create symbol with standard fields
     symbolt constructor_symbol = create_symbol(
-      module_name, current_class_name_, sid.to_string(), location, function_type);
+      module_name,
+      current_class_name_,
+      sid.to_string(),
+      location,
+      function_type);
     constructor_symbol.value = code_blockt(); // Empty body
     constructor_symbol.lvalue = true;
 
@@ -4693,7 +4699,7 @@ void python_converter::get_class_definition(
 
   // Update with complete type (two-phase: incomplete -> complete)
   added_symbol->type = clazz;
-  
+
   current_class_name_.clear();
 }
 
