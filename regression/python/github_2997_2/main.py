@@ -7,5 +7,3 @@ class Bar:
 
 f = Foo()
 b = f.bar()
-
-## still failing to find the __init__ method

@@ -4782,54 +4782,6 @@ void python_converter::get_attributes_from_self(
   }
 }
 
-void python_converter::process_forward_reference(
-  const nlohmann::json &annotation,
-  codet &target_block)
-{
-  if (annotation.is_null())
-    return;
-
-  std::string referenced_class;
-
-  // Handle string forward references: e.g. 'Bar'
-  if ((annotation["_type"] == "Constant" || annotation["_type"] == "Str") &&
-      annotation.contains("value") && !annotation["value"].is_null())
-  {
-    referenced_class =
-      type_utils::remove_quotes(annotation["value"].get<std::string>());
-  }
-  // Handle direct name references: Bar
-  else if (annotation["_type"] == "Name" && annotation.contains("id"))
-  {
-    referenced_class = annotation["id"].get<std::string>();
-    
-    // Skip built-in types like int, str, float, etc.
-    if (type_utils::is_builtin_type(referenced_class))
-      return;
-  }
-  else
-  {
-    // Not a forward reference we need to handle
-    return;
-  }
-
-  // Skip if the class is already in the symbol table
-  if (symbol_table_.find_symbol("tag-" + referenced_class))
-    return;
-
-  // Find and process the referenced class definition
-  const auto &ref_class_node =
-    find_class((*ast_json)["body"], referenced_class);
-  
-  if (!ref_class_node.empty())
-  {
-    // Save and restore current class context
-    std::string saved_class = current_class_name_;
-    get_class_definition(ref_class_node, target_block);
-    current_class_name_ = saved_class;
-  }
-}
-
 void python_converter::get_class_definition(
   const nlohmann::json &class_node,
   codet &target_block)
@@ -4882,36 +4834,6 @@ void python_converter::get_class_definition(
     struct_typet &class_type = static_cast<struct_typet &>(class_symbol->type);
     for (const auto &component : class_type.components())
       clazz.components().emplace_back(component);
-  }
-
-  // Pre-scan: Ensure all classes referenced in method return types and 
-  // constructor parameter types are defined
-  // Handles both string forward references ('Bar') and direct name references (Foo)
-  // This supports PEP 484 forward references and ensures proper dependency ordering
-  for (auto &class_member : class_node["body"])
-  {
-    if (class_member["_type"] != "FunctionDef")
-      continue;
-
-    // Scan return type annotations for forward references
-    // Handles: def method(self) -> 'Bar': ...  or  def method(self) -> Foo: ...
-    if (!class_member["returns"].is_null())
-    {
-      process_forward_reference(class_member["returns"], target_block);
-    }
-
-    // Scan constructor/method parameter type annotations for forward references
-    // Handles: def __init__(self, f: Foo): ...  or  def method(self, b: 'Bar'): ...
-    if (class_member.contains("args") && class_member["args"].contains("args"))
-    {
-      for (const auto &arg : class_member["args"]["args"])
-      {
-        if (arg.contains("annotation") && !arg["annotation"].is_null())
-        {
-          process_forward_reference(arg["annotation"], target_block);
-        }
-      }
-    }
   }
 
   // Iterate over class members
