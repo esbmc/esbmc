@@ -521,7 +521,9 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     list_value.is_null() ||
     (list_value.contains("elts") && list_value["elts"].empty()))
   {
-    return build_array(empty_typet(), 0);
+    // For empty containers, return the list type pointer
+    // The actual element type will be determined when elements are added
+    return get_list_type();
   }
 
   if (list_value["_type"] == "arg" && list_value.contains("annotation"))
