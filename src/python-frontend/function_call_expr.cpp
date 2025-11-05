@@ -1891,7 +1891,26 @@ exprt function_call_expr::handle_general_function_call()
           log_warning(
             "Undefined function '{}' - replacing with assert(false)",
             func_name);
-          return gen_unsupported_function_assert(func_name);
+          // Create a side effect expression with nondet for assignments
+          locationt location = converter_.get_location_from_decl(call_);
+          // Create a nondet expression as a placeholder that won't crash
+          // This allows the code to continue but marks it as undefined behavior
+          exprt nondet_expr("sideeffect", empty_typet());
+          nondet_expr.statement("nondet");
+          nondet_expr.location() = location;
+          nondet_expr.location().user_provided(true);
+          nondet_expr.location().comment(
+            "Unsupported function '" + func_name + "' called");
+          // Also add an assertion to the current block to flag this as an error
+          exprt false_expr = gen_boolean(false);
+          code_assertt assert_code(false_expr);
+          assert_code.location() = location;
+          assert_code.location().user_provided(true);
+          assert_code.location().comment(
+            "Unsupported function '" + func_name + "' is reached");
+          converter_.current_block->copy_to_operands(assert_code);
+
+          return nondet_expr;
         }
       }
     }
@@ -2124,21 +2143,6 @@ exprt function_call_expr::gen_exception_raise(
   raise.move_to_operands(sym);
 
   return raise;
-}
-
-codet function_call_expr::gen_unsupported_function_assert(
-  const std::string &func_name) const
-{
-  locationt location = converter_.get_location_from_decl(call_);
-  std::string message = "Unsupported function '" + func_name + "' is reached";
-  location.user_provided(true);
-  location.comment(message);
-
-  exprt false_expr = gen_boolean(false);
-  code_assertt assert_code(false_expr);
-  assert_code.location() = location;
-
-  return assert_code;
 }
 
 std::vector<std::string>
