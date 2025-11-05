@@ -688,9 +688,26 @@ std::string html_report::code_steps::to_html(size_t last) const
   constexpr std::string_view end_format{
     R"(<tr><td class="num"></td><td class="line"><div id="EndPath" class="msg msgEvent" style="margin-left:{1}ex"><table class="msgT"><tr><td valign="top"><div class="PathIndex PathIndexEvent">{0}</div></td>{2}<td>{3}</td></table></div></td></tr>)"};
 
-  std::string format(is_jump ? jump_format : step_format);
+  if (step == last)
+    return fmt::format(
+      end_format,
+      step,
+      margin * step + 1,
+      previous_step_str,
+      msg,
+      next_step_str);
+
+  if (is_jump)
+    return fmt::format(
+      jump_format,
+      step,
+      margin * step + 1,
+      previous_step_str,
+      msg,
+      next_step_str);
+
   return fmt::format(
-    step == last ? end_format : format,
+    step_format,
     step,
     margin * step + 1,
     previous_step_str,

@@ -82,6 +82,12 @@ public:
     }
   }
 
+  /**
+   * @brief Create an empty set
+   * @return Expression representing the empty set
+   */
+  exprt get_empty_set();
+
 private:
   exprt create_vla(
     const nlohmann::json &element,

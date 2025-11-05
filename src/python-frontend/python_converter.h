@@ -1,6 +1,7 @@
 #pragma once
 
 #include <python-frontend/global_scope.h>
+#include <python-frontend/python_math.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/string_handler.h>
@@ -35,6 +36,11 @@ public:
   void convert();
 
   string_builder &get_string_builder();
+
+  python_math &get_math_handler()
+  {
+    return math_handler_;
+  }
 
   string_handler &get_string_handler()
   {
@@ -164,13 +170,6 @@ private:
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
-  exprt handle_power_operator(exprt base, exprt exp);
-
-  exprt
-  handle_modulo_operator(exprt lhs, exprt rhs, const nlohmann::json &element);
-
-  exprt build_power_expression(const exprt &base, const BigInt &exp);
-
   bool is_bytes_literal(const nlohmann::json &element);
 
   exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
@@ -182,8 +181,6 @@ private:
   exprt get_function_constant_return(const exprt &func_value);
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
-
-  exprt handle_power_operator_sym(exprt base, exprt exp);
 
   symbolt create_assert_temp_variable(const locationt &location);
 
@@ -261,8 +258,6 @@ private:
   symbol_id create_symbol_id() const;
 
   symbol_id create_symbol_id(const std::string &filename) const;
-
-  exprt compute_math_expr(const exprt &expr) const;
 
   void promote_int_to_float(exprt &op, const typet &target_type) const;
 
@@ -400,6 +395,7 @@ private:
   code_blockt *current_block;
   exprt *current_lhs;
   string_handler string_handler_;
+  python_math math_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;

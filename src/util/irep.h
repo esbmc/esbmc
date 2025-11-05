@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <mutex>
 
 #define USE_DSTRING
 #define SHARING

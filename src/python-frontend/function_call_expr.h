@@ -223,12 +223,7 @@ private:
   exprt handle_list_append() const;
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;
-
-  /*
-   * Replace undefined function calls with assert(false):
-   * if reached, verification fails; if unreached, verification succeeds.
-   */
-  codet gen_unsupported_function_assert(const std::string &func_name) const;
+  exprt handle_list_clear() const;
 
   /*
    * Check if the current function call is to a regular expression module function
@@ -270,6 +265,11 @@ private:
    * Handles various representations: type annotation, value type, and constants
    */
   bool is_string_arg(const nlohmann::json &arg) const;
+
+  /**
+   * Handles divmod() built-in function calls.
+   */
+  exprt handle_divmod() const;
 
   // Handler function type for dispatch table
   using HandlerFunction = std::function<exprt()>;

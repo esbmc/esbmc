@@ -311,6 +311,19 @@ exprt function_call_expr::handle_hasattr() const
   return gen_boolean(has_attr);
 }
 
+exprt function_call_expr::handle_divmod() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 2)
+    throw std::runtime_error("divmod() takes exactly 2 arguments");
+
+  exprt dividend = converter_.get_expr(args[0]);
+  exprt divisor = converter_.get_expr(args[1]);
+
+  return converter_.get_math_handler().handle_divmod(dividend, divisor, call_);
+}
+
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
 {
   std::string str_val = std::to_string(arg["value"].get<int>());
@@ -1198,6 +1211,36 @@ exprt function_call_expr::handle_list_insert() const
     *list_symbol, index_expr, call_, value_to_insert);
 }
 
+exprt function_call_expr::handle_list_clear() const
+{
+  // Get the list object name
+  std::string list_name = get_object_name();
+
+  // Find the list symbol
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  // Find the list_clear C function
+  const symbolt *clear_func =
+    converter_.symbol_table().find_symbol("c:list.c@F@list_clear");
+  if (!clear_func)
+    throw std::runtime_error("Clear function symbol not found");
+
+  // Build function call
+  code_function_callt clear_call;
+  clear_call.function() = symbol_expr(*clear_func);
+  clear_call.arguments().push_back(symbol_expr(*list_symbol));
+  clear_call.type() = empty_typet();
+  clear_call.location() = converter_.get_location_from_decl(call_);
+
+  return clear_call;
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1222,6 +1265,8 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_insert();
   if (method_name == "extend")
     return handle_list_extend();
+  if (method_name == "clear")
+    return handle_list_clear();
 
   // Add other methods as needed
 
@@ -1435,105 +1480,165 @@ exprt function_call_expr::handle_any() const
 std::vector<function_call_expr::FunctionHandler>
 function_call_expr::get_dispatch_table()
 {
-  return {// Print function
-          {[this]() { return is_print_call(); },
-           [this]() { return handle_print(); },
-           "print()"},
+  return {
+    // Print function
+    {[this]() { return is_print_call(); },
+     [this]() { return handle_print(); },
+     "print()"},
 
-          // Non-deterministic functions
-          {[this]() { return is_nondet_call(); },
-           [this]() { return build_nondet_call(); },
-           "nondet functions"},
+    // Non-deterministic functions
+    {[this]() { return is_nondet_call(); },
+     [this]() { return build_nondet_call(); },
+     "nondet functions"},
 
-          // Introspection functions (isinstance, hasattr)
-          {[this]() { return is_introspection_call(); },
-           [this]() {
-             if (function_id_.get_function() == "isinstance")
-               return handle_isinstance();
-             else
-               return handle_hasattr();
-           },
-           "isinstance/hasattr"},
+    // Introspection functions (isinstance, hasattr)
+    {[this]() { return is_introspection_call(); },
+     [this]() {
+       if (function_id_.get_function() == "isinstance")
+         return handle_isinstance();
+       else
+         return handle_hasattr();
+     },
+     "isinstance/hasattr"},
 
-          // Input function
-          {[this]() { return is_input_call(); },
-           [this]() { return handle_input(); },
-           "input()"},
+    // Input function
+    {[this]() { return is_input_call(); },
+     [this]() { return handle_input(); },
+     "input()"},
 
-          // Any function
-          {[this]() { return is_any_call(); },
-           [this]() { return handle_any(); },
-           "any()"},
+    // Any function
+    {[this]() { return is_any_call(); },
+     [this]() { return handle_any(); },
+     "any()"},
 
-          // Min/Max functions
-          {[this]() { return is_min_max_call(); },
-           [this]() {
-             const std::string &func_name = function_id_.get_function();
-             if (func_name == "min")
-               return handle_min_max("min", exprt::i_lt);
-             else
-               return handle_min_max("max", exprt::i_gt);
-           },
-           "min/max"},
+    // Min/Max functions
+    {[this]() { return is_min_max_call(); },
+     [this]() {
+       const std::string &func_name = function_id_.get_function();
+       if (func_name == "min")
+         return handle_min_max("min", exprt::i_lt);
+       else
+         return handle_min_max("max", exprt::i_gt);
+     },
+     "min/max"},
 
-          // List methods
-          {[this]() { return is_list_method_call(); },
-           [this]() { return handle_list_method(); },
-           "list methods"},
+    // List methods
+    {[this]() { return is_list_method_call(); },
+     [this]() { return handle_list_method(); },
+     "list methods"},
 
-          // Math module functions
-          {[this]() {
-             const std::string &func_name = function_id_.get_function();
-             return func_name == "__ESBMC_isnan" ||
-                    func_name == "__ESBMC_isinf";
-           },
-           [this]() {
-             const std::string &func_name = function_id_.get_function();
-             const auto &args = call_["args"];
+    // Math module functions
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "__ESBMC_isnan" || func_name == "__ESBMC_isinf";
+     },
+     [this]() {
+       const std::string &func_name = function_id_.get_function();
+       const auto &args = call_["args"];
 
-             if (func_name == "__ESBMC_isnan")
-             {
-               if (args.size() != 1)
-                 throw std::runtime_error("isnan() expects exactly 1 argument");
+       if (func_name == "__ESBMC_isnan")
+       {
+         if (args.size() != 1)
+           throw std::runtime_error("isnan() expects exactly 1 argument");
 
-               exprt arg_expr = converter_.get_expr(args[0]);
-               exprt isnan_expr("isnan", bool_typet());
-               isnan_expr.copy_to_operands(arg_expr);
-               return isnan_expr;
-             }
-             else // __ESBMC_isinf
-             {
-               if (args.size() != 1)
-                 throw std::runtime_error("isinf() expects exactly 1 argument");
+         exprt arg_expr = converter_.get_expr(args[0]);
+         exprt isnan_expr("isnan", bool_typet());
+         isnan_expr.copy_to_operands(arg_expr);
+         return isnan_expr;
+       }
+       else // __ESBMC_isinf
+       {
+         if (args.size() != 1)
+           throw std::runtime_error("isinf() expects exactly 1 argument");
 
-               exprt arg_expr = converter_.get_expr(args[0]);
-               exprt isinf_expr("isinf", bool_typet());
-               isinf_expr.copy_to_operands(arg_expr);
-               return isinf_expr;
-             }
-           },
-           "isnan/isinf"},
+         exprt arg_expr = converter_.get_expr(args[0]);
+         exprt isinf_expr("isinf", bool_typet());
+         isinf_expr.copy_to_operands(arg_expr);
+         return isinf_expr;
+       }
+     },
+     "isnan/isinf"},
 
-          // Built-in type constructors (int, float, str, bool, etc.)
-          {[this]() {
-             const std::string &func_name = function_id_.get_function();
-             return type_utils::is_builtin_type(func_name) ||
-                    type_utils::is_consensus_type(func_name);
-           },
-           [this]() { return build_constant_from_arg(); },
-           "built-in type constructors"},
+    // Math module functions
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       bool is_math_module = false;
+       if (call_["func"]["_type"] == "Attribute")
+       {
+         std::string caller = get_object_name();
+         is_math_module = (caller == "math");
+       }
+       return is_math_module && func_name == "sqrt";
+     },
+     [this]() {
+       const auto &args = call_["args"];
+       if (args.size() != 1)
+         throw std::runtime_error("sqrt() expects exactly 1 argument");
 
-          // Regex module validation
-          {[this]() { return is_re_module_call(); },
-           [this]() {
-             exprt validation_result = validate_re_module_args();
-             if (!validation_result.is_nil())
-               return validation_result;
+       exprt arg_expr = converter_.get_expr(args[0]);
 
-             // If validation passes, handle as general function call
-             return handle_general_function_call();
-           },
-           "re module functions"}};
+       // Promote to float if needed
+       exprt double_operand = arg_expr;
+       if (!arg_expr.type().is_floatbv())
+       {
+         double_operand =
+           exprt("typecast", type_handler_.get_typet("float", 0));
+         double_operand.copy_to_operands(arg_expr);
+       }
+
+       // Create domain check: x < 0 (error condition)
+       exprt zero = gen_zero(type_handler_.get_typet("float", 0));
+       exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
+       domain_check.copy_to_operands(double_operand, zero);
+
+       // Create exception for domain violation
+       exprt raise = gen_exception_raise("ValueError", "math domain error");
+
+       // Add location information
+       locationt loc = converter_.get_location_from_decl(call_);
+       raise.location() = loc;
+       raise.location().user_provided(true);
+
+       // Call python_math to handle the actual sqrt call
+       exprt sqrt_result =
+         converter_.get_math_handler().handle_sqrt(arg_expr, call_);
+
+       // Return conditional: if (x < 0) raise ValueError else sqrt(x)
+       if_exprt conditional(domain_check, raise, sqrt_result);
+       conditional.type() = type_handler_.get_typet("float", 0);
+
+       return conditional;
+     },
+     "math.sqrt()"},
+
+    // divmod function
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "divmod";
+     },
+     [this]() { return handle_divmod(); },
+     "divmod"},
+
+    // Built-in type constructors (int, float, str, bool, etc.)
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       return type_utils::is_builtin_type(func_name) ||
+              type_utils::is_consensus_type(func_name);
+     },
+     [this]() { return build_constant_from_arg(); },
+     "built-in type constructors"},
+
+    // Regex module validation
+    {[this]() { return is_re_module_call(); },
+     [this]() {
+       exprt validation_result = validate_re_module_args();
+       if (!validation_result.is_nil())
+         return validation_result;
+
+       // If validation passes, handle as general function call
+       return handle_general_function_call();
+     },
+     "re module functions"}};
 }
 
 exprt function_call_expr::get()
@@ -1702,7 +1807,7 @@ exprt function_call_expr::handle_general_function_call()
               call.arguments().push_back(arg);
           }
 
-          return std::move(call);
+          return call;
         }
       }
     }
@@ -1778,7 +1883,7 @@ exprt function_call_expr::handle_general_function_call()
               call.arguments().push_back(arg);
           }
 
-          return std::move(call);
+          return call;
         }
         else
         {
@@ -1786,7 +1891,26 @@ exprt function_call_expr::handle_general_function_call()
           log_warning(
             "Undefined function '{}' - replacing with assert(false)",
             func_name);
-          return gen_unsupported_function_assert(func_name);
+          // Create a side effect expression with nondet for assignments
+          locationt location = converter_.get_location_from_decl(call_);
+          // Create a nondet expression as a placeholder that won't crash
+          // This allows the code to continue but marks it as undefined behavior
+          exprt nondet_expr("sideeffect", empty_typet());
+          nondet_expr.statement("nondet");
+          nondet_expr.location() = location;
+          nondet_expr.location().user_provided(true);
+          nondet_expr.location().comment(
+            "Unsupported function '" + func_name + "' called");
+          // Also add an assertion to the current block to flag this as an error
+          exprt false_expr = gen_boolean(false);
+          code_assertt assert_code(false_expr);
+          assert_code.location() = location;
+          assert_code.location().user_provided(true);
+          assert_code.location().comment(
+            "Unsupported function '" + func_name + "' is reached");
+          converter_.current_block->copy_to_operands(assert_code);
+
+          return nondet_expr;
         }
       }
     }
@@ -1891,6 +2015,14 @@ exprt function_call_expr::handle_general_function_call()
   {
     exprt arg = converter_.get_expr(arg_node);
 
+    // Handle string literal constants
+    // Ensure they are proper null-terminated arrays
+    if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+    {
+      std::string str_value = arg_node["value"].get<std::string>();
+      arg = converter_.get_string_builder().build_string_literal(str_value);
+    }
+
     if (
       function_id_.get_function() == "__ESBMC_get_object_size" &&
       (arg.type() == type_handler_.get_list_type() ||
@@ -1987,7 +2119,7 @@ exprt function_call_expr::handle_general_function_call()
       call.arguments().push_back(arg);
   }
 
-  return std::move(call);
+  return call;
 }
 
 exprt function_call_expr::gen_exception_raise(
@@ -2019,21 +2151,6 @@ exprt function_call_expr::gen_exception_raise(
   raise.move_to_operands(sym);
 
   return raise;
-}
-
-codet function_call_expr::gen_unsupported_function_assert(
-  const std::string &func_name) const
-{
-  locationt location = converter_.get_location_from_decl(call_);
-  std::string message = "Unsupported function '" + func_name + "' is reached";
-  location.user_provided(true);
-  location.comment(message);
-
-  exprt false_expr = gen_boolean(false);
-  code_assertt assert_code(false_expr);
-  assert_code.location() = location;
-
-  return assert_code;
 }
 
 std::vector<std::string>

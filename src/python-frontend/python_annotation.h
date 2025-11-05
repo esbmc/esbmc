@@ -1387,6 +1387,10 @@ private:
       inferred_type = get_type_from_constant(stmt["value"]);
     else if (value_type == "List")
       inferred_type = "list";
+    else if (value_type == "Set")
+      inferred_type = "set";
+    else if (value_type == "Tuple")
+      inferred_type = "tuple";
     else if (value_type == "Compare")
       inferred_type = "bool";
     else if (value_type == "UnaryOp") // Handle negative numbers
