@@ -1059,15 +1059,30 @@ class Preprocessor(ast.NodeTransformer):
                 else:
                     node.args[1] = ast.Constant(value=False)
 
-        # if not a function or preprocessor doesn't have function definition return
-        if not isinstance(node.func,ast.Name) or node.func.id not in self.functionParams:
+        # Determine if this is a method call or function call
+        functionName = None
+        expectedArgs = None
+
+        if isinstance(node.func, ast.Attribute):
+            # Handle method calls (e.g., obj.method())
+            method_name = node.func.attr
+            if method_name in self.functionParams:
+                functionName = method_name
+                # For method calls, skip 'self' parameter (first parameter)
+                expectedArgs = self.functionParams[method_name][1:]
+        elif isinstance(node.func, ast.Name):
+            # Handle regular function calls
+            if node.func.id in self.functionParams:
+                functionName = node.func.id
+                expectedArgs = self.functionParams[functionName]
+
+        # If not a tracked function/method, just visit and return
+        if functionName is None or expectedArgs is None:
             self.generic_visit(node)
             return node
 
-        functionName = node.func.id
-        expectedArgs = self.functionParams[functionName]
-        keywords = {}
         # add keyword arguments to function call
+        keywords = {}
         for i in node.keywords:
             if i.arg in keywords:
                 raise SyntaxError(f"Keyword argument repeated:{i.arg}",(self.module_name,i.lineno,i.col_offset,""))
