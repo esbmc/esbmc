@@ -24,7 +24,12 @@
     DO_PRAGMA(GCC diagnostic ignored "-Wunused-parameter")                     \
     DO_PRAGMA(GCC diagnostic ignored "-Wnonnull")                              \
     DO_PRAGMA(GCC diagnostic ignored "-Wdeprecated-declarations")              \
-    DO_PRAGMA(GCC diagnostic ignored "-Wclass-memaccess")
+    DO_PRAGMA(GCC diagnostic ignored "-Wclass-memaccess")                      \
+    DO_PRAGMA(GCC diagnostic ignored "-Wdeprecated-copy")                      \
+    DO_PRAGMA(GCC diagnostic ignored "-Woverloaded-virtual=")                  \
+    DO_PRAGMA(GCC diagnostic ignored "-Wextra")                                \
+    DO_PRAGMA(GCC diagnostic ignored "-Wcpp")                                  \
+    DO_PRAGMA(GCC diagnostic ignored "-Wdangling-reference")
 #endif
 
 #ifndef GNUC_PREREQ
