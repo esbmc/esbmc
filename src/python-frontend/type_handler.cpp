@@ -254,6 +254,16 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return build_array(long_long_int_type(), type_size);
   }
 
+  // divmod() — returns tuple of (quotient, remainder)
+  // The return type is determined dynamically based on operands
+  // Let handle_divmod create the proper type
+  if (ast_type == "divmod")
+  {
+    // Return empty type - the actual tuple type will be created
+    // in handle_divmod based on the operand types
+    return empty_typet();
+  }
+
   // str: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex

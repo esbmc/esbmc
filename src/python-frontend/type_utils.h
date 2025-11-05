@@ -68,7 +68,7 @@ public:
       name == "set" || name == "frozenset" || name == "bytes" ||
       name == "set" || name == "bytearray" || name == "range" ||
       name == "complex" || name == "type" || name == "object" ||
-      name == "None");
+      name == "None" || name == "divmod");
   }
 
   static bool is_consensus_type(const std::string &name)

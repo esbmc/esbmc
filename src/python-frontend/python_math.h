@@ -171,6 +171,40 @@ public:
    *   math.sqrt(-1) -> domain error at runtime
    */
   exprt handle_sqrt(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle divmod() built-in function
+   * 
+   * Implements Python's divmod(a, b) function, which returns a tuple containing
+   * the quotient and remainder of division: (a // b, a % b).
+   * 
+   * The function follows Python's floor division semantics:
+   * - The quotient is computed using floor division (rounds toward negative infinity)
+   * - The remainder has the same sign as the divisor
+   * - The mathematical property always holds: a == (a // b) * b + (a % b)
+   * 
+   * Type handling:
+   * - If either operand is float, both are promoted to float (double)
+   * - Integer operands use integer floor division and modulo
+   * - Float operands use C's floor() function and floating-point modulo
+   * 
+   * @param dividend The numerator (value to be divided)
+   * @param divisor The denominator (value to divide by)
+   * @param element JSON AST node for location information
+   * @return Struct expression representing tuple (quotient, remainder) with
+   *         components named "element_0" (quotient) and "element_1" (remainder)
+   * @throws std::runtime_error if floor symbol not found (for float division)
+   * 
+   * Examples:
+   *   divmod(7, 3)      -> (2, 1)      [7 = 3*2 + 1]
+   *   divmod(-7, 3)     -> (-3, 2)     [-7 = 3*(-3) + 2]
+   *   divmod(7, -3)     -> (-3, -2)    [7 = (-3)*(-3) + (-2)]
+   *   divmod(-7, -3)    -> (2, -1)     [-7 = (-3)*2 + (-1)]
+   *   divmod(7.5, 2.0)  -> (3.0, 1.5)  [7.5 = 2.0*3.0 + 1.5]
+   *   divmod(10, 5)     -> (2, 0)      [exact division]
+   */
+  exprt
+  handle_divmod(exprt dividend, exprt divisor, const nlohmann::json &element);
 };
 
 #endif
