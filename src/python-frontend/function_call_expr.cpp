@@ -2015,6 +2015,14 @@ exprt function_call_expr::handle_general_function_call()
   {
     exprt arg = converter_.get_expr(arg_node);
 
+    // Handle string literal constants
+    // Ensure they are proper null-terminated arrays
+    if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+    {
+      std::string str_value = arg_node["value"].get<std::string>();
+      arg = converter_.get_string_builder().build_string_literal(str_value);
+    }
+
     if (
       function_id_.get_function() == "__ESBMC_get_object_size" &&
       (arg.type() == type_handler_.get_list_type() ||
