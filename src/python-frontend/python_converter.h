@@ -374,6 +374,14 @@ private:
 
   // String method helpers
   exprt handle_str_join(const nlohmann::json &call_json);
+  
+  const nlohmann::json& find_class(
+    const nlohmann::json &body,
+    const std::string &class_name) const;
+
+  void process_forward_reference(
+    const nlohmann::json &annotation,
+    codet &target_block);
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
