@@ -12,7 +12,7 @@ else()
         NAME yices
         DOWNLOAD_ONLY YES
         GITHUB_REPOSITORY SRI-CSL/yices2
-        GIT_TAG Yices-2.6.4)
+        GIT_TAG yices-2.7.0)
 
     # We can't use ExternalProject because we need it ready
     # at configuration time
