@@ -147,6 +147,22 @@ void function_call_expr::get_function_type()
   {
     std::string caller = get_object_name();
 
+    // Check for nested instance attribute (e.g., self.b.a.method())
+    // Exclude module.Class.method() pattern
+    bool is_nested_instance_attr = false;
+    if (call_["func"]["value"]["_type"] == "Attribute")
+    {
+      if (call_["func"]["value"]["value"]["_type"] == "Name")
+      {
+        std::string root_name =
+          call_["func"]["value"]["value"]["id"].get<std::string>();
+        if (!converter_.is_imported_module(root_name))
+        {
+          is_nested_instance_attr = true;
+        }
+      }
+    }
+
     // Handling a function call as a class method call when:
     // (1) The caller corresponds to a class name, for example: MyClass.foo().
     // (2) Calling methods of built-in types, such as int.from_bytes()
@@ -154,9 +170,10 @@ void function_call_expr::get_function_type()
     // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
     // If the caller is a class or a built-in type, the following condition detects a class method call.
     if (
-      is_class(caller, converter_.ast()) ||
-      type_utils::is_builtin_type(caller) ||
-      type_utils::is_builtin_type(type_handler_.get_var_type(caller)))
+      !is_nested_instance_attr &&
+      (is_class(caller, converter_.ast()) ||
+       type_utils::is_builtin_type(caller) ||
+       type_utils::is_builtin_type(type_handler_.get_var_type(caller))))
     {
       function_type_ = FunctionType::ClassMethod;
     }
@@ -213,29 +230,6 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
-bool function_call_expr::is_same_type(
-  const exprt &obj_expr,
-  const nlohmann::json &type_node) const
-{
-  if (type_node["_type"] != "Name")
-    throw std::runtime_error("Unsupported type in isinstance()");
-
-  std::string type_name = type_node["id"];
-  // Get the internal type representation from the type name
-  typet expected_type = type_handler_.get_typet(type_name, 0);
-
-  /* NOTE: Comparing the types directly may be insufficient.
-           Inheritance or type aliases may require deeper analysis. */
-
-  if (base_type_eq(obj_expr.type(), expected_type, converter_.ns))
-    return true;
-
-  if (is_subclass_of(obj_expr.type(), expected_type, converter_.ns))
-    return true;
-
-  return false;
-}
-
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -245,20 +239,63 @@ exprt function_call_expr::handle_isinstance() const
     throw std::runtime_error("isinstance() expects 2 arguments");
 
   // Convert the first argument (the object being checked) into an expression
-  exprt obj_expr = converter_.get_expr(args[0]);
+  const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &type_arg = args[1];
 
+  auto build_isinstance = [&](const std::string &type_name) {
+    typet expected_type = type_handler_.get_typet(type_name, 0);
+    exprt t;
+    if (expected_type.is_symbol())
+    {
+      // struct type
+      const symbolt *symbol = converter_.ns.lookup(expected_type);
+      t = symbol_expr(*symbol);
+    }
+    else
+      t = gen_zero(expected_type);
+
+    exprt isinstance("isinstance", typet("bool"));
+    isinstance.copy_to_operands(obj_expr);
+    isinstance.move_to_operands(t);
+    return isinstance;
+  };
+
   if (type_arg["_type"] == "Name")
-    return gen_boolean(is_same_type(obj_expr, type_arg));
+  {
+    // isinstance(v, int)
+    std::string type_name = args[1]["id"];
+    return build_isinstance(type_name);
+  }
+  else if (type_arg["_type"] == "Constant")
+  {
+    // isintance(v, None)
+    std::string type_name = "NoneType";
+    return build_isinstance(type_name);
+  }
   else if (type_arg["_type"] == "Tuple")
   {
+    // isinstance(v, (int, str))
+    // converted into instance(v, int) || isinstance(v, str)
     const auto &elts = type_arg["elts"];
-    for (const auto &elt : elts)
+
+    std::string first_type = elts[0]["id"];
+    exprt tupe_instance = build_isinstance(first_type);
+
+    for (size_t i = 1; i < elts.size(); ++i)
     {
-      if (is_same_type(obj_expr, elt))
-        return gen_boolean(true);
+      if (elts[i]["_type"] != "Name")
+        throw std::runtime_error("Unsupported type in isinstance()");
+
+      std::string type_name = elts[i]["id"];
+      exprt next_isinstance = build_isinstance(type_name);
+
+      exprt or_expr("or", typet("bool"));
+      or_expr.move_to_operands(tupe_instance);
+      or_expr.move_to_operands(next_isinstance);
+      tupe_instance = or_expr;
     }
-    return gen_boolean(false);
+
+    return tupe_instance;
   }
   else
     throw std::runtime_error("Unsupported type format in isinstance()");
@@ -272,6 +309,19 @@ exprt function_call_expr::handle_hasattr() const
   bool has_attr = converter_.is_instance_attribute(
     sid.to_string(), args[1]["value"], sid.get_object(), "");
   return gen_boolean(has_attr);
+}
+
+exprt function_call_expr::handle_divmod() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 2)
+    throw std::runtime_error("divmod() takes exactly 2 arguments");
+
+  exprt dividend = converter_.get_expr(args[0]);
+  exprt divisor = converter_.get_expr(args[1]);
+
+  return converter_.get_math_handler().handle_divmod(dividend, divisor, call_);
 }
 
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
@@ -1037,7 +1087,24 @@ std::string function_call_expr::get_object_name() const
 
   std::string obj_name;
   if (subelement["_type"] == "Attribute")
-    obj_name = subelement["attr"].get<std::string>();
+  {
+    /* For attribute chains, use the class name resolved by build_function_id()
+     * 
+     * When we have self.f.foo(), the function ID builder has already determined
+     * that f's type is Foo and stored it in function_id_. We reuse that result
+     * rather than re-extracting "f" which would be incorrect.
+     */
+    if (!function_id_.get_class().empty())
+    {
+      std::string class_name = function_id_.get_class();
+      obj_name =
+        (class_name.find("tag-") == 0) ? class_name.substr(4) : class_name;
+    }
+    else
+    {
+      obj_name = subelement["attr"].get<std::string>();
+    }
+  }
   else if (subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
     obj_name = function_id_.get_class();
   else if (subelement["_type"] == "Call")
@@ -1144,6 +1211,36 @@ exprt function_call_expr::handle_list_insert() const
     *list_symbol, index_expr, call_, value_to_insert);
 }
 
+exprt function_call_expr::handle_list_clear() const
+{
+  // Get the list object name
+  std::string list_name = get_object_name();
+
+  // Find the list symbol
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  // Find the list_clear C function
+  const symbolt *clear_func =
+    converter_.symbol_table().find_symbol("c:list.c@F@list_clear");
+  if (!clear_func)
+    throw std::runtime_error("Clear function symbol not found");
+
+  // Build function call
+  code_function_callt clear_call;
+  clear_call.function() = symbol_expr(*clear_func);
+  clear_call.arguments().push_back(symbol_expr(*list_symbol));
+  clear_call.type() = empty_typet();
+  clear_call.location() = converter_.get_location_from_decl(call_);
+
+  return clear_call;
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1168,6 +1265,8 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_insert();
   if (method_name == "extend")
     return handle_list_extend();
+  if (method_name == "clear")
+    return handle_list_clear();
 
   // Add other methods as needed
 
@@ -1381,105 +1480,165 @@ exprt function_call_expr::handle_any() const
 std::vector<function_call_expr::FunctionHandler>
 function_call_expr::get_dispatch_table()
 {
-  return {// Print function
-          {[this]() { return is_print_call(); },
-           [this]() { return handle_print(); },
-           "print()"},
+  return {
+    // Print function
+    {[this]() { return is_print_call(); },
+     [this]() { return handle_print(); },
+     "print()"},
 
-          // Non-deterministic functions
-          {[this]() { return is_nondet_call(); },
-           [this]() { return build_nondet_call(); },
-           "nondet functions"},
+    // Non-deterministic functions
+    {[this]() { return is_nondet_call(); },
+     [this]() { return build_nondet_call(); },
+     "nondet functions"},
 
-          // Introspection functions (isinstance, hasattr)
-          {[this]() { return is_introspection_call(); },
-           [this]() {
-             if (function_id_.get_function() == "isinstance")
-               return handle_isinstance();
-             else
-               return handle_hasattr();
-           },
-           "isinstance/hasattr"},
+    // Introspection functions (isinstance, hasattr)
+    {[this]() { return is_introspection_call(); },
+     [this]() {
+       if (function_id_.get_function() == "isinstance")
+         return handle_isinstance();
+       else
+         return handle_hasattr();
+     },
+     "isinstance/hasattr"},
 
-          // Input function
-          {[this]() { return is_input_call(); },
-           [this]() { return handle_input(); },
-           "input()"},
+    // Input function
+    {[this]() { return is_input_call(); },
+     [this]() { return handle_input(); },
+     "input()"},
 
-          // Any function
-          {[this]() { return is_any_call(); },
-           [this]() { return handle_any(); },
-           "any()"},
+    // Any function
+    {[this]() { return is_any_call(); },
+     [this]() { return handle_any(); },
+     "any()"},
 
-          // Min/Max functions
-          {[this]() { return is_min_max_call(); },
-           [this]() {
-             const std::string &func_name = function_id_.get_function();
-             if (func_name == "min")
-               return handle_min_max("min", exprt::i_lt);
-             else
-               return handle_min_max("max", exprt::i_gt);
-           },
-           "min/max"},
+    // Min/Max functions
+    {[this]() { return is_min_max_call(); },
+     [this]() {
+       const std::string &func_name = function_id_.get_function();
+       if (func_name == "min")
+         return handle_min_max("min", exprt::i_lt);
+       else
+         return handle_min_max("max", exprt::i_gt);
+     },
+     "min/max"},
 
-          // List methods
-          {[this]() { return is_list_method_call(); },
-           [this]() { return handle_list_method(); },
-           "list methods"},
+    // List methods
+    {[this]() { return is_list_method_call(); },
+     [this]() { return handle_list_method(); },
+     "list methods"},
 
-          // Math module functions
-          {[this]() {
-             const std::string &func_name = function_id_.get_function();
-             return func_name == "__ESBMC_isnan" ||
-                    func_name == "__ESBMC_isinf";
-           },
-           [this]() {
-             const std::string &func_name = function_id_.get_function();
-             const auto &args = call_["args"];
+    // Math module functions
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "__ESBMC_isnan" || func_name == "__ESBMC_isinf";
+     },
+     [this]() {
+       const std::string &func_name = function_id_.get_function();
+       const auto &args = call_["args"];
 
-             if (func_name == "__ESBMC_isnan")
-             {
-               if (args.size() != 1)
-                 throw std::runtime_error("isnan() expects exactly 1 argument");
+       if (func_name == "__ESBMC_isnan")
+       {
+         if (args.size() != 1)
+           throw std::runtime_error("isnan() expects exactly 1 argument");
 
-               exprt arg_expr = converter_.get_expr(args[0]);
-               exprt isnan_expr("isnan", bool_typet());
-               isnan_expr.copy_to_operands(arg_expr);
-               return isnan_expr;
-             }
-             else // __ESBMC_isinf
-             {
-               if (args.size() != 1)
-                 throw std::runtime_error("isinf() expects exactly 1 argument");
+         exprt arg_expr = converter_.get_expr(args[0]);
+         exprt isnan_expr("isnan", bool_typet());
+         isnan_expr.copy_to_operands(arg_expr);
+         return isnan_expr;
+       }
+       else // __ESBMC_isinf
+       {
+         if (args.size() != 1)
+           throw std::runtime_error("isinf() expects exactly 1 argument");
 
-               exprt arg_expr = converter_.get_expr(args[0]);
-               exprt isinf_expr("isinf", bool_typet());
-               isinf_expr.copy_to_operands(arg_expr);
-               return isinf_expr;
-             }
-           },
-           "isnan/isinf"},
+         exprt arg_expr = converter_.get_expr(args[0]);
+         exprt isinf_expr("isinf", bool_typet());
+         isinf_expr.copy_to_operands(arg_expr);
+         return isinf_expr;
+       }
+     },
+     "isnan/isinf"},
 
-          // Built-in type constructors (int, float, str, bool, etc.)
-          {[this]() {
-             const std::string &func_name = function_id_.get_function();
-             return type_utils::is_builtin_type(func_name) ||
-                    type_utils::is_consensus_type(func_name);
-           },
-           [this]() { return build_constant_from_arg(); },
-           "built-in type constructors"},
+    // Math module functions
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       bool is_math_module = false;
+       if (call_["func"]["_type"] == "Attribute")
+       {
+         std::string caller = get_object_name();
+         is_math_module = (caller == "math");
+       }
+       return is_math_module && func_name == "sqrt";
+     },
+     [this]() {
+       const auto &args = call_["args"];
+       if (args.size() != 1)
+         throw std::runtime_error("sqrt() expects exactly 1 argument");
 
-          // Regex module validation
-          {[this]() { return is_re_module_call(); },
-           [this]() {
-             exprt validation_result = validate_re_module_args();
-             if (!validation_result.is_nil())
-               return validation_result;
+       exprt arg_expr = converter_.get_expr(args[0]);
 
-             // If validation passes, handle as general function call
-             return handle_general_function_call();
-           },
-           "re module functions"}};
+       // Promote to float if needed
+       exprt double_operand = arg_expr;
+       if (!arg_expr.type().is_floatbv())
+       {
+         double_operand =
+           exprt("typecast", type_handler_.get_typet("float", 0));
+         double_operand.copy_to_operands(arg_expr);
+       }
+
+       // Create domain check: x < 0 (error condition)
+       exprt zero = gen_zero(type_handler_.get_typet("float", 0));
+       exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
+       domain_check.copy_to_operands(double_operand, zero);
+
+       // Create exception for domain violation
+       exprt raise = gen_exception_raise("ValueError", "math domain error");
+
+       // Add location information
+       locationt loc = converter_.get_location_from_decl(call_);
+       raise.location() = loc;
+       raise.location().user_provided(true);
+
+       // Call python_math to handle the actual sqrt call
+       exprt sqrt_result =
+         converter_.get_math_handler().handle_sqrt(arg_expr, call_);
+
+       // Return conditional: if (x < 0) raise ValueError else sqrt(x)
+       if_exprt conditional(domain_check, raise, sqrt_result);
+       conditional.type() = type_handler_.get_typet("float", 0);
+
+       return conditional;
+     },
+     "math.sqrt()"},
+
+    // divmod function
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "divmod";
+     },
+     [this]() { return handle_divmod(); },
+     "divmod"},
+
+    // Built-in type constructors (int, float, str, bool, etc.)
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       return type_utils::is_builtin_type(func_name) ||
+              type_utils::is_consensus_type(func_name);
+     },
+     [this]() { return build_constant_from_arg(); },
+     "built-in type constructors"},
+
+    // Regex module validation
+    {[this]() { return is_re_module_call(); },
+     [this]() {
+       exprt validation_result = validate_re_module_args();
+       if (!validation_result.is_nil())
+         return validation_result;
+
+       // If validation passes, handle as general function call
+       return handle_general_function_call();
+     },
+     "re module functions"}};
 }
 
 exprt function_call_expr::get()
@@ -1544,14 +1703,112 @@ exprt function_call_expr::handle_general_function_call()
       }
       else if (function_type_ == FunctionType::InstanceMethod)
       {
-        assert(obj_symbol);
-        assert(func_symbol);
+        if (obj_symbol && func_symbol)
+        {
+          converter_.update_instance_from_self(
+            get_classname_from_symbol_id(func_symbol->id.as_string()),
+            function_id_.get_function(),
+            obj_symbol_id.to_string());
+        }
 
-        // Update obj attributes from self
-        converter_.update_instance_from_self(
-          get_classname_from_symbol_id(func_symbol->id.as_string()),
-          function_id_.get_function(),
-          obj_symbol_id.to_string());
+        // Handle forward reference: method not yet in symbol table
+        if (!func_symbol)
+        {
+          std::string class_name = function_id_.get_class();
+          std::string method_name = function_id_.get_function();
+
+          // Find all possible class types for this object
+          std::vector<std::string> possible_classes =
+            find_possible_class_types(obj_symbol);
+
+          // If no classes found, use the inferred class name
+          if (possible_classes.empty())
+            possible_classes.push_back(class_name);
+
+          // Check if method exists in any of the possible classes
+          bool method_exists = false;
+          for (const auto &check_class : possible_classes)
+          {
+            if (method_exists_in_class_hierarchy(check_class, method_name))
+            {
+              method_exists = true;
+              break;
+            }
+          }
+
+          // Only report AttributeError if:
+          // 1. Method doesn't exist in the class hierarchy, AND
+          // 2. We're not currently processing any method in the same class
+          //    (methods may reference other methods not yet in the symbol table)
+          std::string current_func = converter_.current_function_name();
+          bool is_in_same_class = false;
+
+          // Check if we're in any method of the target class
+          for (const auto &check_class : possible_classes)
+          {
+            // We're in the same class if:
+            // - current function is the class name (constructor)
+            // - current function is __init__
+            // - the function symbol exists and contains the class marker for this class
+            if (current_func == check_class || current_func == "__init__")
+            {
+              is_in_same_class = true;
+              break;
+            }
+
+            // Check if current function belongs to this class by looking for @C@ClassName pattern
+            std::string class_marker = std::string(CLASS_MARKER) + check_class +
+                                       std::string(FUNCTION_MARKER);
+            const symbolt *current_func_sym =
+              converter_.find_symbol(converter_.create_symbol_id().to_string());
+            if (
+              current_func_sym && current_func_sym->id.as_string().find(
+                                    class_marker) != std::string::npos)
+            {
+              is_in_same_class = true;
+              break;
+            }
+          }
+
+          if (!method_exists && !is_in_same_class)
+          {
+            // Generate AttributeError
+            return generate_attribute_error(method_name, possible_classes);
+          }
+
+          // Method exists or we're in a constructor - create forward reference
+          locationt location = converter_.get_location_from_decl(call_);
+          code_function_callt call;
+          call.location() = location;
+          call.function() = symbol_exprt(func_symbol_id, code_typet());
+          call.type() = empty_typet();
+
+          if (obj_symbol)
+            call.arguments().push_back(
+              gen_address_of(symbol_expr(*obj_symbol)));
+
+          for (const auto &arg_node : call_["args"])
+          {
+            exprt arg = converter_.get_expr(arg_node);
+            if (arg.type().is_array())
+            {
+              if (
+                arg_node["_type"] == "Constant" &&
+                arg_node["value"].is_string())
+              {
+                arg = string_constantt(
+                  arg_node["value"].get<std::string>(),
+                  arg.type(),
+                  string_constantt::k_default);
+              }
+              call.arguments().push_back(address_of_exprt(arg));
+            }
+            else
+              call.arguments().push_back(arg);
+          }
+
+          return call;
+        }
       }
     }
     else
@@ -1585,17 +1842,24 @@ exprt function_call_expr::handle_general_function_call()
           typet return_type = empty_typet();
           const auto &func_node = find_function(
             converter_.ast()["body"], function_id_.get_function());
-          if (
-            !func_node.empty() && func_node.contains("returns") &&
-            !func_node["returns"].is_null())
+          if (!func_node.empty())
           {
-            const auto &returns = func_node["returns"];
-            if (returns.contains("id"))
+            if (
+              func_node.contains("returns") && !func_node["returns"].is_null())
             {
-              return_type =
-                type_handler_.get_typet(returns["id"].get<std::string>());
+              const auto &returns = func_node["returns"];
+              if (returns.contains("id"))
+              {
+                return_type =
+                  type_handler_.get_typet(returns["id"].get<std::string>());
+              }
             }
+            exprt body = converter_.get_block(func_node["body"]);
+            exprt const_return = converter_.get_function_constant_return(body);
+            if (!const_return.is_nil())
+              return const_return;
           }
+
           call.type() = return_type;
 
           // Process arguments normally
@@ -1619,16 +1883,25 @@ exprt function_call_expr::handle_general_function_call()
               call.arguments().push_back(arg);
           }
 
-          return std::move(call);
+          return call;
         }
         else
         {
-          // Not a forward reference - use existing behavior for built-ins/imports/undefined functions
-          log_warning("Undefined function: {}", function_id_.get_function());
-          return exprt();
+          const std::string &func_name = function_id_.get_function();
+          log_warning(
+            "Undefined function '{}' - replacing with assert(false)",
+            func_name);
+          return gen_unsupported_function_assert(func_name);
         }
       }
     }
+  }
+
+  if (func_symbol != nullptr)
+  {
+    exprt type_error = check_argument_types(func_symbol, call_["args"]);
+    if (!type_error.is_nil())
+      return type_error;
   }
 
   locationt location = converter_.get_location_from_decl(call_);
@@ -1649,9 +1922,27 @@ exprt function_call_expr::handle_general_function_call()
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
-    assert(obj_symbol);
-    // Passing object as "self" (first) parameter on instance method calls
-    call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    if (obj_symbol)
+    {
+      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    }
+    else
+    {
+      // Nested attribute: build expression dynamically
+      if (
+        call_["func"]["_type"] == "Attribute" &&
+        call_["func"].contains("value"))
+      {
+        exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+        call.arguments().push_back(gen_address_of(obj_expr));
+      }
+      else
+      {
+        assert(
+          false &&
+          "InstanceMethod requires obj_symbol or valid attribute chain");
+      }
+    }
   }
   else if (function_type_ == FunctionType::ClassMethod)
   {
@@ -1756,7 +2047,17 @@ exprt function_call_expr::handle_general_function_call()
         if (func_symbol != nullptr)
         {
           const code_typet &func_type = to_code_type(func_symbol->type);
-          func_call.type() = func_type.return_type();
+          typet return_type = func_type.return_type();
+
+          // Special handling for constructors
+          if (return_type.id() == "constructor")
+          {
+            // For constructors, use the class type instead of "constructor"
+            return_type =
+              type_handler_.get_typet(func_symbol->name.as_string());
+          }
+
+          func_call.type() = return_type;
         }
       }
 
@@ -1791,7 +2092,7 @@ exprt function_call_expr::handle_general_function_call()
       call.arguments().push_back(arg);
   }
 
-  return std::move(call);
+  return call;
 }
 
 exprt function_call_expr::gen_exception_raise(
@@ -1823,4 +2124,251 @@ exprt function_call_expr::gen_exception_raise(
   raise.move_to_operands(sym);
 
   return raise;
+}
+
+codet function_call_expr::gen_unsupported_function_assert(
+  const std::string &func_name) const
+{
+  locationt location = converter_.get_location_from_decl(call_);
+  std::string message = "Unsupported function '" + func_name + "' is reached";
+  location.user_provided(true);
+  location.comment(message);
+
+  exprt false_expr = gen_boolean(false);
+  code_assertt assert_code(false_expr);
+  assert_code.location() = location;
+
+  return assert_code;
+}
+
+std::vector<std::string>
+function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
+{
+  std::vector<std::string> possible_classes;
+
+  if (!obj_symbol)
+    return possible_classes;
+
+  typet obj_type = obj_symbol->type;
+  if (obj_type.is_pointer())
+    obj_type = obj_type.subtype();
+  if (obj_type.id() == "symbol")
+    obj_type = converter_.ns.follow(obj_type);
+
+  // If type is a struct, extract the class name from the struct tag
+  if (obj_type.is_struct())
+  {
+    const struct_typet &struct_type = to_struct_type(obj_type);
+    std::string tag = struct_type.tag().as_string();
+    std::string actual_class = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+    possible_classes.push_back(actual_class);
+    return possible_classes;
+  }
+
+  // Type is a primitive (e.g., floatbv) - trace through AST to find actual types
+  std::string var_name = obj_symbol->name.as_string();
+  nlohmann::json var_decl = json_utils::find_var_decl(
+    var_name, converter_.current_function_name(), converter_.ast());
+
+  if (var_decl.empty() || !var_decl.contains("value"))
+    return possible_classes;
+
+  const auto &value = var_decl["value"];
+
+  // Check if assigned from a function call
+  if (value["_type"] != "Call" || value["func"]["_type"] != "Name")
+    return possible_classes;
+
+  std::string func_name = value["func"]["id"].get<std::string>();
+
+  // Look up the function definition
+  const auto &func_node =
+    json_utils::find_function(converter_.ast()["body"], func_name);
+
+  if (
+    func_node.empty() || !func_node.contains("returns") ||
+    func_node["returns"].is_null())
+    return possible_classes;
+
+  const auto &returns = func_node["returns"];
+  if (returns["_type"] != "Name" || !returns.contains("id"))
+    return possible_classes;
+
+  std::string return_type = returns["id"].get<std::string>();
+
+  // If return type is 'Any', analyze the function body to find actual return classes
+  if (return_type == "Any" && func_node.contains("body"))
+  {
+    std::function<void(const nlohmann::json &)> find_returns;
+    find_returns = [&](const nlohmann::json &node) {
+      if (!node.is_object())
+        return;
+
+      std::string node_type = node["_type"].get<std::string>();
+
+      if (node_type == "Return" && node.contains("value"))
+      {
+        const auto &ret_val = node["value"];
+        if (ret_val["_type"] == "Call" && ret_val["func"]["_type"] == "Name")
+        {
+          std::string class_name = ret_val["func"]["id"].get<std::string>();
+          if (json_utils::is_class(class_name, converter_.ast()))
+            possible_classes.push_back(class_name);
+        }
+      }
+      else if (node_type == "If")
+      {
+        // Check both branches
+        if (node.contains("body"))
+          for (const auto &stmt : node["body"])
+            find_returns(stmt);
+        if (node.contains("orelse"))
+          for (const auto &stmt : node["orelse"])
+            find_returns(stmt);
+      }
+    };
+
+    for (const auto &stmt : func_node["body"])
+      find_returns(stmt);
+  }
+
+  return possible_classes;
+}
+
+bool function_call_expr::method_exists_in_class_hierarchy(
+  const std::string &class_name,
+  const std::string &method_name) const
+{
+  const auto &class_node =
+    json_utils::find_class(converter_.ast()["body"], class_name);
+
+  if (class_node.empty())
+    return false;
+
+  // Check if method exists in this class
+  if (json_utils::search_function_in_ast(class_node["body"], method_name))
+    return true;
+
+  // Check base classes
+  if (class_node.contains("bases"))
+  {
+    for (const auto &base : class_node["bases"])
+    {
+      if (base.contains("id"))
+      {
+        std::string base_name = base["id"].get<std::string>();
+        if (method_exists_in_class_hierarchy(base_name, method_name))
+          return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+exprt function_call_expr::generate_attribute_error(
+  const std::string &method_name,
+  const std::vector<std::string> &possible_classes) const
+{
+  locationt location = converter_.get_location_from_decl(call_);
+  std::ostringstream error_msg;
+
+  if (possible_classes.size() > 1)
+  {
+    // Multiple possible classes
+    std::string display_classes;
+    for (size_t i = 0; i < possible_classes.size(); ++i)
+    {
+      if (i > 0)
+        display_classes += ", ";
+      display_classes += "'" + possible_classes[i] + "'";
+    }
+    error_msg << "AttributeError: object has no attribute '" << method_name
+              << "' (possible types: " << display_classes << ")";
+  }
+  else if (possible_classes.size() == 1)
+  {
+    error_msg << "AttributeError: '" << possible_classes[0]
+              << "' object has no attribute '" << method_name << "'";
+  }
+  else
+  {
+    error_msg << "AttributeError: object has no attribute '" << method_name
+              << "'";
+  }
+
+  log_warning("{}", error_msg.str());
+
+  code_assertt assert_code(gen_boolean(false));
+  assert_code.location() = location;
+  assert_code.location().user_provided(true);
+  assert_code.location().comment(error_msg.str());
+
+  return assert_code;
+}
+
+exprt function_call_expr::check_argument_types(
+  const symbolt *func_symbol,
+  const nlohmann::json &args) const
+{
+  // Only perform type checking if --strict-types is enabled
+  if (!config.options.get_bool_option("strict-types"))
+    return nil_exprt();
+
+  const code_typet &func_type = to_code_type(func_symbol->type);
+  const auto &params = func_type.arguments();
+
+  // Determine parameter offset based on actual function signature
+  size_t param_offset = 0;
+
+  if (function_type_ == FunctionType::InstanceMethod)
+  {
+    // Instance methods always have 'self' as first parameter
+    param_offset = 1;
+  }
+  else if (function_type_ == FunctionType::ClassMethod)
+  {
+    // For class methods, check if first parameter is actually 'self' or 'cls'
+    // Static methods are called as ClassMethod but don't have self/cls
+    if (!params.empty())
+    {
+      const std::string &first_param = params[0].get_base_name().as_string();
+      if (first_param == "self" || first_param == "cls")
+        param_offset = 1;
+      // Otherwise it's a static method, param_offset stays 0
+    }
+  }
+
+  for (size_t i = 0; i < args.size(); ++i)
+  {
+    size_t param_idx = i + param_offset;
+    if (param_idx >= params.size())
+      break;
+
+    exprt arg = converter_.get_expr(args[i]);
+    const typet &expected_type = params[param_idx].type();
+    const typet &actual_type = arg.type();
+
+    // Check for type mismatch
+    if (!base_type_eq(expected_type, actual_type, converter_.ns))
+    {
+      std::string expected_str = type_handler_.type_to_string(expected_type);
+      std::string actual_str = type_handler_.type_to_string(actual_type);
+
+      std::ostringstream msg;
+      msg << "TypeError: Argument " << (i + 1) << " has incompatible type '"
+          << actual_str << "'; expected '" << expected_str << "'";
+
+      exprt exception = gen_exception_raise("TypeError", msg.str());
+
+      // Add location information from the call
+      locationt loc = converter_.get_location_from_decl(call_);
+      exception.location() = loc;
+      exception.location().user_provided(true);
+
+      return exception;
+    }
+  }
+
+  return nil_exprt();
 }

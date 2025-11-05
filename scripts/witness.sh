@@ -1,23 +1,21 @@
 #!/bin/sh
 
 BENCHEXEC_BIN=/usr/bin/benchexec
-BENCHEXEC_COMMON_FLAGS="-o $HOME/witness-output/ -N 9 ./cpachecker.xml --read-only-dir / --overlay-dir /home  --container"
+BENCHEXEC_COMMON_FLAGS="-o $HOME/witness-output/ -N 9 ./cpachecker.xml --read-only-dir / --overlay-dir /home/benchexec  --container"
 
 # Prepare Environment to run benchexec
 setup_folder () {
     echo "Setting up machine folder..."
+    ls $HOME/esbmc-output/
     mv $HOME/esbmc-output/*.files $HOME/witness-files
     cp esbmc-src/scripts/competitions/svcomp/cpachecker.xml $HOME/cpachecker.xml
     rm -rf $HOME/validation-action $HOME/witness-output $HOME/witness-output.zip
     mkdir $HOME/validation-action
     cd $HOME/validation-action
-    # Don't ask
-    export http_proxy=socks://localhost:1080
-    export https_proxy=socks://localhost:1080
-    
-    curl https://zenodo.org/records/10066216/files/CPAchecker-2.2.1-svn-44999-unix.zip?download=1 -o cpa.zip
-    unzip cpa.zip
-    mv CPAchecker* cpachecker && cd cpachecker    
+
+    curl -#L https://zenodo.org/records/16682497/files/CPAchecker-4.1-unix.zip?download=1 -o cpa.zip
+    unzip -q cpa.zip
+    mv CPAchecker* cpachecker && cd cpachecker
     cp $HOME/cpachecker.xml .
     echo "Configuration done. See files below"
     ls -l

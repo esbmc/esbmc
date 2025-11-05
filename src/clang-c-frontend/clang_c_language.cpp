@@ -20,6 +20,8 @@ CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
 
+clang_c_languaget::~clang_c_languaget() = default;
+
 languaget *new_clang_c_language()
 {
   return new clang_c_languaget;

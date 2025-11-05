@@ -29,7 +29,7 @@ public:
   {
   }
 
-  exprt get();
+  exprt get(bool is_set = false);
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
@@ -110,4 +110,6 @@ private:
 
   // <list_id, <elem_id, elem_type>>
   static std::unordered_map<std::string, TypeInfo> list_type_map;
+
+  exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
 };

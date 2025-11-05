@@ -1154,6 +1154,18 @@ private:
     {
       obj_name = prefix + std::string(".");
     }
+
+    // Handle method calls on constant literals
+    // Python allows: " ".join(l), 123.to_bytes(), etc.
+    // Before this fix, accessing call["value"]["id"] would crash because
+    // Constant nodes don't have an "id" field
+    if (call["value"]["_type"] == "Constant")
+      return get_type_from_constant(call["value"]);
+
+    // Handle normal Name values (variable references)
+    if (!call["value"].contains("id"))
+      return "";
+
     obj_name += call["value"]["id"].template get<std::string>();
     if (obj_name.find('.') != std::string::npos)
       obj_name = invert_substrings(obj_name);
@@ -1164,6 +1176,39 @@ private:
   std::string get_type_from_method(const Json &call)
   {
     std::string type("");
+
+    // Handle method calls on constant literals
+    // When Python code has " ".join(l), the func["value"] is a Constant node
+    // We need to map string method names to their return types directly
+    // without looking up the object in the AST (which would fail)
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"]["_type"] == "Constant")
+    {
+      std::string obj_type = get_type_from_constant(call["func"]["value"]);
+
+      // For string constants, determine return type based on method name
+      if (obj_type == "str" && call["func"].contains("attr"))
+      {
+        const std::string &method = call["func"]["attr"];
+        // Methods that return str
+        if (
+          method == "join" || method == "lower" || method == "upper" ||
+          method == "strip" || method == "lstrip" || method == "rstrip" ||
+          method == "format" || method == "replace")
+          return "str";
+        // Methods that return bool
+        else if (
+          method == "startswith" || method == "endswith" ||
+          method == "isdigit" || method == "isalpha" || method == "isspace" ||
+          method == "islower" || method == "isupper")
+          return "bool";
+        // Default for string methods
+        return "str";
+      }
+
+      return obj_type;
+    }
 
     const std::string &obj = get_object_name(call["func"], std::string());
 
@@ -1177,6 +1222,15 @@ private:
 
     Json obj_node =
       json_utils::find_var_decl(obj, get_current_func_name(), ast_);
+
+    // Check current function parameters if not found
+    if (
+      obj_node.empty() && current_func != nullptr &&
+      (*current_func).contains("args") &&
+      (*current_func)["args"].contains("args"))
+    {
+      obj_node = find_annotated_assign(obj, (*current_func)["args"]["args"]);
+    }
 
     if (obj_node.empty())
       throw std::runtime_error("Object \"" + obj + "\" not found.");
@@ -1395,8 +1449,15 @@ private:
           func.contains("attr") && func.contains("value") &&
           func["value"]["_type"] == "Name" && func["value"].contains("id"))
         {
-          std::string class_name = func["attr"].template get<std::string>();
-          inferred_type = class_name;
+          std::string attr_name = func["attr"].template get<std::string>();
+
+          // Only use attribute as type if it looks like a constructor call
+          // (i.e., attribute name starts with uppercase)
+          if (!attr_name.empty() && std::isupper(attr_name[0]))
+            inferred_type = attr_name;
+          // For method calls that couldn't be resolved, return UNKNOWN
+          else
+            return InferResult::UNKNOWN;
         }
       }
     }

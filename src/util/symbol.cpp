@@ -12,7 +12,7 @@ void symbolt::clear()
   value.make_nil();
   location.make_nil();
   lvalue = static_lifetime = file_local = is_extern = is_type = is_parameter =
-    is_macro = false;
+    is_macro = is_thread_local = false;
   id = module = name = mode = "";
 }
 
@@ -37,6 +37,7 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP2(static_lifetime);
   SYM_SWAP2(file_local);
   SYM_SWAP2(is_extern);
+  SYM_SWAP2(is_thread_local);
 }
 
 void symbolt::dump() const
@@ -72,6 +73,8 @@ void symbolt::show(std::ostream &out) const
     out << " extern";
   if (is_macro)
     out << " macro";
+  if (is_thread_local)
+    out << " is_thread_local";
 
   out << "\n";
   out << "Location....: " << location << "\n";
@@ -110,6 +113,8 @@ void symbolt::to_irep(irept &dest) const
     dest.file_local(true);
   if (is_extern)
     dest.is_extern(true);
+  if (is_thread_local)
+    dest.is_thread_local(true);
 }
 
 void symbolt::from_irep(const irept &src)
@@ -130,6 +135,7 @@ void symbolt::from_irep(const irept &src)
   static_lifetime = src.static_lifetime();
   file_local = src.file_local();
   is_extern = src.is_extern();
+  is_thread_local = src.is_thread_local();
 }
 
 irep_idt symbolt::get_function_name() const

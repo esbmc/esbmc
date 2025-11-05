@@ -770,11 +770,24 @@ class Preprocessor(ast.NodeTransformer):
     def _create_length_assignment(self, node, iter_var_name, length_var='ESBMC_length'):
         """Create ESBMC_length assignment with custom name."""
         length_target = self.create_name_node(length_var, ast.Store(), node)
-        len_func = self.create_name_node('len', ast.Load(), node)
+        int_annotation = self.create_name_node('int', ast.Load(), node)
+
+        # Determine annotation type
+        annotation_id = self._get_iterable_type_annotation(node.iter)
+
+        # For list/set/dict types (pointers), use __ESBMC_get_object_size
+        # For strings (arrays), use len()
+        if annotation_id in ['list', 'set', 'dict']:
+            # Use __ESBMC_get_object_size for pointer-based collections
+            len_func = self.create_name_node('__ESBMC_get_object_size', ast.Load(), node)
+        else:
+            # Use len() for strings and other types
+            len_func = self.create_name_node('len', ast.Load(), node)
+
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
         self.ensure_all_locations(len_call, node)
-        int_annotation = self.create_name_node('int', ast.Load(), node)
+
         length_assign = ast.AnnAssign(
             target=length_target,
             annotation=int_annotation,
@@ -1018,6 +1031,19 @@ class Preprocessor(ast.NodeTransformer):
                     assignments.append(individual_assign)
             return assignments
 
+    def visit_AnnAssign(self, node):
+        """Track type annotations from annotated assignments like x: int = 5"""
+        # First visit child nodes
+        self.generic_visit(node)
+
+        # Track the type if target is a simple Name and has annotation
+        if isinstance(node.target, ast.Name) and node.annotation is not None:
+            var_name = node.target.id
+            var_type = self._extract_type_from_annotation(node.annotation)
+            self.known_variable_types[var_name] = var_type
+
+        return node
+
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
@@ -1052,21 +1078,42 @@ class Preprocessor(ast.NodeTransformer):
             self.generic_visit(node)
             return node
 
+        # Check for conflicts between positional and keyword arguments
+        for i in range(len(node.args)):
+            if i < len(expectedArgs) and expectedArgs[i] in keywords:
+                # Positional argument at position i conflicts with keyword argument
+                raise SyntaxError(
+                    f"Multiple values for argument '{expectedArgs[i]}'",
+                    (self.module_name, node.lineno, node.col_offset, ""))
+
+        # First, collect all missing required arguments
+        missing_args = []
+        for i in range(len(node.args), len(expectedArgs)):
+            if expectedArgs[i] not in keywords and (functionName, expectedArgs[i]) not in self.functionDefaults:
+                missing_args.append(expectedArgs[i])
+
+        # If there are missing arguments, raise TypeError before processing defaults
+        if missing_args:
+            if len(missing_args) == 1:
+                raise TypeError(
+                    f"{functionName}() missing 1 required positional argument: '{missing_args[0]}'"
+                )
+            else:
+                args_str = ' and '.join([f"'{arg}'" for arg in missing_args])
+                raise TypeError(
+                    f"{functionName}() missing {len(missing_args)} required positional arguments: {args_str}"
+                )
+
         # append defaults
-        for i in range(len(node.args),len(expectedArgs)):
+        for i in range(len(node.args), len(expectedArgs)):
             if expectedArgs[i] in keywords:
                 node.args.append(keywords[expectedArgs[i]])
             elif (functionName, expectedArgs[i]) in self.functionDefaults:
                 default_val = self.functionDefaults[(functionName, expectedArgs[i])]
-                if isinstance(default_val,ast.Name):
+                if isinstance(default_val, ast.Name):
                     node.args.append(default_val)
                 else:
-                    node.args.append(ast.Constant(value = default_val))
-            else:
-                print(f"WARNING: {functionName}() missing required positional argument: '{expectedArgs[i]}'\n")
-                print(f"* file: {self.module_name}\n* line {node.lineno}\n* function: {functionName}\n* column: {node.col_offset} ")
-                break # breaking means not enough arguments, solver should reject
-
+                    node.args.append(ast.Constant(value=default_val))
 
         self.generic_visit(node)
         return node # transformed node

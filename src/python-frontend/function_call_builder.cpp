@@ -80,7 +80,89 @@ symbol_id function_call_builder::build_function_id() const
     // Get object name
     if (func_json["value"]["_type"] == "Attribute")
     {
-      obj_name = func_json["value"]["attr"];
+      /* Handle nested attribute chains (e.g., self.f.foo(), a.b.c.method())
+       * 
+       * When calling a method through an attribute chain, we need to determine
+       * the class type of the intermediate object. For example, in self.f.foo(),
+       * we need to know that 'f' has type Foo to correctly resolve Foo.foo().
+       * 
+       * Strategy: Recursively walk the attribute chain from left to right,
+       * resolving each component's type by looking up struct members in the
+       * symbol table, until we reach the final object whose class we need.
+       */
+
+      std::function<typet(const nlohmann::json &)> resolve_attr_type =
+        [&](const nlohmann::json &node) -> typet {
+        if (node["_type"] == "Name")
+        {
+          // Base case: resolve variable to its type
+          std::string name = node["id"].get<std::string>();
+
+          // Skip module names - let the module handling logic deal with them
+          if (converter_.is_imported_module(name))
+            return typet();
+
+          symbol_id var_sid(
+            python_file, current_class_name, current_function_name);
+          var_sid.set_object(name);
+          symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+          return var_symbol ? var_symbol->type : typet();
+        }
+        else if (node["_type"] == "Attribute")
+        {
+          // Recursive case: resolve base, then look up member
+          typet base_type = resolve_attr_type(node["value"]);
+          if (base_type.id().empty())
+            return typet();
+
+          // Normalize type (dereference pointers, follow symbol types)
+          if (base_type.is_pointer())
+            base_type = base_type.subtype();
+          if (base_type.id() == "symbol")
+            base_type = converter_.ns.follow(base_type);
+
+          // Look up the member in the struct
+          if (base_type.is_struct())
+          {
+            const struct_typet &struct_type = to_struct_type(base_type);
+            std::string attr = node["attr"].get<std::string>();
+            return struct_type.has_component(attr)
+                     ? struct_type.get_component(attr).type()
+                     : typet();
+          }
+          return typet();
+        }
+        return typet();
+      };
+
+      // Resolve the full attribute chain type
+      typet obj_type = resolve_attr_type(func_json["value"]);
+
+      if (!obj_type.id().empty())
+      {
+        // Normalize the resolved type
+        if (obj_type.is_pointer())
+          obj_type = obj_type.subtype();
+        if (obj_type.id() == "symbol")
+          obj_type = converter_.ns.follow(obj_type);
+
+        // Extract class name from struct type
+        if (obj_type.is_struct())
+        {
+          std::string tag = to_struct_type(obj_type).tag().as_string();
+          obj_name = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+        }
+        else
+        {
+          obj_name = th.type_to_string(obj_type);
+        }
+      }
+      else
+      {
+        // Fallback: use the direct attribute name
+        // For module.Class.method(), we want "Class" as the object name
+        obj_name = func_json["value"]["attr"].get<std::string>();
+      }
     }
     else if (
       func_json["value"]["_type"] == "Constant" &&
@@ -162,9 +244,33 @@ symbol_id function_call_builder::build_function_id() const
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
+      // Check if this is a tuple by looking up the variable's type
+      if (var_type == "tuple" || var_type.empty())
+      {
+        symbol_id var_sid(
+          python_file, current_class_name, current_function_name);
+        var_sid.set_object(arg["id"].get<std::string>());
+        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+
+        if (var_symbol && var_symbol->type.id() == "struct")
+        {
+          const struct_typet &struct_type = to_struct_type(var_symbol->type);
+
+          // Check if this is a tuple by examining the tag
+          if (struct_type.tag().as_string().find("tag-tuple") == 0)
+          {
+            // Mark this as a tuple len() call
+            func_name = "__ESBMC_len_tuple";
+            function_id.clear();
+            function_id.set_prefix("esbmc:");
+            function_id.set_function(func_name);
+            return function_id;
+          }
+        }
+      }
       if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
-        var_type.empty())
+        var_type == "set" || var_type == "dict" || var_type.empty())
         func_name = kGetObjectSize;
       else if (var_type == "str")
       {
@@ -263,6 +369,22 @@ exprt function_call_builder::build() const
   if (function_id.get_function() == "__ESBMC_len_single_char")
     return from_integer(1, int_type());
 
+  if (function_id.get_function() == "__ESBMC_len_tuple")
+  {
+    const auto &arg = call_["args"][0];
+    exprt obj_expr = converter_.get_expr(arg);
+
+    if (obj_expr.type().id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(obj_expr.type());
+      size_t tuple_len = struct_type.components().size();
+      return from_integer(tuple_len, size_type());
+    }
+
+    // Fallback
+    return from_integer(0, size_type());
+  }
+
   // Special handling for assume calls: convert to code_assume instead of function call
   if (is_assume_call(function_id))
   {
@@ -322,6 +444,27 @@ exprt function_call_builder::build() const
 
       return converter_.get_string_handler().handle_string_isdigit(
         obj_expr, loc);
+    }
+
+    if (method_name == "islower")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("islower() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_islower(
+        obj_expr, loc);
+    }
+
+    if (method_name == "lower")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("lower() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_lower(obj_expr, loc);
     }
 
     if (method_name == "isalpha")

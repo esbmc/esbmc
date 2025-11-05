@@ -8,35 +8,65 @@
 #include <util/expr_util.h>
 #include <util/arith_tools.h>
 #include <util/std_code.h>
+#include <util/mp_arith.h>
 #include <util/symbolic_types.h>
 #include <string>
+#include <functional>
 
 // Extract element type from annotation
 static typet get_elem_type_from_annotation(
   const nlohmann::json &node,
   const type_handler &type_handler_)
 {
-  // Check if annotation exists and has the expected structure
-  if (
-    node.contains("annotation") && node["annotation"].is_object() &&
-    node["annotation"].contains("slice") &&
-    node["annotation"]["slice"].is_object() &&
-    node["annotation"]["slice"].contains("id") &&
-    node["annotation"]["slice"]["id"].is_string())
+  // Extract element type from a Subscript node such as list[T]
+  auto extract_subscript_elem = [&](const nlohmann::json &ann) -> typet {
+    if (
+      ann.contains("slice") && ann["slice"].is_object() &&
+      ann["slice"].contains("id") && ann["slice"]["id"].is_string())
+    {
+      return type_handler_.get_typet(ann["slice"]["id"].get<std::string>());
+    }
+    return typet();
+  };
+
+  if (!node.contains("annotation") || !node["annotation"].is_object())
+    return typet();
+
+  const auto &annotation = node["annotation"];
+
+  // Case 1: Direct subscript annotation like list[str]
+  if (annotation.contains("slice"))
   {
-    return type_handler_.get_typet(
-      node["annotation"]["slice"]["id"].get<std::string>());
+    typet elem_type = extract_subscript_elem(annotation);
+    if (elem_type != typet())
+      return elem_type;
   }
 
-  // Check for direct type annotation
-  if (
-    node.contains("annotation") && node["annotation"].is_object() &&
-    node["annotation"].contains("id") && node["annotation"]["id"].is_string())
+  // Case 2: Union type annotation such as list[str] | None
+  if (annotation["_type"] == "BinOp")
   {
-    return type_handler_.get_typet(node["annotation"]["id"].get<std::string>());
+    // Try left side first (e.g., handles list[str] | None)
+    if (annotation["left"]["_type"] == "Subscript")
+    {
+      typet elem_type = extract_subscript_elem(annotation["left"]);
+      if (elem_type != typet())
+        return elem_type;
+    }
+
+    // Try right side (e.g., handles None | list[str])
+    if (annotation["right"]["_type"] == "Subscript")
+    {
+      typet elem_type = extract_subscript_elem(annotation["right"]);
+      if (elem_type != typet())
+        return elem_type;
+    }
   }
 
-  // Return empty type if annotation structure is not as expected
+  // Case 3: Direct type annotation such as str, int
+  if (annotation.contains("id") && annotation["id"].is_string())
+    return type_handler_.get_typet(annotation["id"].get<std::string>());
+
+  // Return empty type if annotation structure is not recognized
   return typet();
 }
 
@@ -62,26 +92,15 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   // Create and declare temporary symbol for element type
   symbolt &elem_type_sym = converter_.create_tmp_symbol(
     op, "$list_elem_type$", size_type(), type_name_expr);
-  code_declt elem_type_decl(symbol_expr(elem_type_sym));
-  elem_type_decl.location() = location;
-  converter_.add_instruction(elem_type_decl);
 
-  // Call hash function to get type hash
-  const symbolt *hash_func_symbol =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_hash_string");
-  if (!hash_func_symbol)
-  {
-    throw std::runtime_error("Hash function symbol not found");
-  }
-
-  code_function_callt list_type_hash_func_call;
-  list_type_hash_func_call.function() = symbol_expr(*hash_func_symbol);
-  list_type_hash_func_call.arguments().push_back(
-    converter_.get_string_handler().get_array_base_address(type_name_expr));
-  list_type_hash_func_call.lhs() = symbol_expr(elem_type_sym);
-  list_type_hash_func_call.type() = size_type();
-  list_type_hash_func_call.location() = location;
-  converter_.add_instruction(list_type_hash_func_call);
+  // TODO: Eventually we should build a reverse index of hash => type into the context
+  // this will allow better verification counter-examples.
+  constant_exprt hash_value(size_type());
+  hash_value.set_value(integer2binary(
+    std::hash<std::string>{}(elem_type_name), config.ansi_c.address_width));
+  code_assignt hash_assignment(symbol_expr(elem_type_sym), hash_value);
+  hash_assignment.location() = location;
+  converter_.add_instruction(hash_assignment);
 
   // Create and declare temporary symbol for list element
   symbolt &elem_symbol =
@@ -411,19 +430,26 @@ symbolt &python_list::create_list()
   return list_symbol;
 }
 
-exprt python_list::get()
+exprt python_list::get(bool is_set)
 {
   symbolt &list_symbol = create_list();
+  list_symbol.is_set = true;
+
   const std::string &list_id = list_symbol.id.as_string();
 
+  // TODO: if same element is added indirectly this will fail
+  //       e.g. (2, 1+1)
+  std::set<exprt> elements;
   for (auto &e : list_value_["elts"])
   {
     exprt elem = converter_.get_expr(e);
+    if (is_set && elements.count(elem))
+      continue;
+
+    elements.insert(elem);
     exprt list_push_func_call =
       build_push_list_call(list_symbol, list_value_, elem);
-
     converter_.add_instruction(list_push_func_call);
-
     list_type_map[list_id].push_back(
       std::make_pair(elem.identifier().as_string(), elem.type()));
   }
@@ -469,6 +495,32 @@ exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
   return exprt();
 }
 
+exprt python_list::remove_function_calls_recursive(
+  exprt &e,
+  const nlohmann::json &node)
+{
+  // Bounds might generate intermediate calls, we need to add lhs to all of them.
+  const auto add_lhs_var_bound = [&](exprt &foo) -> exprt {
+    if (!foo.is_function_call())
+      return foo;
+    code_function_callt &call = static_cast<code_function_callt &>(foo);
+    symbolt &lhs = converter_.create_tmp_symbol(
+      node, "__python_function_call_lhs$", size_type(), exprt());
+    call.lhs() = symbol_expr(lhs);
+    converter_.add_instruction(call);
+    return symbol_expr(lhs);
+  };
+
+  auto res = add_lhs_var_bound(e);
+  for (auto &ee : res.operands())
+  {
+    ee = add_lhs_var_bound(ee);
+    remove_function_calls_recursive(ee, node);
+  }
+
+  return res;
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -505,7 +557,8 @@ exprt python_list::handle_range_slice(
         return minus_exprt(logical_len, abs_value);
       }
 
-      return converter_.get_expr(bound);
+      exprt e = converter_.get_expr(bound);
+      return remove_function_calls_recursive(e, slice_node);
     };
 
     // Process bounds
@@ -1067,9 +1120,55 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   contains_call.arguments().push_back(item_arg);
 
-  contains_call.arguments().push_back(
-    symbol_expr(*item_info.elem_type_sym));                 // item type hash
-  contains_call.arguments().push_back(item_info.elem_size); // item size
+  // For void/char pointers from iteration, use stored type info from list
+  exprt type_hash = symbol_expr(*item_info.elem_type_sym);
+  exprt elem_size = item_info.elem_size;
+
+  // Check if item is a pointer (void* or char* - from loop iteration over strings)
+  if (item_info.elem_symbol->type.is_pointer())
+  {
+    const std::string &list_name = list.identifier().as_string();
+    auto type_map_it = list_type_map.find(list_name);
+
+    if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+    {
+      // Look for a string array type (char array) in the list
+      for (const auto &stored_entry : type_map_it->second)
+      {
+        const typet &stored_type = stored_entry.second;
+
+        // Check if stored type is a char array (string)
+        if (stored_type.is_array() && stored_type.subtype() == char_type())
+        {
+          // Use the stored string array type instead of pointer type
+          const type_handler type_handler_ = converter_.get_type_handler();
+          const std::string stored_type_name =
+            type_handler_.type_to_string(stored_type);
+
+          constant_exprt stored_hash(size_type());
+          stored_hash.set_value(integer2binary(
+            std::hash<std::string>{}(stored_type_name),
+            config.ansi_c.address_width));
+          type_hash = stored_hash;
+
+          // Recalculate size for stored array type
+          const array_typet &array_type =
+            static_cast<const array_typet &>(stored_type);
+          const size_t array_length =
+            std::stoull(array_type.size().value().as_string(), nullptr, 2);
+          const size_t subtype_size_bits =
+            std::stoull(stored_type.subtype().width().as_string(), nullptr, 10);
+          size_t size_bytes = (array_length * subtype_size_bits) / 8;
+          elem_size = from_integer(BigInt(size_bytes), size_type());
+
+          break; // Found string array type, use it
+        }
+      }
+    }
+  }
+
+  contains_call.arguments().push_back(type_hash);
+  contains_call.arguments().push_back(elem_size);
 
   contains_call.type() = bool_type();
   contains_call.location() = converter_.get_location_from_decl(list_value_);
