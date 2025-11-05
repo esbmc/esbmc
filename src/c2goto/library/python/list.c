@@ -3,7 +3,6 @@
 #include <stdint.h> // SIZE_MAX
 #include <string.h>
 
-
 /*
 ===============================================================================
                     COMPREHENSIVE PYTHON LIST FEATURES OVERVIEW
@@ -189,7 +188,115 @@ void __ESBMC_create_list()
   assert(0);
 };
 
+/** Based on CPython, the idea is to use a PyObject containing type information
+ *  while each actual object is explicitly defined.
+ */
+#if 0
+typedef struct _typeobject
+{
+  /* ===== Core Type Metadata ===== */
 
+  const char *tp_name; /* Type name: "module.typename" */
+  size_t tp_basicsize; /* Size of instance in bytes */
+  size_t tp_itemsize;  /* Size per item for variable-length types */
+
+  /* ===== Type Capability Flags ===== */
+
+  unsigned int tp_flags; /* Bitset of type capabilities */
+
+#  define ESBMC_TYPE_SEQUENCE (1 << 0) /* Supports len(), indexing, iteration */
+#  define ESBMC_TYPE_MAPPING (1 << 1)  /* Supports key-value access */
+#  define ESBMC_TYPE_NUMERIC (1 << 2)  /* Supports arithmetic operations */
+#  define ESBMC_TYPE_COMPARABLE (1 << 3) /* Supports ==, <, >, etc. */
+#  define ESBMC_TYPE_CALLABLE (1 << 4)   /* Can be called as a function */
+#  define ESBMC_TYPE_ITERABLE (1 << 5)   /* Can be iterated */
+#  define ESBMC_TYPE_MUTABLE (1 << 6)    /* Can be modified in place */
+#  define ESBMC_TYPE_CONTAINER (1 << 7)  /* Contains other objects */
+#  define ESBMC_TYPE_BUILTIN (1 << 8)    /* Built-in vs user-defined */
+
+  /* ===== Methods and Attributes ===== */
+
+  struct
+  {
+    const char *name; /* Method name */
+    int param_count;  /* Number of parameters */
+  } *tp_methods;      /* Null-terminated array of methods */
+
+  struct
+  {
+    const char *name;      /* Attribute name */
+    const char *type_name; /* Type of attribute */
+    size_t offset;         /* Byte offset from object start */
+  } *tp_members;           /* Null-terminated array of instance attributes */
+
+  struct _typeobject *tp_base; /* Parent type (for inheritance) */
+
+  /* ===== Operation Semantics ===== */
+
+  struct
+  {
+    /* Symbolic semantics for sequence operations: len(), indexing, slicing, membership */
+  } *tp_as_sequence; /* For list, tuple, str */
+
+  struct
+  {
+    /* Symbolic semantics for mapping operations: [], key lookup, insertion */
+  } *tp_as_mapping; /* For dict and dict-like types */
+
+  struct
+  {
+    /* Symbolic semantics for arithmetic: +, -, *, /, %, //, ** */
+  } *tp_as_number; /* For int, float, complex */
+
+  /* ===== Type Comparison and Compatibility ===== */
+
+  /* Symbolic semantics for ==, !=, <, <=, >, >= operations */
+  /* Symbolic semantics for hash() and hashability */
+
+} PyTypeObject;
+
+typedef struct _object
+{
+  PyTypeObject *ob_type;
+  // Add metadata as needed
+} PyObject;
+
+/* Global type definitions - one per type */
+PyTypeObject PyInt_Type = {
+  .tp_name = "builtins.int",
+  .tp_basicsize = 28,
+  .tp_itemsize = 0,
+  .tp_flags = ESBMC_TYPE_NUMERIC | ESBMC_TYPE_COMPARABLE | ESBMC_TYPE_BUILTIN,
+  .tp_methods = NULL,
+  .tp_members = NULL,
+  .tp_base = NULL,
+};
+
+PyTypeObject PyList_Type = {
+  .tp_name = "builtins.list",
+  .tp_basicsize = 56,
+  .tp_itemsize = 8,
+  .tp_flags = ESBMC_TYPE_SEQUENCE | ESBMC_TYPE_ITERABLE | ESBMC_TYPE_MUTABLE |
+              ESBMC_TYPE_CONTAINER | ESBMC_TYPE_BUILTIN,
+  .tp_methods = NULL, // list_methods, // ["append", "pop", etc.]
+  .tp_members = NULL,
+  .tp_base = NULL,
+};
+
+
+typedef struct {
+  PyObject ob_base;          /* Header: ob_type -> &PyInt_Type */
+  int ob_size;               /* Number of digits (for arbitrary precision) */
+  uint32_t *ob_digit;        /* Array of digit values */
+} PyLongObject;
+typedef struct
+{
+  PyObject ob_base;     /* Header: ob_type -> &PyList_Type */
+  Py_ssize_t ob_size;   /* Current number of items */
+  Py_ssize_t allocated; /* Allocated capacity */
+  PyObject **ob_item;   /* Array of pointers to objects */
+} PyListObject;
+#endif
 
 /* ---------- create ---------- */
 static inline List *list_create(Object *backing)
