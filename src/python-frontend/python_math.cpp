@@ -424,3 +424,96 @@ exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
 
   return sqrt_call;
 }
+
+exprt python_math::handle_divmod(
+  exprt dividend,
+  exprt divisor,
+  const nlohmann::json &element)
+{
+  // Determine the result type (promote to float if either operand is float)
+  typet result_type = dividend.type();
+  if (dividend.type().is_floatbv() || divisor.type().is_floatbv())
+  {
+    result_type = double_type();
+
+    // Promote operands to float if needed
+    if (!dividend.type().is_floatbv())
+    {
+      exprt promoted = exprt("typecast", result_type);
+      promoted.copy_to_operands(dividend);
+      dividend = promoted;
+    }
+    if (!divisor.type().is_floatbv())
+    {
+      exprt promoted = exprt("typecast", result_type);
+      promoted.copy_to_operands(divisor);
+      divisor = promoted;
+    }
+  }
+
+  // Calculate quotient: a // b (floor division)
+  exprt quotient;
+  if (result_type.is_floatbv())
+  {
+    // For floats, use floor(a / b)
+    exprt div_expr("ieee_div", result_type);
+    div_expr.copy_to_operands(dividend, divisor);
+
+    symbolt *floor_symbol = symbol_table.find_symbol("c:@F@floor");
+    if (!floor_symbol)
+      throw std::runtime_error("floor function not found in symbol table");
+
+    side_effect_expr_function_callt floor_call;
+    floor_call.function() = symbol_expr(*floor_symbol);
+    floor_call.arguments() = {div_expr};
+    floor_call.type() = result_type;
+    floor_call.location() = converter.get_location_from_decl(element);
+    quotient = floor_call;
+  }
+  else
+  {
+    // For integers, use integer division then apply floor division logic
+    exprt int_div("/", result_type);
+    int_div.copy_to_operands(dividend, divisor);
+    quotient = handle_floor_division(dividend, divisor, int_div);
+  }
+
+  // Calculate remainder: a % b
+  // Python's remainder: a - (a // b) * b
+  // This ensures the remainder has the same sign as the divisor
+  exprt remainder;
+  if (result_type.is_floatbv())
+  {
+    remainder = handle_modulo(dividend, divisor, element);
+  }
+  else
+  {
+    // For integers, compute: remainder = dividend - quotient * divisor
+    // This matches Python's semantics: divmod(a, b) = (q, r) where a = q*b + r
+    exprt quotient_times_divisor("*", result_type);
+    quotient_times_divisor.copy_to_operands(quotient, divisor);
+
+    remainder = exprt("-", result_type);
+    remainder.copy_to_operands(dividend, quotient_times_divisor);
+  }
+
+  // Create a tuple struct to hold both values
+  struct_typet tuple_type;
+  tuple_type.tag("tag-tuple_divmod");
+
+  struct_typet::componentt comp0;
+  comp0.name("element_0");
+  comp0.type() = result_type;
+  tuple_type.components().push_back(comp0);
+
+  struct_typet::componentt comp1;
+  comp1.name("element_1");
+  comp1.type() = result_type;
+  tuple_type.components().push_back(comp1);
+
+  // Build the tuple expression
+  exprt tuple_expr("struct", tuple_type);
+  tuple_expr.copy_to_operands(quotient, remainder);
+
+  return tuple_expr;
+}

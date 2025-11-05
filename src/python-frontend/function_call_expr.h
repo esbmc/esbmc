@@ -272,6 +272,11 @@ private:
    */
   bool is_string_arg(const nlohmann::json &arg) const;
 
+  /**
+   * Handles divmod() built-in function calls.
+   */
+  exprt handle_divmod() const;
+
   // Handler function type for dispatch table
   using HandlerFunction = std::function<exprt()>;
   using PredicateFunction = std::function<bool()>;

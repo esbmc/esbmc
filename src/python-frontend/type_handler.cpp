@@ -254,6 +254,27 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return build_array(long_long_int_type(), type_size);
   }
 
+  // divmod() — returns tuple of (quotient, remainder)
+  // The return type is a 2-element tuple struct
+  if (ast_type == "divmod")
+  {
+    struct_typet tuple_type;
+    tuple_type.tag("tag-tuple_divmod");
+
+    // Both elements have the same type (determined by operands)
+    // For now, we'll use int as default, but the actual type
+    // will be determined at conversion time based on the operands
+    struct_typet::componentt comp0(
+      "element_0", long_long_int_type());
+    struct_typet::componentt comp1(
+      "element_1", long_long_int_type());
+
+    tuple_type.components().push_back(comp0);
+    tuple_type.components().push_back(comp1);
+
+    return tuple_type;
+  }
+
   // str: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex

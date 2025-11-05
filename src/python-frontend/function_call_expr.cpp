@@ -311,6 +311,19 @@ exprt function_call_expr::handle_hasattr() const
   return gen_boolean(has_attr);
 }
 
+exprt function_call_expr::handle_divmod() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 2)
+    throw std::runtime_error("divmod() takes exactly 2 arguments");
+
+  exprt dividend = converter_.get_expr(args[0]);
+  exprt divisor = converter_.get_expr(args[1]);
+
+  return converter_.get_math_handler().handle_divmod(dividend, divisor, call_);
+}
+
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
 {
   std::string str_val = std::to_string(arg["value"].get<int>());
@@ -1597,6 +1610,14 @@ function_call_expr::get_dispatch_table()
        return conditional;
      },
      "math.sqrt()"},
+
+    // divmod function
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "divmod";
+     },
+     [this]() { return handle_divmod(); },
+     "divmod"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
