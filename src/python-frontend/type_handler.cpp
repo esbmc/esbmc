@@ -39,6 +39,9 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   if (type_utils::is_builtin_type(func_name))
     return false;
 
+  /* The statement is a constructor call if the function call on the
+   * rhs corresponds to the name of a class. */
+
   bool is_ctor_call = false;
 
   const contextt &symbol_table = converter_.symbol_table();
