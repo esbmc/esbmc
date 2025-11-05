@@ -2362,7 +2362,8 @@ exprt function_call_expr::check_argument_types(
     const typet &actual_type = arg.type();
 
     // Check type compatibility with Python object semantics
-    bool types_compatible = base_type_eq(expected_type, actual_type, converter_.ns);
+    bool types_compatible =
+      base_type_eq(expected_type, actual_type, converter_.ns);
 
     // Special handling for Python object semantics:
     // Allow pointer types to match struct parameter types, since Python objects
@@ -2380,7 +2381,8 @@ exprt function_call_expr::check_argument_types(
         ptr_subtype = converter_.ns.follow(ptr_subtype);
 
       // If the pointer points to the expected type, allow it
-      types_compatible = base_type_eq(expected_type, ptr_subtype, converter_.ns);
+      types_compatible =
+        base_type_eq(expected_type, ptr_subtype, converter_.ns);
     }
 
     // Check for type mismatch

@@ -125,7 +125,8 @@ unsigned goto_symext::argument_assignments(
           if (!base_type_eq(f_arg_type, ptr_subtype, ns))
           {
             log_error(
-              "function call: argument \"{}\" type mismatch: got {}, expected {}",
+              "function call: argument \"{}\" type mismatch: got {}, expected "
+              "{}",
               id2string(identifier),
               get_type_id((*it1)->type),
               get_type_id(arg_type));
