@@ -1573,23 +1573,28 @@ function_call_expr::get_dispatch_table()
          double_operand.copy_to_operands(arg_expr);
        }
 
-       // Create domain check assertion: x >= 0
+       // Create domain check: x < 0 (error condition)
        exprt zero = gen_zero(type_handler_.get_typet("float", 0));
-       exprt domain_valid = exprt(">=", type_handler_.get_typet("bool", 0));
-       domain_valid.copy_to_operands(double_operand, zero);
+       exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
+       domain_check.copy_to_operands(double_operand, zero);
 
-       // Create assertion statement
-       code_assertt assertion(domain_valid);
-       assertion.location() = converter_.get_location_from_decl(call_);
-       assertion.location().user_provided(true);
-       assertion.location().comment("ValueError: math domain error");
-       assertion.location().property("sqrt domain error");
+       // Create exception for domain violation
+       exprt raise = gen_exception_raise("ValueError", "math domain error");
 
-       // Add assertion to current block
-       converter_.current_block->move_to_operands(assertion);
+       // Add location information
+       locationt loc = converter_.get_location_from_decl(call_);
+       raise.location() = loc;
+       raise.location().user_provided(true);
 
        // Call python_math to handle the actual sqrt call
-       return converter_.get_math_handler().handle_sqrt(arg_expr, call_);
+       exprt sqrt_result =
+         converter_.get_math_handler().handle_sqrt(arg_expr, call_);
+
+       // Return conditional: if (x < 0) raise ValueError else sqrt(x)
+       if_exprt conditional(domain_check, raise, sqrt_result);
+       conditional.type() = type_handler_.get_typet("float", 0);
+
+       return conditional;
      },
      "math.sqrt()"},
 

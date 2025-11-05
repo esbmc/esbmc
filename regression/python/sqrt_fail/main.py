@@ -1,3 +1,8 @@
 import math
+
 x: int = -1
-result: float = math.sqrt(x)  # Domain error!
+
+try:
+    result: float = math.sqrt(x)  # Domain error!
+except ValueError:
+    assert False, "negative float input"
