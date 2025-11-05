@@ -4791,18 +4791,34 @@ void python_converter::get_class_definition(
   clazz.tag(current_class_name_);
   std::string id = "tag-" + current_class_name_;
 
-  if (symbol_table_.find_symbol(id) != nullptr)
-    return;
-
   locationt location_begin = get_location_from_decl(class_node);
   std::string module_name = location_begin.get_file().as_string();
 
-  // Add class to symbol table
-  symbolt symbol =
-    create_symbol(module_name, current_class_name_, id, location_begin, clazz);
-  symbol.is_type = true;
+  // Check if the symbol is already added to the context
+  symbolt *added_symbol = symbol_table_.find_symbol(id);
+  if (!added_symbol)
+  {
+    /* First add an incomplete type to handle recursive references */
+    struct_typet incomplete_type;
+    incomplete_type.tag(current_class_name_);
+    incomplete_type.incomplete(true);
 
-  symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
+    symbolt symbol =
+      create_symbol(module_name, current_class_name_, id, location_begin, incomplete_type);
+    symbol.is_type = true;
+
+    // Add incomplete type before processing members (for recursive references)
+    added_symbol = symbol_table_.move_symbol_to_context(symbol);
+  }
+
+  assert(added_symbol->is_type);
+
+  /* Avoid infinite recursion: skip if already complete or being defined */
+  if (!added_symbol->type.incomplete())
+    return;
+  
+  // Mark as processing to prevent recursion
+  added_symbol->type.remove(irept::a_incomplete);
 
   // Iterate over base classes
   // Track if class has user-defined base classes for later constructor generation logic
@@ -4939,7 +4955,9 @@ void python_converter::get_class_definition(
     clazz.methods().push_back(method);
   }
 
+  // Update with complete type (two-phase: incomplete -> complete)
   added_symbol->type = clazz;
+  
   current_class_name_.clear();
 }
 
