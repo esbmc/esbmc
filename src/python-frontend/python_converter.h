@@ -37,6 +37,11 @@ public:
 
   string_builder &get_string_builder();
 
+  python_math &get_math_handler()
+  {
+    return math_handler_;
+  }
+
   string_handler &get_string_handler()
   {
     return string_handler_;

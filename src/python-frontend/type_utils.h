@@ -125,7 +125,7 @@ public:
            func_name == "det" || func_name == "matmul" || func_name == "pow" ||
            func_name == "log" || func_name == "pow_by_squaring" ||
            func_name == "log2" || func_name == "log1p_taylor" ||
-           func_name == "ldexp" || func_name == "fmod";
+           func_name == "ldexp";
   }
 
   static bool is_ordered_comparison(const std::string &op)
