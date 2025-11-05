@@ -26,9 +26,8 @@ if(DOWNLOAD_DEPENDENCIES AND (NOT DEFINED IBEX_DIR))
       https://github.com/ibex-team/ibex-lib/archive/refs/tags/ibex-2.9.1.tar.gz
       OPTIONS
       "CMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/ibex_install")
-    set(IBEX_TARGET "ibex")
   endif()
-
+  set(IBEX_TARGET "ibex")
   find_package(ibex REQUIRED)
 else()
   if(DEFINED IBEX_DIR)
