@@ -808,20 +808,6 @@ exprt python_converter::handle_none_comparison(
     return not_exprt(equality_exprt(lhs, rhs));
 }
 
-/**
- * @brief Handle str.join() method calls
- * 
- * Implements Python's str.join() method by:
- * 1. Extracting the separator string from the method caller (e.g., " " in " ".join(l))
- * 2. Getting the list elements from the AST
- * 3. Building a single concatenated string by extracting all characters
- *    and inserting separators between elements
- * 
- * @param call_json The JSON AST node for the join() call
- * @return exprt representing the joined string
- * 
- * Example: " ".join(["a", "b"]) -> "a b"
- */
 exprt python_converter::handle_str_join(const nlohmann::json &call_json)
 {
   // Validate JSON structure: ensure we have the required keys
