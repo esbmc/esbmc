@@ -4,10 +4,9 @@
 
 <require cpuModel="Intel Xeon E3-1230 v5 @ 3.40 GHz"/>
 
-  <resultfiles>**/*.graphml</resultfiles>
+  <resultfiles>**/witness.*</resultfiles>
   
   <option name="-s">kinduction</option>
-  <option name="--ci"/>
 
   <rundefinition name="SV-COMP26_unreach-call">
     <tasks name="ReachSafety-Arrays">
