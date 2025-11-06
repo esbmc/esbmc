@@ -6,7 +6,6 @@ BENCHEXEC_COMMON_FLAGS="-o $HOME/witness-output/ -N 9 ./cpachecker.xml --read-on
 # Prepare Environment to run benchexec
 setup_folder () {
     echo "Setting up machine folder..."
-    ls $HOME/esbmc-output/
     mv $HOME/esbmc-output/*.files $HOME/witness-files
     cp esbmc-src/scripts/competitions/svcomp/cpachecker.xml $HOME/cpachecker.xml
     rm -rf $HOME/validation-action $HOME/witness-output $HOME/witness-output.zip
