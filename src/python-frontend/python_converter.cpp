@@ -763,9 +763,6 @@ exprt python_converter::handle_none_comparison(
   bool rhs_is_none = (rhs.type() == none_type());
 
   // None vs pointer comparison: create NULL of the correct pointer type.
-  // Rationale: In our C/C++ target environment, Optional[T] (Union[T, None])
-  // are represented as pointers. Comparing None to such types must yield
-  // a NULL pointer comparison rather than a constant fold.
   if (
     (lhs_is_none && rhs.is_symbol() && rhs.type().is_pointer()) ||
     (rhs_is_none && lhs.is_symbol() && lhs.type().is_pointer()))
@@ -789,12 +786,29 @@ exprt python_converter::handle_none_comparison(
       return not_exprt(equality_exprt(ptr_expr, null_ptr));
   }
 
+  // None vs symbol comparison: create NULL of the correct pointer type.
+  if (
+    (lhs_is_none && rhs.is_symbol() && !rhs.type().is_pointer()) ||
+    (rhs_is_none && lhs.is_symbol() && !lhs.type().is_pointer()))
+  {
+    // Create a pointer type from the value type and compare with NULL
+    const exprt &val_expr = lhs_is_none ? rhs : lhs;
+    typet ptr_type = gen_pointer_type(val_expr.type());
+
+    // Cast the value expression to pointer type
+    exprt ptr_expr = typecast_exprt(val_expr, ptr_type);
+
+    // Create NULL pointer for comparison
+    constant_exprt null_ptr(ptr_type);
+    null_ptr.set_value("NULL");
+
+    if (is_eq)
+      return equality_exprt(ptr_expr, null_ptr);
+    else
+      return not_exprt(equality_exprt(ptr_expr, null_ptr));
+  }
+
   // None vs non-pointer: constant fold to false/true
-  // Rationale: Non-pointer types in our C/C++ backend (int, bool, float, etc.)
-  // cannot be None - they are concrete values. Therefore, None == <value> is
-  // always false, and None != <value> is always true.
-  // Limitation: This does not model Python objects with custom __eq__ overloads,
-  // as we're targeting static C/C++ semantics, not full Python dynamic dispatch.
   if (lhs_is_none && !rhs_is_none)
     return is_eq ? gen_boolean(0) : gen_boolean(1);
   if (rhs_is_none && !lhs_is_none)
