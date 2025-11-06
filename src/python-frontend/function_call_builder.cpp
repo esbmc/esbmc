@@ -367,7 +367,7 @@ exprt function_call_builder::build() const
 
   // Special handling for single character len() calls
   if (function_id.get_function() == "__ESBMC_len_single_char")
-    return from_integer(1, int_type());
+    return from_integer(1, long_long_int_type());
 
   if (function_id.get_function() == "__ESBMC_len_tuple")
   {
