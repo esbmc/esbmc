@@ -4420,25 +4420,6 @@ void python_converter::get_attributes_from_self(
   }
 }
 
-// Find class definition
-const nlohmann::json &python_converter::find_class(
-  const nlohmann::json &body,
-  const std::string &class_name) const
-{
-  static const nlohmann::json empty_json = nlohmann::json::object();
-
-  for (const auto &item : body)
-  {
-    if (
-      item["_type"] == "ClassDef" &&
-      item["name"].get<std::string>() == class_name)
-    {
-      return item;
-    }
-  }
-  return empty_json;
-}
-
 // Process forward reference
 void python_converter::process_forward_reference(
   const nlohmann::json &annotation,
@@ -4477,8 +4458,8 @@ void python_converter::process_forward_reference(
     return;
 
   // Find and process referenced class definition
-  const auto &ref_class_node =
-    find_class((*ast_json)["body"], referenced_class);
+  const auto ref_class_node =
+    json_utils::find_class((*ast_json)["body"], referenced_class);
 
   if (!ref_class_node.empty())
   {
@@ -4623,7 +4604,7 @@ void python_converter::get_class_definition(
       const std::string &class_name = class_member["annotation"]["id"];
       if (!symbol_table_.find_symbol("tag-" + class_name))
       {
-        const auto &class_node = find_class((*ast_json)["body"], class_name);
+        const auto class_node = json_utils::find_class((*ast_json)["body"], class_name);
         if (!class_node.empty())
         {
           std::string current_class = current_class_name_;
