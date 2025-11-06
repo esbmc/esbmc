@@ -270,10 +270,16 @@ symbol_id function_call_builder::build_function_id() const
       }
       if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
-        var_type == "set" || var_type == "dict" || var_type.empty())
-        func_name = kGetObjectSize;
-      else if (var_type == "str")
+        var_type == "set" || var_type == "dict")
       {
+        func_name = kGetObjectSize;
+      }
+      else if (var_type == "str" || var_type.empty())
+      {
+        // For string types (including optional strings), always use strlen
+        // This handles both str and Optional[str] (pointer to array) cases
+        func_name = kStrlen;
+
         // Check if this is a single character by looking up the variable
         symbol_id var_sid(
           python_file, current_class_name, current_function_name);

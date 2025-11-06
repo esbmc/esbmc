@@ -2023,21 +2023,6 @@ exprt function_call_expr::handle_general_function_call()
       arg = converter_.get_string_builder().build_string_literal(str_value);
     }
 
-    // Check for zero-sized array pointer being passed to get_object_size or len
-    // This represents None/NULL in Python's optional types (e.g., str | None = None)
-    if (
-      (function_id_.get_function() == "__ESBMC_get_object_size" ||
-       function_id_.get_function() == "len") &&
-      arg.type().is_pointer() && arg.type().subtype().is_array())
-    {
-      const array_typet &arr_type = to_array_type(arg.type().subtype());
-      // Check if array size is constant and equals zero
-      if (
-        arr_type.size().is_constant() &&
-        to_constant_expr(arr_type.size()).is_zero())
-        return from_integer(0, long_long_int_type());
-    }
-
     if (
       function_id_.get_function() == "__ESBMC_get_object_size" &&
       (arg.type() == type_handler_.get_list_type() ||
