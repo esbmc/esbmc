@@ -4639,14 +4639,14 @@ void python_converter::get_class_definition(
     }
   }
 
-  // Only generate default constructor like __init__(self) -> None if:
+  // Only generate default constructor like __init__(self) -> constructor if:
   // 1. Class has no __init__ method AND
   // 2. Class has no user-defined base class (to avoid overriding inherited constructor)
   if (!has_init && !has_user_defined_base)
   {
-    // Generate a default constructor: __init__(self) -> None
+    // Generate a default constructor: __init__(self) -> constructor
     code_typet function_type;
-    function_type.return_type() = none_type();
+    function_type.return_type() = typet("constructor");
 
     code_typet::argumentt self_param;
     self_param.type() = gen_pointer_type(clazz);
