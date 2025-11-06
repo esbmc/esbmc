@@ -4428,38 +4428,20 @@ void python_converter::get_class_definition(
   clazz.tag(current_class_name_);
   std::string id = "tag-" + current_class_name_;
 
+  if (symbol_table_.find_symbol(id) != nullptr)
+    return;
+
   locationt location_begin = get_location_from_decl(class_node);
   std::string module_name = location_begin.get_file().as_string();
 
-  // Check if the symbol is already added to the context
-  symbolt *added_symbol = symbol_table_.find_symbol(id);
-  if (!added_symbol)
-  {
-    /* First add an incomplete type to handle recursive references */
-    struct_typet incomplete_type;
-    incomplete_type.tag(current_class_name_);
-    incomplete_type.incomplete(true);
+  // Add class to symbol table
+  symbolt symbol =
+    create_symbol(module_name, current_class_name_, id, location_begin, clazz);
+  symbol.is_type = true;
 
-    symbolt symbol = create_symbol(
-      module_name, current_class_name_, id, location_begin, incomplete_type);
-    symbol.is_type = true;
-
-    // Add incomplete type before processing members (for recursive references)
-    added_symbol = symbol_table_.move_symbol_to_context(symbol);
-  }
-
-  assert(added_symbol->is_type);
-
-  /* Avoid infinite recursion: skip if already complete or being defined */
-  if (!added_symbol->type.incomplete())
-    return;
-
-  // Mark as processing to prevent recursion
-  added_symbol->type.remove(irept::a_incomplete);
+  symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
   // Iterate over base classes
-  // Track if class has user-defined base classes for later constructor generation logic
-  bool has_user_defined_base = false;
   irept::subt &base_ids = clazz.add("bases").get_sub();
   for (auto &base_class : class_node["bases"])
   {
@@ -4471,9 +4453,6 @@ void python_converter::get_class_definition(
       type_utils::is_builtin_type(base_class_name) ||
       type_utils::is_consensus_type(base_class_name))
       continue;
-
-    // Mark that this class has a user-defined base
-    has_user_defined_base = true;
 
     // Get class definition from symbols table
     symbolt *class_symbol = symbol_table_.find_symbol("tag-" + base_class_name);
@@ -4542,63 +4521,7 @@ void python_converter::get_class_definition(
       class_attr_symbol->static_lifetime = true;
     }
   }
-
-  // Check if the class has an __init__ method
-  // If not, generate a default constructor (but only if no base class is present,
-  // as derived classes should inherit the base constructor)
-  bool has_init = false;
-  for (const auto &method : clazz.methods())
-  {
-    if (method.get_name() == current_class_name_)
-    {
-      has_init = true;
-      break;
-    }
-  }
-
-  // Only generate default constructor like __init__(self) -> None if:
-  // 1. Class has no __init__ method AND
-  // 2. Class has no user-defined base class (to avoid overriding inherited constructor)
-  if (!has_init && !has_user_defined_base)
-  {
-    // Generate a default constructor: __init__(self) -> None
-    code_typet function_type;
-    function_type.return_type() = none_type();
-
-    code_typet::argumentt self_param;
-    self_param.type() = gen_pointer_type(clazz);
-    self_param.cmt_base_name("self");
-    function_type.arguments().push_back(self_param);
-
-    locationt location = get_location_from_decl(class_node);
-    std::string module_name = location.get_file().as_string();
-
-    symbol_id sid;
-    sid.set_filename(module_name);
-    sid.set_class(current_class_name_);
-    sid.set_function(current_class_name_);
-
-    // Use helper function to create symbol with standard fields
-    symbolt constructor_symbol = create_symbol(
-      module_name,
-      current_class_name_,
-      sid.to_string(),
-      location,
-      function_type);
-    constructor_symbol.value = code_blockt(); // Empty body
-    constructor_symbol.lvalue = true;
-
-    symbol_table_.add(constructor_symbol);
-
-    // Add the constructor to the class methods list
-    struct_typet::componentt method(
-      constructor_symbol.name, constructor_symbol.type);
-    clazz.methods().push_back(method);
-  }
-
-  // Update with complete type (two-phase: incomplete -> complete)
   added_symbol->type = clazz;
-
   current_class_name_.clear();
 }
 
