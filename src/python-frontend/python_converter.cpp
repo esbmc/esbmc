@@ -4603,7 +4603,8 @@ void python_converter::get_class_definition(
       const std::string &class_name = class_member["annotation"]["id"];
       if (!symbol_table_.find_symbol("tag-" + class_name))
       {
-        const auto &class_node = json_utils::find_class((*ast_json)["body"], class_name);
+        const auto &class_node =
+          json_utils::find_class((*ast_json)["body"], class_name);
         if (!class_node.empty())
         {
           std::string current_class = current_class_name_;
@@ -5463,7 +5464,8 @@ void python_converter::convert()
     // Convert classes referenced by the function
     for (const auto &clazz : global_scope_.classes())
     {
-      const auto &class_node = json_utils::find_class((*ast_json)["body"], clazz);
+      const auto &class_node =
+        json_utils::find_class((*ast_json)["body"], clazz);
       get_class_definition(class_node, block);
       current_class_name_.clear();
     }
@@ -5483,7 +5485,8 @@ void python_converter::convert()
         arg.contains("annotation") && !arg["annotation"].is_null() &&
         arg["annotation"].contains("id"))
       {
-        auto node =  json_utils::find_class((*ast_json)["body"], arg["annotation"]["id"]);
+        auto node =
+          json_utils::find_class((*ast_json)["body"], arg["annotation"]["id"]);
         if (!node.empty())
           get_class_definition(node, block);
       }
