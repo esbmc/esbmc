@@ -83,10 +83,6 @@
       <includesfile>$HOME/sv-benchmarks/c/Hardness.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
     </tasks>
-    <tasks name="ReachSafety-Fuzzle">
-      <includesfile>$HOME/sv-benchmarks/c/Fuzzle.set</includesfile>
-      <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
-    </tasks>
 
     <tasks name="ConcurrencySafety-Main">
       <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
@@ -287,6 +283,46 @@
     <tasks name="SoftwareSystems-DeviceDriversLinux64-Termination">
       <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/termination.prp</propertyfile>
+    </tasks>
+</rundefinition>
+
+<rundefinition name="SV-COMP26_unreach-call_demo">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
+
+    <tasks name="ReachSafety-Huawei-Concurrency-Challenges">
+      <includesfile>$HOME/sv-benchmarks/c/Huawei-Concurrency-Challenges.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+    </tasks>
+</rundefinition>
+
+<rundefinition name="SV-COMP26_no-data-race_demo">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
+
+    <tasks name="NoDataRace-Huawei-Concurrency-Challenges">
+      <includesfile>$HOME/sv-benchmarks/c/Huawei-Concurrency-Challenges.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/no-data-race.prp</propertyfile>
+    </tasks>
+</rundefinition>
+
+<rundefinition name="SV-COMP26_valid-memsafety_demo">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
+
+    <tasks name="MemSafety-Huawei-Concurrency-Challenges">
+      <includesfile>$HOME/sv-benchmarks/c/Huawei-Concurrency-Challenges.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
+    </tasks>
+</rundefinition>
+
+<rundefinition name="SV-COMP26_no-overflow_demo">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
+
+    <tasks name="NoOverflows-Huawei-Concurrency-Challenges">
+      <includesfile>$HOME/sv-benchmarks/c/Huawei-Concurrency-Challenges.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/no-overflow.prp</propertyfile>
     </tasks>
 </rundefinition>
 
