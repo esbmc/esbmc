@@ -12,6 +12,7 @@ class Preprocessor(ast.NodeTransformer):
         self.range_loop_counter = 0  # Counter for unique variable names in nested range loops
         self.iterable_loop_counter = 0  # Counter for unique variable names in nested iterable loops
         self.helper_functions_added = False  # Track if helper functions have been added
+        self.functionKwonlyParams = {}
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -1062,6 +1063,7 @@ class Preprocessor(ast.NodeTransformer):
         # Determine if this is a method call or function call
         functionName = None
         expectedArgs = None
+        kwonlyArgs = []
 
         if isinstance(node.func, ast.Attribute):
             # Handle method calls (e.g., obj.method())
@@ -1070,11 +1072,15 @@ class Preprocessor(ast.NodeTransformer):
                 functionName = method_name
                 # For method calls, skip 'self' parameter (first parameter)
                 expectedArgs = self.functionParams[method_name][1:]
+                # Get keyword-only args if stored
+                kwonlyArgs = getattr(self, 'functionKwonlyParams', {}).get(method_name, [])
         elif isinstance(node.func, ast.Name):
             # Handle regular function calls
             if node.func.id in self.functionParams:
                 functionName = node.func.id
                 expectedArgs = self.functionParams[functionName]
+                # Get keyword-only args if stored
+                kwonlyArgs = getattr(self, 'functionKwonlyParams', {}).get(functionName, [])
 
         # If not a tracked function/method, just visit and return
         if functionName is None or expectedArgs is None:
@@ -1090,6 +1096,23 @@ class Preprocessor(ast.NodeTransformer):
 
         # return early if correct no. or too many parameters
         if len(node.args) >= len(expectedArgs):
+            # Still need to check keyword-only arguments
+            missing_kwonly = []
+            for kwarg in kwonlyArgs:
+                if kwarg not in keywords and (functionName, kwarg) not in self.functionDefaults:
+                    missing_kwonly.append(kwarg)
+
+            if missing_kwonly:
+                if len(missing_kwonly) == 1:
+                    raise TypeError(
+                        f"{functionName}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'"
+                    )
+                else:
+                    args_str = ' and '.join([f"'{arg}'" for arg in missing_kwonly])
+                    raise TypeError(
+                        f"{functionName}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
+                    )
+
             self.generic_visit(node)
             return node
 
@@ -1107,6 +1130,12 @@ class Preprocessor(ast.NodeTransformer):
             if expectedArgs[i] not in keywords and (functionName, expectedArgs[i]) not in self.functionDefaults:
                 missing_args.append(expectedArgs[i])
 
+        # Check for missing keyword-only arguments
+        missing_kwonly = []
+        for kwarg in kwonlyArgs:
+            if kwarg not in keywords and (functionName, kwarg) not in self.functionDefaults:
+                missing_kwonly.append(kwarg)
+
         # If there are missing arguments, raise TypeError before processing defaults
         if missing_args:
             if len(missing_args) == 1:
@@ -1117,6 +1146,17 @@ class Preprocessor(ast.NodeTransformer):
                 args_str = ' and '.join([f"'{arg}'" for arg in missing_args])
                 raise TypeError(
                     f"{functionName}() missing {len(missing_args)} required positional arguments: {args_str}"
+                )
+
+        if missing_kwonly:
+            if len(missing_kwonly) == 1:
+                raise TypeError(
+                    f"{functionName}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'"
+                )
+            else:
+                args_str = ' and '.join([f"'{arg}'" for arg in missing_kwonly])
+                raise TypeError(
+                    f"{functionName}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
                 )
 
         # append defaults
@@ -1143,8 +1183,11 @@ class Preprocessor(ast.NodeTransformer):
         # Preserve order of parameters
         self.functionParams[node.name] = [i.arg for i in node.args.args]
 
+        # Store keyword-only parameters
+        self.functionKwonlyParams[node.name] = [i.arg for i in node.args.kwonlyargs]
+
         # escape early if no defaults defined
-        if len(node.args.defaults) < 1:
+        if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
             self.generic_visit(node)
             return node
         return_nodes = []
@@ -1159,6 +1202,17 @@ class Preprocessor(ast.NodeTransformer):
                 elif isinstance(node.args.defaults[-i],ast.Name):
                     assignment_node, target_var = self.generate_variable_copy(node.name,node.args.args[-i],node.args.defaults[-i])
                     self.functionDefaults[(node.name, node.args.args[-i].arg)] = target_var
+                    return_nodes.append(assignment_node)
+
+        # Handle keyword-only defaults
+        for i, default in enumerate(node.args.kw_defaults):
+            if default is not None:
+                kwarg_name = node.args.kwonlyargs[i].arg
+                if isinstance(default, ast.Constant):
+                    self.functionDefaults[(node.name, kwarg_name)] = default.value
+                elif isinstance(default, ast.Name):
+                    assignment_node, target_var = self.generate_variable_copy(node.name, node.args.kwonlyargs[i], default)
+                    self.functionDefaults[(node.name, kwarg_name)] = target_var
                     return_nodes.append(assignment_node)
 
         self.generic_visit(node)
