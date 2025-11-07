@@ -4446,6 +4446,16 @@ void python_converter::process_forward_reference(
     // Skip built-in types
     if (type_utils::is_builtin_type(referenced_class))
       return;
+
+    // this format should fail: def foo(self) -> Bar:
+    // Bar is not defined yet, so this should fail.
+    // If the symbol already exists, no further processing is needed
+    // TODO: add the delay annotation support for import __future__ annotations.
+    const std::string class_id = "tag-" + referenced_class;
+    if (symbol_table_.find_symbol(class_id))
+      return;
+
+    return;
   }
   else
   {
