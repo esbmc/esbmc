@@ -759,7 +759,7 @@ exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
   const struct_typet &struct_type = to_struct_type(expr.type());
   std::string tag = struct_type.tag().as_string();
 
-  if (tag.find("tag-Optional_") == 0)
+  if (tag.starts_with("tag-Optional_"))
   {
     // Extract the value field
     member_exprt value_field(expr, "value", struct_type.components()[1].type());
@@ -786,7 +786,7 @@ exprt python_converter::handle_none_comparison(
     const struct_typet &struct_type = to_struct_type(lhs.type());
     std::string tag = struct_type.tag().as_string();
 
-    if (tag.find("tag-Optional_") == 0)
+    if (tag.starts_with("tag-Optional_"))
     {
       // This is an Optional type, check the is_none field
       member_exprt is_none_field(lhs, "is_none", bool_type());
@@ -807,7 +807,7 @@ exprt python_converter::handle_none_comparison(
     const struct_typet &struct_type = to_struct_type(rhs.type());
     std::string tag = struct_type.tag().as_string();
 
-    if (tag.find("tag-Optional_") == 0)
+    if (tag.starts_with("tag-Optional_"))
     {
       // This is an Optional type, check the is_none field
       member_exprt is_none_field(rhs, "is_none", bool_type());
@@ -4018,12 +4018,14 @@ typet python_converter::get_type_from_annotation(
     // Count the number of distinct type names in the union
     std::set<std::string> type_names;
     std::function<void(const nlohmann::json &)> collect_types;
+    bool contains_none = false;
     collect_types = [&](const nlohmann::json &node) {
       if (
         node.contains("_type") && node["_type"] == "Constant" &&
         node.contains("value") && node["value"].is_null())
       {
         // This is None, skip it
+        contains_none = true;
         return;
       }
       if (node.contains("id"))
@@ -4037,7 +4039,7 @@ typet python_converter::get_type_from_annotation(
     collect_types(annotation_node);
 
     // If we have multiple types (excluding None), use pointer
-    if (type_names.size() > 1)
+    if (type_names.size() > 1 && contains_none)
       return pointer_type();
 
     // Single type + None: use Optional wrapper for primitives only
@@ -4276,27 +4278,7 @@ void python_converter::process_function_arguments(
   if (args_node.contains("kwonlyargs") && !args_node["kwonlyargs"].is_null())
   {
     for (const nlohmann::json &element : args_node["kwonlyargs"])
-    {
       process_argument(element);
-
-      // If parameter has Optional type and default None, store this info
-      if (element.contains("annotation"))
-      {
-        typet arg_type =
-          get_type_from_annotation(element["annotation"], element);
-
-        if (arg_type.is_struct())
-        {
-          const struct_typet &struct_type = to_struct_type(arg_type);
-          if (struct_type.tag().as_string().find("tag-Optional_") == 0)
-          {
-            // This is an Optional parameter
-            // If it has default=None, we need to handle omitted arguments
-            // Store parameter info for later use
-          }
-        }
-      }
-    }
   }
 }
 

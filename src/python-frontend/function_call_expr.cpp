@@ -2040,7 +2040,7 @@ exprt function_call_expr::handle_general_function_call()
         const struct_typet &struct_type = to_struct_type(param_type);
         std::string tag = struct_type.tag().as_string();
 
-        if (tag.find("tag-Optional_") == 0)
+        if (tag.starts_with("tag-Optional_"))
         {
           // Wrap the argument in Optional struct
           arg = converter_.wrap_in_optional(arg, param_type);
