@@ -2940,9 +2940,10 @@ void python_converter::get_var_assign(
   const auto &target_type = target["_type"];
 
   // this is used to handle forward references
-  if (ast_node.contains("value") &&   
-    ast_node["value"]["_type"] == "Call" &&  
-    type_handler_.is_constructor_call(ast_node["value"]))  
+  if (
+    ast_node.contains("value") && !ast_node["value"].is_null() &&
+    ast_node["value"]["_type"] == "Call" &&
+    type_handler_.is_constructor_call(ast_node["value"]))
     {  
       process_forward_reference(ast_node["value"]["func"], target_block);  
     }
