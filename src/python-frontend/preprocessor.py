@@ -924,6 +924,13 @@ class Preprocessor(ast.NodeTransformer):
         if not isinstance(call_node.func, ast.Name):
             return 'Any'
 
+        # Check if this is a class instantiation (constructor call)
+        func_name = call_node.func.id
+
+        # If the function name starts with uppercase, it's likely a class constructor
+        if func_name and func_name[0].isupper():
+            return func_name
+
         call_type_map = {
             'range': 'range',
             'list': 'list',
@@ -932,7 +939,6 @@ class Preprocessor(ast.NodeTransformer):
             'tuple': 'tuple'
         }
 
-        func_name = call_node.func.id
         return call_type_map.get(func_name, 'Any')
 
     def _copy_location_info(self, source_node, target_node):
@@ -1105,27 +1111,27 @@ class Preprocessor(ast.NodeTransformer):
                 raise SyntaxError(f"Keyword argument repeated:{i.arg}",(self.module_name,i.lineno,i.col_offset,""))
             keywords[i.arg] = i.value
 
+        # Check for missing keyword-only arguments FIRST (before checking positional arg count)
+        missing_kwonly = []
+        for kwarg in kwonlyArgs:
+            if kwarg not in keywords and (functionName, kwarg) not in self.functionDefaults:
+                missing_kwonly.append(kwarg)
+
+        if missing_kwonly:
+            # Use just the method name for error messages
+            display_name = functionName.split('.')[-1] if '.' in functionName else functionName
+            if len(missing_kwonly) == 1:
+                raise TypeError(
+                    f"{display_name}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'"
+                )
+            else:
+                args_str = ' and '.join([f"'{arg}'" for arg in missing_kwonly])
+                raise TypeError(
+                    f"{display_name}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
+                )
+
         # return early if correct no. or too many parameters
         if len(node.args) >= len(expectedArgs):
-            # Still need to check keyword-only arguments
-            missing_kwonly = []
-            for kwarg in kwonlyArgs:
-                if kwarg not in keywords and (functionName, kwarg) not in self.functionDefaults:
-                    missing_kwonly.append(kwarg)
-
-            if missing_kwonly:
-                # Use just the method name for error messages
-                display_name = functionName.split('.')[-1] if '.' in functionName else functionName
-                if len(missing_kwonly) == 1:
-                    raise TypeError(
-                        f"{display_name}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'"
-                    )
-                else:
-                    args_str = ' and '.join([f"'{arg}'" for arg in missing_kwonly])
-                    raise TypeError(
-                        f"{display_name}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
-                    )
-
             self.generic_visit(node)
             return node
 
@@ -1143,12 +1149,6 @@ class Preprocessor(ast.NodeTransformer):
             if expectedArgs[i] not in keywords and (functionName, expectedArgs[i]) not in self.functionDefaults:
                 missing_args.append(expectedArgs[i])
 
-        # Check for missing keyword-only arguments
-        missing_kwonly = []
-        for kwarg in kwonlyArgs:
-            if kwarg not in keywords and (functionName, kwarg) not in self.functionDefaults:
-                missing_kwonly.append(kwarg)
-
         # Use just the method name for error messages
         display_name = functionName.split('.')[-1] if '.' in functionName else functionName
 
@@ -1162,17 +1162,6 @@ class Preprocessor(ast.NodeTransformer):
                 args_str = ' and '.join([f"'{arg}'" for arg in missing_args])
                 raise TypeError(
                     f"{display_name}() missing {len(missing_args)} required positional arguments: {args_str}"
-                )
-
-        if missing_kwonly:
-            if len(missing_kwonly) == 1:
-                raise TypeError(
-                    f"{display_name}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'"
-                )
-            else:
-                args_str = ' and '.join([f"'{arg}'" for arg in missing_kwonly])
-                raise TypeError(
-                    f"{display_name}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
                 )
 
         # append defaults
