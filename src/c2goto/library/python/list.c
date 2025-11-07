@@ -170,23 +170,7 @@ Legend:
 ===============================================================================
 */
 
-typedef struct
-{
-  const void *value; // data pointer
-  size_t type_id;    // hashed type name
-  size_t size;       // number of bytes in value
-} Object;
 
-typedef struct
-{
-  Object *items;
-  size_t size; // elements in use
-} List;
-
-void __ESBMC_create_list()
-{
-  assert(0);
-};
 
 /** Based on CPython, the idea is to use a PyObject containing type information
  *  while each actual object is explicitly defined.
@@ -224,15 +208,34 @@ typedef struct
   __ESBMC_generic_object **ob_item; // Infinite list of elements
 } __ESBMC_list_object;
 
+
+typedef struct
+{
+  const void *value; // data pointer
+  size_t type_id;    // hashed type name
+  size_t size;       // number of bytes in value
+
+} Object;
+
+typedef struct
+{
+  Object *items;
+  size_t size; // elements in use
+  //  __ESBMC_type_object *type;
+} List;
+
+Object* __ESBMC_create_inf_obj()
+{
+  return NULL;
+};
+
 /* ---------- create ---------- */
-static inline List *list_create(Object *backing)
+List *__ESBMC_list_create()
 {
   List *l = __ESBMC_alloca(sizeof(List));
-
-  __ESBMC_assume(l != NULL);
-
-  l->items = backing;
+  l->items = __ESBMC_create_inf_obj();
   l->size = 0;
+ // l->type = &__ESBMC_list_type;
   return l;
 }
 

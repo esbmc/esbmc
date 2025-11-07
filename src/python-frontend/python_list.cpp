@@ -380,28 +380,10 @@ symbolt &python_list::create_list()
   locationt location = converter_.get_location_from_decl(list_value_);
   const type_handler &type_handler = converter_.get_type_handler();
 
-  // Create infinite array type for list storage
-  const array_typet inf_array_type(
-    type_handler.get_list_element_type(), exprt("infinity", size_type()));
-
-  exprt inf_array_value =
-    gen_zero(get_complete_type(inf_array_type, converter_.ns), true);
-
-  // Create and configure infinite array symbol
-  symbolt &inf_array_symbol = converter_.create_tmp_symbol(
-    list_value_, "$storage$", inf_array_type, inf_array_value);
-  inf_array_symbol.value.zero_initializer(true);
-  inf_array_symbol.static_lifetime = true;
-
-  // Declare infinite array
-  code_declt inf_array_decl(symbol_expr(inf_array_symbol));
-  inf_array_decl.location() = location;
-  converter_.add_instruction(inf_array_decl);
-
   // Create list symbol
   const typet list_type = type_handler.get_list_type();
   symbolt &list_symbol =
-    converter_.create_tmp_symbol(list_value_, "$list$", list_type, exprt());
+    converter_.create_tmp_symbol(list_value_, "$py_list$", list_type, exprt());
 
   // Declare list
   code_declt list_decl(symbol_expr(list_symbol));
@@ -410,19 +392,13 @@ symbolt &python_list::create_list()
 
   // Initialize list with storage array
   const symbolt *create_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_create");
-  if (!create_func_sym)
-  {
-    throw std::runtime_error("List creation function symbol not found");
-  }
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_create");
+  assert(create_func_sym);
 
   // Add list_create call to the block
   code_function_callt list_create_func_call;
   list_create_func_call.function() = symbol_expr(*create_func_sym);
   list_create_func_call.lhs() = symbol_expr(list_symbol);
-  list_create_func_call.arguments().push_back(
-    converter_.get_string_handler().get_array_base_address(
-      symbol_expr(inf_array_symbol)));
   list_create_func_call.type() = list_type;
   list_create_func_call.location() = location;
   converter_.add_instruction(list_create_func_call);

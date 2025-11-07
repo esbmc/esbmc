@@ -968,6 +968,61 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  // PythonList methods
+  if (has_prefix(symname, "c:@F@__ESBMC_list"))
+  {
+      bump_call(func_call, symname);
+      return;
+  }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_obj"))
+  {
+
+    assert(func_call.operands.size() == 0 && "Wrong signature");
+    log_status("Creating a list");
+
+    unsigned int &dynamic_counter = get_dynamic_counter();
+    dynamic_counter++;
+
+    symbolt symbol;
+    symbol.name = "static_" + i2string(dynamic_counter) + "_list";
+    symbol.id = std::string("symex_static::list::") + id2string(symbol.name);
+    symbol.lvalue = true;
+    symbol.type.dynamic(false);
+    symbol.static_lifetime = true;
+    
+    const char *list_object_id = "tag-struct __anon_typedef_Object_at_";
+    static const symbolt *list_object_symbol = nullptr;
+    
+    new_context.foreach_operand(
+      [&list_object_id](const symbolt &s)
+      {
+        const std::string &symbol_id = s.id.as_string();
+        if (symbol_id.find(list_object_id) != std::string::npos)
+        {
+          list_object_symbol = &s;
+        }
+      });
+
+    type2tc obj_type = migrate_type(list_object_symbol->type);
+    type2tc t = array_type2tc(obj_type, expr2tc(), true);
+    
+    symbol.type = migrate_type_back(t);
+    symbol.mode = "C";
+    symbol.type.set(
+    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+
+    new_context.add(symbol);
+
+    // var = {0}
+    expr2tc inf_array_sym = symbol2tc(t, symbol.id);
+    expr2tc ptr_obj = address_of2tc(get_empty_type(), inf_array_sym);
+
+    symex_assign(
+      code_assign2tc(func_call.ret, ptr_obj), false, cur_state->guard);
+    return;
+  }
+
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
     "The name in question: {}\n"
