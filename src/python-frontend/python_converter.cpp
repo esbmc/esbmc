@@ -900,8 +900,12 @@ exprt python_converter::handle_str_join(const nlohmann::json &call_json)
     // Edge case: empty list returns empty string
     if (elements.empty())
     {
-      typet empty_str = type_handler_.get_typet("str", 1);
-      return gen_zero(empty_str);
+      // Create a proper null-terminated empty string
+      typet empty_string_type = type_handler_.build_array(char_type(), 1);
+      exprt empty_str = gen_zero(empty_string_type);
+      // Explicitly set the first (and only) element to null terminator
+      empty_str.operands().at(0) = from_integer(0, char_type());
+      return empty_str;
     }
 
     // Convert JSON elements to ESBMC expressions
