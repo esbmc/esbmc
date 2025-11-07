@@ -1687,6 +1687,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       return handle_str_join(element);
     }
   }
+  
+  // Check for forward-referenced constructor calls  
+  if (type_handler_.is_constructor_call(element))  
+  {  
+    code_blockt temp_block;  
+    process_forward_reference(element["func"], temp_block);  
+  }
 
   // Handle indirect calls through function pointer variables
   if (element["func"]["_type"] == "Name")
@@ -2931,6 +2938,14 @@ void python_converter::get_var_assign(
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
   const auto &target_type = target["_type"];
+
+  // this is used to handle forward references
+  if (ast_node.contains("value") &&   
+    ast_node["value"]["_type"] == "Call" &&  
+    type_handler_.is_constructor_call(ast_node["value"]))  
+    {  
+      process_forward_reference(ast_node["value"]["func"], target_block);  
+    }
 
   if (ast_node["_type"] == "AnnAssign")
   {
@@ -4443,8 +4458,9 @@ void python_converter::process_forward_reference(
   {
     referenced_class = annotation["id"].get<std::string>();
 
-    // Skip built-in types
-    if (type_utils::is_builtin_type(referenced_class))
+    if (
+      type_utils::is_builtin_type(referenced_class) ||
+      type_utils::is_consensus_type(referenced_class))
       return;
   }
   else
@@ -4464,8 +4480,10 @@ void python_converter::process_forward_reference(
   if (!ref_class_node.empty())
   {
     std::string saved_class = current_class_name_;
+    std::string saved_func = current_func_name_;
     get_class_definition(ref_class_node, target_block);
     current_class_name_ = saved_class;
+    current_func_name_ = saved_func;
   }
 }
 
@@ -4550,32 +4568,6 @@ void python_converter::get_class_definition(
   }
   added_symbol->type = clazz;
 
-  // Pre-scan for forward references
-  for (auto &class_member : class_node["body"])
-  {
-    if (class_member["_type"] != "FunctionDef")
-      continue;
-
-    // Scan return type annotations for forward references
-    if (!class_member["returns"].is_null())
-    {
-      process_forward_reference(class_member["returns"], target_block);
-    }
-
-    // Scan parameter type annotations for forward references
-    if (class_member.contains("args") && class_member["args"].contains("args"))
-    {
-      for (const auto &arg : class_member["args"]["args"])
-      {
-        if (arg.contains("annotation") && !arg["annotation"].is_null())
-        {
-          process_forward_reference(arg["annotation"], target_block);
-        }
-      }
-    }
-  }
-
-  // Continue processing class members
   for (auto &class_member : class_node["body"])
   {
     // Process methods
