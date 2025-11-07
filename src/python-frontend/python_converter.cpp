@@ -751,61 +751,95 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
+exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
+{
+  if (!expr.type().is_struct())
+    return expr;
+
+  const struct_typet &struct_type = to_struct_type(expr.type());
+  std::string tag = struct_type.tag().as_string();
+
+  if (tag.starts_with("tag-Optional_"))
+  {
+    // Extract the value field
+    member_exprt value_field(expr, "value", struct_type.components()[1].type());
+    return value_field;
+  }
+
+  return expr;
+}
+
 exprt python_converter::handle_none_comparison(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs)
 {
-  bool is_eq = (op == "Eq" || op == "Is");
+  const bool is_eq = (op == "Eq" || op == "Is");
+  const bool lhs_is_none = (lhs.type() == none_type());
+  const bool rhs_is_none = (rhs.type() == none_type());
 
-  // Check if we're comparing None with a different type (not None)
-  bool lhs_is_none = (lhs.type() == none_type());
-  bool rhs_is_none = (rhs.type() == none_type());
+  auto handle_optional_side =
+    [&](const exprt &side, bool other_is_none) -> std::optional<exprt> {
+    if (side.type().is_struct())
+    {
+      const struct_typet &struct_type = to_struct_type(side.type());
+      const std::string &tag = struct_type.tag().as_string();
+      if (tag.starts_with("tag-Optional_") && other_is_none)
+      {
+        member_exprt is_none_field(side, "is_none", bool_type());
+        if (is_eq)
+          return exprt(is_none_field);
+        else
+          return exprt(not_exprt(is_none_field));
+      }
+    }
+    return std::nullopt;
+  };
 
-  // None vs pointer comparison: create NULL of the correct pointer type.
-  // Rationale: In our C/C++ target environment, Optional[T] (Union[T, None])
-  // are represented as pointers. Comparing None to such types must yield
-  // a NULL pointer comparison rather than a constant fold.
+  // Handle Optional[T] vs None
+  if (!lhs_is_none)
+  {
+    if (auto res = handle_optional_side(lhs, rhs_is_none))
+      return *res;
+  }
+  if (!rhs_is_none)
+  {
+    if (auto res = handle_optional_side(rhs, lhs_is_none))
+      return *res;
+  }
+
+  // Handle None vs pointer comparisons
   if (
     (lhs_is_none && rhs.is_symbol() && rhs.type().is_pointer()) ||
     (rhs_is_none && lhs.is_symbol() && lhs.type().is_pointer()))
   {
-    // Determine which expression is the pointer and select appropriate type
-    // For array subtypes, use the full pointer type; otherwise use the other type
     const bool lhs_is_array_ptr =
       lhs.type().is_pointer() &&
       (lhs.type().subtype().is_array() || lhs.type().subtype() == char_type());
+
     const typet &ptr_type = lhs_is_array_ptr ? lhs.type() : rhs.type();
     const exprt &ptr_expr = lhs_is_array_ptr ? lhs : rhs;
 
-    // Create NULL pointer of the appropriate type
     constant_exprt null_ptr(ptr_type);
     null_ptr.set_value("NULL");
 
-    // Generate equality or inequality comparison
+    equality_exprt eq(ptr_expr, null_ptr);
     if (is_eq)
-      return equality_exprt(ptr_expr, null_ptr);
+      return exprt(eq);
     else
-      return not_exprt(equality_exprt(ptr_expr, null_ptr));
+      return exprt(not_exprt(eq));
   }
 
-  // None vs non-pointer: constant fold to false/true
-  // Rationale: Non-pointer types in our C/C++ backend (int, bool, float, etc.)
-  // cannot be None - they are concrete values. Therefore, None == <value> is
-  // always false, and None != <value> is always true.
-  // Limitation: This does not model Python objects with custom __eq__ overloads,
-  // as we're targeting static C/C++ semantics, not full Python dynamic dispatch.
-  if (lhs_is_none && !rhs_is_none)
-    return is_eq ? gen_boolean(0) : gen_boolean(1);
-  if (rhs_is_none && !lhs_is_none)
-    return is_eq ? gen_boolean(0) : gen_boolean(1);
+  // Handle None vs non-pointer constant folding
+  if ((lhs_is_none && !rhs_is_none) || (rhs_is_none && !lhs_is_none))
+    return gen_boolean(!is_eq);
 
-  // Both are None type: do actual pointer comparison
-  // This handles None == None (true) and None != None (false)
+  // Handle None == None and None != None
+  equality_exprt eq(lhs, rhs);
   if (is_eq)
-    return equality_exprt(lhs, rhs);
+    return exprt(eq);
   else
-    return not_exprt(equality_exprt(lhs, rhs));
+    return exprt(not_exprt(eq));
 }
 
 exprt python_converter::handle_str_join(const nlohmann::json &call_json)
@@ -1292,6 +1326,26 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
+  // Don't unwrap for 'is' and 'is not' comparisons - they check the Optional itself
+  bool is_none_check = (op == "Is" || op == "IsNot") &&
+                       (lhs.type() == none_type() || rhs.type() == none_type());
+
+  // Also don't unwrap for == and != with None
+  if (!is_none_check && (op == "Eq" || op == "NotEq"))
+  {
+    bool lhs_is_none = (lhs.type() == none_type());
+    bool rhs_is_none = (rhs.type() == none_type());
+
+    if (lhs_is_none || rhs_is_none)
+      is_none_check = true;
+  }
+
+  if (!is_none_check)
+  {
+    lhs = unwrap_optional_if_needed(lhs);
+    rhs = unwrap_optional_if_needed(rhs);
+  }
+
   // Simplify comparison with NoneType
   if ((lhs.type() == none_type()) || (rhs.type() == none_type()))
   {
@@ -1649,6 +1703,36 @@ bool python_converter::is_imported_module(const std::string &module_name) const
     return true;
 
   return json_utils::is_module(module_name, *ast_json);
+}
+
+exprt python_converter::wrap_in_optional(
+  const exprt &value,
+  const typet &optional_type)
+{
+  assert(optional_type.is_struct());
+  const struct_typet &struct_type = to_struct_type(optional_type);
+
+  // Create struct expression
+  struct_exprt optional_value(struct_type);
+
+  // Set is_none field based on whether value is None
+  exprt is_none_value;
+  if (value.type() == none_type())
+  {
+    is_none_value = gen_boolean(true);
+    // Set value field to zero for None case
+    optional_value.operands().push_back(is_none_value);
+    optional_value.operands().push_back(
+      gen_zero(struct_type.components()[1].type()));
+  }
+  else
+  {
+    is_none_value = gen_boolean(false);
+    optional_value.operands().push_back(is_none_value);
+    optional_value.operands().push_back(value);
+  }
+
+  return optional_value;
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -3910,21 +3994,48 @@ typet python_converter::get_type_from_annotation(
 
     // Treat T | ... | None as Optional[T]
     typet base_type = type_handler_.get_typet(inner_type);
-    // Primitive types (int, float, bool) are treated as value types.
-    // None is represented internally as a sentinel (0), not a pointer.
+
+    // For multi-type unions (e.g., bool | str | None), always use pointer
+    // Count the number of distinct type names in the union
+    std::set<std::string> type_names;
+    std::function<void(const nlohmann::json &)> collect_types;
+    bool contains_none = false;
+    collect_types = [&](const nlohmann::json &node) {
+      if (
+        node.contains("_type") && node["_type"] == "Constant" &&
+        node.contains("value") && node["value"].is_null())
+      {
+        // This is None, skip it
+        contains_none = true;
+        return;
+      }
+      if (node.contains("id"))
+        type_names.insert(node["id"].get<std::string>());
+      if (node.contains("_type") && node["_type"] == "BinOp")
+      {
+        collect_types(node["left"]);
+        collect_types(node["right"]);
+      }
+    };
+    collect_types(annotation_node);
+
+    // If we have multiple types (excluding None), use pointer
+    if (type_names.size() > 1 && contains_none)
+      return pointer_type();
+
+    // Single type + None: use Optional wrapper for primitives only
     if (
       base_type == long_long_int_type() || base_type == long_long_uint_type() ||
       base_type == double_type() || base_type == bool_type())
     {
-      return base_type;
+      return type_handler_.build_optional_type(base_type);
     }
 
     // List types are already pointers
-    // Don't wrap list_type in another pointer; we just return it directly
     if (base_type == type_handler_.get_list_type())
       return base_type;
 
-    // For other types (e.g., classes, lists), use pointer type
+    // For other types (e.g., classes, strings), use pointer type
     return gen_pointer_type(base_type);
   }
   else if (
