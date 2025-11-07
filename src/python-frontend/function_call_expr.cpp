@@ -761,8 +761,19 @@ const symbolt *
 function_call_expr::lookup_python_symbol(const std::string &var_name) const
 {
   std::string filename = function_id_.get_filename();
-  std::string var_symbol = "py:" + filename + "@" + var_name;
+  std::string enclosing_function = converter_.current_function_name();
+
+  // Construct the full symbol identifier with function scope
+  std::string var_symbol =
+    "py:" + filename + "@F@" + enclosing_function + "@" + var_name;
   const symbolt *sym = converter_.find_symbol(var_symbol);
+
+  // If not found in function scope, try module-level scope
+  if (!sym)
+  {
+    var_symbol = "py:" + filename + "@" + var_name;
+    sym = converter_.find_symbol(var_symbol);
+  }
 
   if (!sym)
   {
