@@ -79,7 +79,8 @@ void rw_sett::read_write_rec(
     const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
     if (symbol)
     {
-      if (!symbol->static_lifetime && !dereferenced)
+      if (
+        (!symbol->static_lifetime && !dereferenced) || symbol->is_thread_local)
       {
         return; // ignore for now
       }

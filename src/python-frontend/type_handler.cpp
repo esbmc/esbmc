@@ -254,6 +254,16 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return build_array(long_long_int_type(), type_size);
   }
 
+  // divmod() — returns tuple of (quotient, remainder)
+  // The return type is determined dynamically based on operands
+  // Let handle_divmod create the proper type
+  if (ast_type == "divmod")
+  {
+    // Return empty type - the actual tuple type will be created
+    // in handle_divmod based on the operand types
+    return empty_typet();
+  }
+
   // str: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
@@ -278,6 +288,16 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // so the actual type is inferred from the tuple value
   if (ast_type == "tuple")
     return empty_typet();
+
+  // list — handle list type annotations
+  // For generic "list" without element types, return the list type
+  // so the actual element type is inferred from context
+  if (ast_type == "list")
+    return get_list_type();
+
+  // Reuse list infrastructure for simplicity for now
+  if (ast_type == "set")
+    return get_list_type();
 
   // Custom user-defined types / classes
   if (
@@ -495,50 +515,15 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   return false;
 }
 
-typet type_handler::get_list_type_improved(const nlohmann::json &element)
-{
-  if (!element.contains("elts") || element["elts"].empty())
-    return array_typet(empty_typet(), from_integer(0, size_type()));
-
-  const auto &elements = element["elts"];
-
-  // Check if all elements are string constants
-  bool all_strings = true;
-  size_t max_string_length = 0;
-
-  for (const auto &elem : elements)
-  {
-    if (elem["_type"] == "Constant" && elem["value"].is_string())
-    {
-      std::string str_val = elem["value"].get<std::string>();
-      max_string_length = std::max(
-        max_string_length, str_val.size() + 1); // +1 for null terminator
-    }
-    else
-    {
-      all_strings = false;
-      break;
-    }
-  }
-
-  if (all_strings)
-  {
-    // Create array of string arrays (char arrays)
-    typet string_type = build_array(char_type(), max_string_length);
-    return array_typet(string_type, from_integer(elements.size(), size_type()));
-  }
-
-  // Fallback to original implementation
-  return get_list_type(element);
-}
-
 typet type_handler::get_list_type(const nlohmann::json &list_value) const
 {
   if (
     list_value.is_null() ||
     (list_value.contains("elts") && list_value["elts"].empty()))
   {
-    return build_array(empty_typet(), 0);
+    // For empty containers, return the list type pointer
+    // The actual element type will be determined when elements are added
+    return get_list_type();
   }
 
   if (list_value["_type"] == "arg" && list_value.contains("annotation"))

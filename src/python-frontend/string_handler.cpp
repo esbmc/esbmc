@@ -623,33 +623,47 @@ exprt string_handler::handle_string_endswith(
   exprt suffix_expr = ensure_null_terminated_string(suffix_copy);
 
   // Get string addresses
-  exprt str_addr = get_array_base_address(str_expr);
-  exprt suffix_addr = get_array_base_address(suffix_expr);
+  // Handle both pointer and array types
+  exprt str_addr;
+  exprt suffix_addr;
 
-  // Calculate lengths (exclude null terminators)
-  const array_typet &str_type = to_array_type(str_expr.type());
-  const array_typet &suffix_type = to_array_type(suffix_expr.type());
+  if (str_expr.type().is_pointer())
+    str_addr = str_expr;
+  else
+    str_addr = get_array_base_address(str_expr);
 
-  exprt str_len = str_type.size();
-  exprt suffix_len = suffix_type.size();
+  if (suffix_expr.type().is_pointer())
+    suffix_addr = suffix_expr;
+  else
+    suffix_addr = get_array_base_address(suffix_expr);
 
-  exprt one = from_integer(1, str_len.type());
+  // For length calculation, we need to use strlen for pointer types
+  // Find strlen symbol
+  symbolt *strlen_symbol = symbol_table_.find_symbol("c:@F@strlen");
+  if (!strlen_symbol)
+    throw std::runtime_error("strlen function not found for endswith()");
 
-  // actual_str_len = str_len - 1
-  exprt actual_str_len("-", str_len.type());
-  actual_str_len.copy_to_operands(str_len, one);
+  // Get string length using strlen
+  side_effect_expr_function_callt str_strlen_call;
+  str_strlen_call.function() = symbol_expr(*strlen_symbol);
+  str_strlen_call.arguments() = {str_addr};
+  str_strlen_call.location() = location;
+  str_strlen_call.type() = size_type();
 
-  // actual_suffix_len = suffix_len - 1
-  exprt actual_suffix_len("-", suffix_len.type());
-  actual_suffix_len.copy_to_operands(suffix_len, one);
+  // Get suffix length using strlen
+  side_effect_expr_function_callt suffix_strlen_call;
+  suffix_strlen_call.function() = symbol_expr(*strlen_symbol);
+  suffix_strlen_call.arguments() = {suffix_addr};
+  suffix_strlen_call.location() = location;
+  suffix_strlen_call.type() = size_type();
 
-  // Check if suffix is longer than string: if (suffix_len > str_len) return false
+  // Check if suffix is longer than string
   exprt len_check(">", bool_type());
-  len_check.copy_to_operands(actual_suffix_len, actual_str_len);
+  len_check.copy_to_operands(suffix_strlen_call, str_strlen_call);
 
-  // Calculate offset: str_len - suffix_len
-  exprt offset("-", str_len.type());
-  offset.copy_to_operands(actual_str_len, actual_suffix_len);
+  // Calculate offset: strlen(str) - strlen(suffix)
+  exprt offset("-", size_type());
+  offset.copy_to_operands(str_strlen_call, suffix_strlen_call);
 
   // Get pointer to the position: str + offset
   exprt offset_ptr("+", gen_pointer_type(char_type()));
@@ -660,10 +674,10 @@ exprt string_handler::handle_string_endswith(
   if (!strncmp_symbol)
     throw std::runtime_error("strncmp function not found for endswith()");
 
-  // Call strncmp(str + offset, suffix, len(suffix))
+  // Call strncmp(str + offset, suffix, strlen(suffix))
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {offset_ptr, suffix_addr, actual_suffix_len};
+  strncmp_call.arguments() = {offset_ptr, suffix_addr, suffix_strlen_call};
   strncmp_call.location() = location;
   strncmp_call.type() = int_type();
 
@@ -686,7 +700,26 @@ exprt string_handler::handle_string_isdigit(
   const exprt &string_obj,
   const locationt &location)
 {
-  // Ensure it's a proper null-terminated string
+  // Check if this is a single character
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    // Call Python's single-character version
+    symbolt *isdigit_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_isdigit");
+    if (!isdigit_symbol)
+      throw std::runtime_error(
+        "__python_char_isdigit function not found in symbol table");
+
+    side_effect_expr_function_callt isdigit_call;
+    isdigit_call.function() = symbol_expr(*isdigit_symbol);
+    isdigit_call.arguments().push_back(string_obj);
+    isdigit_call.location() = location;
+    isdigit_call.type() = bool_type();
+
+    return isdigit_call;
+  }
+
+  // For full strings, use the string version
   exprt string_copy = string_obj;
   exprt str_expr = ensure_null_terminated_string(string_copy);
 
@@ -982,4 +1015,87 @@ exprt string_handler::handle_string_membership(
   not_equal.copy_to_operands(strstr_call, null_ptr);
 
   return not_equal;
+}
+
+exprt string_handler::handle_string_islower(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Check if this is a single character
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    // Call Python's single-character version
+    symbolt *islower_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_islower");
+    if (!islower_symbol)
+      throw std::runtime_error(
+        "__python_char_islower function not found in symbol table");
+
+    side_effect_expr_function_callt islower_call;
+    islower_call.function() = symbol_expr(*islower_symbol);
+    islower_call.arguments().push_back(string_obj);
+    islower_call.location() = location;
+    islower_call.type() = bool_type();
+
+    return islower_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *islower_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_islower");
+  if (!islower_str_symbol)
+    throw std::runtime_error("str_islower function not found in symbol table");
+
+  side_effect_expr_function_callt islower_call;
+  islower_call.function() = symbol_expr(*islower_str_symbol);
+  islower_call.arguments().push_back(str_addr);
+  islower_call.location() = location;
+  islower_call.type() = bool_type();
+
+  return islower_call;
+}
+
+exprt string_handler::handle_string_lower(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // For single characters, handle directly
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    symbolt *lower_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_lower");
+    if (!lower_symbol)
+      throw std::runtime_error(
+        "__python_char_lower function not found in symbol table");
+
+    side_effect_expr_function_callt lower_call;
+    lower_call.function() = symbol_expr(*lower_symbol);
+    lower_call.arguments().push_back(string_obj);
+    lower_call.location() = location;
+    lower_call.type() = char_type();
+
+    return lower_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *lower_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_lower");
+  if (!lower_str_symbol)
+    throw std::runtime_error("str_lower function not found in symbol table");
+
+  side_effect_expr_function_callt lower_call;
+  lower_call.function() = symbol_expr(*lower_str_symbol);
+  lower_call.arguments().push_back(str_addr);
+  lower_call.location() = location;
+  lower_call.type() = pointer_typet(char_type());
+
+  return lower_call;
 }

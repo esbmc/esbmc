@@ -132,7 +132,13 @@ bool goto_symext::symex_throw()
 
       if (new_id_number < old_id_number)
       {
-        cur_state->call_stack = old_stack;
+        // Only restore call_stack when re-selecting a better catch handler.
+        // Skip restoration on first match (old_id_number == -1) to avoid unnecessary
+        // deep copy that causes crashes on macOS with Python exceptions.
+        if (old_id_number != (unsigned)-1)
+        {
+          cur_state->call_stack = old_stack;
+        }
         cur_state->guard.make_true();
 
         update_throw_target(except, c_it->second, instruction.code);

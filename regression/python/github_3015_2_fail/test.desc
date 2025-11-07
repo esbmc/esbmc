@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^SyntaxError: Multiple values for argument 'y'$
+

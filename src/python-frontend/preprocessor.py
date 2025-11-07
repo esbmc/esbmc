@@ -12,6 +12,7 @@ class Preprocessor(ast.NodeTransformer):
         self.range_loop_counter = 0  # Counter for unique variable names in nested range loops
         self.iterable_loop_counter = 0  # Counter for unique variable names in nested iterable loops
         self.helper_functions_added = False  # Track if helper functions have been added
+        self.functionKwonlyParams = {}
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -770,11 +771,24 @@ class Preprocessor(ast.NodeTransformer):
     def _create_length_assignment(self, node, iter_var_name, length_var='ESBMC_length'):
         """Create ESBMC_length assignment with custom name."""
         length_target = self.create_name_node(length_var, ast.Store(), node)
-        len_func = self.create_name_node('len', ast.Load(), node)
+        int_annotation = self.create_name_node('int', ast.Load(), node)
+
+        # Determine annotation type
+        annotation_id = self._get_iterable_type_annotation(node.iter)
+
+        # For list/set/dict types (pointers), use __ESBMC_get_object_size
+        # For strings (arrays), use len()
+        if annotation_id in ['list', 'set', 'dict']:
+            # Use __ESBMC_get_object_size for pointer-based collections
+            len_func = self.create_name_node('__ESBMC_get_object_size', ast.Load(), node)
+        else:
+            # Use len() for strings and other types
+            len_func = self.create_name_node('len', ast.Load(), node)
+
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
         self.ensure_all_locations(len_call, node)
-        int_annotation = self.create_name_node('int', ast.Load(), node)
+
         length_assign = ast.AnnAssign(
             target=length_target,
             annotation=int_annotation,
@@ -910,6 +924,13 @@ class Preprocessor(ast.NodeTransformer):
         if not isinstance(call_node.func, ast.Name):
             return 'Any'
 
+        # Check if this is a class instantiation (constructor call)
+        func_name = call_node.func.id
+
+        # If the function name starts with uppercase, it's likely a class constructor
+        if func_name and func_name[0].isupper():
+            return func_name
+
         call_type_map = {
             'range': 'range',
             'list': 'list',
@@ -918,7 +939,6 @@ class Preprocessor(ast.NodeTransformer):
             'tuple': 'tuple'
         }
 
-        func_name = call_node.func.id
         return call_type_map.get(func_name, 'Any')
 
     def _copy_location_info(self, source_node, target_node):
@@ -1018,6 +1038,19 @@ class Preprocessor(ast.NodeTransformer):
                     assignments.append(individual_assign)
             return assignments
 
+    def visit_AnnAssign(self, node):
+        """Track type annotations from annotated assignments like x: int = 5"""
+        # First visit child nodes
+        self.generic_visit(node)
+
+        # Track the type if target is a simple Name and has annotation
+        if isinstance(node.target, ast.Name) and node.annotation is not None:
+            var_name = node.target.id
+            var_type = self._extract_type_from_annotation(node.annotation)
+            self.known_variable_types[var_name] = var_type
+
+        return node
+
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
@@ -1033,40 +1066,114 @@ class Preprocessor(ast.NodeTransformer):
                 else:
                     node.args[1] = ast.Constant(value=False)
 
-        # if not a function or preprocessor doesn't have function definition return
-        if not isinstance(node.func,ast.Name) or node.func.id not in self.functionParams:
+        # Determine if this is a method call or function call
+        functionName = None
+        expectedArgs = None
+        kwonlyArgs = []
+
+        if isinstance(node.func, ast.Attribute):
+            # Handle method calls (e.g., obj.method())
+            method_name = node.func.attr
+
+            # Try to determine the class type from the variable
+            qualified_name = None
+            if isinstance(node.func.value, ast.Name):
+                var_name = node.func.value.id
+                var_type = self.known_variable_types.get(var_name)
+                if var_type and var_type != 'Any':
+                    qualified_name = f"{var_type}.{method_name}"
+
+            # Try qualified name first, fall back to unqualified
+            if qualified_name and qualified_name in self.functionParams:
+                functionName = qualified_name
+                expectedArgs = self.functionParams[qualified_name][1:]  # Skip 'self'
+                kwonlyArgs = self.functionKwonlyParams.get(qualified_name, [])
+            elif method_name in self.functionParams:
+                functionName = method_name
+                expectedArgs = self.functionParams[method_name][1:]  # Skip 'self'
+                kwonlyArgs = self.functionKwonlyParams.get(method_name, [])
+        elif isinstance(node.func, ast.Name):
+            # Handle regular function calls
+            if node.func.id in self.functionParams:
+                functionName = node.func.id
+                expectedArgs = self.functionParams[functionName]
+                kwonlyArgs = self.functionKwonlyParams.get(functionName, [])
+
+        # If not a tracked function/method, just visit and return
+        if functionName is None or expectedArgs is None:
             self.generic_visit(node)
             return node
 
-        functionName = node.func.id
-        expectedArgs = self.functionParams[functionName]
-        keywords = {}
         # add keyword arguments to function call
+        keywords = {}
         for i in node.keywords:
             if i.arg in keywords:
                 raise SyntaxError(f"Keyword argument repeated:{i.arg}",(self.module_name,i.lineno,i.col_offset,""))
             keywords[i.arg] = i.value
+
+        # Check for missing keyword-only arguments FIRST (before checking positional arg count)
+        missing_kwonly = []
+        for kwarg in kwonlyArgs:
+            if kwarg not in keywords and (functionName, kwarg) not in self.functionDefaults:
+                missing_kwonly.append(kwarg)
+
+        if missing_kwonly:
+            # Use just the method name for error messages
+            display_name = functionName.split('.')[-1] if '.' in functionName else functionName
+            if len(missing_kwonly) == 1:
+                raise TypeError(
+                    f"{display_name}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'"
+                )
+            else:
+                args_str = ' and '.join([f"'{arg}'" for arg in missing_kwonly])
+                raise TypeError(
+                    f"{display_name}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
+                )
 
         # return early if correct no. or too many parameters
         if len(node.args) >= len(expectedArgs):
             self.generic_visit(node)
             return node
 
+        # Check for conflicts between positional and keyword arguments
+        for i in range(len(node.args)):
+            if i < len(expectedArgs) and expectedArgs[i] in keywords:
+                display_name = functionName.split('.')[-1] if '.' in functionName else functionName
+                raise SyntaxError(
+                    f"Multiple values for argument '{expectedArgs[i]}'",
+                    (self.module_name, node.lineno, node.col_offset, ""))
+
+        # First, collect all missing required arguments
+        missing_args = []
+        for i in range(len(node.args), len(expectedArgs)):
+            if expectedArgs[i] not in keywords and (functionName, expectedArgs[i]) not in self.functionDefaults:
+                missing_args.append(expectedArgs[i])
+
+        # Use just the method name for error messages
+        display_name = functionName.split('.')[-1] if '.' in functionName else functionName
+
+        # If there are missing arguments, raise TypeError before processing defaults
+        if missing_args:
+            if len(missing_args) == 1:
+                raise TypeError(
+                    f"{display_name}() missing 1 required positional argument: '{missing_args[0]}'"
+                )
+            else:
+                args_str = ' and '.join([f"'{arg}'" for arg in missing_args])
+                raise TypeError(
+                    f"{display_name}() missing {len(missing_args)} required positional arguments: {args_str}"
+                )
+
         # append defaults
-        for i in range(len(node.args),len(expectedArgs)):
+        for i in range(len(node.args), len(expectedArgs)):
             if expectedArgs[i] in keywords:
                 node.args.append(keywords[expectedArgs[i]])
             elif (functionName, expectedArgs[i]) in self.functionDefaults:
                 default_val = self.functionDefaults[(functionName, expectedArgs[i])]
-                if isinstance(default_val,ast.Name):
+                if isinstance(default_val, ast.Name):
                     node.args.append(default_val)
                 else:
-                    node.args.append(ast.Constant(value = default_val))
-            else:
-                print(f"WARNING: {functionName}() missing required positional argument: '{expectedArgs[i]}'\n")
-                print(f"* file: {self.module_name}\n* line {node.lineno}\n* function: {functionName}\n* column: {node.col_offset} ")
-                break # breaking means not enough arguments, solver should reject
-
+                    node.args.append(ast.Constant(value=default_val))
 
         self.generic_visit(node)
         return node # transformed node
@@ -1078,11 +1185,20 @@ class Preprocessor(ast.NodeTransformer):
                 param_type = self._extract_type_from_annotation(arg.annotation)
                 self.known_variable_types[arg.arg] = param_type
 
+        # Determine the qualified name for methods
+        if hasattr(self, 'current_class_name') and self.current_class_name:
+            qualified_name = f"{self.current_class_name}.{node.name}"
+        else:
+            qualified_name = node.name
+
         # Preserve order of parameters
-        self.functionParams[node.name] = [i.arg for i in node.args.args]
+        self.functionParams[qualified_name] = [i.arg for i in node.args.args]
+
+        # Store keyword-only parameters
+        self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
 
         # escape early if no defaults defined
-        if len(node.args.defaults) < 1:
+        if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
             self.generic_visit(node)
             return node
         return_nodes = []
@@ -1093,12 +1209,33 @@ class Preprocessor(ast.NodeTransformer):
             arg_index = len(node.args.args) - i
             if arg_index >= 0:
                 if isinstance(node.args.defaults[-i],ast.Constant):
-                    self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i].value
+                    self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = node.args.defaults[-i].value
                 elif isinstance(node.args.defaults[-i],ast.Name):
-                    assignment_node, target_var = self.generate_variable_copy(node.name,node.args.args[-i],node.args.defaults[-i])
-                    self.functionDefaults[(node.name, node.args.args[-i].arg)] = target_var
+                    assignment_node, target_var = self.generate_variable_copy(qualified_name,node.args.args[-i],node.args.defaults[-i])
+                    self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = target_var
+                    return_nodes.append(assignment_node)
+
+        # Handle keyword-only defaults
+        for i, default in enumerate(node.args.kw_defaults):
+            if default is not None:
+                kwarg_name = node.args.kwonlyargs[i].arg
+                if isinstance(default, ast.Constant):
+                    self.functionDefaults[(qualified_name, kwarg_name)] = default.value
+                elif isinstance(default, ast.Name):
+                    assignment_node, target_var = self.generate_variable_copy(qualified_name, node.args.kwonlyargs[i], default)
+                    self.functionDefaults[(qualified_name, kwarg_name)] = target_var
                     return_nodes.append(assignment_node)
 
         self.generic_visit(node)
         return_nodes.append(node)
         return return_nodes
+
+    def visit_ClassDef(self, node):
+        """Track class context for method definitions"""
+        old_class_name = getattr(self, 'current_class_name', None)
+        self.current_class_name = node.name
+
+        self.generic_visit(node)
+
+        self.current_class_name = old_class_name
+        return node

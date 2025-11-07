@@ -437,3 +437,11 @@ static inline void list_extend(List *l, const List *other)
     ++i;
   }
 }
+
+/* ---------- clear list ---------- */
+static inline void list_clear(List *l)
+{
+  if (!l)
+    return;
+  l->size = 0;
+}

@@ -516,6 +516,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.is_extern = vd.hasExternalStorage();
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
+  symbol.is_thread_local = vd.getTLSKind() != clang::VarDecl::TLS_None;
 
   if (
     symbol.static_lifetime &&
@@ -1307,6 +1308,15 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
+    // Unsupported extensions (optional don't care)
+  case clang::Type::Complex:
+  {
+    // Ok, complex numbers are not really an extension, but it is only
+    // used by extensions though.
+    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
+      break;
+  }
+  // fall through
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
@@ -1460,6 +1470,16 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "unsigned __intcap";
     break;
 #endif
+
+  // Unsupported extensions (optional don't care)
+  case clang::BuiltinType::BFloat16:
+    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
+    {
+      new_type = half_float_type();
+      c_type = "_Float16";
+      break;
+    }
+    // fallthrough
 
   default:
   {
@@ -2828,6 +2848,30 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  // Unsupported extensions (optional don't care)
+  case clang::Stmt::BuiltinBitCastExprClass:
+  {
+    const clang::BuiltinBitCastExpr &temp =
+      static_cast<const clang::BuiltinBitCastExpr &>(stmt);
+    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
+    {
+      typet t;
+      if (get_type(temp.getType(), t))
+        return true;
+      auto nondet = sideeffect2tc(
+        migrate_type(t),
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        type2tc(),
+        sideeffect2t::nondet);
+      exprt expr = migrate_expr_back(nondet);
+      new_expr.swap(expr);
+      break;
+    }
+  }
+    [[fallthrough]];
+
   default:
   {
     std::ostringstream oss;
@@ -3003,6 +3047,11 @@ bool clang_c_convertert::get_cast_expr(
     /* both should not be generated in purecap mode */
     break;
 #endif
+
+  case clang::CK_NonAtomicToAtomic:
+    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
+      break;
+    [[fallthrough]];
 
   default:
   {

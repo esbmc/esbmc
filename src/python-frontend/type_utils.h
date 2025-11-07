@@ -66,8 +66,9 @@ public:
       name == "chr" || name == "hex" || name == "oct" || name == "ord" ||
       name == "abs" || name == "tuple" || name == "list" || name == "dict" ||
       name == "set" || name == "frozenset" || name == "bytes" ||
-      name == "bytearray" || name == "range" || name == "complex" ||
-      name == "type" || name == "object" || name == "None");
+      name == "set" || name == "bytearray" || name == "range" ||
+      name == "complex" || name == "type" || name == "object" ||
+      name == "None" || name == "divmod");
   }
 
   static bool is_consensus_type(const std::string &name)
