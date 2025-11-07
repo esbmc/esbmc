@@ -450,7 +450,7 @@ void string_handler::ensure_string_array(exprt &expr)
 
   if (!expr.type().is_array())
   {
-    // Explicitly build the array and 
+    // Explicitly build the array and
     // ensure null-termination (size 2: char + \0)
     typet t = type_handler_.build_array(expr.type(), 2);
     exprt arr = gen_zero(t);
