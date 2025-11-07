@@ -1931,6 +1931,9 @@ exprt function_call_expr::handle_general_function_call()
   const typet &return_type = to_code_type(func_symbol->type).return_type();
   call.type() = return_type;
 
+  // Determine parameter offset for Optional wrapping logic
+  size_t param_offset = 0;
+
   // Add self as first parameter
   if (function_type_ == FunctionType::Constructor)
   {
@@ -1938,6 +1941,7 @@ exprt function_call_expr::handle_general_function_call()
     // Self is the LHS
     if (converter_.current_lhs)
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
+    param_offset = 1;
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
@@ -1962,6 +1966,7 @@ exprt function_call_expr::handle_general_function_call()
           "InstanceMethod requires obj_symbol or valid attribute chain");
       }
     }
+    param_offset = 1;
   }
   else if (function_type_ == FunctionType::ClassMethod)
   {
@@ -1986,12 +1991,14 @@ exprt function_call_expr::handle_general_function_call()
     {
       // First positional argument will be added in the loop below as 'self'
       // Don't add a NULL cls parameter
+      param_offset = 1;
     }
     else
     {
       // Passing a void pointer to the "cls" argument
       typet t = pointer_typet(empty_typet());
       call.arguments().push_back(gen_zero(t));
+      param_offset = 1;
 
       // All methods for the int class without parameters acts solely on the encapsulated integer value.
       // Therefore, we always pass the caller (obj) as a parameter in these functions.
@@ -2011,9 +2018,35 @@ exprt function_call_expr::handle_general_function_call()
     }
   }
 
+  // Get function type and parameters for Optional wrapping
+  const code_typet &func_type = to_code_type(func_symbol->type);
+  const auto &params = func_type.arguments();
+
+  size_t arg_index = 0;
   for (const auto &arg_node : call_["args"])
   {
     exprt arg = converter_.get_expr(arg_node);
+
+    // Check if the corresponding parameter is Optional
+    size_t param_idx = arg_index + param_offset;
+
+    if (param_idx < params.size())
+    {
+      const typet &param_type = params[param_idx].type();
+
+      // Check if parameter is an Optional type
+      if (param_type.is_struct())
+      {
+        const struct_typet &struct_type = to_struct_type(param_type);
+        std::string tag = struct_type.tag().as_string();
+
+        if (tag.find("tag-Optional_") == 0)
+        {
+          // Wrap the argument in Optional struct
+          arg = converter_.wrap_in_optional(arg, param_type);
+        }
+      }
+    }
 
     // Handle string literal constants
     // Ensure they are proper null-terminated arrays
@@ -2117,6 +2150,8 @@ exprt function_call_expr::handle_general_function_call()
     }
     else
       call.arguments().push_back(arg);
+
+    arg_index++;
   }
 
   return call;

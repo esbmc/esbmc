@@ -370,6 +370,12 @@ private:
   // String method helpers
   exprt handle_str_join(const nlohmann::json &call_json);
 
+  // Wrap values in Optional
+  exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+
+  // Handle Optional value access
+  exprt unwrap_optional_if_needed(const exprt &expr);
+
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
   const global_scope &global_scope_;

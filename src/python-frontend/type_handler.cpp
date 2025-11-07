@@ -850,3 +850,25 @@ typet type_handler::get_tuple_type(const nlohmann::json &tuple_node) const
 
   return tuple_type;
 }
+
+typet type_handler::build_optional_type(const typet &base_type)
+{
+  // Create a struct with two fields:
+  // 1. is_none: bool - indicates if value is None
+  // 2. value: T - the actual value when not None
+
+  struct_typet optional_type;
+  optional_type.tag("tag-Optional_" + base_type.to_string());
+
+  // Add is_none field
+  struct_typet::componentt is_none_field("is_none", "is_none", bool_type());
+  is_none_field.set_access("public");
+  optional_type.components().push_back(is_none_field);
+
+  // Add value field
+  struct_typet::componentt value_field("value", "value", base_type);
+  value_field.set_access("public");
+  optional_type.components().push_back(value_field);
+
+  return optional_type;
+}

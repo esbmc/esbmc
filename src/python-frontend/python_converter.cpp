@@ -751,6 +751,24 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
+exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
+{
+  if (!expr.type().is_struct())
+    return expr;
+
+  const struct_typet &struct_type = to_struct_type(expr.type());
+  std::string tag = struct_type.tag().as_string();
+
+  if (tag.find("tag-Optional_") == 0)
+  {
+    // Extract the value field
+    member_exprt value_field(expr, "value", struct_type.components()[1].type());
+    return value_field;
+  }
+
+  return expr;
+}
+
 exprt python_converter::handle_none_comparison(
   const std::string &op,
   const exprt &lhs,
@@ -761,6 +779,49 @@ exprt python_converter::handle_none_comparison(
   // Check if we're comparing None with a different type (not None)
   bool lhs_is_none = (lhs.type() == none_type());
   bool rhs_is_none = (rhs.type() == none_type());
+
+  // Handle Optional types
+  if (!lhs_is_none && lhs.type().is_struct())
+  {
+    const struct_typet &struct_type = to_struct_type(lhs.type());
+    std::string tag = struct_type.tag().as_string();
+
+    if (tag.find("tag-Optional_") == 0)
+    {
+      // This is an Optional type, check the is_none field
+      member_exprt is_none_field(lhs, "is_none", bool_type());
+
+      if (rhs_is_none)
+      {
+        // x is None or x is not None
+        if (is_eq)
+          return is_none_field;
+        else
+          return not_exprt(is_none_field);
+      }
+    }
+  }
+
+  if (!rhs_is_none && rhs.type().is_struct())
+  {
+    const struct_typet &struct_type = to_struct_type(rhs.type());
+    std::string tag = struct_type.tag().as_string();
+
+    if (tag.find("tag-Optional_") == 0)
+    {
+      // This is an Optional type, check the is_none field
+      member_exprt is_none_field(rhs, "is_none", bool_type());
+
+      if (lhs_is_none)
+      {
+        // None is x or None is not x
+        if (is_eq)
+          return is_none_field;
+        else
+          return not_exprt(is_none_field);
+      }
+    }
+  }
 
   // None vs pointer comparison: create NULL of the correct pointer type.
   if (
@@ -780,28 +841,6 @@ exprt python_converter::handle_none_comparison(
     null_ptr.set_value("NULL");
 
     // Generate equality or inequality comparison
-    if (is_eq)
-      return equality_exprt(ptr_expr, null_ptr);
-    else
-      return not_exprt(equality_exprt(ptr_expr, null_ptr));
-  }
-
-  // None vs symbol comparison: create NULL of the correct pointer type.
-  if (
-    (lhs_is_none && rhs.is_symbol() && !rhs.type().is_pointer()) ||
-    (rhs_is_none && lhs.is_symbol() && !lhs.type().is_pointer()))
-  {
-    // Create a pointer type from the value type and compare with NULL
-    const exprt &val_expr = lhs_is_none ? rhs : lhs;
-    typet ptr_type = gen_pointer_type(val_expr.type());
-
-    // Cast the value expression to pointer type
-    exprt ptr_expr = typecast_exprt(val_expr, ptr_type);
-
-    // Create NULL pointer for comparison
-    constant_exprt null_ptr(ptr_type);
-    null_ptr.set_value("NULL");
-
     if (is_eq)
       return equality_exprt(ptr_expr, null_ptr);
     else
@@ -1306,6 +1345,16 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
+  // Don't unwrap for 'is' and 'is not' comparisons - they check the Optional itself
+  bool is_none_check = (op == "Is" || op == "IsNot") &&
+                       (lhs.type() == none_type() || rhs.type() == none_type());
+
+  if (!is_none_check)
+  {
+    lhs = unwrap_optional_if_needed(lhs);
+    rhs = unwrap_optional_if_needed(rhs);
+  }
+
   // Simplify comparison with NoneType
   if ((lhs.type() == none_type()) || (rhs.type() == none_type()))
   {
@@ -1663,6 +1712,36 @@ bool python_converter::is_imported_module(const std::string &module_name) const
     return true;
 
   return json_utils::is_module(module_name, *ast_json);
+}
+
+exprt python_converter::wrap_in_optional(
+  const exprt &value,
+  const typet &optional_type)
+{
+  assert(optional_type.is_struct());
+  const struct_typet &struct_type = to_struct_type(optional_type);
+
+  // Create struct expression
+  struct_exprt optional_value(struct_type);
+
+  // Set is_none field based on whether value is None
+  exprt is_none_value;
+  if (value.type() == none_type())
+  {
+    is_none_value = gen_boolean(true);
+    // Set value field to zero for None case
+    optional_value.operands().push_back(is_none_value);
+    optional_value.operands().push_back(
+      gen_zero(struct_type.components()[1].type()));
+  }
+  else
+  {
+    is_none_value = gen_boolean(false);
+    optional_value.operands().push_back(is_none_value);
+    optional_value.operands().push_back(value);
+  }
+
+  return optional_value;
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -3924,13 +4003,13 @@ typet python_converter::get_type_from_annotation(
 
     // Treat T | ... | None as Optional[T]
     typet base_type = type_handler_.get_typet(inner_type);
-    // Primitive types (int, float, bool) are treated as value types.
-    // None is represented internally as a sentinel (0), not a pointer.
+
+    // Primitive types (int, float, bool) now use Optional wrapper
     if (
       base_type == long_long_int_type() || base_type == long_long_uint_type() ||
       base_type == double_type() || base_type == bool_type())
     {
-      return base_type;
+      return type_handler_.build_optional_type(base_type);
     }
 
     // List types are already pointers
@@ -4162,7 +4241,27 @@ void python_converter::process_function_arguments(
   if (args_node.contains("kwonlyargs") && !args_node["kwonlyargs"].is_null())
   {
     for (const nlohmann::json &element : args_node["kwonlyargs"])
+    {
       process_argument(element);
+
+      // If parameter has Optional type and default None, store this info
+      if (element.contains("annotation"))
+      {
+        typet arg_type =
+          get_type_from_annotation(element["annotation"], element);
+
+        if (arg_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(arg_type);
+          if (struct_type.tag().as_string().find("tag-Optional_") == 0)
+          {
+            // This is an Optional parameter
+            // If it has default=None, we need to handle omitted arguments
+            // Store parameter info for later use
+          }
+        }
+      }
+    }
   }
 }
 
