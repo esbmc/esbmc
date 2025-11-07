@@ -774,91 +774,72 @@ exprt python_converter::handle_none_comparison(
   const exprt &lhs,
   const exprt &rhs)
 {
-  bool is_eq = (op == "Eq" || op == "Is");
+  const bool is_eq = (op == "Eq" || op == "Is");
+  const bool lhs_is_none = (lhs.type() == none_type());
+  const bool rhs_is_none = (rhs.type() == none_type());
 
-  // Check if we're comparing None with a different type (not None)
-  bool lhs_is_none = (lhs.type() == none_type());
-  bool rhs_is_none = (rhs.type() == none_type());
-
-  // Handle Optional types
-  if (!lhs_is_none && lhs.type().is_struct())
-  {
-    const struct_typet &struct_type = to_struct_type(lhs.type());
-    std::string tag = struct_type.tag().as_string();
-
-    if (tag.starts_with("tag-Optional_"))
+  auto handle_optional_side =
+    [&](const exprt &side, bool other_is_none) -> std::optional<exprt> {
+    if (side.type().is_struct())
     {
-      // This is an Optional type, check the is_none field
-      member_exprt is_none_field(lhs, "is_none", bool_type());
-
-      if (rhs_is_none)
+      const struct_typet &struct_type = to_struct_type(side.type());
+      const std::string &tag = struct_type.tag().as_string();
+      if (tag.starts_with("tag-Optional_") && other_is_none)
       {
-        // x is None or x is not None
+        member_exprt is_none_field(side, "is_none", bool_type());
         if (is_eq)
-          return is_none_field;
+          return exprt(is_none_field);
         else
-          return not_exprt(is_none_field);
+          return exprt(not_exprt(is_none_field));
       }
     }
-  }
+    return std::nullopt;
+  };
 
-  if (!rhs_is_none && rhs.type().is_struct())
+  // Handle Optional[T] vs None
+  if (!lhs_is_none)
   {
-    const struct_typet &struct_type = to_struct_type(rhs.type());
-    std::string tag = struct_type.tag().as_string();
-
-    if (tag.starts_with("tag-Optional_"))
-    {
-      // This is an Optional type, check the is_none field
-      member_exprt is_none_field(rhs, "is_none", bool_type());
-
-      if (lhs_is_none)
-      {
-        // None is x or None is not x
-        if (is_eq)
-          return is_none_field;
-        else
-          return not_exprt(is_none_field);
-      }
-    }
+    if (auto res = handle_optional_side(lhs, rhs_is_none))
+      return *res;
+  }
+  if (!rhs_is_none)
+  {
+    if (auto res = handle_optional_side(rhs, lhs_is_none))
+      return *res;
   }
 
-  // None vs pointer comparison: create NULL of the correct pointer type.
+  // Handle None vs pointer comparisons
   if (
     (lhs_is_none && rhs.is_symbol() && rhs.type().is_pointer()) ||
     (rhs_is_none && lhs.is_symbol() && lhs.type().is_pointer()))
   {
-    // Determine which expression is the pointer and select appropriate type
-    // For array subtypes, use the full pointer type; otherwise use the other type
     const bool lhs_is_array_ptr =
       lhs.type().is_pointer() &&
       (lhs.type().subtype().is_array() || lhs.type().subtype() == char_type());
+
     const typet &ptr_type = lhs_is_array_ptr ? lhs.type() : rhs.type();
     const exprt &ptr_expr = lhs_is_array_ptr ? lhs : rhs;
 
-    // Create NULL pointer of the appropriate type
     constant_exprt null_ptr(ptr_type);
     null_ptr.set_value("NULL");
 
-    // Generate equality or inequality comparison
+    equality_exprt eq(ptr_expr, null_ptr);
     if (is_eq)
-      return equality_exprt(ptr_expr, null_ptr);
+      return exprt(eq);
     else
-      return not_exprt(equality_exprt(ptr_expr, null_ptr));
+      return exprt(not_exprt(eq));
   }
 
-  // None vs non-pointer: constant fold to false/true
-  if (lhs_is_none && !rhs_is_none)
-    return is_eq ? gen_boolean(0) : gen_boolean(1);
-  if (rhs_is_none && !lhs_is_none)
-    return is_eq ? gen_boolean(0) : gen_boolean(1);
+  // Handle None vs non-pointer constant folding
+  if ((lhs_is_none && !rhs_is_none) || (rhs_is_none && !lhs_is_none))
+    return gen_boolean(!is_eq);
 
-  // Both are None type: do actual pointer comparison
-  // This handles None == None (true) and None != None (false)
+  // Handle None == None and None != None
+  equality_exprt eq(lhs, rhs);
   if (is_eq)
-    return equality_exprt(lhs, rhs);
+    return exprt(eq);
   else
-    return not_exprt(equality_exprt(lhs, rhs));
+    return exprt(not_exprt(eq));
 }
 
 exprt python_converter::handle_str_join(const nlohmann::json &call_json)
