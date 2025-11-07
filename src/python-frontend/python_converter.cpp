@@ -1349,6 +1349,16 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   bool is_none_check = (op == "Is" || op == "IsNot") &&
                        (lhs.type() == none_type() || rhs.type() == none_type());
 
+  // Also don't unwrap for == and != with None
+  if (!is_none_check && (op == "Eq" || op == "NotEq"))
+  {
+    bool lhs_is_none = (lhs.type() == none_type());
+    bool rhs_is_none = (rhs.type() == none_type());
+
+    if (lhs_is_none || rhs_is_none)
+      is_none_check = true;
+  }
+
   if (!is_none_check)
   {
     lhs = unwrap_optional_if_needed(lhs);
@@ -4004,7 +4014,33 @@ typet python_converter::get_type_from_annotation(
     // Treat T | ... | None as Optional[T]
     typet base_type = type_handler_.get_typet(inner_type);
 
-    // Primitive types (int, float, bool) now use Optional wrapper
+    // For multi-type unions (e.g., bool | str | None), always use pointer
+    // Count the number of distinct type names in the union
+    std::set<std::string> type_names;
+    std::function<void(const nlohmann::json &)> collect_types;
+    collect_types = [&](const nlohmann::json &node) {
+      if (
+        node.contains("_type") && node["_type"] == "Constant" &&
+        node.contains("value") && node["value"].is_null())
+      {
+        // This is None, skip it
+        return;
+      }
+      if (node.contains("id"))
+        type_names.insert(node["id"].get<std::string>());
+      if (node.contains("_type") && node["_type"] == "BinOp")
+      {
+        collect_types(node["left"]);
+        collect_types(node["right"]);
+      }
+    };
+    collect_types(annotation_node);
+
+    // If we have multiple types (excluding None), use pointer
+    if (type_names.size() > 1)
+      return pointer_type();
+
+    // Single type + None: use Optional wrapper for primitives only
     if (
       base_type == long_long_int_type() || base_type == long_long_uint_type() ||
       base_type == double_type() || base_type == bool_type())
@@ -4013,11 +4049,10 @@ typet python_converter::get_type_from_annotation(
     }
 
     // List types are already pointers
-    // Don't wrap list_type in another pointer; we just return it directly
     if (base_type == type_handler_.get_list_type())
       return base_type;
 
-    // For other types (e.g., classes, lists), use pointer type
+    // For other types (e.g., classes, strings), use pointer type
     return gen_pointer_type(base_type);
   }
   else if (
