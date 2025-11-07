@@ -1673,12 +1673,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       return handle_str_join(element);
     }
   }
-  
-  // Check for forward-referenced constructor calls  
-  if (type_handler_.is_constructor_call(element))  
-  {  
-    code_blockt temp_block;  
-    process_forward_reference(element["func"], temp_block);  
+
+  // Check for forward-referenced constructor calls
+  if (type_handler_.is_constructor_call(element))
+  {
+    code_blockt temp_block;
+    process_forward_reference(element["func"], temp_block);
   }
 
   // Handle indirect calls through function pointer variables
@@ -2930,9 +2930,9 @@ void python_converter::get_var_assign(
     ast_node.contains("value") && !ast_node["value"].is_null() &&
     ast_node["value"]["_type"] == "Call" &&
     type_handler_.is_constructor_call(ast_node["value"]))
-    {  
-      process_forward_reference(ast_node["value"]["func"], target_block);  
-    }
+  {
+    process_forward_reference(ast_node["value"]["func"], target_block);
+  }
 
   if (ast_node["_type"] == "AnnAssign")
   {
@@ -4583,7 +4583,8 @@ void python_converter::get_class_definition(
       const std::string &class_name = class_member["annotation"]["id"];
       if (!symbol_table_.find_symbol("tag-" + class_name))
       {
-        const auto class_node = json_utils::find_class((*ast_json)["body"], class_name);
+        const auto class_node =
+          json_utils::find_class((*ast_json)["body"], class_name);
         if (!class_node.empty())
         {
           std::string current_class = current_class_name_;
