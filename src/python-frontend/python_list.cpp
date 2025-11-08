@@ -1061,10 +1061,8 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   // Find the list_contains function
   const symbolt *list_contains_func =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_contains");
-  if (!list_contains_func)
-    throw std::runtime_error(
-      "list_contains function not found in symbol table");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  assert(list_contains_func);
 
   // Create a temporary variable to store the result
   symbolt &contains_ret = converter_.create_tmp_symbol(

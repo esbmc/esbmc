@@ -331,28 +331,7 @@ bool __ESBMC_list_insert(
   return true;
 }
 
-static inline bool
-list_replace(List *l, size_t index, const void *new_value, size_t type_id)
-{
-  if (index >= l->size)
-    return false;
-
-  // TODO: probably should be a copy
-  l->items[index].value = new_value;
-  l->items[index].type_id = type_id;
-  return true;
-}
-
-/* ---------- pop / erase ---------- */
-static inline bool list_pop(List *l)
-{
-  if (l->size == 0)
-    return false;
-  l->size--;
-  return true;
-}
-
-static bool list_contains(
+bool __ESBMC_list_contains(
   const List *l,
   const void *item,
   size_t item_type_id,
