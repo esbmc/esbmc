@@ -971,15 +971,13 @@ void goto_symext::run_intrinsic(
   // PythonList methods
   if (has_prefix(symname, "c:@F@__ESBMC_list"))
   {
-      bump_call(func_call, symname);
-      return;
+    bump_call(func_call, symname);
+    return;
   }
 
   if (has_prefix(symname, "c:@F@__ESBMC_create_inf_obj"))
   {
-
     assert(func_call.operands.size() == 0 && "Wrong signature");
-    log_status("Creating a list");
 
     unsigned int &dynamic_counter = get_dynamic_counter();
     dynamic_counter++;
@@ -990,27 +988,18 @@ void goto_symext::run_intrinsic(
     symbol.lvalue = true;
     symbol.type.dynamic(false);
     symbol.static_lifetime = true;
-    
-    const char *list_object_id = "tag-struct __anon_typedef_Object_at_";
-    static const symbolt *list_object_symbol = nullptr;
-    
-    new_context.foreach_operand(
-      [&list_object_id](const symbolt &s)
-      {
-        const std::string &symbol_id = s.id.as_string();
-        if (symbol_id.find(list_object_id) != std::string::npos)
-        {
-          list_object_symbol = &s;
-        }
-      });
+
+    const symbolt *list_object_symbol =
+      new_context.find_symbol("tag-struct __ESBMC_PyObj");
+    assert(list_object_symbol);
 
     type2tc obj_type = migrate_type(list_object_symbol->type);
     type2tc t = array_type2tc(obj_type, expr2tc(), true);
-    
+
     symbol.type = migrate_type_back(t);
     symbol.mode = "C";
     symbol.type.set(
-    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
 
     new_context.add(symbol);
 

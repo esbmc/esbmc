@@ -206,7 +206,7 @@ typedef struct
   __ESBMC_generic_object **ob_item; // Infinite list of elements
 } __ESBMC_list_object;
 
-typedef struct
+typedef struct __ESBMC_PyObj
 {
   const void *value; // data pointer
   size_t type_id;    // hashed type name
@@ -214,7 +214,7 @@ typedef struct
 
 } Object;
 
-typedef struct
+typedef struct __ESBMC_PyListObj
 {
   Object *items;
   size_t size; // elements in use
@@ -256,7 +256,6 @@ bool __ESBMC_list_push(
   l->size++;
 
   // TODO: Nondeterministic failure?
-
   return true;
 }
 
@@ -349,6 +348,7 @@ bool __ESBMC_list_contains(
     if (elem->type_id == item_type_id && elem->size == item_size)
     {
       // Compare the actual data
+      // TODO: Not sure if this works for recursive types
       if (elem->value == item || memcmp(elem->value, item, item_size) == 0)
         return true;
     }
@@ -382,7 +382,6 @@ void __ESBMC_list_extend(List *l, const List *other)
   }
 }
 
-/* ---------- clear list ---------- */
 void __ESBMC_list_clear(List *l)
 {
   if (!l)
