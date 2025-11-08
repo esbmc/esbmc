@@ -229,7 +229,6 @@ Object* __ESBMC_create_inf_obj()
   return NULL;
 };
 
-/* ---------- create ---------- */
 List *__ESBMC_list_create()
 {
   List *l = __ESBMC_alloca(sizeof(List));
@@ -244,13 +243,28 @@ size_t __ESBMC_list_size(const List *l)
   return l ? l->size : 0;
 }
 
-/* ---------- bounds check ---------- */
-/*
-static inline bool list_in_bounds(const List *l, size_t index)
+bool __ESBMC_list_push(List *l, const void *value, size_t type_id, size_t type_size)
 {
-  return index < l->size;
+  // TODO: __ESBMC_obj_cpy
+  void *copied_value = __ESBMC_alloca(type_size);
+  memcpy(copied_value, value, type_size);
+
+  l->items[l->size].value = copied_value;
+  l->items[l->size].type_id = type_id;
+  l->items[l->size].size = type_size;
+  l->size++;
+
+  // TODO: Nondeterministic failure?
+  
+  return true;
 }
-*/
+
+bool __ESBMC_list_push_object(List *l, Object *o)
+{
+  assert(l != NULL);
+  assert(o != NULL);
+  return __ESBMC_list_push(l, o->value, o->type_id, o->size);
+}
 
 static bool list_eq(const List *l1, const List *l2)
 {
@@ -321,26 +335,7 @@ static inline bool list_push(List *l, const void *value, size_t type_id)
 }
 */
 
-static inline bool
-list_push(List *l, const void *value, size_t type_id, size_t type_size)
-{
-  void *copied_value = __ESBMC_alloca(type_size);
 
-  memcpy(copied_value, value, type_size);
-
-  l->items[l->size].value = copied_value;
-  l->items[l->size].type_id = type_id;
-  l->items[l->size].size = type_size;
-  l->size++;
-  return true;
-}
-
-static inline bool list_push_object(List *l, Object *o)
-{
-  assert(l != NULL);
-  assert(o != NULL);
-  return list_push(l, o->value, o->type_id, o->size);
-}
 
 /* ---------- insert element at index ---------- */
 static inline bool list_insert(
@@ -352,7 +347,7 @@ static inline bool list_insert(
 {
   // If index is beyond the end, just append
   if (index >= l->size)
-    return list_push(l, value, type_id, type_size);
+    return __ESBMC_list_push(l, value, type_id, type_size);
 
   // Make a copy of the value
   void *copied_value = __ESBMC_alloca(type_size);

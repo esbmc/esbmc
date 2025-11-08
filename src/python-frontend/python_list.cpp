@@ -207,7 +207,7 @@ exprt python_list::build_push_list_call(
   list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *push_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_push");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push");
 
   if (!push_func_sym)
   {
@@ -271,7 +271,7 @@ exprt python_list::build_concat_list_call(
   const symbolt *at_sym =
     converter_.symbol_table().find_symbol("c:list.c@F@list_at");
   const symbolt *push_obj_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   assert(size_sym && at_sym && push_obj_sym);
 
   auto copy_list = [&](const exprt &src_list) {
@@ -639,7 +639,7 @@ exprt python_list::handle_range_slice(
 
   // Push element to sliced list
   const symbolt *push_func =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   if (!push_func)
   {
     throw std::runtime_error("Push function symbol not found");
