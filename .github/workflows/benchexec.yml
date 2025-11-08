@@ -36,6 +36,10 @@ on:
         - SV-COMP26_termination
         - SV-COMP26_no-overflow
         - SV-COMP26_ConcurrencySafety
+        - SV-COMP26_unreach-call_demo
+        - SV-COMP26_no-data-race_demo
+        - SV-COMP26_valid-memsafety_demo
+        - SV-COMP26_no-overflow_demo
         - Custom
       task:
         type: choice
@@ -87,6 +91,10 @@ on:
         - Termination-MainHeap
         - Termination-Other
         - SoftwareSystems-DeviceDriversLinux64-Termination
+        - ReachSafety-Huawei-Concurrency-Challenges
+        - NoDataRace-Huawei-Concurrency-Challenges
+        - MemSafety-Huawei-Concurrency-Challenges
+        - NoOverflows-Huawei-Concurrency-Challenges
       cpachecker:
             description: "Run CPAChecker for violation witness validation"
             required: true
