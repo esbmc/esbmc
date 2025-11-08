@@ -982,6 +982,24 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       exprt value_expr = converter_.get_expr(first_arg);
 
+      // If it's a constant string, we need to ensure proper conversion
+      if (
+        first_arg["_type"] == "Constant" && first_arg.contains("value") &&
+        first_arg["value"].is_string())
+      {
+        // This is a string literal - use string conversion
+        if (base_expr.is_nil())
+        {
+          return converter_.get_string_handler().handle_string_to_int_base10(
+            value_expr, converter_.get_location_from_decl(call_));
+        }
+        else
+        {
+          return converter_.get_string_handler().handle_string_to_int(
+            value_expr, base_expr, converter_.get_location_from_decl(call_));
+        }
+      }
+
       if (base_expr.is_nil())
       {
         // No base provided
