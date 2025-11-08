@@ -979,36 +979,12 @@ void goto_symext::run_intrinsic(
   {
     assert(func_call.operands.size() == 0 && "Wrong signature");
 
-    unsigned int &dynamic_counter = get_dynamic_counter();
-    dynamic_counter++;
-
-    symbolt symbol;
-    symbol.name = "static_" + i2string(dynamic_counter) + "_list";
-    symbol.id = std::string("symex_static::list::") + id2string(symbol.name);
-    symbol.lvalue = true;
-    symbol.type.dynamic(false);
-    symbol.static_lifetime = true;
-
     const symbolt *list_object_symbol =
       new_context.find_symbol("tag-struct __ESBMC_PyObj");
     assert(list_object_symbol);
 
-    type2tc obj_type = migrate_type(list_object_symbol->type);
-    type2tc t = array_type2tc(obj_type, expr2tc(), true);
+    symex_mem_inf(func_call.ret, migrate_type(list_object_symbol->type), cur_state->guard);
 
-    symbol.type = migrate_type_back(t);
-    symbol.mode = "C";
-    symbol.type.set(
-      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
-
-    new_context.add(symbol);
-
-    // var = {0}
-    expr2tc inf_array_sym = symbol2tc(t, symbol.id);
-    expr2tc ptr_obj = address_of2tc(get_empty_type(), inf_array_sym);
-
-    symex_assign(
-      code_assign2tc(func_call.ret, ptr_obj), false, cur_state->guard);
     return;
   }
 
