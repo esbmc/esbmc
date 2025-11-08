@@ -167,7 +167,8 @@ const static std::vector<std::string> python_c_models = {
   "__python_char_lower",
   "__python_str_lower",
   "__ESBMC_create_inf_obj",
-  "__ESBMC_list_create"
+  "__ESBMC_list_create",
+      "__ESBMC_list_size"
 };
 } // namespace
 

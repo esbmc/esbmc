@@ -2034,7 +2034,7 @@ exprt function_call_expr::handle_general_function_call()
       assert(list_symbol);
 
       const symbolt *list_size_func_sym =
-        converter_.find_symbol("c:list.c@F@list_size");
+        converter_.find_symbol("c:@F@__ESBMC_list_size");
       assert(list_size_func_sym);
 
       code_function_callt list_size_func_call;

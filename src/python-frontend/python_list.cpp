@@ -267,7 +267,7 @@ exprt python_list::build_concat_list_call(
 
   // Helpers we’ll call from the C model
   const symbolt *size_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_size");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
   const symbolt *at_sym =
     converter_.symbol_table().find_symbol("c:list.c@F@list_at");
   const symbolt *push_obj_sym =

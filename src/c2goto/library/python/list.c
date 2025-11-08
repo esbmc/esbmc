@@ -239,6 +239,11 @@ List *__ESBMC_list_create()
   return l;
 }
 
+size_t __ESBMC_list_size(const List *l)
+{
+  return l ? l->size : 0;
+}
+
 /* ---------- bounds check ---------- */
 /*
 static inline bool list_in_bounds(const List *l, size_t index)
@@ -281,10 +286,7 @@ static bool list_eq(const List *l1, const List *l2)
   return true;
 }
 
-static inline size_t list_size(const List *l)
-{
-  return l ? l->size : 0;
-}
+
 
 /* ---------- getters ---------- */
 static inline Object *list_at(List *l, size_t index)
