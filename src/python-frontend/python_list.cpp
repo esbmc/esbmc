@@ -238,7 +238,7 @@ exprt python_list::build_insert_list_call(
   list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *insert_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_insert");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_insert");
   if (!insert_func_sym)
     throw std::runtime_error("Insert function symbol not found");
 

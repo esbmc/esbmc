@@ -302,14 +302,7 @@ Object *__ESBMC_list_at(List *l, size_t index)
   return &l->items[index];
 }
 
-static inline const Object *list_cat(const List *l, size_t index)
-{
-  __ESBMC_assert(index < l->size, "out-of-bounds read in list");
-  return &l->items[index];
-}
-
-/* ---------- insert element at index ---------- */
-static inline bool list_insert(
+bool __ESBMC_list_insert(
   List *l,
   size_t index,
   const void *value,
@@ -324,7 +317,7 @@ static inline bool list_insert(
   void *copied_value = __ESBMC_alloca(type_size);
   memcpy(copied_value, value, type_size);
 
-  // Shift all elements from index onwards one position to the right
+  // TODO: there oughta be a better way to do this
   size_t elements_to_shift = l->size - index;
   memmove(
     &l->items[index + 1], &l->items[index], elements_to_shift * sizeof(Object));
@@ -338,12 +331,13 @@ static inline bool list_insert(
   return true;
 }
 
-/* ---------- replace element ---------- */
 static inline bool
 list_replace(List *l, size_t index, const void *new_value, size_t type_id)
 {
   if (index >= l->size)
     return false;
+
+  // TODO: probably should be a copy
   l->items[index].value = new_value;
   l->items[index].type_id = type_id;
   return true;
