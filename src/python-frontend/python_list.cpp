@@ -269,7 +269,7 @@ exprt python_list::build_concat_list_call(
   const symbolt *size_sym =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
   const symbolt *at_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_at");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
   const symbolt *push_obj_sym =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   assert(size_sym && at_sym && push_obj_sym);
@@ -441,7 +441,7 @@ exprt python_list::build_list_at_call(
   pointer_typet obj_type(converter_.get_type_handler().get_list_element_type());
 
   const symbolt *list_at_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_at");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
   assert(list_at_func_sym);
 
   side_effect_expr_function_callt list_at_call;

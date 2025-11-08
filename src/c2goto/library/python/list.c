@@ -170,8 +170,6 @@ Legend:
 ===============================================================================
 */
 
-
-
 /** Based on CPython, the idea is to use a PyObject containing type information
  *  while each actual object is explicitly defined.
  */
@@ -208,7 +206,6 @@ typedef struct
   __ESBMC_generic_object **ob_item; // Infinite list of elements
 } __ESBMC_list_object;
 
-
 typedef struct
 {
   const void *value; // data pointer
@@ -224,7 +221,7 @@ typedef struct
   //  __ESBMC_type_object *type;
 } List;
 
-Object* __ESBMC_create_inf_obj()
+Object *__ESBMC_create_inf_obj()
 {
   return NULL;
 };
@@ -234,7 +231,7 @@ List *__ESBMC_list_create()
   List *l = __ESBMC_alloca(sizeof(List));
   l->items = __ESBMC_create_inf_obj();
   l->size = 0;
- // l->type = &__ESBMC_list_type;
+  // l->type = &__ESBMC_list_type;
   return l;
 }
 
@@ -243,7 +240,11 @@ size_t __ESBMC_list_size(const List *l)
   return l ? l->size : 0;
 }
 
-bool __ESBMC_list_push(List *l, const void *value, size_t type_id, size_t type_size)
+bool __ESBMC_list_push(
+  List *l,
+  const void *value,
+  size_t type_id,
+  size_t type_size)
 {
   // TODO: __ESBMC_obj_cpy
   void *copied_value = __ESBMC_alloca(type_size);
@@ -255,7 +256,7 @@ bool __ESBMC_list_push(List *l, const void *value, size_t type_id, size_t type_s
   l->size++;
 
   // TODO: Nondeterministic failure?
-  
+
   return true;
 }
 
@@ -276,6 +277,8 @@ bool __ESBMC_list_eq(const List *l1, const List *l2)
     return false;
 
   size_t i = 0, end = l1->size;
+
+  // BUG: Something weird is happening when I change this while into a FOR
   while (i < end)
   {
     const Object *a = &l1->items[i];
@@ -293,42 +296,17 @@ bool __ESBMC_list_eq(const List *l1, const List *l2)
   return true;
 }
 
-
-
-/* ---------- getters ---------- */
-static inline Object *list_at(List *l, size_t index)
+Object *__ESBMC_list_at(List *l, size_t index)
 {
-  //return list_in_bounds(l, index) ? &l->items[index] : NULL;
-  assert(index < l->size);
+  __ESBMC_assert(index < l->size, "out-of-bounds read in list");
   return &l->items[index];
 }
 
 static inline const Object *list_cat(const List *l, size_t index)
 {
-  //  return list_in_bounds(l, index) ? &l->items[index] : NULL;
-  assert(index < l->size);
+  __ESBMC_assert(index < l->size, "out-of-bounds read in list");
   return &l->items[index];
 }
-
-static inline void *list_get_as(const List *l, size_t i, size_t expect_type)
-{
-  const Object *o = list_cat(l, i);
-  return (o && o->type_id == expect_type) ? (void *)o->value : NULL;
-}
-
-/* ---------- push element ---------- */
-
-/*
-static inline bool list_push(List *l, const void *value, size_t type_id)
-{
-  l->items[l->size].value = value;
-  l->items[l->size].type_id = type_id;
-  l->size++;
-  return true;
-}
-*/
-
-
 
 /* ---------- insert element at index ---------- */
 static inline bool list_insert(
