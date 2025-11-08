@@ -173,75 +173,83 @@ Legend:
 /** Based on CPython, the idea is to use a PyObject containing type information
  *  while each actual object is explicitly defined.
  */
-typedef struct _typeobject
+typedef struct __ESBMC_PyType
 {
   const char *tp_name; /* Type name: "module.typename" */
   size_t tp_basicsize; /* Size of instance in bytes */
 
   // TODO: Extra features (vtables, constructors, members)
-} __ESBMC_type_object;
+} PyType;
 
-static __ESBMC_type_object __ESBMC_generic_type;
-static __ESBMC_type_object __ESBMC_list_type;
+static PyType __ESBMC_generic_type;
+static PyType __ESBMC_list_type;
 
-// TODO: I was going to use __ESBMC_object but that might lead to confusion
-// Note: always keep type as the first field!
-typedef struct
-{
-  __ESBMC_type_object *
-    ob_type; // It must point to a concrete (hopefully static) __ESBMC_type_object.
-  // Add metadata as needed
-} __ESBMC_value_object;
-
-typedef struct
-{
-  __ESBMC_type_object *ob_type; // It must point to a void*  __ESBMC_type_object
-  void *value;                  // Ptr to value
-} __ESBMC_generic_object;
-
-typedef struct
-{
-  __ESBMC_type_object *ob_base;     // It must point to a List  __ESBMC_type
-  size_t ob_size;                   // Current number of items in the list
-  __ESBMC_generic_object **ob_item; // Infinite list of elements
-} __ESBMC_list_object;
-
+/**
+ * @brief Minimal representation of a Python-like object.
+ *
+ * In CPython, PyObject includes only a pointer to its type object. Most
+ * user-defined types embed this as their header, allowing any instance to
+ * be safely cast to PyObject* for type inspection.
+ *
+ * @code
+ * PyListObject l = {...};
+ * for (size_t i = 0; i < l.size; ++i) {
+ *   PyObject *o = (PyObject *)l.values[i];
+ *   PyType *t = ((PyObject *)o)->type;
+ * }
+ * @endcode
+ *
+ * This simplified version keeps both the type information and the data pointer
+ * explicit. The long-term goal is to embed only a type pointer, enabling more
+ * lightweight polymorphic casts. 
+ */
 typedef struct __ESBMC_PyObj
 {
-  const void *value; // data pointer
-  size_t type_id;    // hashed type name
-  size_t size;       // number of bytes in value
+  const void *value; /**< Pointer to object data */
+  size_t type_id;    /**< Hashed or unique type identifier */
+  size_t size;       /**< Number of bytes in value */
+} PyObject;
 
-} Object;
-
+/**
+ * @brief Minimal representation of a Python-like list object.
+ *
+ * Example usage in C:
+ * @code
+ * PyListObject list = {...};
+ * for (size_t i = 0; i < list.size; ++i) {
+ *   PyObject *item = &list.items[i];
+ *   // Access fields like item->type_id or item->value here
+ * }
+ * @endcode
+ */
 typedef struct __ESBMC_PyListObj
 {
-  Object *items;
-  size_t size; // elements in use
-  //  __ESBMC_type_object *type;
-} List;
+  PyObject *items; /**< Array of PyObject items (SMT infinite array concept) */
+  size_t size;     /**< Number of elements currently in use */
+  //PyType *type;    /**< &PyListType */
+} PyListObject;
 
-Object *__ESBMC_create_inf_obj()
+PyObject *__ESBMC_create_inf_obj()
 {
   return NULL;
 };
 
-List *__ESBMC_list_create()
+PyListObject *__ESBMC_list_create()
 {
-  List *l = __ESBMC_alloca(sizeof(List));
+  PyListObject *l = __ESBMC_alloca(sizeof(PyListObject));
   l->items = __ESBMC_create_inf_obj();
   l->size = 0;
   // l->type = &__ESBMC_list_type;
   return l;
 }
 
-size_t __ESBMC_list_size(const List *l)
+size_t __ESBMC_list_size(const PyListObject *l)
 {
   return l ? l->size : 0;
 }
 
 bool __ESBMC_list_push(
-  List *l,
+  PyListObject *l,
   const void *value,
   size_t type_id,
   size_t type_size)
@@ -259,14 +267,14 @@ bool __ESBMC_list_push(
   return true;
 }
 
-bool __ESBMC_list_push_object(List *l, Object *o)
+bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
 {
   assert(l != NULL);
   assert(o != NULL);
   return __ESBMC_list_push(l, o->value, o->type_id, o->size);
 }
 
-bool __ESBMC_list_eq(const List *l1, const List *l2)
+bool __ESBMC_list_eq(const PyListObject *l1, const PyListObject *l2)
 {
   if (!l1 || !l2)
     return false;
@@ -280,8 +288,8 @@ bool __ESBMC_list_eq(const List *l1, const List *l2)
   // BUG: Something weird is happening when I change this while into a FOR
   while (i < end)
   {
-    const Object *a = &l1->items[i];
-    const Object *b = &l2->items[i++];
+    const PyObject *a = &l1->items[i];
+    const PyObject *b = &l2->items[i++];
 
     // Same address => element equal; keep checking the rest.
     if (a->value == b->value)
@@ -295,14 +303,14 @@ bool __ESBMC_list_eq(const List *l1, const List *l2)
   return true;
 }
 
-Object *__ESBMC_list_at(List *l, size_t index)
+PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(index < l->size, "out-of-bounds read in list");
   return &l->items[index];
 }
 
 bool __ESBMC_list_insert(
-  List *l,
+  PyListObject *l,
   size_t index,
   const void *value,
   size_t type_id,
@@ -319,7 +327,9 @@ bool __ESBMC_list_insert(
   // TODO: there oughta be a better way to do this
   size_t elements_to_shift = l->size - index;
   memmove(
-    &l->items[index + 1], &l->items[index], elements_to_shift * sizeof(Object));
+    &l->items[index + 1],
+    &l->items[index],
+    elements_to_shift * sizeof(PyObject));
 
   // Insert the new element
   l->items[index].value = copied_value;
@@ -331,7 +341,7 @@ bool __ESBMC_list_insert(
 }
 
 bool __ESBMC_list_contains(
-  const List *l,
+  const PyListObject *l,
   const void *item,
   size_t item_type_id,
   size_t item_size)
@@ -342,7 +352,7 @@ bool __ESBMC_list_contains(
   size_t i = 0;
   while (i < l->size)
   {
-    const Object *elem = &l->items[i];
+    const PyObject *elem = &l->items[i];
 
     // Check if types and sizes match
     if (elem->type_id == item_type_id && elem->size == item_size)
@@ -360,7 +370,7 @@ bool __ESBMC_list_contains(
 
 /* ---------- extend list ---------- */
 
-void __ESBMC_list_extend(List *l, const List *other)
+void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
 {
   if (!l || !other)
     return;
@@ -368,7 +378,7 @@ void __ESBMC_list_extend(List *l, const List *other)
   size_t i = 0;
   while (i < other->size)
   {
-    const Object *elem = &other->items[i];
+    const PyObject *elem = &other->items[i];
 
     void *copied_value = __ESBMC_alloca(elem->size);
     memcpy(copied_value, elem->value, elem->size);
@@ -382,7 +392,7 @@ void __ESBMC_list_extend(List *l, const List *other)
   }
 }
 
-void __ESBMC_list_clear(List *l)
+void __ESBMC_list_clear(PyListObject *l)
 {
   if (!l)
     return;
