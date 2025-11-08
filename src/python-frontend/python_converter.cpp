@@ -4772,6 +4772,44 @@ void python_converter::get_return_statements(
   }
   else
   {
+    // If we're returning an array but the function expects a pointer,
+    // convert the array to a pointer (for string literals)
+    const typet &expected_return_type = current_element_type;
+
+    if (expected_return_type.is_pointer() && return_value.type().is_array())
+    {
+      // For constant array literals (string literals), convert to string_constantt
+      if (return_value.is_constant())
+      {
+        // Extract the string content from the constant array
+        std::string str_content;
+        for (const auto &operand : return_value.operands())
+        {
+          if (operand.is_constant())
+          {
+            BigInt char_val = binary2integer(
+              operand.value().as_string(), operand.type().is_signedbv());
+            if (char_val == 0)
+              break; // Stop at null terminator
+            str_content += static_cast<char>(char_val.to_int64());
+          }
+        }
+
+        // Create a string_constantt with proper type
+        typet string_type = return_value.type();
+        return_value = string_constantt(
+          str_content, string_type, string_constantt::k_default);
+
+        // Get its address (converts array to pointer)
+        return_value = address_of_exprt(return_value);
+      }
+      else
+      {
+        // For non-constant arrays (variables), convert to pointer
+        return_value = string_handler_.get_array_base_address(return_value);
+      }
+    }
+
     // Original behavior for non-function-call returns
     code_returnt return_code;
     return_code.return_value() = return_value;
