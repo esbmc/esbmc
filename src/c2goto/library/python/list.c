@@ -325,18 +325,18 @@ bool __ESBMC_list_insert(
   memcpy(copied_value, value, type_size);
 
   // TODO: there oughta be a better way to do this
-  size_t elements_to_shift = l->size - index;
-  memmove(
-    &l->items[index + 1],
-    &l->items[index],
-    elements_to_shift * sizeof(PyObject));
+  size_t i = l->size;
+  while (i > index)
+  {
+    l->items[i] = l->items[i - 1];
+    i--;
+  }
 
   // Insert the new element
   l->items[index].value = copied_value;
   l->items[index].type_id = type_id;
   l->items[index].size = type_size;
   l->size++;
-
   return true;
 }
 
