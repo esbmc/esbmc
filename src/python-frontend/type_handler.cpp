@@ -264,15 +264,21 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return empty_typet();
   }
 
+  // ord(): Converts a 1-character string to its Unicode code point (as integer)
+  if (ast_type == "ord")
+    return long_long_int_type();
+
+  // abs(): Return the absolute value of a number
+  if (ast_type == "abs")
+    return long_long_int_type();
+
   // str: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
   // oct(): Converts an integer to a lowercase octal string
-  // ord(): Converts a 1-character string to its Unicode code point (as integer)
-  // abs(): Return the absolute value of a number
   if (
     ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-    ast_type == "oct" || ast_type == "ord" || ast_type == "abs")
+    ast_type == "oct")
   {
     if (type_size == 1)
     {

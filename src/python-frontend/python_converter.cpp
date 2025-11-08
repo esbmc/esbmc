@@ -3352,7 +3352,15 @@ void python_converter::get_var_assign(
         }
       }
 
-      if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
+      // For function calls returning pointers (including strings),
+      // we need to assign the result
+      if (rhs.type().is_pointer() && !is_ctor_call)
+      {
+        // Create an assignment: lhs = function_call()
+        rhs.op0() = lhs;
+      }
+      else if (
+        !rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
         rhs.op0() = lhs;
 
       if (rhs.type() == type_handler_.get_list_type())
@@ -4335,6 +4343,11 @@ void python_converter::get_function_definition(
     else if (return_type == "list" || return_type == "List")
     {
       type.return_type() = type_handler_.get_list_type();
+    }
+    else if (return_type == "str")
+    {
+      // String return types should be pointers, not arrays
+      type.return_type() = gen_pointer_type(char_type());
     }
     else if (return_type == "tuple" && return_node["_type"] == "Subscript")
     {
