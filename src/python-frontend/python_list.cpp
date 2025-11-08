@@ -1161,9 +1161,8 @@ exprt python_list::build_extend_list_call(
   const exprt &other_list)
 {
   const symbolt *extend_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_extend");
-  if (!extend_func_sym)
-    throw std::runtime_error("Extend function symbol not found");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_extend");
+  assert(extend_func_sym);
 
   locationt location = converter_.get_location_from_decl(op);
 

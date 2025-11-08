@@ -360,7 +360,7 @@ bool __ESBMC_list_contains(
 
 /* ---------- extend list ---------- */
 
-static inline void list_extend(List *l, const List *other)
+void __ESBMC_list_extend(List *l, const List *other)
 {
   if (!l || !other)
     return;
@@ -383,7 +383,7 @@ static inline void list_extend(List *l, const List *other)
 }
 
 /* ---------- clear list ---------- */
-static inline void list_clear(List *l)
+void __ESBMC_list_clear(List *l)
 {
   if (!l)
     return;
