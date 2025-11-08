@@ -1026,7 +1026,7 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guardt &guard);
-    /** Wrapper around for inf alloc. */
+    /** Wrapper around for infinite array allocation. */
   expr2tc symex_mem_inf(
 			const expr2tc &lhs,
 			const type2tc &base_type,
