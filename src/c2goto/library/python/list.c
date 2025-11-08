@@ -266,7 +266,7 @@ bool __ESBMC_list_push_object(List *l, Object *o)
   return __ESBMC_list_push(l, o->value, o->type_id, o->size);
 }
 
-static bool list_eq(const List *l1, const List *l2)
+bool __ESBMC_list_eq(const List *l1, const List *l2)
 {
   if (!l1 || !l2)
     return false;
@@ -275,27 +275,20 @@ static bool list_eq(const List *l1, const List *l2)
   if (l1->size != l2->size)
     return false;
 
-  size_t i = 0;
-  while (i < l1->size)
+  size_t i = 0, end = l1->size;
+  while (i < end)
   {
     const Object *a = &l1->items[i];
-    const Object *b = &l2->items[i];
+    const Object *b = &l2->items[i++];
 
     // Same address => element equal; keep checking the rest.
     if (a->value == b->value)
-    {
-      ++i;
       continue;
-    }
 
     if (
       !a->value || !b->value || a->type_id != b->type_id ||
       a->size != b->size || memcmp(a->value, b->value, a->size) != 0)
-    {
       return false;
-    }
-
-    ++i;
   }
   return true;
 }

@@ -107,7 +107,7 @@ const static std::vector<std::string> python_c_models = {
   "list_pop",
   "list_size",
   "list_hash_string",
-  "list_eq",
+  "__ESBMC_list_eq",
   "strncmp",
   "strcmp",
   "strlen",

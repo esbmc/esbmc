@@ -906,7 +906,7 @@ exprt python_list::compare(
   const std::string &op)
 {
   const symbolt *list_eq_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_eq");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_eq");
   assert(list_eq_func_sym);
 
   const symbolt *lhs_symbol =
