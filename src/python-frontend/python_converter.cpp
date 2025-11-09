@@ -1903,14 +1903,41 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       args[it->second] = arg_expr;
     }
 
-    // Fill empty arguments with None for optional parameters
+    // Fill empty arguments with proper Optional values or None for optional parameters
     for (size_t i = 0; i < args.size(); ++i)
     {
       if (args[i].is_nil() || args[i].id().empty())
       {
-        constant_exprt none_expr(none_type());
-        none_expr.set_value("NULL");
-        args[i] = none_expr;
+        const typet &param_type = params[i].type();
+
+        // Check if this is an Optional type (struct with "is_none" field)
+        if (param_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(param_type);
+          const std::string &tag = struct_type.tag().as_string();
+
+          if (tag.starts_with("tag-Optional_"))
+          {
+            // Create Optional value with is_none=true
+            constant_exprt none_expr(none_type());
+            none_expr.set_value("NULL");
+            args[i] = wrap_in_optional(none_expr, param_type);
+          }
+          else
+          {
+            // Regular struct type - set to NULL pointer
+            constant_exprt none_expr(none_type());
+            none_expr.set_value("NULL");
+            args[i] = none_expr;
+          }
+        }
+        else
+        {
+          // Non-struct type - use NULL for None
+          constant_exprt none_expr(none_type());
+          none_expr.set_value("NULL");
+          args[i] = none_expr;
+        }
       }
     }
   };
