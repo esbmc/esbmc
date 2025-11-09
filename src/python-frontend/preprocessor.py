@@ -980,8 +980,6 @@ class Preprocessor(ast.NodeTransformer):
                     assignments.append(individual_assign)
         else:
             # Don't transform tuple unpacking from variables - let converter handle it
-            # The C++ converter has proper logic to handle struct member access for tuples
-            # Transforming to subscripts here breaks tuple (struct) unpacking
             return source_node
 
         return assignments

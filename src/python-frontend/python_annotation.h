@@ -1615,7 +1615,7 @@ private:
       if (stmt_type != "Assign" || !element["type_comment"].is_null())
         continue;
 
-      // Skip tuple/list unpacking assignments - they don't need type annotation
+      // Skip tuple/list unpacking assignments
       // The C++ converter will handle them directly with proper type inference
       if (
         element.contains("targets") && !element["targets"].empty() &&

@@ -3174,6 +3174,7 @@ void python_converter::get_var_assign(
   }
   else if (ast_node["_type"] == "Assign")
   {
+    // Assign logic
     const auto &target = ast_node["targets"][0];
     const auto &target_type = target["_type"];
 
@@ -3184,6 +3185,49 @@ void python_converter::get_var_assign(
       is_converting_rhs = true;
       exprt rhs = get_expr(ast_node["value"]);
       is_converting_rhs = false;
+
+      // If RHS is a function call, we need to create a temporary variable first
+      // because we can't do member access on a side effect expression
+      if (rhs.is_function_call() || rhs.id() == "sideeffect")
+      {
+        // Create temporary variable to hold the result
+        locationt loc = get_location_from_decl(ast_node);
+        std::string temp_name =
+          "ESBMC_unpack_temp_" +
+          std::to_string(reinterpret_cast<uintptr_t>(&ast_node));
+
+        symbolt temp_symbol = create_symbol(
+          loc.get_file().as_string(),
+          temp_name,
+          create_symbol_id().to_string() + "@" + temp_name,
+          loc,
+          rhs.type());
+        temp_symbol.lvalue = true;
+        temp_symbol.file_local = true;
+        temp_symbol.is_extern = false;
+        temp_symbol.static_lifetime = false;
+
+        symbolt *added_temp = symbol_table_.move_symbol_to_context(temp_symbol);
+        exprt temp_var = symbol_expr(*added_temp);
+
+        // For function calls, set the LHS of the call to our temp variable
+        if (rhs.is_function_call())
+        {
+          code_function_callt &call = static_cast<code_function_callt &>(rhs);
+          call.lhs() = temp_var;
+          target_block.copy_to_operands(rhs);
+        }
+        else
+        {
+          // For other side effects, create an assignment
+          code_assignt temp_assign(temp_var, rhs);
+          temp_assign.location() = loc;
+          target_block.copy_to_operands(temp_assign);
+        }
+
+        // Now use the temp variable for unpacking
+        rhs = temp_var;
+      }
 
       // Handle tuple struct unpacking
       if (rhs.type().id() == "struct")
@@ -3203,7 +3247,7 @@ void python_converter::get_var_assign(
               std::to_string(tuple_type.components().size()));
           }
 
-          // Create assignments: x = t.element_0, y = t.element_1, ...
+          // Create assignments: x = temp.element_0, y = temp.element_1, ...
           for (size_t i = 0; i < targets.size(); i++)
           {
             if (targets[i]["_type"] != "Name")
@@ -3236,7 +3280,7 @@ void python_converter::get_var_assign(
               var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
             }
 
-            // Create member access: t.element_i
+            // Create member access: temp.element_i
             std::string member_name = "element_" + std::to_string(i);
             member_exprt member_access(
               rhs, member_name, tuple_type.components()[i].type());
