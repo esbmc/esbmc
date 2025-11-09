@@ -1317,9 +1317,8 @@ exprt function_call_expr::handle_list_clear() const
 
   // Find the list_clear C function
   const symbolt *clear_func =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_clear");
-  if (!clear_func)
-    throw std::runtime_error("Clear function symbol not found");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_clear");
+  assert(clear_func);
 
   // Build function call
   code_function_callt clear_call;
@@ -2157,7 +2156,7 @@ exprt function_call_expr::handle_general_function_call()
       assert(list_symbol);
 
       const symbolt *list_size_func_sym =
-        converter_.find_symbol("c:list.c@F@list_size");
+        converter_.find_symbol("c:@F@__ESBMC_list_size");
       assert(list_size_func_sym);
 
       code_function_callt list_size_func_call;

@@ -428,6 +428,74 @@ void goto_symext::finalize_realloc_result(
   dynamic_memory.emplace_back(result_copy, alloc_guard, false, symbol_name);
 }
 
+expr2tc goto_symext::symex_mem_inf(
+  const expr2tc &lhs,
+  const type2tc &base_type,
+  const guardt &guard)
+{
+  if (is_nil_expr(lhs))
+    return expr2tc(); // ignore
+
+  // size
+  type2tc type = base_type;
+
+  assert(!is_nil_type(base_type));
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  // value
+  symbolt symbol;
+
+  symbol.name = "dynamic_" + i2string(dynamic_counter) + "_inf_array";
+
+  symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
+  symbol.lvalue = true;
+
+  typet renamedtype = ns.follow(migrate_type_back(type));
+
+  symbol.type = array_typet(renamedtype, exprt("infinity", size_type()));
+  symbol.type.dynamic(true);
+  symbol.type.set(
+    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+  symbol.mode = "C";
+  new_context.add(symbol);
+
+  type2tc new_type = migrate_type(symbol.type);
+
+  type2tc rhs_type;
+  expr2tc rhs_ptr_obj;
+
+  type2tc subtype = migrate_type(symbol.type.subtype());
+  expr2tc sym = symbol2tc(new_type, symbol.id);
+  expr2tc idx_val = gen_long(size_type2(), 0L);
+  expr2tc idx = index2tc(subtype, sym, idx_val);
+  rhs_type = migrate_type(symbol.type.subtype());
+  rhs_ptr_obj = idx;
+
+  expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  expr2tc rhs = rhs_addrof;
+  expr2tc ptr_rhs = rhs;
+  guardt alloc_guard = cur_state->guard;
+
+  if (rhs->type != lhs->type)
+    rhs = typecast2tc(lhs->type, rhs);
+
+  cur_state->rename(rhs);
+  expr2tc rhs_copy(rhs);
+
+  symex_assign(code_assign2tc(lhs, rhs), true, guard);
+
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+
+  track_new_pointer(ptr_obj, new_type, guard, gen_one(size_type2()));
+
+  alloc_guard.append(guard);
+  dynamic_memory.emplace_back(
+    rhs_copy, alloc_guard, true, symbol.name.as_string());
+
+  return to_address_of2t(rhs_addrof).ptr_obj;
+}
+
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
