@@ -3343,6 +3343,69 @@ void python_converter::get_var_assign(
         return;
       }
 
+      // Handle pointer to list (list literal case)
+      else if (rhs.type().is_pointer())
+      {
+        // Check if this is a list literal by examining the AST
+        const auto &value_node = ast_node["value"];
+        if (value_node["_type"] == "List")
+        {
+          const auto &elements = value_node["elts"];
+          const auto &targets = target["elts"];
+
+          if (elements.size() != targets.size())
+          {
+            throw std::runtime_error(
+              "Cannot unpack list: expected " + std::to_string(targets.size()) +
+              " values, got " + std::to_string(elements.size()));
+          }
+
+          // Create assignments directly from list elements
+          for (size_t i = 0; i < targets.size(); i++)
+          {
+            if (targets[i]["_type"] != "Name")
+            {
+              throw std::runtime_error(
+                "List unpacking only supports simple names, not " +
+                targets[i]["_type"].get<std::string>());
+            }
+
+            std::string var_name = targets[i]["id"].get<std::string>();
+            symbol_id var_sid = create_symbol_id();
+            var_sid.set_object(var_name);
+
+            symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+            // Convert the element expression
+            is_converting_rhs = true;
+            exprt elem_expr = get_expr(elements[i]);
+            is_converting_rhs = false;
+
+            if (!var_symbol)
+            {
+              locationt loc = get_location_from_decl(targets[i]);
+
+              symbolt new_symbol = create_symbol(
+                loc.get_file().as_string(),
+                var_name,
+                var_sid.to_string(),
+                loc,
+                elem_expr.type());
+              new_symbol.lvalue = true;
+              new_symbol.file_local = true;
+              new_symbol.is_extern = false;
+              var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
+            }
+
+            code_assignt assign(symbol_expr(*var_symbol), elem_expr);
+            assign.location() = get_location_from_decl(ast_node);
+            target_block.copy_to_operands(assign);
+          }
+
+          return;
+        }
+      }
+
       throw std::runtime_error(
         "Cannot unpack " + rhs.type().id_string() +
         " - only tuples and arrays can be unpacked");
