@@ -1758,10 +1758,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
 
-  // Early detection for str.join() method calls
+  // Handle str.join() method calls
   // Python syntax: separator.join(iterable), e.g., " ".join(["a", "b"])
-  // This handles it before the general function_call_builder to ensure
-  // proper AST-based list element extraction
   if (
     element["func"]["_type"] == "Attribute" &&
     element["func"]["attr"] == "join")
