@@ -3035,6 +3035,228 @@ exprt python_converter::get_return_from_func(const char *func_symbol_id)
   return nil_exprt();
 }
 
+exprt python_converter::prepare_rhs_for_unpacking(
+  const nlohmann::json &ast_node,
+  exprt &rhs,
+  codet &target_block)
+{
+  // If RHS is a function call, we need to create a temporary variable first
+  // because we can't do member access on a side effect expression
+  if (rhs.is_function_call() || rhs.id() == "sideeffect")
+  {
+    locationt loc = get_location_from_decl(ast_node);
+    std::string temp_name =
+      "ESBMC_unpack_temp_" +
+      std::to_string(reinterpret_cast<uintptr_t>(&ast_node));
+
+    symbolt temp_symbol = create_symbol(
+      loc.get_file().as_string(),
+      temp_name,
+      create_symbol_id().to_string() + "@" + temp_name,
+      loc,
+      rhs.type());
+    temp_symbol.lvalue = true;
+    temp_symbol.file_local = true;
+    temp_symbol.is_extern = false;
+    temp_symbol.static_lifetime = false;
+
+    symbolt *added_temp = symbol_table_.move_symbol_to_context(temp_symbol);
+    exprt temp_var = symbol_expr(*added_temp);
+
+    if (rhs.is_function_call())
+    {
+      code_function_callt &call = static_cast<code_function_callt &>(rhs);
+      call.lhs() = temp_var;
+      target_block.copy_to_operands(rhs);
+    }
+    else
+    {
+      code_assignt temp_assign(temp_var, rhs);
+      temp_assign.location() = loc;
+      target_block.copy_to_operands(temp_assign);
+    }
+
+    return temp_var;
+  }
+
+  return rhs;
+}
+
+void python_converter::handle_tuple_unpacking(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  exprt &rhs,
+  codet &target_block)
+{
+  const struct_typet &tuple_type = to_struct_type(rhs.type());
+
+  // Verify it's a tuple
+  if (tuple_type.tag().as_string().find("tag-tuple") != 0)
+    return;
+
+  const auto &targets = target["elts"];
+
+  if (targets.size() != tuple_type.components().size())
+  {
+    throw std::runtime_error(
+      "Cannot unpack tuple: expected " + std::to_string(targets.size()) +
+      " values, got " + std::to_string(tuple_type.components().size()));
+  }
+
+  // Create assignments: x = temp.element_0, y = temp.element_1, ...
+  for (size_t i = 0; i < targets.size(); i++)
+  {
+    if (targets[i]["_type"] != "Name")
+    {
+      throw std::runtime_error(
+        "Tuple unpacking only supports simple names, not " +
+        targets[i]["_type"].get<std::string>());
+    }
+
+    std::string var_name = targets[i]["id"].get<std::string>();
+    symbol_id var_sid = create_symbol_id();
+    var_sid.set_object(var_name);
+
+    symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+    if (!var_symbol)
+    {
+      locationt loc = get_location_from_decl(targets[i]);
+      const typet &elem_type = tuple_type.components()[i].type();
+
+      symbolt new_symbol = create_symbol(
+        loc.get_file().as_string(),
+        var_name,
+        var_sid.to_string(),
+        loc,
+        elem_type);
+      new_symbol.lvalue = true;
+      new_symbol.file_local = true;
+      new_symbol.is_extern = false;
+      var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
+    }
+
+    // Create member access: temp.element_i
+    std::string member_name = "element_" + std::to_string(i);
+    member_exprt member_access(
+      rhs, member_name, tuple_type.components()[i].type());
+
+    // Create assignment
+    code_assignt assign(symbol_expr(*var_symbol), member_access);
+    assign.location() = get_location_from_decl(ast_node);
+    target_block.copy_to_operands(assign);
+  }
+}
+
+void python_converter::handle_array_unpacking(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  exprt &rhs,
+  codet &target_block)
+{
+  const auto &targets = target["elts"];
+
+  for (size_t i = 0; i < targets.size(); i++)
+  {
+    if (targets[i]["_type"] != "Name")
+    {
+      throw std::runtime_error(
+        "Array unpacking only supports simple names, not " +
+        targets[i]["_type"].get<std::string>());
+    }
+
+    std::string var_name = targets[i]["id"].get<std::string>();
+    symbol_id var_sid = create_symbol_id();
+    var_sid.set_object(var_name);
+
+    symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+    if (!var_symbol)
+    {
+      locationt loc = get_location_from_decl(targets[i]);
+      typet elem_type = rhs.type().subtype();
+
+      symbolt new_symbol = create_symbol(
+        loc.get_file().as_string(),
+        var_name,
+        var_sid.to_string(),
+        loc,
+        elem_type);
+      new_symbol.lvalue = true;
+      new_symbol.file_local = true;
+      new_symbol.is_extern = false;
+      var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
+    }
+
+    // Create subscript: rhs[i]
+    exprt index_expr = from_integer(i, size_type());
+    index_exprt subscript(rhs, index_expr, rhs.type().subtype());
+
+    code_assignt assign(symbol_expr(*var_symbol), subscript);
+    assign.location() = get_location_from_decl(ast_node);
+    target_block.copy_to_operands(assign);
+  }
+}
+
+void python_converter::handle_list_literal_unpacking(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  codet &target_block)
+{
+  const auto &value_node = ast_node["value"];
+  const auto &elements = value_node["elts"];
+  const auto &targets = target["elts"];
+
+  if (elements.size() != targets.size())
+  {
+    throw std::runtime_error(
+      "Cannot unpack list: expected " + std::to_string(targets.size()) +
+      " values, got " + std::to_string(elements.size()));
+  }
+
+  // Create assignments directly from list elements
+  for (size_t i = 0; i < targets.size(); i++)
+  {
+    if (targets[i]["_type"] != "Name")
+    {
+      throw std::runtime_error(
+        "List unpacking only supports simple names, not " +
+        targets[i]["_type"].get<std::string>());
+    }
+
+    std::string var_name = targets[i]["id"].get<std::string>();
+    symbol_id var_sid = create_symbol_id();
+    var_sid.set_object(var_name);
+
+    symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+    // Convert the element expression
+    is_converting_rhs = true;
+    exprt elem_expr = get_expr(elements[i]);
+    is_converting_rhs = false;
+
+    if (!var_symbol)
+    {
+      locationt loc = get_location_from_decl(targets[i]);
+
+      symbolt new_symbol = create_symbol(
+        loc.get_file().as_string(),
+        var_name,
+        var_sid.to_string(),
+        loc,
+        elem_expr.type());
+      new_symbol.lvalue = true;
+      new_symbol.file_local = true;
+      new_symbol.is_extern = false;
+      var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
+    }
+
+    code_assignt assign(symbol_expr(*var_symbol), elem_expr);
+    assign.location() = get_location_from_decl(ast_node);
+    target_block.copy_to_operands(assign);
+  }
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -3052,7 +3274,7 @@ void python_converter::get_var_assign(
                                                       : ast_node["target"];
   const auto &target_type = target["_type"];
 
-  // this is used to handle forward references
+  // Handle forward references
   if (
     ast_node.contains("value") && !ast_node["value"].is_null() &&
     ast_node["value"]["_type"] == "Call" &&
@@ -3178,7 +3400,7 @@ void python_converter::get_var_assign(
     const auto &target = ast_node["targets"][0];
     const auto &target_type = target["_type"];
 
-    // Handle tuple/list unpacking: (x, y) = t or [a, b] = arr
+    // Handle tuple/list unpacking
     if (target_type == "Tuple" || target_type == "List")
     {
       // Get RHS
@@ -3186,222 +3408,26 @@ void python_converter::get_var_assign(
       exprt rhs = get_expr(ast_node["value"]);
       is_converting_rhs = false;
 
-      // If RHS is a function call, we need to create a temporary variable first
-      // because we can't do member access on a side effect expression
-      if (rhs.is_function_call() || rhs.id() == "sideeffect")
-      {
-        // Create temporary variable to hold the result
-        locationt loc = get_location_from_decl(ast_node);
-        std::string temp_name =
-          "ESBMC_unpack_temp_" +
-          std::to_string(reinterpret_cast<uintptr_t>(&ast_node));
+      // Prepare RHS if it's a function call
+      rhs = prepare_rhs_for_unpacking(ast_node, rhs, target_block);
 
-        symbolt temp_symbol = create_symbol(
-          loc.get_file().as_string(),
-          temp_name,
-          create_symbol_id().to_string() + "@" + temp_name,
-          loc,
-          rhs.type());
-        temp_symbol.lvalue = true;
-        temp_symbol.file_local = true;
-        temp_symbol.is_extern = false;
-        temp_symbol.static_lifetime = false;
-
-        symbolt *added_temp = symbol_table_.move_symbol_to_context(temp_symbol);
-        exprt temp_var = symbol_expr(*added_temp);
-
-        // For function calls, set the LHS of the call to our temp variable
-        if (rhs.is_function_call())
-        {
-          code_function_callt &call = static_cast<code_function_callt &>(rhs);
-          call.lhs() = temp_var;
-          target_block.copy_to_operands(rhs);
-        }
-        else
-        {
-          // For other side effects, create an assignment
-          code_assignt temp_assign(temp_var, rhs);
-          temp_assign.location() = loc;
-          target_block.copy_to_operands(temp_assign);
-        }
-
-        // Now use the temp variable for unpacking
-        rhs = temp_var;
-      }
-
-      // Handle tuple struct unpacking
+      // Handle different unpacking types
       if (rhs.type().id() == "struct")
       {
-        const struct_typet &tuple_type = to_struct_type(rhs.type());
-
-        // Verify it's a tuple
-        if (tuple_type.tag().as_string().find("tag-tuple") == 0)
-        {
-          const auto &targets = target["elts"];
-
-          if (targets.size() != tuple_type.components().size())
-          {
-            throw std::runtime_error(
-              "Cannot unpack tuple: expected " +
-              std::to_string(targets.size()) + " values, got " +
-              std::to_string(tuple_type.components().size()));
-          }
-
-          // Create assignments: x = temp.element_0, y = temp.element_1, ...
-          for (size_t i = 0; i < targets.size(); i++)
-          {
-            if (targets[i]["_type"] != "Name")
-            {
-              throw std::runtime_error(
-                "Tuple unpacking only supports simple names, not " +
-                targets[i]["_type"].get<std::string>());
-            }
-
-            std::string var_name = targets[i]["id"].get<std::string>();
-            symbol_id var_sid = create_symbol_id();
-            var_sid.set_object(var_name);
-
-            symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-            if (!var_symbol)
-            {
-              locationt loc = get_location_from_decl(targets[i]);
-              const typet &elem_type = tuple_type.components()[i].type();
-
-              symbolt new_symbol = create_symbol(
-                loc.get_file().as_string(),
-                var_name,
-                var_sid.to_string(),
-                loc,
-                elem_type);
-              new_symbol.lvalue = true;
-              new_symbol.file_local = true;
-              new_symbol.is_extern = false;
-              var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
-            }
-
-            // Create member access: temp.element_i
-            std::string member_name = "element_" + std::to_string(i);
-            member_exprt member_access(
-              rhs, member_name, tuple_type.components()[i].type());
-
-            // Create assignment
-            code_assignt assign(symbol_expr(*var_symbol), member_access);
-            assign.location() = get_location_from_decl(ast_node);
-            target_block.copy_to_operands(assign);
-          }
-
-          return;
-        }
-      }
-      // Handle array/list unpacking
-      else if (rhs.type().is_array())
-      {
-        const auto &targets = target["elts"];
-
-        for (size_t i = 0; i < targets.size(); i++)
-        {
-          if (targets[i]["_type"] != "Name")
-          {
-            throw std::runtime_error(
-              "Array unpacking only supports simple names, not " +
-              targets[i]["_type"].get<std::string>());
-          }
-
-          std::string var_name = targets[i]["id"].get<std::string>();
-          symbol_id var_sid = create_symbol_id();
-          var_sid.set_object(var_name);
-
-          symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-          if (!var_symbol)
-          {
-            locationt loc = get_location_from_decl(targets[i]);
-            typet elem_type = rhs.type().subtype();
-
-            symbolt new_symbol = create_symbol(
-              loc.get_file().as_string(),
-              var_name,
-              var_sid.to_string(),
-              loc,
-              elem_type);
-            new_symbol.lvalue = true;
-            new_symbol.file_local = true;
-            new_symbol.is_extern = false;
-            var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
-          }
-
-          // Create subscript: rhs[i]
-          exprt index_expr = from_integer(i, size_type());
-          index_exprt subscript(rhs, index_expr, rhs.type().subtype());
-
-          code_assignt assign(symbol_expr(*var_symbol), subscript);
-          assign.location() = get_location_from_decl(ast_node);
-          target_block.copy_to_operands(assign);
-        }
-
+        handle_tuple_unpacking(ast_node, target, rhs, target_block);
         return;
       }
-
-      // Handle pointer to list (list literal case)
+      else if (rhs.type().is_array())
+      {
+        handle_array_unpacking(ast_node, target, rhs, target_block);
+        return;
+      }
       else if (rhs.type().is_pointer())
       {
-        // Check if this is a list literal by examining the AST
         const auto &value_node = ast_node["value"];
         if (value_node["_type"] == "List")
         {
-          const auto &elements = value_node["elts"];
-          const auto &targets = target["elts"];
-
-          if (elements.size() != targets.size())
-          {
-            throw std::runtime_error(
-              "Cannot unpack list: expected " + std::to_string(targets.size()) +
-              " values, got " + std::to_string(elements.size()));
-          }
-
-          // Create assignments directly from list elements
-          for (size_t i = 0; i < targets.size(); i++)
-          {
-            if (targets[i]["_type"] != "Name")
-            {
-              throw std::runtime_error(
-                "List unpacking only supports simple names, not " +
-                targets[i]["_type"].get<std::string>());
-            }
-
-            std::string var_name = targets[i]["id"].get<std::string>();
-            symbol_id var_sid = create_symbol_id();
-            var_sid.set_object(var_name);
-
-            symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-            // Convert the element expression
-            is_converting_rhs = true;
-            exprt elem_expr = get_expr(elements[i]);
-            is_converting_rhs = false;
-
-            if (!var_symbol)
-            {
-              locationt loc = get_location_from_decl(targets[i]);
-
-              symbolt new_symbol = create_symbol(
-                loc.get_file().as_string(),
-                var_name,
-                var_sid.to_string(),
-                loc,
-                elem_expr.type());
-              new_symbol.lvalue = true;
-              new_symbol.file_local = true;
-              new_symbol.is_extern = false;
-              var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
-            }
-
-            code_assignt assign(symbol_expr(*var_symbol), elem_expr);
-            assign.location() = get_location_from_decl(ast_node);
-            target_block.copy_to_operands(assign);
-          }
-
+          handle_list_literal_unpacking(ast_node, target, target_block);
           return;
         }
       }
@@ -3413,7 +3439,6 @@ void python_converter::get_var_assign(
 
     // Normal assignment handling
     std::string name;
-
     if (target_type == "Subscript")
       name = target["value"]["id"].get<std::string>();
     else if (target_type == "Attribute")

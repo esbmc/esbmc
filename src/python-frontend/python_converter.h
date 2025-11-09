@@ -347,6 +347,28 @@ private:
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
 
+  void handle_tuple_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    exprt &rhs,
+    codet &target_block);
+
+  void handle_array_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    exprt &rhs,
+    codet &target_block);
+
+  void handle_list_literal_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
+  exprt prepare_rhs_for_unpacking(
+    const nlohmann::json &ast_node,
+    exprt &rhs,
+    codet &target_block);
+
   exprt create_lhs_expression(
     const nlohmann::json &target,
     symbolt *lhs_symbol,
