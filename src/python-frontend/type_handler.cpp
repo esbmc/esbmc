@@ -647,7 +647,7 @@ const typet type_handler::get_list_type() const
 {
   static const symbolt *list_type_symbol = nullptr;
   const char *list_type_id = "tag-struct __ESBMC_PyListObj";
-  list_type_symbol = converter_.symbol_table().find_symbol(list_type_id);  
+  list_type_symbol = converter_.symbol_table().find_symbol(list_type_id);
   assert(list_type_symbol);
   return pointer_typet(symbol_typet(list_type_symbol->id));
 }

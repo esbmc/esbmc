@@ -429,8 +429,8 @@ void goto_symext::finalize_realloc_result(
 }
 
 expr2tc goto_symext::symex_mem_inf(
-				   const expr2tc &lhs,
-				   const type2tc &base_type,
+  const expr2tc &lhs,
+  const type2tc &base_type,
   const guardt &guard)
 {
   if (is_nil_expr(lhs))
@@ -499,7 +499,6 @@ expr2tc goto_symext::symex_mem_inf(
 
   return to_address_of2t(rhs_addrof).ptr_obj;
 }
-
 
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,

@@ -983,7 +983,8 @@ void goto_symext::run_intrinsic(
       new_context.find_symbol("tag-struct __ESBMC_PyObj");
     assert(list_object_symbol);
 
-    symex_mem_inf(func_call.ret, migrate_type(list_object_symbol->type), cur_state->guard);
+    symex_mem_inf(
+      func_call.ret, migrate_type(list_object_symbol->type), cur_state->guard);
 
     return;
   }
