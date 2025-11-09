@@ -761,8 +761,19 @@ const symbolt *
 function_call_expr::lookup_python_symbol(const std::string &var_name) const
 {
   std::string filename = function_id_.get_filename();
-  std::string var_symbol = "py:" + filename + "@" + var_name;
+  std::string enclosing_function = converter_.current_function_name();
+
+  // Construct the full symbol identifier with function scope
+  std::string var_symbol =
+    "py:" + filename + "@F@" + enclosing_function + "@" + var_name;
   const symbolt *sym = converter_.find_symbol(var_symbol);
+
+  // If not found in function scope, try module-level scope
+  if (!sym)
+  {
+    var_symbol = "py:" + filename + "@" + var_name;
+    sym = converter_.find_symbol(var_symbol);
+  }
 
   if (!sym)
   {
@@ -904,23 +915,102 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "str" && arg["value"].is_number_float())
     return handle_float_to_str(arg);
 
-  // Handle int(): convert string (from symbol) to int
-  else if (func_name == "int" && arg["_type"] == "Name")
+  // Handle int(): convert to integer
+  else if (func_name == "int")
   {
-    const symbolt *sym = lookup_python_symbol(arg["id"]);
-    if (sym && sym->value.is_constant())
-      return handle_str_symbol_to_int(sym);
+    // Get the arguments list from the call
+    const nlohmann::json &arguments =
+      call_.contains("args") ? call_["args"] : nlohmann::json::array();
+
+    // int() with no arguments returns 0
+    if (arguments.empty())
+    {
+      return from_integer(0, int_type());
+    }
+
+    const nlohmann::json &first_arg = arguments[0];
+
+    // Check if we have a base argument (second parameter)
+    exprt base_expr = nil_exprt();
+    if (arguments.size() > 1)
+    {
+      // Get the base expression
+      base_expr = converter_.get_expr(arguments[1]);
+    }
+
+    // Handle Name type (variable reference)
+    if (first_arg["_type"] == "Name")
+    {
+      const symbolt *sym = lookup_python_symbol(first_arg["id"]);
+      if (sym && sym->value.is_constant())
+      {
+        if (base_expr.is_nil())
+        {
+          return handle_str_symbol_to_int(sym);
+        }
+        else
+        {
+          // Convert symbol to expression and use with base
+          exprt value_expr = symbol_expr(*sym);
+          return converter_.get_string_handler()
+            .handle_int_conversion_with_base(
+              value_expr, base_expr, converter_.get_location_from_decl(call_));
+        }
+      }
+      else
+      {
+        // Try to get the expression type directly
+        exprt expr = converter_.get_expr(first_arg);
+
+        if (base_expr.is_nil())
+        {
+          // No base provided, use general conversion
+          return converter_.get_string_handler().handle_int_conversion(
+            expr, converter_.get_location_from_decl(call_));
+        }
+        else
+        {
+          // Base provided, use conversion with base
+          return converter_.get_string_handler()
+            .handle_int_conversion_with_base(
+              expr, base_expr, converter_.get_location_from_decl(call_));
+        }
+      }
+    }
+    // Handle other types (Constant, etc.)
     else
     {
-      // Try to get the expression type directly, even if symbol lookup failed
-      exprt expr = converter_.get_expr(arg);
-      if (type_utils::is_string_type(expr.type()))
-      {
-        std::string var_name = arg["id"].get<std::string>();
-        std::string m = "int() conversion may fail - variable" + var_name +
-                        "may contain non-integer string";
+      exprt value_expr = converter_.get_expr(first_arg);
 
-        return gen_exception_raise("ValueError", m);
+      // If it's a constant string, we need to ensure proper conversion
+      if (
+        first_arg["_type"] == "Constant" && first_arg.contains("value") &&
+        first_arg["value"].is_string())
+      {
+        // This is a string literal - use string conversion
+        if (base_expr.is_nil())
+        {
+          return converter_.get_string_handler().handle_string_to_int_base10(
+            value_expr, converter_.get_location_from_decl(call_));
+        }
+        else
+        {
+          return converter_.get_string_handler().handle_string_to_int(
+            value_expr, base_expr, converter_.get_location_from_decl(call_));
+        }
+      }
+
+      if (base_expr.is_nil())
+      {
+        // No base provided
+        return converter_.get_string_handler().handle_int_conversion(
+          value_expr, converter_.get_location_from_decl(call_));
+      }
+      else
+      {
+        // Base provided
+        return converter_.get_string_handler().handle_int_conversion_with_base(
+          value_expr, base_expr, converter_.get_location_from_decl(call_));
       }
     }
   }
@@ -1930,6 +2020,9 @@ exprt function_call_expr::handle_general_function_call()
   const typet &return_type = to_code_type(func_symbol->type).return_type();
   call.type() = return_type;
 
+  // Determine parameter offset for Optional wrapping logic
+  size_t param_offset = 0;
+
   // Add self as first parameter
   if (function_type_ == FunctionType::Constructor)
   {
@@ -1937,6 +2030,7 @@ exprt function_call_expr::handle_general_function_call()
     // Self is the LHS
     if (converter_.current_lhs)
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
+    param_offset = 1;
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
@@ -1961,6 +2055,7 @@ exprt function_call_expr::handle_general_function_call()
           "InstanceMethod requires obj_symbol or valid attribute chain");
       }
     }
+    param_offset = 1;
   }
   else if (function_type_ == FunctionType::ClassMethod)
   {
@@ -1985,12 +2080,14 @@ exprt function_call_expr::handle_general_function_call()
     {
       // First positional argument will be added in the loop below as 'self'
       // Don't add a NULL cls parameter
+      param_offset = 1;
     }
     else
     {
       // Passing a void pointer to the "cls" argument
       typet t = pointer_typet(empty_typet());
       call.arguments().push_back(gen_zero(t));
+      param_offset = 1;
 
       // All methods for the int class without parameters acts solely on the encapsulated integer value.
       // Therefore, we always pass the caller (obj) as a parameter in these functions.
@@ -2010,9 +2107,35 @@ exprt function_call_expr::handle_general_function_call()
     }
   }
 
+  // Get function type and parameters for Optional wrapping
+  const code_typet &func_type = to_code_type(func_symbol->type);
+  const auto &params = func_type.arguments();
+
+  size_t arg_index = 0;
   for (const auto &arg_node : call_["args"])
   {
     exprt arg = converter_.get_expr(arg_node);
+
+    // Check if the corresponding parameter is Optional
+    size_t param_idx = arg_index + param_offset;
+
+    if (param_idx < params.size())
+    {
+      const typet &param_type = params[param_idx].type();
+
+      // Check if parameter is an Optional type
+      if (param_type.is_struct())
+      {
+        const struct_typet &struct_type = to_struct_type(param_type);
+        std::string tag = struct_type.tag().as_string();
+
+        if (tag.starts_with("tag-Optional_"))
+        {
+          // Wrap the argument in Optional struct
+          arg = converter_.wrap_in_optional(arg, param_type);
+        }
+      }
+    }
 
     // Handle string literal constants
     // Ensure they are proper null-terminated arrays
@@ -2116,6 +2239,8 @@ exprt function_call_expr::handle_general_function_call()
     }
     else
       call.arguments().push_back(arg);
+
+    arg_index++;
   }
 
   return call;

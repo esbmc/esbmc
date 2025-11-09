@@ -450,7 +450,9 @@ void string_handler::ensure_string_array(exprt &expr)
 
   if (!expr.type().is_array())
   {
-    typet t = type_handler_.build_array(expr.type(), 1);
+    // Explicitly build the array and
+    // ensure null-termination (size 2: char + \0)
+    typet t = type_handler_.build_array(expr.type(), 2);
     exprt arr = gen_zero(t);
     arr.operands().at(0) = expr;
     expr = arr;
@@ -1098,4 +1100,122 @@ exprt string_handler::handle_string_lower(
   lower_call.type() = pointer_typet(char_type());
 
   return lower_call;
+}
+
+exprt string_handler::handle_string_to_int(
+  const exprt &string_obj,
+  const exprt &base_arg,
+  const locationt &location)
+{
+  // Ensure we have a null-terminated string
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+
+  // Get base address of the string
+  exprt str_addr = get_array_base_address(str_expr);
+
+  // Determine the base value (default is 10)
+  exprt base_expr = base_arg;
+  if (base_expr.is_nil())
+  {
+    // Default base is 10
+    base_expr = from_integer(10, int_type());
+  }
+  else if (!base_expr.type().is_signedbv() && !base_expr.type().is_unsignedbv())
+  {
+    // Cast base to int if needed
+    base_expr = typecast_exprt(base_expr, int_type());
+  }
+
+  // Find the __python_int function symbol
+  symbolt *int_symbol = symbol_table_.find_symbol("c:@F@__python_int");
+  if (!int_symbol)
+  {
+    throw std::runtime_error("__python_int function not found in symbol table");
+  }
+
+  // Call __python_int(str, base)
+  side_effect_expr_function_callt int_call;
+  int_call.function() = symbol_expr(*int_symbol);
+  int_call.arguments().push_back(str_addr);
+  int_call.arguments().push_back(base_expr);
+  int_call.location() = location;
+  int_call.type() = int_type();
+
+  return int_call;
+}
+
+exprt string_handler::handle_string_to_int_base10(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Convenience wrapper for base 10 conversion
+  return handle_string_to_int(string_obj, nil_exprt(), location);
+}
+
+exprt string_handler::handle_int_conversion(
+  const exprt &arg,
+  const locationt &location)
+{
+  // Handle int() with different argument types
+
+  // If argument is already an integer type, return as is
+  if (type_utils::is_integer_type(arg.type()))
+  {
+    return arg;
+  }
+
+  // If argument is a float, truncate to integer
+  if (arg.type().is_floatbv())
+  {
+    return typecast_exprt(arg, int_type());
+  }
+
+  // If argument is a boolean, convert to 0 or 1
+  if (arg.type().is_bool())
+  {
+    exprt result("if", int_type());
+    result.copy_to_operands(arg);
+    result.copy_to_operands(from_integer(1, int_type()));
+    result.copy_to_operands(from_integer(0, int_type()));
+    return result;
+  }
+
+  // If argument is a string or char array, use string conversion
+  if (arg.type().is_array() && arg.type().subtype() == char_type())
+  {
+    return handle_string_to_int_base10(arg, location);
+  }
+
+  // If argument is a pointer to char (string pointer)
+  if (arg.type().is_pointer() && arg.type().subtype() == char_type())
+  {
+    // Create a wrapper to ensure null-termination handling
+    exprt string_copy = arg;
+    return handle_string_to_int(string_copy, nil_exprt(), location);
+  }
+
+  // For other types, attempt a typecast
+  return typecast_exprt(arg, int_type());
+}
+
+exprt string_handler::handle_int_conversion_with_base(
+  const exprt &arg,
+  const exprt &base,
+  const locationt &location)
+{
+  // int() with explicit base only works with strings
+  if (!arg.type().is_array() && !arg.type().is_pointer())
+  {
+    throw std::runtime_error("int() with base argument requires string input");
+  }
+
+  // Ensure base is an integer
+  exprt base_expr = base;
+  if (!base_expr.type().is_signedbv() && !base_expr.type().is_unsignedbv())
+  {
+    base_expr = typecast_exprt(base_expr, int_type());
+  }
+
+  return handle_string_to_int(arg, base_expr, location);
 }
