@@ -22,6 +22,7 @@ class function_call_expr;
 class type_handler;
 class string_builder;
 class module_locator;
+class tuple_handler;
 
 class python_converter
 {
@@ -45,6 +46,11 @@ public:
   string_handler &get_string_handler()
   {
     return string_handler_;
+  }
+
+  tuple_handler &get_tuple_handler()
+  {
+    return *tuple_handler_;
   }
 
   const nlohmann::json &ast() const
@@ -137,6 +143,7 @@ private:
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
+  friend class tuple_handler;
   bool processing_list_elements = false;
 
   template <typename Func>
@@ -283,6 +290,7 @@ private:
     const nlohmann::json &function_node,
     const code_typet &type,
     exprt &function_body);
+
   exprt compare_constants_internal(
     const std::string &op,
     const exprt &lhs,
@@ -347,12 +355,6 @@ private:
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
 
-  void handle_tuple_unpacking(
-    const nlohmann::json &ast_node,
-    const nlohmann::json &target,
-    exprt &rhs,
-    codet &target_block);
-
   void handle_array_unpacking(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
@@ -362,11 +364,6 @@ private:
   void handle_list_literal_unpacking(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
-    codet &target_block);
-
-  exprt prepare_rhs_for_unpacking(
-    const nlohmann::json &ast_node,
-    exprt &rhs,
     codet &target_block);
 
   exprt create_lhs_expression(
@@ -395,6 +392,7 @@ private:
   void process_forward_reference(
     const nlohmann::json &annotation,
     codet &target_block);
+
   // Wrap values in Optional
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
 
@@ -419,6 +417,7 @@ private:
   exprt *current_lhs;
   string_handler string_handler_;
   python_math math_handler_;
+  tuple_handler *tuple_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;

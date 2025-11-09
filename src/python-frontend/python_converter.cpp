@@ -7,6 +7,7 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/string_builder.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -2595,55 +2596,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     const nlohmann::json &slice = element["slice"];
 
     // Handle tuple subscripting - tuples are structs, not arrays
-    if (array.type().id() == "struct")
+    if (tuple_handler_->is_tuple_type(array.type()))
     {
-      const struct_typet &struct_type = to_struct_type(array.type());
-
-      // Check if this is a tuple (has our tuple tag pattern)
-      if (struct_type.tag().as_string().find("tag-tuple") == 0)
-      {
-        // For tuples, convert subscript to member access
-        exprt index_expr = get_expr(slice);
-
-        // Index must be a constant for struct member access
-        if (index_expr.is_constant())
-        {
-          const constant_exprt &const_index = to_constant_expr(index_expr);
-          BigInt index_val = binary2integer(const_index.value().c_str(), false);
-
-          // Convert BigInt to size_t for array indexing
-          size_t idx = index_val.to_int64();
-
-          // Check bounds
-          if (index_val < 0 || idx >= struct_type.components().size())
-          {
-            log_error(
-              "Tuple index {} out of range (size: {})",
-              index_val,
-              struct_type.components().size());
-            expr = exprt();
-            break;
-          }
-
-          // Create member access expression: t[0] -> t.element_0
-          std::string member_name = "element_" + integer2string(index_val);
-          const struct_typet::componentt &comp = struct_type.components()[idx];
-
-          expr = member_exprt(array, member_name, comp.type());
-
-          if (element.contains("lineno"))
-          {
-            locationt loc = get_location_from_decl(element);
-            expr.location() = loc;
-          }
-        }
-        else
-        {
-          log_error("Tuple subscript with non-constant index is not supported");
-          expr = exprt();
-        }
-        break;
-      }
+      expr = tuple_handler_->handle_tuple_subscript(array, slice, element);
+      break;
     }
 
     // Handle regular array/list subscripting
@@ -2674,55 +2630,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
 exprt python_converter::get_tuple_expr(const nlohmann::json &element)
 {
-  assert(element.contains("_type") && element["_type"] == "Tuple");
-  assert(element.contains("elts"));
-
-  const nlohmann::json &elts = element["elts"];
-
-  // Build a tag name based on element types for type unification
-  std::string tag_name = "tag-tuple";
-
-  // Process each element and collect expressions
-  std::vector<exprt> element_exprs;
-  element_exprs.reserve(elts.size());
-
-  // First pass: get all expressions to determine types
-  for (size_t i = 0; i < elts.size(); i++)
-  {
-    exprt elem_expr = get_expr(elts[i]);
-    element_exprs.push_back(elem_expr);
-
-    // Build unique tag based on types to ensure type identity
-    tag_name += "_" + elem_expr.type().to_string();
-  }
-
-  // Create a struct type to represent the tuple
-  struct_typet tuple_type;
-
-  // Add components
-  for (size_t i = 0; i < element_exprs.size(); i++)
-  {
-    std::string comp_name = "element_" + std::to_string(i);
-    struct_typet::componentt comp(
-      comp_name, comp_name, element_exprs[i].type());
-    tuple_type.components().push_back(comp);
-  }
-
-  // Set the tag to ensure type identity across tuple instances
-  tuple_type.tag(tag_name);
-
-  // Create struct expression with tuple type
-  struct_exprt tuple_expr(tuple_type);
-  tuple_expr.operands() = element_exprs;
-
-  // Set location information
-  if (element.contains("lineno"))
-  {
-    locationt loc = get_location_from_decl(element);
-    tuple_expr.location() = loc;
-  }
-
-  return tuple_expr;
+  return tuple_handler_->get_tuple_expr(element);
 }
 
 void python_converter::copy_instance_attributes(
@@ -3035,119 +2943,6 @@ exprt python_converter::get_return_from_func(const char *func_symbol_id)
   return nil_exprt();
 }
 
-exprt python_converter::prepare_rhs_for_unpacking(
-  const nlohmann::json &ast_node,
-  exprt &rhs,
-  codet &target_block)
-{
-  // If RHS is a function call, we need to create a temporary variable first
-  // because we can't do member access on a side effect expression
-  if (rhs.is_function_call() || rhs.id() == "sideeffect")
-  {
-    locationt loc = get_location_from_decl(ast_node);
-    std::string temp_name =
-      "ESBMC_unpack_temp_" +
-      std::to_string(reinterpret_cast<uintptr_t>(&ast_node));
-
-    symbolt temp_symbol = create_symbol(
-      loc.get_file().as_string(),
-      temp_name,
-      create_symbol_id().to_string() + "@" + temp_name,
-      loc,
-      rhs.type());
-    temp_symbol.lvalue = true;
-    temp_symbol.file_local = true;
-    temp_symbol.is_extern = false;
-    temp_symbol.static_lifetime = false;
-
-    symbolt *added_temp = symbol_table_.move_symbol_to_context(temp_symbol);
-    exprt temp_var = symbol_expr(*added_temp);
-
-    if (rhs.is_function_call())
-    {
-      code_function_callt &call = static_cast<code_function_callt &>(rhs);
-      call.lhs() = temp_var;
-      target_block.copy_to_operands(rhs);
-    }
-    else
-    {
-      code_assignt temp_assign(temp_var, rhs);
-      temp_assign.location() = loc;
-      target_block.copy_to_operands(temp_assign);
-    }
-
-    return temp_var;
-  }
-
-  return rhs;
-}
-
-void python_converter::handle_tuple_unpacking(
-  const nlohmann::json &ast_node,
-  const nlohmann::json &target,
-  exprt &rhs,
-  codet &target_block)
-{
-  const struct_typet &tuple_type = to_struct_type(rhs.type());
-
-  // Verify it's a tuple
-  if (tuple_type.tag().as_string().find("tag-tuple") != 0)
-    return;
-
-  const auto &targets = target["elts"];
-
-  if (targets.size() != tuple_type.components().size())
-  {
-    throw std::runtime_error(
-      "Cannot unpack tuple: expected " + std::to_string(targets.size()) +
-      " values, got " + std::to_string(tuple_type.components().size()));
-  }
-
-  // Create assignments: x = temp.element_0, y = temp.element_1, ...
-  for (size_t i = 0; i < targets.size(); i++)
-  {
-    if (targets[i]["_type"] != "Name")
-    {
-      throw std::runtime_error(
-        "Tuple unpacking only supports simple names, not " +
-        targets[i]["_type"].get<std::string>());
-    }
-
-    std::string var_name = targets[i]["id"].get<std::string>();
-    symbol_id var_sid = create_symbol_id();
-    var_sid.set_object(var_name);
-
-    symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-    if (!var_symbol)
-    {
-      locationt loc = get_location_from_decl(targets[i]);
-      const typet &elem_type = tuple_type.components()[i].type();
-
-      symbolt new_symbol = create_symbol(
-        loc.get_file().as_string(),
-        var_name,
-        var_sid.to_string(),
-        loc,
-        elem_type);
-      new_symbol.lvalue = true;
-      new_symbol.file_local = true;
-      new_symbol.is_extern = false;
-      var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
-    }
-
-    // Create member access: temp.element_i
-    std::string member_name = "element_" + std::to_string(i);
-    member_exprt member_access(
-      rhs, member_name, tuple_type.components()[i].type());
-
-    // Create assignment
-    code_assignt assign(symbol_expr(*var_symbol), member_access);
-    assign.location() = get_location_from_decl(ast_node);
-    target_block.copy_to_operands(assign);
-  }
-}
-
 void python_converter::handle_array_unpacking(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -3409,12 +3204,14 @@ void python_converter::get_var_assign(
       is_converting_rhs = false;
 
       // Prepare RHS if it's a function call
-      rhs = prepare_rhs_for_unpacking(ast_node, rhs, target_block);
+      rhs =
+        tuple_handler_->prepare_rhs_for_unpacking(ast_node, rhs, target_block);
 
       // Handle different unpacking types
       if (rhs.type().id() == "struct")
       {
-        handle_tuple_unpacking(ast_node, target, rhs, target_block);
+        tuple_handler_->handle_tuple_unpacking(
+          ast_node, target, rhs, target_block);
         return;
       }
       else if (rhs.type().is_array())
@@ -4666,38 +4463,8 @@ void python_converter::get_function_definition(
     }
     else if (return_type == "tuple" && return_node["_type"] == "Subscript")
     {
-      // Handle tuple[int, int] style annotations
-      struct_typet tuple_type;
-      const auto &slice = return_node["slice"];
-
-      // Build tag name matching the pattern used in get_tuple_expr
-      std::string tag_name = "tag-tuple";
-
-      if (slice.contains("elts"))
-      {
-        // Multiple element types: tuple[int, str, float]
-        const auto &elts = slice["elts"];
-        for (size_t i = 0; i < elts.size(); i++)
-        {
-          typet elem_type;
-          if (elts[i].contains("id"))
-            elem_type =
-              type_handler_.get_typet(elts[i]["id"].get<std::string>());
-          else
-            elem_type = type_handler_.get_typet(elts[i]);
-
-          // Build tag using same pattern as get_tuple_expr
-          tag_name += "_" + elem_type.to_string();
-
-          std::string comp_name = "element_" + std::to_string(i);
-          struct_typet::componentt comp(comp_name, comp_name, elem_type);
-          tuple_type.components().push_back(comp);
-        }
-      }
-
-      // Set the tag to ensure type identity
-      tuple_type.tag(tag_name);
-      type.return_type() = tuple_type;
+      type.return_type() =
+        tuple_handler_->get_tuple_type_from_annotation(return_node);
     }
     else
     {
@@ -5584,13 +5351,15 @@ python_converter::python_converter(
     current_block(nullptr),
     current_lhs(nullptr),
     string_handler_(*this, symbol_table_, type_handler_, string_builder_),
-    math_handler_(*this, symbol_table_, type_handler_)
+    math_handler_(*this, symbol_table_, type_handler_),
+    tuple_handler_(new tuple_handler(*this, type_handler_))
 {
 }
 
 python_converter::~python_converter()
 {
   delete string_builder_;
+  delete tuple_handler_;
 }
 
 string_builder &python_converter::get_string_builder()
