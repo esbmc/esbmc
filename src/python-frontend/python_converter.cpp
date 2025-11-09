@@ -778,6 +778,11 @@ exprt python_converter::handle_none_comparison(
   const bool lhs_is_none = (lhs.type() == none_type());
   const bool rhs_is_none = (rhs.type() == none_type());
 
+  // Only handle actual None comparisons
+  // If neither side is None, this is NOT a None comparison
+  if (!lhs_is_none && !rhs_is_none)
+    return exprt();
+
   auto handle_optional_side =
     [&](const exprt &side, bool other_is_none) -> std::optional<exprt> {
     if (side.type().is_struct())
@@ -835,11 +840,20 @@ exprt python_converter::handle_none_comparison(
     return gen_boolean(!is_eq);
 
   // Handle None == None and None != None
-  equality_exprt eq(lhs, rhs);
-  if (is_eq)
-    return exprt(eq);
-  else
-    return exprt(not_exprt(eq));
+  // Create isnone expression
+  exprt isnone_expr("isnone", typet("bool"));
+  isnone_expr.copy_to_operands(lhs);
+  isnone_expr.copy_to_operands(rhs);
+
+  // If checking inequality, wrap with not
+  if (!is_eq)
+  {
+    exprt not_expr("not", typet("bool"));
+    not_expr.move_to_operands(isnone_expr);
+    return not_expr;
+  }
+
+  return isnone_expr;
 }
 
 exprt python_converter::handle_str_join(const nlohmann::json &call_json)

@@ -2705,4 +2705,85 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     else
       expr = gen_false_expr();
   }
+  else if (is_isnone2t(expr))
+  {
+    const isnone2t &cmp = to_isnone2t(expr);
+    expr2tc lhs = cmp.side_1;
+    expr2tc rhs = cmp.side_2;
+
+    cur_state->rename(lhs);
+    cur_state->rename(rhs);
+
+    // Remove typecasts to get original types
+    while (is_typecast2t(lhs))
+      lhs = to_typecast2t(lhs).from;
+    while (is_typecast2t(rhs))
+      rhs = to_typecast2t(rhs).from;
+
+    auto is_none_type = [](const expr2tc &e) -> bool {
+      return is_struct_type(e) &&
+             to_struct_type(e->type).name.as_string() == "tag-NoneType";
+    };
+
+    const bool lhs_is_none = is_none_type(lhs);
+    const bool rhs_is_none = is_none_type(rhs);
+
+    // Handle Optional[T] vs None
+    auto handle_optional_side =
+      [&](const expr2tc &side, bool other_is_none) -> std::optional<expr2tc> {
+      if (is_struct_type(side))
+      {
+        const struct_type2t &struct_type = to_struct_type(side->type);
+        const std::string &tag = struct_type.name.as_string();
+        if (tag.starts_with("tag-Optional_") && other_is_none)
+        {
+          // Access is_none field from Optional struct
+          // isnone always checks equality, so return the field directly
+          return member2tc(get_bool_type(), side, "is_none");
+        }
+      }
+      return std::nullopt;
+    };
+
+    if (!lhs_is_none)
+    {
+      if (auto res = handle_optional_side(lhs, rhs_is_none))
+      {
+        expr = *res;
+        return;
+      }
+    }
+    if (!rhs_is_none)
+    {
+      if (auto res = handle_optional_side(rhs, lhs_is_none))
+      {
+        expr = *res;
+        return;
+      }
+    }
+
+    // Handle None vs pointer comparisons
+    if (
+      (lhs_is_none && is_pointer_type(rhs)) ||
+      (rhs_is_none && is_pointer_type(lhs)))
+    {
+      const expr2tc &ptr_expr = is_pointer_type(lhs) ? lhs : rhs;
+      expr2tc null_ptr = gen_zero(ptr_expr->type);
+
+      // isnone always checks equality
+      expr = equality2tc(ptr_expr, null_ptr);
+      return;
+    }
+
+    // Handle None vs non-pointer constant folding
+    if ((lhs_is_none && !rhs_is_none) || (rhs_is_none && !lhs_is_none))
+    {
+      // isnone checks equality, so None == non-None is false
+      expr = gen_false_expr();
+      return;
+    }
+
+    // Handle None == None (both sides are None, so always true)
+    expr = gen_true_expr();
+  }
 }
