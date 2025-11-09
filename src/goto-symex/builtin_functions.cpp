@@ -437,7 +437,7 @@ expr2tc goto_symext::symex_mem_inf(
     return expr2tc(); // ignore
 
   // size
-  type2tc type = base_type;  
+  type2tc type = base_type;
 
   assert(!is_nil_type(base_type));
   unsigned int &dynamic_counter = get_dynamic_counter();
@@ -446,11 +446,9 @@ expr2tc goto_symext::symex_mem_inf(
   // value
   symbolt symbol;
 
-  symbol.name = "dynamic_" + i2string(dynamic_counter) +
-                "_inf_array";
+  symbol.name = "dynamic_" + i2string(dynamic_counter) + "_inf_array";
 
-  symbol.id = std::string("symex_dynamic::") +
-              id2string(symbol.name);
+  symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
   symbol.lvalue = true;
 
   typet renamedtype = ns.follow(migrate_type_back(type));
