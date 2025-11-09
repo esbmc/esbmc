@@ -373,6 +373,11 @@ private:
   void process_forward_reference(
     const nlohmann::json &annotation,
     codet &target_block);
+  // Wrap values in Optional
+  exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+
+  // Handle Optional value access
+  exprt unwrap_optional_if_needed(const exprt &expr);
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;

@@ -271,15 +271,21 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return empty_typet();
   }
 
+  // ord(): Converts a 1-character string to its Unicode code point (as integer)
+  if (ast_type == "ord")
+    return long_long_int_type();
+
+  // abs(): Return the absolute value of a number
+  if (ast_type == "abs")
+    return long_long_int_type();
+
   // str: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
   // oct(): Converts an integer to a lowercase octal string
-  // ord(): Converts a 1-character string to its Unicode code point (as integer)
-  // abs(): Return the absolute value of a number
   if (
     ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-    ast_type == "oct" || ast_type == "ord" || ast_type == "abs")
+    ast_type == "oct")
   {
     if (type_size == 1)
     {
@@ -647,42 +653,17 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 const typet type_handler::get_list_type() const
 {
   static const symbolt *list_type_symbol = nullptr;
-  const char *list_type_id = "tag-struct __anon_typedef_List_at_";
-
-  if (!list_type_symbol)
-  {
-    converter_.symbol_table().foreach_operand(
-      [&list_type_id](const symbolt &s) {
-        const std::string &symbol_id = s.id.as_string();
-        if (symbol_id.find(list_type_id) != std::string::npos)
-        {
-          list_type_symbol = &s;
-        }
-      });
-  }
-
-  if (!list_type_symbol)
-    return typet();
-
+  const char *list_type_id = "tag-struct __ESBMC_PyListObj";
+  list_type_symbol = converter_.symbol_table().find_symbol(list_type_id);
+  assert(list_type_symbol);
   return pointer_typet(symbol_typet(list_type_symbol->id));
 }
 
 typet type_handler::get_list_element_type() const
 {
   static const symbolt *type = nullptr;
-  const char *type_id = "tag-struct __anon_typedef_Object_at";
-
-  if (!type)
-  {
-    converter_.symbol_table().foreach_operand([&type_id](const symbolt &s) {
-      const std::string &symbol_id = s.id.as_string();
-      if (symbol_id.find(type_id) != symbol_id.npos)
-      {
-        type = &s;
-      }
-    });
-  }
-
+  const char *type_id = "tag-struct __ESBMC_PyObj";
+  type = converter_.symbol_table().find_symbol(type_id);
   assert(type);
   return symbol_typet(type->id);
 }
@@ -856,4 +837,26 @@ typet type_handler::get_tuple_type(const nlohmann::json &tuple_node) const
   }
 
   return tuple_type;
+}
+
+typet type_handler::build_optional_type(const typet &base_type)
+{
+  // Create a struct with two fields:
+  // 1. is_none: bool - indicates if value is None
+  // 2. value: T - the actual value when not None
+
+  struct_typet optional_type;
+  optional_type.tag("tag-Optional_" + base_type.to_string());
+
+  // Add is_none field
+  struct_typet::componentt is_none_field("is_none", "is_none", bool_type());
+  is_none_field.set_access("public");
+  optional_type.components().push_back(is_none_field);
+
+  // Add value field
+  struct_typet::componentt value_field("value", "value", base_type);
+  value_field.set_access("public");
+  optional_type.components().push_back(value_field);
+
+  return optional_type;
 }

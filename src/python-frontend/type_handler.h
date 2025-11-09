@@ -99,6 +99,8 @@ public:
    */
   size_t get_type_width(const typet &type) const;
 
+  typet build_optional_type(const typet &base_type);
+
 private:
   /// Encapsulate the const_cast in one place with clear documentation
   exprt get_expr_helper(const nlohmann::json &json) const;
