@@ -1615,6 +1615,17 @@ private:
       if (stmt_type != "Assign" || !element["type_comment"].is_null())
         continue;
 
+      // Skip tuple/list unpacking assignments
+      // The C++ converter will handle them directly with proper type inference
+      if (
+        element.contains("targets") && !element["targets"].empty() &&
+        element["targets"][0].contains("_type") &&
+        (element["targets"][0]["_type"] == "Tuple" ||
+         element["targets"][0]["_type"] == "List"))
+      {
+        continue;
+      }
+
       std::string inferred_type("");
 
       // Check if LHS was previously annotated

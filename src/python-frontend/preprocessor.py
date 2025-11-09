@@ -979,29 +979,8 @@ class Preprocessor(ast.NodeTransformer):
                     self._update_variable_types_simple(target_elem, value_elem)
                     assignments.append(individual_assign)
         else:
-            # For all other cases (including lists and complex expressions),
-            # use temporary variable to avoid AST node sharing issues
-            temp_var_name = f"ESBMC_unpack_temp_{id(source_node)}"
-            temp_var = ast.Name(id=temp_var_name, ctx=ast.Store())
-            self._copy_location_info(source_node, temp_var)
-            temp_assign = self._create_individual_assignment(temp_var, value, source_node)
-            assignments.append(temp_assign)
-
-            # Now create individual assignments from temp variable
-            for i, target_elem in enumerate(target.elts):
-                if isinstance(target_elem, ast.Name):
-                    subscript = ast.Subscript(
-                        value=ast.Name(id=temp_var_name, ctx=ast.Load()),
-                        slice=ast.Constant(value=i),
-                        ctx=ast.Load()
-                    )
-                    self._copy_location_info(source_node, subscript)
-                    self._copy_location_info(source_node, subscript.value)
-                    self._copy_location_info(source_node, subscript.slice)
-
-                    individual_assign = self._create_individual_assignment(target_elem, subscript, source_node)
-                    self.known_variable_types[target_elem.id] = 'Any'
-                    assignments.append(individual_assign)
+            # Don't transform tuple unpacking from variables - let converter handle it
+            return source_node
 
         return assignments
 
