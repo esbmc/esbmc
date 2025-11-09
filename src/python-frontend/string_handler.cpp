@@ -450,7 +450,9 @@ void string_handler::ensure_string_array(exprt &expr)
 
   if (!expr.type().is_array())
   {
-    typet t = type_handler_.build_array(expr.type(), 1);
+    // Explicitly build the array and
+    // ensure null-termination (size 2: char + \0)
+    typet t = type_handler_.build_array(expr.type(), 2);
     exprt arr = gen_zero(t);
     arr.operands().at(0) = expr;
     expr = arr;
@@ -623,33 +625,47 @@ exprt string_handler::handle_string_endswith(
   exprt suffix_expr = ensure_null_terminated_string(suffix_copy);
 
   // Get string addresses
-  exprt str_addr = get_array_base_address(str_expr);
-  exprt suffix_addr = get_array_base_address(suffix_expr);
+  // Handle both pointer and array types
+  exprt str_addr;
+  exprt suffix_addr;
 
-  // Calculate lengths (exclude null terminators)
-  const array_typet &str_type = to_array_type(str_expr.type());
-  const array_typet &suffix_type = to_array_type(suffix_expr.type());
+  if (str_expr.type().is_pointer())
+    str_addr = str_expr;
+  else
+    str_addr = get_array_base_address(str_expr);
 
-  exprt str_len = str_type.size();
-  exprt suffix_len = suffix_type.size();
+  if (suffix_expr.type().is_pointer())
+    suffix_addr = suffix_expr;
+  else
+    suffix_addr = get_array_base_address(suffix_expr);
 
-  exprt one = from_integer(1, str_len.type());
+  // For length calculation, we need to use strlen for pointer types
+  // Find strlen symbol
+  symbolt *strlen_symbol = symbol_table_.find_symbol("c:@F@strlen");
+  if (!strlen_symbol)
+    throw std::runtime_error("strlen function not found for endswith()");
 
-  // actual_str_len = str_len - 1
-  exprt actual_str_len("-", str_len.type());
-  actual_str_len.copy_to_operands(str_len, one);
+  // Get string length using strlen
+  side_effect_expr_function_callt str_strlen_call;
+  str_strlen_call.function() = symbol_expr(*strlen_symbol);
+  str_strlen_call.arguments() = {str_addr};
+  str_strlen_call.location() = location;
+  str_strlen_call.type() = size_type();
 
-  // actual_suffix_len = suffix_len - 1
-  exprt actual_suffix_len("-", suffix_len.type());
-  actual_suffix_len.copy_to_operands(suffix_len, one);
+  // Get suffix length using strlen
+  side_effect_expr_function_callt suffix_strlen_call;
+  suffix_strlen_call.function() = symbol_expr(*strlen_symbol);
+  suffix_strlen_call.arguments() = {suffix_addr};
+  suffix_strlen_call.location() = location;
+  suffix_strlen_call.type() = size_type();
 
-  // Check if suffix is longer than string: if (suffix_len > str_len) return false
+  // Check if suffix is longer than string
   exprt len_check(">", bool_type());
-  len_check.copy_to_operands(actual_suffix_len, actual_str_len);
+  len_check.copy_to_operands(suffix_strlen_call, str_strlen_call);
 
-  // Calculate offset: str_len - suffix_len
-  exprt offset("-", str_len.type());
-  offset.copy_to_operands(actual_str_len, actual_suffix_len);
+  // Calculate offset: strlen(str) - strlen(suffix)
+  exprt offset("-", size_type());
+  offset.copy_to_operands(str_strlen_call, suffix_strlen_call);
 
   // Get pointer to the position: str + offset
   exprt offset_ptr("+", gen_pointer_type(char_type()));
@@ -660,10 +676,10 @@ exprt string_handler::handle_string_endswith(
   if (!strncmp_symbol)
     throw std::runtime_error("strncmp function not found for endswith()");
 
-  // Call strncmp(str + offset, suffix, len(suffix))
+  // Call strncmp(str + offset, suffix, strlen(suffix))
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {offset_ptr, suffix_addr, actual_suffix_len};
+  strncmp_call.arguments() = {offset_ptr, suffix_addr, suffix_strlen_call};
   strncmp_call.location() = location;
   strncmp_call.type() = int_type();
 
@@ -1084,4 +1100,122 @@ exprt string_handler::handle_string_lower(
   lower_call.type() = pointer_typet(char_type());
 
   return lower_call;
+}
+
+exprt string_handler::handle_string_to_int(
+  const exprt &string_obj,
+  const exprt &base_arg,
+  const locationt &location)
+{
+  // Ensure we have a null-terminated string
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+
+  // Get base address of the string
+  exprt str_addr = get_array_base_address(str_expr);
+
+  // Determine the base value (default is 10)
+  exprt base_expr = base_arg;
+  if (base_expr.is_nil())
+  {
+    // Default base is 10
+    base_expr = from_integer(10, int_type());
+  }
+  else if (!base_expr.type().is_signedbv() && !base_expr.type().is_unsignedbv())
+  {
+    // Cast base to int if needed
+    base_expr = typecast_exprt(base_expr, int_type());
+  }
+
+  // Find the __python_int function symbol
+  symbolt *int_symbol = symbol_table_.find_symbol("c:@F@__python_int");
+  if (!int_symbol)
+  {
+    throw std::runtime_error("__python_int function not found in symbol table");
+  }
+
+  // Call __python_int(str, base)
+  side_effect_expr_function_callt int_call;
+  int_call.function() = symbol_expr(*int_symbol);
+  int_call.arguments().push_back(str_addr);
+  int_call.arguments().push_back(base_expr);
+  int_call.location() = location;
+  int_call.type() = int_type();
+
+  return int_call;
+}
+
+exprt string_handler::handle_string_to_int_base10(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Convenience wrapper for base 10 conversion
+  return handle_string_to_int(string_obj, nil_exprt(), location);
+}
+
+exprt string_handler::handle_int_conversion(
+  const exprt &arg,
+  const locationt &location)
+{
+  // Handle int() with different argument types
+
+  // If argument is already an integer type, return as is
+  if (type_utils::is_integer_type(arg.type()))
+  {
+    return arg;
+  }
+
+  // If argument is a float, truncate to integer
+  if (arg.type().is_floatbv())
+  {
+    return typecast_exprt(arg, int_type());
+  }
+
+  // If argument is a boolean, convert to 0 or 1
+  if (arg.type().is_bool())
+  {
+    exprt result("if", int_type());
+    result.copy_to_operands(arg);
+    result.copy_to_operands(from_integer(1, int_type()));
+    result.copy_to_operands(from_integer(0, int_type()));
+    return result;
+  }
+
+  // If argument is a string or char array, use string conversion
+  if (arg.type().is_array() && arg.type().subtype() == char_type())
+  {
+    return handle_string_to_int_base10(arg, location);
+  }
+
+  // If argument is a pointer to char (string pointer)
+  if (arg.type().is_pointer() && arg.type().subtype() == char_type())
+  {
+    // Create a wrapper to ensure null-termination handling
+    exprt string_copy = arg;
+    return handle_string_to_int(string_copy, nil_exprt(), location);
+  }
+
+  // For other types, attempt a typecast
+  return typecast_exprt(arg, int_type());
+}
+
+exprt string_handler::handle_int_conversion_with_base(
+  const exprt &arg,
+  const exprt &base,
+  const locationt &location)
+{
+  // int() with explicit base only works with strings
+  if (!arg.type().is_array() && !arg.type().is_pointer())
+  {
+    throw std::runtime_error("int() with base argument requires string input");
+  }
+
+  // Ensure base is an integer
+  exprt base_expr = base;
+  if (!base_expr.type().is_signedbv() && !base_expr.type().is_unsignedbv())
+  {
+    base_expr = typecast_exprt(base_expr, int_type());
+  }
+
+  return handle_string_to_int(arg, base_expr, location);
 }

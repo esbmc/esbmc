@@ -968,6 +968,27 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  // PythonList methods
+  if (has_prefix(symname, "c:@F@__ESBMC_list"))
+  {
+    bump_call(func_call, symname);
+    return;
+  }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_obj"))
+  {
+    assert(func_call.operands.size() == 0 && "Wrong signature");
+
+    const symbolt *list_object_symbol =
+      new_context.find_symbol("tag-struct __ESBMC_PyObj");
+    assert(list_object_symbol);
+
+    symex_mem_inf(
+      func_call.ret, migrate_type(list_object_symbol->type), cur_state->guard);
+
+    return;
+  }
+
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
     "The name in question: {}\n"

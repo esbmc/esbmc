@@ -207,7 +207,7 @@ exprt python_list::build_push_list_call(
   list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *push_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_push");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push");
 
   if (!push_func_sym)
   {
@@ -238,7 +238,7 @@ exprt python_list::build_insert_list_call(
   list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *insert_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_insert");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_insert");
   if (!insert_func_sym)
     throw std::runtime_error("Insert function symbol not found");
 
@@ -267,11 +267,11 @@ exprt python_list::build_concat_list_call(
 
   // Helpers we’ll call from the C model
   const symbolt *size_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_size");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
   const symbolt *at_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_at");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
   const symbolt *push_obj_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   assert(size_sym && at_sym && push_obj_sym);
 
   auto copy_list = [&](const exprt &src_list) {
@@ -380,28 +380,10 @@ symbolt &python_list::create_list()
   locationt location = converter_.get_location_from_decl(list_value_);
   const type_handler &type_handler = converter_.get_type_handler();
 
-  // Create infinite array type for list storage
-  const array_typet inf_array_type(
-    type_handler.get_list_element_type(), exprt("infinity", size_type()));
-
-  exprt inf_array_value =
-    gen_zero(get_complete_type(inf_array_type, converter_.ns), true);
-
-  // Create and configure infinite array symbol
-  symbolt &inf_array_symbol = converter_.create_tmp_symbol(
-    list_value_, "$storage$", inf_array_type, inf_array_value);
-  inf_array_symbol.value.zero_initializer(true);
-  inf_array_symbol.static_lifetime = true;
-
-  // Declare infinite array
-  code_declt inf_array_decl(symbol_expr(inf_array_symbol));
-  inf_array_decl.location() = location;
-  converter_.add_instruction(inf_array_decl);
-
   // Create list symbol
   const typet list_type = type_handler.get_list_type();
   symbolt &list_symbol =
-    converter_.create_tmp_symbol(list_value_, "$list$", list_type, exprt());
+    converter_.create_tmp_symbol(list_value_, "$py_list$", list_type, exprt());
 
   // Declare list
   code_declt list_decl(symbol_expr(list_symbol));
@@ -410,19 +392,13 @@ symbolt &python_list::create_list()
 
   // Initialize list with storage array
   const symbolt *create_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_create");
-  if (!create_func_sym)
-  {
-    throw std::runtime_error("List creation function symbol not found");
-  }
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_create");
+  assert(create_func_sym);
 
   // Add list_create call to the block
   code_function_callt list_create_func_call;
   list_create_func_call.function() = symbol_expr(*create_func_sym);
   list_create_func_call.lhs() = symbol_expr(list_symbol);
-  list_create_func_call.arguments().push_back(
-    converter_.get_string_handler().get_array_base_address(
-      symbol_expr(inf_array_symbol)));
   list_create_func_call.type() = list_type;
   list_create_func_call.location() = location;
   converter_.add_instruction(list_create_func_call);
@@ -465,7 +441,7 @@ exprt python_list::build_list_at_call(
   pointer_typet obj_type(converter_.get_type_handler().get_list_element_type());
 
   const symbolt *list_at_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_at");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
   assert(list_at_func_sym);
 
   side_effect_expr_function_callt list_at_call;
@@ -663,7 +639,7 @@ exprt python_list::handle_range_slice(
 
   // Push element to sliced list
   const symbolt *push_func =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   if (!push_func)
   {
     throw std::runtime_error("Push function symbol not found");
@@ -930,7 +906,7 @@ exprt python_list::compare(
   const std::string &op)
 {
   const symbolt *list_eq_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_eq");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_eq");
   assert(list_eq_func_sym);
 
   const symbolt *lhs_symbol =
@@ -1085,10 +1061,8 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   // Find the list_contains function
   const symbolt *list_contains_func =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_contains");
-  if (!list_contains_func)
-    throw std::runtime_error(
-      "list_contains function not found in symbol table");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  assert(list_contains_func);
 
   // Create a temporary variable to store the result
   symbolt &contains_ret = converter_.create_tmp_symbol(
@@ -1187,9 +1161,8 @@ exprt python_list::build_extend_list_call(
   const exprt &other_list)
 {
   const symbolt *extend_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_extend");
-  if (!extend_func_sym)
-    throw std::runtime_error("Extend function symbol not found");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_extend");
+  assert(extend_func_sym);
 
   locationt location = converter_.get_location_from_decl(op);
 
@@ -1214,4 +1187,15 @@ exprt python_list::build_extend_list_call(
   extend_func_call.location() = location;
 
   return extend_func_call;
+}
+
+exprt python_list::get_empty_set()
+{
+  // Create an empty list structure for the set
+  symbolt &list_symbol = create_list();
+  list_symbol.is_set = true;
+
+  // No elements to add for empty set
+  // Type information will be determined when elements are added
+  return symbol_expr(list_symbol);
 }

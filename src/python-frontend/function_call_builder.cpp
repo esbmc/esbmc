@@ -270,10 +270,16 @@ symbol_id function_call_builder::build_function_id() const
       }
       if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
-        var_type == "set" || var_type == "dict" || var_type.empty())
-        func_name = kGetObjectSize;
-      else if (var_type == "str")
+        var_type == "set" || var_type == "dict")
       {
+        func_name = kGetObjectSize;
+      }
+      else if (var_type == "str" || var_type.empty())
+      {
+        // For string types (including optional strings), always use strlen
+        // This handles both str and Optional[str] (pointer to array) cases
+        func_name = kStrlen;
+
         // Check if this is a single character by looking up the variable
         symbol_id var_sid(
           python_file, current_class_name, current_function_name);
@@ -367,7 +373,7 @@ exprt function_call_builder::build() const
 
   // Special handling for single character len() calls
   if (function_id.get_function() == "__ESBMC_len_single_char")
-    return from_integer(1, int_type());
+    return from_integer(1, long_long_int_type());
 
   if (function_id.get_function() == "__ESBMC_len_tuple")
   {

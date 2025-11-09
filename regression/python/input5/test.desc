@@ -1,4 +1,4 @@
 CORE
 main.py
-
-^\s*Throwing an exception of type ValueError but there is not catch for it.$
+--incremental-bmc
+^VERIFICATION FAILED$
