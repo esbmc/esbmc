@@ -1055,6 +1055,88 @@ private:
       return "Any"; // Default for cases where annotation is missing or null
   }
 
+  // Check for @overload decorators
+  bool has_overload_decorator(const Json &func_node) const
+  {
+    if (!func_node.contains("decorator_list"))
+      return false;
+
+    for (const auto &decorator : func_node["decorator_list"])
+    {
+      if (decorator["_type"] == "Name" && decorator["id"] == "overload")
+        return true;
+    }
+    return false;
+  }
+
+  // Find the best matching overload
+  std::string resolve_overload_return_type(
+    const std::string &func_name,
+    const Json &call_node) const
+  {
+    std::vector<Json> overloads;
+
+    // Find all overload definitions
+    for (const Json &elem : ast_["body"])
+    {
+      if (
+        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
+        has_overload_decorator(elem))
+      {
+        overloads.push_back(elem);
+      }
+    }
+
+    if (overloads.empty())
+      return "";
+
+    // Try to match based on literal arguments
+    if (!call_node.contains("args") || call_node["args"].empty())
+      return "";
+
+    for (const auto &overload : overloads)
+    {
+      if (!overload.contains("args") || !overload["args"].contains("args"))
+        continue;
+
+      const auto &params = overload["args"]["args"];
+      const auto &call_args = call_node["args"];
+
+      // Try to match first parameter (literal type check)
+      if (params.size() > 0 && call_args.size() > 0)
+      {
+        const auto &param_annotation = params[0]["annotation"];
+        const auto &call_arg = call_args[0];
+
+        // Check for Literal["foo"] pattern
+        if (
+          param_annotation["_type"] == "Subscript" &&
+          param_annotation["value"]["id"] == "Literal" &&
+          param_annotation["slice"]["_type"] == "Constant")
+        {
+          std::string literal_value =
+            param_annotation["slice"]["value"].template get<std::string>();
+
+          // Check if call argument matches
+          if (
+            call_arg["_type"] == "Constant" && call_arg["value"].is_string() &&
+            call_arg["value"].template get<std::string>() == literal_value)
+          {
+            // Found matching overload, return its type
+            if (
+              overload.contains("returns") && !overload["returns"].is_null() &&
+              overload["returns"].contains("id"))
+            {
+              return overload["returns"]["id"];
+            }
+          }
+        }
+      }
+    }
+
+    return "";
+  }
+
   std::string get_type_from_call(const Json &element)
   {
     const Json &func = element["value"]["func"];
@@ -1074,8 +1156,16 @@ private:
       if (type_utils::is_consensus_func(func_id))
         return type_utils::get_type_from_consensus_func(func_id);
 
+      // Try to resolve overload before falling back to regular function
       if (!type_utils::is_python_model_func(func_id))
+      {
+        std::string overload_type =
+          resolve_overload_return_type(func_id, element["value"]);
+        if (!overload_type.empty())
+          return overload_type;
+
         return get_function_return_type(func_id, ast_);
+      }
     }
 
     // Handle class method calls like int.from_bytes(), str.join(), etc.
