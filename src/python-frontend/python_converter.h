@@ -370,6 +370,9 @@ private:
   // String method helpers
   exprt handle_str_join(const nlohmann::json &call_json);
 
+  void process_forward_reference(
+    const nlohmann::json &annotation,
+    codet &target_block);
   // Wrap values in Optional
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
 

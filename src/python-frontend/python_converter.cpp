@@ -1774,6 +1774,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
+  // Check for forward-referenced constructor calls
+  if (type_handler_.is_constructor_call(element))
+  {
+    code_blockt temp_block;
+    process_forward_reference(element["func"], temp_block);
+  }
+
   // Handle indirect calls through function pointer variables
   if (element["func"]["_type"] == "Name")
   {
@@ -2530,10 +2537,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           var_name,
           class_type.tag().as_string());
       }
-      // For RHS (reading): use instance member only if explicitly set
+      // For RHS (reading): use instance member if explicitly set OR if symbol is a parameter
+      // This allows parameter objects like 'f: Foo' to access instance attributes
       else if (
-        !is_converting_lhs && instance_has_attr &&
-        class_type.has_component(attr_name))
+        !is_converting_lhs && class_type.has_component(attr_name) &&
+        (instance_has_attr || symbol->is_parameter))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = create_member_expression(*symbol, attr_name, attr_type);
@@ -3043,6 +3051,15 @@ void python_converter::get_var_assign(
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
   const auto &target_type = target["_type"];
+
+  // this is used to handle forward references
+  if (
+    ast_node.contains("value") && !ast_node["value"].is_null() &&
+    ast_node["value"]["_type"] == "Call" &&
+    type_handler_.is_constructor_call(ast_node["value"]))
+  {
+    process_forward_reference(ast_node["value"]["func"], target_block);
+  }
 
   if (ast_node["_type"] == "AnnAssign")
   {
@@ -4572,6 +4589,58 @@ void python_converter::get_attributes_from_self(
   }
 }
 
+// Process forward reference
+void python_converter::process_forward_reference(
+  const nlohmann::json &annotation,
+  codet &target_block)
+{
+  if (annotation.is_null())
+    return;
+
+  std::string referenced_class;
+
+  // Process string form of forward reference: 'Bar'
+  if (
+    (annotation["_type"] == "Constant" || annotation["_type"] == "Str") &&
+    annotation.contains("value") && !annotation["value"].is_null())
+  {
+    referenced_class =
+      type_utils::remove_quotes(annotation["value"].get<std::string>());
+  }
+  // Process direct name reference: Bar
+  else if (annotation["_type"] == "Name" && annotation.contains("id"))
+  {
+    referenced_class = annotation["id"].get<std::string>();
+
+    if (
+      type_utils::is_builtin_type(referenced_class) ||
+      type_utils::is_consensus_type(referenced_class))
+      return;
+  }
+  else
+  {
+    return;
+  }
+
+  // If class is already in symbol table, skip
+  std::string class_id = "tag-" + referenced_class;
+  if (symbol_table_.find_symbol(class_id))
+    return;
+
+  // Find and process referenced class definition
+  const auto ref_class_node =
+    json_utils::find_class((*ast_json)["body"], referenced_class);
+
+  if (!ref_class_node.empty())
+  {
+    std::string saved_class = current_class_name_;
+    std::string saved_func = current_func_name_;
+    get_class_definition(ref_class_node, target_block);
+    current_class_name_ = saved_class;
+    current_func_name_ = saved_func;
+  }
+}
+
 void python_converter::get_class_definition(
   const nlohmann::json &class_node,
   codet &target_block)
@@ -4649,8 +4718,15 @@ void python_converter::get_class_definition(
     if (class_member["_type"] == "FunctionDef")
     {
       get_attributes_from_self(class_member["body"], clazz);
-      added_symbol->type = clazz;
+    }
+  }
+  added_symbol->type = clazz;
 
+  for (auto &class_member : class_node["body"])
+  {
+    // Process methods
+    if (class_member["_type"] == "FunctionDef")
+    {
       std::string method_name = class_member["name"].get<std::string>();
       if (method_name == "__init__")
         method_name = current_class_name_;
@@ -4674,7 +4750,8 @@ void python_converter::get_class_definition(
       const std::string &class_name = class_member["annotation"]["id"];
       if (!symbol_table_.find_symbol("tag-" + class_name))
       {
-        const auto &class_node = find_class((*ast_json)["body"], class_name);
+        const auto class_node =
+          json_utils::find_class((*ast_json)["body"], class_name);
         if (!class_node.empty())
         {
           std::string current_class = current_class_name_;
