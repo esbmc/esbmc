@@ -778,6 +778,11 @@ exprt python_converter::handle_none_comparison(
   const bool lhs_is_none = (lhs.type() == none_type());
   const bool rhs_is_none = (rhs.type() == none_type());
 
+  // Only handle actual None comparisons
+  // If neither side is None, this is NOT a None comparison
+  if (!lhs_is_none && !rhs_is_none)
+    return exprt();
+
   auto handle_optional_side =
     [&](const exprt &side, bool other_is_none) -> std::optional<exprt> {
     if (side.type().is_struct())
@@ -835,11 +840,20 @@ exprt python_converter::handle_none_comparison(
     return gen_boolean(!is_eq);
 
   // Handle None == None and None != None
-  equality_exprt eq(lhs, rhs);
-  if (is_eq)
-    return exprt(eq);
-  else
-    return exprt(not_exprt(eq));
+  // Create isnone expression
+  exprt isnone_expr("isnone", typet("bool"));
+  isnone_expr.copy_to_operands(lhs);
+  isnone_expr.copy_to_operands(rhs);
+
+  // If checking inequality, wrap with not
+  if (!is_eq)
+  {
+    exprt not_expr("not", typet("bool"));
+    not_expr.move_to_operands(isnone_expr);
+    return not_expr;
+  }
+
+  return isnone_expr;
 }
 
 exprt python_converter::handle_str_join(const nlohmann::json &call_json)
@@ -1744,10 +1758,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
 
-  // Early detection for str.join() method calls
+  // Handle str.join() method calls
   // Python syntax: separator.join(iterable), e.g., " ".join(["a", "b"])
-  // This handles it before the general function_call_builder to ensure
-  // proper AST-based list element extraction
   if (
     element["func"]["_type"] == "Attribute" &&
     element["func"]["attr"] == "join")
@@ -1891,14 +1903,41 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       args[it->second] = arg_expr;
     }
 
-    // Fill empty arguments with None for optional parameters
+    // Fill empty arguments with proper Optional values or None for optional parameters
     for (size_t i = 0; i < args.size(); ++i)
     {
       if (args[i].is_nil() || args[i].id().empty())
       {
-        constant_exprt none_expr(none_type());
-        none_expr.set_value("NULL");
-        args[i] = none_expr;
+        const typet &param_type = params[i].type();
+
+        // Check if this is an Optional type (struct with "is_none" field)
+        if (param_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(param_type);
+          const std::string &tag = struct_type.tag().as_string();
+
+          if (tag.starts_with("tag-Optional_"))
+          {
+            // Create Optional value with is_none=true
+            constant_exprt none_expr(none_type());
+            none_expr.set_value("NULL");
+            args[i] = wrap_in_optional(none_expr, param_type);
+          }
+          else
+          {
+            // Regular struct type - set to NULL pointer
+            constant_exprt none_expr(none_type());
+            none_expr.set_value("NULL");
+            args[i] = none_expr;
+          }
+        }
+        else
+        {
+          // Non-struct type - use NULL for None
+          constant_exprt none_expr(none_type());
+          none_expr.set_value("NULL");
+          args[i] = none_expr;
+        }
       }
     }
   };
