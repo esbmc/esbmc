@@ -437,9 +437,7 @@ expr2tc goto_symext::symex_mem_inf(
     return expr2tc(); // ignore
 
   // size
-  type2tc type = base_type;
-  bool size_is_one = false;
-  bool is_malloc = false;
+  type2tc type = base_type;  
 
   assert(!is_nil_type(base_type));
   unsigned int &dynamic_counter = get_dynamic_counter();
@@ -449,9 +447,9 @@ expr2tc goto_symext::symex_mem_inf(
   symbolt symbol;
 
   symbol.name = "dynamic_" + i2string(dynamic_counter) +
-                (size_is_one ? "_value" : "_inf_array");
+                "_inf_array";
 
-  symbol.id = std::string("symex_dynamic::") + (!is_malloc ? "alloca::" : "") +
+  symbol.id = std::string("symex_dynamic::") +
               id2string(symbol.name);
   symbol.lvalue = true;
 
@@ -495,7 +493,7 @@ expr2tc goto_symext::symex_mem_inf(
 
   alloc_guard.append(guard);
   dynamic_memory.emplace_back(
-    rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
+    rhs_copy, alloc_guard, true, symbol.name.as_string());
 
   return to_address_of2t(rhs_addrof).ptr_obj;
 }
