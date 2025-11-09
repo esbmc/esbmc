@@ -3174,11 +3174,138 @@ void python_converter::get_var_assign(
   }
   else if (ast_node["_type"] == "Assign")
   {
-    // Assign logic
     const auto &target = ast_node["targets"][0];
-
-    std::string name;
     const auto &target_type = target["_type"];
+
+    // Handle tuple/list unpacking: (x, y) = t or [a, b] = arr
+    if (target_type == "Tuple" || target_type == "List")
+    {
+      // Get RHS
+      is_converting_rhs = true;
+      exprt rhs = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+
+      // Handle tuple struct unpacking
+      if (rhs.type().id() == "struct")
+      {
+        const struct_typet &tuple_type = to_struct_type(rhs.type());
+
+        // Verify it's a tuple
+        if (tuple_type.tag().as_string().find("tag-tuple") == 0)
+        {
+          const auto &targets = target["elts"];
+
+          if (targets.size() != tuple_type.components().size())
+          {
+            throw std::runtime_error(
+              "Cannot unpack tuple: expected " +
+              std::to_string(targets.size()) + " values, got " +
+              std::to_string(tuple_type.components().size()));
+          }
+
+          // Create assignments: x = t.element_0, y = t.element_1, ...
+          for (size_t i = 0; i < targets.size(); i++)
+          {
+            if (targets[i]["_type"] != "Name")
+            {
+              throw std::runtime_error(
+                "Tuple unpacking only supports simple names, not " +
+                targets[i]["_type"].get<std::string>());
+            }
+
+            std::string var_name = targets[i]["id"].get<std::string>();
+            symbol_id var_sid = create_symbol_id();
+            var_sid.set_object(var_name);
+
+            symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+            if (!var_symbol)
+            {
+              locationt loc = get_location_from_decl(targets[i]);
+              const typet &elem_type = tuple_type.components()[i].type();
+
+              symbolt new_symbol = create_symbol(
+                loc.get_file().as_string(),
+                var_name,
+                var_sid.to_string(),
+                loc,
+                elem_type);
+              new_symbol.lvalue = true;
+              new_symbol.file_local = true;
+              new_symbol.is_extern = false;
+              var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
+            }
+
+            // Create member access: t.element_i
+            std::string member_name = "element_" + std::to_string(i);
+            member_exprt member_access(
+              rhs, member_name, tuple_type.components()[i].type());
+
+            // Create assignment
+            code_assignt assign(symbol_expr(*var_symbol), member_access);
+            assign.location() = get_location_from_decl(ast_node);
+            target_block.copy_to_operands(assign);
+          }
+
+          return;
+        }
+      }
+      // Handle array/list unpacking
+      else if (rhs.type().is_array())
+      {
+        const auto &targets = target["elts"];
+
+        for (size_t i = 0; i < targets.size(); i++)
+        {
+          if (targets[i]["_type"] != "Name")
+          {
+            throw std::runtime_error(
+              "Array unpacking only supports simple names, not " +
+              targets[i]["_type"].get<std::string>());
+          }
+
+          std::string var_name = targets[i]["id"].get<std::string>();
+          symbol_id var_sid = create_symbol_id();
+          var_sid.set_object(var_name);
+
+          symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+          if (!var_symbol)
+          {
+            locationt loc = get_location_from_decl(targets[i]);
+            typet elem_type = rhs.type().subtype();
+
+            symbolt new_symbol = create_symbol(
+              loc.get_file().as_string(),
+              var_name,
+              var_sid.to_string(),
+              loc,
+              elem_type);
+            new_symbol.lvalue = true;
+            new_symbol.file_local = true;
+            new_symbol.is_extern = false;
+            var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
+          }
+
+          // Create subscript: rhs[i]
+          exprt index_expr = from_integer(i, size_type());
+          index_exprt subscript(rhs, index_expr, rhs.type().subtype());
+
+          code_assignt assign(symbol_expr(*var_symbol), subscript);
+          assign.location() = get_location_from_decl(ast_node);
+          target_block.copy_to_operands(assign);
+        }
+
+        return;
+      }
+
+      throw std::runtime_error(
+        "Cannot unpack " + rhs.type().id_string() +
+        " - only tuples and arrays can be unpacked");
+    }
+
+    // Normal assignment handling
+    std::string name;
 
     if (target_type == "Subscript")
       name = target["value"]["id"].get<std::string>();
