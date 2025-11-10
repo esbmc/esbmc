@@ -43,7 +43,8 @@ private:
    */
   exprt check_argument_types(
     const symbolt *func_symbol,
-    const nlohmann::json &args) const;
+    const nlohmann::json &args,
+    const nlohmann::json &keywords) const;
 
   // Helper methods for AttributeError detection
   std::vector<std::string>
