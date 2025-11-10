@@ -1322,6 +1322,30 @@ exprt python_converter::handle_membership_operator(
     "' operation");
 }
 
+exprt python_converter::handle_string_type_mismatch(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &op)
+{
+  bool lhs_is_string = type_utils::is_string_type(lhs.type());
+  bool rhs_is_string = type_utils::is_string_type(rhs.type());
+
+  // Check if we have a type mismatch
+  if (!((lhs_is_string && !rhs_is_string) || (!lhs_is_string && rhs_is_string)))
+    return nil_exprt(); // No mismatch, return nil to indicate no action taken
+
+  // Handle equality/inequality comparisons
+  if (op == "Eq" || op == "NotEq")
+  {
+    // Python allows this comparison but it always returns False for Eq and True for NotEq
+    // For verification purposes, we model this as returning the expected constant value
+    // This represents Python's behavior: str == int always evaluates to False
+    return gen_boolean(op == "NotEq");
+  }
+
+  return nil_exprt(); // No action taken for other operators
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -1445,10 +1469,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // Check for float vs string comparisons
     bool lhs_is_float = lhs.type().is_floatbv();
     bool rhs_is_float = rhs.type().is_floatbv();
-    bool lhs_is_string =
-      lhs.type().is_array() && lhs.type().subtype() == char_type();
-    bool rhs_is_string =
-      rhs.type().is_array() && rhs.type().subtype() == char_type();
+    bool lhs_is_string = type_utils::is_string_type(lhs.type());
+    bool rhs_is_string = type_utils::is_string_type(rhs.type());
 
     if ((lhs_is_float && rhs_is_string) || (lhs_is_string && rhs_is_float))
     {
@@ -1509,6 +1531,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (!result.is_nil())
       return result;
   }
+
+  // Handle string vs non-string type mismatches
+  exprt type_mismatch_result = handle_string_type_mismatch(lhs, rhs, op);
+  if (!type_mismatch_result.is_nil())
+    return type_mismatch_result;
 
   // Replace ** operation with the resultant constant.
   if (op == "Pow" || op == "power")

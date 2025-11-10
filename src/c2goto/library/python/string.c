@@ -387,3 +387,62 @@ __ESBMC_HIDE:;
 
   return sign * result;
 }
+
+// Python chr() builtin - converts Unicode code point to string
+// Returns a static buffer containing the UTF-8 encoded character
+// Valid range: 0 to 0x10FFFF (1,114,111)
+char *__python_chr(int codepoint)
+{
+__ESBMC_HIDE:;
+  // Validate range
+  if (codepoint < 0 || codepoint > 0x10FFFF)
+  {
+    __ESBMC_assert(0, "chr() arg not in range(0x110000)");
+    return (char *)0;
+  }
+
+  // Reject surrogate pairs (0xD800-0xDFFF) as Python does
+  if (codepoint >= 0xD800 && codepoint <= 0xDFFF)
+  {
+    __ESBMC_assert(0, "chr() arg is a surrogate code point");
+    return (char *)0;
+  }
+
+  // Use a static buffer to return the result
+  static char buffer[5]; // Max 4 bytes for UTF-8 + null terminator
+
+  // ASCII range (0x00-0x7F): 1 byte
+  if (codepoint <= 0x7F)
+  {
+    buffer[0] = (char)codepoint;
+    buffer[1] = '\0';
+    return buffer;
+  }
+
+  // 2-byte UTF-8 (0x80-0x7FF)
+  if (codepoint <= 0x7FF)
+  {
+    buffer[0] = (char)(0xC0 | (codepoint >> 6));
+    buffer[1] = (char)(0x80 | (codepoint & 0x3F));
+    buffer[2] = '\0';
+    return buffer;
+  }
+
+  // 3-byte UTF-8 (0x800-0xFFFF)
+  if (codepoint <= 0xFFFF)
+  {
+    buffer[0] = (char)(0xE0 | (codepoint >> 12));
+    buffer[1] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+    buffer[2] = (char)(0x80 | (codepoint & 0x3F));
+    buffer[3] = '\0';
+    return buffer;
+  }
+
+  // 4-byte UTF-8 (0x10000-0x10FFFF)
+  buffer[0] = (char)(0xF0 | (codepoint >> 18));
+  buffer[1] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
+  buffer[2] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+  buffer[3] = (char)(0x80 | (codepoint & 0x3F));
+  buffer[4] = '\0';
+  return buffer;
+}

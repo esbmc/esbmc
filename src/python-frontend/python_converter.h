@@ -389,6 +389,11 @@ private:
   // String method helpers
   exprt handle_str_join(const nlohmann::json &call_json);
 
+  exprt handle_string_type_mismatch(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &op);
+
   void process_forward_reference(
     const nlohmann::json &annotation,
     codet &target_block);

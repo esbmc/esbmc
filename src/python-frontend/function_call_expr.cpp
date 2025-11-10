@@ -419,6 +419,7 @@ std::string utf8_encode(unsigned int int_value)
 exprt function_call_expr::handle_chr(nlohmann::json &arg) const
 {
   int int_value = 0;
+  bool is_constant = false;
 
   // Check for unary minus: e.g., chr(-1)
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
@@ -429,14 +430,20 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     if (
       op["_type"] == "USub" && operand.contains("value") &&
       operand["value"].is_number_integer())
+    {
       int_value = -operand["value"].get<int>();
+      is_constant = true;
+    }
     else
       return gen_exception_raise("TypeError", "Unsupported UnaryOp in chr()");
   }
 
   // Handle integer input
   else if (arg.contains("value") && arg["value"].is_number_integer())
+  {
     int_value = arg["value"].get<int>();
+    is_constant = true;
+  }
 
   // Reject float input
   else if (arg.contains("value") && arg["value"].is_number_float())
@@ -450,6 +457,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     try
     {
       int_value = std::stoi(s);
+      is_constant = true;
     }
     catch (const std::invalid_argument &)
     {
@@ -457,18 +465,19 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
   }
 
+  // Handle variable references (Name nodes)
   else if (arg.contains("_type") && arg["_type"] == "Name")
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
     if (!sym)
     {
-      // if symbol not found revert to a variable assignment
-      arg["value"] = std::string(1, static_cast<char>(int_value));
-      typet t = type_handler_.get_typet("chr", 1);
-      exprt expr = converter_.get_expr(arg);
-      expr.type() = t;
-      return expr;
+      // Symbol not found - use runtime conversion via string_handler
+      exprt var_expr = converter_.get_expr(arg);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_chr_conversion(
+        var_expr, loc);
     }
+
     exprt val = sym->value;
 
     if (!val.is_constant())
@@ -476,19 +485,20 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
 
     if (val.is_nil())
     {
-      // Runtime variable: create expression without compile-time evaluation
+      // Runtime variable: use string_handler for runtime conversion
       exprt var_expr = converter_.get_expr(arg);
-
-      // Since we can't evaluate at compile time, just convert the variable
-      // The type should already be correct from get_expr
-      return var_expr;
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_chr_conversion(
+        var_expr, loc);
     }
 
+    // Try to extract constant value
     const auto &const_expr = to_constant_expr(val);
     std::string binary_str = id2string(const_expr.get_value());
     try
     {
       int_value = std::stoul(binary_str, nullptr, 2);
+      is_constant = true;
     }
     catch (std::out_of_range &)
     {
@@ -504,27 +514,42 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     arg.erase("id");
     arg.erase("ctx");
   }
-  std::string utf8_encoded;
 
-  try
+  // If we have a constant value, do compile-time conversion
+  if (is_constant)
   {
-    utf8_encoded = utf8_encode(int_value);
-  }
-  catch (const std::out_of_range &e)
-  {
-    return gen_exception_raise("ValueError", "chr()");
+    std::string utf8_encoded;
+
+    try
+    {
+      utf8_encoded = utf8_encode(int_value);
+    }
+    catch (const std::out_of_range &e)
+    {
+      return gen_exception_raise("ValueError", "chr()");
+    }
+
+    // Build a proper character array, not a single char
+    // Create array type with proper size (length + null terminator)
+    size_t array_size = utf8_encoded.size() + 1;
+    typet char_array_type =
+      array_typet(char_type(), from_integer(array_size, size_type()));
+
+    // Build the array expression with all characters
+    std::vector<unsigned char> char_data(
+      utf8_encoded.begin(), utf8_encoded.end());
+    char_data.push_back('\0'); // Add null terminator
+
+    // Use converter's make_char_array_expr to build proper array
+    exprt result = converter_.make_char_array_expr(char_data, char_array_type);
+
+    return result;
   }
 
-  // Replace the value with a single-character string
-  arg["value"] = arg["n"] = arg["s"] = utf8_encoded;
-  arg["type"] = "str";
-
-  bool null_terminated = int_value > 0x7f;
-  // Build and return the string expression
-  exprt expr = converter_.get_expr(arg);
-  expr.type() =
-    type_handler_.get_typet("str", utf8_encoded.size() + null_terminated);
-  return expr;
+  // If we reach here, we need runtime conversion
+  exprt var_expr = converter_.get_expr(arg);
+  locationt loc = converter_.get_location_from_decl(call_);
+  return converter_.get_string_handler().handle_chr_conversion(var_expr, loc);
 }
 
 exprt function_call_expr::handle_base_conversion(
