@@ -24,6 +24,8 @@ ignored_dirs=(
   "github_2993_fail"
   "github_2993_2_fail"
   "github_3012_3_fail"
+  "github_3090_4"
+  "github_3090_4_fail"
   "global"
   "integer_squareroot_fail"
   "int_from_bytes"

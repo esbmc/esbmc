@@ -56,17 +56,27 @@ std::vector<exprt> string_builder::extract_string_chars(
     return chars;
   }
 
-  // Handle symbol expressions
+  // Handle pointer types - cannot extract
+  if (expr.type().is_pointer())
+    return chars;
+
+  // Handle symbol expressions BEFORE checking array type
+  // A symbol with array type has no operands in the expression itself;
+  // the actual array data is stored in symbol->value
   if (expr.is_symbol())
   {
     symbolt *symbol =
       get_symbol_table().find_symbol(expr.identifier().as_string());
-    if (
-      symbol && symbol->value.is_constant() && symbol->value.type().is_array())
+
+    if (symbol && symbol->value.type().is_array())
     {
-      for (size_t i = 0; i < symbol->value.operands().size(); ++i)
+      // Extract from the symbol's stored value
+      const exprt &value = symbol->value;
+      for (size_t i = 0; i < value.operands().size(); ++i)
       {
-        const exprt &ch = symbol->value.operands()[i];
+        const exprt &ch = value.operands()[i];
+
+        // Skip null terminators if they're constant zeros
         if (ch.is_constant())
         {
           try
@@ -75,24 +85,26 @@ std::vector<exprt> string_builder::extract_string_chars(
               binary2integer(ch.value().as_string(), ch.type().is_signedbv());
             if (char_val == 0)
               break;
-            chars.push_back(ch);
           }
           catch (...)
           {
-            chars.push_back(ch);
           }
         }
+
+        chars.push_back(ch);
       }
     }
     return chars;
   }
 
-  // Handle constant arrays
-  if (expr.is_constant() && expr.type().is_array())
+  // Handle array expressions directly (non-symbol arrays with operands)
+  if (expr.type().is_array())
   {
     for (size_t i = 0; i < expr.operands().size(); ++i)
     {
       const exprt &ch = expr.operands()[i];
+
+      // Skip null terminators if they're constant zeros
       if (ch.is_constant())
       {
         try
@@ -101,31 +113,37 @@ std::vector<exprt> string_builder::extract_string_chars(
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           if (char_val == 0)
             break;
-          chars.push_back(ch);
         }
         catch (...)
         {
-          chars.push_back(ch);
         }
       }
+
+      chars.push_back(ch);
     }
     return chars;
   }
 
-  // Handle single character constants
-  if (
-    expr.is_constant() &&
-    (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  // Handle single character (constant or symbolic)
+  if (expr.type().is_signedbv() || expr.type().is_unsignedbv())
   {
-    try
+    if (expr.is_constant())
     {
-      BigInt char_val =
-        binary2integer(expr.value().as_string(), expr.type().is_signedbv());
-      if (char_val != 0)
+      try
+      {
+        BigInt char_val =
+          binary2integer(expr.value().as_string(), expr.type().is_signedbv());
+        if (char_val != 0)
+          chars.push_back(expr);
+      }
+      catch (...)
+      {
         chars.push_back(expr);
+      }
     }
-    catch (...)
+    else
     {
+      // Symbolic character - include it directly
       chars.push_back(expr);
     }
   }
