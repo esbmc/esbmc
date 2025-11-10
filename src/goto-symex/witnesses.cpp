@@ -54,7 +54,7 @@ void grapht::generate_graphml(optionst &options)
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
 
-  std::string witness_output = options.get_option("witness-output");
+  std::string witness_output = options.get_option("witness-output-graphml");
   if (witness_output == "-")
     boost::property_tree::write_xml(std::cout, graphml_node, settings);
   else
@@ -121,7 +121,7 @@ void yamlt::generate_yaml(optionst &options)
   yaml_emitter << YAML::EndMap;
   yaml_emitter << YAML::EndSeq;
 
-  const std::string witness_output = options.get_option("witness-output");
+  const std::string witness_output = options.get_option("witness-output-yaml");
   if (witness_output == "-")
     std::cout << yaml_emitter.c_str() << std::endl;
   else
