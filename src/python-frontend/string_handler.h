@@ -331,6 +331,17 @@ public:
     const exprt &base,
     const locationt &location);
 
+  /**
+   * Handle chr() builtin function
+   * Converts a Unicode code point to its string representation
+   * Supports chr(i) where i is an integer in range [0, 0x10FFFF]
+   * @param codepoint_arg The integer code point to convert
+   * @param location Source location for error reporting
+   * @return Expression representing the resulting string (char array pointer)
+   */
+  exprt
+  handle_chr_conversion(const exprt &codepoint_arg, const locationt &location);
+
 private:
   python_converter &converter_;
   contextt &symbol_table_;

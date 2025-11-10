@@ -1219,3 +1219,48 @@ exprt string_handler::handle_int_conversion_with_base(
 
   return handle_string_to_int(arg, base_expr, location);
 }
+
+exprt string_handler::handle_chr_conversion(
+  const exprt &codepoint_arg,
+  const locationt &location)
+{
+  // Ensure the argument is an integer type
+  exprt codepoint_expr = codepoint_arg;
+
+  // If not already an integer, try to convert it
+  if (!type_utils::is_integer_type(codepoint_expr.type()))
+  {
+    // If it's a float, truncate to integer
+    if (codepoint_expr.type().is_floatbv())
+      codepoint_expr = typecast_exprt(codepoint_expr, int_type());
+    // If it's a boolean, convert to 0 or 1
+    else if (codepoint_expr.type().is_bool())
+    {
+      exprt result("if", int_type());
+      result.copy_to_operands(codepoint_expr);
+      result.copy_to_operands(from_integer(1, int_type()));
+      result.copy_to_operands(from_integer(0, int_type()));
+      codepoint_expr = result;
+    }
+    else
+      throw std::runtime_error("chr() argument must be an integer");
+  }
+
+  // Cast to int type if it's a different integer width
+  if (codepoint_expr.type() != int_type())
+    codepoint_expr = typecast_exprt(codepoint_expr, int_type());
+
+  // Find the __python_chr function symbol
+  symbolt *chr_symbol = symbol_table_.find_symbol("c:@F@__python_chr");
+  if (!chr_symbol)
+    throw std::runtime_error("__python_chr function not found in symbol table");
+
+  // Call __python_chr(codepoint)
+  side_effect_expr_function_callt chr_call;
+  chr_call.function() = symbol_expr(*chr_symbol);
+  chr_call.arguments().push_back(codepoint_expr);
+  chr_call.location() = location;
+  chr_call.type() = pointer_typet(char_type());
+
+  return chr_call;
+}
