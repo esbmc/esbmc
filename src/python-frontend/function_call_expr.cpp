@@ -2032,7 +2032,8 @@ exprt function_call_expr::handle_general_function_call()
 
   if (func_symbol != nullptr)
   {
-    exprt type_error = check_argument_types(func_symbol, call_["args"]);
+    exprt type_error =
+      check_argument_types(func_symbol, call_["args"], call_["keywords"]);
     if (!type_error.is_nil())
       return type_error;
   }
@@ -2470,7 +2471,8 @@ exprt function_call_expr::generate_attribute_error(
 
 exprt function_call_expr::check_argument_types(
   const symbolt *func_symbol,
-  const nlohmann::json &args) const
+  const nlohmann::json &args,
+  const nlohmann::json &keywords) const
 {
   // Only perform type checking if --strict-types is enabled
   if (!config.options.get_bool_option("strict-types"))
@@ -2500,6 +2502,12 @@ exprt function_call_expr::check_argument_types(
     }
   }
 
+  auto types_match = [&](const typet &expected, const typet &actual) {
+    return base_type_eq(expected, actual, converter_.ns) ||
+           (type_utils::is_string_type(expected) &&
+            type_utils::is_string_type(actual));
+  };
+
   for (size_t i = 0; i < args.size(); ++i)
   {
     size_t param_idx = i + param_offset;
@@ -2511,7 +2519,7 @@ exprt function_call_expr::check_argument_types(
     const typet &actual_type = arg.type();
 
     // Check for type mismatch
-    if (!base_type_eq(expected_type, actual_type, converter_.ns))
+    if (!types_match(expected_type, actual_type))
     {
       std::string expected_str = type_handler_.type_to_string(expected_type);
       std::string actual_str = type_handler_.type_to_string(actual_type);
@@ -2528,6 +2536,53 @@ exprt function_call_expr::check_argument_types(
       exception.location().user_provided(true);
 
       return exception;
+    }
+  }
+
+  if (keywords.is_array())
+  {
+    for (const auto &keyword : keywords)
+    {
+      if (!keyword.contains("arg") || keyword["arg"].is_null())
+        continue;
+
+      const std::string &param_name = keyword["arg"].get<std::string>();
+
+      size_t param_idx = params.size();
+      for (size_t i = param_offset; i < params.size(); ++i)
+      {
+        if (params[i].get_base_name().as_string() == param_name)
+        {
+          param_idx = i;
+          break;
+        }
+      }
+
+      if (param_idx >= params.size() || !keyword.contains("value"))
+        continue;
+
+      exprt arg = converter_.get_expr(keyword["value"]);
+      const typet &expected_type = params[param_idx].type();
+      const typet &actual_type = arg.type();
+
+      if (!types_match(expected_type, actual_type))
+      {
+        std::string expected_str = type_handler_.type_to_string(expected_type);
+        std::string actual_str = type_handler_.type_to_string(actual_type);
+
+        std::ostringstream msg;
+        msg << "TypeError: Argument '" << param_name
+            << "' has incompatible type '" << actual_str << "'; expected '"
+            << expected_str << "'";
+
+        exprt exception = gen_exception_raise("TypeError", msg.str());
+
+        locationt loc = converter_.get_location_from_decl(call_);
+        exception.location() = loc;
+        exception.location().user_provided(true);
+
+        return exception;
+      }
     }
   }
 
