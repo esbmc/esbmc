@@ -56,11 +56,11 @@ std::vector<exprt> string_builder::extract_string_chars(
     return chars;
   }
 
-  // Handle pointer types - cannot extract
+  // Handle pointer types, we cannot extract
   if (expr.type().is_pointer())
     return chars;
 
-  // Handle symbol expressions BEFORE checking array type
+  // Handle symbol expressions before checking array type
   // A symbol with array type has no operands in the expression itself;
   // the actual array data is stored in symbol->value
   if (expr.is_symbol())
@@ -143,7 +143,7 @@ std::vector<exprt> string_builder::extract_string_chars(
     }
     else
     {
-      // Symbolic character - include it directly
+      // Symbolic character
       chars.push_back(expr);
     }
   }
@@ -250,8 +250,13 @@ exprt string_builder::concatenate_strings(
   combined_chars.insert(
     combined_chars.end(), rhs_chars.begin(), rhs_chars.end());
 
-  // Build null-terminated result
-  return build_null_terminated_string(combined_chars);
+  if (combined_chars.size())
+  {
+    // Build null-terminated result as a new array
+    return build_null_terminated_string(combined_chars);
+  }
+  else
+    return concatenate_strings_via_c_function(lhs, rhs, left);
 }
 
 exprt string_builder::build_raw_byte_array(const std::vector<uint8_t> &bytes)
@@ -277,4 +282,63 @@ exprt string_builder::build_raw_byte_array(const std::vector<uint8_t> &bytes)
   }
 
   return result;
+}
+
+exprt string_builder::concatenate_strings_via_c_function(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left)
+{
+  // Get location for the operation
+  locationt location;
+  if (!left.is_null() && left.contains("lineno"))
+    location.set_line(std::to_string(left["lineno"].get<int>()));
+
+  // Ensure both operands are null-terminated strings
+  exprt lhs_str = ensure_null_terminated_string(const_cast<exprt &>(lhs));
+  exprt rhs_str = ensure_null_terminated_string(const_cast<exprt &>(rhs));
+
+  // Get base addresses (pointers) for the strings
+  exprt lhs_addr = str_handler_->get_array_base_address(lhs_str);
+  exprt rhs_addr = str_handler_->get_array_base_address(rhs_str);
+
+  // Find or create the __python_str_concat function symbol
+  std::string func_name = "__python_str_concat";
+  std::string func_symbol_id = "c:@F@" + func_name;
+
+  symbolt *concat_symbol = get_symbol_table().find_symbol(func_symbol_id);
+  if (!concat_symbol)
+  {
+    // Create the function symbol if it doesn't exist
+    symbolt new_symbol;
+    new_symbol.name = func_name;
+    new_symbol.id = func_symbol_id;
+    new_symbol.mode = "C";
+    new_symbol.is_extern = true;
+
+    // Build function type: char* __python_str_concat(const char*, const char*)
+    code_typet concat_type;
+    typet char_ptr = gen_pointer_type(char_type());
+    concat_type.return_type() = char_ptr;
+
+    code_typet::argumentt arg1(char_ptr);
+    code_typet::argumentt arg2(char_ptr);
+    concat_type.arguments().push_back(arg1);
+    concat_type.arguments().push_back(arg2);
+
+    new_symbol.type = concat_type;
+
+    get_symbol_table().add(new_symbol);
+    concat_symbol = get_symbol_table().find_symbol(func_symbol_id);
+  }
+
+  // Create the function call: __python_str_concat(lhs, rhs)
+  side_effect_expr_function_callt concat_call;
+  concat_call.function() = symbol_expr(*concat_symbol);
+  concat_call.arguments().push_back(lhs_addr);
+  concat_call.arguments().push_back(rhs_addr);
+  concat_call.location() = location;
+  concat_call.type() = gen_pointer_type(char_type());
+
+  return concat_call;
 }

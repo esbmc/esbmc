@@ -502,43 +502,25 @@ std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
   const exprt &lhs,
   const exprt &rhs)
 {
-  // Try to resolve symbols to their constant values
-  exprt lhs_resolved = get_resolved_value(lhs);
-  exprt rhs_resolved = get_resolved_value(rhs);
+  exprt resolved_lhs = lhs;
+  exprt resolved_rhs = rhs;
 
-  exprt final_lhs = lhs_resolved.is_nil() ? lhs : lhs_resolved;
-  exprt final_rhs = rhs_resolved.is_nil() ? rhs : rhs_resolved;
-
-  // Resolve array element symbols
-  if (final_lhs.is_constant() && final_lhs.type().is_array())
+  // Only resolve constant arrays, not pointers
+  if (lhs.is_symbol() && lhs.type().is_array())
   {
-    exprt::operandst &lhs_ops = final_lhs.operands();
-    for (size_t i = 0; i < lhs_ops.size(); ++i)
-    {
-      if (lhs_ops[i].is_symbol())
-      {
-        exprt resolved_elem = get_resolved_value(lhs_ops[i]);
-        if (!resolved_elem.is_nil())
-          lhs_ops[i] = resolved_elem;
-      }
-    }
+    const symbolt *sym = symbol_table_.find_symbol(lhs.identifier());
+    if (sym && sym->value.is_constant())
+      resolved_lhs = sym->value;
   }
 
-  if (final_rhs.is_constant() && final_rhs.type().is_array())
+  if (rhs.is_symbol() && rhs.type().is_array())
   {
-    exprt::operandst &rhs_ops = final_rhs.operands();
-    for (size_t i = 0; i < rhs_ops.size(); ++i)
-    {
-      if (rhs_ops[i].is_symbol())
-      {
-        exprt resolved_elem = get_resolved_value(rhs_ops[i]);
-        if (!resolved_elem.is_nil())
-          rhs_ops[i] = resolved_elem;
-      }
-    }
+    const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
+    if (sym && sym->value.is_constant())
+      resolved_rhs = sym->value;
   }
 
-  return {final_lhs, final_rhs};
+  return {resolved_lhs, resolved_rhs};
 }
 
 bool python_converter::has_unsupported_side_effects_internal(
@@ -655,22 +637,38 @@ exprt python_converter::handle_type_mismatches(
   const exprt &lhs,
   const exprt &rhs)
 {
-  // Skip if either operand is a member expression or types match exactly
-  if (lhs.is_member() || rhs.is_member() || lhs.type() == rhs.type())
+  // Skip if either operand is a member expression
+  if (lhs.is_member() || rhs.is_member())
+    return nil_exprt();
+
+  // Check if both are string types (either array or pointer to char)
+  bool lhs_is_string =
+    (lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
+    (lhs.type().is_pointer() && lhs.type().subtype() == char_type());
+  bool rhs_is_string =
+    (rhs.type().is_array() && rhs.type().subtype() == char_type()) ||
+    (rhs.type().is_pointer() && rhs.type().subtype() == char_type());
+
+  // If both are strings (regardless of array vs pointer), let strcmp handle it
+  if (lhs_is_string && rhs_is_string)
+    return nil_exprt();
+
+  // Types match exactly
+  if (lhs.type() == rhs.type())
     return nil_exprt();
 
   // Both operands are arrays - need to distinguish between lists and strings
   if (lhs.type().is_array() && rhs.type().is_array())
   {
     // Check if these are different semantic types (list vs string)
-    bool lhs_is_string = (lhs.type().subtype() == char_type());
-    bool rhs_is_string = (rhs.type().subtype() == char_type());
+    bool lhs_is_string_array = (lhs.type().subtype() == char_type());
+    bool rhs_is_string_array = (rhs.type().subtype() == char_type());
 
     // If one is a string array and the other is not, they're different types
-    if (lhs_is_string != rhs_is_string)
+    if (lhs_is_string_array != rhs_is_string_array)
       return gen_boolean(op == "NotEq");
 
-    // Both are strings: compare based on content
+    // Both are string arrays: compare based on content
     // check if empty
     bool lhs_empty = string_handler_.is_zero_length_array(lhs) ||
                      (lhs.is_constant() && lhs.operands().size() <= 1);
@@ -686,8 +684,8 @@ exprt python_converter::handle_type_mismatches(
     return nil_exprt();
   }
 
-  // Mixed types (array vs non-array)
-  // Let strcmp handle the comparison
+  // Mixed types (array vs non-array, but not both strings)
+  // Let strcmp handle the comparison if they're both strings
   return nil_exprt();
 }
 
@@ -3670,14 +3668,21 @@ void python_converter::get_compound_assign(
   std::string op = ast_node["op"]["_type"].get<std::string>();
 
   // Check if this is a string concatenation based on variable annotation
-  bool is_string_concat =
-    false; // use to check if the operation is a string concatenation
+  bool is_string_concat = false;
   if (op == "Add")
   {
     // Standard array-based string concatenation
     if (
       (lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
       (current_element_type.is_array() &&
+       current_element_type.subtype() == char_type()))
+    {
+      is_string_concat = true;
+    }
+    // Pointer-based string
+    else if (
+      (lhs.type().is_pointer() && lhs.type().subtype() == char_type()) ||
+      (current_element_type.is_pointer() &&
        current_element_type.subtype() == char_type()))
     {
       is_string_concat = true;
@@ -3708,24 +3713,38 @@ void python_converter::get_compound_assign(
       string_handler_.handle_string_concatenation(lhs, rhs_expr, left, right);
 
     // Update the variable's type to match the concatenated result
-    if (!var_name.empty() && concatenated.type().is_array())
+    // Handle both array and pointer results
+    if (
+      !var_name.empty() && (concatenated.type().is_array() ||
+                            (concatenated.type().is_pointer() &&
+                             concatenated.type().subtype() == char_type())))
     {
       symbol_id sid = create_symbol_id();
       sid.set_object(var_name);
       symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
       if (symbol)
       {
-        // Update both the symbol's type and the LHS expression type
+        // Update the symbol's type to pointer if concatenated returns pointer
         symbol->type = concatenated.type();
-        lhs.type() = concatenated.type();
-        // Also update the symbol's value to maintain consistency
-        symbol->value = concatenated;
+
+        // Update LHS to be a symbol with the new type
+        lhs = symbol_exprt(symbol->id, symbol->type);
+
+        // For pointer results, don't update the value
+        // (it will be assigned via the assignment statement)
+        if (concatenated.type().is_array())
+        {
+          symbol->value = concatenated;
+        }
       }
     }
 
     code_assignt code_assign(lhs, concatenated);
     code_assign.location() = loc;
     target_block.copy_to_operands(code_assign);
+
+    // Reset RHS flag
+    is_converting_rhs = false;
     return;
   }
 

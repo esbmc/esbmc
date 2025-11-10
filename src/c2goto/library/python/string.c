@@ -2,14 +2,9 @@
 #include <limits.h>
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
-// NOTE: For multi-byte characters (e.g., from iteration), the frontend must
-// handle the full multi-byte sequence, as this function is for a single 'int c'
-// which is typically only one byte from the string array.
 _Bool __python_char_isalpha(int c)
 {
 __ESBMC_HIDE:;
-  // This check is sufficient for *bytes* extracted from a string.
-  // The string version handles multi-byte sequences.
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
@@ -18,42 +13,31 @@ _Bool __python_str_isalpha(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s || !*s)
-    return 0; // Empty string is not alphabetic
+    return 0;
 
   while (*s)
   {
     unsigned char c = (unsigned char)*s;
 
-    // 1. Handle ASCII letters
     if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
     {
       s++;
       continue;
     }
 
-    // 2. Reject common non-alphabetic ASCII characters (e.g., space, digit, symbol)
     if (c <= 0x7F)
-    {
-      // Explicitly reject space (0x20). Python isalpha() must be only letters.
       return 0;
-    }
 
-    // 3. Handle Two-Byte UTF-8 sequences (0xC0-0xDF)
     if (c >= 0xC2 && c <= 0xDF)
     {
       unsigned char next = (unsigned char)*(s + 1);
       if (next >= 0x80 && next <= 0xBF)
       {
-        // Treat valid two-byte UTF-8 sequences in 0xC2–0xDF as alphabetic.
-        // Covers Latin-1 Supplement and common accented letters (é, ñ, ü, etc.).
-
-        s += 2; // Skip both bytes
+        s += 2;
         continue;
       }
     }
 
-    // 4. Any other sequence (invalid UTF-8, three-byte, four-byte, or unhandled
-    // two-byte sequences) is considered non-alphabetic by this model.
     return 0;
   }
 
@@ -71,7 +55,7 @@ _Bool __python_str_isdigit(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s || !*s)
-    return 0; // NULL or empty string returns false
+    return 0;
 
   while (*s)
   {
@@ -79,7 +63,7 @@ __ESBMC_HIDE:;
       return 0;
     s++;
   }
-  return 1; // All characters are digits
+  return 1;
 }
 
 // Python string isspace: checks if all characters are whitespace
@@ -87,13 +71,12 @@ _Bool __python_str_isspace(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s || !*s)
-    return 0; // Empty string is not considered all whitespace in Python
+    return 0;
 
   while (*s)
   {
     unsigned char c = (unsigned char)*s;
 
-    // Check for whitespace: space, tab, newline, vertical tab, form feed, carriage return
     if (!(c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
           c == '\r'))
       return 0;
@@ -101,18 +84,16 @@ __ESBMC_HIDE:;
     s++;
   }
 
-  return 1; // All characters are whitespace
+  return 1;
 }
 
 // Python string lstrip: removes leading whitespace characters
-// Returns a pointer to the first non-whitespace character
 const char *__python_str_lstrip(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s)
     return s;
 
-  // Skip leading whitespace
   while (*s && (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' ||
                 *s == '\f' || *s == '\r'))
   {
@@ -130,36 +111,29 @@ __ESBMC_HIDE:;
 }
 
 // Python string islower - checks if all cased characters are lowercase
-// Returns true if there's at least one lowercase letter and no uppercase letters
-// NOTE: This is a simplified implementation with partial Unicode support!
 _Bool __python_str_islower(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s || !*s)
-    return 0; // Empty string returns false
+    return 0;
 
-  _Bool has_cased = 0; // Track if we found any cased character
+  _Bool has_cased = 0;
 
   while (*s)
   {
     unsigned char c = (unsigned char)*s;
 
-    // Check for uppercase ASCII letters
     if (c >= 'A' && c <= 'Z')
-      return 0; // Found uppercase, not all lower
+      return 0;
 
-    // Check for lowercase ASCII letters
     if (c >= 'a' && c <= 'z')
-      has_cased = 1; // Found at least one lowercase letter
+      has_cased = 1;
 
-    // Handle two-byte UTF-8 sequences for accented letters
     if (c >= 0xC2 && c <= 0xDF)
     {
       unsigned char next = (unsigned char)*(s + 1);
       if (next >= 0x80 && next <= 0xBF)
       {
-        // For simplicity, treat valid two-byte UTF-8 as cased characters
-        // In real Python, we'd need full Unicode case mapping
         has_cased = 1;
         s += 2;
         continue;
@@ -169,7 +143,7 @@ __ESBMC_HIDE:;
     s++;
   }
 
-  return has_cased; // True only if we found at least one cased character
+  return has_cased;
 }
 
 // Python character lower - converts a single character to lowercase
@@ -182,15 +156,13 @@ __ESBMC_HIDE:;
 }
 
 // Python string lower - converts all characters to lowercase
-// Uses a static buffer for ESBMC verification
 char *__python_str_lower(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s)
     return (char *)s;
 
-  // Use a static buffer (sufficient for verification purposes)
-  static char buffer[256];
+  char *buffer = __ESBMC_alloca(256);
 
   int i = 0;
   while (i < 255 && s[i])
@@ -202,10 +174,8 @@ __ESBMC_HIDE:;
     i++;
   }
 
-  // Warn if string was truncated
   if (s[i] != '\0')
   {
-    // String is longer than buffer - issue warning
     __ESBMC_assert(0, "String too long for lower() - exceeds 255 characters");
   }
 
@@ -215,34 +185,28 @@ __ESBMC_HIDE:;
 }
 
 // Python int() builtin - converts string to integer
-// Handles optional base parameter (2-36), with base 10 as default
-// Returns 0 for invalid conversions
 int __python_int(const char *s, int base)
 {
 __ESBMC_HIDE:;
   if (!s)
     return 0;
 
-  // Validate base (Python accepts 0, 2-36)
   if (base != 0 && (base < 2 || base > 36))
   {
     __ESBMC_assert(0, "int() base must be >= 2 and <= 36, or 0");
     return 0;
   }
 
-  // Skip leading whitespace
   while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' || *s == '\f' ||
          *s == '\r')
     s++;
 
-  // Handle empty string after whitespace
   if (!*s)
   {
     __ESBMC_assert(0, "invalid literal for int() with empty string");
     return 0;
   }
 
-  // Handle sign
   int sign = 1;
   if (*s == '-')
   {
@@ -254,7 +218,6 @@ __ESBMC_HIDE:;
     s++;
   }
 
-  // Auto-detect base if base == 0
   if (base == 0)
   {
     if (*s == '0')
@@ -284,7 +247,6 @@ __ESBMC_HIDE:;
       base = 10;
     }
   }
-  // Handle explicit base prefixes (0x, 0b, 0o) when base is specified
   else if (base == 16 && *s == '0' && (*(s + 1) == 'x' || *(s + 1) == 'X'))
   {
     s += 2;
@@ -298,14 +260,12 @@ __ESBMC_HIDE:;
     s += 2;
   }
 
-  // Check if we have at least one digit
   if (!*s)
   {
     __ESBMC_assert(0, "invalid literal for int() - no digits");
     return 0;
   }
 
-  // Convert string to integer
   int result = 0;
   _Bool found_digit = 0;
 
@@ -314,7 +274,6 @@ __ESBMC_HIDE:;
     int digit_value = -1;
     unsigned char c = (unsigned char)*s;
 
-    // Convert character to digit value
     if (c >= '0' && c <= '9')
     {
       digit_value = c - '0';
@@ -330,23 +289,19 @@ __ESBMC_HIDE:;
     else if (
       c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r')
     {
-      // Trailing whitespace is allowed
       s++;
       continue;
     }
     else
     {
-      // Invalid character
       __ESBMC_assert(0, "invalid literal for int() - invalid character");
       return 0;
     }
 
-    // Check if digit is valid for the base
     if (digit_value >= base)
     {
       if (found_digit)
       {
-        // We found at least one valid digit, stop here (trailing whitespace OK)
         break;
       }
       __ESBMC_assert(
@@ -356,7 +311,6 @@ __ESBMC_HIDE:;
 
     found_digit = 1;
 
-    // Check for overflow (simplified - doesn't handle full range)
     if (result > (INT_MAX / base))
     {
       __ESBMC_assert(0, "int() conversion overflow");
@@ -367,12 +321,10 @@ __ESBMC_HIDE:;
     s++;
   }
 
-  // Skip trailing whitespace
   while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' || *s == '\f' ||
          *s == '\r')
     s++;
 
-  // Check if there are any remaining non-whitespace characters
   if (*s != '\0')
   {
     __ESBMC_assert(0, "invalid literal for int() - trailing characters");
@@ -389,29 +341,23 @@ __ESBMC_HIDE:;
 }
 
 // Python chr() builtin - converts Unicode code point to string
-// Returns a static buffer containing the UTF-8 encoded character
-// Valid range: 0 to 0x10FFFF (1,114,111)
 char *__python_chr(int codepoint)
 {
 __ESBMC_HIDE:;
-  // Validate range
   if (codepoint < 0 || codepoint > 0x10FFFF)
   {
     __ESBMC_assert(0, "chr() arg not in range(0x110000)");
     return (char *)0;
   }
 
-  // Reject surrogate pairs (0xD800-0xDFFF) as Python does
   if (codepoint >= 0xD800 && codepoint <= 0xDFFF)
   {
     __ESBMC_assert(0, "chr() arg is a surrogate code point");
     return (char *)0;
   }
 
-  // Use a static buffer to return the result
-  static char buffer[5]; // Max 4 bytes for UTF-8 + null terminator
+  char *buffer = __ESBMC_alloca(5);
 
-  // ASCII range (0x00-0x7F): 1 byte
   if (codepoint <= 0x7F)
   {
     buffer[0] = (char)codepoint;
@@ -419,7 +365,6 @@ __ESBMC_HIDE:;
     return buffer;
   }
 
-  // 2-byte UTF-8 (0x80-0x7FF)
   if (codepoint <= 0x7FF)
   {
     buffer[0] = (char)(0xC0 | (codepoint >> 6));
@@ -428,7 +373,6 @@ __ESBMC_HIDE:;
     return buffer;
   }
 
-  // 3-byte UTF-8 (0x800-0xFFFF)
   if (codepoint <= 0xFFFF)
   {
     buffer[0] = (char)(0xE0 | (codepoint >> 12));
@@ -438,11 +382,61 @@ __ESBMC_HIDE:;
     return buffer;
   }
 
-  // 4-byte UTF-8 (0x10000-0x10FFFF)
   buffer[0] = (char)(0xF0 | (codepoint >> 18));
   buffer[1] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
   buffer[2] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
   buffer[3] = (char)(0x80 | (codepoint & 0x3F));
   buffer[4] = '\0';
+  return buffer;
+}
+
+// Python string concatenation - combines two strings
+char *__python_str_concat(const char *s1, const char *s2)
+{
+__ESBMC_HIDE:;
+  if (!s1 && !s2)
+    return (char *)0;
+
+  if (!s1)
+    s1 = "";
+  if (!s2)
+    s2 = "";
+
+  char *buffer = __ESBMC_alloca(512);
+
+  int i = 0;
+  int pos = 0;
+
+  // Copy first string
+  while (pos < 511 && s1[i])
+  {
+    buffer[pos] = s1[i];
+    pos++;
+    i++;
+  }
+
+  if (s1[i] != '\0')
+  {
+    __ESBMC_assert(0, "String concatenation overflow - first string too long");
+    buffer[511] = '\0';
+    return buffer;
+  }
+
+  // Copy second string
+  i = 0;
+  while (pos < 511 && s2[i])
+  {
+    buffer[pos] = s2[i];
+    pos++;
+    i++;
+  }
+
+  if (s2[i] != '\0')
+  {
+    __ESBMC_assert(
+      0, "String concatenation overflow - result exceeds 511 characters");
+  }
+
+  buffer[pos] = '\0';
   return buffer;
 }
