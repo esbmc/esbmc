@@ -504,19 +504,36 @@ exprt python_list::handle_range_slice(
   const typet list_type = converter_.get_type_handler().get_list_type();
 
   // Handle regular array/string slicing (not list slicing)
-  if (array.type() != list_type && array.type().is_array())
+  // String parameters come as pointer-to-char, so handle both arrays and char pointers
+  bool is_string_slice =
+    (array.type() != list_type && array.type().is_array()) ||
+    (array.type().is_pointer() && array.type().subtype() == char_type());
+
+  if (is_string_slice)
   {
-    const array_typet &src_type = to_array_type(array.type());
     locationt location = converter_.get_location_from_decl(slice_node);
 
-    // Get array length
-    exprt array_len = src_type.size();
+    // Determine element type and logical length
+    typet elem_type;
+    exprt array_len;
+    exprt logical_len;
 
-    // For char arrays (strings), exclude the null terminator from length
-    // when calculating negative indices, to match Python string behavior
-    exprt logical_len = array_len;
-    if (src_type.subtype() == char_type())
-      logical_len = minus_exprt(array_len, gen_one(size_type()));
+    if (array.type().is_array())
+    {
+      const array_typet &src_type = to_array_type(array.type());
+      elem_type = src_type.subtype();
+      array_len = src_type.size();
+      // For char arrays (strings), exclude null terminator from logical length
+      logical_len = (elem_type == char_type())
+                      ? minus_exprt(array_len, gen_one(size_type()))
+                      : array_len;
+    }
+    else // pointer case
+    {
+      elem_type = array.type().subtype();
+      array_len = exprt();   // Not used for pointers
+      logical_len = exprt(); // Will use explicit bounds only
+    }
 
     // Process slice bounds (handles null, negative indices)
     auto process_bound =
@@ -530,7 +547,8 @@ exprt python_list::handle_range_slice(
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
       {
         exprt abs_value = converter_.get_expr(bound["operand"]);
-        return minus_exprt(logical_len, abs_value);
+        return logical_len.is_nil() ? abs_value
+                                    : minus_exprt(logical_len, abs_value);
       }
 
       exprt e = converter_.get_expr(bound);
@@ -546,7 +564,7 @@ exprt python_list::handle_range_slice(
 
     // Create result array type with extra space for null terminator
     plus_exprt result_size(slice_len, gen_one(size_type()));
-    array_typet result_type(src_type.subtype(), result_size);
+    array_typet result_type(elem_type, result_size);
 
     // Create temporary for sliced array
     symbolt &result = converter_.create_tmp_symbol(
@@ -568,8 +586,8 @@ exprt python_list::handle_range_slice(
     code_blockt body;
     // result[i] = array[lower + i]
     plus_exprt src_idx(lower_expr, symbol_expr(idx));
-    index_exprt src(array, src_idx, src_type.subtype());
-    index_exprt dst(symbol_expr(result), symbol_expr(idx), src_type.subtype());
+    index_exprt src(array, src_idx, elem_type);
+    index_exprt dst(symbol_expr(result), symbol_expr(idx), elem_type);
     code_assignt assign(dst, src);
     body.copy_to_operands(assign);
 
@@ -584,8 +602,8 @@ exprt python_list::handle_range_slice(
     converter_.add_instruction(loop);
 
     // Add null terminator at result[slice_len]
-    index_exprt null_pos(symbol_expr(result), slice_len, src_type.subtype());
-    code_assignt add_null(null_pos, gen_zero(src_type.subtype()));
+    index_exprt null_pos(symbol_expr(result), slice_len, elem_type);
+    code_assignt add_null(null_pos, gen_zero(elem_type));
     add_null.location() = location;
     converter_.add_instruction(add_null);
 
