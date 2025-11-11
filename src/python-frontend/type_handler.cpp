@@ -321,14 +321,6 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // Check if it's a defined class in the AST
   bool is_defined = json_utils::is_class(ast_type, converter_.ast());
 
-  // Check if it's a built-in type (handles tuple, list, dict, etc.)
-  if (!is_defined)
-    is_defined = type_utils::is_builtin_type(ast_type);
-
-  // Check if it's imported
-  if (!is_defined)
-    is_defined = converter_.is_imported_module(ast_type);
-
   // Look up the type in the symbol table
   if (!is_defined)
   {
@@ -336,6 +328,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     if (s)
       return s->type;
   }
+
+  // Check if it's a built-in type (handles tuple, list, dict, etc.)
+  if (!is_defined)
+    is_defined = type_utils::is_builtin_type(ast_type);
+
+  // Check if it's imported
+  if (!is_defined)
+    is_defined = converter_.is_imported_module(ast_type);
 
   // If still not found, it's a NameError
   if (!is_defined)
