@@ -4157,14 +4157,10 @@ typet python_converter::get_type_from_annotation(
 
     if (inner_type.empty())
     {
-      // All types were None or couldn't be extracted - use pointer type
-      return pointer_type();
+      // All types were None or couldn't be extracted - use any_type (void*)
+      return any_type();
     }
 
-    // Treat T | ... | None as Optional[T]
-    typet base_type = type_handler_.get_typet(inner_type);
-
-    // For multi-type unions (e.g., bool | str | None), always use pointer
     // Count the number of distinct type names in the union
     std::set<std::string> type_names;
     std::function<void(const nlohmann::json &)> collect_types;
@@ -4188,9 +4184,13 @@ typet python_converter::get_type_from_annotation(
     };
     collect_types(annotation_node);
 
-    // If we have multiple types (excluding None), use pointer
+    // If we have multiple types, treat as untyped pointer
+    // This preserves the original behavior for type checking
     if (type_names.size() > 1 && contains_none)
-      return pointer_type();
+      return gen_pointer_type(char_type());
+
+    // Treat T | ... | None as Optional[T]
+    typet base_type = type_handler_.get_typet(inner_type);
 
     // Single type + None: use Optional wrapper for primitives only
     if (
