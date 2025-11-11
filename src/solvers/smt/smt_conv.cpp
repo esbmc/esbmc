@@ -1,8 +1,6 @@
 #include "irep2/irep2_expr.h"
 #include <cfloat>
-#include <cmath>
 #include <iomanip>
-#include <limits>
 #include <solvers/prop/literal.h>
 #include <solvers/smt/smt_conv.h>
 #include <sstream>
