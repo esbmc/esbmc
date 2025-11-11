@@ -187,10 +187,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Don't crash on unsupported extensions."},
     {"witness-output",
-     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     boost::program_options::value<std::string>()->value_name("path"),
      "generate the verification result witness in both Yaml and GraphML "
-     "format; use '-' for "
-     "output to stdout"},
+     "format."},
     {"witness-output-graphml",
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
      "generate the verification result witness in GraphML format; use '-' for "

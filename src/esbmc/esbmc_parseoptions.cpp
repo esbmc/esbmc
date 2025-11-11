@@ -507,11 +507,12 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
     if (n.extension() == ".yaml" || n.extension() == ".yml")
     {
+      // expected extension
     }
     else if (!n.has_extension())
     {
-      filename += ".yml";
-      options.set_option("witness-output-yaml", filename);
+      if (n != "-")
+        options.set_option("witness-output-yaml", filename + ".yml");
     }
     else
     {
@@ -529,11 +530,12 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
     if (n.extension() == ".graphml")
     {
+      // expected extension
     }
     else if (!n.has_extension())
     {
-      filename += ".graphml";
-      options.set_option("witness-output-graphml", filename);
+      if (n != "-")
+        options.set_option("witness-output-graphml", filename + ".graphml");
     }
     else
     {
