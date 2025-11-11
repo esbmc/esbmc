@@ -4537,7 +4537,10 @@ void python_converter::get_function_definition(
   {
     std::string type_string =
       type_utils::remove_quotes(return_node["value"].get<std::string>());
-    type.return_type() = type_handler_.get_typet(type_string);
+    if (type_string == "str")
+      type.return_type() = gen_pointer_type(char_type());
+    else
+      type.return_type() = type_handler_.get_typet(type_string);
   }
   else
     throw std::runtime_error("Return type undefined");
