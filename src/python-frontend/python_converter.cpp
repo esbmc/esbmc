@@ -87,7 +87,7 @@ static std::string get_op(const std::string &op, const typet &type)
       return std::tolower(c);
     });
 
-  // Special case: if the type is floating-point, use IEEE-specific operators.
+  // If the type is floating-point, use IEEE-specific operators.
   if (type.is_floatbv())
   {
     static const std::unordered_map<std::string, std::string> float_ops = {
@@ -201,7 +201,6 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(get_op(op, bool_type()), bool_type());
-
   bool contains_non_boolean = false;
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
@@ -210,12 +209,10 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     logical_expr.copy_to_operands(operand_expr);
     contains_non_boolean |= !operand_expr.is_boolean();
   }
-
   // Shockingly enough, a BoolOp may not return a boolean.
   if (contains_non_boolean)
   {
     typet t = extract_type_from_boolean_op(logical_expr).type();
-
     // Are we dealing with an actual bool expression?
     if (t.is_bool())
       return logical_expr;
@@ -232,7 +229,6 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 
       result_expr = if_expr;
     }
-
     return result_expr;
   }
   return logical_expr;
@@ -438,12 +434,6 @@ inline bool is_ieee_op(const exprt &expr)
   const std::string &id = expr.id().as_string();
   return id == "ieee_add" || id == "ieee_mul" || id == "ieee_sub" ||
          id == "ieee_div";
-}
-
-inline bool is_math_expr(const exprt &expr)
-{
-  const std::string &id = expr.id().as_string();
-  return id == "+" || id == "-" || id == "*" || id == "/";
 }
 
 // Attach source location from symbol table if expr is a symbol
@@ -3377,7 +3367,6 @@ void python_converter::get_var_assign(
     has_value = true;
     is_converting_rhs = false;
 
-    // Fix for single character string constant assigned to str type variables
     if (lhs_type == "str" && type_utils::is_integer_type(rhs.type()))
     {
       // Check if this is a string constant assignment like s: str = "h"
@@ -3400,8 +3389,6 @@ void python_converter::get_var_assign(
             integer2binary(char_val, 8), integer2string(char_val), char_type());
           str_array.operands().at(i) = char_expr;
         }
-        // Null terminator is already zero-initialized
-
         rhs = str_array;
       }
     }
@@ -3581,7 +3568,6 @@ void python_converter::get_var_assign(
   current_lhs = nullptr;
 }
 
-/// Resolve the type of a variable from AST annotations or the symbol table
 typet python_converter::resolve_variable_type(
   const std::string &var_name,
   const locationt &loc)
@@ -3896,7 +3882,7 @@ python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
     if (node.contains("id"))
       return node["id"].get<std::string>();
 
-    // Handle Subscript nodes (like Literal["bar"])
+    // Handle Subscript nodes (such as Literal["bar"])
     // Don't try to extract a string type name - return a marker
     if (node.contains("_type") && node["_type"] == "Subscript")
     {
@@ -4007,7 +3993,7 @@ typet python_converter::get_type_from_annotation(
           has_none = true;
         else if (type == pointer_type())
         {
-          // Mixed type - mark as having both string and numeric
+          // Mixed type: mark as having both string and numeric
           has_string = true;
           flags.has_int = true;
         }
