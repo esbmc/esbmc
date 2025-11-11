@@ -285,7 +285,7 @@ private:
     code_typet &type,
     const symbol_id &id,
     const locationt &location);
-    
+
   size_t register_function_argument(
     const nlohmann::json &element,
     code_typet &type,

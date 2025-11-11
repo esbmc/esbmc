@@ -1965,7 +1965,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     for (const auto &entry : param_positions)
     {
       size_t index = entry.second;
-      if (index < provided.size() && !(args[index].is_nil() || args[index].id().empty()))
+      if (
+        index < provided.size() &&
+        !(args[index].is_nil() || args[index].id().empty()))
         provided[index] = true;
     }
 
@@ -1980,7 +1982,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
       if (!has_default && !optional_param)
       {
-        missing_required.push_back(i);// add the index of the missing argument
+        missing_required.push_back(i); // add the index of the missing argument
       }
     }
 
@@ -2001,8 +2003,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       else
       {
         msg << "TypeError: " << func_symbol->name.as_string() << "() missing "
-            << missing_names.size()
-            << " required positional arguments: ";
+            << missing_names.size() << " required positional arguments: ";
         for (size_t i = 0; i < missing_names.size(); ++i)
         {
           msg << "'" << missing_names[i] << "'";
