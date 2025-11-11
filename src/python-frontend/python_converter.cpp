@@ -2499,10 +2499,21 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       std::string obj_type_name;
       const typet &symbol_type =
         (symbol->type.is_pointer()) ? symbol->type.subtype() : symbol->type;
-      for (const auto &it : symbol_type.get_named_sub())
+
+      if (symbol_type.id() == "struct")
       {
-        if (it.first == "identifier")
-          obj_type_name = it.second.id_string();
+        // Struct types store class name in "tag" field
+        const struct_typet &struct_type = to_struct_type(symbol_type);
+        obj_type_name = "tag-" + struct_type.tag().as_string();
+      }
+      else
+      {
+        // Search named_sub for identifier
+        for (const auto &it : symbol_type.get_named_sub())
+        {
+          if (it.first == "identifier")
+            obj_type_name = it.second.id_string();
+        }
       }
 
       // Get class definition from symbols table
