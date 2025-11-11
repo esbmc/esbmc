@@ -2640,13 +2640,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     return get_tuple_expr(element);
   default:
   {
-    const auto &lineno = element["lineno"].template get<int>();
     std::ostringstream oss;
     oss << "Unsupported expression ";
     if (element.contains("_type"))
       oss << element["_type"].get<std::string>();
 
-    oss << " at line " << lineno;
+    if (element.contains("lineno"))
+      oss << " at line " << element["lineno"].template get<int>();
+
     throw std::runtime_error(oss.str());
   }
   }
@@ -4910,6 +4911,16 @@ void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  if (ast_node["value"].is_null())
+  {
+    // Handle bare return statement (return with no value)
+    locationt location = get_location_from_decl(ast_node);
+    code_returnt return_code;
+    return_code.location() = location;
+    target_block.copy_to_operands(return_code);
+    return;
+  }
+
   exprt return_value = get_expr(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);
 
