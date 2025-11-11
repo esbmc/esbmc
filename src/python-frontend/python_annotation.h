@@ -853,7 +853,29 @@ private:
         const auto &import_node =
           json_utils::find_imported_function(ast_, func_name);
         auto module = module_manager_->get_module(import_node["module"]);
-        return module->get_function(func_name).return_type_;
+
+        // Try to get it as a function first
+        try
+        {
+          auto func_info = module->get_function(func_name);
+
+          // If return_type is empty or "NoneType", check if it's actually a class
+          if (
+            func_info.return_type_.empty() ||
+            func_info.return_type_ == "NoneType")
+          {
+            // It might be a class constructor (__init__ returns None)
+            // Return the class name as the type
+            return func_name;
+          }
+
+          return func_info.return_type_;
+        }
+        catch (std::runtime_error &)
+        {
+          // If get_function fails, it might be a class
+          return func_name;
+        }
       }
     }
     catch (std::runtime_error &)
