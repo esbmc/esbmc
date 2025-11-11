@@ -3893,8 +3893,7 @@ python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
     if (node.contains("id"))
       return node["id"].get<std::string>();
 
-    // Handle Subscript nodes (such as Literal["bar"])
-    // Don't try to extract a string type name - return a marker
+    // Handle Subscript nodes (such as Literal["bar"] or Sequence[str])
     if (node.contains("_type") && node["_type"] == "Subscript")
     {
       if (node.contains("value") && node["value"].contains("id"))
@@ -3902,7 +3901,10 @@ python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
         std::string subscript_type = node["value"]["id"].get<std::string>();
         if (subscript_type == "Literal")
           return "__LITERAL__"; // Special marker for Literal types
-        // For list[str], dict[int], etc., return the base type (list, dict)
+        // For Sequence[str], List[int], etc., return "list" as the concrete type
+        if (subscript_type == "Sequence" || subscript_type == "List")
+          return "list";
+        // For other generic types, return the base type
         return subscript_type;
       }
       return ""; // Other subscript types
