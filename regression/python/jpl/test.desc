@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
 
 ^ERROR: All parameters in function \"list\_comp\" must be type annotated$

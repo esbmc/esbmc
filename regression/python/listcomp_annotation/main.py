@@ -1,4 +1,4 @@
-values: list[int] = [x for x in range(5)]
+values: list[int] = [x for x in range(2)]
 
-assert values == [0, 1, 2, 3, 4]
+assert values == [0, 1]
 

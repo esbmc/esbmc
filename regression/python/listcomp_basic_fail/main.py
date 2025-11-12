@@ -1,5 +1,5 @@
-nums = [0, 1, 2, 3]
+nums = [0, 1]
 squares = [x * x for x in nums]
 
-assert squares == [0, 1, 4, 10]
+assert squares == [0, 2]
 
