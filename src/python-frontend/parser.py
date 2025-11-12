@@ -449,8 +449,10 @@ def main():
         print("\033[93m\nType checking warning:\033[0m")
         print(result.stdout)
 
-    # Add the script directory to the import search path
-    sys.path.append(os.path.dirname(filename))
+    # Add the script directory to the front of the import search path
+    script_dir = os.path.dirname(os.path.abspath(filename))
+    if script_dir and script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
