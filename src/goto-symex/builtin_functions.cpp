@@ -2789,8 +2789,9 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       rhs = to_typecast2t(rhs).from;
 
     auto is_none_type = [](const expr2tc &e) -> bool {
-      return is_struct_type(e) &&
-             to_struct_type(e->type).name.as_string() == "tag-NoneType";
+      // None is represented as pointer to bool
+      return is_pointer_type(e) &&
+             is_bool_type(to_pointer_type(e->type).subtype);
     };
 
     const bool lhs_is_none = is_none_type(lhs);
@@ -2830,28 +2831,24 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       }
     }
 
-    // Handle None vs pointer comparisons
-    if (
-      (lhs_is_none && is_pointer_type(rhs)) ||
-      (rhs_is_none && is_pointer_type(lhs)))
+    // Handle None vs None pointer comparisons (identity check)
+    if (lhs_is_none && rhs_is_none)
     {
-      const expr2tc &ptr_expr = is_pointer_type(lhs) ? lhs : rhs;
+      const expr2tc &ptr_expr = lhs;
       expr2tc null_ptr = gen_zero(ptr_expr->type);
-
-      // isnone always checks equality
       expr = equality2tc(ptr_expr, null_ptr);
       return;
     }
 
-    // Handle None vs non-pointer constant folding
+    // Handle None vs non-None comparison
     if ((lhs_is_none && !rhs_is_none) || (rhs_is_none && !lhs_is_none))
     {
-      // isnone checks equality, so None == non-None is false
+      // None is never equal to non-None values
       expr = gen_false_expr();
       return;
     }
 
-    // Handle None == None (both sides are None, so always true)
+    // Handle non-None comparisons
     expr = gen_true_expr();
   }
 }
