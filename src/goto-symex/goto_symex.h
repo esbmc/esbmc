@@ -118,6 +118,13 @@ public:
       0);
   };
 
+  static expr2tc gen_byte_memcpy(
+      const expr2tc &src,
+      const expr2tc &dst,
+      const size_t num_of_bytes,
+      const size_t src_offset,
+      const size_t dst_offset); 
+
   // Methods
 
   /**
@@ -162,6 +169,7 @@ protected:
    */
   void dereference(expr2tc &expr, dereferencet::modet mode);
 
+
   // symex
 
   /**
@@ -203,8 +211,7 @@ protected:
    *  It calls free on alloca'd symbols and erase the symbols from the
    *  propagation map.
    */
-  void symex_dead(const expr2tc code);
-
+  void symex_dead(const expr2tc code);   
   /**
    *  Interpret an ASSUME instruction.
    */
@@ -475,10 +482,40 @@ protected:
    * @param art 
    * @param func_call memset function call
    */
+
   void intrinsic_memcpy(
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+    /**
+     * Computes the equivalent object value when considering a memcpy operation on it.
+     * 
+     * @param ret_ref The returning reference of the function call
+     * @param src The source expression from which bytes are copied.
+     * @param dst The destination expression to which bytes are copied.
+     * @param num_of_bytes The number of bytes to copy from src to dst.
+     * @param src_offset The offset in src from which the bytes start.
+     * @param dst_offset The offset in dst at which the bytes are written.
+     *
+     * @returns A new expr2tc representing the result of the memcpy operation, or an empty expr2tc if unable construct the object
+     *
+     * Usage Examples:
+     * @code
+     * expr2tc src = constant_int2tc(get_uint_type(32), BigInt(0xdeadbeef));
+     * expr2tc dst = constant_int2tc(get_uint_type(32), BigInt(0x12345678));
+     * size_t num_of_bytes = 1;
+     * size_t src_offset = 1;
+     * size_t dst_offset = 2;
+     *
+     * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
+     * // result should be constant_int2tc(bitvec_type(32)), BigInt(0x12de345678));
+     * @endcode
+     */
+  expr2tc multiple_bytes_copies(const expr2tc &dst_obj,
+    const expr2tc &src_obj,
+    const size_t &dst_offset,
+    const size_t src_offset,
+    const size_t num_of_bytes);       
   // Function to call a symname function, in case where were not able to optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
@@ -1252,12 +1289,11 @@ namespace goto_symex_utils
  * // result should be constant_int2tc(bitvec_type(32)), BigInt(0x12de345678));
  * @endcode
  */
-expr2tc gen_byte_memcpy(
-  const expr2tc &src,
-  const expr2tc &dst,
-  const size_t num_of_bytes,
-  const size_t src_offset,
-  const size_t dst_offset);
+  expr2tc gen_byte_memcpy(
+    const expr2tc &src,
+    const expr2tc &dst,
+    const size_t num_of_bytes,
+    const size_t src_offset,
+    const size_t dst_offset);
 } // namespace goto_symex_utils
-
 #endif
