@@ -1895,6 +1895,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     code_function_callt &call = static_cast<code_function_callt &>(call_expr);
     auto &args = call.arguments();
 
+    size_t positional_count =
+      element.contains("args") && element["args"].is_array()
+        ? element["args"].size()
+        : 0;
+
     std::map<std::string, size_t> param_positions;
     for (size_t i = 0; i < params.size(); ++i)
     {
@@ -1927,6 +1932,92 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       args[it->second] = arg_expr;
     }
 
+    // we need to check if the argument is provided despite being optional
+    auto is_optional_type = [&](const typet &param_type) {
+      if (!param_type.is_struct())
+        return false;
+      const struct_typet &struct_type = to_struct_type(param_type);
+      const std::string &tag = struct_type.tag().as_string();
+      return tag.starts_with("tag-Optional_");
+    };
+
+    std::vector<size_t> missing_required;
+    std::vector<bool> provided(params.size(), false);
+
+    size_t bound_params = 0;
+    if (!params.empty())
+    {
+      const std::string &first_param_name =
+        params[0].get_base_name().as_string();
+      if (first_param_name == "self" || first_param_name == "cls")
+        bound_params = 1;
+    }
+
+    for (size_t i = 0; i < bound_params && i < provided.size(); ++i)
+      provided[i] = true;
+
+    for (size_t i = 0; i < positional_count; ++i)
+    {
+      size_t param_idx = bound_params + i;
+      if (param_idx < provided.size())
+        provided[param_idx] = true;
+    }
+
+    for (const auto &entry : param_positions)
+    {
+      size_t index = entry.second;
+      if (
+        index < provided.size() &&
+        !(args[index].is_nil() || args[index].id().empty()))
+        provided[index] = true;
+    }
+
+    // check if any argument is missing
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+      if (provided[i])
+        continue;
+
+      bool has_default = params[i].has_default_value();
+      bool optional_param = is_optional_type(params[i].type());
+
+      if (!has_default && !optional_param)
+      {
+        missing_required.push_back(i); // add the index of the missing argument
+      }
+    }
+
+    if (!missing_required.empty())
+    {
+      std::vector<std::string> missing_names;
+      missing_names.reserve(missing_required.size());
+      for (size_t idx : missing_required)
+        missing_names.push_back(params[idx].get_base_name().as_string());
+
+      std::ostringstream msg;
+      if (missing_names.size() == 1)
+      {
+        msg << "TypeError: " << func_symbol->name.as_string()
+            << "() missing 1 required positional argument: '"
+            << missing_names.front() << "'";
+      }
+      else
+      {
+        msg << "TypeError: " << func_symbol->name.as_string() << "() missing "
+            << missing_names.size() << " required positional arguments: ";
+        for (size_t i = 0; i < missing_names.size(); ++i)
+        {
+          msg << "'" << missing_names[i] << "'";
+          if (i + 2 < missing_names.size())
+            msg << ", ";
+          else if (i + 2 == missing_names.size())
+            msg << " and ";
+        }
+      }
+
+      throw std::runtime_error(msg.str());
+    }
+
     // Fill empty arguments with proper Optional values or None for optional parameters
     for (size_t i = 0; i < args.size(); ++i)
     {
@@ -1935,25 +2026,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         const typet &param_type = params[i].type();
 
         // Check if this is an Optional type (struct with "is_none" field)
-        if (param_type.is_struct())
+        if (is_optional_type(param_type))
         {
-          const struct_typet &struct_type = to_struct_type(param_type);
-          const std::string &tag = struct_type.tag().as_string();
-
-          if (tag.starts_with("tag-Optional_"))
-          {
-            // Create Optional value with is_none=true
-            constant_exprt none_expr(none_type());
-            none_expr.set_value("NULL");
-            args[i] = wrap_in_optional(none_expr, param_type);
-          }
-          else
-          {
-            // Regular struct type - set to NULL pointer
-            constant_exprt none_expr(none_type());
-            none_expr.set_value("NULL");
-            args[i] = none_expr;
-          }
+          // Create Optional value with is_none=true
+          constant_exprt none_expr(none_type());
+          none_expr.set_value("NULL");
+          args[i] = wrap_in_optional(none_expr, param_type);
         }
         else
         {
@@ -4323,114 +4401,167 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
   return flags;
 }
 
+size_t python_converter::register_function_argument(
+  const nlohmann::json &element,
+  code_typet &type,
+  const symbol_id &id,
+  const locationt &location,
+  bool is_keyword_only)
+{
+  (void)is_keyword_only;
+
+  // Extract the argument name and resolve its type from the annotation.
+  // Special cases: `self` and `cls` are modelled as pointers to the current class
+  std::string arg_name = element["arg"].get<std::string>();
+  typet arg_type;
+
+  if (arg_name == "self")
+    arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
+  else if (arg_name == "cls")
+    arg_type = any_type();
+  else
+  {
+    if (!element.contains("annotation") || element["annotation"].is_null())
+    {
+      throw std::runtime_error(
+        "All parameters in function \"" + current_func_name_ +
+        "\" must be type annotated");
+    }
+    arg_type = get_type_from_annotation(element["annotation"], element);
+  }
+
+  // Arrays are converted to pointers so that the backend receives the same
+  // representation regardless of how the parameter is declared.
+  if (arg_type.is_array())
+    arg_type = gen_pointer_type(arg_type.subtype());
+
+  assert(arg_type != typet());
+
+  code_typet::argumentt arg;
+  arg.type() = arg_type;
+  arg.cmt_base_name(arg_name);
+
+  // Build a unique identifier for the parameter. The identifier mirrors the
+  // scheme used elsewhere in the converter (function-id@parameter-name)
+  std::string arg_id = id.to_string() + "@" + arg_name;
+  arg.cmt_identifier(arg_id);
+  arg.identifier(arg_id);
+  arg.location() = get_location_from_decl(element);
+
+  type.arguments().push_back(arg);
+  size_t inserted_index = type.arguments().size() - 1;
+
+  // Materialise a symbol for the parameter so that subsequent passes (e.g.
+  // attribute access on instances) can resolve it.
+  symbolt param_symbol = create_symbol(
+    location.get_file().as_string(),
+    arg_name,
+    arg_id,
+    arg.location(),
+    arg_type);
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+  param_symbol.static_lifetime = false;
+  param_symbol.is_extern = false;
+  symbol_table_.add(param_symbol);
+
+  // If the parameter is class-typed (e.g. Foo), copy instance attributes from
+  // the class’ synthetic `self` symbol so method bodies can access members via
+  // this parameter.
+  if (arg_name != "self" && arg_name != "cls")
+  {
+    typet base_type = arg_type.is_pointer() ? arg_type.subtype() : arg_type;
+    if (base_type.id() == "symbol")
+      base_type = ns.follow(base_type);
+
+    if (base_type.is_struct())
+    {
+      const struct_typet &struct_type = to_struct_type(base_type);
+      std::string class_tag = struct_type.tag().as_string();
+
+      std::string class_name = extract_class_name_from_tag(class_tag);
+
+      symbol_id self_sid(
+        location.get_file().as_string(), class_name, class_name);
+      self_sid.set_object("self");
+
+      copy_instance_attributes(self_sid.to_string(), arg_id);
+
+      std::string normalized_key = create_normalized_self_key(class_tag);
+      copy_instance_attributes(normalized_key, arg_id);
+    }
+  }
+
+  return inserted_index;
+}
+
 void python_converter::process_function_arguments(
   const nlohmann::json &function_node,
   code_typet &type,
   const symbol_id &id,
   const locationt &location)
 {
-  // Process a single argument
-  auto process_argument = [&](const nlohmann::json &element) {
-    std::string arg_name = element["arg"].get<std::string>();
-    typet arg_type;
-
-    // Handle special cases for 'self' and 'cls'
-    if (arg_name == "self")
-      arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
-    else if (arg_name == "cls")
-      arg_type = any_type();
-    else
-    {
-      if (!element.contains("annotation") || element["annotation"].is_null())
-      {
-        throw std::runtime_error(
-          "All parameters in function \"" + current_func_name_ +
-          "\" must be type annotated");
-      }
-      arg_type = get_type_from_annotation(element["annotation"], element);
-    }
-
-    // Convert arrays to pointers
-    if (arg_type.is_array())
-      arg_type = gen_pointer_type(arg_type.subtype());
-
-    assert(arg_type != typet());
-
-    // Create argument descriptor
-    code_typet::argumentt arg;
-    arg.type() = arg_type;
-    arg.cmt_base_name(arg_name);
-
-    std::string arg_id = id.to_string() + "@" + arg_name;
-    arg.cmt_identifier(arg_id);
-    arg.identifier(arg_id);
-    arg.location() = get_location_from_decl(element);
-
-    type.arguments().push_back(arg);
-
-    // Create parameter symbol
-    symbolt param_symbol = create_symbol(
-      location.get_file().as_string(),
-      arg_name,
-      arg_id,
-      arg.location(),
-      arg_type);
-    param_symbol.lvalue = true;
-    param_symbol.is_parameter = true;
-    param_symbol.file_local = true;
-    param_symbol.static_lifetime = false;
-    param_symbol.is_extern = false;
-    symbol_table_.add(param_symbol);
-
-    // Register instance attributes for class-typed parameters
-    // When a parameter has a class type (like f: Foo), we need to register
-    // that this parameter symbol has access to the class's instance attributes
-    if (arg_name != "self" && arg_name != "cls")
-    {
-      // Check if this is a class type (pointer to struct or struct)
-      typet base_type = arg_type.is_pointer() ? arg_type.subtype() : arg_type;
-
-      if (base_type.id() == "symbol")
-      {
-        // Follow the symbol to get the actual struct type
-        base_type = ns.follow(base_type);
-      }
-
-      if (base_type.is_struct())
-      {
-        const struct_typet &struct_type = to_struct_type(base_type);
-        std::string class_tag = struct_type.tag().as_string();
-
-        // Copy instance attributes from the class's self to this parameter
-        std::string class_name = extract_class_name_from_tag(class_tag);
-
-        // Build the self symbol ID for this class
-        symbol_id self_sid(
-          location.get_file().as_string(), class_name, class_name);
-        self_sid.set_object("self");
-
-        // Copy instance attributes from class's self to this parameter
-        copy_instance_attributes(self_sid.to_string(), arg_id);
-
-        // Also try the normalized key for cross-method attribute access
-        std::string normalized_key = create_normalized_self_key(class_tag);
-        copy_instance_attributes(normalized_key, arg_id);
-      }
-    }
-  };
+  std::vector<size_t> positional_indices;
+  std::vector<size_t> kwonly_indices;
 
   // Extract args node to avoid repeated access
   const nlohmann::json &args_node = function_node["args"];
 
   // Process regular arguments
   for (const nlohmann::json &element : args_node["args"])
-    process_argument(element);
+  {
+    size_t index =
+      register_function_argument(element, type, id, location, false);
+    positional_indices.push_back(index);
+  }
 
   // Process keyword-only arguments (parameters after * separator)
   if (args_node.contains("kwonlyargs") && !args_node["kwonlyargs"].is_null())
   {
     for (const nlohmann::json &element : args_node["kwonlyargs"])
-      process_argument(element);
+    {
+      size_t index =
+        register_function_argument(element, type, id, location, true);
+      kwonly_indices.push_back(index);
+    }
+  }
+
+  if (
+    args_node.contains("defaults") && args_node["defaults"].is_array() &&
+    !args_node["defaults"].empty() && !positional_indices.empty())
+  {
+    const auto &defaults = args_node["defaults"];
+    size_t defaults_count = defaults.size();
+
+    if (defaults_count <= positional_indices.size())
+    {
+      for (size_t i = 0; i < defaults_count; ++i)
+      {
+        size_t positional_index =
+          positional_indices[positional_indices.size() - defaults_count + i];
+        if (!defaults[i].is_null())
+        {
+          exprt default_expr = get_expr(defaults[i]);
+          type.arguments()[positional_index].default_value() = default_expr;
+        }
+      }
+    }
+  }
+
+  if (
+    args_node.contains("kw_defaults") && args_node["kw_defaults"].is_array() &&
+    args_node["kw_defaults"].size() == kwonly_indices.size())
+  {
+    const auto &kw_defaults = args_node["kw_defaults"];
+    for (size_t i = 0; i < kw_defaults.size(); ++i)
+    {
+      if (!kw_defaults[i].is_null())
+      {
+        exprt default_expr = get_expr(kw_defaults[i]);
+        type.arguments()[kwonly_indices[i]].default_value() = default_expr;
+      }
+    }
   }
 }
 

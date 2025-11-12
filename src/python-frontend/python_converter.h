@@ -288,6 +288,13 @@ private:
     const symbol_id &id,
     const locationt &location);
 
+  size_t register_function_argument(
+    const nlohmann::json &element,
+    code_typet &type,
+    const symbol_id &id,
+    const locationt &location,
+    bool is_keyword_only);
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,
