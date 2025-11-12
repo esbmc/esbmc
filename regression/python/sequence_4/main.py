@@ -1,10 +1,10 @@
 from typing import Sequence
 
 def foo(s: Sequence[str] | None = None) -> None:
-    if s is None:
+    if len(s) == 0:
         return
 
-foo(None)
-foo([])
-foo(["a", "b", "c"])
+    for x in s:
+        assert isinstance(x, str)
+
 foo(["", "test", "123"])

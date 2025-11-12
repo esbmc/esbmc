@@ -803,32 +803,6 @@ exprt python_converter::handle_none_comparison(
       return *res;
   }
 
-  // Handle None vs pointer comparisons
-  if (
-    (lhs_is_none && rhs.is_symbol() && rhs.type().is_pointer()) ||
-    (rhs_is_none && lhs.is_symbol() && lhs.type().is_pointer()))
-  {
-    const bool lhs_is_array_ptr =
-      lhs.type().is_pointer() &&
-      (lhs.type().subtype().is_array() || lhs.type().subtype() == char_type());
-
-    const typet &ptr_type = lhs_is_array_ptr ? lhs.type() : rhs.type();
-    const exprt &ptr_expr = lhs_is_array_ptr ? lhs : rhs;
-
-    constant_exprt null_ptr(ptr_type);
-    null_ptr.set_value("NULL");
-
-    equality_exprt eq(ptr_expr, null_ptr);
-    if (is_eq)
-      return exprt(eq);
-    else
-      return exprt(not_exprt(eq));
-  }
-
-  // Handle None vs non-pointer constant folding
-  if ((lhs_is_none && !rhs_is_none) || (rhs_is_none && !lhs_is_none))
-    return gen_boolean(!is_eq);
-
   // Handle None == None and None != None
   // Create isnone expression
   exprt isnone_expr("isnone", typet("bool"));

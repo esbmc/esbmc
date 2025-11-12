@@ -701,17 +701,13 @@ class Preprocessor(ast.NodeTransformer):
         annotation_id = self._get_iterable_type_annotation(node.iter)
 
         # Determine iterator variable name and whether to create ESBMC_iter
-        is_string_param = (isinstance(node.iter, ast.Name) and
-                        annotation_id == 'str' and
-                        node.iter.id in self.known_variable_types and
-                        self.known_variable_types[node.iter.id] == 'str')
-
-        if is_string_param:
-            # For string parameters, use original parameter directly
+        if isinstance(node.iter, ast.Name):
+            # For any Name reference (parameter or variable), use it directly
+            # This preserves type information for the converter
             iter_var_name = node.iter.id
             setup_statements = []
         else:
-            # For other iterables, create ESBMC_iter copy with unique name
+            # For other iterables (literals, calls, expressions), create ESBMC_iter copy
             iter_var_name = f'{iter_var_base}_{loop_id}'
             iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name)
             setup_statements = [iter_assign]
