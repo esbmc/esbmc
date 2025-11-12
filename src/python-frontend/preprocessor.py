@@ -153,8 +153,8 @@ class Preprocessor(ast.NodeTransformer):
         node = ast.Constant(value=value)
         return self.ensure_all_locations(node, source_node)
 
-    def visit_ListComp(self, node):
-        """Lower a simple list comprehension to init + loop + result name."""
+    def _lower_listcomp(self, node):
+        """Lower a simple list comprehension into prefix statements and result expression."""
         if len(node.generators) != 1:
             raise NotImplementedError("Nested list comprehensions are not supported yet")
 
@@ -221,7 +221,60 @@ class Preprocessor(ast.NodeTransformer):
         result_name = self.create_name_node(tmp_name, ast.Load(), node)
         self.ensure_all_locations(result_name, node)
 
-        return [init_assign] + transformed_for + [result_name]
+        return [init_assign] + transformed_for, result_name
+
+    class _ListCompExpressionLowerer(ast.NodeTransformer):
+        """Utility transformer that lowers list comprehensions inside an expression."""
+
+        def __init__(self, preprocessor):
+            super().__init__()
+            self.preprocessor = preprocessor
+            self.statements = []
+
+        def visit_ListComp(self, node):
+            prefix, result_expr = self.preprocessor._lower_listcomp(node)
+            self.statements.extend(prefix)
+            return result_expr
+
+    def _lower_listcomp_in_expr(self, expr):
+        """Lower all list comprehensions inside an expression node."""
+        if expr is None:
+            return [], expr
+        lowerer = self._ListCompExpressionLowerer(self)
+        new_expr = lowerer.visit(expr)
+        return lowerer.statements, new_expr
+
+    def visit_Return(self, node):
+        node = self.generic_visit(node)
+        prefix, new_value = self._lower_listcomp_in_expr(node.value)
+        node.value = new_value
+        if prefix:
+            return prefix + [node]
+        return node
+
+    def visit_Expr(self, node):
+        node = self.generic_visit(node)
+        prefix, new_value = self._lower_listcomp_in_expr(node.value)
+        node.value = new_value
+        if prefix:
+            return prefix + [node]
+        return node
+
+    def visit_If(self, node):
+        node = self.generic_visit(node)
+        prefix, new_test = self._lower_listcomp_in_expr(node.test)
+        node.test = new_test
+        if prefix:
+            return prefix + [node]
+        return node
+
+    def visit_While(self, node):
+        node = self.generic_visit(node)
+        prefix, new_test = self._lower_listcomp_in_expr(node.test)
+        node.test = new_test
+        if prefix:
+            return prefix + [node]
+        return node
 
     def _extract_type_from_annotation(self, annotation):
         """Extract a simplified type string from a type annotation AST node"""
@@ -1055,23 +1108,20 @@ class Preprocessor(ast.NodeTransformer):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
-        if len(node.targets) == 1 and isinstance(node.value, ast.ListComp):
-            # Lower the list comprehension first so we can splice the statements back.
-            lowered = self.visit(node.value)
-            if not isinstance(lowered, list) or len(lowered) < 2:
-                return node
-            result_expr = lowered.pop()
-            # Recreate the original assignment with the lowered result.
-            lowered_assign = ast.Assign(targets=[node.targets[0]], value=result_expr)
+        # First visit child nodes
+        node = self.generic_visit(node)
+
+        prefix, lowered_value = self._lower_listcomp_in_expr(node.value)
+        if prefix:
+            if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                raise NotImplementedError("List comprehension assignment requires a simple target name")
+            node.value = lowered_value
+            lowered_assign = ast.Assign(targets=node.targets, value=node.value)
             self._copy_location_info(node, lowered_assign)
             self.ensure_all_locations(lowered_assign, node)
             ast.fix_missing_locations(lowered_assign)
-            if isinstance(node.targets[0], ast.Name):
-                self.known_variable_types[node.targets[0].id] = 'list'
-            return lowered + [lowered_assign]
-
-        # First visit child nodes
-        self.generic_visit(node)
+            self.known_variable_types[node.targets[0].id] = 'list'
+            return prefix + [lowered_assign]
 
         # Handle single target (most common case)
         if len(node.targets) == 1:
@@ -1101,27 +1151,26 @@ class Preprocessor(ast.NodeTransformer):
 
     def visit_AnnAssign(self, node):
         """Track type annotations from annotated assignments like x: int = 5"""
-        if getattr(node, "value", None) and isinstance(node.value, ast.ListComp):
-            # Lower the list comprehension before recreating the annotated assignment.
-            lowered = self.visit(node.value)
-            if not isinstance(lowered, list) or len(lowered) < 2:
-                return node
-            result_expr = lowered.pop()
-            lowered_assign = ast.AnnAssign(
-                target=node.target,
-                annotation=node.annotation,
-                value=result_expr,
-                simple=node.simple
-            )
-            self._copy_location_info(node, lowered_assign)
-            self.ensure_all_locations(lowered_assign, node)
-            ast.fix_missing_locations(lowered_assign)
-            if isinstance(node.target, ast.Name):
-                self.known_variable_types[node.target.id] = 'list'
-            return lowered + [lowered_assign]
-
         # First visit child nodes
-        self.generic_visit(node)
+        node = self.generic_visit(node)
+
+        if getattr(node, "value", None) is not None:
+            prefix, lowered_value = self._lower_listcomp_in_expr(node.value)
+            if prefix:
+                if not isinstance(node.target, ast.Name):
+                    raise NotImplementedError("Annotated list comprehension assignment requires a simple target name")
+                node.value = lowered_value
+                lowered_assign = ast.AnnAssign(
+                    target=node.target,
+                    annotation=node.annotation,
+                    value=node.value,
+                    simple=node.simple
+                )
+                self._copy_location_info(node, lowered_assign)
+                self.ensure_all_locations(lowered_assign, node)
+                ast.fix_missing_locations(lowered_assign)
+                self.known_variable_types[node.target.id] = 'list'
+                return prefix + [lowered_assign]
 
         # Track the type if target is a simple Name and has annotation
         if isinstance(node.target, ast.Name) and node.annotation is not None:
