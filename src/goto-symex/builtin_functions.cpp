@@ -2142,6 +2142,13 @@ void goto_symext::intrinsic_memcpy(
       claim(check, error_msg);
       continue;
     }
+
+    // Arrived here means that we are doing an invalid memcpy and the user does not care if its wrong
+    if (is_out_bounds)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
   }
 
   // Readings are sorted... now go for writings
@@ -2203,6 +2210,13 @@ void goto_symext::intrinsic_memcpy(
       expr2tc check = implies2tc(item.guard, gen_false_expr());
       claim(check, error_msg);
       continue;
+    }
+
+    // Arrived here means that we are doing an invalid memcpy and the user does not care if its wrong
+    if (is_out_bounds)
+    {
+      bump_call(func_call, bump_name);
+      return;
     }
 
     // Time to do the actual copy
