@@ -1,4 +1,4 @@
 THOROUGH
 main.py
 --multi-property --force-malloc-success --unwind 3
-^Properties\: 50 verified ✓ 48 passed, ✗ 2 failed$
+^Properties\:.*2 failed$

@@ -93,21 +93,17 @@ static const struct buffer
 // The goto reader will only pick up symbols for these functions and their dependencies
 // This is a Python-specific whitelist invoked when you use set_functions_to_read
 const static std::vector<std::string> python_c_models = {
-  "list_create",
+  "__ESBMC_list_create",
   "list_in_bounds",
-  "list_at",
-  "list_cat",
-  "list_clear",
-  "list_get_as",
-  "list_push",
-  "list_insert",
-  "list_extend",
-  "list_push_object",
-  "list_replace",
-  "list_pop",
-  "list_size",
+  "__ESBMC_list_at",
+  "__ESBMC_list_clear",
+  "__ESBMC_list_push",
+  "__ESBMC_list_extend",
+  "__ESBMC_list_insert",
+  "__ESBMC_list_push_object",
+  "__ESBMC_list_size",
   "list_hash_string",
-  "list_eq",
+  "__ESBMC_list_eq",
   "strncmp",
   "strcmp",
   "strlen",
@@ -154,7 +150,7 @@ const static std::vector<std::string> python_c_models = {
   "log1p_taylor",
   "strstr",
   "strchr",
-  "list_contains",
+  "__ESBMC_list_contains",
   "__python_str_isdigit",
   "__python_char_isdigit",
   "__python_str_isalpha",
@@ -165,8 +161,11 @@ const static std::vector<std::string> python_c_models = {
   "__python_char_islower",
   "__python_str_islower",
   "__python_char_lower",
-  "__python_str_lower"};
-
+  "__python_str_lower",
+  "__ESBMC_create_inf_obj",
+  "__python_int",
+  "__python_chr",
+  "__python_str_concat"};
 } // namespace
 
 static void generate_symbol_deps(

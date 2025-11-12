@@ -3,23 +3,26 @@
 <benchmark tool="cpachecker" timelimit="90 s" hardtimelimit="96 s" memlimit="7 GB" cpuCores="2">
 <require cpuModel="Intel Xeon E3-1230 v5 @ 3.40 GHz"/>
  
-  <resultfiles>**/witness.{graphml,yml}</resultfiles>
+  <resultfiles>**/witness.*</resultfiles>
 
-  <option name="-violation-witness-validation"/>
-  <option name="-setprop">witness.checkProgramHash=false</option>
-  <option name="-heap">5000m</option>
-  <option name="-benchmark"/>
-  <option name="-setprop">cpa.predicate.memoryAllocationsAlwaysSucceed=true</option>
-
-  <option name="-setprop">cpa.smg.memoryAllocationFunctions=malloc,__kmalloc,kmalloc,kzalloc,kzalloc_node,ldv_zalloc,ldv_malloc</option>
-  <option name="-setprop">cpa.smg.arrayAllocationFunctions=calloc,kmalloc_array,kcalloc</option>
-  <option name="-setprop">cpa.smg.zeroingMemoryAllocation=calloc,kzalloc,kcalloc,kzalloc_node,ldv_zalloc</option>
-  <option name="-setprop">cpa.smg.deallocationFunctions=free,kfree,kfree_const</option>
-
+  <option name="--violation-witness-validation" />
+  <option name="--heap" />
+  <option name="5000m" />
+  <option name="--benchmark" />
+  <option name="--option" />
+  <option name="witness.checkProgramHash=false" />
+  <option name="--option" />
+  <option name="cpa.smg.memoryAllocationFunctions=malloc,__kmalloc,kmalloc,kzalloc,kzalloc_node,ldv_zalloc,ldv_malloc" />
+  <option name="--option" />
+  <option name="cpa.smg.arrayAllocationFunctions=calloc,kmalloc_array,kcalloc" />
+  <option name="--option" />
+  <option name="cpa.smg.zeroingMemoryAllocation=calloc,kzalloc,kcalloc,kzalloc_node,ldv_zalloc" />
+  <option name="--option" />
+  <option name="cpa.smg.deallocationFunctions=free,kfree,kfree_const" />
 
 <rundefinition name="SV-COMP26_unreach-call">
-  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</requiredfiles>
-  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</option>
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
 
     <tasks name="ReachSafety-Arrays">
       <includesfile>$HOME/sv-benchmarks/c/Arrays.set</includesfile>
@@ -80,10 +83,6 @@
       <includesfile>$HOME/sv-benchmarks/c/Hardness.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
     </tasks>
-    <tasks name="ReachSafety-Fuzzle">
-      <includesfile>$HOME/sv-benchmarks/c/Fuzzle.set</includesfile>
-      <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
-    </tasks>
 
     <tasks name="ConcurrencySafety-Main">
       <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
@@ -120,8 +119,8 @@
 </rundefinition>
 
 <rundefinition name="SV-COMP26_no-data-race">
-  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</requiredfiles>
-  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</option>
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
 
     <tasks name="NoDataRace-Main">
       <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
@@ -130,8 +129,8 @@
 </rundefinition>
 
 <rundefinition name="SV-COMP26_valid-memcleanup">
-  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</requiredfiles>
-  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</option>
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
 
     <tasks name="MemSafety-MemCleanup">
       <includesfile>$HOME/sv-benchmarks/c/Heap.set</includesfile>
@@ -148,8 +147,8 @@
 </rundefinition>
 
 <rundefinition name="SV-COMP26_valid-memsafety">
-  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</requiredfiles>
-  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</option>
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
 
     <tasks name="MemSafety-Arrays">
       <includesfile>$HOME/sv-benchmarks/c/Arrays.set</includesfile>
@@ -203,8 +202,8 @@
 </rundefinition>
 
 <rundefinition name="SV-COMP26_no-overflow">
-  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</requiredfiles>
-  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</option>
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
 
     <tasks name="NoOverflows-Main">
       <includesfile>$HOME/sv-benchmarks/c/Arrays.set</includesfile>
@@ -252,8 +251,8 @@
 </rundefinition>
 
 <rundefinition name="SV-COMP26_termination">
-  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</requiredfiles>
-  <option name="-witness">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.{graphml,yml}</option>
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
 
     <tasks name="Termination-BitVectors">
       <includesfile>$HOME/sv-benchmarks/c/BitVectors-Termination.set</includesfile>
@@ -284,6 +283,46 @@
     <tasks name="SoftwareSystems-DeviceDriversLinux64-Termination">
       <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/termination.prp</propertyfile>
+    </tasks>
+</rundefinition>
+
+<rundefinition name="SV-COMP26_unreach-call_demo">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
+
+    <tasks name="ReachSafety-Huawei-Concurrency-Challenges">
+      <includesfile>$HOME/sv-benchmarks/c/Huawei-Concurrency-Challenges.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+    </tasks>
+</rundefinition>
+
+<rundefinition name="SV-COMP26_no-data-race_demo">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
+
+    <tasks name="NoDataRace-Huawei-Concurrency-Challenges">
+      <includesfile>$HOME/sv-benchmarks/c/Huawei-Concurrency-Challenges.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/no-data-race.prp</propertyfile>
+    </tasks>
+</rundefinition>
+
+<rundefinition name="SV-COMP26_valid-memsafety_demo">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
+
+    <tasks name="MemSafety-Huawei-Concurrency-Challenges">
+      <includesfile>$HOME/sv-benchmarks/c/Huawei-Concurrency-Challenges.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
+    </tasks>
+</rundefinition>
+
+<rundefinition name="SV-COMP26_no-overflow_demo">
+  <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
+  <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>
+
+    <tasks name="NoOverflows-Huawei-Concurrency-Challenges">
+      <includesfile>$HOME/sv-benchmarks/c/Huawei-Concurrency-Challenges.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/no-overflow.prp</propertyfile>
     </tasks>
 </rundefinition>
 

@@ -1,7 +1,6 @@
 #include "irep2/irep2_expr.h"
 #include <cfloat>
 #include <iomanip>
-#include <set>
 #include <solvers/prop/literal.h>
 #include <solvers/smt/smt_conv.h>
 #include <sstream>
@@ -2911,42 +2910,76 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   }
 }
 
+// Convert a rational number represented by two BigInts into a IEEE 754 double.
+// This replaces the previous std::stod-based approach which could not cope
+// with extremely large/small numerators or denominators exposed by --ir mode.
 double smt_convt::convert_rational_to_double(
   const BigInt &numerator,
   const BigInt &denominator)
 {
-  constexpr size_t BUFFER_SIZE = 1024;
+  constexpr size_t INITIAL_BUFFER_SIZE = 1024;
+  constexpr size_t MAX_BUFFER_SIZE = 100000;
 
-  std::vector<char> num_buffer(BUFFER_SIZE, '\0');
-  std::vector<char> den_buffer(BUFFER_SIZE, '\0');
+  // Start with the legacy fixed-size buffers.
+  std::vector<char> num_buffer(INITIAL_BUFFER_SIZE, '\0');
+  std::vector<char> den_buffer(INITIAL_BUFFER_SIZE, '\0');
 
-  numerator.as_string(num_buffer.data(), BUFFER_SIZE, 10);
-  denominator.as_string(den_buffer.data(), BUFFER_SIZE, 10);
+  // Populate the buffer with the decimal representation of `value`, growing the
+  // buffer as needed. We keep the legacy fixed-size path to avoid extra
+  // allocations on the common fast path.
+  auto ensure_string = [&](const BigInt &value, std::vector<char> &buffer) {
+    while (true)
+    {
+      // 1) Try to reuse the current buffer (may already be large).
+      if (!buffer.empty())
+      {
+        char *result = value.as_string(buffer.data(), buffer.size(), 10);
 
-  // Force null termination to prevent over-read
-  num_buffer[BUFFER_SIZE - 1] = '\0';
-  den_buffer[BUFFER_SIZE - 1] = '\0';
+        if (result != nullptr)
+        {
+          // 1a) as_string returns a pointer to the first digit; copy it forward.
+          size_t len = strnlen(result, buffer.size());
+          if (len > 0 && len < buffer.size())
+          {
+            // Include the trailing '\0' so later std::stod sees the number.
+            for (size_t i = 0; i <= len; ++i)
+              buffer[i] = result[i];
+            return true;
+          }
+        }
+      }
 
-  // Check if as_string() actually produced output
-  size_t num_len = strnlen(num_buffer.data(), BUFFER_SIZE);
-  size_t den_len = strnlen(den_buffer.data(), BUFFER_SIZE);
+      // 2) Need a larger buffer: estimate required digits (+ sign + '\0').
+      size_t required = static_cast<size_t>(value.digits(10)) + 2;
+      size_t next_size = buffer.size() * 2;
+      if (next_size < required)
+        next_size = required;
+      if (next_size == 0)
+        next_size = INITIAL_BUFFER_SIZE;
+      if (next_size > MAX_BUFFER_SIZE)
+        return false;
 
-  // Handle the case where as_string() fails for very small numbers
-  if (num_len == 0 || den_len == 0)
+      // 3) Grow buffer and retry.
+      buffer.assign(next_size, '\0');
+    }
+  };
+
+  // Extract decimal strings for numerator/denominator (with fallback).
+  bool num_ok = ensure_string(numerator, num_buffer);
+  bool den_ok = ensure_string(denominator, den_buffer);
+
+  if (!num_ok || !den_ok)
   {
-    bool num_positive =
-      !numerator.is_zero(); // Assumes non-zero means some value exists
+    // If conversion still fails, keep legacy behaviour: approximate sign.
+    bool num_positive = !numerator.is_zero();
     bool den_positive = !denominator.is_zero();
 
     if (num_positive && den_positive)
     {
-      // This likely represents a very small positive rational number
-      // that's too small for string conversion but should be > 0
-      // Return a very small positive value instead of 0.0
       log_warning(
         "BigInt as_string() failed for very small rational - returning minimal "
         "positive value");
-      return DBL_MIN; // Smallest positive normalized double
+      return DBL_MIN;
     }
     else
     {
@@ -2955,48 +2988,86 @@ double smt_convt::convert_rational_to_double(
     }
   }
 
-  if (num_len >= BUFFER_SIZE - 1 || den_len >= BUFFER_SIZE - 1)
+  size_t num_len = strnlen(num_buffer.data(), num_buffer.size());
+  size_t den_len = strnlen(den_buffer.data(), den_buffer.size());
+
+  if (num_len >= num_buffer.size() - 1 || den_len >= den_buffer.size() - 1)
   {
+    // Bail out if we still risk truncation.
     log_warning(
       "BigInt to string conversion may have been truncated - buffer too small");
     return 0.0;
   }
 
-  try
+  bool numerator_negative = numerator.is_negative();
+  bool denominator_negative = denominator.is_negative();
+
+  BigInt num_abs = numerator;
+  if (numerator_negative)
+    num_abs.negate();
+
+  BigInt den_abs = denominator;
+  if (denominator_negative)
+    den_abs.negate();
+
+  if (den_abs.is_zero())
   {
-    double num_val = std::stod(num_buffer.data());
-    double den_val = std::stod(den_buffer.data());
-
-    if (den_val == 0.0)
-    {
-      log_warning("Denominator converted to 0.0 despite non-zero BigInt");
-      return 0.0;
-    }
-
-    double result = num_val / den_val;
-
-    // Handle underflow in the division result
-    if (result == 0.0 && num_val != 0.0)
-    {
-      // The division underflowed to zero, but we know the rational is non-zero
-      // Return a minimal positive value to preserve the sign
-      log_warning(
-        "Division result underflowed - returning minimal positive value");
-      return DBL_MIN;
-    }
-
-    return result;
-  }
-  catch (const std::exception &e)
-  {
-    log_warning(
-      "Failed to convert BigInt strings to double: numerator='%s', "
-      "denominator='%s', error: %s",
-      num_buffer.data(),
-      den_buffer.data(),
-      e.what());
+    log_warning("Encountered rational with zero denominator during conversion");
     return 0.0;
   }
+
+  BigInt quotient;
+  BigInt remainder;
+  BigInt::div(num_abs, den_abs, quotient, remainder);
+
+  // Use ieee_floatt to map arbitrarily large integers onto the nearest double.
+
+  ieee_floatt quotient_ieee(ieee_float_spect::double_precision());
+  quotient_ieee.from_integer(quotient);
+  double quotient_double = quotient_ieee.to_double();
+
+  bool result_positive = !(numerator_negative ^ denominator_negative);
+
+  if (std::isinf(quotient_double))
+    return result_positive ? std::numeric_limits<double>::infinity()
+                           : -std::numeric_limits<double>::infinity();
+
+  // Only a finite number of fractional bits affects a double. We accumulate a
+  // few extra guard bits so that rounding to nearest double later is stable.
+  constexpr unsigned guard_bits = 10;
+  const unsigned max_fraction_bits =
+    std::numeric_limits<double>::digits + guard_bits;
+
+  long double fraction = 0.0L;
+  long double factor = 0.5L;
+
+  for (unsigned i = 0; i < max_fraction_bits && !remainder.is_zero(); ++i)
+  {
+    remainder *= 2;
+    if (remainder.compare(den_abs) >= 0)
+    {
+      remainder -= den_abs;
+      fraction += factor;
+    }
+    factor *= 0.5L;
+  }
+
+  // Combine integer and fractional part using long double to minimize rounding
+  // error before the final cast back to double.
+  long double total = static_cast<long double>(quotient_double) + fraction;
+  double result = static_cast<double>(total);
+
+  if (result == 0.0 && !num_abs.is_zero())
+  {
+    double min_positive = std::numeric_limits<double>::denorm_min();
+    result = result_positive ? min_positive : -min_positive;
+    return result;
+  }
+
+  if (!result_positive)
+    result = -result;
+
+  return result;
 }
 
 expr2tc smt_convt::get_by_type(const expr2tc &expr)

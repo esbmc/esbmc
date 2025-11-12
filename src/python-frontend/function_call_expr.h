@@ -43,7 +43,8 @@ private:
    */
   exprt check_argument_types(
     const symbolt *func_symbol,
-    const nlohmann::json &args) const;
+    const nlohmann::json &args,
+    const nlohmann::json &keywords) const;
 
   // Helper methods for AttributeError detection
   std::vector<std::string>
@@ -224,12 +225,6 @@ private:
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
-
-  /*
-   * Replace undefined function calls with assert(false):
-   * if reached, verification fails; if unreached, verification succeeds.
-   */
-  codet gen_unsupported_function_assert(const std::string &func_name) const;
 
   /*
    * Check if the current function call is to a regular expression module function

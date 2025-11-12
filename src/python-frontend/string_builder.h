@@ -55,6 +55,11 @@ public:
   /// Create a raw byte array without null termination (for Python bytes literals)
   exprt build_raw_byte_array(const std::vector<uint8_t> &bytes);
 
+  exprt concatenate_strings_via_c_function(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left);
+
 private:
   python_converter &converter_;
   string_handler *str_handler_;
