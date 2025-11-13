@@ -4937,7 +4937,6 @@ void python_converter::get_return_statements(
       }
     }
 
-    // Original behavior for non-function-call returns
     code_returnt return_code;
     return_code.return_value() = return_value;
     return_code.location() = location;
@@ -4945,7 +4944,6 @@ void python_converter::get_return_statements(
   }
 }
 
-// function to create temporary variable for function call results
 symbolt python_converter::create_assert_temp_variable(const locationt &location)
 {
   symbol_id temp_sid = create_symbol_id();
@@ -5135,7 +5133,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         code_assertt assert_code;
         assert_code.assertion() = test;
         assert_code.location() = get_location_from_decl(element);
-        attach_assert_message(assert_code); // Add message if present
+        attach_assert_message(assert_code);
         block.move_to_operands(assert_code);
       }
       break;
@@ -5471,7 +5469,7 @@ void python_converter::create_builtin_symbols()
     else if (last_dot != std::string::npos)
       name_value = current_python_file.substr(0, last_dot);
     else
-      name_value = current_python_file; // fallback
+      name_value = current_python_file;
   }
 
   typet string_type =
@@ -5697,9 +5695,7 @@ void python_converter::convert()
     symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
 
     if (!symbol)
-    {
       throw std::runtime_error("Symbol " + sid.to_string() + " not found");
-    }
 
     // Create function call
     code_function_callt call;
