@@ -773,36 +773,6 @@ exprt python_converter::handle_none_comparison(
   if (!lhs_is_none && !rhs_is_none)
     return exprt();
 
-  auto handle_optional_side =
-    [&](const exprt &side, bool other_is_none) -> std::optional<exprt> {
-    if (side.type().is_struct())
-    {
-      const struct_typet &struct_type = to_struct_type(side.type());
-      const std::string &tag = struct_type.tag().as_string();
-      if (tag.starts_with("tag-Optional_") && other_is_none)
-      {
-        member_exprt is_none_field(side, "is_none", bool_type());
-        if (is_eq)
-          return exprt(is_none_field);
-        else
-          return exprt(not_exprt(is_none_field));
-      }
-    }
-    return std::nullopt;
-  };
-
-  // Handle Optional[T] vs None
-  if (!lhs_is_none)
-  {
-    if (auto res = handle_optional_side(lhs, rhs_is_none))
-      return *res;
-  }
-  if (!rhs_is_none)
-  {
-    if (auto res = handle_optional_side(rhs, lhs_is_none))
-      return *res;
-  }
-
   // Handle None == None and None != None
   // Create isnone expression
   exprt isnone_expr("isnone", typet("bool"));
