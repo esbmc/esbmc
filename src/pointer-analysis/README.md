@@ -8,7 +8,7 @@ The C specification demands that absolutely every `data object` has an equivalen
  object
 * Dereference it with predictable results.
 
-The trouble comes from the fact that SMT solvers do not like this one bit. It would be OK to treat all variable storage as one big SMT array of bytes and repeatedly store and load from it. Arbitrary byte accesses would be regular array access to memory. However, we'd almost certainly need better solving performance (the SMT solver would have to explore state space in a fixed order).
+The trouble is that SMT solvers do not like this one bit. It would be OK to treat all variable storage as one big SMT array of bytes and repeatedly store and load from it. Arbitrary byte accesses would be treated as regular array accesses to memory. However, we'd almost certainly need better solving performance (the SMT solver would have to explore state space in a fixed order).
 
 What ESBMC does instead is use the primitives that SMT provides (bitvectors, arrays, possibly floatbvs) as variables to store values. That means that whenever we have code like this:
 
@@ -66,9 +66,9 @@ All of that is easy, though: the hard stuff is in `dereferencet::build_reference
 * Here is the offset into it we want to read/write (`lexical_offset`)
 * Here is the type of data to read/write (`type`)
 
-We call `build_reference_rec` with that information. Look at the switch statement; here, we have the cross-product of all the types and different configurations of information encapsulated in one memory load.
+We call `build_reference_rec` with that information. Look at the switch statement; here, we have the cross-product of all the types and configurations, encapsulated in a single memory load.
 
-In the switch-statement, some facts are accumulated about the types we are dealing with into a single flags number, which is switched on. We have to consider:
+In the switch statement, some facts about the types we are dealing with are accumulated into a single flag number, which is set. We have to consider:
 
 * The type of the underlying primitive (`flag_src_*`)
 * The type that the dereference needs to evaluate to (`flag_dst_*`), i.e., what data is being loaded/stored,

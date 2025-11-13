@@ -5,6 +5,7 @@
 #include <vector>
 #include <set>
 #include <util/string_container.h>
+#include <mutex>
 
 class StringContainerTest
 {

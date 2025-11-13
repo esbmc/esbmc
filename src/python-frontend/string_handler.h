@@ -287,6 +287,61 @@ public:
    */
   exprt get_array_base_address(const exprt &arr);
 
+  /**
+   * Convert a string to an integer using Python's int() function
+   * @param string_obj The string expression to convert
+   * @param base_arg The base for conversion (2-36, or 0 for auto-detect)
+   * @param location Source location for error reporting
+   * @return Expression representing the integer result
+   */
+  exprt handle_string_to_int(
+    const exprt &string_obj,
+    const exprt &base_arg,
+    const locationt &location);
+
+  /**
+   * Convert a string to an integer using base 10 (convenience method)
+   * @param string_obj The string expression to convert
+   * @param location Source location for error reporting
+   * @return Expression representing the integer result
+   */
+  exprt handle_string_to_int_base10(
+    const exprt &string_obj,
+    const locationt &location);
+
+  /**
+   * Handle int() builtin with automatic type detection
+   * Supports int(x) where x can be: int, float, bool, or string
+   * @param arg The argument to convert
+   * @param location Source location for error reporting
+   * @return Expression representing the integer result
+   */
+  exprt handle_int_conversion(const exprt &arg, const locationt &location);
+
+  /**
+   * Handle int() builtin with explicit base
+   * Supports int(x, base) where x is a string
+   * @param arg The string argument to convert
+   * @param base The base for conversion
+   * @param location Source location for error reporting
+   * @return Expression representing the integer result
+   */
+  exprt handle_int_conversion_with_base(
+    const exprt &arg,
+    const exprt &base,
+    const locationt &location);
+
+  /**
+   * Handle chr() builtin function
+   * Converts a Unicode code point to its string representation
+   * Supports chr(i) where i is an integer in range [0, 0x10FFFF]
+   * @param codepoint_arg The integer code point to convert
+   * @param location Source location for error reporting
+   * @return Expression representing the resulting string (char array pointer)
+   */
+  exprt
+  handle_chr_conversion(const exprt &codepoint_arg, const locationt &location);
+
 private:
   python_converter &converter_;
   contextt &symbol_table_;

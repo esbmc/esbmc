@@ -222,7 +222,6 @@ BigInt get_line_number(
 /**
  *
  */
-int generate_sha1_hash_for_file(const char *path, std::string &output);
 int generate_sha256_hash_for_file(const char *path, std::string &output);
 
 /**

@@ -387,6 +387,23 @@ void violation_yaml_goto_trace(
       }
       break;
 
+    case goto_trace_stept::ASSUME:
+      if (step.pc->is_goto())
+      {
+        waypoint wp;
+        wp.type = waypoint::branching;
+        wp.file = yml.verified_file;
+        wp.value = step.guard ? "true" : "false";
+        wp.line = get_line_number(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+        wp.column = step.pc->location.get_column().c_str();
+        wp.function = step.pc->location.function().c_str();
+        yml.segments.push_back(wp);
+      }
+      break;
+
     case goto_trace_stept::ASSIGNMENT:
       if (
         step.pc->is_assign() || step.pc->is_return() ||

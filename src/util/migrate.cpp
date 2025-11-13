@@ -1531,6 +1531,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, op0, op1);
     new_expr_ref = isinstance2tc(op0, op1);
   }
+  else if (expr.id() == "isnone")
+  {
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    new_expr_ref = isnone2tc(op0, op1);
+  }
   else if (expr.id() == "capability_base")
   {
     expr2tc op0;
@@ -2889,6 +2895,14 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt back("isinstance", bool_typet());
     back.copy_to_operands(migrate_expr_back(ins.side_1));
     back.copy_to_operands(migrate_expr_back(ins.side_2));
+    return back;
+  }
+  case expr2t::isnone_id:
+  {
+    const isnone2t &isn = to_isnone2t(ref);
+    exprt back("isnone", bool_typet());
+    back.copy_to_operands(migrate_expr_back(isn.side_1));
+    back.copy_to_operands(migrate_expr_back(isn.side_2));
     return back;
   }
   case expr2t::deallocated_obj_id:
