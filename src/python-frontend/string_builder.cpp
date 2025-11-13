@@ -250,7 +250,9 @@ exprt string_builder::concatenate_strings(
   combined_chars.insert(
     combined_chars.end(), rhs_chars.begin(), rhs_chars.end());
 
-  if (combined_chars.size())
+  // Only use direct concatenation if we successfully extracted chars from both operands
+  // Otherwise, fall back to C function (for pointer types, symbolic values, etc.)
+  if (combined_chars.size() > 0 && lhs_chars.size() > 0 && rhs_chars.size() > 0)
   {
     // Build null-terminated result as a new array
     return build_null_terminated_string(combined_chars);
