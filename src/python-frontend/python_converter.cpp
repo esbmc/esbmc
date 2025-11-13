@@ -3826,6 +3826,40 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   exprt cond = get_expr(ast_node["test"]);
   cond.location() = get_location_from_decl(ast_node["test"]);
 
+  // Handle function calls in conditions
+  if (cond.is_function_call() && ast_node["test"]["_type"] == "Call")
+  {
+    locationt location = get_location_from_decl(ast_node["test"]);
+
+    // Create temporary variable for function call result
+    symbolt temp_symbol =
+      create_return_temp_variable(cond.type(), location, "cond");
+    symbol_table_.add(temp_symbol);
+    exprt temp_var_expr = symbol_expr(temp_symbol);
+
+    // Create a decl-block to hold the function call
+    code_blockt decl_block;
+
+    // Add declaration
+    code_declt temp_decl(temp_var_expr);
+    temp_decl.location() = location;
+    decl_block.copy_to_operands(temp_decl);
+
+    // Set the LHS of the function call to our temporary variable
+    if (!cond.type().is_empty())
+      cond.op0() = temp_var_expr;
+
+    // Add function call
+    decl_block.copy_to_operands(cond);
+
+    // Use temporary variable as the new condition
+    cond = temp_var_expr;
+
+    // Add the decl_block to current_block before processing the if statement
+    if (current_block)
+      current_block->copy_to_operands(decl_block);
+  }
+
   // Recover type
   current_element_type = t;
 
