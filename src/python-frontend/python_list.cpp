@@ -217,8 +217,24 @@ exprt python_list::build_push_list_call(
   code_function_callt push_func_call;
   push_func_call.function() = symbol_expr(*push_func_sym);
   push_func_call.arguments().push_back(symbol_expr(list)); // list
-  push_func_call.arguments().push_back(                    // &element
-    address_of_exprt(symbol_expr(*elem_info.elem_symbol)));
+
+  // For string types (pointer to char), we must pass the pointer value directly
+  // For other types (including other pointers such None/bool*), we must pass the address
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->type.is_pointer() &&
+    elem_info.elem_symbol->type.subtype() == char_type())
+  {
+    // For string type (char*), we must pass the pointer value itself
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  }
+  else
+  {
+    // For all other types, we must pass address of the value
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+  }
+
+  push_func_call.arguments().push_back(element_arg); // element or &element
   push_func_call.arguments().push_back(
     symbol_expr(*elem_info.elem_type_sym));                  // type hash
   push_func_call.arguments().push_back(elem_info.elem_size); // element size
