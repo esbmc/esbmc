@@ -492,7 +492,19 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
         var_expr, loc);
     }
 
-    // Try to extract constant value
+    // Even if the symbol has a constant value, we should not
+    // perform compile-time conversion if the symbol is mutable (lvalue)
+    // because its value may change at runtime (e.g., loop variables)
+    if (sym->lvalue)
+    {
+      // This is a mutable variable - use runtime conversion
+      exprt var_expr = converter_.get_expr(arg);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_chr_conversion(
+        var_expr, loc);
+    }
+
+    // Try to extract constant value (only for truly constant symbols)
     const auto &const_expr = to_constant_expr(val);
     std::string binary_str = id2string(const_expr.get_value());
     try
