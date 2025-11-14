@@ -826,6 +826,21 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   else
     abort();
 
+  // Dereference check all pointer arguments after the format string
+  for (size_t i = idx; i < new_rhs.operands.size(); i++)
+  {
+    expr2tc &arg = new_rhs.operands[i];
+    if (is_pointer_type(arg) && !cur_state->guard.is_false())
+    {
+      // Create a dereference expression to trigger validity checks
+      type2tc subtype = to_pointer_type(arg->type).subtype;
+      expr2tc deref_expr = dereference2tc(subtype, arg);
+
+      // Perform dereference to check validity (freed, null, bounds, etc.)
+      dereference(deref_expr, dereferencet::READ);
+    }
+  }
+
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
     new_rhs.operands.erase(new_rhs.operands.begin());
