@@ -840,17 +840,25 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     if (cur_state->guard.is_false())
       continue;
 
-    // Skip symbols that are already at L2 renaming level
-    if (is_symbol2t(arg))
-    {
-      const symbol2t &sym = to_symbol2t(arg);
-      if (
-        sym.rlevel == symbol2t::renaming_level::level2 ||
-        sym.rlevel == symbol2t::renaming_level::level2_global)
+    // Check the entire expression tree for L2 symbols, not just top-level
+    // Complex expressions (member access, dereference, etc.) may contain
+    // L2 symbols deeper in the tree
+    bool has_l2_symbols = false;
+    arg->foreach_operand([&has_l2_symbols](const expr2tc &e) {
+      if (is_symbol2t(e))
       {
-        continue;
+        const symbol2t &sym = to_symbol2t(e);
+        if (
+          sym.rlevel == symbol2t::renaming_level::level2 ||
+          sym.rlevel == symbol2t::renaming_level::level2_global)
+        {
+          has_l2_symbols = true;
+        }
       }
-    }
+    });
+
+    if (has_l2_symbols)
+      continue;
 
     // Get the subtype and check if it's valid
     type2tc subtype = to_pointer_type(arg->type).subtype;
