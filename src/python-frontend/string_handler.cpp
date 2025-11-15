@@ -409,6 +409,11 @@ exprt string_handler::handle_string_concatenation(
   return string_builder_->concatenate_strings(lhs, rhs, left, right);
 }
 
+exprt string_handler::handle_string_repetition(exprt &lhs, exprt &rhs)
+{
+  return string_builder_->handle_string_repetition(lhs, rhs);
+}
+
 bool string_handler::is_zero_length_array(const exprt &expr)
 {
   if (expr.id() == "sideeffect")
@@ -467,6 +472,9 @@ exprt string_handler::handle_string_operations(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
+  if (op == "Mult")
+    return handle_string_repetition(lhs, rhs);
+
   ensure_string_array(lhs);
   ensure_string_array(rhs);
 
@@ -475,8 +483,7 @@ exprt string_handler::handle_string_operations(
 
   if (op == "Eq" || op == "NotEq")
     return handle_string_comparison(op, lhs, rhs, element);
-
-  if (op == "Add")
+  else if (op == "Add")
     return handle_string_concatenation(lhs, rhs, left, right);
 
   return nil_exprt();

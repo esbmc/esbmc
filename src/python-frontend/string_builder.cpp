@@ -261,6 +261,70 @@ exprt string_builder::concatenate_strings(
     return concatenate_strings_via_c_function(lhs, rhs, left);
 }
 
+exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
+{
+  size_t size = 0;
+  exprt str;
+  std::string value;
+
+  // Get size (e.g.: "a" * 3)
+  if (rhs.type().is_signedbv() || rhs.type().is_bool())
+  {
+    if (rhs.is_symbol())
+    {
+      symbolt *size_var = converter_.find_symbol(
+        to_symbol_expr(rhs).get_identifier().as_string());
+      assert(size_var);
+      value = size_var->value.value().as_string();
+    }
+    else if (rhs.is_constant())
+      value = rhs.value().as_string();
+
+    // "a" * True = "a"
+    // "a" * False = ""
+    if (rhs.type().is_bool())
+      size = value == "true" ? 1 : 0;
+    else
+      size = std::stoi(rhs.value().as_string(), nullptr, 2);
+
+    str_handler_->ensure_string_array(lhs);
+    str = lhs;
+  }
+  // Get size (e.g.: 3 * "a")
+  else if (lhs.type().is_signedbv() || lhs.type().is_bool())
+  {
+    if (lhs.is_symbol())
+    {
+      symbolt *size_var = converter_.find_symbol(
+        to_symbol_expr(lhs).get_identifier().as_string());
+      assert(size_var);
+      value = size_var->value.value().as_string();
+    }
+    else if (lhs.is_constant())
+      value = lhs.value().as_string();
+
+    if (rhs.type().is_bool())
+      size = value == "true" ? 1 : 0;
+    else
+      size = std::stoi(rhs.value().as_string(), nullptr, 2);
+
+    str_handler_->ensure_string_array(rhs);
+    str = rhs;
+  }
+  else
+    throw std::runtime_error("Unsupported string repetition type");
+
+  std::vector<exprt> chars = extract_string_chars(str);
+  std::vector<exprt> combined_chars;
+  combined_chars.reserve(chars.size() * size);
+  for (size_t i = 0; i < size; ++i)
+  {
+    combined_chars.insert(combined_chars.end(), chars.begin(), chars.end());
+  }
+
+  return build_null_terminated_string(combined_chars);
+}
+
 exprt string_builder::build_raw_byte_array(const std::vector<uint8_t> &bytes)
 {
   // Get the proper bytes type from type_handler

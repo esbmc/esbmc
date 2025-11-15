@@ -157,6 +157,16 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Handle string repetition
+   * @param op multiply operator (Eq, Mult)
+   * @param lhs Left operand
+   * @param rhs Right operand
+   * @param element JSON element with location info
+   * @return Repetition expression
+   */
+  exprt handle_string_repetition(exprt &lhs, exprt &rhs);
+
+  /**
    * @brief Handle general string operations
    * @param op Operation type
    * @param lhs Left operand
