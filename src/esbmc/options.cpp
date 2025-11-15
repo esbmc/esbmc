@@ -390,6 +390,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-reachable-memory-leak",
      NULL,
      "exclude still reachable objects from --memory-leak-check"},
+    {"printf-check", NULL, "enable pointer validation for printf arguments"},
     {"nan-check", NULL, "check floating-point for NaN"},
     {"memory-leak-check", NULL, "enable memory leak check"},
     {"overflow-check", NULL, "enable arithmetic over- and underflow check"},

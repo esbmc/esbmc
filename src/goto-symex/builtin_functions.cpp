@@ -826,6 +826,51 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   else
     abort();
 
+  // Only perform dereference checks if printf-check is enabled
+  if (options.get_bool_option("printf-check"))
+  {
+    // Dereference check all pointer arguments after the format string
+    for (size_t i = idx; i < new_rhs.operands.size(); i++)
+    {
+      expr2tc &arg = new_rhs.operands[i];
+
+      if (!arg)
+        continue;
+
+      if (!is_pointer_type(arg->type))
+        continue;
+
+      if (cur_state->guard.is_false())
+        continue;
+
+      // Check the entire expression tree for L2 symbols, not just top-level
+      bool has_l2_symbols = false;
+      arg->foreach_operand([&has_l2_symbols](const expr2tc &e) {
+        if (is_symbol2t(e))
+        {
+          const symbol2t &sym = to_symbol2t(e);
+          if (
+            sym.rlevel == symbol2t::renaming_level::level2 ||
+            sym.rlevel == symbol2t::renaming_level::level2_global)
+          {
+            has_l2_symbols = true;
+          }
+        }
+      });
+
+      if (has_l2_symbols)
+        continue;
+
+      type2tc subtype = to_pointer_type(arg->type).subtype;
+
+      if (is_empty_type(subtype) || is_nil_type(subtype))
+        continue;
+
+      expr2tc deref_expr = dereference2tc(subtype, arg);
+      dereference(deref_expr, dereferencet::READ);
+    }
+  }
+
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
     new_rhs.operands.erase(new_rhs.operands.begin());
