@@ -216,6 +216,17 @@ bool clang_c_maint::clang_main()
       init_code.copy_to_operands(
         code_assignt(symbol_expr(argv_symbol), null_array));
 
+      // Constrain argv[0] to be non-NULL when argc >= 1
+      // Per C standard: when argc > 0, argv[0] points to program name
+      exprt argv_0_index("index", argv_symbol.type.subtype());
+      argv_0_index.copy_to_operands(
+        symbol_expr(argv_symbol), gen_zero(index_type()));
+
+      exprt argv_0_not_null("notequal", bool_type());
+      argv_0_not_null.copy_to_operands(argv_0_index, null);
+
+      init_code.copy_to_operands(code_assumet(argv_0_not_null));
+
       exprt::operandst &operands = call.arguments();
 
       if (arguments.size() == 3)
