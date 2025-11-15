@@ -52,7 +52,6 @@ int main(int argc, char **argv)
   int                   i;
   pthread_t             threadid[NTHREADS+1];
 
-  __ESBMC_assume(argv[0] != NULL);
   printf("Enter Testcase - %s\n", argv[0]);
 
   pthread_mutex_init(&mutex,NULL);

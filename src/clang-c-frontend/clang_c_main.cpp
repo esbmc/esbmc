@@ -209,15 +209,8 @@ bool clang_c_maint::clang_main()
       // Create an array filled with NULL (no explicit size)
       array_of_exprt null_array(null, argv_type);
 
-      // Assign the initialized array to argv_symbol
-      // disable bounds check on that one
-      // Logic to perform this ^ moved into goto_check and dereference,
-      // rather than load irep2 with additional baggage.
-      init_code.copy_to_operands(
-        code_assignt(symbol_expr(argv_symbol), null_array));
-
       // Constrain argv[0] to be non-NULL when argc >= 1
-      // Per C standard: when argc > 0, argv[0] points to program name
+      // Per C standard: when argc > 0, argv[0] through argv[argc-1] point to valid strings
       exprt argv_0_index("index", argv_symbol.type.subtype());
       argv_0_index.copy_to_operands(
         symbol_expr(argv_symbol), gen_zero(index_type()));
