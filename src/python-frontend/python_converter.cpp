@@ -1993,6 +1993,51 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   };
 
   handle_keywords(call_expr);
+
+  // Convert struct arguments to pointers for union-typed parameters
+  // This handles both positional and keyword arguments
+  if (call_expr.id() == "code" && call_expr.get("statement") == "function_call")
+  {
+    code_function_callt &call = static_cast<code_function_callt &>(call_expr);
+    // Get function symbol to access parameter types
+    const exprt &func = call.function();
+    if (func.is_symbol())
+    {
+      const symbolt *func_symbol = symbol_table_.find_symbol(func.identifier());
+      if (func_symbol && func_symbol->type.is_code())
+      {
+        const code_typet &func_type = to_code_type(func_symbol->type);
+        const code_typet::argumentst &params = func_type.arguments();
+        auto &args = call.arguments();
+        for (size_t i = 0; i < args.size() && i < params.size(); ++i)
+        {
+          const typet &param_type = params[i].type();
+          exprt &arg = args[i];
+
+          // Get the actual type of the argument (resolve symbols)
+          typet arg_actual_type = arg.type();
+          if (arg.is_symbol())
+          {
+            const symbolt *arg_symbol =
+              symbol_table_.find_symbol(arg.identifier());
+            if (arg_symbol)
+            {
+              arg_actual_type = arg_symbol->type;
+              // Follow symbol type references using namespace
+              if (arg_actual_type.id() == "symbol")
+                arg_actual_type = ns.follow(arg_actual_type);
+            }
+          }
+          // Handle union types: if param is pointer and arg is struct (or symbol to struct), take address
+          if (
+            param_type.is_pointer() && arg_actual_type.is_struct() &&
+            !arg.is_address_of() && !arg_actual_type.is_pointer())
+            arg = gen_address_of(arg);
+        }
+      }
+    }
+  }
+
   return call_expr;
 }
 
