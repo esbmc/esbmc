@@ -14,6 +14,7 @@ ignored_dirs=(
   "cover2"
   "cover3"
   "cover4"
+  "cover5"
   "convert-byte-update2"
   "constants"
   "div6_fail"
