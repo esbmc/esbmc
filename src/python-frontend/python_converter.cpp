@@ -1457,7 +1457,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
-  if (lhs_type == "str" && rhs_type == "str")
+  if (
+    (lhs_type == "str" && rhs_type == "str") ||
+    (op == "Mult" && (lhs_type == "str" || rhs_type == "str" ||
+                      type_utils::is_char_type(lhs.type()) ||
+                      type_utils::is_char_type(rhs.type()))))
   {
     const exprt &result = string_handler_.handle_string_operations(
       op, lhs, rhs, left, right, element);
