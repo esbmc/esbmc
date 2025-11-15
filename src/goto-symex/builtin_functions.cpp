@@ -830,15 +830,28 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   for (size_t i = idx; i < new_rhs.operands.size(); i++)
   {
     expr2tc &arg = new_rhs.operands[i];
-    if (is_pointer_type(arg) && !cur_state->guard.is_false())
-    {
-      // Create a dereference expression to trigger validity checks
-      type2tc subtype = to_pointer_type(arg->type).subtype;
-      expr2tc deref_expr = dereference2tc(subtype, arg);
 
-      // Perform dereference to check validity (freed, null, bounds, etc.)
-      dereference(deref_expr, dereferencet::READ);
-    }
+    if (!arg)
+      continue;
+
+    if (!is_pointer_type(arg->type))
+      continue;
+
+    if (cur_state->guard.is_false())
+      continue;
+
+    // Get the subtype and check if it's valid
+    type2tc subtype = to_pointer_type(arg->type).subtype;
+
+    // Skip if subtype is empty or nil - nothing to dereference
+    if (is_empty_type(subtype) || is_nil_type(subtype))
+      continue;
+
+    // Create a dereference expression to trigger validity checks
+    expr2tc deref_expr = dereference2tc(subtype, arg);
+
+    // Perform dereference to check validity (freed, null, bounds, etc.)
+    dereference(deref_expr, dereferencet::READ);
   }
 
   // Now we pop the format
