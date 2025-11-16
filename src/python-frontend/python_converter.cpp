@@ -729,13 +729,13 @@ exprt python_converter::handle_string_comparison(
     throw std::runtime_error(
       "strcmp function not found in symbol table for string comparison");
 
-  side_effect_expr_function_callt strncmp_call;
-  strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {resolved_lhs, resolved_rhs};
-  strncmp_call.location() = get_location_from_decl(element);
-  strncmp_call.type() = int_type();
+  side_effect_expr_function_callt strcmp_call;
+  strcmp_call.function() = symbol_expr(*strncmp_symbol);
+  strcmp_call.arguments() = {resolved_lhs, resolved_rhs};
+  strcmp_call.location() = get_location_from_decl(element);
+  strcmp_call.type() = int_type();
 
-  lhs = strncmp_call;
+  lhs = strcmp_call;
   rhs = gen_zero(int_type());
 
   return nil_exprt(); // continue with lhs OP rhs
