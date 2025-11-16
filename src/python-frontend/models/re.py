@@ -12,7 +12,11 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
     if pattern_len != 6:
         return -1
 
-    if not (pattern[0] == '[' and pattern[2] == '-' and pattern[4] == ']'):
+    # Extract pattern characters to avoid constant folding issues
+    ch0: str = pattern[0]
+    ch2: str = pattern[2]
+    ch4: str = pattern[4]
+    if not (ch0 == '[' and ch2 == '-' and ch4 == ']'):
         return -1
 
     quantifier: str = pattern[5]
@@ -21,7 +25,7 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
 
     start_char: str = pattern[1]
     end_char: str = pattern[3]
-    string_len: int = len(string) - 1
+    string_len: int = len(string)
 
     if string_len == 0:
         return 1 if quantifier == '*' else 0
@@ -40,14 +44,17 @@ def try_match_digit_sequence(pattern: str, pattern_len: int, string: str) -> int
     if pattern_len != 3:
         return -1
 
-    if pattern[0] != '\\' or pattern[1] != 'd':
+    # Extract pattern characters to avoid constant folding issues
+    ch0: str = pattern[0]
+    ch1: str = pattern[1]
+    if ch0 != '\\' or ch1 != 'd':
         return -1
 
     quantifier: str = pattern[2]
     if quantifier != '+' and quantifier != '*':
         return -1
 
-    string_len: int = len(string) - 1
+    string_len: int = len(string)
 
     if string_len == 0:
         return 1 if quantifier == '*' else 0
@@ -67,7 +74,12 @@ def try_match_alternation(pattern: str, pattern_len: int, string: str) -> int:
     if pattern_len != 7:
         return -1
 
-    if not (pattern[0] == '(' and pattern[2] == '|' and pattern[4] == ')' and pattern[6] == '*'):
+    # Extract pattern characters to avoid constant folding issues
+    ch0: str = pattern[0]
+    ch2: str = pattern[2]
+    ch4: str = pattern[4]
+    ch6: str = pattern[6]
+    if not (ch0 == '(' and ch2 == '|' and ch4 == ')' and ch6 == '*'):
         return -1
 
     option1: str = pattern[1]
@@ -86,8 +98,17 @@ def try_match_two_char_class_range(pattern: str, pattern_len: int, string: str) 
     if pattern_len != 12:
         return -1
 
-    if not (pattern[0] == '^' and pattern[1] == '[' and pattern[3] == '-' and pattern[5] == ']' and
-            pattern[6] == '[' and pattern[8] == '-' and pattern[10] == ']' and pattern[11] == '$'):
+    # Extract pattern characters to avoid constant folding issues
+    ch0: str = pattern[0]
+    ch1: str = pattern[1]
+    ch3: str = pattern[3]
+    ch5: str = pattern[5]
+    ch6: str = pattern[6]
+    ch8: str = pattern[8]
+    ch10: str = pattern[10]
+    ch11: str = pattern[11]
+    if not (ch0 == '^' and ch1 == '[' and ch3 == '-' and ch5 == ']' and
+            ch6 == '[' and ch8 == '-' and ch10 == ']' and ch11 == '$'):
         return -1
 
     start_char1: str = pattern[2]
@@ -115,7 +136,9 @@ def try_match_dot_literal(pattern: str, pattern_len: int, string: str) -> int:
     if pattern_len != 2:
         return -1
 
-    if pattern[0] != '.':
+    # Extract pattern character to avoid constant folding issues
+    ch0: str = pattern[0]
+    if ch0 != '.':
         return -1
 
     # Second character should be a literal (not a metacharacter)
@@ -152,7 +175,10 @@ def match(pattern: str, string: str) -> bool:
 
     # Universal match ".*"
     if pattern_len >= 2:
-        if pattern[0] == '.' and pattern[1] == '*':
+        # Extract pattern characters to avoid constant folding issues
+        ch0: str = pattern[0]
+        ch1: str = pattern[1]
+        if ch0 == '.' and ch1 == '*':
             return True
 
     # Try each pattern recognizer
@@ -178,7 +204,10 @@ def match(pattern: str, string: str) -> bool:
 
     # Pattern ending with ".*"
     if pattern_len >= 3:
-        if pattern[pattern_len - 2] == '.' and pattern[pattern_len - 1] == '*':
+        # Extract pattern characters to avoid constant folding issues
+        ch_last2: str = pattern[pattern_len - 2]
+        ch_last1: str = pattern[pattern_len - 1]
+        if ch_last2 == '.' and ch_last1 == '*':
             prefix_len: int = pattern_len - 2
             has_meta_in_prefix: bool = False
             i: int = 0
@@ -212,7 +241,8 @@ def match(pattern: str, string: str) -> bool:
     # Literal pattern matching
     if not has_meta:
         effective_pattern_len: int = pattern_len
-        if len(string) - 1 < effective_pattern_len:
+        string_len: int = len(string)
+        if string_len < effective_pattern_len:
             return False
         m: int = 0
         while m < effective_pattern_len:
@@ -234,7 +264,10 @@ def search(pattern: str, string: str) -> bool:
 
     # ".*" pattern always matches
     if len(pattern) >= 2:
-        if pattern[0] == '.' and pattern[1] == '*':
+        # Extract pattern characters to avoid constant folding issues
+        ch0: str = pattern[0]
+        ch1: str = pattern[1]
+        if ch0 == '.' and ch1 == '*':
             return True
 
     pattern_len: int = len(pattern)
@@ -282,7 +315,10 @@ def fullmatch(pattern: str, string: str) -> bool:
 
     # ".*" pattern matches everything
     if len(pattern) >= 2:
-        if pattern[0] == '.' and pattern[1] == '*':
+        # Extract pattern characters to avoid constant folding issues
+        ch0: str = pattern[0]
+        ch1: str = pattern[1]
+        if ch0 == '.' and ch1 == '*':
             return True
 
     pattern_len: int = len(pattern)
