@@ -146,6 +146,11 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **Concatenation (+ operator)**: Fully supports the list + list operation (e.g., `[1,2] + [3,4] → [1,2,3,4]`), producing a new list containing all elements of both operands in order.
   - **String Operations**:
     - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns `True`).
+    - **Repetition (multiplication operator)**: Supports string repetition using the `*` operator with both orderings:
+      - `"a" * 3` returns `"aaa"` (string × integer)
+      - `3 * "a"` returns `"aaa"` (integer × string)
+      - **Supports boolean multipliers:** `"a" * True` returns `"a"`, `"a" * False` returns `""`
+      - Works with both string literals and string variables
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
     - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
     - **lstrip() method**: Removes leading whitespace characters from strings (e.g., `"  hello".lstrip()` returns `"hello"`).
