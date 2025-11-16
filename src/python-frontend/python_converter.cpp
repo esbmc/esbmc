@@ -1457,6 +1457,39 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
+  // Check for Add operations with string operands
+  if (op == "Add")
+  {
+    // Check if either operand is a string constant in the JSON
+    bool lhs_is_str_literal = false;
+    bool rhs_is_str_literal = false;
+
+    if (
+      element.contains("left") && element["left"].contains("value") &&
+      element["left"]["value"].is_string())
+    {
+      lhs_is_str_literal = true;
+      lhs_type = "str";
+    }
+
+    if (
+      element.contains("right") && element["right"].contains("value") &&
+      element["right"]["value"].is_string())
+    {
+      rhs_is_str_literal = true;
+      rhs_type = "str";
+    }
+
+    // If one is a string literal, treat both as strings for concatenation
+    if (lhs_is_str_literal || rhs_is_str_literal)
+    {
+      if (lhs_type.empty())
+        lhs_type = "str";
+      if (rhs_type.empty())
+        rhs_type = "str";
+    }
+  }
+
   if (
     (lhs_type == "str" && rhs_type == "str") ||
     (op == "Mult" && (lhs_type == "str" || rhs_type == "str" ||
