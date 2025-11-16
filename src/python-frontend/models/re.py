@@ -33,6 +33,8 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
     i: int = 0
     while i < string_len:
         c: str = string[i]
+        # Use direct character comparison with string literals
+        # This avoids ord() issues with variables and works correctly
         if c < start_char or c > end_char:
             return 0
         i = i + 1
@@ -62,6 +64,8 @@ def try_match_digit_sequence(pattern: str, pattern_len: int, string: str) -> int
     i: int = 0
     while i < string_len:
         c: str = string[i]
+        # Use direct character comparison with string literals
+        # This avoids ord() issues with variables and works correctly
         if c < '0' or c > '9':
             return 0
         i = i + 1
@@ -123,6 +127,8 @@ def try_match_two_char_class_range(pattern: str, pattern_len: int, string: str) 
         return 0
 
     # Check both characters are in their respective ranges
+    # Use direct character comparison with string literals
+    # This avoids ord() issues with variables and works correctly
     if string[0] < start_char1 or string[0] > end_char1:
         return 0
     if string[1] < start_char2 or string[1] > end_char2:

@@ -741,6 +741,85 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
+exprt python_converter::handle_single_char_comparison(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs)
+{
+  // Helper function to check if an expression represents a single character
+  // This can be:
+  // 1. A char type directly (from string indexing)
+  // 2. A single character string (array of char with size 2: character + null terminator)
+  auto is_single_char = [](const exprt &expr) -> bool {
+    // Direct char type (from string indexing)
+    if (expr.type() == char_type())
+      return true;
+    
+    // Single character string (array of char with size 2)
+    if (!expr.type().is_array())
+      return false;
+    
+    const array_typet &arr_type = to_array_type(expr.type());
+    if (arr_type.subtype() != char_type())
+      return false;
+    
+    // Check if size is 2 (single character + null terminator)
+    if (arr_type.size().is_constant())
+    {
+      BigInt size = binary2integer(
+        arr_type.size().value().as_string(), arr_type.size().type().is_signedbv());
+      return size == 2;
+    }
+    
+    return false;
+  };
+
+  // Helper function to extract character value as integer
+  auto extract_char_value = [](const exprt &char_expr) -> exprt {
+    // If it's already a char type, convert directly to signed integer
+    if (char_expr.type() == char_type())
+    {
+      return typecast_exprt(char_expr, signedbv_typet(8));
+    }
+    
+    // If it's a single character string (array), extract first character
+    if (char_expr.type().is_array())
+    {
+      exprt zero_index = from_integer(0, index_type());
+      exprt char_val = index_exprt(char_expr, zero_index, char_type());
+      return typecast_exprt(char_val, signedbv_typet(8));
+    }
+    
+    // Should not reach here
+    return char_expr;
+  };
+
+  // Check if both operands represent single characters
+  bool lhs_is_char = is_single_char(lhs);
+  bool rhs_is_char = is_single_char(rhs);
+
+  if (lhs_is_char && rhs_is_char)
+  {
+    // Extract character values as integers
+    exprt lhs_char = extract_char_value(lhs);
+    exprt rhs_char = extract_char_value(rhs);
+
+    // Create comparison expression with integer operands
+    exprt comp_expr(get_op(op, bool_type()), bool_type());
+    comp_expr.copy_to_operands(lhs_char, rhs_char);
+    
+    // Preserve location from original operands
+    if (!lhs.location().is_nil())
+      comp_expr.location() = lhs.location();
+    else if (!rhs.location().is_nil())
+      comp_expr.location() = rhs.location();
+
+    return comp_expr;
+  }
+
+  return nil_exprt();
+}
+
 exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
 {
   if (!expr.type().is_struct())
@@ -1399,6 +1478,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Handle type mismatches for relational operations
   if (type_utils::is_relational_op(op))
   {
+    // Check for single character string comparisons (for <, >, <=, >=)
+    if (type_utils::is_ordered_comparison(op))
+    {
+      exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
+      if (!char_comp_result.is_nil())
+        return char_comp_result;
+    }
+
     // Check for float vs string comparisons
     bool lhs_is_float = lhs.type().is_floatbv();
     bool rhs_is_float = rhs.type().is_floatbv();
