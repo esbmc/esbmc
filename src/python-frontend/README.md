@@ -985,27 +985,27 @@ def analyze_paths(x: int) -> str:
 def test_reachability() -> None:
     x: int = nondet_int()
     
-    # Cover: Can x be greater than 100? (Expected: FAIL - satisfiable)
+    # Cover: Can x be greater than 100?
     __ESBMC_cover(x > 100)
     
-    # Cover: Can x be in the medium range? (Expected: FAIL - satisfiable)
+    # Cover: Can x be in the medium range?
     __ESBMC_cover(50 < x <= 100)
     
     # Add constraint: x must be positive
     __ESBMC_assume(x > 0)
     
-    # Cover: Can x still be negative? (Expected: SUCCESS - not satisfiable)
+    # Cover: Can x still be negative?
     __ESBMC_cover(x < 0)
     
-    # Cover: Can x be positive? (Expected: FAIL - satisfiable)
+    # Cover: Can x be positive?
     __ESBMC_cover(x > 0)
     
     result = analyze_paths(x)
     
-    # Cover: Can we reach the "high" path? (Expected: FAIL - satisfiable)
+    # Cover: Can we reach the "high" path?
     __ESBMC_cover(result == "high")
     
-    # Cover: Can we reach the "zero_or_negative" path? (Expected: SUCCESS - not satisfiable after assume)
+    # Cover: Can we reach the "zero_or_negative" path?
     __ESBMC_cover(result == "zero_or_negative")
 
 def test_dead_code_detection() -> None:
@@ -1014,12 +1014,12 @@ def test_dead_code_detection() -> None:
     __ESBMC_assume(value >= 0)
     
     if value < 0:
-        # This is dead code - the cover should succeed (prove unreachability)
+        # This is dead code
         __ESBMC_cover(True)
         print("This branch is unreachable")
     
     if value >= 0:
-        # This is reachable code - the cover should fail (show reachability)
+        # This is reachable code
         __ESBMC_cover(True)
         print("This branch is reachable")
 
@@ -1131,7 +1131,7 @@ Violated property:
 - **Key Insights from this Example**:
   - **Lines 16, 19, 28, 33, 50**: These cover properties fail (have counterexamples), confirming that various values and code paths are reachable.
   - **Lines 25, 36**: These cover properties pass (have proofs), demonstrating that after the `__ESBMC_assume(x > 0)`, negative values and the "zero_or_negative" path are provably unreachable.
-  - **Dead Code Detection**: The cover property at line 50 fails (counterexample), confirming that the branch is reachable. The cover at line 45 (in the if value < 0 branch) would pass (proof), proving that the branch is dead code.
+  - **Dead Code Detection**: The cover property at line 50 fails (counterexample), confirming that the branch is reachable. The cover at line 45 (in the `if value < 0` branch) would pass (proof), proving that the branch is dead code.
 
 # Numpy Formal Verification with ESBMC
 
