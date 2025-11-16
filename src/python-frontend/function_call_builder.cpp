@@ -15,12 +15,19 @@ const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
+const std::string kEsbmcCover = "__ESBMC_cover";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
   const nlohmann::json &call)
   : converter_(converter), call_(call)
 {
+}
+
+bool function_call_builder::is_cover_call(const symbol_id &function_id) const
+{
+  const std::string &func_name = function_id.get_function();
+  return (func_name == kEsbmcCover);
 }
 
 bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
@@ -312,6 +319,10 @@ symbol_id function_call_builder::build_function_id() const
   {
     function_id.clear();
   }
+  else if (is_cover_call(function_id))
+  {
+    function_id.clear();
+  }
 
   // Insert class name in the symbol id
   if (obj_name == "super")
@@ -413,6 +424,28 @@ exprt function_call_builder::build() const
     assume_code.location() = converter_.get_location_from_decl(call_);
 
     return assume_code;
+  }
+
+  // cover calls convert to code_assert statement
+  // cover semantics: cover(cond) behaves as assert(!cond)
+  // - failure (counterexample) means the condition is satisfiable
+  // - success (proof) means the condition is not satisfiable
+  if (is_cover_call(function_id))
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error("__ESBMC_cover requires one boolean argument");
+
+    exprt condition = converter_.get_expr(call_["args"][0]);
+
+    // Negate the condition: cover(cond) = assert(!cond)
+    exprt negated_condition = gen_not(condition);
+
+    // Create code_assert statement with cover property
+    code_assertt cover_code(negated_condition);
+    locationt loc = converter_.get_location_from_decl(call_);
+    cover_code.location() = loc;
+
+    return cover_code;
   }
 
   if (call_["func"]["_type"] == "Attribute")
