@@ -2135,9 +2135,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   const std::string &str_val = value.get<std::string>();
 
   // Handle single-character string as char literal ONLY if not processing list elements
-  if (
-    str_val.size() == 1 && !is_bytes_literal(element) &&
-    !processing_list_elements)
+  if (str_val.size() == 1 && !is_bytes_literal(element))
   {
     typet t = type_handler_.get_typet("str", str_val.size());
     return from_integer(static_cast<unsigned char>(str_val[0]), t);

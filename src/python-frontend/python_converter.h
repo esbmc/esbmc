@@ -146,7 +146,6 @@ private:
   friend class python_list;
   friend class tuple_handler;
   friend class python_class_builder;
-  bool processing_list_elements = false;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
