@@ -408,6 +408,10 @@ private:
     const exprt &rhs,
     const std::string &op);
 
+  // Helper functions for character handling
+  bool is_single_char_expr(const exprt &expr) const;
+  exprt extract_char_value_as_int(const exprt &char_expr) const;
+
   void process_forward_reference(
     const nlohmann::json &annotation,
     codet &target_block);

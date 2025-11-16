@@ -741,68 +741,65 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
+bool python_converter::is_single_char_expr(const exprt &expr) const
+{
+  // Direct char type (from string indexing)
+  if (expr.type() == char_type())
+    return true;
+  
+  // Single character string (array of char with size 2)
+  if (!expr.type().is_array())
+    return false;
+  
+  const array_typet &arr_type = to_array_type(expr.type());
+  if (arr_type.subtype() != char_type())
+    return false;
+  
+  // Check if size is 2 (single character + null terminator)
+  if (arr_type.size().is_constant())
+  {
+    BigInt size = binary2integer(
+      arr_type.size().value().as_string(), arr_type.size().type().is_signedbv());
+    return size == 2;
+  }
+  
+  return false;
+}
+
+exprt python_converter::extract_char_value_as_int(const exprt &char_expr) const
+{
+  // If it's already a char type, convert directly to signed integer
+  if (char_expr.type() == char_type())
+  {
+    return typecast_exprt(char_expr, signedbv_typet(8));
+  }
+  
+  // If it's a single character string (array), extract first character
+  if (char_expr.type().is_array())
+  {
+    exprt zero_index = from_integer(0, index_type());
+    exprt char_val = index_exprt(char_expr, zero_index, char_type());
+    return typecast_exprt(char_val, signedbv_typet(8));
+  }
+  
+  // Should not reach here
+  return char_expr;
+}
+
 exprt python_converter::handle_single_char_comparison(
   const std::string &op,
   exprt &lhs,
   exprt &rhs)
 {
-  // Helper function to check if an expression represents a single character
-  // This can be:
-  // 1. A char type directly (from string indexing)
-  // 2. A single character string (array of char with size 2: character + null terminator)
-  auto is_single_char = [](const exprt &expr) -> bool {
-    // Direct char type (from string indexing)
-    if (expr.type() == char_type())
-      return true;
-    
-    // Single character string (array of char with size 2)
-    if (!expr.type().is_array())
-      return false;
-    
-    const array_typet &arr_type = to_array_type(expr.type());
-    if (arr_type.subtype() != char_type())
-      return false;
-    
-    // Check if size is 2 (single character + null terminator)
-    if (arr_type.size().is_constant())
-    {
-      BigInt size = binary2integer(
-        arr_type.size().value().as_string(), arr_type.size().type().is_signedbv());
-      return size == 2;
-    }
-    
-    return false;
-  };
-
-  // Helper function to extract character value as integer
-  auto extract_char_value = [](const exprt &char_expr) -> exprt {
-    // If it's already a char type, convert directly to signed integer
-    if (char_expr.type() == char_type())
-    {
-      return typecast_exprt(char_expr, signedbv_typet(8));
-    }
-    
-    // If it's a single character string (array), extract first character
-    if (char_expr.type().is_array())
-    {
-      exprt zero_index = from_integer(0, index_type());
-      exprt char_val = index_exprt(char_expr, zero_index, char_type());
-      return typecast_exprt(char_val, signedbv_typet(8));
-    }
-    
-    // Should not reach here
-    return char_expr;
-  };
-
   // Check if both operands represent single characters
-  bool lhs_is_char = is_single_char(lhs);
-  bool rhs_is_char = is_single_char(rhs);
+  bool lhs_is_char = is_single_char_expr(lhs);
+  bool rhs_is_char = is_single_char_expr(rhs);
 
   if (lhs_is_char && rhs_is_char)
   {
     // Extract character values as integers
-    exprt lhs_char = extract_char_value(lhs);
-    exprt rhs_char = extract_char_value(rhs);
+    exprt lhs_char = extract_char_value_as_int(lhs);
+    exprt rhs_char = extract_char_value_as_int(rhs);
 
     // Create comparison expression with integer operands
     exprt comp_expr(get_op(op, bool_type()), bool_type());
@@ -1346,7 +1343,37 @@ exprt python_converter::handle_string_type_mismatch(
   if (!((lhs_is_string && !rhs_is_string) || (!lhs_is_string && rhs_is_string)))
     return nil_exprt(); // No mismatch, return nil to indicate no action taken
 
-  // Handle equality/inequality comparisons
+  // Check if this is a character vs single-character string comparison
+  // In Python, char == "c" should be compared character by character
+  bool lhs_is_char = (lhs.type() == char_type());
+  bool rhs_is_char = (rhs.type() == char_type());
+  bool lhs_is_single_char_str = is_single_char_expr(lhs);
+  bool rhs_is_single_char_str = is_single_char_expr(rhs);
+
+  if ((lhs_is_char && rhs_is_single_char_str) || (lhs_is_single_char_str && rhs_is_char))
+  {
+    // Handle character vs single-character string comparison
+    if (op == "Eq" || op == "NotEq")
+    {
+      // Extract character values for comparison using helper function
+      exprt lhs_char = extract_char_value_as_int(lhs);
+      exprt rhs_char = extract_char_value_as_int(rhs);
+      
+      // Create comparison expression
+      exprt comp_expr(get_op(op, bool_type()), bool_type());
+      comp_expr.copy_to_operands(lhs_char, rhs_char);
+      
+      // Preserve location from original operands
+      if (!lhs.location().is_nil())
+        comp_expr.location() = lhs.location();
+      else if (!rhs.location().is_nil())
+        comp_expr.location() = rhs.location();
+      
+      return comp_expr;
+    }
+  }
+
+  // Handle equality/inequality comparisons for other type mismatches
   if (op == "Eq" || op == "NotEq")
   {
     // Python allows this comparison but it always returns False for Eq and True for NotEq
