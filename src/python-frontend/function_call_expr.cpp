@@ -1,18 +1,19 @@
 #include <python-frontend/function_call_expr.h>
-#include <python-frontend/symbol_id.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
+#include <python-frontend/symbol_id.h>
+#include <python-frontend/type_handler.h>
+#include <python-frontend/type_utils.h>
+#include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
-#include <util/string_constant.h>
-#include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/message.h>
 #include <util/python_types.h>
+#include <util/string_constant.h>
+
 #include <regex>
 #include <stdexcept>
 
