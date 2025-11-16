@@ -909,49 +909,21 @@ exprt string_handler::handle_string_lstrip(
   return call;
 }
 
-exprt string_handler::handle_string_membership(
+  exprt string_handler::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
   const nlohmann::json &element)
 {
-  // Get the width of char type from config
-  std::size_t char_width = config.ansi_c.char_width;
-
   // Determine if lhs represents a single character or a string
-  bool lhs_is_single_char = false;
-
-  // Check if lhs is a direct char value
-  if (
-    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
-    bv_width(lhs.type()) == char_width)
-  {
-    lhs_is_single_char = true;
-  }
-
   // Check if lhs is a void* (pointer with empty/nil subtype)
-  if (!lhs_is_single_char && lhs.type().is_pointer())
+  // This handles single-character strings from list iteration which are represented as void* pointers
+  bool lhs_is_single_char = false;
+  if (lhs.type().is_pointer())
   {
     const typet &subtype = lhs.type().subtype();
     if (subtype.is_nil() || subtype.id() == "empty")
     {
       lhs_is_single_char = true;
-    }
-  }
-
-  // Check if lhs is a symbol holding a character value (not pointer)
-  if (!lhs_is_single_char && lhs.is_symbol())
-  {
-    const symbolt *sym =
-      symbol_table_.find_symbol(lhs.get_string("identifier"));
-    if (sym)
-    {
-      const typet &sym_type = sym->type;
-      if (
-        (sym_type.is_signedbv() || sym_type.is_unsignedbv()) &&
-        bv_width(sym_type) == char_width)
-      {
-        lhs_is_single_char = true;
-      }
     }
   }
 
@@ -982,19 +954,11 @@ exprt string_handler::handle_string_membership(
     exprt rhs_str = ensure_null_terminated_string(rhs);
     exprt rhs_addr = get_array_base_address(rhs_str);
 
-    // Convert lhs to int for strchr
-    // If lhs is void*, first cast to char type, then to int
-    exprt char_as_int = lhs;
-    if (lhs.type().is_pointer())
-    {
-      const typet &subtype = lhs.type().subtype();
-      if (subtype.is_nil() || subtype.id() == "empty")
-      {
-        // lhs is void*, cast to char first
-        char_as_int = typecast_exprt(lhs, char_type());
-      }
-    }
-    // Now cast to int
+    // Convert lhs (void* pointer) to char value for strchr
+    // void* points to single-character string array, so cast to char* and dereference
+    typet char_ptr_type = gen_pointer_type(char_type());
+    exprt char_ptr = typecast_exprt(lhs, char_ptr_type);
+    exprt char_as_int = dereference_exprt(char_ptr, char_type());
     char_as_int = typecast_exprt(char_as_int, int_type());
 
     // Call strchr(string, character)
@@ -1290,3 +1254,4 @@ exprt string_handler::handle_chr_conversion(
 
   return chr_call;
 }
+
