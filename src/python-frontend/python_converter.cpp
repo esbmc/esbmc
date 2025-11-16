@@ -660,7 +660,6 @@ exprt python_converter::handle_type_mismatches(
       return gen_boolean(op == "NotEq");
 
     // Both are string arrays: compare based on content
-    // check if empty
     bool lhs_empty = string_handler_.is_zero_length_array(lhs) ||
                      (lhs.is_constant() && lhs.operands().size() <= 1);
     bool rhs_empty = string_handler_.is_zero_length_array(rhs) ||
@@ -816,7 +815,7 @@ exprt python_converter::handle_str_join(const nlohmann::json &call_json)
   const nlohmann::json &list_arg = call_json["args"][0];
 
   // Currently only support Name references (e.g., variable names)
-  // TODO: Support direct List literals like " ".join(["a", "b"])
+  // TODO: Support direct List literals such as " ".join(["a", "b"])
   if (
     list_arg.contains("_type") && list_arg["_type"] == "Name" &&
     list_arg.contains("id"))
@@ -2134,7 +2133,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
 
   const std::string &str_val = value.get<std::string>();
 
-  // Handle single-character string as char literal ONLY if not processing list elements
+  // Handle single-character string as char literal
   if (str_val.size() == 1 && !is_bytes_literal(element))
   {
     typet t = type_handler_.get_typet("str", str_val.size());
@@ -2209,7 +2208,6 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
   return false;
 }
 
-// Extract class name from tag (removes "tag-" prefix)
 std::string
 python_converter::extract_class_name_from_tag(const std::string &tag_name)
 {
@@ -2218,7 +2216,6 @@ python_converter::extract_class_name_from_tag(const std::string &tag_name)
   return tag_name;
 }
 
-// Create normalized self key for cross-method access
 std::string
 python_converter::create_normalized_self_key(const std::string &class_tag)
 {
@@ -2226,7 +2223,6 @@ python_converter::create_normalized_self_key(const std::string &class_tag)
   return "self@" + class_name;
 }
 
-// Clean attribute type by removing internal annotations
 typet python_converter::clean_attribute_type(const typet &attr_type)
 {
   typet clean_type = attr_type;
@@ -2236,7 +2232,6 @@ typet python_converter::clean_attribute_type(const typet &attr_type)
   return clean_type;
 }
 
-// Create member expression with cleaned type
 exprt python_converter::create_member_expression(
   const symbolt &symbol,
   const std::string &attr_name,
@@ -2277,7 +2272,6 @@ void python_converter::register_instance_attribute(
   }
 }
 
-// Check if attribute is an instance attribute
 bool python_converter::is_instance_attribute(
   const std::string &symbol_id,
   const std::string &attr_name,
@@ -2887,7 +2881,6 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
     " has no return statement");
 }
 
-// Extract type information from annotations
 std::pair<std::string, typet>
 python_converter::extract_type_info(const nlohmann::json &var_node)
 {
@@ -2924,7 +2917,6 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
   return {var_type_str, var_typet};
 }
 
-// Create LHS expression based on target type
 exprt python_converter::create_lhs_expression(
   const nlohmann::json &target,
   symbolt *lhs_symbol,
@@ -2946,7 +2938,6 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
-// Handle post-assignment type adjustments
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
