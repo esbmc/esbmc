@@ -17,4 +17,4 @@ def find_first_in_sorted(arr, x):
     return -1
 
 assert find_first_in_sorted([3, 4, 5, 5, 5, 5, 6], 5) == 2
-
+assert find_first_in_sorted([3, 4, 5, 5, 5, 5, 6], 7) == -1
