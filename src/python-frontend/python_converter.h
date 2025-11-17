@@ -315,10 +315,8 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
-  exprt handle_single_char_comparison(
-    const std::string &op,
-    exprt &lhs,
-    exprt &rhs);
+  exprt
+  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
 
   void get_attributes_from_self(
     const nlohmann::json &method_body,
@@ -411,7 +409,7 @@ private:
   // Helper functions for character handling
   bool is_single_char_expr(const exprt &expr) const;
   exprt extract_char_value_as_int(const exprt &char_expr) const;
-  
+
   // Create character comparison expression (extracted common logic)
   exprt create_char_comparison_expr(
     const std::string &op,

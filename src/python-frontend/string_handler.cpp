@@ -909,7 +909,7 @@ exprt string_handler::handle_string_lstrip(
   return call;
 }
 
-  exprt string_handler::handle_string_membership(
+exprt string_handler::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
   const nlohmann::json &element)
@@ -1254,4 +1254,3 @@ exprt string_handler::handle_chr_conversion(
 
   return chr_call;
 }
-

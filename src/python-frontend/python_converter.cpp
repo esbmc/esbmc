@@ -745,23 +745,24 @@ bool python_converter::is_single_char_expr(const exprt &expr) const
   // Direct char type (from string indexing)
   if (expr.type() == char_type())
     return true;
-  
+
   // Single character string (array of char with size 2)
   if (!expr.type().is_array())
     return false;
-  
+
   const array_typet &arr_type = to_array_type(expr.type());
   if (arr_type.subtype() != char_type())
     return false;
-  
+
   // Check if size is 2 (single character + null terminator)
   if (arr_type.size().is_constant())
   {
     BigInt size = binary2integer(
-      arr_type.size().value().as_string(), arr_type.size().type().is_signedbv());
+      arr_type.size().value().as_string(),
+      arr_type.size().type().is_signedbv());
     return size == 2;
   }
-  
+
   return false;
 }
 
@@ -1358,7 +1359,9 @@ exprt python_converter::handle_string_type_mismatch(
   bool lhs_is_single_char_str = is_single_char_expr(lhs);
   bool rhs_is_single_char_str = is_single_char_expr(rhs);
 
-  if ((lhs_is_char && rhs_is_single_char_str) || (lhs_is_single_char_str && rhs_is_char))
+  if (
+    (lhs_is_char && rhs_is_single_char_str) ||
+    (lhs_is_single_char_str && rhs_is_char))
   {
     // Handle character vs single-character string comparison
     return create_char_comparison_expr(op, lhs, rhs);
@@ -1597,14 +1600,16 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Check if both operands are strings
   // Use both type_to_string (for compatibility) and is_string_type (for pointer types)
-  bool lhs_is_string = (lhs_type == "str") || type_utils::is_string_type(lhs.type());
-  bool rhs_is_string = (rhs_type == "str") || type_utils::is_string_type(rhs.type());
-  
+  bool lhs_is_string =
+    (lhs_type == "str") || type_utils::is_string_type(lhs.type());
+  bool rhs_is_string =
+    (rhs_type == "str") || type_utils::is_string_type(rhs.type());
+
   if (
     (lhs_is_string && rhs_is_string) ||
-    (op == "Mult" && (lhs_is_string || rhs_is_string ||
-                      type_utils::is_char_type(lhs.type()) ||
-                      type_utils::is_char_type(rhs.type()))))
+    (op == "Mult" &&
+     (lhs_is_string || rhs_is_string || type_utils::is_char_type(lhs.type()) ||
+      type_utils::is_char_type(rhs.type()))))
   {
     const exprt &result = string_handler_.handle_string_operations(
       op, lhs, rhs, left, right, element);
