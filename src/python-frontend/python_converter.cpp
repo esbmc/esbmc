@@ -1604,9 +1604,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
+  // Check if both operands are strings
+  // Use both type_to_string (for compatibility) and is_string_type (for pointer types)
+  bool lhs_is_string = (lhs_type == "str") || type_utils::is_string_type(lhs.type());
+  bool rhs_is_string = (rhs_type == "str") || type_utils::is_string_type(rhs.type());
+  
   if (
-    (lhs_type == "str" && rhs_type == "str") ||
-    (op == "Mult" && (lhs_type == "str" || rhs_type == "str" ||
+    (lhs_is_string && rhs_is_string) ||
+    (op == "Mult" && (lhs_is_string || rhs_is_string ||
                       type_utils::is_char_type(lhs.type()) ||
                       type_utils::is_char_type(rhs.type()))))
   {

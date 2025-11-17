@@ -921,10 +921,21 @@ exprt python_list::handle_index_access(
       base.swap(deref);
     }
 
-    // Cast from void* to target type pointer and dereference
+    // For array types, return pointer to element type instead of pointer to array
+    // The dereference system doesn't support array types as target types
+    // Callers will handle the conversion when needed (similar to single-char string handling)
+    if (elem_type.is_array())
+    {
+      const array_typet &arr_type = to_array_type(elem_type);
+      // Cast to pointer to element type (e.g., char* instead of char[2]*)
+      typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
+      return tc;
+    }
+
+    // Cast from void* to target type pointer
     typecast_exprt tc(obj_value, pointer_typet(elem_type));
 
-    // Dereference to get the actual value
+    // Dereference to get the actual value (for non-array types)
     dereference_exprt deref(elem_type);
     deref.op0() = tc;
     return deref;
