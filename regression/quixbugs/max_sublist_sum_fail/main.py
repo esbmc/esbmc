@@ -8,4 +8,4 @@ def max_sublist_sum(arr:list[int]) -> int:
 
     return max_so_far
 
-assert max_sublist_sum([4, -5, 2, 1, -1, 3]) == 4
+assert max_sublist_sum([4, -5, 2, 1, -1, 3]) == 5
