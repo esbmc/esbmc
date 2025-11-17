@@ -766,10 +766,8 @@ exprt python_converter::handle_single_char_comparison(
   exprt &lhs,
   exprt &rhs)
 {
-  exprt lhs_char_value =
-    python_char_utils::get_char_value_as_int(lhs, false);
-  exprt rhs_char_value =
-    python_char_utils::get_char_value_as_int(rhs, false);
+  exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, false);
+  exprt rhs_char_value = python_char_utils::get_char_value_as_int(rhs, false);
 
   if (lhs_char_value.is_nil() || rhs_char_value.is_nil())
     return nil_exprt();
@@ -1304,10 +1302,8 @@ exprt python_converter::handle_string_type_mismatch(
   if (!((lhs_is_string && !rhs_is_string) || (!lhs_is_string && rhs_is_string)))
     return nil_exprt(); // No mismatch, return nil to indicate no action taken
 
-  exprt lhs_char_value =
-    python_char_utils::get_char_value_as_int(lhs, false);
-  exprt rhs_char_value =
-    python_char_utils::get_char_value_as_int(rhs, false);
+  exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, false);
+  exprt rhs_char_value = python_char_utils::get_char_value_as_int(rhs, false);
 
   if (!lhs_char_value.is_nil() && !rhs_char_value.is_nil())
   {

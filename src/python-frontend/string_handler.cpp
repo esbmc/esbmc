@@ -915,8 +915,7 @@ exprt string_handler::handle_string_membership(
   exprt &rhs,
   const nlohmann::json &element)
 {
-  exprt lhs_char_value =
-    python_char_utils::get_char_value_as_int(lhs, true);
+  exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, true);
 
   // Use strchr for single character membership testing
   if (!lhs_char_value.is_nil())

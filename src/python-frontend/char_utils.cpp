@@ -8,7 +8,6 @@
 
 namespace python_char_utils
 {
-
 namespace
 {
 bool is_char_array_of_length(const typet &type, std::size_t expected_length)
@@ -71,5 +70,3 @@ exprt get_char_value_as_int(const exprt &expr, bool allow_void_pointer)
 }
 
 } // namespace python_char_utils
-
-
