@@ -1,5 +1,5 @@
-#include <python-frontend/string_handler.h>
 #include <python-frontend/char_utils.h>
+#include <python-frontend/string_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/type_utils.h>
@@ -14,7 +14,6 @@
 #include <util/symbol.h>
 #include <util/type.h>
 
-#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <iomanip>
