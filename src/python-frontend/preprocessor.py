@@ -13,6 +13,7 @@ class Preprocessor(ast.NodeTransformer):
         self.iterable_loop_counter = 0  # Counter for unique variable names in nested iterable loops
         self.helper_functions_added = False  # Track if helper functions have been added
         self.functionKwonlyParams = {}
+        self.listcomp_counter = 0  # Counter for list comprehension temporaries
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -151,6 +152,129 @@ class Preprocessor(ast.NodeTransformer):
         """Create a Constant node with proper location info"""
         node = ast.Constant(value=value)
         return self.ensure_all_locations(node, source_node)
+
+    def _lower_listcomp(self, node):
+        """Lower a simple list comprehension into prefix statements and result expression."""
+        if len(node.generators) != 1:
+            raise NotImplementedError("Nested list comprehensions are not supported yet")
+
+        generator = node.generators[0]
+        if len(getattr(generator, "ifs", [])) > 1:
+            raise NotImplementedError("Only a single if-condition is supported in list comprehensions")
+        if getattr(generator, "is_async", False):
+            raise NotImplementedError("Async list comprehensions are not supported")
+
+        # Create a unique temporary list that will collect results.
+        tmp_name = f"ESBMC_listcomp_{self.listcomp_counter}"
+        self.listcomp_counter += 1
+
+        # Step 1: initialise the result list literal.
+        init_assign = ast.Assign(
+            targets=[self.create_name_node(tmp_name, ast.Store(), node)],
+            value=ast.List(elts=[], ctx=ast.Load())
+        )
+        self.ensure_all_locations(init_assign, node)
+        ast.fix_missing_locations(init_assign)
+
+        # Step 2: build the append expression that pushes each produced element.
+        append_expr = ast.Expr(
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=self.create_name_node(tmp_name, ast.Load(), node),
+                    attr="append",
+                    ctx=ast.Load()
+                ),
+                args=[self.visit(node.elt)],
+                keywords=[]
+            )
+        )
+        self.ensure_all_locations(append_expr, node.elt)
+
+        loop_body = [append_expr]
+        if generator.ifs:
+            # Wrap the append call in a conditional guard if the comprehension uses a filter.
+            cond = self.visit(generator.ifs[0])
+            self.ensure_all_locations(cond, generator.ifs[0])
+            if_stmt = ast.If(test=cond, body=loop_body, orelse=[])
+            self.ensure_all_locations(if_stmt, generator.ifs[0])
+            ast.fix_missing_locations(if_stmt)
+            loop_body = [if_stmt]
+
+        # Step 3: synthesise a for-loop that looks identical to the comprehension.
+        for_stmt = ast.For(
+            target=generator.target,
+            iter=self.visit(generator.iter),
+            body=loop_body,
+            orelse=[]
+        )
+        self.ensure_all_locations(for_stmt, node)
+        # Reuse the existing for-to-while lowering logic so we keep behaviour consistent.
+        transformed_for = self.visit_For(for_stmt)
+        if not isinstance(transformed_for, list):
+            transformed_for = [transformed_for]
+
+        for stmt in transformed_for:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        # The comprehension evaluates to the temporary list, so expose it to callers.
+        result_name = self.create_name_node(tmp_name, ast.Load(), node)
+        self.ensure_all_locations(result_name, node)
+
+        return [init_assign] + transformed_for, result_name
+
+    class _ListCompExpressionLowerer(ast.NodeTransformer):
+        """Utility transformer that lowers list comprehensions inside an expression."""
+
+        def __init__(self, preprocessor):
+            super().__init__()
+            self.preprocessor = preprocessor
+            self.statements = []
+
+        def visit_ListComp(self, node):
+            prefix, result_expr = self.preprocessor._lower_listcomp(node)
+            self.statements.extend(prefix)
+            return result_expr
+
+    def _lower_listcomp_in_expr(self, expr):
+        """Lower all list comprehensions inside an expression node."""
+        if expr is None:
+            return [], expr
+        lowerer = self._ListCompExpressionLowerer(self)
+        new_expr = lowerer.visit(expr)
+        return lowerer.statements, new_expr
+
+    def visit_Return(self, node):
+        node = self.generic_visit(node)
+        prefix, new_value = self._lower_listcomp_in_expr(node.value)
+        node.value = new_value
+        if prefix:
+            return prefix + [node]
+        return node
+
+    def visit_Expr(self, node):
+        node = self.generic_visit(node)
+        prefix, new_value = self._lower_listcomp_in_expr(node.value)
+        node.value = new_value
+        if prefix:
+            return prefix + [node]
+        return node
+
+    def visit_If(self, node):
+        node = self.generic_visit(node)
+        prefix, new_test = self._lower_listcomp_in_expr(node.test)
+        node.test = new_test
+        if prefix:
+            return prefix + [node]
+        return node
+
+    def visit_While(self, node):
+        node = self.generic_visit(node)
+        prefix, new_test = self._lower_listcomp_in_expr(node.test)
+        node.test = new_test
+        if prefix:
+            return prefix + [node]
+        return node
 
     def _extract_type_from_annotation(self, annotation):
         """Extract a simplified type string from a type annotation AST node"""
@@ -985,7 +1109,19 @@ class Preprocessor(ast.NodeTransformer):
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
         # First visit child nodes
-        self.generic_visit(node)
+        node = self.generic_visit(node)
+
+        prefix, lowered_value = self._lower_listcomp_in_expr(node.value)
+        if prefix:
+            if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                raise NotImplementedError("List comprehension assignment requires a simple target name")
+            node.value = lowered_value
+            lowered_assign = ast.Assign(targets=node.targets, value=node.value)
+            self._copy_location_info(node, lowered_assign)
+            self.ensure_all_locations(lowered_assign, node)
+            ast.fix_missing_locations(lowered_assign)
+            self.known_variable_types[node.targets[0].id] = 'list'
+            return prefix + [lowered_assign]
 
         # Handle single target (most common case)
         if len(node.targets) == 1:
@@ -1016,7 +1152,25 @@ class Preprocessor(ast.NodeTransformer):
     def visit_AnnAssign(self, node):
         """Track type annotations from annotated assignments like x: int = 5"""
         # First visit child nodes
-        self.generic_visit(node)
+        node = self.generic_visit(node)
+
+        if getattr(node, "value", None) is not None:
+            prefix, lowered_value = self._lower_listcomp_in_expr(node.value)
+            if prefix:
+                if not isinstance(node.target, ast.Name):
+                    raise NotImplementedError("Annotated list comprehension assignment requires a simple target name")
+                node.value = lowered_value
+                lowered_assign = ast.AnnAssign(
+                    target=node.target,
+                    annotation=node.annotation,
+                    value=node.value,
+                    simple=node.simple
+                )
+                self._copy_location_info(node, lowered_assign)
+                self.ensure_all_locations(lowered_assign, node)
+                ast.fix_missing_locations(lowered_assign)
+                self.known_variable_types[node.target.id] = 'list'
+                return prefix + [lowered_assign]
 
         # Track the type if target is a simple Name and has annotation
         if isinstance(node.target, ast.Name) and node.annotation is not None:
