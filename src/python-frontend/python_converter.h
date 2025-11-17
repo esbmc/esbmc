@@ -411,6 +411,12 @@ private:
   // Helper functions for character handling
   bool is_single_char_expr(const exprt &expr) const;
   exprt extract_char_value_as_int(const exprt &char_expr) const;
+  
+  // Create character comparison expression (extracted common logic)
+  exprt create_char_comparison_expr(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs) const;
 
   void process_forward_reference(
     const nlohmann::json &annotation,

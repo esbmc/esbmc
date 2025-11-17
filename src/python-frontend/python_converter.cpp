@@ -773,7 +773,7 @@ exprt python_converter::extract_char_value_as_int(const exprt &char_expr) const
   {
     return typecast_exprt(char_expr, signedbv_typet(8));
   }
-  
+
   // If it's a single character string (array), extract first character
   if (char_expr.type().is_array())
   {
@@ -781,9 +781,31 @@ exprt python_converter::extract_char_value_as_int(const exprt &char_expr) const
     exprt char_val = index_exprt(char_expr, zero_index, char_type());
     return typecast_exprt(char_val, signedbv_typet(8));
   }
-  
+
   // Should not reach here
   return char_expr;
+}
+
+exprt python_converter::create_char_comparison_expr(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  // Extract character values as integers
+  exprt lhs_char = extract_char_value_as_int(lhs);
+  exprt rhs_char = extract_char_value_as_int(rhs);
+
+  // Create comparison expression with integer operands
+  exprt comp_expr(get_op(op, bool_type()), bool_type());
+  comp_expr.copy_to_operands(lhs_char, rhs_char);
+
+  // Preserve location from original operands
+  if (!lhs.location().is_nil())
+    comp_expr.location() = lhs.location();
+  else if (!rhs.location().is_nil())
+    comp_expr.location() = rhs.location();
+
+  return comp_expr;
 }
 
 exprt python_converter::handle_single_char_comparison(
@@ -797,21 +819,8 @@ exprt python_converter::handle_single_char_comparison(
 
   if (lhs_is_char && rhs_is_char)
   {
-    // Extract character values as integers
-    exprt lhs_char = extract_char_value_as_int(lhs);
-    exprt rhs_char = extract_char_value_as_int(rhs);
-
-    // Create comparison expression with integer operands
-    exprt comp_expr(get_op(op, bool_type()), bool_type());
-    comp_expr.copy_to_operands(lhs_char, rhs_char);
-    
-    // Preserve location from original operands
-    if (!lhs.location().is_nil())
-      comp_expr.location() = lhs.location();
-    else if (!rhs.location().is_nil())
-      comp_expr.location() = rhs.location();
-
-    return comp_expr;
+    // Use shared helper function to create comparison expression
+    return create_char_comparison_expr(op, lhs, rhs);
   }
 
   return nil_exprt();
@@ -1353,24 +1362,7 @@ exprt python_converter::handle_string_type_mismatch(
   if ((lhs_is_char && rhs_is_single_char_str) || (lhs_is_single_char_str && rhs_is_char))
   {
     // Handle character vs single-character string comparison
-    if (op == "Eq" || op == "NotEq")
-    {
-      // Extract character values for comparison using helper function
-      exprt lhs_char = extract_char_value_as_int(lhs);
-      exprt rhs_char = extract_char_value_as_int(rhs);
-      
-      // Create comparison expression
-      exprt comp_expr(get_op(op, bool_type()), bool_type());
-      comp_expr.copy_to_operands(lhs_char, rhs_char);
-      
-      // Preserve location from original operands
-      if (!lhs.location().is_nil())
-        comp_expr.location() = lhs.location();
-      else if (!rhs.location().is_nil())
-        comp_expr.location() = rhs.location();
-      
-      return comp_expr;
-    }
+    return create_char_comparison_expr(op, lhs, rhs);
   }
 
   // Handle equality/inequality comparisons for other type mismatches
@@ -1516,10 +1508,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // Check for float vs string comparisons
     bool lhs_is_float = lhs.type().is_floatbv();
     bool rhs_is_float = rhs.type().is_floatbv();
-    bool lhs_is_string = type_utils::is_string_type(lhs.type());
-    bool rhs_is_string = type_utils::is_string_type(rhs.type());
+    bool lhs_is_str = type_utils::is_string_type(lhs.type());
+    bool rhs_is_str = type_utils::is_string_type(rhs.type());
 
-    if ((lhs_is_float && rhs_is_string) || (lhs_is_string && rhs_is_float))
+    if ((lhs_is_float && rhs_is_str) || (lhs_is_str && rhs_is_float))
     {
       // Create a binary expression for handle_float_vs_string with proper location
       exprt binary_expr(get_op(op, bool_type()), bool_type());
