@@ -1,15 +1,15 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_math.h>
+#include <python-frontend/string_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
-#include <python-frontend/string_handler.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/symbol_generator.h>
-#include <nlohmann/json.hpp>
 #include <map>
 #include <set>
 #include <utility>
@@ -146,7 +146,6 @@ private:
   friend class python_list;
   friend class tuple_handler;
   friend class python_class_builder;
-  bool processing_list_elements = false;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
