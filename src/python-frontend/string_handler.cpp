@@ -1,3 +1,4 @@
+#include <python-frontend/char_utils.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string_builder.h>
@@ -13,7 +14,6 @@
 #include <util/symbol.h>
 #include <util/type.h>
 
-#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <iomanip>
@@ -914,49 +914,10 @@ exprt string_handler::handle_string_membership(
   exprt &rhs,
   const nlohmann::json &element)
 {
-  // Get the width of char type from config
-  std::size_t char_width = config.ansi_c.char_width;
-
-  // Determine if lhs represents a single character or a string
-  bool lhs_is_single_char = false;
-
-  // Check if lhs is a direct char value
-  if (
-    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
-    bv_width(lhs.type()) == char_width)
-  {
-    lhs_is_single_char = true;
-  }
-
-  // Check if lhs is a void* (pointer with empty/nil subtype)
-  if (!lhs_is_single_char && lhs.type().is_pointer())
-  {
-    const typet &subtype = lhs.type().subtype();
-    if (subtype.is_nil() || subtype.id() == "empty")
-    {
-      lhs_is_single_char = true;
-    }
-  }
-
-  // Check if lhs is a symbol holding a character value (not pointer)
-  if (!lhs_is_single_char && lhs.is_symbol())
-  {
-    const symbolt *sym =
-      symbol_table_.find_symbol(lhs.get_string("identifier"));
-    if (sym)
-    {
-      const typet &sym_type = sym->type;
-      if (
-        (sym_type.is_signedbv() || sym_type.is_unsignedbv()) &&
-        bv_width(sym_type) == char_width)
-      {
-        lhs_is_single_char = true;
-      }
-    }
-  }
+  exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, true);
 
   // Use strchr for single character membership testing
-  if (lhs_is_single_char)
+  if (!lhs_char_value.is_nil())
   {
     symbolt *strchr_symbol = symbol_table_.find_symbol("c:@F@strchr");
     if (!strchr_symbol)
@@ -982,20 +943,7 @@ exprt string_handler::handle_string_membership(
     exprt rhs_str = ensure_null_terminated_string(rhs);
     exprt rhs_addr = get_array_base_address(rhs_str);
 
-    // Convert lhs to int for strchr
-    // If lhs is void*, first cast to char type, then to int
-    exprt char_as_int = lhs;
-    if (lhs.type().is_pointer())
-    {
-      const typet &subtype = lhs.type().subtype();
-      if (subtype.is_nil() || subtype.id() == "empty")
-      {
-        // lhs is void*, cast to char first
-        char_as_int = typecast_exprt(lhs, char_type());
-      }
-    }
-    // Now cast to int
-    char_as_int = typecast_exprt(char_as_int, int_type());
+    exprt char_as_int = typecast_exprt(lhs_char_value, int_type());
 
     // Call strchr(string, character)
     side_effect_expr_function_callt strchr_call;

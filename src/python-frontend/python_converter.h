@@ -10,7 +10,6 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/symbol_generator.h>
-
 #include <map>
 #include <set>
 #include <utility>
@@ -315,6 +314,9 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  exprt
+  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
+
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);
@@ -402,6 +404,14 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const std::string &op);
+
+  // Create character comparison expression from preprocessed operands
+  exprt create_char_comparison_expr(
+    const std::string &op,
+    const exprt &lhs_char_value,
+    const exprt &rhs_char_value,
+    const exprt &lhs_source,
+    const exprt &rhs_source) const;
 
   void process_forward_reference(
     const nlohmann::json &annotation,

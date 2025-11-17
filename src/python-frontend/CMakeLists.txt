@@ -27,6 +27,7 @@ add_library(pythonfrontend STATIC
             function_call_builder.cpp
             string_builder.cpp
             string_handler.cpp
+            char_utils.cpp
             parse_float.cpp
             tuple_handler.cpp
             convert_float_literal.cpp)

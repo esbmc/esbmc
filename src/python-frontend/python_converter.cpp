@@ -1,3 +1,4 @@
+#include <python-frontend/char_utils.h>
 #include <python-frontend/convert_float_literal.h>
 #include <python-frontend/function_call_builder.h>
 #include <python-frontend/json_utils.h>
@@ -740,6 +741,41 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
+exprt python_converter::create_char_comparison_expr(
+  const std::string &op,
+  const exprt &lhs_char_value,
+  const exprt &rhs_char_value,
+  const exprt &lhs_source,
+  const exprt &rhs_source) const
+{
+  // Create comparison expression with integer operands
+  exprt comp_expr(get_op(op, bool_type()), bool_type());
+  comp_expr.copy_to_operands(lhs_char_value, rhs_char_value);
+
+  // Preserve location from original operands
+  if (!lhs_source.location().is_nil())
+    comp_expr.location() = lhs_source.location();
+  else if (!rhs_source.location().is_nil())
+    comp_expr.location() = rhs_source.location();
+
+  return comp_expr;
+}
+
+exprt python_converter::handle_single_char_comparison(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs)
+{
+  exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, false);
+  exprt rhs_char_value = python_char_utils::get_char_value_as_int(rhs, false);
+
+  if (lhs_char_value.is_nil() || rhs_char_value.is_nil())
+    return nil_exprt();
+
+  return create_char_comparison_expr(
+    op, lhs_char_value, rhs_char_value, lhs, rhs);
+}
+
 exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
 {
   if (!expr.type().is_struct())
@@ -1266,7 +1302,16 @@ exprt python_converter::handle_string_type_mismatch(
   if (!((lhs_is_string && !rhs_is_string) || (!lhs_is_string && rhs_is_string)))
     return nil_exprt(); // No mismatch, return nil to indicate no action taken
 
-  // Handle equality/inequality comparisons
+  exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, false);
+  exprt rhs_char_value = python_char_utils::get_char_value_as_int(rhs, false);
+
+  if (!lhs_char_value.is_nil() && !rhs_char_value.is_nil())
+  {
+    return create_char_comparison_expr(
+      op, lhs_char_value, rhs_char_value, lhs, rhs);
+  }
+
+  // Handle equality/inequality comparisons for other type mismatches
   if (op == "Eq" || op == "NotEq")
   {
     // Python allows this comparison but it always returns False for Eq and True for NotEq
@@ -1398,13 +1443,21 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Handle type mismatches for relational operations
   if (type_utils::is_relational_op(op))
   {
+    // Check for single character string comparisons (for <, >, <=, >=)
+    if (type_utils::is_ordered_comparison(op))
+    {
+      exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
+      if (!char_comp_result.is_nil())
+        return char_comp_result;
+    }
+
     // Check for float vs string comparisons
     bool lhs_is_float = lhs.type().is_floatbv();
     bool rhs_is_float = rhs.type().is_floatbv();
-    bool lhs_is_string = type_utils::is_string_type(lhs.type());
-    bool rhs_is_string = type_utils::is_string_type(rhs.type());
+    bool lhs_is_str = type_utils::is_string_type(lhs.type());
+    bool rhs_is_str = type_utils::is_string_type(rhs.type());
 
-    if ((lhs_is_float && rhs_is_string) || (lhs_is_string && rhs_is_float))
+    if ((lhs_is_float && rhs_is_str) || (lhs_is_str && rhs_is_float))
     {
       // Create a binary expression for handle_float_vs_string with proper location
       exprt binary_expr(get_op(op, bool_type()), bool_type());
@@ -1489,11 +1542,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
+  // Check if both operands are strings
+  // Use both type_to_string (for compatibility) and is_string_type (for pointer types)
+  bool lhs_is_string =
+    (lhs_type == "str") || type_utils::is_string_type(lhs.type());
+  bool rhs_is_string =
+    (rhs_type == "str") || type_utils::is_string_type(rhs.type());
+
   if (
-    (lhs_type == "str" && rhs_type == "str") ||
-    (op == "Mult" && (lhs_type == "str" || rhs_type == "str" ||
-                      type_utils::is_char_type(lhs.type()) ||
-                      type_utils::is_char_type(rhs.type()))))
+    (lhs_is_string && rhs_is_string) ||
+    (op == "Mult" &&
+     (lhs_is_string || rhs_is_string || type_utils::is_char_type(lhs.type()) ||
+      type_utils::is_char_type(rhs.type()))))
   {
     const exprt &result = string_handler_.handle_string_operations(
       op, lhs, rhs, left, right, element);
@@ -2132,13 +2192,6 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return exprt(); // Not a string, no handling
 
   const std::string &str_val = value.get<std::string>();
-
-  // Handle single-character string as char literal
-  if (str_val.size() == 1 && !is_bytes_literal(element))
-  {
-    typet t = type_handler_.get_typet("str", str_val.size());
-    return from_integer(static_cast<unsigned char>(str_val[0]), t);
-  }
 
   // Handle string or byte literals
   typet t = current_element_type;
