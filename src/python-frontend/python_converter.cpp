@@ -1,3 +1,4 @@
+#include <python-frontend/char_utils.h>
 #include <python-frontend/convert_float_literal.h>
 #include <python-frontend/function_call_builder.h>
 #include <python-frontend/json_utils.h>
@@ -740,70 +741,22 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
-bool python_converter::is_single_char_expr(const exprt &expr) const
-{
-  // Direct char type (from string indexing)
-  if (expr.type() == char_type())
-    return true;
-
-  // Single character string (array of char with size 2)
-  if (!expr.type().is_array())
-    return false;
-
-  const array_typet &arr_type = to_array_type(expr.type());
-  if (arr_type.subtype() != char_type())
-    return false;
-
-  // Check if size is 2 (single character + null terminator)
-  if (arr_type.size().is_constant())
-  {
-    BigInt size = binary2integer(
-      arr_type.size().value().as_string(),
-      arr_type.size().type().is_signedbv());
-    return size == 2;
-  }
-
-  return false;
-}
-
-exprt python_converter::extract_char_value_as_int(const exprt &char_expr) const
-{
-  // If it's already a char type, convert directly to signed integer
-  if (char_expr.type() == char_type())
-  {
-    return typecast_exprt(char_expr, signedbv_typet(8));
-  }
-
-  // If it's a single character string (array), extract first character
-  if (char_expr.type().is_array())
-  {
-    exprt zero_index = from_integer(0, index_type());
-    exprt char_val = index_exprt(char_expr, zero_index, char_type());
-    return typecast_exprt(char_val, signedbv_typet(8));
-  }
-
-  // Should not reach here
-  return char_expr;
-}
-
 exprt python_converter::create_char_comparison_expr(
   const std::string &op,
-  const exprt &lhs,
-  const exprt &rhs) const
+  const exprt &lhs_char_value,
+  const exprt &rhs_char_value,
+  const exprt &lhs_source,
+  const exprt &rhs_source) const
 {
-  // Extract character values as integers
-  exprt lhs_char = extract_char_value_as_int(lhs);
-  exprt rhs_char = extract_char_value_as_int(rhs);
-
   // Create comparison expression with integer operands
   exprt comp_expr(get_op(op, bool_type()), bool_type());
-  comp_expr.copy_to_operands(lhs_char, rhs_char);
+  comp_expr.copy_to_operands(lhs_char_value, rhs_char_value);
 
   // Preserve location from original operands
-  if (!lhs.location().is_nil())
-    comp_expr.location() = lhs.location();
-  else if (!rhs.location().is_nil())
-    comp_expr.location() = rhs.location();
+  if (!lhs_source.location().is_nil())
+    comp_expr.location() = lhs_source.location();
+  else if (!rhs_source.location().is_nil())
+    comp_expr.location() = rhs_source.location();
 
   return comp_expr;
 }
@@ -813,17 +766,16 @@ exprt python_converter::handle_single_char_comparison(
   exprt &lhs,
   exprt &rhs)
 {
-  // Check if both operands represent single characters
-  bool lhs_is_char = is_single_char_expr(lhs);
-  bool rhs_is_char = is_single_char_expr(rhs);
+  exprt lhs_char_value =
+    python_char_utils::get_char_value_as_int(lhs, false);
+  exprt rhs_char_value =
+    python_char_utils::get_char_value_as_int(rhs, false);
 
-  if (lhs_is_char && rhs_is_char)
-  {
-    // Use shared helper function to create comparison expression
-    return create_char_comparison_expr(op, lhs, rhs);
-  }
+  if (lhs_char_value.is_nil() || rhs_char_value.is_nil())
+    return nil_exprt();
 
-  return nil_exprt();
+  return create_char_comparison_expr(
+    op, lhs_char_value, rhs_char_value, lhs, rhs);
 }
 
 exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
@@ -1352,19 +1304,15 @@ exprt python_converter::handle_string_type_mismatch(
   if (!((lhs_is_string && !rhs_is_string) || (!lhs_is_string && rhs_is_string)))
     return nil_exprt(); // No mismatch, return nil to indicate no action taken
 
-  // Check if this is a character vs single-character string comparison
-  // In Python, char == "c" should be compared character by character
-  bool lhs_is_char = (lhs.type() == char_type());
-  bool rhs_is_char = (rhs.type() == char_type());
-  bool lhs_is_single_char_str = is_single_char_expr(lhs);
-  bool rhs_is_single_char_str = is_single_char_expr(rhs);
+  exprt lhs_char_value =
+    python_char_utils::get_char_value_as_int(lhs, false);
+  exprt rhs_char_value =
+    python_char_utils::get_char_value_as_int(rhs, false);
 
-  if (
-    (lhs_is_char && rhs_is_single_char_str) ||
-    (lhs_is_single_char_str && rhs_is_char))
+  if (!lhs_char_value.is_nil() && !rhs_char_value.is_nil())
   {
-    // Handle character vs single-character string comparison
-    return create_char_comparison_expr(op, lhs, rhs);
+    return create_char_comparison_expr(
+      op, lhs_char_value, rhs_char_value, lhs, rhs);
   }
 
   // Handle equality/inequality comparisons for other type mismatches

@@ -1,16 +1,15 @@
 #pragma once
 
-#include <nlohmann/json.hpp>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_math.h>
-#include <python-frontend/string_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/string_handler.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/symbol_generator.h>
-
+#include <nlohmann/json.hpp>
 #include <map>
 #include <set>
 #include <utility>
@@ -147,6 +146,7 @@ private:
   friend class python_list;
   friend class tuple_handler;
   friend class python_class_builder;
+  bool processing_list_elements = false;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -315,8 +315,10 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
-  exprt
-  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
+  exprt handle_single_char_comparison(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs);
 
   void get_attributes_from_self(
     const nlohmann::json &method_body,
@@ -406,15 +408,13 @@ private:
     const exprt &rhs,
     const std::string &op);
 
-  // Helper functions for character handling
-  bool is_single_char_expr(const exprt &expr) const;
-  exprt extract_char_value_as_int(const exprt &char_expr) const;
-
-  // Create character comparison expression (extracted common logic)
+  // Create character comparison expression from preprocessed operands
   exprt create_char_comparison_expr(
     const std::string &op,
-    const exprt &lhs,
-    const exprt &rhs) const;
+    const exprt &lhs_char_value,
+    const exprt &rhs_char_value,
+    const exprt &lhs_source,
+    const exprt &rhs_source) const;
 
   void process_forward_reference(
     const nlohmann::json &annotation,

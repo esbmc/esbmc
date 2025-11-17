@@ -1,4 +1,5 @@
 #include <python-frontend/string_handler.h>
+#include <python-frontend/char_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/type_utils.h>
@@ -914,21 +915,11 @@ exprt string_handler::handle_string_membership(
   exprt &rhs,
   const nlohmann::json &element)
 {
-  // Determine if lhs represents a single character or a string
-  // Check if lhs is a void* (pointer with empty/nil subtype)
-  // This handles single-character strings from list iteration which are represented as void* pointers
-  bool lhs_is_single_char = false;
-  if (lhs.type().is_pointer())
-  {
-    const typet &subtype = lhs.type().subtype();
-    if (subtype.is_nil() || subtype.id() == "empty")
-    {
-      lhs_is_single_char = true;
-    }
-  }
+  exprt lhs_char_value =
+    python_char_utils::get_char_value_as_int(lhs, true);
 
   // Use strchr for single character membership testing
-  if (lhs_is_single_char)
+  if (!lhs_char_value.is_nil())
   {
     symbolt *strchr_symbol = symbol_table_.find_symbol("c:@F@strchr");
     if (!strchr_symbol)
@@ -954,12 +945,7 @@ exprt string_handler::handle_string_membership(
     exprt rhs_str = ensure_null_terminated_string(rhs);
     exprt rhs_addr = get_array_base_address(rhs_str);
 
-    // Convert lhs (void* pointer) to char value for strchr
-    // void* points to single-character string array, so cast to char* and dereference
-    typet char_ptr_type = gen_pointer_type(char_type());
-    exprt char_ptr = typecast_exprt(lhs, char_ptr_type);
-    exprt char_as_int = dereference_exprt(char_ptr, char_type());
-    char_as_int = typecast_exprt(char_as_int, int_type());
+    exprt char_as_int = typecast_exprt(lhs_char_value, int_type());
 
     // Call strchr(string, character)
     side_effect_expr_function_callt strchr_call;
