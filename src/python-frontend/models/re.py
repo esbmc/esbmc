@@ -111,8 +111,8 @@ def try_match_two_char_class_range(pattern: str, pattern_len: int, string: str) 
     ch8: str = pattern[8]
     ch10: str = pattern[10]
     ch11: str = pattern[11]
-    if not (ch0 == '^' and ch1 == '[' and ch3 == '-' and ch5 == ']' and
-            ch6 == '[' and ch8 == '-' and ch10 == ']' and ch11 == '$'):
+    if not (ch0 == '^' and ch1 == '[' and ch3 == '-' and ch5 == ']' and ch6 == '[' and ch8 == '-'
+            and ch10 == ']' and ch11 == '$'):
         return -1
 
     start_char1: str = pattern[2]
