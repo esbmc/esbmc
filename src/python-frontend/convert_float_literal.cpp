@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-Module: C++ Language Conversion
-
-Author: Daniel Kroening, kroening@kroening.com
-
-\*******************************************************************/
-
 #include <python-frontend/convert_float_literal.h>
 #include <python-frontend/parse_float.h>
 #include <util/arith_tools.h>

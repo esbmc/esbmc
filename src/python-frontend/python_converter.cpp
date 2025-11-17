@@ -1,25 +1,25 @@
-#include <python-frontend/python_converter.h>
-#include <python-frontend/json_utils.h>
-#include <python-frontend/type_utils.h>
-#include <python-frontend/symbol_id.h>
-#include <python-frontend/function_call_builder.h>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_class_builder.h>
-#include <python-frontend/module_locator.h>
-#include <python-frontend/string_builder.h>
-#include <python-frontend/tuple_handler.h>
 #include <python-frontend/convert_float_literal.h>
-#include <util/std_code.h>
-#include <util/c_types.h>
-#include <util/python_types.h>
-#include <util/c_typecast.h>
+#include <python-frontend/function_call_builder.h>
+#include <python-frontend/json_utils.h>
+#include <python-frontend/module_locator.h>
+#include <python-frontend/python_annotation.h>
+#include <python-frontend/python_class_builder.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/python_list.h>
+#include <python-frontend/string_builder.h>
+#include <python-frontend/symbol_id.h>
+#include <python-frontend/tuple_handler.h>
+#include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
+#include <util/c_typecast.h>
+#include <util/c_types.h>
+#include <util/encoding.h>
 #include <util/expr_util.h>
 #include <util/message.h>
-#include <util/encoding.h>
-#include <util/symbolic_types.h>
+#include <util/python_types.h>
+#include <util/std_code.h>
 #include <util/string_constant.h>
+#include <util/symbolic_types.h>
 
 #include <algorithm>
 #include <cmath>
@@ -660,7 +660,6 @@ exprt python_converter::handle_type_mismatches(
       return gen_boolean(op == "NotEq");
 
     // Both are string arrays: compare based on content
-    // check if empty
     bool lhs_empty = string_handler_.is_zero_length_array(lhs) ||
                      (lhs.is_constant() && lhs.operands().size() <= 1);
     bool rhs_empty = string_handler_.is_zero_length_array(rhs) ||
@@ -729,13 +728,13 @@ exprt python_converter::handle_string_comparison(
     throw std::runtime_error(
       "strcmp function not found in symbol table for string comparison");
 
-  side_effect_expr_function_callt strncmp_call;
-  strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {resolved_lhs, resolved_rhs};
-  strncmp_call.location() = get_location_from_decl(element);
-  strncmp_call.type() = int_type();
+  side_effect_expr_function_callt strcmp_call;
+  strcmp_call.function() = symbol_expr(*strncmp_symbol);
+  strcmp_call.arguments() = {resolved_lhs, resolved_rhs};
+  strcmp_call.location() = get_location_from_decl(element);
+  strcmp_call.type() = int_type();
 
-  lhs = strncmp_call;
+  lhs = strcmp_call;
   rhs = gen_zero(int_type());
 
   return nil_exprt(); // continue with lhs OP rhs
@@ -901,7 +900,7 @@ exprt python_converter::handle_str_join(const nlohmann::json &call_json)
   const nlohmann::json &list_arg = call_json["args"][0];
 
   // Currently only support Name references (e.g., variable names)
-  // TODO: Support direct List literals like " ".join(["a", "b"])
+  // TODO: Support direct List literals such as " ".join(["a", "b"])
   if (
     list_arg.contains("_type") && list_arg["_type"] == "Name" &&
     list_arg.contains("id"))
@@ -2313,7 +2312,6 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
   return false;
 }
 
-// Extract class name from tag (removes "tag-" prefix)
 std::string
 python_converter::extract_class_name_from_tag(const std::string &tag_name)
 {
@@ -2322,7 +2320,6 @@ python_converter::extract_class_name_from_tag(const std::string &tag_name)
   return tag_name;
 }
 
-// Create normalized self key for cross-method access
 std::string
 python_converter::create_normalized_self_key(const std::string &class_tag)
 {
@@ -2330,7 +2327,6 @@ python_converter::create_normalized_self_key(const std::string &class_tag)
   return "self@" + class_name;
 }
 
-// Clean attribute type by removing internal annotations
 typet python_converter::clean_attribute_type(const typet &attr_type)
 {
   typet clean_type = attr_type;
@@ -2340,7 +2336,6 @@ typet python_converter::clean_attribute_type(const typet &attr_type)
   return clean_type;
 }
 
-// Create member expression with cleaned type
 exprt python_converter::create_member_expression(
   const symbolt &symbol,
   const std::string &attr_name,
@@ -2381,7 +2376,6 @@ void python_converter::register_instance_attribute(
   }
 }
 
-// Check if attribute is an instance attribute
 bool python_converter::is_instance_attribute(
   const std::string &symbol_id,
   const std::string &attr_name,
@@ -2991,7 +2985,6 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
     " has no return statement");
 }
 
-// Extract type information from annotations
 std::pair<std::string, typet>
 python_converter::extract_type_info(const nlohmann::json &var_node)
 {
@@ -3028,7 +3021,6 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
   return {var_type_str, var_typet};
 }
 
-// Create LHS expression based on target type
 exprt python_converter::create_lhs_expression(
   const nlohmann::json &target,
   symbolt *lhs_symbol,
@@ -3050,7 +3042,6 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
-// Handle post-assignment type adjustments
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
