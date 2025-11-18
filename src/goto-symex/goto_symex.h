@@ -177,7 +177,6 @@ protected:
    *  @param old_guard Renamed guard on this jump occuring.
    */
   virtual void symex_goto(const expr2tc &old_guard);
-  std::unordered_set<unsigned int> seen_loop;
 
   /**
    *  Perform interpretation of RETURN instruction.
