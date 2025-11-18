@@ -3,6 +3,338 @@
 #include <stdint.h> // SIZE_MAX
 #include <string.h>
 
+/// Python predicates
+
+typedef void __PyObject;
+
+/**
+ * @typedef unaryfunc
+ * @brief Unary function pointer type
+ * 
+ * Function pointer type for unary operations on Python objects.
+ * Used for operations that take a single operand.
+ * 
+ * @param arg The Python object operand
+ * @return New reference to the result object, or NULL on error
+ * 
+ * @note Common uses include:
+ *       - Unary arithmetic operators (negation, positive, absolute value)
+ *       - Type conversions (int, float, str)
+ *       - Iterator protocol (__iter__)
+ */
+typedef __PyObject *(*unaryfunc)(__PyObject *);
+
+/**
+ * @typedef binaryfunc
+ * @brief Binary function pointer type
+ * 
+ * Function pointer type for binary operations on Python objects.
+ * Used for operations that take two operands.
+ * 
+ * @param left The left operand
+ * @param right The right operand
+ * @return New reference to the result object, or NULL on error
+ * 
+ * @note Common uses include:
+ *       - Binary arithmetic operators (+, -, *, /, //, %, **, etc.)
+ *       - Comparison operators
+ *       - Bitwise operators (&, |, ^, <<, >>)
+ *       - Container operations (subscript, concatenation)
+ */
+typedef __PyObject *(*binaryfunc)(__PyObject *, __PyObject *);
+
+/**
+ * @typedef ternaryfunc
+ * @brief Ternary function pointer type
+ * 
+ * Function pointer type for ternary operations on Python objects.
+ * Used for operations that take three operands.
+ * 
+ * @param arg1 The first operand
+ * @param arg2 The second operand
+ * @param arg3 The third operand
+ * @return New reference to the result object, or NULL on error
+ * 
+ * @note Primary use: pow(base, exp, mod) for the three-argument power function
+ *       Also used for __setitem__ with slice assignment
+ */
+typedef __PyObject *(*ternaryfunc)(__PyObject *, __PyObject *, __PyObject *);
+
+/**
+ * @typedef inquiry
+ * @brief Boolean query function pointer type
+ * 
+ * Function pointer type for predicate/query operations that return
+ * a boolean result as an integer.
+ * 
+ * @param self The Python object to query
+ * @return 1 for true, 0 for false, -1 on error
+ * 
+ * @note Common uses include:
+ *       - Boolean conversion (__bool__)
+ *       - Container membership testing
+ *       - Object state queries
+ */
+typedef int (*inquiry)(__PyObject *);
+
+/**
+ * @typedef lenfunc
+ * @brief Length query function pointer type
+ * 
+ * Function pointer type for obtaining the length/size of a Python object.
+ * 
+ * @param self The Python object to query
+ * @return The length/size of the object, or (size_t)-1 on error
+ * 
+ * @note Used for implementing __len__() protocol
+ *       Typical for containers (lists, tuples, dicts, sets, strings)
+ */
+typedef size_t (*lenfunc)(__PyObject *);
+
+/**
+ * @typedef ssizeargfunc
+ * @brief Indexed access function pointer type
+ * 
+ * Function pointer type for retrieving an item at a specific index.
+ * Takes a signed size type for the index.
+ * 
+ * @param self The container object
+ * @param index The index of the item to retrieve (may be negative)
+ * @return New reference to the item at the given index, or NULL on error
+ * 
+ * @note Used for implementing sequence indexing (__getitem__ with integer index)
+ *       Negative indices are typically interpreted as offsets from the end
+ */
+typedef __PyObject *(*ssizeargfunc)(__PyObject *, size_t);
+
+/**
+ * @typedef ssizeobjargproc
+ * @brief Indexed assignment function pointer type
+ * 
+ * Function pointer type for setting or deleting an item at a specific index.
+ * 
+ * @param self The container object
+ * @param index The index where the item should be set
+ * @param value The value to set, or NULL to delete the item
+ * @return 0 on success, -1 on error
+ * 
+ * @note Used for implementing sequence item assignment and deletion
+ *       (__setitem__ and __delitem__ with integer index)
+ *       When value is NULL, the item should be deleted
+ */
+typedef int (*ssizeobjargproc)(__PyObject *, size_t, __PyObject *);
+
+
+/**
+ * @typedef objobjargproc
+ * @brief Object-keyed assignment function pointer type
+ * 
+ * Function pointer type for setting or deleting items using object keys.
+ * 
+ * @param self The container object (typically a mapping)
+ * @param key The key object
+ * @param value The value to associate with the key, or NULL to delete
+ * @return 0 on success, -1 on error
+ * 
+ * @note Used for implementing mapping protocols:
+ *       - Dictionary item assignment (__setitem__)
+ *       - Dictionary item deletion (__delitem__)
+ *       When value is NULL, the key-value pair should be deleted
+ */
+typedef int (*objobjargproc)(__PyObject *, __PyObject *, __PyObject *);
+
+/**
+ * @typedef objobjproc
+ * @brief Binary object comparison/operation function pointer type
+ * 
+ * Function pointer type for operations that take two Python object arguments
+ * and return an integer result. This is a simpler variant of objobjargproc
+ * that does not involve assignment or deletion.
+ * 
+ * @param arg1 The first Python object
+ * @param arg2 The second Python object
+ * @return Integer result (semantics depend on the specific operation):
+ *         - For comparisons: -1, 0, or 1 (less than, equal, greater than)
+ *         - For boolean queries: 1 for true, 0 for false, -1 on error
+ *         - Operation-specific integer result on success, -1 on error
+ * 
+ * @note Common uses include:
+ *       - Rich comparison operators (__lt__, __le__, __eq__, __ne__, __gt__, __ge__)
+ *       - Binary predicate operations
+ *       - Custom comparison implementations
+ * 
+ * @see objobjargproc for the three-argument variant used in assignment
+ * @see binaryfunc for operations returning object pointers
+ */
+typedef int (*objobjproc)(__PyObject *, __PyObject *);
+
+/* typedef void (*freefunc)(void *); */
+/* typedef void (*destructor)(__PyObject *); */
+/* typedef __PyObject *(*reprfunc)(__PyObject *); */
+/* typedef __PyObject *(*getattrfunc)(__PyObject *, char *); */
+/* typedef __PyObject *(*getattrofunc)(__PyObject *, __PyObject *); */
+/* typedef int (*setattrfunc)(__PyObject *, char *, __PyObject *); */
+/* typedef int (*setattrofunc)(__PyObject *, __PyObject *, __PyObject *); */
+/* typedef PyObject *(*richcmpfunc) (PyObject *, PyObject *, int); */
+/* typedef PyObject *(*getiterfunc) (PyObject *); */
+/* typedef PyObject *(*iternextfunc) (PyObject *); */
+/* typedef PyObject *(*descrgetfunc) (PyObject *, PyObject *, PyObject *); */
+/* typedef int (*descrsetfunc) (PyObject *, PyObject *, PyObject *); */
+/* typedef int (*initproc)(PyObject *, PyObject *, PyObject *); */
+/* typedef PyObject *(*newfunc)(PyTypeObject *, PyObject *, PyObject *); */
+/* typedef PyObject *(*allocfunc)(PyTypeObject *, Py_ssize_t); */
+//typedef Py_hash_t (*hashfunc)(PyObject *);
+//typedef PyObject *(*ssizessizeargfunc)(PyObject *, Py_ssize_t, Py_ssize_t);
+//typedef int(*ssizessizeobjargproc)(PyObject *, Py_ssize_t, Py_ssize_t, PyObject *);
+//typedef int (*objobjproc)(PyObject *, PyObject *);
+//typedef int (*visitproc)(PyObject *, void *);
+//typedef int (*traverseproc)(PyObject *, visitproc, void *);
+
+// PySequence
+
+/**
+ * @struct PySequenceMethods
+ * @brief Sequence protocol implementation structure
+ * 
+ * This structure defines the function pointers for implementing the sequence
+ * protocol in CPython. It allows custom types to behave like sequences
+ * (lists, tuples, strings, etc.) by supporting indexing, slicing, iteration,
+ * and in-place operations.
+ */
+typedef struct {
+    /**
+     * @brief Length query function
+     * 
+     * Implements len(obj) and __len__() protocol.
+     * 
+     * @return The number of items in the sequence.
+     * 
+     * @note Required for most sequence operations
+     */
+    lenfunc sq_length;
+
+    /**
+     * @brief Concatenation operation
+     * 
+     * Implements obj1 + obj2 for sequences.
+     * 
+     * @param arg1 The left sequence operand
+     * @param arg2 The right sequence operand to concatenate
+     * @return New reference to concatenated sequence, or NULL on error
+     * 
+     * @note Maps to __add__() protocol
+     * @see sq_inplace_concat for in-place variant
+     */
+    binaryfunc sq_concat;
+
+    /**
+     * @brief Sequence repetition/multiplication operation
+     * 
+     * Implements obj * n and n * obj for sequences.
+     * 
+     * @param arg The sequence to repeat
+     * @param count Number of times to repeat the sequence
+     * @return New reference to repeated sequence, or NULL on error
+     * 
+     * @note Maps to __mul__() and __rmul__() protocols
+     * @see sq_inplace_repeat for in-place variant
+     */
+    ssizeargfunc sq_repeat;
+
+    /**
+     * @brief Item retrieval by index
+     * 
+     * Implements obj[index] for sequences (subscript access).
+     * 
+     * @param self The sequence object
+     * @param index The index of the item to retrieve (may be negative)
+     * @return New reference to the item at index, or NULL on error
+     * 
+     * @note Maps to __getitem__() with integer index
+     * @note Negative indices wrap around from the sequence end
+     * @note Called by PySequence_GetItem()
+     */
+    ssizeargfunc sq_item;
+
+    /**
+     * @brief Item assignment/deletion by index
+     * 
+     * Implements obj[index] = value and del obj[index] for sequences.
+     * 
+     * @param self The sequence object
+     * @param index The index of the item to set
+     * @param value The new value, or NULL to delete the item
+     * @return 0 on success, -1 on error
+     * 
+     * @note Maps to __setitem__() and __delitem__() with integer index
+     * @note When value is NULL, the item should be deleted
+     * @note Negative indices wrap around from the sequence end
+     * @note Called by PySequence_SetItem() and PySequence_DelItem()
+     */
+    ssizeobjargproc sq_ass_item;
+
+    /**
+     * @brief Deprecated slice assignment/deletion operation
+     * 
+     * Historically used for slice assignment obj[start:stop] = value
+     * before extended slicing was introduced.
+     * 
+     * @deprecated Set to NULL; slice assignment is now handled through
+     *             __setitem__ with slice objects
+     * @note Retained for binary compatibility with older code
+     */
+    void *was_sq_ass_slice;
+
+    /**
+     * @brief Membership test operation
+     * 
+     * Implements x in obj for sequences (membership testing).
+     * 
+     * @param self The sequence to search
+     * @param arg The value to search for
+     * @return 1 if arg is found in self, 0 if not found, -1 on error
+     * 
+     * @note Maps to __contains__() protocol
+     * @note If not implemented, falls back to linear search using sq_item
+     * @note Called by PySequence_Contains()
+     */
+    objobjproc sq_contains;
+
+    /**
+     * @brief In-place concatenation operation
+     * 
+     * Implements obj1 += obj2 for sequences (modifying obj1 in place).
+     * 
+     * @param self The sequence to modify (may be reallocated)
+     * @param arg The sequence to concatenate
+     * @return New reference to modified sequence, or NULL on error
+     * 
+     * @note Maps to __iadd__() protocol
+     * @note May return a new object if in-place modification isn't possible
+     * @note Called by PySequence_InPlaceConcat()
+     * @see sq_concat for the immutable variant
+     */
+    binaryfunc sq_inplace_concat;
+
+    /**
+     * @brief In-place repetition/multiplication operation
+     * 
+     * Implements obj *= n for sequences (modifying obj in place).
+     * 
+     * @param self The sequence to repeat and modify in place
+     * @param count Number of times to repeat the sequence
+     * @return New reference to modified sequence, or NULL on error
+     * 
+     * @note Maps to __imul__() protocol
+     * @note May return a new object if in-place modification isn't possible
+     * @note Called by PySequence_InPlaceRepeat()
+     * @see sq_repeat for the immutable variant
+     */
+    ssizeargfunc sq_inplace_repeat;
+} __PySequenceMethods;
+
+
+
 /** Based on CPython, the idea is to use a PyObject containing type information
  *  while each actual object is explicitly defined.
  */
@@ -12,11 +344,12 @@ typedef struct __ESBMC_PyType
   size_t tp_basicsize; /* Size of instance in bytes */
 
   // TODO: Extra features (vtables, constructors, members)
+  __PySequenceMethods as_sq;
+  
 } PyType;
 
 // TODO: There is no such a thing as a generic type in python.
 static PyType __ESBMC_generic_type;
-static PyType __ESBMC_list_type;
 
 /**
  * @brief Minimal representation of a Python-like object.
@@ -44,18 +377,9 @@ typedef struct __ESBMC_PyObj
   size_t size;       /**< Number of bytes in value */
 } PyObject;
 
-/**
- * @brief Minimal representation of a Python-like list object.
- *
- * Example usage in C:
- * @code
- * PyListObject list = {...};
- * for (size_t i = 0; i < list.size; ++i) {
- *   PyObject *item = &list.items[i];
- *   // Access fields like item->type_id or item->value here
- * }
- * @endcode
- */
+
+// List Type
+
 typedef struct __ESBMC_PyListObj
 {
   PyType *type;    /**< &PyListType */
@@ -63,10 +387,39 @@ typedef struct __ESBMC_PyListObj
   size_t size;     /**< Number of elements currently in use */
 } PyListObject;
 
+
+size_t __python_list_size(__PyObject *obj)
+{
+  PyListObject* l = (PyListObject *)obj;
+  return l ? l->size : 0;
+}
+
+
+static PyType __ESBMC_list_type;
+
+int value;
+PyType *get_list_type()
+{
+  if (value)
+    return &__ESBMC_list_type;
+
+  __ESBMC_list_type.tp_name = "PyList";
+  __ESBMC_list_type.tp_basicsize = 0;
+
+  __PySequenceMethods methods;
+  methods.sq_length =  __python_list_size;
+  __ESBMC_list_type.as_sq = methods;
+
+  value = 1;
+  return &__ESBMC_list_type;
+}
+
 PyObject *__ESBMC_create_inf_obj()
 {
   return NULL;
 };
+
+extern void *__ESBMC_alloca(size_t);
 
 PyListObject *__ESBMC_list_create()
 {
@@ -78,9 +431,9 @@ PyListObject *__ESBMC_list_create()
   return l;
 }
 
-size_t __ESBMC_list_size(const PyListObject *l)
+size_t __ESBMC_list_size(PyListObject *l)
 {
-  return l ? l->size : 0;
+  return get_list_type()->as_sq.sq_length(l);
 }
 
 bool __ESBMC_list_push(
@@ -104,8 +457,10 @@ bool __ESBMC_list_push(
 
 bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
 {
+  #ifdef __ESBMC_CHECK_OMS
   assert(l != NULL);
   assert(o != NULL);
+  #endif
   return __ESBMC_list_push(l, o->value, o->type_id, o->size);
 }
 
