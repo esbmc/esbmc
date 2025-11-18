@@ -376,54 +376,14 @@ typedef struct __ESBMC_PyListObj
 } PyListObject;
 
 
-size_t __python_list_size(__PyObject *obj)
-{
-  PyListObject* l = (PyListObject *)obj;
-  return l ? l->size : 0;
-}
-
-__PyObject *__python_list_concat(__PyObject *obj1, __PyObject *obj2)
-{
-  __ESBMC_assert(0, "Not implemented");
-  return NULL;
-}
-
-__PyObject *__python_list_repeat(__PyObject *self, size_t length)
-{
-  __ESBMC_assert(0, "Not implemented");
-  return NULL;
-}
-
-__PyObject *__python_list_index(__PyObject *self, size_t index)
-{
-  __ESBMC_assert(0, "Not implemented");
-  return NULL;
-}
-
-int __python_list_index_assignment(__PyObject *self, size_t index, __PyObject *value)
-{
-  __ESBMC_assert(0, "Not implemented");
-  return -1;
-}
-
-int __python_list_contains(__PyObject *self, __PyObject *member)
-{
-  __ESBMC_assert(0, "Not implemented");
-  return -1;
-}
-
-__PyObject *__python_list_in_concat(__PyObject *self, __PyObject *obj2)
-{
-  __ESBMC_assert(0, "Not implemented");
-  return NULL;
-}
-
-__PyObject *__python_list_in_repeat(__PyObject *self, size_t length)
-{
-  __ESBMC_assert(0, "Not implemented");
-  return NULL;
-}
-
+size_t __python_list_size(__PyObject *obj);
+__PyObject *__python_list_concat(__PyObject *obj1, __PyObject *obj2);
+__PyObject *__python_list_repeat(__PyObject *self, size_t length);
+__PyObject *__python_list_index(__PyObject *self, size_t index);
+int __python_list_index_assignment(__PyObject *self, size_t index, __PyObject *value);
+int __python_list_contains(__PyObject *self, __PyObject *member);
+__PyObject *__python_list_in_concat(__PyObject *self, __PyObject *obj2);
+__PyObject *__python_list_in_repeat(__PyObject *self, size_t length);
 
 static PyType __ESBMC_list_type;
 
@@ -465,7 +425,6 @@ PyListObject *__ESBMC_list_create()
   l->type = get_list_type();
   l->items = __ESBMC_create_inf_obj();
   l->size = 0;
-  //
   return l;
 }
 
@@ -533,8 +492,7 @@ bool __ESBMC_list_eq(const PyListObject *l1, const PyListObject *l2)
 
 PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
-  __ESBMC_assert(index < l->size, "out-of-bounds read in list");
-  return &l->items[index];
+  return l->type->as_sq.sq_item(l, index);
 }
 
 bool __ESBMC_list_insert(
@@ -625,4 +583,54 @@ void __ESBMC_list_clear(PyListObject *l)
   if (!l)
     return;
   l->size = 0;
+}
+
+
+size_t __python_list_size(__PyObject *obj)
+{
+  PyListObject* l = (PyListObject *)obj;
+  return l ? l->size : 0;
+}
+
+__PyObject *__python_list_concat(__PyObject *obj1, __PyObject *obj2)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return NULL;
+}
+
+__PyObject *__python_list_repeat(__PyObject *self, size_t length)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return NULL;
+}
+
+__PyObject *__python_list_index(__PyObject *self, size_t index)
+{
+  PyListObject *l = (PyListObject *)self;
+  __ESBMC_assert(index < l->size, "out-of-bounds read in list");
+  return &l->items[index];
+}
+
+int __python_list_index_assignment(__PyObject *self, size_t index, __PyObject *value)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return -1;
+}
+
+int __python_list_contains(__PyObject *self, __PyObject *member)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return -1;
+}
+
+__PyObject *__python_list_in_concat(__PyObject *self, __PyObject *obj2)
+{  
+  __ESBMC_assert(0, "Not implemented");
+  return NULL;
+}
+
+__PyObject *__python_list_in_repeat(__PyObject *self, size_t length)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return NULL;
 }
