@@ -80,6 +80,8 @@ void build_goto_trace(
     if (SSA_step.is_assignment())
     {
       goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
+      if (is_dereference2t(goto_trace_step.lhs))
+        continue;
 
       try
       {
