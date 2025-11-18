@@ -2957,6 +2957,13 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
       var_type_str = ann["attr"];
     else if (ann.contains("id"))
       var_type_str = var_node["annotation"]["id"];
+    else if (ann.contains("_type") && ann["_type"] == "BinOp")
+    {
+      // Handle union types (e.g., re.Match[str] | None)
+      // Use get_type_from_annotation which has proper union handling
+      var_typet = get_type_from_annotation(ann, var_node);
+      return {var_type_str, var_typet};
+    }
 
     if (var_type_str.empty())
       return {var_type_str, var_typet};
