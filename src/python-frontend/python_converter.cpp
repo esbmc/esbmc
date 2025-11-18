@@ -4993,9 +4993,30 @@ void python_converter::get_return_statements(
     else
       func_name = "func"; // fallback
 
+    // Determine return type: check if it's empty (forward reference)
+    typet return_type = return_value.type();
+
+    if (return_type.is_empty() || return_type.id() == typet::t_empty)
+    {
+      // Forward reference: function not yet processed
+      // Look up return type from AST
+      const auto &func_node =
+        json_utils::find_function((*ast_json)["body"], func_name);
+
+      if (
+        !func_node.empty() && func_node.contains("returns") &&
+        !func_node["returns"].is_null())
+        return_type = get_type_from_annotation(func_node["returns"], func_node);
+      else
+      {
+        // Default to void* if we can't determine the type
+        return_type = any_type();
+      }
+    }
+
     // Create temporary variable to store function call result
     symbolt temp_symbol =
-      create_return_temp_variable(return_value.type(), location, func_name);
+      create_return_temp_variable(return_type, location, func_name);
     symbol_table_.add(temp_symbol);
     exprt temp_var_expr = symbol_expr(temp_symbol);
 
@@ -5005,7 +5026,7 @@ void python_converter::get_return_statements(
     target_block.copy_to_operands(temp_decl);
 
     // Set the LHS of the function call to our temporary variable
-    if (!return_value.type().is_empty())
+    if (!return_type.is_empty())
       return_value.op0() = temp_var_expr;
 
     // If a constructor is being invoked, the temporary variable is passed as 'self'
