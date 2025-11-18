@@ -274,18 +274,6 @@ typedef struct {
     ssizeobjargproc sq_ass_item;
 
     /**
-     * @brief Deprecated slice assignment/deletion operation
-     * 
-     * Historically used for slice assignment obj[start:stop] = value
-     * before extended slicing was introduced.
-     * 
-     * @deprecated Set to NULL; slice assignment is now handled through
-     *             __setitem__ with slice objects
-     * @note Retained for binary compatibility with older code
-     */
-    void *was_sq_ass_slice;
-
-    /**
      * @brief Membership test operation
      * 
      * Implements x in obj for sequences (membership testing).
@@ -394,6 +382,48 @@ size_t __python_list_size(__PyObject *obj)
   return l ? l->size : 0;
 }
 
+__PyObject *__python_list_concat(__PyObject *obj1, __PyObject *obj2)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return NULL;
+}
+
+__PyObject *__python_list_repeat(__PyObject *self, size_t length)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return NULL;
+}
+
+__PyObject *__python_list_index(__PyObject *self, size_t index)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return NULL;
+}
+
+int __python_list_index_assignment(__PyObject *self, size_t index, __PyObject *value)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return -1;
+}
+
+int __python_list_contains(__PyObject *self, __PyObject *member)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return -1;
+}
+
+__PyObject *__python_list_in_concat(__PyObject *self, __PyObject *obj2)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return NULL;
+}
+
+__PyObject *__python_list_in_repeat(__PyObject *self, size_t length)
+{
+  __ESBMC_assert(0, "Not implemented");
+  return NULL;
+}
+
 
 static PyType __ESBMC_list_type;
 
@@ -407,7 +437,15 @@ PyType *get_list_type()
   __ESBMC_list_type.tp_basicsize = 0;
 
   __PySequenceMethods methods;
-  methods.sq_length =  __python_list_size;
+  methods.sq_length = __python_list_size;
+  methods.sq_concat = __python_list_concat;
+  methods.sq_repeat = __python_list_repeat;
+  methods.sq_item = __python_list_index;
+  methods.sq_ass_item = __python_list_index_assignment;
+  methods.sq_contains = __python_list_contains;
+  methods.sq_inplace_concat = __python_list_in_concat;
+  methods.sq_inplace_repeat = __python_list_in_repeat;
+  
   __ESBMC_list_type.as_sq = methods;
 
   value = 1;
@@ -424,7 +462,7 @@ extern void *__ESBMC_alloca(size_t);
 PyListObject *__ESBMC_list_create()
 {
   PyListObject *l = __ESBMC_alloca(sizeof(PyListObject));
-  l->type = &__ESBMC_list_type;
+  l->type = get_list_type();
   l->items = __ESBMC_create_inf_obj();
   l->size = 0;
   //
