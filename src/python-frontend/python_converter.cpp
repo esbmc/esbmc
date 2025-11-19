@@ -4868,17 +4868,29 @@ void python_converter::get_attributes_from_self(
     {
       const std::string &attr_name = stmt["target"]["attr"];
 
-      // Check if "id" exists before accessing it
-      if (!stmt["annotation"].contains("id"))
+      // Handle both simple names (id) and module-qualified names (Attribute)
+      std::string annotated_type;
+
+      if (stmt["annotation"].contains("id"))
+      {
+        // Simple type annotation such as self._md: Bar
+        annotated_type = stmt["annotation"]["id"].get<std::string>();
+      }
+      else if (
+        stmt["annotation"].contains("_type") &&
+        stmt["annotation"]["_type"] == "Attribute")
+      {
+        // Module-qualified type annotation like: self._md: md.Bar
+        // Extract just the class name (the attribute part)
+        annotated_type = stmt["annotation"]["attr"].get<std::string>();
+      }
+      else
       {
         log_warning(
           "Skipping attribute '{}' with unsupported annotation type",
           attr_name);
         continue;
       }
-
-      const std::string &annotated_type =
-        stmt["annotation"]["id"].get<std::string>();
 
       typet type;
       if (annotated_type == "str")
@@ -4889,8 +4901,7 @@ void python_converter::get_attributes_from_self(
         type = gen_pointer_type(base_type);
       }
       else
-        type =
-          type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
+        type = type_handler_.get_typet(annotated_type);
 
       struct_typet::componentt comp =
         build_component(current_class_name_, attr_name, type);
