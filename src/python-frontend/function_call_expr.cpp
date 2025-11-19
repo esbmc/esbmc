@@ -2324,6 +2324,132 @@ exprt function_call_expr::handle_general_function_call()
     arg_index++;
   }
 
+  // Add default arguments for missing parameters
+  size_t num_provided_args = call_["args"].size();
+  size_t total_params = params.size();
+
+  // Calculate how many arguments will actually be present after implicit additions
+  size_t num_actual_args = num_provided_args;
+
+  // For ClassMethod with no explicit args, check if object will be implicitly added
+  if (function_type_ == FunctionType::ClassMethod && call_["args"].empty())
+  {
+    // Check the exact conditions where the object is added as an argument
+    bool will_add_object = false;
+
+    if (obj_symbol)
+    {
+      std::string var_type =
+        type_handler_.get_var_type(obj_symbol->name.as_string());
+
+      if (var_type == "int")
+        will_add_object = true;
+    }
+
+    if (call_["func"]["value"]["_type"] == "BinOp")
+      will_add_object = true;
+
+    if (will_add_object)
+      num_actual_args = 1;
+  }
+
+  // Check if we should skip validation for numpy functions
+  // Numpy stub files often have incomplete/incorrect default parameter info
+  // TODO: we have to revisit the function signature handling for numpy functions
+  bool skip_validation = false;
+
+  if (call_["func"]["_type"] == "Attribute")
+  {
+    auto current = call_["func"]["value"];
+
+    // Walk up the attribute chain to get full module path
+    while (current["_type"] == "Attribute")
+      current = current["value"];
+
+    if (current["_type"] == "Name")
+    {
+      std::string root = current["id"].get<std::string>();
+
+      // Check if it starts with np or numpy
+      skip_validation = (root == "np" || root == "numpy");
+    }
+  }
+
+  // First, check if all required (non-default) parameters are provided
+  if (!skip_validation)
+  {
+    for (size_t param_idx = param_offset; param_idx < total_params; ++param_idx)
+    {
+      const auto &param_info = params[param_idx];
+      size_t arg_position = param_idx - param_offset;
+
+      // Check if this parameter was provided (either positionally or by keyword)
+      bool provided = arg_position < num_actual_args;
+
+      // Check if provided as keyword argument
+      if (
+        !provided && call_.contains("keywords") && call_["keywords"].is_array())
+      {
+        std::string param_name = param_info.get_base_name().as_string();
+        for (const auto &kw : call_["keywords"])
+        {
+          if (
+            kw.contains("arg") && !kw["arg"].is_null() &&
+            kw["arg"].get<std::string>() == param_name)
+          {
+            provided = true;
+            break;
+          }
+        }
+      }
+
+      // If not provided and has no default, it's an error
+      if (!provided && !param_info.has_default_value())
+      {
+        std::string param_name = param_info.get_base_name().as_string();
+        std::string func_name = function_id_.get_function();
+
+        std::ostringstream msg;
+        msg << func_name << "() missing required positional argument: '"
+            << param_name << "'";
+
+        exprt exception = gen_exception_raise("TypeError", msg.str());
+        locationt loc = converter_.get_location_from_decl(call_);
+        exception.location() = loc;
+        exception.location().user_provided(true);
+
+        return exception;
+      }
+    }
+  }
+
+  // Now add default arguments for missing optional parameters
+  for (size_t param_idx = num_provided_args + param_offset;
+       param_idx < total_params;
+       ++param_idx)
+  {
+    const auto &param_info = params[param_idx];
+
+    // Check if parameter has a default value
+    if (param_info.has_default_value())
+    {
+      exprt default_val = param_info.default_value();
+
+      // Handle Optional types: wrap default in Optional if needed
+      if (param_info.type().is_struct())
+      {
+        const struct_typet &struct_type = to_struct_type(param_info.type());
+        std::string tag = struct_type.tag().as_string();
+
+        if (tag.starts_with("tag-Optional_"))
+          default_val =
+            converter_.wrap_in_optional(default_val, param_info.type());
+      }
+
+      call.arguments().push_back(default_val);
+    }
+  }
+
   return call;
 }
 
