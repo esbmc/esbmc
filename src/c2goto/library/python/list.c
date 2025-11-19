@@ -124,7 +124,6 @@ typedef __PyObject *(*ssizeargfunc)(__PyObject *, size_t);
  */
 typedef int (*ssizeobjargproc)(__PyObject *, size_t, __PyObject *);
 
-
 /**
  * @typedef objobjargproc
  * @brief Object-keyed assignment function pointer type
@@ -168,6 +167,37 @@ typedef int (*objobjargproc)(__PyObject *, __PyObject *, __PyObject *);
  */
 typedef int (*objobjproc)(__PyObject *, __PyObject *);
 
+/**
+ * @typedef richcmpfunc
+ * @brief Rich comparison function pointer type
+ * 
+ * Function pointer type for implementing Python's rich comparison methods.
+ * 
+ * @param self The first Python object operand (usually the calling object)
+ * @param other The second Python object operand to compare against
+ * @param op An integer specifying the comparison operation, typically one of:
+ *        - Py_LT: less than
+ *        - Py_LE: less than or equal
+ *        - Py_EQ: equal
+ *        - Py_NE: not equal
+ *        - Py_GT: greater than
+ *        - Py_GE: greater than or equal
+ * @return New reference to a PyObject representing the result of the comparison,
+ *         typically Py_True or Py_False, or NULL on error.
+ * 
+ * @note This corresponds to the tp_richcompare slot in PyTypeObject.
+ *       It allows objects to implement full rich comparison semantics.
+ * @see PyObject_RichCompare(), PyTypeObject::tp_richcompare
+ */
+typedef _Bool (*richcmpfunc)(__PyObject *, __PyObject *, int);
+
+#define Py_LT 0
+#define Py_LE 1
+#define Py_EQ 2
+#define Py_NE 3
+#define Py_GT 4
+#define Py_GE 5
+
 /* typedef void (*freefunc)(void *); */
 /* typedef void (*destructor)(__PyObject *); */
 /* typedef __PyObject *(*reprfunc)(__PyObject *); */
@@ -175,7 +205,7 @@ typedef int (*objobjproc)(__PyObject *, __PyObject *);
 /* typedef __PyObject *(*getattrofunc)(__PyObject *, __PyObject *); */
 /* typedef int (*setattrfunc)(__PyObject *, char *, __PyObject *); */
 /* typedef int (*setattrofunc)(__PyObject *, __PyObject *, __PyObject *); */
-/* typedef PyObject *(*richcmpfunc) (PyObject *, PyObject *, int); */
+/*  */
 /* typedef PyObject *(*getiterfunc) (PyObject *); */
 /* typedef PyObject *(*iternextfunc) (PyObject *); */
 /* typedef PyObject *(*descrgetfunc) (PyObject *, PyObject *, PyObject *); */
@@ -201,8 +231,9 @@ typedef int (*objobjproc)(__PyObject *, __PyObject *);
  * (lists, tuples, strings, etc.) by supporting indexing, slicing, iteration,
  * and in-place operations.
  */
-typedef struct {
-    /**
+typedef struct
+{
+  /**
      * @brief Length query function
      * 
      * Implements len(obj) and __len__() protocol.
@@ -211,9 +242,9 @@ typedef struct {
      * 
      * @note Required for most sequence operations
      */
-    lenfunc sq_length;
+  lenfunc sq_length;
 
-    /**
+  /**
      * @brief Concatenation operation
      * 
      * Implements obj1 + obj2 for sequences.
@@ -225,9 +256,9 @@ typedef struct {
      * @note Maps to __add__() protocol
      * @see sq_inplace_concat for in-place variant
      */
-    binaryfunc sq_concat;
+  binaryfunc sq_concat;
 
-    /**
+  /**
      * @brief Sequence repetition/multiplication operation
      * 
      * Implements obj * n and n * obj for sequences.
@@ -239,9 +270,9 @@ typedef struct {
      * @note Maps to __mul__() and __rmul__() protocols
      * @see sq_inplace_repeat for in-place variant
      */
-    ssizeargfunc sq_repeat;
+  ssizeargfunc sq_repeat;
 
-    /**
+  /**
      * @brief Item retrieval by index
      * 
      * Implements obj[index] for sequences (subscript access).
@@ -254,9 +285,9 @@ typedef struct {
      * @note Negative indices wrap around from the sequence end
      * @note Called by PySequence_GetItem()
      */
-    ssizeargfunc sq_item;
+  ssizeargfunc sq_item;
 
-    /**
+  /**
      * @brief Item assignment/deletion by index
      * 
      * Implements obj[index] = value and del obj[index] for sequences.
@@ -271,9 +302,9 @@ typedef struct {
      * @note Negative indices wrap around from the sequence end
      * @note Called by PySequence_SetItem() and PySequence_DelItem()
      */
-    ssizeobjargproc sq_ass_item;
+  ssizeobjargproc sq_ass_item;
 
-    /**
+  /**
      * @brief Membership test operation
      * 
      * Implements x in obj for sequences (membership testing).
@@ -286,9 +317,9 @@ typedef struct {
      * @note If not implemented, falls back to linear search using sq_item
      * @note Called by PySequence_Contains()
      */
-    objobjproc sq_contains;
+  objobjproc sq_contains;
 
-    /**
+  /**
      * @brief In-place concatenation operation
      * 
      * Implements obj1 += obj2 for sequences (modifying obj1 in place).
@@ -302,9 +333,9 @@ typedef struct {
      * @note Called by PySequence_InPlaceConcat()
      * @see sq_concat for the immutable variant
      */
-    binaryfunc sq_inplace_concat;
+  binaryfunc sq_inplace_concat;
 
-    /**
+  /**
      * @brief In-place repetition/multiplication operation
      * 
      * Implements obj *= n for sequences (modifying obj in place).
@@ -318,10 +349,8 @@ typedef struct {
      * @note Called by PySequence_InPlaceRepeat()
      * @see sq_repeat for the immutable variant
      */
-    ssizeargfunc sq_inplace_repeat;
+  ssizeargfunc sq_inplace_repeat;
 } __PySequenceMethods;
-
-
 
 /** Based on CPython, the idea is to use a PyObject containing type information
  *  while each actual object is explicitly defined.
@@ -332,8 +361,9 @@ typedef struct __ESBMC_PyType
   size_t tp_basicsize; /* Size of instance in bytes */
 
   // TODO: Extra features (vtables, constructors, members)
+  richcmpfunc comparation;
   __PySequenceMethods as_sq;
-  
+
 } PyType;
 
 // TODO: There is no such a thing as a generic type in python.
@@ -365,7 +395,6 @@ typedef struct __ESBMC_PyObj
   size_t size;       /**< Number of bytes in value */
 } PyObject;
 
-
 // List Type
 
 typedef struct __ESBMC_PyListObj
@@ -375,16 +404,18 @@ typedef struct __ESBMC_PyListObj
   size_t size;     /**< Number of elements currently in use */
 } PyListObject;
 
-
 size_t __python_list_size(__PyObject *obj);
 __PyObject *__python_list_concat(__PyObject *obj1, __PyObject *obj2);
 __PyObject *__python_list_repeat(__PyObject *self, size_t length);
 __PyObject *__python_list_index(__PyObject *self, size_t index);
-int __python_list_index_assignment(__PyObject *self, size_t index, __PyObject *value);
+int __python_list_index_assignment(
+  __PyObject *self,
+  size_t index,
+  __PyObject *value);
 int __python_list_contains(__PyObject *self, __PyObject *member);
 __PyObject *__python_list_in_concat(__PyObject *self, __PyObject *obj2);
 __PyObject *__python_list_in_repeat(__PyObject *self, size_t length);
-
+_Bool __python_list_cmp(__PyObject *a, __PyObject *b, int op);
 static PyType __ESBMC_list_type;
 
 int value;
@@ -396,6 +427,8 @@ PyType *get_list_type()
   __ESBMC_list_type.tp_name = "PyList";
   __ESBMC_list_type.tp_basicsize = 0;
 
+  __ESBMC_list_type.comparation = __python_list_cmp;
+
   __PySequenceMethods methods;
   methods.sq_length = __python_list_size;
   methods.sq_concat = __python_list_concat;
@@ -405,7 +438,6 @@ PyType *get_list_type()
   methods.sq_contains = __python_list_contains;
   methods.sq_inplace_concat = __python_list_in_concat;
   methods.sq_inplace_repeat = __python_list_in_repeat;
-  
   __ESBMC_list_type.as_sq = methods;
 
   value = 1;
@@ -454,45 +486,21 @@ bool __ESBMC_list_push(
 
 bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
 {
-  #ifdef __ESBMC_CHECK_OMS
+#ifdef __ESBMC_CHECK_OMS
   assert(l != NULL);
   assert(o != NULL);
-  #endif
+#endif
   return __ESBMC_list_push(l, o->value, o->type_id, o->size);
 }
 
-bool __ESBMC_list_eq(const PyListObject *l1, const PyListObject *l2)
+bool __ESBMC_list_eq(PyListObject *l1, PyListObject *l2)
 {
-  if (!l1 || !l2)
-    return false;
-  if (__ESBMC_same_object(l1, l2))
-    return true;
-  if (l1->size != l2->size)
-    return false;
-
-  size_t i = 0, end = l1->size;
-
-  // BUG: Something weird is happening when I change this while into a FOR
-  while (i < end)
-  {
-    const PyObject *a = &l1->items[i];
-    const PyObject *b = &l2->items[i++];
-
-    // Same address => element equal; keep checking the rest.
-    if (a->value == b->value)
-      continue;
-
-    if (
-      !a->value || !b->value || a->type_id != b->type_id ||
-      a->size != b->size || memcmp(a->value, b->value, a->size) != 0)
-      return false;
-  }
-  return true;
+  return get_list_type()->comparation(l1, l2, Py_EQ);
 }
 
 PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
-  return l->type->as_sq.sq_item(l, index);
+  return get_list_type()->as_sq.sq_item(l, index);
 }
 
 bool __ESBMC_list_insert(
@@ -585,10 +593,9 @@ void __ESBMC_list_clear(PyListObject *l)
   l->size = 0;
 }
 
-
 size_t __python_list_size(__PyObject *obj)
 {
-  PyListObject* l = (PyListObject *)obj;
+  PyListObject *l = (PyListObject *)obj;
   return l ? l->size : 0;
 }
 
@@ -611,7 +618,10 @@ __PyObject *__python_list_index(__PyObject *self, size_t index)
   return &l->items[index];
 }
 
-int __python_list_index_assignment(__PyObject *self, size_t index, __PyObject *value)
+int __python_list_index_assignment(
+  __PyObject *self,
+  size_t index,
+  __PyObject *value)
 {
   __ESBMC_assert(0, "Not implemented");
   return -1;
@@ -624,7 +634,7 @@ int __python_list_contains(__PyObject *self, __PyObject *member)
 }
 
 __PyObject *__python_list_in_concat(__PyObject *self, __PyObject *obj2)
-{  
+{
   __ESBMC_assert(0, "Not implemented");
   return NULL;
 }
@@ -633,4 +643,42 @@ __PyObject *__python_list_in_repeat(__PyObject *self, size_t length)
 {
   __ESBMC_assert(0, "Not implemented");
   return NULL;
+}
+
+_Bool __python_list_cmp(__PyObject *lhs, __PyObject *rhs, int op)
+{
+#ifdef __ESBMC_CHECK_OMS
+  __ESBMC_assert(op == Py_EQ, "Only equality supported for now");
+#endif
+  if (op != Py_EQ)
+    return nondet_bool();
+  if (!lhs || !rhs)
+    return false;
+  if (__ESBMC_same_object(lhs, rhs))
+    return true;
+
+  PyListObject *l1 = (PyListObject *)lhs;
+  PyListObject *l2 = (PyListObject *)rhs;
+
+  if (l1->size != l2->size)
+    return false;
+
+  size_t i = 0, end = l1->size;
+
+  // BUG: Something weird is happening when I change this while into a FOR
+  while (i < end)
+  {
+    const PyObject *a = &l1->items[i];
+    const PyObject *b = &l2->items[i++];
+
+    // Same address => element equal; keep checking the rest.
+    if (a->value == b->value)
+      continue;
+
+    if (
+      !a->value || !b->value || a->type_id != b->type_id ||
+      a->size != b->size || memcmp(a->value, b->value, a->size) != 0)
+      return false;
+  }
+  return true;
 }
