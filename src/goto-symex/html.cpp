@@ -717,24 +717,31 @@ html_report::Language html_report::detect_language(const std::string &filepath)
 std::string html_report::code_lines::to_html() const
 {
   // TODO: C++23 has constexpr for regex
-  // TODO: Support for comments
-  constexpr std::array keywords{
-    "auto",     "break",  "case",    "char",   "const",    "continue",
-    "default",  "do",     "double",  "else",   "enum",     "extern",
-    "float",    "for",    "goto",    "if",     "int",      "long",
-    "register", "return", "short",   "signed", "sizeof",   "static",
-    "struct",   "switch", "typedef", "union",  "unsigned", "void",
-    "volatile", "while"};
+  // Use static regex objects for better performance (constructed only once)
+  static const std::regex cpp_keywords_regex(
+    "\\b(auto|break|case|char|const|continue|default|do|double|else|enum|"
+    "extern|float|for|goto|if|int|long|register|return|short|signed|sizeof|"
+    "static|struct|switch|typedef|union|unsigned|void|volatile|while)"
+    "\\b(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)");
 
-  std::string output(content);
-  for (const auto &word : keywords)
-  {
-    std::regex e(
-      fmt::format("(\\b({}))(\\b)(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)", word));
-    output = std::regex_replace(
-      output, e, fmt::format("<span class='keyword'>{}</span>", word));
-  }
-  return output;
+  static const std::regex python_keywords_regex(
+    "\\b(False|None|True|and|as|assert|async|await|break|class|continue|def|"
+    "del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|"
+    "nonlocal|not|or|pass|raise|return|try|while|with|yield)"
+    "\\b(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)");
+
+  // Choose regex based on language
+  const std::regex *keywords_regex;
+  if (language == Language::Python)
+    keywords_regex = &python_keywords_regex;
+  else if (language == Language::C_CPP)
+    keywords_regex = &cpp_keywords_regex;
+  else
+    return content; // No highlighting for unknown languages
+
+  // Single regex_replace instead of loop - much faster!
+  return std::regex_replace(
+    content, *keywords_regex, "<span class='keyword'>$&</span>");
 }
 std::string html_report::code_steps::to_html(size_t last) const
 {
