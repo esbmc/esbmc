@@ -408,6 +408,7 @@ private:
     std::string to_html() const;
   };
 
+  static Language detect_language(const std::string &filepath);
   struct code_steps
   {
     code_steps(const size_t step, const std::string &msg, bool is_jump)
@@ -542,6 +543,8 @@ void html_report::print_file_table(
   std::ostream &os,
   std::pair<const std::string_view, size_t> file) const
 {
+  // Detect language from file extension
+  Language lang = detect_language(std::string(file.first));
   std::vector<code_lines> lines;
   {
     std::ifstream input(std::string(file.first));
@@ -650,6 +653,28 @@ void generate_html_report(
 
   std::ofstream html(fmt::format("report-{}.html", uuid));
   report.output(html);
+}
+
+html_report::Language html_report::detect_language(const std::string &filepath)
+{
+  if (filepath.empty())
+    return Language::Unknown;
+
+  // Check file extension
+  size_t dot_pos = filepath.find_last_of('.');
+  if (dot_pos == std::string::npos)
+    return Language::Unknown;
+
+  std::string ext = filepath.substr(dot_pos);
+
+  if (ext == ".py")
+    return Language::Python;
+  else if (
+    ext == ".c" || ext == ".cpp" || ext == ".cc" || ext == ".cxx" ||
+    ext == ".h" || ext == ".hpp" || ext == ".hh" || ext == ".hxx")
+    return Language::C_CPP;
+
+  return Language::Unknown;
 }
 
 std::string html_report::code_lines::to_html() const
