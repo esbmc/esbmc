@@ -397,10 +397,14 @@ private:
 
   struct code_lines
   {
-    explicit code_lines(const std::string &content) : content(content)
+    explicit code_lines(
+      const std::string &content,
+      Language lang = Language::C_CPP)
+      : content(content), language(lang)
     {
     }
     const std::string content;
+    Language language;
     std::string to_html() const;
   };
 
