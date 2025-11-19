@@ -242,28 +242,41 @@ def emit_module_json(
 
 
 def process_collected_imports(output_dir):
-    for module_name, import_info in list(module_imports.items()):
-        imported_elements = None if import_info['import_all'] \
-            else [ast.alias(name, None) for name in import_info['specific_names']]
+    # Keep processing until no new modules are discovered
+    processed_modules = set()
 
-        # Attempt to resolve and emit JSON for imported submodules (e.g., "pkg.sub")
-        if import_info['specific_names']:
-            for name in list(import_info['specific_names']):
-                emit_module_json(f"{module_name}.{name}", output_dir)
+    while True:
+        # Get modules that haven't been processed yet
+        modules_to_process = set(module_imports.keys()) - processed_modules
 
-        # Emit the module itself
-        filename = resolve_module_file(module_name, output_dir)
-        if not filename:
-            continue
+        if not modules_to_process:
+            break
 
-        # Parse once, fix relative imports, collect nested imports
-        tree = parse_file(filename)
-        for subnode in ast.walk(tree):
-            if isinstance(subnode, (ast.Import, ast.ImportFrom)):
-                rewrite_relative_import(subnode, module_name)
-                process_imports(subnode, output_dir)
+        for module_name in modules_to_process:
+            import_info = module_imports[module_name]
+            processed_modules.add(module_name)
 
-        generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
+            imported_elements = None if import_info['import_all'] \
+                else [ast.alias(name, None) for name in import_info['specific_names']]
+
+            # Attempt to resolve and emit JSON for imported submodules (e.g., "pkg.sub")
+            if import_info['specific_names']:
+                for name in list(import_info['specific_names']):
+                    emit_module_json(f"{module_name}.{name}", output_dir)
+
+            # Emit the module itself
+            filename = resolve_module_file(module_name, output_dir)
+            if not filename:
+                continue
+
+            # Parse once, fix relative imports, collect nested imports
+            tree = parse_file(filename)
+            for subnode in ast.walk(tree):
+                if isinstance(subnode, (ast.Import, ast.ImportFrom)):
+                    rewrite_relative_import(subnode, module_name)
+                    process_imports(subnode, output_dir)
+
+            generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
 
 
 def rewrite_relative_import(node, parent_module: str | None):
