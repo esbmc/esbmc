@@ -3353,12 +3353,12 @@ void python_converter::get_var_assign(
       symbol.lvalue = true;
       symbol.file_local = true;
       symbol.is_extern = false;
-      
+
       // Track if this is a new symbol (not just overwriting an existing one)
       symbol_created = (lhs_symbol == nullptr);
-      
+
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
-      
+
       // Add declaration statement ONLY for newly created local variables
       // This ensures they are registered in current_names during symex to avoid
       // being incorrectly classified as level2_global in pointer analysis
