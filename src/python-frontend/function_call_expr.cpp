@@ -666,6 +666,48 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
         "ord() expected string of length 1, but " + py_type + " found");
     }
 
+    // For runtime variables (mutable), try to extract constant value if available
+    if (sym->lvalue && !sym->value.is_nil())
+    {
+      auto value_opt = extract_string_from_symbol(sym);
+      if (value_opt)
+      {
+        // Successfully extracted constant value from lvalue string
+        code_point = decode_utf8_codepoint(*value_opt);
+
+        // Remove Name data
+        arg["_type"] = "Constant";
+        arg.erase("id");
+        arg.erase("ctx");
+
+        // Replace the arg with the integer value
+        arg["value"] = code_point;
+        arg["type"] = "int";
+
+        // Build and return the integer expression
+        exprt expr = converter_.get_expr(arg);
+        expr.type() = type_handler_.get_typet("int", 0);
+        return expr;
+      }
+      // If extraction failed for lvalue, fall through to runtime conversion
+    }
+
+    // Use runtime conversion for variables without constant value or failed extraction
+    if (sym->value.is_nil() || sym->lvalue)
+    {
+      exprt var_expr = converter_.get_expr(arg);
+
+      if (
+        var_expr.type() == char_type() || var_expr.type().is_signedbv() ||
+        var_expr.type().is_unsignedbv())
+      {
+        return typecast_exprt(var_expr, int_type());
+      }
+
+      return gen_exception_raise("ValueError", "ord() requires a character");
+    }
+
+    // Compile-time extraction for constant symbols
     auto value_opt = extract_string_from_symbol(sym);
     if (!value_opt)
     {
