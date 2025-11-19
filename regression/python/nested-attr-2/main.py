@@ -1,4 +1,4 @@
-# Test case 5: Three-level nested attribute access
+# Test case 2: Three-level nested attribute access
 class Level3:
     def get_value(self) -> int:
         return 999

@@ -1,12 +1,7 @@
-# Test case 10: Nested attribute with method returning object (chaining)
+# Test case 7: Nested attribute with method returning object (chaining)
 class Node:
     def __init__(self, value: int) -> None:
         self.value: int = value
-        self.next: 'Node' = None
-
-    def set_next(self, node: 'Node') -> 'Node':
-        self.next = node
-        return self
 
     def get_value(self) -> int:
         return self.value

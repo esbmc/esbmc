@@ -1,4 +1,4 @@
-# Test case 11: Mixed nested attributes with different types
+# Test case 8: Mixed nested attributes with different types
 class StringProcessor:
     def process(self, s: str) -> str:
         return "HELLO" if s == "hello" else s

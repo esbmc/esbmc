@@ -1,4 +1,4 @@
-# Test case 12: Nested attribute in complex expression
+# Test case 9: Nested attribute in complex expression
 class Math:
     def square(self, x: int) -> int:
         return x * x
