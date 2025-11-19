@@ -1,5 +1,4 @@
 CORE
 main.py
 
-^ERROR: TypeError: foo\(\) missing 1 required positional argument: \'a\'$
-
+^  Throwing an exception of type TypeError but there is not catch for it.$
