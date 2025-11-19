@@ -3337,6 +3337,7 @@ void python_converter::get_var_assign(
     }
 
     // Symbol creation
+    bool symbol_created = false;
     if (!lhs_symbol || !is_global)
     {
       // Debug module name
@@ -3352,7 +3353,21 @@ void python_converter::get_var_assign(
       symbol.lvalue = true;
       symbol.file_local = true;
       symbol.is_extern = false;
+
+      // Track if this is a new symbol (not just overwriting an existing one)
+      symbol_created = (lhs_symbol == nullptr);
+
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+
+      // Add declaration statement ONLY for newly created local variables
+      // This ensures they are registered in current_names during symex to avoid
+      // being incorrectly classified as level2_global in pointer analysis
+      if (symbol_created && !current_func_name_.empty() && !is_global)
+      {
+        code_declt decl(symbol_expr(*lhs_symbol));
+        decl.location() = location_begin;
+        target_block.copy_to_operands(decl);
+      }
     }
 
     // Check for uninitialized usage
