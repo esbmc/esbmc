@@ -3,16 +3,20 @@
 #include <stdint.h> // SIZE_MAX
 #include <string.h>
 
-/// Python predicates
+/**
+ * This file starts as a implementation of the Python List, however, it ended up being a full blown
+ * Python Interpreter for ESBMC. I could split these in multiple files... but lets keep it a single for now
+*/
+
+/*****************************/
+/* CPython inspired typedefs */
+/*****************************/
 
 typedef void __PyObject;
 
 /**
  * @typedef unaryfunc
  * @brief Unary function pointer type
- * 
- * Function pointer type for unary operations on Python objects.
- * Used for operations that take a single operand.
  * 
  * @param arg The Python object operand
  * @return New reference to the result object, or NULL on error
@@ -28,18 +32,13 @@ typedef __PyObject *(*unaryfunc)(__PyObject *);
  * @typedef binaryfunc
  * @brief Binary function pointer type
  * 
- * Function pointer type for binary operations on Python objects.
- * Used for operations that take two operands.
- * 
  * @param left The left operand
  * @param right The right operand
  * @return New reference to the result object, or NULL on error
  * 
  * @note Common uses include:
  *       - Binary arithmetic operators (+, -, *, /, //, %, **, etc.)
- *       - Comparison operators
  *       - Bitwise operators (&, |, ^, <<, >>)
- *       - Container operations (subscript, concatenation)
  */
 typedef __PyObject *(*binaryfunc)(__PyObject *, __PyObject *);
 
@@ -47,16 +46,10 @@ typedef __PyObject *(*binaryfunc)(__PyObject *, __PyObject *);
  * @typedef ternaryfunc
  * @brief Ternary function pointer type
  * 
- * Function pointer type for ternary operations on Python objects.
- * Used for operations that take three operands.
- * 
  * @param arg1 The first operand
  * @param arg2 The second operand
  * @param arg3 The third operand
  * @return New reference to the result object, or NULL on error
- * 
- * @note Primary use: pow(base, exp, mod) for the three-argument power function
- *       Also used for __setitem__ with slice assignment
  */
 typedef __PyObject *(*ternaryfunc)(__PyObject *, __PyObject *, __PyObject *);
 
@@ -64,18 +57,12 @@ typedef __PyObject *(*ternaryfunc)(__PyObject *, __PyObject *, __PyObject *);
  * @typedef inquiry
  * @brief Boolean query function pointer type
  * 
- * Function pointer type for predicate/query operations that return
- * a boolean result as an integer.
- * 
- * @param self The Python object to query
- * @return 1 for true, 0 for false, -1 on error
- * 
  * @note Common uses include:
  *       - Boolean conversion (__bool__)
  *       - Container membership testing
  *       - Object state queries
  */
-typedef int (*inquiry)(__PyObject *);
+typedef _Bool (*inquiry)(__PyObject *);
 
 /**
  * @typedef lenfunc
@@ -190,7 +177,6 @@ typedef int (*objobjproc)(__PyObject *, __PyObject *);
  * @see PyObject_RichCompare(), PyTypeObject::tp_richcompare
  */
 typedef _Bool (*richcmpfunc)(__PyObject *, __PyObject *, int);
-
 #define Py_LT 0
 #define Py_LE 1
 #define Py_EQ 2
@@ -198,6 +184,7 @@ typedef _Bool (*richcmpfunc)(__PyObject *, __PyObject *, int);
 #define Py_GT 4
 #define Py_GE 5
 
+// Not implemented yet
 /* typedef void (*freefunc)(void *); */
 /* typedef void (*destructor)(__PyObject *); */
 /* typedef __PyObject *(*reprfunc)(__PyObject *); */
@@ -205,7 +192,6 @@ typedef _Bool (*richcmpfunc)(__PyObject *, __PyObject *, int);
 /* typedef __PyObject *(*getattrofunc)(__PyObject *, __PyObject *); */
 /* typedef int (*setattrfunc)(__PyObject *, char *, __PyObject *); */
 /* typedef int (*setattrofunc)(__PyObject *, __PyObject *, __PyObject *); */
-/*  */
 /* typedef PyObject *(*getiterfunc) (PyObject *); */
 /* typedef PyObject *(*iternextfunc) (PyObject *); */
 /* typedef PyObject *(*descrgetfunc) (PyObject *, PyObject *, PyObject *); */
@@ -220,7 +206,9 @@ typedef _Bool (*richcmpfunc)(__PyObject *, __PyObject *, int);
 //typedef int (*visitproc)(PyObject *, void *);
 //typedef int (*traverseproc)(PyObject *, visitproc, void *);
 
-// PySequence
+/**************/
+/* PySequence */
+/**************/
 
 /**
  * @struct PySequenceMethods
@@ -352,9 +340,10 @@ typedef struct
   ssizeargfunc sq_inplace_repeat;
 } __PySequenceMethods;
 
-/** Based on CPython, the idea is to use a PyObject containing type information
- *  while each actual object is explicitly defined.
- */
+/***********/
+/* PyTypes */
+/***********/
+
 typedef struct __ESBMC_PyType
 {
   const char *tp_name; /* Type name: "module.typename" */
@@ -395,7 +384,14 @@ typedef struct __ESBMC_PyObj
   size_t size;       /**< Number of bytes in value */
 } PyObject;
 
-// List Type
+PyObject *__ESBMC_create_inf_obj()
+{
+  return NULL;
+};
+
+/***************/
+/* Python List */
+/***************/
 
 typedef struct __ESBMC_PyListObj
 {
@@ -404,6 +400,7 @@ typedef struct __ESBMC_PyListObj
   size_t size;     /**< Number of elements currently in use */
 } PyListObject;
 
+// Methods
 size_t __python_list_size(__PyObject *obj);
 __PyObject *__python_list_concat(__PyObject *obj1, __PyObject *obj2);
 __PyObject *__python_list_repeat(__PyObject *self, size_t length);
@@ -424,7 +421,7 @@ PyType *get_list_type()
   if (value)
     return &__ESBMC_list_type;
 
-  __ESBMC_list_type.tp_name = "PyList";
+  __ESBMC_list_type.tp_name = "builtin.list";
   __ESBMC_list_type.tp_basicsize = 0;
 
   __ESBMC_list_type.comparation = __python_list_cmp;
@@ -443,11 +440,6 @@ PyType *get_list_type()
   value = 1;
   return &__ESBMC_list_type;
 }
-
-PyObject *__ESBMC_create_inf_obj()
-{
-  return NULL;
-};
 
 extern void *__ESBMC_alloca(size_t);
 
