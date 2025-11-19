@@ -480,7 +480,8 @@ const std::string html_report::generate_body() const
     catch (const std::filesystem::filesystem_error &e)
     {
       filename = raw_path;
-      log_warning("[HTML] Cannot resolve absolute path for {}: {}", raw_path, e.what());
+      log_warning(
+        "[HTML] Cannot resolve absolute path for {}: {}", raw_path, e.what());
     }
   }
   // Bug Summary
@@ -590,13 +591,12 @@ void html_report::print_file_table(
     catch (const std::filesystem::filesystem_error &e)
     {
       display_path = std::string(file.first);
-      log_warning("[HTML] Cannot resolve path for {}: {}", file.first, e.what());
+      log_warning(
+        "[HTML] Cannot resolve path for {}: {}", file.first, e.what());
     }
   }
   os << fmt::format(
-    "<div id=File{}><h4 class=FileName>{}</h4>",
-    file.second,
-    display_path);
+    "<div id=File{}><h4 class=FileName>{}</h4>", file.second, display_path);
   std::unordered_map<size_t, std::list<code_steps>> steps;
   size_t counter = 0;
   for (const auto &step : goto_trace.steps)
@@ -717,7 +717,7 @@ html_report::Language html_report::detect_language(const std::string &filepath)
 std::string html_report::code_lines::to_html() const
 {
   // TODO: C++23 has constexpr for regex
-  // Use static regex objects for better performance (constructed only once)
+  // Use static regex objects for better performance
   static const std::regex cpp_keywords_regex(
     "\\b(auto|break|case|char|const|continue|default|do|double|else|enum|"
     "extern|float|for|goto|if|int|long|register|return|short|signed|sizeof|"
@@ -737,9 +737,10 @@ std::string html_report::code_lines::to_html() const
   else if (language == Language::C_CPP)
     keywords_regex = &cpp_keywords_regex;
   else
-    return content; // No highlighting for unknown languages
+    // No highlighting for unknown languages
+    return content;
 
-  // Single regex_replace instead of loop - much faster!
+  // Single regex_replace instead of loop
   return std::regex_replace(
     content, *keywords_regex, "<span class='keyword'>$&</span>");
 }
