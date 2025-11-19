@@ -462,11 +462,27 @@ const std::string html_report::generate_body() const
 {
   std::ostringstream body;
   const locationt &location = violation_step->pc->location;
-  // html.cpp:453
+
+  // Get filename with validation, empty protection
+  std::string filename;
   std::string raw_path = location.get_file().as_string();
-  const std::string filename = raw_path.empty()
-                                 ? "<unknown>"
-                                 : std::filesystem::absolute(raw_path).string();
+  if (raw_path.empty())
+  {
+    filename = "<unknown>";
+    log_warning("[HTML] Empty file path in violation location");
+  }
+  else
+  {
+    try
+    {
+      filename = std::filesystem::absolute(raw_path).string();
+    }
+    catch (const std::filesystem::filesystem_error &e)
+    {
+      filename = raw_path;
+      log_warning("[HTML] Cannot resolve absolute path for {}: {}", raw_path, e.what());
+    }
+  }
   // Bug Summary
   {
     const std::string position{fmt::format(
@@ -512,7 +528,10 @@ const std::string html_report::generate_body() const
     std::unordered_set<size_t> relevant_lines;
     for (const auto &step : goto_trace.steps)
     {
-      files.insert(step.pc->location.get_file().as_string());
+      // Only insert non-empty file paths
+      std::string file_path = step.pc->location.get_file().as_string();
+      if (!file_path.empty())
+        files.insert(file_path);
       if (!(step.is_assert() && step.guard))
         relevant_lines.insert(atoi(step.pc->location.get_line().c_str()));
     }
@@ -551,15 +570,33 @@ void html_report::print_file_table(
     std::string line;
     while (std::getline(input, line))
     {
-      code_lines code_line(line);
+      code_lines code_line(line, lang);
       lines.push_back(code_line);
+    }
+  }
+  // Get display path with validation
+  std::string display_path;
+  if (file.first.empty())
+  {
+    display_path = "<unknown>";
+    log_warning("[HTML] Empty file path in trace");
+  }
+  else
+  {
+    try
+    {
+      display_path = std::filesystem::absolute(file.first).string();
+    }
+    catch (const std::filesystem::filesystem_error &e)
+    {
+      display_path = std::string(file.first);
+      log_warning("[HTML] Cannot resolve path for {}: {}", file.first, e.what());
     }
   }
   os << fmt::format(
     "<div id=File{}><h4 class=FileName>{}</h4>",
     file.second,
-    std::filesystem::absolute(file.first).string());
-
+    display_path);
   std::unordered_map<size_t, std::list<code_steps>> steps;
   size_t counter = 0;
   for (const auto &step : goto_trace.steps)
