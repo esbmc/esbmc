@@ -387,6 +387,14 @@ private:
   void print_file_table(
     std::ostream &os,
     std::pair<const std::string_view, size_t>) const;
+
+  enum class Language
+  {
+    C_CPP,
+    Python,
+    Unknown
+  };
+
   struct code_lines
   {
     explicit code_lines(const std::string &content) : content(content)
@@ -449,8 +457,11 @@ const std::string html_report::generate_body() const
 {
   std::ostringstream body;
   const locationt &location = violation_step->pc->location;
-  const std::string filename{
-    std::filesystem::absolute(location.get_file().as_string()).string()};
+  // html.cpp:453
+  std::string raw_path = location.get_file().as_string();
+  const std::string filename = raw_path.empty()
+                                 ? "<unknown>"
+                                 : std::filesystem::absolute(raw_path).string();
   // Bug Summary
   {
     const std::string position{fmt::format(
