@@ -2423,30 +2423,40 @@ exprt function_call_expr::handle_general_function_call()
     }
   }
 
-  // Now add default arguments for missing optional parameters
-  for (size_t param_idx = num_provided_args + param_offset;
-       param_idx < total_params;
-       ++param_idx)
+  // Add default arguments for missing optional parameters
+  // BUT: only do this if there are no keywords in the call.
+  // When keywords are present, handle_keywords() will properly fill in
+  // missing arguments with correct Optional wrapping.
+  bool has_keywords = call_.contains("keywords") &&
+                      call_["keywords"].is_array() &&
+                      !call_["keywords"].empty();
+
+  if (!has_keywords)
   {
-    const auto &param_info = params[param_idx];
-
-    // Check if parameter has a default value
-    if (param_info.has_default_value())
+    for (size_t param_idx = num_provided_args + param_offset;
+         param_idx < total_params;
+         ++param_idx)
     {
-      exprt default_val = param_info.default_value();
+      const auto &param_info = params[param_idx];
 
-      // Handle Optional types: wrap default in Optional if needed
-      if (param_info.type().is_struct())
+      // Check if parameter has a default value
+      if (param_info.has_default_value())
       {
-        const struct_typet &struct_type = to_struct_type(param_info.type());
-        std::string tag = struct_type.tag().as_string();
+        exprt default_val = param_info.default_value();
 
-        if (tag.starts_with("tag-Optional_"))
-          default_val =
-            converter_.wrap_in_optional(default_val, param_info.type());
+        // Handle Optional types: wrap default in Optional if needed
+        if (param_info.type().is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(param_info.type());
+          std::string tag = struct_type.tag().as_string();
+
+          if (tag.starts_with("tag-Optional_"))
+            default_val =
+              converter_.wrap_in_optional(default_val, param_info.type());
+        }
+
+        call.arguments().push_back(default_val);
       }
-
-      call.arguments().push_back(default_val);
     }
   }
 
