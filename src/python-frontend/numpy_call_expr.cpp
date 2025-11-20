@@ -1,12 +1,12 @@
-#include <python-frontend/numpy_call_expr.h>
-#include <python-frontend/symbol_id.h>
-#include <python-frontend/python_converter.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/numpy_call_expr.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/symbol_id.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
 #include <util/expr.h>
 #include <util/expr_util.h>
-#include <util/c_types.h>
 #include <util/message.h>
-#include <util/arith_tools.h>
 
 #include <ostream>
 

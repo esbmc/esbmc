@@ -54,7 +54,7 @@ void grapht::generate_graphml(optionst &options)
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
 
-  std::string witness_output = options.get_option("witness-output");
+  std::string witness_output = options.get_option("witness-output-graphml");
   if (witness_output == "-")
     boost::property_tree::write_xml(std::cout, graphml_node, settings);
   else
@@ -100,10 +100,10 @@ void yamlt::generate_yaml(optionst &options)
   else
     create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
+  yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq;
+
   if (!this->segments.empty())
   {
-    yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq;
-
     for (auto &waypoint : this->segments)
     {
       yaml_emitter << YAML::BeginMap;
@@ -114,14 +114,14 @@ void yamlt::generate_yaml(optionst &options)
       yaml_emitter << YAML::EndSeq;
       yaml_emitter << YAML::EndMap;
     }
-
-    yaml_emitter << YAML::EndSeq;
   }
+
+  yaml_emitter << YAML::EndSeq;
 
   yaml_emitter << YAML::EndMap;
   yaml_emitter << YAML::EndSeq;
 
-  const std::string witness_output = options.get_option("witness-output");
+  const std::string witness_output = options.get_option("witness-output-yaml");
   if (witness_output == "-")
     std::cout << yaml_emitter.c_str() << std::endl;
   else
@@ -129,27 +129,6 @@ void yamlt::generate_yaml(optionst &options)
     std::ofstream fout(witness_output);
     fout << yaml_emitter.c_str() << "\n";
   }
-}
-
-int generate_sha1_hash_for_file(const char *path, std::string &output)
-{
-  FILE *file = fopen(path, "rb");
-  if (!file)
-    return -1;
-
-  const int bufSize = 32768;
-  char *buffer = (char *)alloca(bufSize);
-
-  crypto_hash c;
-  int bytesRead = 0;
-  while ((bytesRead = fread(buffer, 1, bufSize, file)))
-    c.ingest(buffer, bytesRead);
-
-  c.fin();
-  output = c.to_string();
-
-  fclose(file);
-  return 0;
 }
 
 int generate_sha256_hash_for_file(const char *path, std::string &output)
@@ -205,6 +184,9 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   else if (wp.type == waypoint::assumption)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "assumption";
+  else if (wp.type == waypoint::branching)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "branching";
 
   waypoint << YAML::Key << "action" << YAML::Value << YAML::DoubleQuoted
            << "follow";
@@ -216,6 +198,13 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
              << wp.value;
     waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
              << "c_expression";
+    waypoint << YAML::EndMap;
+  }
+  else if (wp.type == waypoint::branching)
+  {
+    waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
+    waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
+             << wp.value;
     waypoint << YAML::EndMap;
   }
 
@@ -669,9 +658,9 @@ void _create_graph_node(
 
   std::string programFileHash;
   if (program_file.empty())
-    generate_sha1_hash_for_file(verifiedfile.c_str(), programFileHash);
+    generate_sha256_hash_for_file(verifiedfile.c_str(), programFileHash);
   else
-    generate_sha1_hash_for_file(program_file.c_str(), programFileHash);
+    generate_sha256_hash_for_file(program_file.c_str(), programFileHash);
   xmlnodet pProgramHash;
   pProgramHash.add("<xmlattr>.key", "programhash");
   pProgramHash.put_value(programFileHash);
@@ -690,25 +679,27 @@ void _create_graph_node(
       pDataSpecification.put_value(
         "CHECK( init(main()), LTL(G valid-memcleanup) )");
   }
+  else if (options.get_bool_option("data-races-check"))
+    pDataSpecification.put_value("CHECK( init(main()), LTL(G ! data-race) )");
   else
     pDataSpecification.put_value(
       "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
   graphnode.add_child("data", pDataSpecification);
 
-  boost::posix_time::ptime creation_time =
-    boost::posix_time::microsec_clock::universal_time();
   xmlnodet p_creationTime;
   p_creationTime.add("<xmlattr>.key", "creationtime");
 
-  // Conversion to string using the ISO 8601.
-  // Source: https://www.boost.org/doc/libs/1_49_0/doc/html/date_time/posix_time.html
-  std::string tmp = boost::posix_time::to_iso_extended_string(creation_time);
-  // However, SV-COMP witness format slightly modifies the ISO 8601 format,
-  // where the seconds field is written as SS instead of SS.fffffffff
-  // Here we want to make the witness validators happy.
-  // source: https://github.com/sosy-lab/sv-witnesses
-  std::string new_creation_time = tmp.substr(0, tmp.find(".", 0));
-  p_creationTime.put_value(new_creation_time);
+  std::time_t t = std::time(nullptr);
+  std::tm local_tm = *std::localtime(&t);
+
+  char creation_time[64];
+  std::strftime(
+    creation_time, sizeof(creation_time), "%Y-%m-%dT%H:%M:%S%z", &local_tm);
+  std::string timestr(creation_time);
+
+  if (timestr.size() >= 5)
+    timestr.insert(timestr.size() - 2, ":");
+  p_creationTime.put_value(timestr);
   graphnode.add_child("data", p_creationTime);
 }
 
@@ -935,7 +926,8 @@ std::string get_formated_assignment(
   std::string assignment = "";
   if (
     !is_nil_expr(step.value) && is_constant_expr(step.value) &&
-    is_valid_witness_step(ns, step))
+    !is_constant_array2t(step.value) && !is_constant_struct2t(step.value) &&
+    !is_constant_union2t(step.value) && is_valid_witness_step(ns, step))
   {
     assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
     assignment += " == ";
@@ -1095,7 +1087,7 @@ void generate_testcase_metadata()
   metadata.put(
     "test-metadata.programfile", config.options.get_option("input-file"));
   std::string programFileHash;
-  generate_sha1_hash_for_file(
+  generate_sha256_hash_for_file(
     config.options.get_option("input-file").c_str(), programFileHash);
   metadata.put("test-metadata.programhash", programFileHash);
   metadata.put("test-metadata.entryfunction", "main");

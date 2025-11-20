@@ -174,7 +174,8 @@ void goto_convertt::do_atomic_begin(
   if (
     function.location().function() != "pthread_create" &&
     function.location().function() != "pthread_join_noswitch" &&
-    function.location().function() != "pthread_trampoline")
+    function.location().function() != "pthread_trampoline" &&
+    !config.options.get_bool_option("data-races-check-only"))
   {
     code_function_callt call;
     call.function() = symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));

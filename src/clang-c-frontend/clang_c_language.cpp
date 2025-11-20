@@ -20,6 +20,8 @@ CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
 
+clang_c_languaget::~clang_c_languaget() = default;
+
 languaget *new_clang_c_language()
 {
   return new clang_c_languaget;
@@ -362,6 +364,7 @@ std::string clang_c_languaget::internal_additions()
 # 1 "esbmc_intrinsics.h" 1
 void __ESBMC_assume(_Bool);
 void __ESBMC_assert(_Bool, const char *);
+void __ESBMC_cover(_Bool);
 _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();

@@ -1,14 +1,15 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
 #include <python-frontend/global_scope.h>
+#include <python-frontend/python_math.h>
+#include <python-frontend/string_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
-#include <python-frontend/string_handler.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/symbol_generator.h>
-#include <nlohmann/json.hpp>
 #include <map>
 #include <set>
 #include <utility>
@@ -21,6 +22,8 @@ class function_call_expr;
 class type_handler;
 class string_builder;
 class module_locator;
+class tuple_handler;
+class python_class_builder;
 
 class python_converter
 {
@@ -36,9 +39,19 @@ public:
 
   string_builder &get_string_builder();
 
+  python_math &get_math_handler()
+  {
+    return math_handler_;
+  }
+
   string_handler &get_string_handler()
   {
     return string_handler_;
+  }
+
+  tuple_handler &get_tuple_handler()
+  {
+    return *tuple_handler_;
   }
 
   const nlohmann::json &ast() const
@@ -131,7 +144,8 @@ private:
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
-  bool processing_list_elements = false;
+  friend class tuple_handler;
+  friend class python_class_builder;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -164,13 +178,6 @@ private:
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
-  exprt handle_power_operator(exprt base, exprt exp);
-
-  exprt
-  handle_modulo_operator(exprt lhs, exprt rhs, const nlohmann::json &element);
-
-  exprt build_power_expression(const exprt &base, const BigInt &exp);
-
   bool is_bytes_literal(const nlohmann::json &element);
 
   exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
@@ -182,8 +189,6 @@ private:
   exprt get_function_constant_return(const exprt &func_value);
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
-
-  exprt handle_power_operator_sym(exprt base, exprt exp);
 
   symbolt create_assert_temp_variable(const locationt &location);
 
@@ -262,8 +267,6 @@ private:
 
   symbol_id create_symbol_id(const std::string &filename) const;
 
-  exprt compute_math_expr(const exprt &expr) const;
-
   void promote_int_to_float(exprt &op, const typet &target_type) const;
 
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
@@ -284,10 +287,18 @@ private:
     const symbol_id &id,
     const locationt &location);
 
+  size_t register_function_argument(
+    const nlohmann::json &element,
+    code_typet &type,
+    const symbol_id &id,
+    const locationt &location,
+    bool is_keyword_only);
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,
     exprt &function_body);
+
   exprt compare_constants_internal(
     const std::string &op,
     const exprt &lhs,
@@ -302,6 +313,9 @@ private:
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
+
+  exprt
+  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
 
   void get_attributes_from_self(
     const nlohmann::json &method_body,
@@ -352,6 +366,17 @@ private:
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
 
+  void handle_array_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    exprt &rhs,
+    codet &target_block);
+
+  void handle_list_literal_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
   exprt create_lhs_expression(
     const nlohmann::json &target,
     symbolt *lhs_symbol,
@@ -375,6 +400,29 @@ private:
   // String method helpers
   exprt handle_str_join(const nlohmann::json &call_json);
 
+  exprt handle_string_type_mismatch(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &op);
+
+  // Create character comparison expression from preprocessed operands
+  exprt create_char_comparison_expr(
+    const std::string &op,
+    const exprt &lhs_char_value,
+    const exprt &rhs_char_value,
+    const exprt &lhs_source,
+    const exprt &rhs_source) const;
+
+  void process_forward_reference(
+    const nlohmann::json &annotation,
+    codet &target_block);
+
+  // Wrap values in Optional
+  exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+
+  // Handle Optional value access
+  exprt unwrap_optional_if_needed(const exprt &expr);
+
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
   const global_scope &global_scope_;
@@ -392,6 +440,8 @@ private:
   code_blockt *current_block;
   exprt *current_lhs;
   string_handler string_handler_;
+  python_math math_handler_;
+  tuple_handler *tuple_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;

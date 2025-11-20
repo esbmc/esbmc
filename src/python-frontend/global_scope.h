@@ -1,7 +1,7 @@
 #pragma once
 
-#include <unordered_set>
 #include <string>
+#include <unordered_set>
 
 class global_scope
 {

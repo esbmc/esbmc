@@ -506,11 +506,13 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     boost::filesystem::path n(filename);
 
     if (n.extension() == ".yaml" || n.extension() == ".yml")
-      options.set_option("witness-output", filename);
+    {
+      // expected extension
+    }
     else if (!n.has_extension())
     {
-      filename += ".yml";
-      options.set_option("witness-output", filename);
+      if (n != "-")
+        options.set_option("witness-output-yaml", filename + ".yml");
     }
     else
     {
@@ -519,6 +521,39 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
         n.extension().string());
       abort();
     }
+  }
+
+  if (cmdline.isset("witness-output-graphml"))
+  {
+    std::string filename = cmdline.getval("witness-output-graphml");
+    boost::filesystem::path n(filename);
+
+    if (n.extension() == ".graphml")
+    {
+      // expected extension
+    }
+    else if (!n.has_extension())
+    {
+      if (n != "-")
+        options.set_option("witness-output-graphml", filename + ".graphml");
+    }
+    else
+    {
+      log_error(
+        "Output file has extension {}, expected graphml.",
+        n.extension().string());
+      abort();
+    }
+  }
+
+  if (cmdline.isset("witness-output"))
+  {
+    std::string filename = cmdline.getval("witness-output");
+    boost::filesystem::path n(filename);
+    n.replace_extension("");
+
+    options.set_option("witness-output-yaml", filename + ".yml");
+    options.set_option("witness-output-graphml", filename + ".graphml");
   }
 
   config.options = options;

@@ -1,8 +1,8 @@
 a = 60
 b = 5
 
-sum = float(a + b)
-assert sum  == 65.0
+sum1 = float(a + b)
+assert sum1  == 65.0
 
-sum = chr(int(sum))
-assert sum == 'A'
+sum2 = chr(int(sum1))
+assert sum2 == 'A'
