@@ -1,5 +1,4 @@
 def test_all_strings():
-    """Should PASS: Dictionary with only string values"""
     translations: dict = {
         'hello': 'hola',
         'goodbye': 'adios',
