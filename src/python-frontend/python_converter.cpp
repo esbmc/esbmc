@@ -6,6 +6,7 @@
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/python_class_builder.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
@@ -188,7 +189,8 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"Set", ExpressionType::LIST},
     {"Lambda", ExpressionType::FUNC_CALL},
     {"JoinedStr", ExpressionType::FSTRING},
-    {"Tuple", ExpressionType::TUPLE}};
+    {"Tuple", ExpressionType::TUPLE},
+    {"Dict", ExpressionType::LITERAL}};
 
   const auto &type = element["_type"];
   auto it = type_map.find(type);
@@ -2499,6 +2501,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LITERAL:
   {
+    if (dict_handler_->is_dict_literal(element))
+    {
+      expr = dict_handler_->get_dict_literal(element);
+      break;
+    }
+
     expr = get_literal(element);
     break;
   }
@@ -2775,6 +2783,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (tuple_handler_->is_tuple_type(array.type()))
     {
       expr = tuple_handler_->handle_tuple_subscript(array, slice, element);
+      break;
+    }
+
+    // Handle dictionary subscript
+    if (array.type().is_struct())
+    {
+      // This is a dictionary access
+      expr = dict_handler_->handle_dict_subscript(array, slice);
       break;
     }
 
@@ -3239,6 +3255,17 @@ void python_converter::get_var_assign(
 {
   // Extract type information
   auto [lhs_type, element_type] = extract_type_info(ast_node);
+
+  // Check if the RHS is a dictionary literal
+  if (
+    ast_node.contains("value") && !ast_node["value"].is_null() &&
+    dict_handler_->is_dict_literal(ast_node["value"]))
+  {
+    // For dict assignments, infer the type from the literal
+    exprt dict_expr = dict_handler_->get_dict_literal(ast_node["value"]);
+    element_type = dict_expr.type();
+  }
+
   current_element_type = element_type;
 
   exprt lhs;
@@ -5513,7 +5540,8 @@ python_converter::python_converter(
     current_lhs(nullptr),
     string_handler_(*this, symbol_table_, type_handler_, string_builder_),
     math_handler_(*this, symbol_table_, type_handler_),
-    tuple_handler_(new tuple_handler(*this, type_handler_))
+    tuple_handler_(new tuple_handler(*this, type_handler_)),
+    dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_))
 {
 }
 
@@ -5521,6 +5549,7 @@ python_converter::~python_converter()
 {
   delete string_builder_;
   delete tuple_handler_;
+  delete dict_handler_;
 }
 
 string_builder &python_converter::get_string_builder()

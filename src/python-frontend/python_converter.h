@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 #include <python-frontend/global_scope.h>
+#include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_math.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/type_handler.h>
@@ -38,6 +39,11 @@ public:
   void convert();
 
   string_builder &get_string_builder();
+
+  python_dict_handler *get_dict_handler()
+  {
+    return dict_handler_;
+  }
 
   python_math &get_math_handler()
   {
@@ -442,6 +448,7 @@ private:
   string_handler string_handler_;
   python_math math_handler_;
   tuple_handler *tuple_handler_;
+  python_dict_handler *dict_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;

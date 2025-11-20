@@ -1634,6 +1634,8 @@ private:
       inferred_type = "set";
     else if (value_type == "Tuple")
       inferred_type = "tuple";
+    else if (value_type == "Dict")
+      inferred_type = "dict";
     else if (value_type == "Compare")
       inferred_type = "bool";
     else if (value_type == "UnaryOp") // Handle negative numbers
