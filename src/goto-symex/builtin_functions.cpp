@@ -1933,9 +1933,34 @@ void goto_symext::intrinsic_memcpy(
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
   }*/
+  if (number_of_bytes == 0){
+    log_debug("memcpy", "Zero-byte copy, returning dst");
+    if(!is_nil_expr(func_call.ret)){
+      symex_assign(code_assign2tc(func_call.ret, dst_arg));
+    }
+    return;
+  }
 
-  if (
-    number_of_bytes >= 2 && (is_struct_type(dst_arg->type) || is_pointer_type(dst_arg->type)))
+  bool try_struct_copy = false;
+  type2tc target_type;
+
+  if(is_pointer_type(dst_arg->type))
+  {
+     target_type = to_pointer_type(dst_arg->type).subtype;
+
+     if(is_struct_type(target_type))
+     {
+        try_struct_copy = true;
+
+        dst_arg = dereference2tc(target_type, dst_arg);
+        src_arg = dereference2tc(target_type, src_arg);
+     }}
+  else if (is_struct_type(dst_arg->type)){
+        target_type = dst_arg->type;
+        try_struct_copy = true;
+  }
+  
+  if (try_struct_copy)
   {
     type2tc target_type;
 
@@ -1948,6 +1973,27 @@ void goto_symext::intrinsic_memcpy(
     else
     {
       target_type = dst_arg->type;
+    }
+    if(!options.get_bool_option("no-pointer-check")) {
+      expr2tc null_dst = constant_int2tc(dst_arg->type, BigInt(0));
+      expr2tc null_src = constant_int2tc(src_arg->type, BigInt(0));
+      expr2tc dst_null_check = not2tc(same_object2tc(dst_arg, null_dst));
+      expr2tc src_null_check = not2tc(same_object2tc(src_arg, null_src));
+
+      claim(dst_null_check, "dereference failure: NULL destination pointer in struct copy");
+      claim(src_null_check, "dereference failure: NULL source pointer in struct copy");
+    }
+    if(!options.get_bool_option("no-bounds-check")) {
+      uint64_t dst_struct_size = type_byte_size(target_type).to_uint64();
+      uint64_t src_struct_size = type_byte_size(src_arg->type).to_uint64();
+
+      if(dst_struct_size < number_of_bytes || src_struct_size < number_of_bytes) {
+        std::string error_msg = fmt::format("dereference failure: struct size {} too small for {} byte copy",
+        dst_struct_size, number_of_bytes);
+        claim(gen_false_expr(), error_msg);
+        bump_call(func_call, "c:@F@__memcpy_impl");
+        return;
+      }
     }
 
     if (has_bitfields(target_type) || is_packed_struct(target_type))

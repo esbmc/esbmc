@@ -482,7 +482,6 @@ protected:
    * @param art 
    * @param func_call memset function call
    */
-
   void intrinsic_memcpy(
     reachability_treet &art,
     const code_function_call2t &func_call);
