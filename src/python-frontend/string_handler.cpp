@@ -982,6 +982,25 @@ exprt string_handler::handle_string_membership(
   const exprt *needle_array = get_array_expr(lhs_str);
   const exprt *haystack_array = get_array_expr(rhs_str);
 
+  // Special case: empty needle is always found in any haystack (Python semantics)
+  if (needle_array && !needle_array->operands().empty())
+  {
+    const exprt::operandst &needle_ops = needle_array->operands();
+
+    // Check if needle is empty (just the null terminator)
+    if (needle_ops.size() == 1 && needle_ops[0].is_constant())
+    {
+      BigInt first_val = binary2integer(
+        needle_ops[0].value().as_string(), needle_ops[0].type().is_signedbv());
+
+      if (first_val == 0)
+      {
+        // Empty string is always "in" any string in Python
+        return gen_boolean(true);
+      }
+    }
+  }
+
   // Special case: Check if needle starts with '\0'
   // Python strings with null characters are valid, but we need to handle
   // the C null-terminator semantics vs Python string semantics
