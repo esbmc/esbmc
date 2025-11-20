@@ -308,6 +308,12 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "list")
     return get_list_type();
 
+  // dict — handle dict type annotations
+  // For generic "dict" without key/value types, return empty type
+  // so the actual type is inferred from the dictionary literal
+  if (ast_type == "dict")
+    return empty_typet();
+
   // Reuse list infrastructure for simplicity for now
   if (ast_type == "set")
     return get_list_type();
