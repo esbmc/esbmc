@@ -1802,11 +1802,8 @@ expr2tc goto_symext::multiple_bytes_copies(const expr2tc &dst_obj,
       constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
     
     expr2tc index_expr = constant_int2tc(get_uint64_type(), BigInt(dst_offset+i));
-      //expr2tc value = src_idx;
     result = with2tc(result->type, result, index_expr,src_idx);
 
-    //dereference(value, dereferencet::READ);
-    //symex_assign(code_assign2tc(dst_idx, value), false, guard);
   }
 
   // Copy remaining bytes
@@ -1820,9 +1817,6 @@ expr2tc goto_symext::multiple_bytes_copies(const expr2tc &dst_obj,
     
     expr2tc index_expr = constant_int2tc(get_uint64_type(), BigInt(dst_offset+i));  
     result = with2tc(result->type, result, index_expr, src_idx); 
-   // expr2tc value = src_idx;
-    //dereference(value, dereferencet::READ);
-    //symex_assign(code_assign2tc(dst_idx, value), false, guard);
   }
 
   return result;
@@ -1902,7 +1896,7 @@ void goto_symext::intrinsic_memcpy(
   if (is_nil_expr(dst_arg) || is_nil_expr(src_arg))
   {
     log_debug("memcpy", "Source or destination is NULL, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl");
+    bump_call(func_call, bump_name);
     return;
   }
 
@@ -1911,7 +1905,7 @@ void goto_symext::intrinsic_memcpy(
     (is_constant_int2t(src_arg) && to_constant_int2t(src_arg).value.is_zero()))
   {
     log_debug("memcpy", "NULL pointer operand, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl");
+    bump_call(func_call, bump_name);
     return;
   }
 
@@ -1921,85 +1915,74 @@ void goto_symext::intrinsic_memcpy(
   if (!is_constant_int2t(n_arg))
   {
     log_debug("memcpy", "Symbolic size not supported, falling back");
-    bump_call(func_call, "c:@F@__memcpy_impl");
+    bump_call(func_call, bump_name);
     return;
   }  
   const unsigned long number_of_bytes = to_constant_int2t(n_arg).as_ulong();
 
-  /*if (number_of_bytes == 1)
+  if (is_pointer_type(dst_arg->type) || is_struct_type(dst_arg->type))
   {
-    log_debug(
-      "memcpy", "Single-byte copy detected, falling back to standard memcpy");
-    bump_call(func_call, "c:@F@__memcpy_impl");
-    return;
-  }*/
+      type2tc target_type;
+      if (is_pointer_type(dst_arg->type))
+      {
+          target_type = to_pointer_type(dst_arg->type).subtype;
+          dst_arg = dereference2tc(target_type, dst_arg);
+          src_arg = dereference2tc(target_type, src_arg);
+      }
+      else
+      {
+          target_type = dst_arg->type;
+      }
+      if (has_bitfields(target_type) || is_packed_struct(target_type))
+        {
+          log_debug("memcpy", "Bitfield or packed struct, falling back");
+          bump_call(func_call, bump_name);
+          return;
+        }
 
-  if (
-    number_of_bytes >= 2 && (is_struct_type(dst_arg->type) || is_pointer_type(dst_arg->type)))
-  {
-    type2tc target_type;
+      log_debug("memcpy", "Using struct copy for {}-byte struct", number_of_bytes);
 
-    if (is_pointer_type(dst_arg->type))
-    {
-      target_type = to_pointer_type(dst_arg->type).subtype;
-      dst_arg = dereference2tc(target_type, dst_arg);
-      src_arg = dereference2tc(target_type, src_arg);
-    }
-    else
-    {
-      target_type = dst_arg->type;
-    }
+      if (!is_struct_type(target_type) || !is_struct_type(src_arg->type))
+      {
+          log_debug("memcpy", "Not a struct type after dereference");
+          bump_call(func_call, bump_name);
+          return;
+      }
 
-    if (has_bitfields(target_type) || is_packed_struct(target_type))
-    {
-      log_debug("memcpy", "Bitfield or packed struct, falling back");
-      bump_call(func_call, "c:@F@__memcpy_impl");
-      return;
-    }
+      const struct_type2t &dst_struct = to_struct_type(target_type);
+      const struct_type2t &src_struct = to_struct_type(src_arg->type);
 
-    log_debug("memcpy", "Using struct copy for {}-byte struct", number_of_bytes);
+        // Verify struct sizes match the copy size
+      if (
+          dst_struct.get_width() != number_of_bytes ||
+          src_struct.get_width() != number_of_bytes)
+      {
+          log_debug("memcpy", "Struct size mismatch, falling back");
+          bump_call(func_call, bump_name);
+          return;
+      }
 
-    if (!is_struct_type(target_type) || !is_struct_type(src_arg->type))
-    {
-      log_debug("memcpy", "Not a struct type after dereference");
-      bump_call(func_call, "c:@F@__memcpy_impl");
-      return;
-    }
+      for (unsigned i = 0; i < dst_struct.members.size(); i++)
+      {
+          //TO DO: handle multiple objects like arrays in a struct
+          // Create member expressions for both source and destination
+          expr2tc dst_member =
+            member2tc(dst_struct.members[i], dst_arg, dst_struct.member_names[i]);
 
-    const struct_type2t &dst_struct = to_struct_type(target_type);
-    const struct_type2t &src_struct = to_struct_type(src_arg->type);
+          expr2tc src_member =
+            member2tc(src_struct.members[i], src_arg, src_struct.member_names[i]);
 
-    // Verify struct sizes match the copy size
-    if (
-      dst_struct.get_width() != number_of_bytes ||
-      src_struct.get_width() != number_of_bytes)
-    {
-      log_debug("memcpy", "Struct size mismatch, falling back");
-      bump_call(func_call, "c:@F@__memcpy_impl");
-      return;
-    }
+          // Copy member by member - this avoids byte loops!
+          symex_assign(code_assign2tc(dst_member, src_member));
+      }
 
-    for (unsigned i = 0; i < dst_struct.members.size(); i++)
-    {
-      //TO DO: handle multiple objects like arrays in a struct
-      // Create member expressions for both source and destination
-      expr2tc dst_member =
-        member2tc(dst_struct.members[i], dst_arg, dst_struct.member_names[i]);
-
-      expr2tc src_member =
-        member2tc(src_struct.members[i], src_arg, src_struct.member_names[i]);
-
-      // Copy member by member - this avoids byte loops!
-      symex_assign(code_assign2tc(dst_member, src_member));
-    }
-
-    // Handle return value if exists
-    if (!is_nil_expr(func_call.ret))
-    {
-      symex_assign(code_assign2tc(func_call.ret, dst_arg));
-    }
-    return;
-  }
+        // Handle return value if exists
+      if (!is_nil_expr(func_call.ret))
+      {
+          symex_assign(code_assign2tc(func_call.ret, dst_arg));
+      }
+        return;
+     }
 
   log_status("Using intrinsic_memcpy for {}-byte copy", number_of_bytes);
 
@@ -2189,38 +2172,45 @@ void goto_symext::intrinsic_memcpy(
       // Offset is garanteed to be a constant
         const uint64_t src_offset =
           to_constant_int2t(src_item.offset).value.to_uint64();
-        //Rather do the multiple bytes per copy, put my multiple bytes per copy here
         
-        if (number_of_bytes >1)
+        const expr2tc new_object = do_memcpy_expression(
+            item.object,
+            number_of_offset,
+            src_item.object,
+            src_offset,
+            number_of_bytes);
+
+        if (new_object)
         {
-            log_debug("memcpy", "Doing multiple bytes copy for {} bytes", number_of_bytes);
-            multiple_bytes_copies(item.object, 
-                                  src_item.object, 
-                                  number_of_offset, 
-                                  src_offset,
-                                  number_of_bytes);
-
+            log_debug("memcpy", "Using efficient do_memcpy_expression for {}-byte copy", number_of_bytes);
+            
+            guardt assignment_guard = guard;
+            assignment_guard.add(src_item.guard);
+            symex_assign(code_assign2tc(item.object, new_object), false, assignment_guard);
         }
-        else {
+        else
+        {
+            //Fall back to multiple_bytes_copies (robust chunked approach)
+            log_debug("memcpy", "do_memcpy_expression failed, using robust multiple_bytes_copies for {}-byte copy", number_of_bytes);
+            
+            expr2tc fallback_object = multiple_bytes_copies(
+                item.object,
+                src_item.object,
+                number_of_offset,
+                src_offset,
+                number_of_bytes);
 
-            const expr2tc new_object = do_memcpy_expression(
-              item.object,
-              number_of_offset,
-              src_item.object,
-              src_offset,
-              number_of_bytes);
-
-            if (!new_object)
+            if (!fallback_object)
             {
-              log_debug("memcpy", "New object in src items not detected, falling back");
-              bump_call(func_call, bump_name);
-              return;
+                log_debug("memcpy", "Both optimized methods failed, falling back to __memcpy_impl");
+                bump_call(func_call, bump_name);
+                return;
             }
 
             guardt assignment_guard = guard;
             assignment_guard.add(src_item.guard);
-            symex_assign(code_assign2tc(item.object, new_object), false, assignment_guard);
-          }
+            symex_assign(code_assign2tc(item.object, fallback_object), false, assignment_guard);
+        }
     }}
 //  auto &dst_item = internal_deref_items.front();
   //auto &src_item = src_items.front(); do not use front item only

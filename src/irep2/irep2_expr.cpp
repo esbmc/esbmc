@@ -354,7 +354,6 @@ expr2tc constant_string2t::at(size_t i) const
   expr2tc r = csa[i];
   return r;
 }
-
 static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
 {
   if (is_array_type(a))
