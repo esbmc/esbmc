@@ -2,32 +2,70 @@
 #define STL_VALARRAY
 
 #include "definitions.h"
+#include <initializer_list>
 
 namespace std
 {
-
-template <class>
+template <class T>
 class valarray;
 
 class slice
 {
-  slice();
-  slice(size_t start, size_t length, size_t stride);
-  slice(const slice &slc);
-  size_t start() const;
-  size_t size() const;
-  size_t stride() const;
+private:
+  size_t _start, _length, _stride;
+
+public:
+  slice() : _start(0), _length(0), _stride(0)
+  {
+  }
+  slice(size_t start, size_t length, size_t stride)
+    : _start(start), _length(length), _stride(stride)
+  {
+  }
+  slice(const slice &slc)
+    : _start(slc._start), _length(slc._length), _stride(slc._stride)
+  {
+  }
+  size_t start() const
+  {
+    return _start;
+  }
+  size_t size() const
+  {
+    return _length;
+  }
+  size_t stride() const
+  {
+    return _stride;
+  }
 };
 
 class gslice
 {
-  gslice();
+private:
+  size_t _start;
+  size_t *_lengths;
+  size_t *_strides;
+  size_t _ndim;
+
+public:
+  gslice() : _start(0), _lengths(nullptr), _strides(nullptr), _ndim(0)
+  {
+  }
   gslice(
     size_t start,
     const valarray<size_t> &lengths,
     const valarray<size_t> &strides);
   gslice(const gslice &gslc);
-  size_t start() const;
+  ~gslice()
+  {
+    delete[] _lengths;
+    delete[] _strides;
+  }
+  size_t start() const
+  {
+    return _start;
+  }
   valarray<size_t> size() const;
   valarray<size_t> stride() const;
 };
@@ -37,7 +75,20 @@ class slice_array
 {
 public:
   typedef T value_type;
-  void operator=(const valarray<T> &) const;
+  T *_data;
+  size_t _size;
+
+  slice_array(T *data, size_t size) : _data(data), _size(size)
+  {
+  }
+
+  void operator=(const valarray<T> &val) const
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = val._data[i % val.size()];
+    }
+  }
   void operator*=(const valarray<T> &) const;
   void operator/=(const valarray<T> &) const;
   void operator%=(const valarray<T> &) const;
@@ -48,8 +99,16 @@ public:
   void operator|=(const valarray<T> &) const;
   void operator<<=(const valarray<T> &) const;
   void operator>>=(const valarray<T> &) const;
-  void operator=(const T &);
-  ~slice_array();
+  void operator=(const T &val)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = val;
+    }
+  }
+  ~slice_array()
+  {
+  }
 
 private:
   slice_array();
@@ -60,6 +119,11 @@ private:
 template <class T>
 class gslice_array
 {
+private:
+  gslice_array();
+  gslice_array(const gslice_array &);
+  gslice_array &operator=(const gslice_array &);
+
 public:
   typedef T value_type;
   void operator=(const valarray<T> &) const;
@@ -75,11 +139,6 @@ public:
   void operator>>=(const valarray<T> &) const;
   void operator=(const T &);
   ~gslice_array();
-
-private:
-  gslice_array();
-  gslice_array(const gslice_array &);
-  gslice_array &operator=(const gslice_array &);
 };
 
 template <class T>
@@ -87,7 +146,20 @@ class mask_array
 {
 public:
   typedef T value_type;
-  void operator=(const valarray<T> &) const;
+  T *_data;
+  size_t _size;
+
+  mask_array(T *data, size_t size) : _data(data), _size(size)
+  {
+  }
+
+  void operator=(const valarray<T> &val) const
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = val._data[i % val.size()];
+    }
+  }
   void operator*=(const valarray<T> &) const;
   void operator/=(const valarray<T> &) const;
   void operator%=(const valarray<T> &) const;
@@ -98,8 +170,16 @@ public:
   void operator|=(const valarray<T> &) const;
   void operator<<=(const valarray<T> &) const;
   void operator>>=(const valarray<T> &) const;
-  void operator=(const T &);
-  ~mask_array();
+  void operator=(const T &val)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = val;
+    }
+  }
+  ~mask_array()
+  {
+  }
 
 private:
   mask_array();
@@ -110,6 +190,11 @@ private:
 template <class T>
 class indirect_array
 {
+private:
+  indirect_array();
+  indirect_array(const indirect_array &);
+  indirect_array &operator=(const indirect_array &);
+
 public:
   typedef T value_type;
   void operator=(const valarray<T> &) const;
@@ -125,103 +210,470 @@ public:
   void operator>>=(const valarray<T> &) const;
   void operator=(const T &);
   ~indirect_array();
-
-private:
-  indirect_array();
-  indirect_array(const indirect_array &);
-  indirect_array &operator=(const indirect_array &);
 };
 
 template <class T>
 class valarray
 {
-  valarray();
-  explicit valarray(size_t n);
-  valarray(const T &val, size_t n);
-  valarray(const T *p, size_t n);
-  valarray(const valarray &x);
-  valarray(const slice_array<T> &sub);
+private:
+  T *_data;
+  size_t _size;
+
+public:
+  // Constructors
+  valarray() : _data(nullptr), _size(0)
+  {
+  }
+
+  explicit valarray(size_t n) : _size(n)
+  {
+    _data = new T[n];
+    for (size_t i = 0; i < n; ++i)
+    {
+      _data[i] = T();
+    }
+  }
+
+  valarray(const T &val, size_t n) : _size(n)
+  {
+    _data = new T[n];
+    for (size_t i = 0; i < n; ++i)
+    {
+      _data[i] = val;
+    }
+  }
+
+  valarray(const T *p, size_t n) : _size(n)
+  {
+    _data = new T[n];
+    for (size_t i = 0; i < n; ++i)
+    {
+      _data[i] = p[i];
+    }
+  }
+
+  valarray(const valarray &x) : _size(x._size)
+  {
+    _data = new T[_size];
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = x._data[i];
+    }
+  }
+
+  // C++11 initializer list constructor
+  valarray(std::initializer_list<T> il) : _size(il.size())
+  {
+    _data = new T[_size];
+    size_t i = 0;
+    for (auto it = il.begin(); it != il.end(); ++it, ++i)
+    {
+      _data[i] = *it;
+    }
+  }
+
+  valarray(const slice_array<T> &sub) : _size(sub._size)
+  {
+    _data = new T[_size];
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = sub._data[i];
+    }
+  }
+
   valarray(const gslice_array<T> &sub);
-  valarray(const mask_array<T> &sub);
+
+  valarray(const mask_array<T> &sub) : _size(sub._size)
+  {
+    _data = new T[_size];
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = sub._data[i];
+    }
+  }
+
   valarray(const indirect_array<T> &sub);
-  ~valarray();
-  valarray<T> operator+() const;
-  valarray<T> operator-() const;
-  valarray<T> operator~() const;
-  valarray<bool> operator!() const;
-  valarray<T> &operator*=(const valarray<T> &rhs);
-  valarray<T> &operator/=(const valarray<T> &rhs);
-  valarray<T> &operator%=(const valarray<T> &rhs);
-  valarray<T> &operator+=(const valarray<T> &rhs);
-  valarray<T> &operator-=(const valarray<T> &rhs);
+
+  // Destructor
+  ~valarray()
+  {
+  }
+
+  // Unary operators
+  valarray<T> operator+() const
+  {
+    valarray<T> result(_size);
+    for (size_t i = 0; i < _size; ++i)
+    {
+      result._data[i] = +_data[i];
+    }
+    return result;
+  }
+
+  valarray<T> operator-() const
+  {
+    valarray<T> result(_size);
+    for (size_t i = 0; i < _size; ++i)
+    {
+      result._data[i] = -_data[i];
+    }
+    return result;
+  }
+
+  valarray<T> operator~() const
+  {
+    valarray<T> result(_size);
+    for (size_t i = 0; i < _size; ++i)
+    {
+      result._data[i] = ~_data[i];
+    }
+    return result;
+  }
+
+  valarray<bool> operator!() const
+  {
+    valarray<bool> result(_size);
+    for (size_t i = 0; i < _size; ++i)
+    {
+      result._data[i] = !_data[i];
+    }
+    return result;
+  }
+
+  // Compound assignment operators
+  valarray<T> &operator*=(const valarray<T> &rhs)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] *= rhs._data[i % rhs.size()];
+    }
+    return *this;
+  }
+
+  valarray<T> &operator/=(const valarray<T> &rhs)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] /= rhs._data[i % rhs.size()];
+    }
+    return *this;
+  }
+
+  valarray<T> &operator%=(const valarray<T> &rhs)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] %= rhs._data[i % rhs.size()];
+    }
+    return *this;
+  }
+
+  valarray<T> &operator+=(const valarray<T> &rhs)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] += rhs._data[i % rhs.size()];
+    }
+    return *this;
+  }
+
+  valarray<T> &operator-=(const valarray<T> &rhs)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] -= rhs._data[i % rhs.size()];
+    }
+    return *this;
+  }
+
   valarray<T> &operator^=(const valarray<T> &rhs);
   valarray<T> &operator&=(const valarray<T> &rhs);
   valarray<T> &operator|=(const valarray<T> &rhs);
   valarray<T> &operator<<=(const valarray<T> &rhs);
   valarray<T> &operator>>=(const valarray<T> &rhs);
-  valarray<T> &operator*=(const T &val);
-  valarray<T> &operator/=(const T &val);
-  valarray<T> &operator%=(const T &val);
-  valarray<T> &operator+=(const T &val);
-  valarray<T> &operator-=(const T &val);
+
+  valarray<T> &operator*=(const T &val)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] *= val;
+    }
+    return *this;
+  }
+
+  valarray<T> &operator/=(const T &val)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] /= val;
+    }
+    return *this;
+  }
+
+  valarray<T> &operator%=(const T &val)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] %= val;
+    }
+    return *this;
+  }
+
+  valarray<T> &operator+=(const T &val)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] += val;
+    }
+    return *this;
+  }
+
+  valarray<T> &operator-=(const T &val)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] -= val;
+    }
+    return *this;
+  }
+
   valarray<T> &operator^=(const T &val);
   valarray<T> &operator&=(const T &val);
   valarray<T> &operator|=(const T &val);
   valarray<T> &operator<<=(const T &val);
   valarray<T> &operator>>=(const T &val);
+
+  // Member functions
   valarray<T> apply(T func(T)) const;
   valarray<T> apply(T func(const T &)) const;
   valarray<T> cshift(int n) const;
   T max() const;
   T min() const;
-  valarray<T> &operator=(const valarray<T> &x);
-  valarray<T> &operator=(const T &val);
-  valarray<T> &operator=(const slice_array<T> &sub);
+
+  // Assignment operators
+  valarray<T> &operator=(const valarray<T> &x)
+  {
+    if (this != &x)
+    {
+      delete[] _data;
+      _size = x._size;
+      _data = new T[_size];
+      for (size_t i = 0; i < _size; ++i)
+      {
+        _data[i] = x._data[i];
+      }
+    }
+    return *this;
+  }
+
+  valarray<T> &operator=(const T &val)
+  {
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = val;
+    }
+    return *this;
+  }
+
+  valarray<T> &operator=(const slice_array<T> &sub)
+  {
+    delete[] _data;
+    _size = sub._size;
+    _data = new T[_size];
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = sub._data[i];
+    }
+    return *this;
+  }
+
   valarray<T> &operator=(const gslice_array<T> &sub);
-  valarray<T> &operator=(const mask_array<T> &sub);
+
+  valarray<T> &operator=(const mask_array<T> &sub)
+  {
+    delete[] _data;
+    _size = sub._size;
+    _data = new T[_size];
+    for (size_t i = 0; i < _size; ++i)
+    {
+      _data[i] = sub._data[i];
+    }
+    return *this;
+  }
+
   valarray<T> &operator=(const indirect_array<T> &sub);
-  T operator[](size_t n) const;
-  T &operator[](size_t n);
-  valarray<T> operator[](slice slc) const;
-  slice_array<T> operator[](slice slc);
+
+  // Element access
+  T operator[](size_t n) const
+  {
+    return _data[n];
+  }
+
+  T &operator[](size_t n)
+  {
+    return _data[n];
+  }
+
+  // Slice access
+  valarray<T> operator[](slice slc) const
+  {
+    valarray<T> result(slc.size());
+    for (size_t i = 0; i < slc.size(); ++i)
+    {
+      result._data[i] = _data[slc.start() + i * slc.stride()];
+    }
+    return result;
+  }
+
+  slice_array<T> operator[](slice slc)
+  {
+    T *slice_data = new T[slc.size()];
+    for (size_t i = 0; i < slc.size(); ++i)
+    {
+      slice_data[i] = _data[slc.start() + i * slc.stride()];
+    }
+    return slice_array<T>(slice_data, slc.size());
+  }
+
+  // Generalized slice access
   valarray<T> operator[](const gslice &gslc) const;
   gslice_array<T> operator[](const gslice &gslc);
-  valarray<T> operator[](const valarray<bool> &msk) const;
-  mask_array<T> operator[](const valarray<bool> &msk);
+
+  // Mask access
+  valarray<T> operator[](const valarray<bool> &msk) const
+  {
+    size_t count = 0;
+    for (size_t i = 0; i < _size; ++i)
+    {
+      if (msk._data[i])
+        count++;
+    }
+    valarray<T> result(count);
+    size_t j = 0;
+    for (size_t i = 0; i < _size; ++i)
+    {
+      if (msk._data[i])
+      {
+        result._data[j++] = _data[i];
+      }
+    }
+    return result;
+  }
+
+  mask_array<T> operator[](const valarray<bool> &msk)
+  {
+    size_t count = 0;
+    for (size_t i = 0; i < _size; ++i)
+    {
+      if (msk._data[i])
+        count++;
+    }
+    T *mask_data = new T[count];
+    size_t j = 0;
+    for (size_t i = 0; i < _size; ++i)
+    {
+      if (msk._data[i])
+      {
+        mask_data[j++] = _data[i];
+      }
+    }
+    return mask_array<T>(mask_data, count);
+  }
+
+  // Indirect access
   valarray<T> operator[](const valarray<size_t> &ind) const;
   indirect_array<T> operator[](const valarray<size_t> &ind);
+
   void resize(size_t sz, T c = T());
   valarray<T> shift(int n) const;
-  size_t size() const;
-  T sum() const;
-  valarray<T> abs(const valarray<T> &x);
-  valarray<T> acos(const valarray<T> &x);
-  valarray<T> asin(const valarray<T> &x);
-  valarray<T> atan(const valarray<T> &x);
-  valarray<T> atan2(const valarray<T> &y, const valarray<T> &x);
-  valarray<T> atan2(const valarray<T> &y, const T &x);
-  valarray<T> atan2(const T &y, const valarray<T> &x);
-  valarray<T> cos(const valarray<T> &x);
-  valarray<T> cosh(const valarray<T> &x);
-  valarray<T> exp(const valarray<T> &x);
-  valarray<T> log(const valarray<T> &x);
-  valarray<T> log10(const valarray<T> &x);
-  valarray<T> pow(const valarray<T> &x, const valarray<T> &y);
-  valarray<T> pow(const valarray<T> &x, const T &y);
-  valarray<T> pow(const T &x, const valarray<T> &y);
-  valarray<T> sin(const valarray<T> &x);
-  valarray<T> sinh(const valarray<T> &x);
-  valarray<T> sqrt(const valarray<T> &x);
-  valarray<T> tan(const valarray<T> &x);
-  valarray<T> tanh(const valarray<T> &x);
+
+  size_t size() const
+  {
+    return _size;
+  }
+
+  T sum() const
+  {
+    T result = T();
+    for (size_t i = 0; i < _size; ++i)
+    {
+      result += _data[i];
+    }
+    return result;
+  }
+
+  // Mathematical functions
+  static valarray<T> abs(const valarray<T> &x);
+  static valarray<T> acos(const valarray<T> &x);
+  static valarray<T> asin(const valarray<T> &x);
+  static valarray<T> atan(const valarray<T> &x);
+  static valarray<T> atan2(const valarray<T> &y, const valarray<T> &x);
+  static valarray<T> atan2(const valarray<T> &y, const T &x);
+  static valarray<T> atan2(const T &y, const valarray<T> &x);
+  static valarray<T> cos(const valarray<T> &x);
+  static valarray<T> cosh(const valarray<T> &x);
+  static valarray<T> exp(const valarray<T> &x);
+  static valarray<T> log(const valarray<T> &x);
+  static valarray<T> log10(const valarray<T> &x);
+  static valarray<T> pow(const valarray<T> &x, const valarray<T> &y);
+  static valarray<T> pow(const valarray<T> &x, const T &y);
+  static valarray<T> pow(const T &x, const valarray<T> &y);
+  static valarray<T> sin(const valarray<T> &x);
+  static valarray<T> sinh(const valarray<T> &x);
+  static valarray<T> sqrt(const valarray<T> &x);
+  static valarray<T> tan(const valarray<T> &x);
+  static valarray<T> tanh(const valarray<T> &x);
+
+  // Friend declarations for non-member operators
+  template <class U>
+  friend class slice_array;
+  template <class U>
+  friend class mask_array;
+  template <class U>
+  friend class valarray;
+  template <class U>
+  friend valarray<U> operator+(const valarray<U> &lhs, const U &val);
+  template <class U>
+  friend valarray<U> operator*(const valarray<U> &lhs, const U &val);
+  template <class U>
+  friend valarray<U> operator%(const valarray<U> &lhs, const U &val);
+  template <class U>
+  friend valarray<bool> operator==(const valarray<U> &lhs, const U &val);
 };
 
+// Non-member operators - Arithmetic
 template <class T>
-valarray<T> operator*(const valarray<T> &lhs, const valarray<T> &rhs);
+valarray<T> operator*(const valarray<T> &lhs, const valarray<T> &rhs)
+{
+  valarray<T> result(lhs.size());
+  for (size_t i = 0; i < lhs.size(); ++i)
+  {
+    result._data[i] = lhs._data[i] * rhs._data[i % rhs.size()];
+  }
+  return result;
+}
+
 template <class T>
-valarray<T> operator*(const T &val, const valarray<T> &rhs);
+valarray<T> operator*(const T &val, const valarray<T> &rhs)
+{
+  valarray<T> result(rhs.size());
+  for (size_t i = 0; i < rhs.size(); ++i)
+  {
+    result._data[i] = val * rhs._data[i];
+  }
+  return result;
+}
+
 template <class T>
-valarray<T> operator*(const valarray<T> &lhs, const T &val);
+valarray<T> operator*(const valarray<T> &lhs, const T &val)
+{
+  valarray<T> result(lhs.size());
+  for (size_t i = 0; i < lhs.size(); ++i)
+  {
+    result._data[i] = lhs._data[i] * val;
+  }
+  return result;
+}
 
 template <class T>
 valarray<T> operator/(const valarray<T> &lhs, const valarray<T> &rhs);
@@ -235,14 +687,48 @@ valarray<T> operator%(const valarray<T> &lhs, const valarray<T> &rhs);
 template <class T>
 valarray<T> operator%(const T &val, const valarray<T> &rhs);
 template <class T>
-valarray<T> operator%(const valarray<T> &lhs, const T &val);
+valarray<T> operator%(const valarray<T> &lhs, const T &val)
+{
+  valarray<T> result(lhs.size());
+  for (size_t i = 0; i < lhs.size(); ++i)
+  {
+    result._data[i] = lhs._data[i] % val;
+  }
+  return result;
+}
 
 template <class T>
-valarray<T> operator+(const valarray<T> &lhs, const valarray<T> &rhs);
+valarray<T> operator+(const valarray<T> &lhs, const valarray<T> &rhs)
+{
+  valarray<T> result(lhs.size());
+  for (size_t i = 0; i < lhs.size(); ++i)
+  {
+    result._data[i] = lhs._data[i] + rhs._data[i % rhs.size()];
+  }
+  return result;
+}
+
 template <class T>
-valarray<T> operator+(const T &val, const valarray<T> &rhs);
+valarray<T> operator+(const T &val, const valarray<T> &rhs)
+{
+  valarray<T> result(rhs.size());
+  for (size_t i = 0; i < rhs.size(); ++i)
+  {
+    result._data[i] = val + rhs._data[i];
+  }
+  return result;
+}
+
 template <class T>
-valarray<T> operator+(const valarray<T> &lhs, const T &val);
+valarray<T> operator+(const valarray<T> &lhs, const T &val)
+{
+  valarray<T> result(lhs.size());
+  for (size_t i = 0; i < lhs.size(); ++i)
+  {
+    result._data[i] = lhs._data[i] + val;
+  }
+  return result;
+}
 
 template <class T>
 valarray<T> operator-(const valarray<T> &lhs, const valarray<T> &rhs);
@@ -251,6 +737,7 @@ valarray<T> operator-(const T &val, const valarray<T> &rhs);
 template <class T>
 valarray<T> operator-(const valarray<T> &lhs, const T &val);
 
+// Bitwise operators
 template <class T>
 valarray<T> operator^(const valarray<T> &lhs, const valarray<T> &rhs);
 template <class T>
@@ -286,6 +773,7 @@ valarray<T> operator>>(const T &val, const valarray<T> &rhs);
 template <class T>
 valarray<T> operator>>(const valarray<T> &lhs, const T &val);
 
+// Logical operators
 template <class T>
 valarray<bool> operator&&(const valarray<T> &lhs, const valarray<T> &rhs);
 template <class T>
@@ -300,12 +788,39 @@ valarray<bool> operator||(const T &val, const valarray<T> &rhs);
 template <class T>
 valarray<bool> operator||(const valarray<T> &lhs, const T &val);
 
+// Comparison operators
 template <class T>
-valarray<bool> operator==(const valarray<T> &lhs, const valarray<T> &rhs);
+valarray<bool> operator==(const valarray<T> &lhs, const valarray<T> &rhs)
+{
+  valarray<bool> result(lhs.size());
+  for (size_t i = 0; i < lhs.size(); ++i)
+  {
+    result._data[i] = (lhs._data[i] == rhs._data[i % rhs.size()]);
+  }
+  return result;
+}
+
 template <class T>
-valarray<bool> operator==(const T &val, const valarray<T> &rhs);
+valarray<bool> operator==(const T &val, const valarray<T> &rhs)
+{
+  valarray<bool> result(rhs.size());
+  for (size_t i = 0; i < rhs.size(); ++i)
+  {
+    result._data[i] = (val == rhs._data[i]);
+  }
+  return result;
+}
+
 template <class T>
-valarray<bool> operator==(const valarray<T> &lhs, const T &val);
+valarray<bool> operator==(const valarray<T> &lhs, const T &val)
+{
+  valarray<bool> result(lhs.size());
+  for (size_t i = 0; i < lhs.size(); ++i)
+  {
+    result._data[i] = (lhs._data[i] == val);
+  }
+  return result;
+}
 
 template <class T>
 valarray<bool> operator!=(const valarray<T> &lhs, const valarray<T> &rhs);
@@ -341,6 +856,43 @@ template <class T>
 valarray<bool> operator>=(const T &val, const valarray<T> &rhs);
 template <class T>
 valarray<bool> operator>=(const valarray<T> &lhs, const T &val);
+
+inline gslice::gslice(
+  size_t start,
+  const valarray<size_t> &lengths,
+  const valarray<size_t> &strides)
+  : _start(start), _ndim(lengths.size())
+{
+  _lengths = new size_t[_ndim];
+  _strides = new size_t[_ndim];
+  for (size_t i = 0; i < _ndim; ++i)
+  {
+    _lengths[i] = lengths[i];
+    _strides[i] = strides[i];
+  }
+}
+
+inline gslice::gslice(const gslice &gslc)
+  : _start(gslc._start), _ndim(gslc._ndim)
+{
+  _lengths = new size_t[_ndim];
+  _strides = new size_t[_ndim];
+  for (size_t i = 0; i < _ndim; ++i)
+  {
+    _lengths[i] = gslc._lengths[i];
+    _strides[i] = gslc._strides[i];
+  }
+}
+
+inline valarray<size_t> gslice::size() const
+{
+  return valarray<size_t>(_lengths, _ndim);
+}
+
+inline valarray<size_t> gslice::stride() const
+{
+  return valarray<size_t>(_strides, _ndim);
+}
 
 } // namespace std
 

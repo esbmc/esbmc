@@ -4,37 +4,73 @@
 #include "cstddef"
 #include "iterator"
 #include "utility"
-
-#if 0
-template<class T> class allocator {
-	T value_type;
-	T* pointer;
-	T& reference;
-	const T* const_pointer;
-	const T& const_reference;
-	unsigned int size_type;
-	ptrdiff_t difference_type;
-
-	allocator() throw ();
-	allocator(const allocator&) throw ();
-	template<class U>
-	allocator(const allocator<U>&) throw ();
-	pointer address(reference x) const;
-	const_pointer address(const_reference x) const;
-	pointer allocate(size_type n, allocator<void>::const_pointer hint = 0);
-	void deallocate(pointer p, size_type n);
-	size_type max_size() const throw ();
-	void construct(pointer p, const_reference val) {
-		new ((void*) p) T(val);
-	}
-	void destroy(pointer p) {
-		((T*) p)->~T();
-	}
-};
-#endif
+#include "stdlib.h"
 
 namespace std
 {
+// Minimal allocator implementation
+template <typename T>
+class allocator
+{
+public:
+  typedef T value_type;
+  typedef T *pointer;
+  typedef const T *const_pointer;
+  typedef T &reference;
+  typedef const T &const_reference;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+
+  template <typename U>
+  struct rebind
+  {
+    typedef allocator<U> other;
+  };
+
+  allocator() = default;
+
+  template <typename U>
+  allocator(const allocator<U> &)
+  {
+  }
+
+  pointer allocate(size_type n)
+  {
+    return static_cast<pointer>(malloc(n * sizeof(T)));
+  }
+
+  void deallocate(pointer ptr, size_type)
+  {
+    free(ptr);
+  }
+
+  template <typename U, typename... Args>
+  void construct(U *ptr, Args &&...args)
+  {
+    new (ptr) U(args...);
+  }
+
+  template <typename U>
+  void destroy(U *ptr)
+  {
+    ptr->~U();
+  }
+
+  size_type max_size() const
+  {
+    return size_t(-1) / sizeof(T);
+  }
+
+  bool operator==(const allocator &) const
+  {
+    return true;
+  }
+  bool operator!=(const allocator &) const
+  {
+    return false;
+  }
+};
+
 template <class X>
 class auto_ptr
 {

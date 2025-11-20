@@ -25,7 +25,8 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_cond_lock_field(a) ((a).__lock)
 #define __ESBMC_cond_futex_field(a) ((a).__futex)
 #define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
-#define __ESBMC_rwlock_field(a) ((a).__lock)
+#define __ESBMC_rwlock_readers(a) ((a)->__readers)
+#define __ESBMC_rwlock_writer(a) ((a)->__writer)
 
 /* Global tracking data. Should all initialize to 0 / false */
 __attribute__((annotate("__ESBMC_inf_size")))
@@ -250,9 +251,6 @@ __ESBMC_HIDE:;
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
-
-  // Terminate thread
-  __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
 
   // Ensure that there is no subsequent execution path
@@ -493,7 +491,8 @@ int pthread_rwlock_init(
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_rwlock_readers(lock) = 0;
+  __ESBMC_rwlock_writer(lock) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -502,8 +501,8 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_assume(!__ESBMC_rwlock_field(*lock));
-  __ESBMC_rwlock_field(*lock) = 1;
+  __ESBMC_assume(!__ESBMC_rwlock_writer(lock));
+  __ESBMC_rwlock_readers(lock)++;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -511,6 +510,17 @@ __ESBMC_HIDE:;
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  if (__ESBMC_rwlock_writer(lock) != 0)
+  {
+    __ESBMC_atomic_end();
+    return EBUSY;
+  }
+  else
+    __ESBMC_rwlock_readers(lock)++;
+  __ESBMC_atomic_end();
+
   return 0;
 }
 
@@ -518,24 +528,24 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-
-  int res = 1;
-  if (__ESBMC_rwlock_field(*lock))
-    goto PTHREAD_RWLOCK_TRYWRLOCK_END;
-
-  __ESBMC_rwlock_field(*lock) = 1;
-  res = 0;
-
-PTHREAD_RWLOCK_TRYWRLOCK_END:
+  if (__ESBMC_rwlock_writer(lock) != 0 || __ESBMC_rwlock_readers(lock) != 0)
+  {
+    __ESBMC_atomic_end();
+    return EBUSY;
+  }
+  __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
-  return res;
+  return 0;
 }
 
 int pthread_rwlock_unlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_rwlock_field(*lock) = 0;
+  if (__ESBMC_rwlock_writer(lock))
+    __ESBMC_rwlock_writer(lock) = 0;
+  else if (__ESBMC_rwlock_readers(lock) > 0)
+    __ESBMC_rwlock_readers(lock)--;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -544,10 +554,11 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_assume(!__ESBMC_rwlock_field(*lock));
-  __ESBMC_rwlock_field(*lock) = 1;
+  __ESBMC_assume(
+    !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)));
+  __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
-  return 0; // we never fail
+  return 0;
 }
 
 /************************ condvar mainpulation routines ***********************/

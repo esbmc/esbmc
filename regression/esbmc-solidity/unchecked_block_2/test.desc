@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--k-induction --unsigned-overflow-check --sol contract.sol
+^VERIFICATION FAILED$

@@ -59,7 +59,7 @@ unsigned goto_symext::argument_assignments(
 
   // iterates over the types of the arguments
   for (unsigned int name_idx = 0; name_idx < function_type.arguments.size();
-       ++name_idx, it1++)
+       ++name_idx, ++it1)
   {
     // if you run out of actual arguments there was a mismatch
     if (it1 == arguments.end())
@@ -99,6 +99,42 @@ unsigned goto_symext::argument_assignments(
           (is_number_type(f_rhs_type) || is_pointer_type(f_rhs_type)))
         {
           rhs = typecast2tc(arg_type, rhs);
+        }
+        // Special handling for Python object semantics:
+        // Allow pointer types to match struct parameter types since Python
+        // objects are always passed by reference (pointer), but type annotations
+        // declare parameters with struct types (e.g., def __init__(self, f: Foo))
+        else if (is_pointer_type(f_rhs_type) && is_struct_type(f_arg_type))
+        {
+          // Check if the pointer points to the expected struct type
+          const pointer_type2t &ptr_type = to_pointer_type(f_rhs_type);
+          type2tc ptr_subtype = ptr_type.subtype;
+
+          // Resolve symbol types
+          while (is_symbol_type(ptr_subtype))
+          {
+            const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
+            symbolt const *sym = ns.lookup(sym_type.symbol_name);
+            if (sym)
+              ptr_subtype = migrate_type(sym->type);
+            else
+              break;
+          }
+
+          // If pointer points to the expected struct type, allow it
+          if (!base_type_eq(f_arg_type, ptr_subtype, ns))
+          {
+            log_error(
+              "function call: argument \"{}\" type mismatch: got {}, expected "
+              "{}",
+              id2string(identifier),
+              get_type_id((*it1)->type),
+              get_type_id(arg_type));
+            abort();
+          }
+
+          // Type is compatible (pointer to struct), dereference pointer for assignment
+          rhs = dereference2tc(f_arg_type, rhs);
         }
         else
         {
@@ -231,21 +267,26 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     log_warning(
       "no body for function {}", get_pretty_name(identifier.as_string()));
 
-    // For unknown functions, iterate over its arguments and check the pointers
+    /*
+     * For unknown functions, iterate over its arguments and check the pointers
+     * Improve the behavior logic of ESBMC to make it more realistic：
+     * 1. All pointers are invalid after calling unknown function -- too strict.
+     * 2. Only pointers given by (or reachable via) arguments are invalid.
+     * 3. CHERI guarantee: only memory within the capability permission may be modified.
+     */
     if (options.get_bool_option("unknown-method-args-check"))
     {
       for (auto argument : call.operands)
       {
         if (is_pointer_type(argument->type))
         {
-          type2tc t = to_pointer_type(argument->type).subtype;
+          // Create an invalid pointer
+          type2tc ptr_type = pointer_type2tc(get_empty_type());
+          expr2tc invalid_object = symbol2tc(ptr_type, "INVALID");
 
-          // Special case: Void type cannot be dereferenced
-          if (is_empty_type(t))
-            t = char_type2();
-
-          expr2tc deref = dereference2tc(t, argument);
-          dereference(deref, dereferencet::READ);
+          // There should be a difference here, we assign all pointer type arguments as
+          // invalid pointers, and CHERI's capabilities should prevent that here.
+          symex_assign(code_assign2tc(argument, invalid_object));
         }
       }
     }

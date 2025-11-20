@@ -88,9 +88,9 @@ typedef int pthread_once_t;
 
 //#if defined __USE_UNIX98 || defined __USE_XOPEN2K
 //jmorse - we always want this, regardless of feature flags.
-typedef struct
-{
-  int __lock;
+typedef struct {
+  int __readers;
+  int __writer;
 } pthread_rwlock_t;
 
 /* Read-write lock initializer. */

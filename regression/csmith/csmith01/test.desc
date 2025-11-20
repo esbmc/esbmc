@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --partial-loops --boolector --no-align-check --smtlib-solver-prog --error-label --tuple-node-flattener --all-claims --bv --witness-output --show-loops --incremental-bmc
 ^VERIFICATION FAILED$

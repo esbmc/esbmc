@@ -1,5 +1,4 @@
 CORE
 gh-1070.c
---unwind 1 --cvc
+--unwind 1 --cvc5
 ^VERIFICATION FAILED$
-\bdereference failure:|\bunwinding assertion loop\b

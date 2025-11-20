@@ -22,6 +22,7 @@ __ESBMC_HIDE:;
          (c >= '0' && c <= '9');
 }
 
+// C standard isalpha - ASCII only in default locale
 int isalpha(int c)
 {
 __ESBMC_HIDE:;

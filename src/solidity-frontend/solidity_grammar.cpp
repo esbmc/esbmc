@@ -117,6 +117,10 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   {
     return UsingForDef;
   }
+  else if (element["nodeType"] == "ModifierDefinition")
+  {
+    return ModifierDef;
+  }
   else
   {
     log_error(
@@ -139,6 +143,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
     ENUM_TO_STR(ErrorDef)
     ENUM_TO_STR(EventDef)
     ENUM_TO_STR(UsingForDef)
+    ENUM_TO_STR(ModifierDef)
     ENUM_TO_STR(ContractBodyElementTError)
   default:
   {
@@ -202,12 +207,29 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     // we must first handle tuple
     // otherwise we might parse tuple(literal_string, literal_string)
     // as ElementaryTypeName
-    if (typeString.compare(0, 6, "tuple(") == 0)
+    if (typeString.compare(0, 5, "type(") == 0)
+    {
+      if (typeIdentifier.compare(0, 17, "t_magic_meta_type") == 0)
+        return TypeProperty;
+      // For type conversion
+      return TypeConversionName;
+    }
+    else if (typeString.compare(0, 6, "tuple(") == 0)
     {
       return TupleTypeName;
     }
-    if (typeIdentifier.find("t_mapping$") != std::string::npos)
+    else if (typeIdentifier.find("t_mapping$") != std::string::npos)
     {
+      std::string target = "t_mapping$";
+
+      size_t first = typeIdentifier.find(target);
+      size_t second = typeIdentifier.find(target, first + 1);
+
+      if (first != std::string::npos && second != std::string::npos)
+      {
+        log_error("Currently we do not support nested mapping");
+        return TypeNameTError;
+      }
       return MappingTypeName;
     }
     else if (typeIdentifier.compare(0, 8, "t_array$") == 0)
@@ -224,10 +246,11 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       //   Memory Array
 
       // Multi-Dimensional Arrays
-      if (typeIdentifier.find("t_array$_t_array$") != std::string::npos)
+      if (typeIdentifier.compare(0, 17, "t_array$_t_array$") == 0)
       {
-        log_error("Multi-Dimensional Arrays are not supported.");
-        abort();
+        log_debug(
+          "solidity", "Experimental support for multi-dimensional arrays.");
+        return NestedArrayTypeName;
       }
 
       if (typeIdentifier.find("$dyn") != std::string::npos)
@@ -249,7 +272,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
       typeString == "string" || typeString.find("literal_string") == 0 ||
-      typeString == "string storage ref" || typeString == "string memory" ||
+      typeString == "string storage ref" ||
+      typeString == "string storage pointer" || typeString == "string memory" ||
       typeString == "address payable" || typeString == "address" ||
       typeString.compare(0, 5, "bytes") == 0)
     {
@@ -264,13 +288,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return ContractTypeName;
     }
-    else if (typeString.find("type(") != std::string::npos)
-    {
-      if (typeIdentifier.compare(0, 17, "t_magic_meta_type") == 0)
-        return TypeProperty;
-      // For type conversion
-      return TypeConversionName;
-    }
+
     else if (typeString.find("int_const") != std::string::npos)
     {
       // For Literal, their typeString is like "int_const 100".
@@ -292,6 +310,14 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     else if (typeIdentifier.compare(0, 7, "t_magic") == 0)
     {
       return BuiltinTypeName;
+    }
+    else if (typeIdentifier.compare(0, 7, "t_error") == 0)
+    {
+      return ErrorTypeName;
+    }
+    else if (solidity_convertert::UserDefinedVarMap.count(typeString) > 0)
+    {
+      return UserDefinedTypeName;
     }
     else
     {
@@ -331,6 +357,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(PointerArrayToPtr)
     ENUM_TO_STR(ArrayTypeName)
     ENUM_TO_STR(DynArrayTypeName)
+    ENUM_TO_STR(NestedArrayTypeName)
     ENUM_TO_STR(ContractTypeName)
     ENUM_TO_STR(AddressTypeName)
     ENUM_TO_STR(AddressPayableTypeName)
@@ -341,6 +368,8 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(TupleTypeName)
     ENUM_TO_STR(MappingTypeName)
     ENUM_TO_STR(BuiltinTypeName)
+    ENUM_TO_STR(ErrorTypeName)
+    ENUM_TO_STR(UserDefinedTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
   {
@@ -390,7 +419,7 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
   }
   if (
     typeString == "string" || typeString == "string storage ref" ||
-    typeString == "string memory")
+    typeString == "string memory" || typeString == "string storage pointer")
   {
     return STRING;
   }
@@ -593,7 +622,9 @@ const char *parameter_list_to_str(ParameterListT type)
 // rule block
 BlockT get_block_t(const nlohmann::json &block)
 {
-  if (block["nodeType"] == "Block" && block.contains("statements"))
+  if (
+    (block["nodeType"] == "Block" || block["nodeType"] == "UncheckedBlock") &&
+    block.contains("statements"))
   {
     return Statement;
   }
@@ -630,7 +661,6 @@ const char *block_to_str(BlockT type)
     ENUM_TO_STR(BlockIfStatement)
     ENUM_TO_STR(BlockWhileStatement)
     ENUM_TO_STR(BlockExpressionStatement)
-    ENUM_TO_STR(UncheckedBlock)
     ENUM_TO_STR(BlockTError)
   default:
   {
@@ -659,7 +689,7 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return ForStatement;
   }
-  else if (stmt["nodeType"] == "Block")
+  else if (stmt["nodeType"] == "Block" || stmt["nodeType"] == "UncheckedBlock")
   {
     return Block;
   }
@@ -687,6 +717,14 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return EmitStatement;
   }
+  else if (stmt["nodeType"] == "PlaceholderStatement")
+  {
+    return PlaceholderStatement;
+  }
+  else if (stmt["nodeType"] == "TryStatement")
+  {
+    return TryStatement;
+  }
   else
   {
     log_error(
@@ -713,6 +751,8 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(BreakStatement)
     ENUM_TO_STR(RevertStatement)
     ENUM_TO_STR(EmitStatement)
+    ENUM_TO_STR(PlaceholderStatement)
+    ENUM_TO_STR(TryStatement)
   default:
   {
     assert(!"Unknown statement type");
@@ -811,11 +851,16 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if (expr["nodeType"] == "FunctionCallOptions")
   {
+    // if (expr["expression"]["nodeType"] == "NewExpression")
+    //   return NewExpression;
     return CallOptionsExprClass;
   }
   else if (expr["nodeType"] == "FunctionCall")
   {
-    if (expr["expression"]["nodeType"] == "NewExpression")
+    if (
+      expr["expression"]["nodeType"] == "NewExpression" ||
+      (expr["expression"]["nodeType"] == "FunctionCallOptions" &&
+       expr["expression"]["expression"]["nodeType"] == "NewExpression"))
       return NewExpression;
     if (expr["kind"] == "typeConversion")
       return TypeConversionExpression;
@@ -843,6 +888,8 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return ContractMemberCall;
     else if (is_address_member_call(expr))
       return AddressMemberCall;
+    else if (type_name == SolidityGrammar::TypeNameT::TypeConversionName)
+      return TypeMemberCall;
     else
       //TODO Assume it's a builtin member
       // due to that the BuiltinTypeName cannot cover all the builtin member
@@ -1114,6 +1161,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(StructMemberCall)
     ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(BuiltinMemberCall)
+    ENUM_TO_STR(TypeMemberCall)
     ENUM_TO_STR(TypeConversionExpression)
     ENUM_TO_STR(TypePropertyExpression)
     ENUM_TO_STR(NullExpr)
@@ -1134,7 +1182,7 @@ FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
     decl["nodeType"] == "EventDefinition");
   if (
     decl["parameters"]["parameters"].size() == 0 ||
-    decl["kind"] == "constructor")
+    (decl.contains("kind") && decl["kind"] == "constructor"))
   {
     return FunctionNoProto;
   }

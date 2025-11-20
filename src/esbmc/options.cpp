@@ -75,6 +75,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"override-return-annotation",
       NULL,
       "Override return annotation with inferred type"},
+     {"strict-types",
+      NULL,
+      "Enforce strict type checking for function arguments during "
+      "verification"},
    }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
@@ -121,7 +125,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"warning,W",
      boost::program_options::value<std::vector<std::string>>(),
      "enable specific frontend warnings, disable with \"no-\" prefix, or pass "
-     "options directly to the C/C++ frontends with the form -Wc,OPT1,OPT2,..."},
+     "options directly to the C/C++ frontends with the form "
+     "-Wc,OPT1,OPT2,..."},
     {"std",
      boost::program_options::value<std::string>()->value_name("version"),
      "set C/C++ standard version"},
@@ -157,6 +162,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "export generated goto program"},
     {"binary", NULL, "read goto program instead of source code"},
+    {"cprover", NULL, "add compatibility layer for CPROVER gotos"},
     {"little-endian", NULL, "allow little-endian word-byte conversions"},
     {"big-endian", NULL, "allow big-endian word-byte conversions"},
     {"16", NULL, "set width of machine word (default is 64)"},
@@ -177,9 +183,20 @@ const struct group_opt_templ all_cmd_options[] = {
     {"file-output",
      boost::program_options::value<std::string>(),
      "redirects every message into a file (no stdout/stderr)"},
+    {"dont-care-about-missing-extensions",
+     NULL,
+     "Don't crash on unsupported extensions."},
     {"witness-output",
+     boost::program_options::value<std::string>()->value_name("path"),
+     "generate the verification result witness in both Yaml and GraphML "
+     "format."},
+    {"witness-output-graphml",
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
      "generate the verification result witness in GraphML format; use '-' for "
+     "output to stdout"},
+    {"witness-output-yaml",
+     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     "generate the verification result witness in Yaml format; use '-' for "
      "output to stdout"},
     {"witness-producer", boost::program_options::value<std::string>(), ""},
     {"witness-programfile", boost::program_options::value<std::string>(), ""},
@@ -241,7 +258,6 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "disable the removal of NO-OP instructions in GOTO programs"},
     {"partial-loops", NULL, "permit paths with partial loops"},
-    {"unroll-loops", NULL, ""},
     {"no-slice", NULL, "do not remove unused equations"},
     {"multi-fail-fast",
      boost::program_options::value<int>()->value_name("n"),
@@ -262,7 +278,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"slice-assumes", NULL, "remove unused assume statements"},
     {"extended-try-analysis", NULL, ""},
     {"skip-bmc", NULL, "do not perform bounded model checking"},
-    {"cache-asserts", NULL, "cache asserts that were already proven correct"}}},
+    {"loop-invariant", NULL, "enable loop invariant checking"},
+    {"no-cache-asserts",
+     NULL,
+     "do not cache asserts that were already proven correct"}}},
   {"Incremental BMC",
    {{"incremental-bmc", NULL, "incremental loop unwinding verification"},
     {"falsification", NULL, "incremental loop unwinding for bug searching"},
@@ -292,6 +311,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "use solver with integer/real arithmetic. Integer/real have an unbounded "
      "range, overapproximating normal integers/reals while significantly "
      "boosting performance"},
+    {"parallel-solving",
+     NULL,
+     "solve each VCC in parallel (this activates --multi-property)"},
     {"smtlib", NULL, "use SMT lib format"},
     {"default-solver",
      boost::program_options::value<std::string>()->value_name("<solver>"),
@@ -368,6 +390,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-reachable-memory-leak",
      NULL,
      "exclude still reachable objects from --memory-leak-check"},
+    {"printf-check", NULL, "enable pointer validation for printf arguments"},
     {"nan-check", NULL, "check floating-point for NaN"},
     {"memory-leak-check", NULL, "enable memory leak check"},
     {"overflow-check", NULL, "enable arithmetic over- and underflow check"},
@@ -384,6 +407,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "enable global and local deadlock check with mutex"},
     {"data-races-check", NULL, "enable data races check"},
+    {"data-races-check-only",
+     NULL,
+     "enable data races check and only focus on race checks to reduce "
+     "thread interleaving"},
     {"lock-order-check", NULL, "enable for lock acquisition ordering check"},
     {"atomicity-check", NULL, "enable atomicity check at visible assignments"},
     {"stack-limit",
@@ -396,6 +423,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"force-malloc-success", NULL, "do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "do not check for realloc failure"},
     {"malloc-zero-is-null", NULL, "force malloc(0) to return NULL"},
+    {"max-symbolic-realloc-copy",
+     boost::program_options::value<int>()->default_value(128)->value_name("nr"),
+     "set maximum number of elements to copy symbolically in realloc (default "
+     "is 128)"},
     {"enable-unreachability-intrinsic",
      NULL,
      "enable the functionality of the __ESBMC_unreachable() intrinsic, which "

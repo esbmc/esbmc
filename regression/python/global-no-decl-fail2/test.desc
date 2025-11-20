@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Variable x in function modify is uninitialized.$

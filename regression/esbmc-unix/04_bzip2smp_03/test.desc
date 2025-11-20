@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --unwind 1 --function BZ2_bzclose --depth 200
 ^VERIFICATION FAILED$

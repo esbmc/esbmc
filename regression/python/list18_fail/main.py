@@ -1,0 +1,2 @@
+empty = []
+assert empty == ""

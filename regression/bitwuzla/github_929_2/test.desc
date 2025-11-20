@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzla --smt-formula-only --output -
+^\(set-logic QF\_BV\)$

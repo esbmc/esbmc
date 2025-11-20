@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^TypeError: foo\(\) missing 1 required positional argument: \'x\'$

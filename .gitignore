@@ -25,3 +25,7 @@ compile_commands.json
 
 # custom init scripts
 init.sh
+src/CMakeCache.txt
+src/CMakeFiles/
+src/CPackConfig.cmake
+src/CPackSourceConfig.cmake

@@ -174,7 +174,8 @@ void goto_convertt::do_atomic_begin(
   if (
     function.location().function() != "pthread_create" &&
     function.location().function() != "pthread_join_noswitch" &&
-    function.location().function() != "pthread_trampoline")
+    function.location().function() != "pthread_trampoline" &&
+    !config.options.get_bool_option("data-races-check-only"))
   {
     code_function_callt call;
     call.function() = symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
@@ -527,7 +528,7 @@ void goto_convertt::do_function_call_symbol(
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
   // the builtin function, we should honor the user function and call it
-  if (symbol->value.is_not_nil())
+  if (symbol->value.is_not_nil() && symbol->value.has_operands())
   {
     // insert function call
     code_function_callt function_call;
@@ -546,7 +547,9 @@ void goto_convertt::do_function_call_symbol(
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
   bool is_assert = (base_name == "assert");
 
-  if (is_assume || is_assert)
+  bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");
+
+  if (is_assume || is_assert || is_loop_invariant)
   {
     if (arguments.size() != 1)
     {
@@ -554,12 +557,42 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    if (options.get_bool_option("no-assertions") && !is_assume)
+    if (
+      options.get_bool_option("no-assertions") && !is_assume &&
+      !is_loop_invariant)
       return;
 
-    goto_programt::targett t =
-      dest.add_instruction(is_assume ? ASSUME : ASSERT);
-    migrate_expr(arguments.front(), t->guard);
+    // Rafael's invariant merging: combine consecutive __invariant() calls
+    // into a single LOOP_INVARIANT instruction for efficiency
+    // not tested yet, but should be correct
+    goto_programt::targett t;
+    expr2tc guard;
+    migrate_expr(arguments.front(), guard);
+
+    bool multiple_invariants = false;
+
+    if (is_loop_invariant)
+    {
+      if (!is_bool_type(guard))
+        log_error("invariants must be of bool type");
+
+      goto_programt::instructiont &final_instruct = dest.instructions.back();
+      if (final_instruct.is_loop_invariant())
+      {
+        multiple_invariants = true;
+        final_instruct.add_loop_invariant(guard);
+      }
+      else
+      {
+        t = dest.add_instruction(LOOP_INVARIANT);
+        t->add_loop_invariant(guard);
+      }
+    }
+    else
+    {
+      t = dest.add_instruction(is_assume ? ASSUME : ASSERT);
+      t->guard = guard;
+    }
 
     // The user may have re-declared the assert or assume functions to take an
     // integer argument, rather than a boolean. This leads to problems at the
@@ -567,11 +600,15 @@ void goto_convertt::do_function_call_symbol(
     // ASSUME/ASSERT insns are boolean exprs.  So, if the given argument to
     // this function isn't a bool, typecast it.  We can't rely on the C/C++
     // type system to ensure that.
-    if (!is_bool_type(t->guard->type))
+    if (!is_loop_invariant && !is_bool_type(t->guard->type))
       t->guard = typecast2tc(get_bool_type(), t->guard);
 
-    t->location = function.location();
-    t->location.user_provided(true);
+    // make sure that we don't alraedy have a location
+    if (!multiple_invariants)
+    {
+      t->location = function.location();
+      t->location.user_provided(true);
+    }
 
     if (is_assert)
       t->location.property("assertion");
@@ -1018,6 +1055,16 @@ void goto_convertt::do_function_call_symbol(
     code_assignt assignment(lhs, rhs);
     assignment.location() = function.location();
     copy(assignment, ASSIGN, dest);
+    return;
+  }
+  else if (base_name == "set_unexpected")
+  {
+    symbolt new_symbol;
+    new_symbol.name = "__ESBMC_unexpected";
+    new_symbol.type = arguments[0].type();
+    new_symbol.id = "c:@F@" + id2string(new_symbol.name);
+    new_symbol.value = arguments[0].op0().op0();
+    new_name(new_symbol);
     return;
   }
   else

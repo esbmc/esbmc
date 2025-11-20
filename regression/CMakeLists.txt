@@ -58,6 +58,9 @@ endif()
 if(ENABLE_CVC4)
     set(REGRESSIONS_CVC cvc)
 endif()
+if(ENABLE_CVC5)
+    set(REGRESSIONS_CVC cvc)
+endif()
 if(ENABLE_MATHSAT)
     set(REGRESSIONS_MATHSAT mathsat)
 endif()
@@ -73,15 +76,15 @@ endif()
 if(ENABLE_GOTO_CONTRACTOR)
     set(REGRESSIONS_GOTO_CONTRACTOR Interval-analysis-ibex-contractor)
 endif()
-if(ENABLE_OLD_FRONTEND)
-    set(REGRESSIONS_OLD_FRONTEND esbmc-old)
-endif()
 if(ENABLE_JIMPLE_FRONTEND)
     set(REGRESSIONS_JIMPLE jimple)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
+    set(REGRESSIONS_PYTHON_INTENSIVE python-intensive)
     set(REGRESSIONS_NUMPY numpy)
+    set(REGRESSIONS_HUMANEVAL humaneval)
+    set(REGRESSIONS_QUIXBUGS quixbugs)
 endif()
 
 if(ESBMC_CHERI_CLANG)
@@ -107,15 +110,19 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/deque
                       esbmc-cpp/list
                       esbmc-cpp/map
+                      esbmc-cpp/unordered_map
                       esbmc-cpp/multimap
                       esbmc-cpp/multiset
                       esbmc-cpp/priority_queue
                       esbmc-cpp/queue
                       esbmc-cpp/set
+                      esbmc-cpp/unordered_set
                       esbmc-cpp/stack
                       esbmc-cpp/unix
                       esbmc-cpp/vector
                       esbmc-cpp/try_catch
+                      esbmc-cpp/functional
+                      esbmc-cpp/bitset
                       )
 # list of C++11 test suites
 set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
@@ -157,6 +164,7 @@ if(APPLE)
                     ${REGRESSIONS_JIMPLE}
                     k-induction
                     k-induction-parallel
+                    termination
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
@@ -168,8 +176,13 @@ if(APPLE)
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_PYTHON_INTENSIVE}
                     ${REGRESSIONS_NUMPY}
+                    ${REGRESSIONS_HUMANEVAL}
+                    ${REGRESSIONS_QUIXBUGS}
                     ltl
+                    goto-transcoder
+                    loop-invariants
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -179,6 +192,7 @@ elseif(WIN32)
                     llvm
                     floats
                     k-induction
+                    termination
                     windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
@@ -187,6 +201,7 @@ elseif(WIN32)
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     ltl
+                    goto-transcoder
        )
 else()
   if(NOT BENCHBRINGUP)
@@ -201,6 +216,7 @@ else()
                     floats
                     floats-regression
                     k-induction
+                    termination
                     csmith
                     k-induction-parallel
                     cuda/benchmarks
@@ -224,9 +240,15 @@ else()
                     linux
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_PYTHON_INTENSIVE}
                     ${REGRESSIONS_NUMPY}
+                    ${REGRESSIONS_HUMANEVAL}
+                    ${REGRESSIONS_QUIXBUGS}
                     ltl
                     goto-coverage
+                    goto-transcoder
+                    parallel-solving
+                    loop-invariants
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
@@ -242,7 +264,8 @@ foreach(regression IN LISTS REGRESSIONS)
     else()
         set(MODES CORE KNOWNBUG FUTURE THOROUGH)
     endif()
+    if(CORE_REGRESSION_ONLY)
+      set(MODES CORE)
+    endif()
     add_esbmc_regression("${regression}" "${MODES}")
 endforeach()
-
-

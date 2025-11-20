@@ -1,14 +1,48 @@
 #pragma once
 
-#include <string>
+#include <algorithm>
 #include <fstream>
 #include <sstream>
-#include <algorithm>
+#include <string>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
 namespace json_utils
 {
+template <typename JsonType>
+bool search_function_in_ast(const JsonType &node, const std::string &func_name)
+{
+  if (!node.is_object())
+    return false;
+
+  // Check if this is a function definition with matching name
+  if (
+    node.contains("_type") && node["_type"] == "FunctionDef" &&
+    node.contains("name") && node["name"] == func_name)
+  {
+    return true;
+  }
+
+  // Recursively search all child nodes
+  for (const auto &[key, value] : node.items())
+  {
+    if (value.is_array())
+    {
+      for (const auto &item : value)
+      {
+        if (search_function_in_ast(item, func_name))
+          return true;
+      }
+    }
+    else if (value.is_object())
+    {
+      if (search_function_in_ast(value, func_name))
+        return true;
+    }
+  }
+  return false;
+}
+
 template <typename JsonType>
 JsonType find_class(const JsonType &ast_json, const std::string &class_name)
 {
@@ -147,14 +181,18 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
   for (auto &element : block["body"])
   {
+    // Check for annotated assignment (AnnAssign)
     if (
-      element["_type"] == "AnnAssign" && element["target"].contains("id") &&
-      element["target"]["id"] == var_name)
+      element["_type"] == "AnnAssign" && element.contains("target") &&
+      element["target"].contains("id") && element["target"]["id"] == var_name)
       return element;
 
+    // Check for regular assignment (Assign)
     if (
-      element["_type"] == "Assign" &&
+      element["_type"] == "Assign" && element.contains("targets") &&
+      !element["targets"].empty() && element["targets"][0].contains("_type") &&
       element["targets"][0]["_type"] == "Name" &&
+      element["targets"][0].contains("id") &&
       element["targets"][0]["id"] == var_name)
       return element;
   }
@@ -162,10 +200,8 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
   if (block.contains("args"))
   {
     for (auto &arg : block["args"]["args"])
-    {
-      if (arg["arg"] == var_name)
+      if (arg.contains("arg") && arg["arg"] == var_name)
         return arg;
-    }
   }
 
   return JsonType();
@@ -181,10 +217,27 @@ const JsonType find_var_decl(
 
   if (!function.empty())
   {
+    // Search in top-level functions
     for (const auto &elem : ast["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == function)
         ref = get_var_node(var_name, elem);
+
+      // Search in class methods
+      if (elem["_type"] == "ClassDef" && elem.contains("body"))
+      {
+        for (const auto &class_member : elem["body"])
+        {
+          if (
+            class_member["_type"] == "FunctionDef" &&
+            class_member["name"] == function)
+          {
+            ref = get_var_node(var_name, class_member);
+            if (!ref.empty())
+              return ref;
+          }
+        }
+      }
     }
   }
 
@@ -193,6 +246,42 @@ const JsonType find_var_decl(
     ref = get_var_node(var_name, ast);
 
   return ref;
+}
+
+template <typename JsonType>
+const JsonType get_var_value(
+  const std::string &var_name,
+  const std::string &function,
+  const JsonType &ast)
+{
+  JsonType value = find_var_decl(var_name, function, ast);
+  while (!value.empty() && value["_type"] != "arg" &&
+         value["value"]["_type"] == "Name")
+  {
+    value = find_var_decl(value["value"]["id"], function, ast);
+  }
+  return value;
+}
+
+template <typename JsonType>
+const JsonType get_list_element(const JsonType &list_value, int pos)
+{
+  if (
+    list_value["_type"] == "List" && list_value.contains("elts") &&
+    !list_value["elts"].empty())
+  {
+    return list_value["elts"][pos];
+  }
+
+  if (list_value["_type"] == "BinOp")
+  {
+    if (list_value["left"]["_type"] == "List")
+      return list_value["left"]["elts"][pos];
+    if (list_value["rigth"]["_type"] == "List")
+      return list_value["right"]["elts"][pos];
+  }
+
+  return JsonType();
 }
 
 template <typename JsonType>

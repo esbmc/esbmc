@@ -148,7 +148,6 @@ void symex_target_equationt::convert_internal_step(
   smt_convt::ast_vec &assertions,
   SSA_stept &step)
 {
-  static unsigned output_count = 0; // Temporary hack; should become scoped.
   smt_astt true_val = smt_conv.convert_ast(gen_true_expr());
   smt_astt false_val = smt_conv.convert_ast(gen_false_expr());
 
@@ -190,7 +189,7 @@ void symex_target_equationt::convert_internal_step(
   {
     for (std::list<expr2tc>::const_iterator o_it = step.output_args.begin();
          o_it != step.output_args.end();
-         o_it++)
+         ++o_it)
     {
       const expr2tc &tmp = *o_it;
       if (is_constant_expr(tmp) || is_constant_string2t(tmp))
@@ -371,7 +370,7 @@ unsigned int symex_target_equationt::clear_assertions()
     if (it->type == goto_trace_stept::ASSERT)
     {
       SSA_stepst::iterator it2 = it;
-      it--;
+      --it;
       SSA_steps.erase(it2);
       num_asserts++;
     }

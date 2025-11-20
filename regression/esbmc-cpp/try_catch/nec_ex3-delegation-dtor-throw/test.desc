@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.cpp
 --unwind 2 --no-unwinding-assertions --error-label ERROR --depth 215 --timeout 900
 

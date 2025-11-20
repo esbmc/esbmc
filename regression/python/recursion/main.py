@@ -1,4 +1,4 @@
-def fib(n:int) -> int:
+def fib(n):
   if n <= 0:
     return 0
   elif n == 1:
@@ -6,5 +6,5 @@ def fib(n:int) -> int:
   else:
     return fib(n - 1) + fib(n - 2)
 
-n:int = 6
-result:int = fib(n)
+n = 6
+result = fib(n)

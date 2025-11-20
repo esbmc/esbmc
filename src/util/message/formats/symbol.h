@@ -21,7 +21,7 @@ struct fmt::formatter<symbolt>
 
   // This will teach fmt how to convert irep_idt into a str.
   template <typename FormatContext>
-  auto format(const symbolt &p, FormatContext &ctx)
+  auto format(const symbolt &p, FormatContext &ctx) const
   {
     std::ostringstream oss;
     p.show(oss);

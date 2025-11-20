@@ -1,0 +1,4 @@
+CORE
+main.c
+--force-realloc-success --force-malloc-success
+^VERIFICATION FAILED$

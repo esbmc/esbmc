@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--cvc5 --incremental-bmc
+^VERIFICATION FAILED$

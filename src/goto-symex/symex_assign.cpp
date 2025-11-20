@@ -8,7 +8,6 @@
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 
 goto_symext::goto_symext(
@@ -132,25 +131,26 @@ void goto_symext::do_simplify(expr2tc &expr)
 // Handle side effects
 void goto_symext::handle_sideeffect(
   const expr2tc &lhs,
-  const sideeffect2t &effect)
+  const sideeffect2t &effect,
+  const guardt &guard)
 {
   switch (effect.kind)
   {
   case sideeffect2t::cpp_new:
   case sideeffect2t::cpp_new_arr:
-    symex_cpp_new(lhs, effect);
+    symex_cpp_new(lhs, effect, guard);
     break;
   case sideeffect2t::realloc:
-    symex_realloc(lhs, effect);
+    symex_realloc(lhs, effect, guardt());
     break;
   case sideeffect2t::malloc:
-    symex_malloc(lhs, effect);
+    symex_malloc(lhs, effect, guard);
     break;
   case sideeffect2t::alloca:
-    symex_alloca(lhs, effect);
+    symex_alloca(lhs, effect, guard);
     break;
   case sideeffect2t::va_arg:
-    symex_va_arg(lhs, effect);
+    symex_va_arg(lhs, effect, guard);
     break;
   case sideeffect2t::printf2:
     // Do nothing for printf
@@ -161,23 +161,31 @@ void goto_symext::handle_sideeffect(
 }
 
 // Handle conditional expressions (if2t)
-bool goto_symext::handle_conditional(const expr2tc &lhs, const if2t &if_effect)
+bool goto_symext::handle_conditional(
+  const expr2tc &lhs,
+  const if2t &if_effect,
+  const guardt &guard)
 {
   bool has_sideeffect = false;
+  const expr2tc &cond = if_effect.cond;
   const expr2tc &true_value = if_effect.true_value;
   const expr2tc &false_value = if_effect.false_value;
 
   // Handle true_value side effects
   if (is_sideeffect2t(true_value))
   {
-    handle_sideeffect(lhs, to_sideeffect2t(true_value));
+    guardt g(guard);
+    g.add(cond);
+    handle_sideeffect(lhs, to_sideeffect2t(true_value), g);
     has_sideeffect = true;
   }
 
   // Handle false_value side effects
   if (is_sideeffect2t(false_value))
   {
-    handle_sideeffect(lhs, to_sideeffect2t(false_value));
+    guardt g(guard);
+    g.add(not2tc(cond));
+    handle_sideeffect(lhs, to_sideeffect2t(false_value), g);
     has_sideeffect = true;
   }
 
@@ -228,7 +236,7 @@ void goto_symext::symex_assign(
   // Handle sideeffect2t (side effects) expressions
   if (is_sideeffect2t(rhs))
   {
-    handle_sideeffect(lhs, to_sideeffect2t(rhs));
+    handle_sideeffect(lhs, to_sideeffect2t(rhs), guard);
     return;
   }
 
@@ -236,7 +244,7 @@ void goto_symext::symex_assign(
   if (is_if2t(rhs))
   {
     const if2t &if_effect = to_if2t(rhs);
-    if (handle_conditional(lhs, if_effect))
+    if (handle_conditional(lhs, if_effect, guard))
       return;
   }
 
@@ -514,6 +522,9 @@ void goto_symext::symex_assign_array(
   expr2tc new_rhs = rhs;
   if (new_rhs->type != index.type)
     new_rhs = typecast2tc(index.type, new_rhs);
+
+  if (!is_nil_expr(full_rhs) && full_rhs->type != index.type)
+    full_rhs = typecast2tc(index.type, full_rhs);
 
   new_rhs =
     with2tc(index.source_value->type, index.source_value, index.index, new_rhs);

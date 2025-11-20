@@ -2,7 +2,6 @@
 /// Abstract Interpretation Domain
 
 #include <goto-programs/abstract-interpretation/ai_domain.h>
-#include <util/simplify_expr.h>
 
 /// Use the information in the domain to simplify the expression on the LHS of
 /// an assignment. This for example won't simplify symbols to their values, but

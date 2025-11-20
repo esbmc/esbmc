@@ -16,6 +16,8 @@ public:
     const nlohmann::json &call,
     python_converter &converter);
 
+  ~numpy_call_expr();
+
   exprt get() override;
 
 private:
