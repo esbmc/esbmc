@@ -563,7 +563,7 @@ void value_sett::get_value_set_rec(
     // rather than crashing or triggering undefined behavior. This prevents
     // internal assertion failures during memcpy analysis or when encountering
     // unmodeled pointer values, treating them as "unknown pointer" cases.
-   /* if (sym.rlevel == symbol2t::renaming_level::level2_global)
+    /* if (sym.rlevel == symbol2t::renaming_level::level2_global)
     {
       insert(dest, unknown2tc(original_type), BigInt(0));
       return;
