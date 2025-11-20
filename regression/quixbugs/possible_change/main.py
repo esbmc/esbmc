@@ -68,3 +68,4 @@ assert possible_change([1, 5, 10, 25, 50], 140) == 786
 assert possible_change([1, 5, 10, 25, 50, 100], 140) == 817
 assert possible_change([1, 3, 7, 42, 78], 140) == 981
 assert possible_change([3, 7, 42, 78], 140) == 20
+

@@ -29,3 +29,4 @@ assert next_permutation([4, 5, 8, 7, 1]) == [4, 7, 1, 5, 8]
 assert next_permutation([9, 5, 2, 6, 1]) == [9, 5, 6, 1, 2]
 assert next_permutation([44, 5, 1, 7, 9]) == [44, 5, 1, 9, 7]
 assert next_permutation([3, 4, 5]) == [3, 5, 4]
+

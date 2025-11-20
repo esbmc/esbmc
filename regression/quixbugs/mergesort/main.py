@@ -22,77 +22,6 @@ def mergesort(arr):
         right = mergesort(arr[middle:])
         return merge(left, right)
 
-"""
-def mergesort(arr):
-    def merge(left, right):
-        result = []
-        i = 0
-        j = 0
-        while i < len(left) and j < len(right):
-            if left[i] <= right[j]:
-                result.append(left[i])
-                i += 1
-            else:
-                result.append(right[j])
-                j += 1
-        result.extend(left[i:] or right[j:])
-        return result
-
-    if len(arr) == 0 or len(arr) == 1:
-        return arr
-    else:
-        middle = len(arr) // 2
-        left = mergesort(arr[:middle])
-        right = mergesort(arr[middle:])
-        return merge(left, right)
-
-def mergesort(arr):
-    def merge(left, right):
-        result = []
-        i = 0
-        j = 0
-        while i < len(left) and j < len(right):
-            if left[i] <= right[j]:
-                result.append(left[i])
-                i += 1
-            else:
-                result.append(right[j])
-                j += 1
-        result.extend(left[i:] or right[j:])
-        return result
-
-    if len(arr) == 1 or len(arr) == 0:
-        return arr
-    else:
-        middle = len(arr) // 2
-        left = mergesort(arr[:middle])
-        right = mergesort(arr[middle:])
-        return merge(left, right)
-
-def mergesort(arr):
-    def merge(left, right):
-        result = []
-        i = 0
-        j = 0
-        while i < len(left) and j < len(right):
-            if left[i] <= right[j]:
-                result.append(left[i])
-                i += 1
-            else:
-                result.append(right[j])
-                j += 1
-        result.extend(left[i:] or right[j:])
-        return result
-
-    if len(arr) < 2:
-        return arr
-    else:
-        middle = len(arr) // 2
-        left = mergesort(arr[:middle])
-        right = mergesort(arr[middle:])
-        return merge(left, right)
-"""
-
 assert mergesort([]) == []
 assert mergesort([1, 2, 6, 72, 7, 33, 4]) == [1, 2, 4, 6, 7, 33, 72]
 assert mergesort([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3]) == [1, 1, 2, 3, 3, 3, 4, 5, 5, 5, 6, 7, 8, 9, 9, 9]
@@ -107,3 +36,4 @@ assert mergesort([4, 3, 1, 5, 2]) == [1, 2, 3, 4, 5]
 assert mergesort([5, 4, 2, 3, 6, 7, 1]) == [1, 2, 3, 4, 5, 6, 7]
 assert mergesort([10, 16, 6, 1, 14, 19, 15, 2, 9, 4, 18, 17, 12, 3, 11, 8, 13, 5, 7]) == list(range(1, 20))
 assert mergesort([10, 16, 6, 1, 14, 19, 15, 2, 9, 4, 18]) == [1, 2, 4, 6, 9, 10, 14, 15, 16, 18, 19]
+

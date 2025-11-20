@@ -151,3 +151,4 @@ assert wrap(TEXT, 140) == [
     " surroundings - the sea, mountains, clouds, the open sky - Gurov thought how in reality everything is beautiful in this world when one",
     " reflects: everything except what we think or do ourselves when we forget our human dignity and the higher aims of our existence."
 ]
+
