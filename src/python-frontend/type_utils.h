@@ -30,7 +30,8 @@ enum class StatementType
   UNKNOWN,
   GLOBAL,
   TRY,
-  EXCEPTHANDLER
+  EXCEPTHANDLER,
+  DELETE
 };
 
 enum class ExpressionType
