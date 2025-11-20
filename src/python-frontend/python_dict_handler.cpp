@@ -31,14 +31,19 @@ bool python_dict_handler::is_dict_literal(const nlohmann::json &element) const
 std::string
 python_dict_handler::extract_dict_key(const nlohmann::json &key_node) const
 {
-  if (key_node["_type"] == "Constant" && key_node["value"].is_string())
-    return key_node["value"].get<std::string>();
+  if (key_node["_type"] == "Constant")
+  {
+    if (key_node["value"].is_string())
+      return key_node["value"].get<std::string>();
+    if (key_node["value"].is_number_integer())
+      return std::to_string(key_node["value"].get<int64_t>());
+  }
 
   if (key_node["_type"] == "Name")
     return key_node["id"].get<std::string>();
 
   throw std::runtime_error(
-    "Dictionary keys must be string literals or identifiers");
+    "Dictionary keys must be string or integer literals, or identifiers");
 }
 
 typet python_dict_handler::infer_value_type(const nlohmann::json &value_node)
@@ -237,4 +242,156 @@ exprt python_dict_handler::handle_dict_subscript(
   }
 
   return member_expr;
+}
+
+void python_dict_handler::mark_key_deleted(
+  const std::string &dict_id,
+  const std::string &key)
+{
+  deleted_keys_[dict_id].insert(key);
+}
+
+bool python_dict_handler::is_key_deleted(
+  const std::string &dict_id,
+  const std::string &key) const
+{
+  auto it = deleted_keys_.find(dict_id);
+  if (it == deleted_keys_.end())
+    return false;
+  return it->second.find(key) != it->second.end();
+}
+
+exprt python_dict_handler::handle_dict_membership(
+  const exprt &key_expr,
+  const exprt &dict_expr,
+  bool negated)
+{
+  // Extract the key string from the key expression
+  std::string key;
+
+  // Handle string constant
+  if (key_expr.id() == "string-constant")
+  {
+    key = key_expr.value().as_string();
+  }
+  // Handle integer constant
+  else if (
+    key_expr.is_constant() &&
+    (key_expr.type().is_signedbv() || key_expr.type().is_unsignedbv()))
+  {
+    BigInt int_val = binary2integer(
+      key_expr.value().as_string(), key_expr.type().is_signedbv());
+    key = std::to_string(int_val.to_int64());
+  }
+  // Handle constant array (string literal)
+  else if (key_expr.is_constant() && key_expr.type().is_array())
+  {
+    for (const auto &op : key_expr.operands())
+    {
+      if (op.is_constant())
+      {
+        BigInt char_val =
+          binary2integer(op.value().as_string(), op.type().is_signedbv());
+        if (char_val == 0)
+          break;
+        key += static_cast<char>(char_val.to_int64());
+      }
+    }
+  }
+  // Handle pointer to string (address_of)
+  else if (key_expr.type().is_pointer() && key_expr.is_address_of())
+  {
+    const exprt &pointee = key_expr.op0();
+    if (pointee.id() == "string-constant")
+    {
+      key = pointee.value().as_string();
+    }
+    else if (pointee.is_constant() && pointee.type().is_array())
+    {
+      for (const auto &op : pointee.operands())
+      {
+        if (op.is_constant())
+        {
+          BigInt char_val =
+            binary2integer(op.value().as_string(), op.type().is_signedbv());
+          if (char_val == 0)
+            break;
+          key += static_cast<char>(char_val.to_int64());
+        }
+      }
+    }
+  }
+  else
+  {
+    throw std::runtime_error(
+      "Dictionary membership key must be a string or integer literal");
+  }
+
+  // Get the dictionary type
+  typet dict_type = dict_expr.type();
+  if (dict_expr.is_symbol())
+  {
+    const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
+    if (sym)
+      dict_type = sym->type;
+  }
+
+  if (dict_type.id() == "symbol")
+  {
+    namespacet ns(symbol_table_);
+    dict_type = ns.follow(dict_type);
+  }
+
+  if (!dict_type.is_struct())
+  {
+    throw std::runtime_error(
+      "Membership check requires a dictionary (struct) type");
+  }
+
+  const struct_typet &struct_type = to_struct_type(dict_type);
+
+  // Check if the key exists as a component in the struct
+  bool key_exists = false;
+  for (const auto &component : struct_type.components())
+  {
+    if (component.get_name() == key)
+    {
+      key_exists = true;
+      break;
+    }
+  }
+
+  if (!key_exists)
+  {
+    // Key doesn't exist in struct definition
+    return gen_boolean(negated);
+  }
+
+  // Check if key was deleted
+  std::string dict_id =
+    dict_expr.is_symbol() ? dict_expr.identifier().as_string() : "anon_dict";
+
+  bool deleted = is_key_deleted(dict_id, key);
+
+  if (deleted)
+  {
+    // Key was deleted: "in" returns false, "not in" returns true
+    return gen_boolean(negated);
+  }
+  else
+  {
+    // Key exists and not deleted: "in" returns true, "not in" returns false
+    return gen_boolean(!negated);
+  }
+}
+
+void python_dict_handler::unmark_key_deleted(
+  const std::string &dict_id,
+  const std::string &key)
+{
+  auto it = deleted_keys_.find(dict_id);
+  if (it != deleted_keys_.end())
+  {
+    it->second.erase(key);
+  }
 }
