@@ -217,8 +217,24 @@ exprt python_list::build_push_list_call(
   code_function_callt push_func_call;
   push_func_call.function() = symbol_expr(*push_func_sym);
   push_func_call.arguments().push_back(symbol_expr(list)); // list
-  push_func_call.arguments().push_back(                    // &element
-    address_of_exprt(symbol_expr(*elem_info.elem_symbol)));
+
+  // For string types (pointer to char), we must pass the pointer value directly
+  // For other types (including other pointers such None/bool*), we must pass the address
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->type.is_pointer() &&
+    elem_info.elem_symbol->type.subtype() == char_type())
+  {
+    // For string type (char*), we must pass the pointer value itself
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  }
+  else
+  {
+    // For all other types, we must pass address of the value
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+  }
+
+  push_func_call.arguments().push_back(element_arg); // element or &element
   push_func_call.arguments().push_back(
     symbol_expr(*elem_info.elem_type_sym));                  // type hash
   push_func_call.arguments().push_back(elem_info.elem_size); // element size
@@ -905,10 +921,21 @@ exprt python_list::handle_index_access(
       base.swap(deref);
     }
 
-    // Cast from void* to target type pointer and dereference
+    // For array types, return pointer to element type instead of pointer to array
+    // The dereference system doesn't support array types as target types
+    // Callers will handle the conversion when needed (similar to single-char string handling)
+    if (elem_type.is_array())
+    {
+      const array_typet &arr_type = to_array_type(elem_type);
+      // Cast to pointer to element type (e.g., char* instead of char[2]*)
+      typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
+      return tc;
+    }
+
+    // Cast from void* to target type pointer
     typecast_exprt tc(obj_value, pointer_typet(elem_type));
 
-    // Dereference to get the actual value
+    // Dereference to get the actual value (for non-array types)
     dereference_exprt deref(elem_type);
     deref.op0() = tc;
     return deref;
@@ -1116,8 +1143,8 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   exprt type_hash = symbol_expr(*item_info.elem_type_sym);
   exprt elem_size = item_info.elem_size;
 
-  // Check if item is a pointer (void* or char* - from loop iteration over strings)
-  if (item_info.elem_symbol->type.is_pointer())
+  // Check if item is a void pointer (from loop iteration over strings)
+  if (item_info.elem_symbol->type == pointer_typet(empty_typet()))
   {
     const std::string &list_name = list.identifier().as_string();
     auto type_map_it = list_type_map.find(list_name);
@@ -1132,7 +1159,7 @@ exprt python_list::contains(const exprt &item, const exprt &list)
         // Check if stored type is a char array (string)
         if (stored_type.is_array() && stored_type.subtype() == char_type())
         {
-          // Use the stored string array type instead of pointer type
+          // Use the stored string array type instead of void pointer type
           const type_handler type_handler_ = converter_.get_type_handler();
           const std::string stored_type_name =
             type_handler_.type_to_string(stored_type);
@@ -1143,15 +1170,35 @@ exprt python_list::contains(const exprt &item, const exprt &list)
             config.ansi_c.address_width));
           type_hash = stored_hash;
 
-          // Recalculate size for stored array type
-          const array_typet &array_type =
-            static_cast<const array_typet &>(stored_type);
-          const size_t array_length =
-            std::stoull(array_type.size().value().as_string(), nullptr, 2);
-          const size_t subtype_size_bits =
-            std::stoull(stored_type.subtype().width().as_string(), nullptr, 10);
-          size_t size_bytes = (array_length * subtype_size_bits) / 8;
-          elem_size = from_integer(BigInt(size_bytes), size_type());
+          // Use strlen for void* strings from iteration
+          const symbolt *strlen_symbol =
+            converter_.symbol_table().find_symbol("c:@F@strlen");
+          if (strlen_symbol)
+          {
+            // Call strlen to get actual string length
+            symbolt &strlen_result = converter_.create_tmp_symbol(
+              list_value_,
+              "$strlen_result$",
+              size_type(),
+              gen_zero(size_type()));
+            code_declt strlen_decl(symbol_expr(strlen_result));
+            strlen_decl.location() = item_info.location;
+            converter_.add_instruction(strlen_decl);
+
+            code_function_callt strlen_call;
+            strlen_call.function() = symbol_expr(*strlen_symbol);
+            strlen_call.lhs() = symbol_expr(strlen_result);
+            strlen_call.arguments().push_back(
+              symbol_expr(*item_info.elem_symbol));
+            strlen_call.type() = size_type();
+            strlen_call.location() = item_info.location;
+            converter_.add_instruction(strlen_call);
+
+            // Add 1 for null terminator: size = strlen(s) + 1
+            exprt one_const = from_integer(1, strlen_result.type);
+            elem_size = exprt("+", strlen_result.type);
+            elem_size.copy_to_operands(symbol_expr(strlen_result), one_const);
+          }
 
           break; // Found string array type, use it
         }

@@ -1344,6 +1344,137 @@ private:
       obj_node = find_annotated_assign(obj, (*current_func)["args"]["args"]);
     }
 
+    // Handle nested attribute access (e.g., self.f.foo() or self.b.a.get_value())
+    if (obj_node.empty() && call["func"]["value"]["_type"] == "Attribute")
+    {
+      // Recursively resolve nested attribute chain (e.g., self.b.a -> [self, b, a])
+      std::function<std::string(const Json &, std::vector<std::string> &)>
+        extract_attr_chain =
+          [&](
+            const Json &node, std::vector<std::string> &chain) -> std::string {
+        if (node["_type"] == "Attribute")
+        {
+          std::string attr = node["attr"].template get<std::string>();
+          chain.push_back(attr);
+          return extract_attr_chain(node["value"], chain);
+        }
+        else if (node["_type"] == "Name" && node.contains("id"))
+        {
+          return node["id"].template get<std::string>();
+        }
+        return "";
+      };
+
+      std::vector<std::string> attr_chain;
+      std::string base_obj =
+        extract_attr_chain(call["func"]["value"], attr_chain);
+
+      // Reverse the chain because extract_attr_chain collects from outer to inner
+      // For self.b.a, we get [a, b] but need [b, a] to process left to right
+      std::reverse(attr_chain.begin(), attr_chain.end());
+
+      // If base object is "self" and we have at least one attribute, resolve the chain
+      if (base_obj == "self" && !attr_chain.empty() && current_func != nullptr)
+      {
+        // Get the class name from current_func's context
+        std::string class_name = "";
+        for (const Json &elem : ast_["body"])
+        {
+          if (elem["_type"] == "ClassDef" && elem.contains("body"))
+          {
+            for (const Json &member : elem["body"])
+            {
+              if (
+                member["_type"] == "FunctionDef" &&
+                member["name"] == (*current_func)["name"])
+              {
+                class_name = elem["name"].template get<std::string>();
+                break;
+              }
+            }
+            if (!class_name.empty())
+              break;
+          }
+        }
+
+        // Recursively resolve the attribute chain
+        std::string current_type = class_name;
+        for (size_t i = 0; i < attr_chain.size(); ++i)
+        {
+          const std::string &attr_name = attr_chain[i];
+
+          // Find the current class
+          Json current_class =
+            json_utils::find_class(ast_["body"], current_type);
+          if (current_class.empty())
+            break;
+
+          // Look for the attribute in __init__ method
+          bool found = false;
+          for (const Json &member : current_class["body"])
+          {
+            if (
+              member["_type"] == "FunctionDef" && member["name"] == "__init__")
+            {
+              for (const Json &stmt : member["body"])
+              {
+                // Check for AnnAssign: self.attr: Type = value
+                if (
+                  stmt["_type"] == "AnnAssign" &&
+                  stmt["target"]["_type"] == "Attribute" &&
+                  stmt["target"]["value"]["id"] == "self" &&
+                  stmt["target"]["attr"] == attr_name)
+                {
+                  // Found the attribute, get its type
+                  if (
+                    stmt.contains("annotation") &&
+                    !stmt["annotation"].is_null() &&
+                    stmt["annotation"].contains("id") &&
+                    !stmt["annotation"]["id"].is_null())
+                  {
+                    current_type =
+                      stmt["annotation"]["id"].template get<std::string>();
+                    found = true;
+                    break;
+                  }
+                }
+              }
+              if (found)
+                break;
+            }
+          }
+
+          if (!found)
+            break;
+
+          // If this is the last attribute in the chain, find the method return type
+          if (i == attr_chain.size() - 1)
+          {
+            Json final_class =
+              json_utils::find_class(ast_["body"], current_type);
+            if (!final_class.empty())
+            {
+              const std::string &method_name = call["func"]["attr"];
+              for (const Json &method : final_class["body"])
+              {
+                if (
+                  method["_type"] == "FunctionDef" &&
+                  method["name"] == method_name)
+                {
+                  if (
+                    method.contains("returns") &&
+                    method["returns"].contains("id"))
+                  {
+                    return method["returns"]["id"].template get<std::string>();
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
     if (obj_node.empty())
       throw std::runtime_error("Object \"" + obj + "\" not found.");
 

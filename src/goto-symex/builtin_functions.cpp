@@ -826,6 +826,51 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   else
     abort();
 
+  // Only perform dereference checks if printf-check is enabled
+  if (options.get_bool_option("printf-check"))
+  {
+    // Dereference check all pointer arguments after the format string
+    for (size_t i = idx; i < new_rhs.operands.size(); i++)
+    {
+      expr2tc &arg = new_rhs.operands[i];
+
+      if (!arg)
+        continue;
+
+      if (!is_pointer_type(arg->type))
+        continue;
+
+      if (cur_state->guard.is_false())
+        continue;
+
+      // Check the entire expression tree for L2 symbols, not just top-level
+      bool has_l2_symbols = false;
+      arg->foreach_operand([&has_l2_symbols](const expr2tc &e) {
+        if (is_symbol2t(e))
+        {
+          const symbol2t &sym = to_symbol2t(e);
+          if (
+            sym.rlevel == symbol2t::renaming_level::level2 ||
+            sym.rlevel == symbol2t::renaming_level::level2_global)
+          {
+            has_l2_symbols = true;
+          }
+        }
+      });
+
+      if (has_l2_symbols)
+        continue;
+
+      type2tc subtype = to_pointer_type(arg->type).subtype;
+
+      if (is_empty_type(subtype) || is_nil_type(subtype))
+        continue;
+
+      expr2tc deref_expr = dereference2tc(subtype, arg);
+      dereference(deref_expr, dereferencet::READ);
+    }
+  }
+
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
     new_rhs.operands.erase(new_rhs.operands.begin());
@@ -2789,8 +2834,9 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       rhs = to_typecast2t(rhs).from;
 
     auto is_none_type = [](const expr2tc &e) -> bool {
-      return is_struct_type(e) &&
-             to_struct_type(e->type).name.as_string() == "tag-NoneType";
+      // None is represented as pointer to bool
+      return is_pointer_type(e) &&
+             is_bool_type(to_pointer_type(e->type).subtype);
     };
 
     const bool lhs_is_none = is_none_type(lhs);
@@ -2830,28 +2876,24 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       }
     }
 
-    // Handle None vs pointer comparisons
-    if (
-      (lhs_is_none && is_pointer_type(rhs)) ||
-      (rhs_is_none && is_pointer_type(lhs)))
+    // Handle None vs None pointer comparisons (identity check)
+    if (lhs_is_none && rhs_is_none)
     {
-      const expr2tc &ptr_expr = is_pointer_type(lhs) ? lhs : rhs;
+      const expr2tc &ptr_expr = lhs;
       expr2tc null_ptr = gen_zero(ptr_expr->type);
-
-      // isnone always checks equality
       expr = equality2tc(ptr_expr, null_ptr);
       return;
     }
 
-    // Handle None vs non-pointer constant folding
+    // Handle None vs non-None comparison
     if ((lhs_is_none && !rhs_is_none) || (rhs_is_none && !lhs_is_none))
     {
-      // isnone checks equality, so None == non-None is false
+      // None is never equal to non-None values
       expr = gen_false_expr();
       return;
     }
 
-    // Handle None == None (both sides are None, so always true)
+    // Handle non-None comparisons
     expr = gen_true_expr();
   }
 }

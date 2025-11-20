@@ -286,7 +286,8 @@ void violation_graphml_goto_trace(
   grapht graph(grapht::VIOLATION);
   graph.verified_file = options.get_option("input-file");
 
-  log_progress("Generating Violation Witness for: {}", graph.verified_file);
+  log_progress(
+    "Generating Violation Graphml Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -360,7 +361,7 @@ void violation_yaml_goto_trace(
 {
   yamlt yml(yamlt::VIOLATION);
   yml.verified_file = options.get_option("input-file");
-  log_progress("Generating Violation Witness for: {}", yml.verified_file);
+  log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
 
   for (const auto &step : goto_trace.steps)
   {
@@ -441,7 +442,8 @@ void correctness_graphml_goto_trace(
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = options.get_option("input-file");
-  log_progress("Generating Correctness Witness for: {}", graph.verified_file);
+  log_progress(
+    "Generating Correctness Graphml Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -488,7 +490,8 @@ void correctness_yaml_goto_trace(
 {
   yamlt yml(yamlt::CORRECTNESS);
   yml.verified_file = options.get_option("input-file");
-  log_progress("Generating Correctness Witness for: {}", yml.verified_file);
+  log_progress(
+    "Generating Correctness Yaml Witness for: {}", yml.verified_file);
 
 #if 0
   for (const auto &step : goto_trace.steps)

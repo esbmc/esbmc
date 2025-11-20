@@ -1,18 +1,19 @@
 #include <python-frontend/function_call_expr.h>
-#include <python-frontend/symbol_id.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
+#include <python-frontend/symbol_id.h>
+#include <python-frontend/type_handler.h>
+#include <python-frontend/type_utils.h>
+#include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
-#include <util/string_constant.h>
-#include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/message.h>
 #include <util/python_types.h>
+#include <util/string_constant.h>
+
 #include <regex>
 #include <stdexcept>
 
@@ -492,7 +493,19 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
         var_expr, loc);
     }
 
-    // Try to extract constant value
+    // Even if the symbol has a constant value, we should not
+    // perform compile-time conversion if the symbol is mutable (lvalue)
+    // because its value may change at runtime (e.g., loop variables)
+    if (sym->lvalue)
+    {
+      // This is a mutable variable - use runtime conversion
+      exprt var_expr = converter_.get_expr(arg);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_chr_conversion(
+        var_expr, loc);
+    }
+
+    // Try to extract constant value (only for truly constant symbols)
     const auto &const_expr = to_constant_expr(val);
     std::string binary_str = id2string(const_expr.get_value());
     try
@@ -653,6 +666,48 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
         "ord() expected string of length 1, but " + py_type + " found");
     }
 
+    // For runtime variables (mutable), try to extract constant value if available
+    if (sym->lvalue && !sym->value.is_nil())
+    {
+      auto value_opt = extract_string_from_symbol(sym);
+      if (value_opt)
+      {
+        // Successfully extracted constant value from lvalue string
+        code_point = decode_utf8_codepoint(*value_opt);
+
+        // Remove Name data
+        arg["_type"] = "Constant";
+        arg.erase("id");
+        arg.erase("ctx");
+
+        // Replace the arg with the integer value
+        arg["value"] = code_point;
+        arg["type"] = "int";
+
+        // Build and return the integer expression
+        exprt expr = converter_.get_expr(arg);
+        expr.type() = type_handler_.get_typet("int", 0);
+        return expr;
+      }
+      // If extraction failed for lvalue, fall through to runtime conversion
+    }
+
+    // Use runtime conversion for variables without constant value or failed extraction
+    if (sym->value.is_nil() || sym->lvalue)
+    {
+      exprt var_expr = converter_.get_expr(arg);
+
+      if (
+        var_expr.type() == char_type() || var_expr.type().is_signedbv() ||
+        var_expr.type().is_unsignedbv())
+      {
+        return typecast_exprt(var_expr, int_type());
+      }
+
+      return gen_exception_raise("ValueError", "ord() requires a character");
+    }
+
+    // Compile-time extraction for constant symbols
     auto value_opt = extract_string_from_symbol(sym);
     if (!value_opt)
     {
@@ -2267,6 +2322,142 @@ exprt function_call_expr::handle_general_function_call()
       call.arguments().push_back(arg);
 
     arg_index++;
+  }
+
+  // Add default arguments for missing parameters
+  size_t num_provided_args = call_["args"].size();
+  size_t total_params = params.size();
+
+  // Calculate how many arguments will actually be present after implicit additions
+  size_t num_actual_args = num_provided_args;
+
+  // For ClassMethod with no explicit args, check if object will be implicitly added
+  if (function_type_ == FunctionType::ClassMethod && call_["args"].empty())
+  {
+    // Check the exact conditions where the object is added as an argument
+    bool will_add_object = false;
+
+    if (obj_symbol)
+    {
+      std::string var_type =
+        type_handler_.get_var_type(obj_symbol->name.as_string());
+
+      if (var_type == "int")
+        will_add_object = true;
+    }
+
+    if (call_["func"]["value"]["_type"] == "BinOp")
+      will_add_object = true;
+
+    if (will_add_object)
+      num_actual_args = 1;
+  }
+
+  // Check if we should skip validation for numpy functions
+  // Numpy stub files often have incomplete/incorrect default parameter info
+  // TODO: we have to revisit the function signature handling for numpy functions
+  bool skip_validation = false;
+
+  if (call_["func"]["_type"] == "Attribute")
+  {
+    auto current = call_["func"]["value"];
+
+    // Walk up the attribute chain to get full module path
+    while (current["_type"] == "Attribute")
+      current = current["value"];
+
+    if (current["_type"] == "Name")
+    {
+      std::string root = current["id"].get<std::string>();
+
+      // Check if it starts with np or numpy
+      skip_validation = (root == "np" || root == "numpy");
+    }
+  }
+
+  // First, check if all required (non-default) parameters are provided
+  if (!skip_validation)
+  {
+    for (size_t param_idx = param_offset; param_idx < total_params; ++param_idx)
+    {
+      const auto &param_info = params[param_idx];
+      size_t arg_position = param_idx - param_offset;
+
+      // Check if this parameter was provided (either positionally or by keyword)
+      bool provided = arg_position < num_actual_args;
+
+      // Check if provided as keyword argument
+      if (
+        !provided && call_.contains("keywords") && call_["keywords"].is_array())
+      {
+        std::string param_name = param_info.get_base_name().as_string();
+        for (const auto &kw : call_["keywords"])
+        {
+          if (
+            kw.contains("arg") && !kw["arg"].is_null() &&
+            kw["arg"].get<std::string>() == param_name)
+          {
+            provided = true;
+            break;
+          }
+        }
+      }
+
+      // If not provided and has no default, it's an error
+      if (!provided && !param_info.has_default_value())
+      {
+        std::string param_name = param_info.get_base_name().as_string();
+        std::string func_name = function_id_.get_function();
+
+        std::ostringstream msg;
+        msg << func_name << "() missing required positional argument: '"
+            << param_name << "'";
+
+        exprt exception = gen_exception_raise("TypeError", msg.str());
+        locationt loc = converter_.get_location_from_decl(call_);
+        exception.location() = loc;
+        exception.location().user_provided(true);
+
+        return exception;
+      }
+    }
+  }
+
+  // Add default arguments for missing optional parameters
+  // BUT: only do this if there are no keywords in the call.
+  // When keywords are present, handle_keywords() will properly fill in
+  // missing arguments with correct Optional wrapping.
+  bool has_keywords = call_.contains("keywords") &&
+                      call_["keywords"].is_array() &&
+                      !call_["keywords"].empty();
+
+  if (!has_keywords)
+  {
+    for (size_t param_idx = num_provided_args + param_offset;
+         param_idx < total_params;
+         ++param_idx)
+    {
+      const auto &param_info = params[param_idx];
+
+      // Check if parameter has a default value
+      if (param_info.has_default_value())
+      {
+        exprt default_val = param_info.default_value();
+
+        // Handle Optional types: wrap default in Optional if needed
+        if (param_info.type().is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(param_info.type());
+          std::string tag = struct_type.tag().as_string();
+
+          if (tag.starts_with("tag-Optional_"))
+            default_val =
+              converter_.wrap_in_optional(default_val, param_info.type());
+        }
+
+        call.arguments().push_back(default_val);
+      }
+    }
   }
 
   return call;

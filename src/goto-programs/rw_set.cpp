@@ -41,7 +41,7 @@ void rw_sett::compute(const exprt &expr)
       {
         const symbol_exprt &symbol_expr = to_symbol_expr(code.op1());
         const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
-        if (symbol->value.is_nil())
+        if (symbol->value.is_nil() || symbol->name == "__VERIFIER_assert")
           Forall_operands (it, code.op2())
           {
             if (it->is_address_of())

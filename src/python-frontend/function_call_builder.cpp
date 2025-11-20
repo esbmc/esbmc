@@ -1,9 +1,9 @@
 #include <python-frontend/function_call_builder.h>
 #include <python-frontend/function_call_expr.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/numpy_call_expr.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 
@@ -15,12 +15,19 @@ const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
+const std::string kEsbmcCover = "__ESBMC_cover";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
   const nlohmann::json &call)
   : converter_(converter), call_(call)
 {
+}
+
+bool function_call_builder::is_cover_call(const symbol_id &function_id) const
+{
+  const std::string &func_name = function_id.get_function();
+  return (func_name == kEsbmcCover);
 }
 
 bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
@@ -312,6 +319,10 @@ symbol_id function_call_builder::build_function_id() const
   {
     function_id.clear();
   }
+  else if (is_cover_call(function_id))
+  {
+    function_id.clear();
+  }
 
   // Insert class name in the symbol id
   if (obj_name == "super")
@@ -371,6 +382,14 @@ exprt function_call_builder::build() const
 {
   symbol_id function_id = build_function_id();
 
+  if (is_len_call(function_id) && !call_["args"].empty())
+  {
+    exprt arg_expr = converter_.get_expr(call_["args"][0]);
+
+    if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
+      return from_integer(1, long_long_int_type());
+  }
+
   // Special handling for single character len() calls
   if (function_id.get_function() == "__ESBMC_len_single_char")
     return from_integer(1, long_long_int_type());
@@ -405,6 +424,28 @@ exprt function_call_builder::build() const
     assume_code.location() = converter_.get_location_from_decl(call_);
 
     return assume_code;
+  }
+
+  // cover calls convert to code_assert statement
+  // cover semantics: cover(cond) behaves as assert(!cond)
+  // - failure (counterexample) means the condition is satisfiable
+  // - success (proof) means the condition is not satisfiable
+  if (is_cover_call(function_id))
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error("__ESBMC_cover requires one boolean argument");
+
+    exprt condition = converter_.get_expr(call_["args"][0]);
+
+    // Negate the condition: cover(cond) = assert(!cond)
+    exprt negated_condition = gen_not(condition);
+
+    // Create code_assert statement with cover property
+    code_assertt cover_code(negated_condition);
+    locationt loc = converter_.get_location_from_decl(call_);
+    cover_code.location() = loc;
+
+    return cover_code;
   }
 
   if (call_["func"]["_type"] == "Attribute")

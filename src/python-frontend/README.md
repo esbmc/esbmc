@@ -146,6 +146,11 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **Concatenation (+ operator)**: Fully supports the list + list operation (e.g., `[1,2] + [3,4] → [1,2,3,4]`), producing a new list containing all elements of both operands in order.
   - **String Operations**:
     - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns `True`).
+    - **Repetition (multiplication operator)**: Supports string repetition using the `*` operator with both orderings:
+      - `"a" * 3` returns `"aaa"` (string × integer)
+      - `3 * "a"` returns `"aaa"` (integer × string)
+      - **Supports boolean multipliers:** `"a" * True` returns `"a"`, `"a" * False` returns `""`
+      - Works with both string literals and string variables
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
     - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
     - **lstrip() method**: Removes leading whitespace characters from strings (e.g., `"  hello".lstrip()` returns `"hello"`).
@@ -174,6 +179,18 @@ Below is an overview of ESBMC-Python's key capabilities:
 ### Error Handling and Assertions
 - **Assertions**: Supports `assert` statements for program verification.
 - **Assumptions**: Supports `assume` statements for specifying assumptions for verification.
+
+### Cover Properties and Reachability Analysis
+- **Cover Properties**: Supports `__ESBMC_cover()` function for checking if conditions are satisfiable at specific program points.
+  - **Reachability Semantics**: Cover properties use inverted assertion semantics, where `cover(cond)` behaves as `assert(!cond)`:
+    - **Counterexample (failed assertion)**: condition is satisfiable (reachable).
+    - **Proof (passed assertion)**: condition is unsatisfiable (unreachable).
+  - **Use Cases**:
+    - **Path Reachability**: Verify that specific code branches can be executed.
+    - **Value Coverage**: Check if variables can achieve certain values or ranges.
+    - **Dead Code Detection**: Identify unreachable code paths.
+    - **Test Adequacy**: Ensure test scenarios exercise interesting program states.
+  - **Multi-Property Mode**: Cover properties work best with the `--multi-property` flag, allowing ESBMC to continue verification after satisfiable covers are found.
 
 ### Module System and Built-in Variables
 
@@ -953,6 +970,173 @@ In this example, ESBMC with `--strict-types` successfully detects all type misma
 - **Optional Feature**: Disabled by default to allow flexible verification; enable only when type safety is critical.
 
 This feature helps prevent `TypeError` exceptions that would occur at runtime when incompatible types are passed to functions, improving code reliability through static type verification.
+
+### Example 8: Cover Properties for Reachability Analysis
+
+This example demonstrates how cover properties can be used to analyze program reachability and verify that specific conditions are possible:
+
+````Python
+def analyze_paths(x: int) -> str:
+    """Function with multiple execution paths"""
+    if x > 100:
+        return "high"
+    elif x > 50:
+        return "medium"
+    elif x > 0:
+        return "low"
+    else:
+        return "zero_or_negative"
+
+def test_reachability() -> None:
+    x: int = nondet_int()
+    
+    # Cover: Can x be greater than 100?
+    __ESBMC_cover(x > 100)
+    
+    # Cover: Can x be in the medium range?
+    __ESBMC_cover(50 < x <= 100)
+    
+    # Add constraint: x must be positive
+    __ESBMC_assume(x > 0)
+    
+    # Cover: Can x still be negative?
+    __ESBMC_cover(x < 0)
+    
+    # Cover: Can x be positive?
+    __ESBMC_cover(x > 0)
+    
+    result = analyze_paths(x)
+    
+    # Cover: Can we reach the "high" path?
+    __ESBMC_cover(result == "high")
+    
+    # Cover: Can we reach the "zero_or_negative" path?
+    __ESBMC_cover(result == "zero_or_negative")
+
+def test_dead_code_detection() -> None:
+    """Using cover to identify unreachable code"""
+    value: int = nondet_int()
+    __ESBMC_assume(value >= 0)
+    
+    if value < 0:
+        # This is dead code
+        __ESBMC_cover(True)
+        print("This branch is unreachable")
+    
+    if value >= 0:
+        # This is reachable code
+        __ESBMC_cover(True)
+        print("This branch is reachable")
+
+test_reachability()
+test_dead_code_detection()
+````
+
+**Command:**
+
+```bash
+$ esbmc main.py --unwind 10 --multi-property
+```
+
+**ESBMC Output:**
+```
+✗ FAILED: 'assertion at file main.py line 16 column 4 function test_reachability'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 9223372036854767699 (01111111 11111111 11111111 11111111 11111111 11111111 11100000 01010011)
+
+State 2 file main.py line 16 column 4 function test_reachability thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 16 column 4 function test_reachability
+  assertion
+  !(x > 100)
+
+✗ FAILED: 'assertion at file main.py line 19 column 4 function test_reachability'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 79 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 01001111)
+
+State 2 file main.py line 19 column 4 function test_reachability thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 19 column 4 function test_reachability
+  assertion
+  !(50 < x && x <= 100)
+
+✗ FAILED: 'assertion at file main.py line 28 column 4 function test_reachability'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 2047 (00000000 00000000 00000000 00000000 00000000 00000000 00000111 11111111)
+
+State 3 file main.py line 28 column 4 function test_reachability thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 28 column 4 function test_reachability
+  assertion
+  !(x > 0)
+
+✗ FAILED: 'assertion at file main.py line 33 column 4 function test_reachability'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 103 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 01100111)
+
+State 3 file main.py line 33 column 4 function test_reachability thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 33 column 4 function test_reachability
+  assertion
+  !(return_value$_strcmp$1 == 0)
+
+✗ FAILED: 'assertion at file main.py line 50 column 8 function test_dead_code_detection'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 2047 (00000000 00000000 00000000 00000000 00000000 00000000 00000111 11111111)
+
+State 3 file main.py line 40 column 4 function test_dead_code_detection thread 0
+----------------------------------------------------
+  value = 0 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 5 file main.py line 50 column 8 function test_dead_code_detection thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 50 column 8 function test_dead_code_detection
+  assertion
+  !1
+````
+
+## Understanding Cover Property Results:
+
+- **FAILED (counterexample found)** = The condition is satisfiable/reachable.
+  - This is the expected outcome for conditions you want to verify as possible.
+  - ESBMC provides concrete values that satisfy the condition.
+- **PASSED (proof found)** = The condition is unsatisfiable/unreachable.
+  - This indicates the condition cannot be satisfied given the constraints.
+  - Useful for verifying dead code or proving certain states are unreachable.
+- **Key Insights from this Example**:
+  - **Lines 16, 19, 28, 33, 50**: These cover properties fail (have counterexamples), confirming that various values and code paths are reachable.
+  - **Lines 25, 36**: These cover properties pass (have proofs), demonstrating that after the `__ESBMC_assume(x > 0)`, negative values and the "zero_or_negative" path are provably unreachable.
+  - **Dead Code Detection**: The cover property at line 50 fails (counterexample), confirming that the branch is reachable. The cover at line 45 (in the `if value < 0` branch) would pass (proof), proving that the branch is dead code.
 
 # Numpy Formal Verification with ESBMC
 

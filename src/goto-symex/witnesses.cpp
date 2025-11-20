@@ -926,7 +926,8 @@ std::string get_formated_assignment(
   std::string assignment = "";
   if (
     !is_nil_expr(step.value) && is_constant_expr(step.value) &&
-    is_valid_witness_step(ns, step))
+    !is_constant_array2t(step.value) && !is_constant_struct2t(step.value) &&
+    !is_constant_union2t(step.value) && is_valid_witness_step(ns, step))
   {
     assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
     assignment += " == ";

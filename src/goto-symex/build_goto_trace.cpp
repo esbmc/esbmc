@@ -62,7 +62,7 @@ void build_goto_trace(
     if (SSA_step.hidden && is_compact_trace)
       continue;
 
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true() && !SSA_step.is_assume())
+    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
       continue;
 
     goto_trace_stept goto_trace_step;
