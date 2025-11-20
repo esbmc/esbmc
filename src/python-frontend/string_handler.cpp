@@ -919,20 +919,8 @@ exprt string_handler::handle_string_membership(
   // Get the width of char type from config
   std::size_t char_width = config.ansi_c.char_width;
 
-  // Check if lhs is a pointer to a single character
-  if (lhs.type().is_pointer())
-  {
-    const typet &subtype = lhs.type().subtype();
-    if (
-      (subtype.is_signedbv() || subtype.is_unsignedbv()) &&
-      bv_width(subtype) == char_width)
-    {
-      lhs_is_char_value = true;
-    }
-  }
-
   // Check if lhs is a symbol holding a character value
-  if (!lhs_is_char_value && lhs.is_symbol())
+  if (lhs.is_symbol())
   {
     const symbolt *sym =
       symbol_table_.find_symbol(lhs.get_string("identifier"));
