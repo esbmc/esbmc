@@ -368,6 +368,9 @@ private:
 
   std::string extract_non_none_type(const nlohmann::json &annotation_node);
 
+  void
+  get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
+
   // helper methods for get_var_assign
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);

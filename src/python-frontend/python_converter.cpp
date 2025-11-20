@@ -70,7 +70,8 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Raise", StatementType::RAISE},
   {"Global", StatementType::GLOBAL},
   {"Try", StatementType::TRY},
-  {"ExceptHandler", StatementType::EXCEPTHANDLER}};
+  {"ExceptHandler", StatementType::EXCEPTHANDLER},
+  {"Delete", StatementType::DELETE}};
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -1261,6 +1262,31 @@ exprt python_converter::handle_membership_operator(
   const nlohmann::json &element,
   bool invert)
 {
+  // Check if rhs is a dictionary (struct type with dict tag)
+  typet rhs_resolved_type = rhs.type();
+  if (rhs.is_symbol())
+  {
+    const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
+    if (sym)
+      rhs_resolved_type = sym->type;
+  }
+
+  if (rhs_resolved_type.id() == "symbol")
+    rhs_resolved_type = ns.follow(rhs_resolved_type);
+
+  if (rhs_resolved_type.is_struct())
+  {
+    const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
+    std::string tag = struct_type.tag().as_string();
+
+    if (
+      tag.find("dict_") != std::string::npos ||
+      tag.find("tag-dict") != std::string::npos)
+    {
+      return dict_handler_->handle_dict_membership(lhs, rhs, invert);
+    }
+  }
+
   typet list_type = type_handler_.get_list_type();
 
   // Handle set/list membership:
@@ -3284,6 +3310,68 @@ void python_converter::get_var_assign(
     type_handler_.is_constructor_call(ast_node["value"]))
   {
     process_forward_reference(ast_node["value"]["func"], target_block);
+  }
+
+  // Handle dict subscript assignment - unmark deleted key if re-assigned
+  if (target_type == "Subscript")
+  {
+    exprt container_expr = get_expr(target["value"]);
+    typet container_type = container_expr.type();
+
+    if (container_expr.is_symbol())
+    {
+      const symbolt *sym =
+        symbol_table_.find_symbol(container_expr.identifier());
+      if (sym)
+        container_type = sym->type;
+    }
+
+    if (container_type.id() == "symbol")
+      container_type = ns.follow(container_type);
+
+    if (container_type.is_struct())
+    {
+      const struct_typet &struct_type = to_struct_type(container_type);
+      std::string tag = struct_type.tag().as_string();
+
+      if (
+        tag.find("dict_") != std::string::npos ||
+        tag.find("tag-dict") != std::string::npos)
+      {
+        std::string dict_id = container_expr.is_symbol()
+                                ? container_expr.identifier().as_string()
+                                : "anon_dict";
+
+        const nlohmann::json &slice = target["slice"];
+        std::string key;
+        if (slice["_type"] == "Constant")
+        {
+          if (slice["value"].is_string())
+            key = slice["value"].get<std::string>();
+          else if (slice["value"].is_number_integer())
+            key = std::to_string(slice["value"].get<int64_t>());
+        }
+        else if (slice["_type"] == "Name")
+        {
+          std::string var_name = slice["id"].get<std::string>();
+          nlohmann::json var_decl =
+            json_utils::find_var_decl(var_name, current_func_name_, *ast_json);
+          if (
+            !var_decl.empty() && var_decl.contains("value") &&
+            var_decl["value"]["_type"] == "Constant")
+          {
+            const auto &val = var_decl["value"]["value"];
+            if (val.is_string())
+              key = val.get<std::string>();
+            else if (val.is_number_integer())
+              key = std::to_string(val.get<int64_t>());
+          }
+        }
+
+        if (!key.empty())
+          dict_handler_->unmark_key_deleted(dict_id, key);
+      }
+    }
   }
 
   if (ast_node["_type"] == "AnnAssign")
@@ -5477,7 +5565,11 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       block.move_to_operands(code_expr);
       break;
     }
-
+    case StatementType::DELETE:
+    {
+      get_delete_statement(element, block);
+      break;
+    }
     /* "https://docs.python.org/3/tutorial/controlflow.html:
      * "The pass statement does nothing. It can be used when a statement
      *  is required syntactically but the program requires no action." */
@@ -6054,4 +6146,107 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
     return gen_zero(any_type());
 
   return found_type.is_empty() ? gen_zero(any_type()) : gen_zero(found_type);
+}
+
+void python_converter::get_delete_statement(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  if (!ast_node.contains("targets") || !ast_node["targets"].is_array())
+  {
+    throw std::runtime_error("Delete statement missing targets");
+  }
+
+  for (const auto &target : ast_node["targets"])
+  {
+    if (target["_type"] == "Subscript")
+    {
+      exprt dict_expr = get_expr(target["value"]);
+      const nlohmann::json &slice = target["slice"];
+
+      typet dict_type = dict_expr.type();
+      if (dict_expr.is_symbol())
+      {
+        const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
+        if (sym)
+          dict_type = sym->type;
+      }
+
+      if (dict_type.id() == "symbol")
+        dict_type = ns.follow(dict_type);
+
+      if (!dict_type.is_struct())
+      {
+        throw std::runtime_error(
+          "del on subscript requires a dictionary (struct) type");
+      }
+
+      std::string key;
+      if (slice["_type"] == "Constant")
+      {
+        // Handle both string and integer constant keys
+        if (slice["value"].is_string())
+          key = slice["value"].get<std::string>();
+        else if (slice["value"].is_number_integer())
+          key = std::to_string(slice["value"].get<int64_t>());
+        else
+          throw std::runtime_error(
+            "Dictionary key must be a string or integer constant");
+      }
+      else if (slice["_type"] == "Name")
+      {
+        // Variable reference - resolve its constant value from AST
+        std::string var_name = slice["id"].get<std::string>();
+        nlohmann::json var_decl =
+          json_utils::find_var_decl(var_name, current_func_name_, *ast_json);
+
+        if (
+          !var_decl.empty() && var_decl.contains("value") &&
+          var_decl["value"]["_type"] == "Constant")
+        {
+          const auto &val = var_decl["value"]["value"];
+          if (val.is_string())
+            key = val.get<std::string>();
+          else if (val.is_number_integer())
+            key = std::to_string(val.get<int64_t>());
+          else
+            throw std::runtime_error(
+              "del with variable key '" + var_name +
+              "' requires a constant string or integer value");
+        }
+        else
+        {
+          throw std::runtime_error(
+            "del with variable key '" + var_name +
+            "' requires a constant value");
+        }
+      }
+      else
+      {
+        throw std::runtime_error(
+          "Dictionary key must be a constant or variable");
+      }
+
+      std::string dict_id = dict_expr.is_symbol()
+                              ? dict_expr.identifier().as_string()
+                              : "anon_dict";
+
+      dict_handler_->mark_key_deleted(dict_id, key);
+
+      locationt location = get_location_from_decl(ast_node);
+      code_skipt skip;
+      skip.location() = location;
+      target_block.copy_to_operands(skip);
+    }
+    else if (target["_type"] == "Name")
+    {
+      log_warning("del on simple variables is not fully supported");
+    }
+    else
+    {
+      throw std::runtime_error(
+        "Delete statement target type not supported: " +
+        target["_type"].get<std::string>());
+    }
+  }
 }
