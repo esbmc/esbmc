@@ -15,7 +15,7 @@ class type_handler;
 class contextt;
 
 /**
- * Handler for Python dictionary operations in ESBMC
+ * Handler for Python dictionary operations
  * 
  * Dictionaries are modeled as structs with named fields for each key.
  * For example: {'name': 'Bob', 'age': 30} becomes:
@@ -44,37 +44,49 @@ public:
   exprt get_dict_literal(const nlohmann::json &element);
 
   /**
-   * Handle dictionary subscript operations (dict[key])
+   * Handle dictionary subscript operations (i.e., dict[key])
    * Converts to struct member access
    */
   exprt handle_dict_subscript(
     const exprt &dict_expr,
     const nlohmann::json &slice_node);
 
-  /// Mark a dictionary key as deleted
+  /**
+   * Mark a dictionary key as deleted
+   */
   void mark_key_deleted(const std::string &dict_id, const std::string &key);
 
-  /// Check if a dictionary key has been deleted
+  /**
+   * Check if a dictionary key has been deleted
+   */
   bool is_key_deleted(const std::string &dict_id, const std::string &key) const;
 
-  /// Handle dictionary membership check ("in" / "not in")
+  /**
+   * Handle dictionary membership check (i.e., "in" / "not in")
+   */
   exprt handle_dict_membership(
     const exprt &key_expr,
     const exprt &dict_expr,
     bool negated);
 
-  /// Mark a dictionary key as no longer deleted (when re-assigned)
+  /**
+   * Mark a dictionary key as no longer deleted (when re-assigned)
+   */
   void unmark_key_deleted(const std::string &dict_id, const std::string &key);
 
 private:
-  // Track deleted dictionary keys: map<dict_id, set<key_name>>
+  /** 
+   * Track deleted dictionary keys: map<dict_id, set<key_name>>
+   */
   std::unordered_map<std::string, std::set<std::string>> deleted_keys_;
 
   python_converter &converter_;
   contextt &symbol_table_;
   type_handler &type_handler_;
 
-  // Counter for generating unique dictionary type names
+  /** 
+   * Counter for generating unique dictionary type names
+   */
   static int dict_counter_;
 
   /**
