@@ -70,7 +70,7 @@ exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
   if (!is_dict_literal(element))
     throw std::runtime_error("Expected Dict literal");
 
-  // Just return the type - actual initialization happens during assignment
+  // Just return the type: actual initialization happens during assignment
   // This prevents double-creation of the dictionary
   struct_typet dict_type = get_dict_struct_type();
 
