@@ -157,6 +157,16 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Handle string repetition
+   * @param op multiply operator (Eq, Mult)
+   * @param lhs Left operand
+   * @param rhs Right operand
+   * @param element JSON element with location info
+   * @return Repetition expression
+   */
+  exprt handle_string_repetition(exprt &lhs, exprt &rhs);
+
+  /**
    * @brief Handle general string operations
    * @param op Operation type
    * @param lhs Left operand
@@ -254,6 +264,23 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  /**
+   * @brief Handle Python's str.islower() method
+   * @param string_obj Expression representing the string or character to check
+   * @param location Source location for error reporting
+   * @return Boolean expression: true if all cased chars are lowercase, false otherwise
+   */
+  exprt
+  handle_string_islower(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.lower() method
+   * @param string_obj String object
+   * @param location Source location
+   * @return Pointer to lowercase string
+   */
+  exprt handle_string_lower(const exprt &string_obj, const locationt &location);
+
   // Utility methods
 
   /**
@@ -269,6 +296,61 @@ public:
    * @return Address expression
    */
   exprt get_array_base_address(const exprt &arr);
+
+  /**
+   * Convert a string to an integer using Python's int() function
+   * @param string_obj The string expression to convert
+   * @param base_arg The base for conversion (2-36, or 0 for auto-detect)
+   * @param location Source location for error reporting
+   * @return Expression representing the integer result
+   */
+  exprt handle_string_to_int(
+    const exprt &string_obj,
+    const exprt &base_arg,
+    const locationt &location);
+
+  /**
+   * Convert a string to an integer using base 10 (convenience method)
+   * @param string_obj The string expression to convert
+   * @param location Source location for error reporting
+   * @return Expression representing the integer result
+   */
+  exprt handle_string_to_int_base10(
+    const exprt &string_obj,
+    const locationt &location);
+
+  /**
+   * Handle int() builtin with automatic type detection
+   * Supports int(x) where x can be: int, float, bool, or string
+   * @param arg The argument to convert
+   * @param location Source location for error reporting
+   * @return Expression representing the integer result
+   */
+  exprt handle_int_conversion(const exprt &arg, const locationt &location);
+
+  /**
+   * Handle int() builtin with explicit base
+   * Supports int(x, base) where x is a string
+   * @param arg The string argument to convert
+   * @param base The base for conversion
+   * @param location Source location for error reporting
+   * @return Expression representing the integer result
+   */
+  exprt handle_int_conversion_with_base(
+    const exprt &arg,
+    const exprt &base,
+    const locationt &location);
+
+  /**
+   * Handle chr() builtin function
+   * Converts a Unicode code point to its string representation
+   * Supports chr(i) where i is an integer in range [0, 0x10FFFF]
+   * @param codepoint_arg The integer code point to convert
+   * @param location Source location for error reporting
+   * @return Expression representing the resulting string (char array pointer)
+   */
+  exprt
+  handle_chr_conversion(const exprt &codepoint_arg, const locationt &location);
 
 private:
   python_converter &converter_;

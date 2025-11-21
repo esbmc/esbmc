@@ -1,4 +1,5 @@
 CORE
 main.c
 --ir
-^WARNING: BigInt as_string\(\) failed for very small rational - returning minimal positive value$
+^  result = 0\.000000$
+^VERIFICATION FAILED$

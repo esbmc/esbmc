@@ -21,7 +21,7 @@ struct fmt::formatter<irept>
 
   // This will teach fmt how to convert irept into a str.
   template <typename FormatContext>
-  auto format(const irept &p, FormatContext &ctx)
+  auto format(const irept &p, FormatContext &ctx) const
   {
     return format_to(ctx.out(), "{}", p.pretty(0));
   }

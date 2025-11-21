@@ -251,6 +251,10 @@ std::string forall2t::field_names[esbmct::num_type_fields] =
   {"symbol", "predicate", "", "", ""};
 std::string exists2t::field_names[esbmct::num_type_fields] =
   {"symbol", "predicate", "", "", ""};
+std::string isinstance2t::field_names[esbmct::num_type_fields] =
+  {"value", "type", "", "", ""};
+std::string isnone2t::field_names[esbmct::num_type_fields] =
+  {"lhs", "rhs", "", "", ""};
 
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr

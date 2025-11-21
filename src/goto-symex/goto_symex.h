@@ -515,6 +515,8 @@ protected:
   /* Handles dereferencing between threads and is used only in data race checks. **/
   void replace_races_check(expr2tc &expr);
 
+  void simplify_python_builtins(expr2tc &expr);
+
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 
@@ -1024,6 +1026,12 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guardt &guard);
+  /** Wrapper around for infinite array allocation. */
+  expr2tc symex_mem_inf(
+    const expr2tc &lhs,
+    const type2tc &base_type,
+    const guardt &guard);
+
   /** Pointer modelling update function */
   void track_new_pointer(
     const expr2tc &ptr_obj,

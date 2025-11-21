@@ -1,3 +1,4 @@
+#include <python-frontend/char_utils.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string_builder.h>
@@ -13,7 +14,6 @@
 #include <util/symbol.h>
 #include <util/type.h>
 
-#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <iomanip>
@@ -409,6 +409,11 @@ exprt string_handler::handle_string_concatenation(
   return string_builder_->concatenate_strings(lhs, rhs, left, right);
 }
 
+exprt string_handler::handle_string_repetition(exprt &lhs, exprt &rhs)
+{
+  return string_builder_->handle_string_repetition(lhs, rhs);
+}
+
 bool string_handler::is_zero_length_array(const exprt &expr)
 {
   if (expr.id() == "sideeffect")
@@ -450,7 +455,9 @@ void string_handler::ensure_string_array(exprt &expr)
 
   if (!expr.type().is_array())
   {
-    typet t = type_handler_.build_array(expr.type(), 1);
+    // Explicitly build the array and
+    // ensure null-termination (size 2: char + \0)
+    typet t = type_handler_.build_array(expr.type(), 2);
     exprt arr = gen_zero(t);
     arr.operands().at(0) = expr;
     expr = arr;
@@ -465,6 +472,9 @@ exprt string_handler::handle_string_operations(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
+  if (op == "Mult")
+    return handle_string_repetition(lhs, rhs);
+
   ensure_string_array(lhs);
   ensure_string_array(rhs);
 
@@ -473,8 +483,7 @@ exprt string_handler::handle_string_operations(
 
   if (op == "Eq" || op == "NotEq")
     return handle_string_comparison(op, lhs, rhs, element);
-
-  if (op == "Add")
+  else if (op == "Add")
     return handle_string_concatenation(lhs, rhs, left, right);
 
   return nil_exprt();
@@ -623,33 +632,47 @@ exprt string_handler::handle_string_endswith(
   exprt suffix_expr = ensure_null_terminated_string(suffix_copy);
 
   // Get string addresses
-  exprt str_addr = get_array_base_address(str_expr);
-  exprt suffix_addr = get_array_base_address(suffix_expr);
+  // Handle both pointer and array types
+  exprt str_addr;
+  exprt suffix_addr;
 
-  // Calculate lengths (exclude null terminators)
-  const array_typet &str_type = to_array_type(str_expr.type());
-  const array_typet &suffix_type = to_array_type(suffix_expr.type());
+  if (str_expr.type().is_pointer())
+    str_addr = str_expr;
+  else
+    str_addr = get_array_base_address(str_expr);
 
-  exprt str_len = str_type.size();
-  exprt suffix_len = suffix_type.size();
+  if (suffix_expr.type().is_pointer())
+    suffix_addr = suffix_expr;
+  else
+    suffix_addr = get_array_base_address(suffix_expr);
 
-  exprt one = from_integer(1, str_len.type());
+  // For length calculation, we need to use strlen for pointer types
+  // Find strlen symbol
+  symbolt *strlen_symbol = symbol_table_.find_symbol("c:@F@strlen");
+  if (!strlen_symbol)
+    throw std::runtime_error("strlen function not found for endswith()");
 
-  // actual_str_len = str_len - 1
-  exprt actual_str_len("-", str_len.type());
-  actual_str_len.copy_to_operands(str_len, one);
+  // Get string length using strlen
+  side_effect_expr_function_callt str_strlen_call;
+  str_strlen_call.function() = symbol_expr(*strlen_symbol);
+  str_strlen_call.arguments() = {str_addr};
+  str_strlen_call.location() = location;
+  str_strlen_call.type() = size_type();
 
-  // actual_suffix_len = suffix_len - 1
-  exprt actual_suffix_len("-", suffix_len.type());
-  actual_suffix_len.copy_to_operands(suffix_len, one);
+  // Get suffix length using strlen
+  side_effect_expr_function_callt suffix_strlen_call;
+  suffix_strlen_call.function() = symbol_expr(*strlen_symbol);
+  suffix_strlen_call.arguments() = {suffix_addr};
+  suffix_strlen_call.location() = location;
+  suffix_strlen_call.type() = size_type();
 
-  // Check if suffix is longer than string: if (suffix_len > str_len) return false
+  // Check if suffix is longer than string
   exprt len_check(">", bool_type());
-  len_check.copy_to_operands(actual_suffix_len, actual_str_len);
+  len_check.copy_to_operands(suffix_strlen_call, str_strlen_call);
 
-  // Calculate offset: str_len - suffix_len
-  exprt offset("-", str_len.type());
-  offset.copy_to_operands(actual_str_len, actual_suffix_len);
+  // Calculate offset: strlen(str) - strlen(suffix)
+  exprt offset("-", size_type());
+  offset.copy_to_operands(str_strlen_call, suffix_strlen_call);
 
   // Get pointer to the position: str + offset
   exprt offset_ptr("+", gen_pointer_type(char_type()));
@@ -660,10 +683,10 @@ exprt string_handler::handle_string_endswith(
   if (!strncmp_symbol)
     throw std::runtime_error("strncmp function not found for endswith()");
 
-  // Call strncmp(str + offset, suffix, len(suffix))
+  // Call strncmp(str + offset, suffix, strlen(suffix))
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {offset_ptr, suffix_addr, actual_suffix_len};
+  strncmp_call.arguments() = {offset_ptr, suffix_addr, suffix_strlen_call};
   strncmp_call.location() = location;
   strncmp_call.type() = int_type();
 
@@ -896,20 +919,8 @@ exprt string_handler::handle_string_membership(
   // Get the width of char type from config
   std::size_t char_width = config.ansi_c.char_width;
 
-  // Check if lhs is a pointer to a single character
-  if (lhs.type().is_pointer())
-  {
-    const typet &subtype = lhs.type().subtype();
-    if (
-      (subtype.is_signedbv() || subtype.is_unsignedbv()) &&
-      bv_width(subtype) == char_width)
-    {
-      lhs_is_char_value = true;
-    }
-  }
-
   // Check if lhs is a symbol holding a character value
-  if (!lhs_is_char_value && lhs.is_symbol())
+  if (lhs.is_symbol())
   {
     const symbolt *sym =
       symbol_table_.find_symbol(lhs.get_string("identifier"));
@@ -976,6 +987,124 @@ exprt string_handler::handle_string_membership(
   exprt lhs_str = ensure_null_terminated_string(lhs);
   exprt rhs_str = ensure_null_terminated_string(rhs);
 
+  // Obtain the actual array expression (handle both constants and symbols)
+  auto get_array_expr = [this](const exprt &e) -> const exprt * {
+    if (e.is_constant() && e.type().is_array())
+      return &e;
+    if (e.is_symbol())
+    {
+      const symbolt *sym = symbol_table_.find_symbol(e.identifier());
+      if (sym && sym->value.is_constant() && sym->value.type().is_array())
+        return &sym->value;
+    }
+    return nullptr;
+  };
+
+  const exprt *needle_array = get_array_expr(lhs_str);
+  const exprt *haystack_array = get_array_expr(rhs_str);
+
+  // Special case: empty needle is always found in any haystack (Python semantics)
+  if (needle_array && !needle_array->operands().empty())
+  {
+    const exprt::operandst &needle_ops = needle_array->operands();
+
+    // Check if needle is empty (just the null terminator)
+    if (needle_ops.size() == 1 && needle_ops[0].is_constant())
+    {
+      BigInt first_val = binary2integer(
+        needle_ops[0].value().as_string(), needle_ops[0].type().is_signedbv());
+
+      if (first_val == 0)
+      {
+        // Empty string is always "in" any string in Python
+        return gen_boolean(true);
+      }
+    }
+  }
+
+  // Special case: Check if needle starts with '\0' (but is not empty)
+  // Python strings with null characters are valid, but we need to handle
+  // the C null-terminator semantics vs Python string semantics
+  if (needle_array && haystack_array)
+  {
+    const exprt::operandst &needle_ops = needle_array->operands();
+    const exprt::operandst &haystack_ops = haystack_array->operands();
+
+    // Check if needle starts with '\0' and has more than just the terminator
+    if (
+      needle_ops.size() > 1 && !needle_ops.empty() &&
+      needle_ops[0].is_constant())
+    {
+      BigInt first_val = binary2integer(
+        needle_ops[0].value().as_string(), needle_ops[0].type().is_signedbv());
+
+      if (first_val == 0)
+      {
+        // Needle starts with '\0' but has more characters
+        // Check if haystack has any embedded nulls (before the final terminator)
+        bool has_embedded_null = false;
+        for (size_t i = 0; i + 1 < haystack_ops.size(); ++i)
+        {
+          if (haystack_ops[i].is_constant())
+          {
+            BigInt val = binary2integer(
+              haystack_ops[i].value().as_string(),
+              haystack_ops[i].type().is_signedbv());
+            if (val == 0)
+            {
+              has_embedded_null = true;
+              break;
+            }
+          }
+        }
+
+        // If haystack has no embedded nulls, needle starting with '\0' won't be found
+        if (!has_embedded_null)
+          return gen_boolean(false);
+
+        // Needle is like '\0x' or '\0abc' - need to search for this pattern
+        // in haystack that may contain embedded nulls
+        bool found = false;
+        for (size_t h = 0; h + needle_ops.size() <= haystack_ops.size(); ++h)
+        {
+          bool match = true;
+          for (size_t n = 0; n + 1 < needle_ops.size(); ++n)
+          {
+            if (
+              !haystack_ops[h + n].is_constant() ||
+              !needle_ops[n].is_constant())
+            {
+              match = false;
+              break;
+            }
+            BigInt h_val = binary2integer(
+              haystack_ops[h + n].value().as_string(),
+              haystack_ops[h + n].type().is_signedbv());
+            BigInt n_val = binary2integer(
+              needle_ops[n].value().as_string(),
+              needle_ops[n].type().is_signedbv());
+            if (h_val != n_val)
+            {
+              match = false;
+              break;
+            }
+          }
+          if (match)
+          {
+            found = true;
+            break;
+          }
+        }
+        return gen_boolean(found);
+      }
+    }
+  }
+
+  // TODO: This falls back to C's strstr for non-constant strings,
+  // which is unsound if 'lhs' or 'rhs' contain embedded nulls ('\0').
+  // For full Python semantics, a null-aware 'strstr' for
+  // symbolic/non-constant strings is required.
+
   // Get base addresses for C string functions
   exprt lhs_addr = get_array_base_address(lhs_str);
   exprt rhs_addr = get_array_base_address(rhs_str);
@@ -1001,4 +1130,250 @@ exprt string_handler::handle_string_membership(
   not_equal.copy_to_operands(strstr_call, null_ptr);
 
   return not_equal;
+}
+
+exprt string_handler::handle_string_islower(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Check if this is a single character
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    // Call Python's single-character version
+    symbolt *islower_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_islower");
+    if (!islower_symbol)
+      throw std::runtime_error(
+        "__python_char_islower function not found in symbol table");
+
+    side_effect_expr_function_callt islower_call;
+    islower_call.function() = symbol_expr(*islower_symbol);
+    islower_call.arguments().push_back(string_obj);
+    islower_call.location() = location;
+    islower_call.type() = bool_type();
+
+    return islower_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *islower_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_islower");
+  if (!islower_str_symbol)
+    throw std::runtime_error("str_islower function not found in symbol table");
+
+  side_effect_expr_function_callt islower_call;
+  islower_call.function() = symbol_expr(*islower_str_symbol);
+  islower_call.arguments().push_back(str_addr);
+  islower_call.location() = location;
+  islower_call.type() = bool_type();
+
+  return islower_call;
+}
+
+exprt string_handler::handle_string_lower(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // For single characters, handle directly
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    symbolt *lower_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_lower");
+    if (!lower_symbol)
+      throw std::runtime_error(
+        "__python_char_lower function not found in symbol table");
+
+    side_effect_expr_function_callt lower_call;
+    lower_call.function() = symbol_expr(*lower_symbol);
+    lower_call.arguments().push_back(string_obj);
+    lower_call.location() = location;
+    lower_call.type() = char_type();
+
+    return lower_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *lower_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_lower");
+  if (!lower_str_symbol)
+    throw std::runtime_error("str_lower function not found in symbol table");
+
+  side_effect_expr_function_callt lower_call;
+  lower_call.function() = symbol_expr(*lower_str_symbol);
+  lower_call.arguments().push_back(str_addr);
+  lower_call.location() = location;
+  lower_call.type() = pointer_typet(char_type());
+
+  return lower_call;
+}
+
+exprt string_handler::handle_string_to_int(
+  const exprt &string_obj,
+  const exprt &base_arg,
+  const locationt &location)
+{
+  // Ensure we have a null-terminated string
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+
+  // Get base address of the string
+  exprt str_addr = get_array_base_address(str_expr);
+
+  // Determine the base value (default is 10)
+  exprt base_expr = base_arg;
+  if (base_expr.is_nil())
+  {
+    // Default base is 10
+    base_expr = from_integer(10, int_type());
+  }
+  else if (!base_expr.type().is_signedbv() && !base_expr.type().is_unsignedbv())
+  {
+    // Cast base to int if needed
+    base_expr = typecast_exprt(base_expr, int_type());
+  }
+
+  // Find the __python_int function symbol
+  symbolt *int_symbol = symbol_table_.find_symbol("c:@F@__python_int");
+  if (!int_symbol)
+  {
+    throw std::runtime_error("__python_int function not found in symbol table");
+  }
+
+  // Call __python_int(str, base)
+  side_effect_expr_function_callt int_call;
+  int_call.function() = symbol_expr(*int_symbol);
+  int_call.arguments().push_back(str_addr);
+  int_call.arguments().push_back(base_expr);
+  int_call.location() = location;
+  int_call.type() = int_type();
+
+  return int_call;
+}
+
+exprt string_handler::handle_string_to_int_base10(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Convenience wrapper for base 10 conversion
+  return handle_string_to_int(string_obj, nil_exprt(), location);
+}
+
+exprt string_handler::handle_int_conversion(
+  const exprt &arg,
+  const locationt &location)
+{
+  // Handle int() with different argument types
+
+  // If argument is already an integer type, return as is
+  if (type_utils::is_integer_type(arg.type()))
+  {
+    return arg;
+  }
+
+  // If argument is a float, truncate to integer
+  if (arg.type().is_floatbv())
+  {
+    return typecast_exprt(arg, int_type());
+  }
+
+  // If argument is a boolean, convert to 0 or 1
+  if (arg.type().is_bool())
+  {
+    exprt result("if", int_type());
+    result.copy_to_operands(arg);
+    result.copy_to_operands(from_integer(1, int_type()));
+    result.copy_to_operands(from_integer(0, int_type()));
+    return result;
+  }
+
+  // If argument is a string or char array, use string conversion
+  if (arg.type().is_array() && arg.type().subtype() == char_type())
+  {
+    return handle_string_to_int_base10(arg, location);
+  }
+
+  // If argument is a pointer to char (string pointer)
+  if (arg.type().is_pointer() && arg.type().subtype() == char_type())
+  {
+    // Create a wrapper to ensure null-termination handling
+    exprt string_copy = arg;
+    return handle_string_to_int(string_copy, nil_exprt(), location);
+  }
+
+  // For other types, attempt a typecast
+  return typecast_exprt(arg, int_type());
+}
+
+exprt string_handler::handle_int_conversion_with_base(
+  const exprt &arg,
+  const exprt &base,
+  const locationt &location)
+{
+  // int() with explicit base only works with strings
+  if (!arg.type().is_array() && !arg.type().is_pointer())
+  {
+    throw std::runtime_error("int() with base argument requires string input");
+  }
+
+  // Ensure base is an integer
+  exprt base_expr = base;
+  if (!base_expr.type().is_signedbv() && !base_expr.type().is_unsignedbv())
+  {
+    base_expr = typecast_exprt(base_expr, int_type());
+  }
+
+  return handle_string_to_int(arg, base_expr, location);
+}
+
+exprt string_handler::handle_chr_conversion(
+  const exprt &codepoint_arg,
+  const locationt &location)
+{
+  // Ensure the argument is an integer type
+  exprt codepoint_expr = codepoint_arg;
+
+  // If not already an integer, try to convert it
+  if (!type_utils::is_integer_type(codepoint_expr.type()))
+  {
+    // If it's a float, truncate to integer
+    if (codepoint_expr.type().is_floatbv())
+      codepoint_expr = typecast_exprt(codepoint_expr, int_type());
+    // If it's a boolean, convert to 0 or 1
+    else if (codepoint_expr.type().is_bool())
+    {
+      exprt result("if", int_type());
+      result.copy_to_operands(codepoint_expr);
+      result.copy_to_operands(from_integer(1, int_type()));
+      result.copy_to_operands(from_integer(0, int_type()));
+      codepoint_expr = result;
+    }
+    else
+      throw std::runtime_error("chr() argument must be an integer");
+  }
+
+  // Cast to int type if it's a different integer width
+  if (codepoint_expr.type() != int_type())
+    codepoint_expr = typecast_exprt(codepoint_expr, int_type());
+
+  // Find the __python_chr function symbol
+  symbolt *chr_symbol = symbol_table_.find_symbol("c:@F@__python_chr");
+  if (!chr_symbol)
+    throw std::runtime_error("__python_chr function not found in symbol table");
+
+  // Call __python_chr(codepoint)
+  side_effect_expr_function_callt chr_call;
+  chr_call.function() = symbol_expr(*chr_symbol);
+  chr_call.arguments().push_back(codepoint_expr);
+  chr_call.location() = location;
+  chr_call.type() = pointer_typet(char_type());
+
+  return chr_call;
 }

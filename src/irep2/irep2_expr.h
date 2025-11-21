@@ -1530,6 +1530,8 @@ irep_typedefs(capability_base, object_ops);
 irep_typedefs(capability_top, object_ops);
 irep_typedefs(forall, logic_2ops);
 irep_typedefs(exists, logic_2ops);
+irep_typedefs(isinstance, logic_2ops);
+irep_typedefs(isnone, logic_2ops);
 
 class exists2t : public exists_expr_methods
 {
@@ -3133,6 +3135,31 @@ public:
   {
   }
   races_check2t(const races_check2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isinstance2t : public isinstance_expr_methods
+{
+public:
+  isinstance2t(const expr2tc &value, const expr2tc &type)
+    : isinstance_expr_methods(get_bool_type(), isinstance_id, value, type)
+  {
+  }
+  isinstance2t(const isinstance2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isnone2t : public isnone_expr_methods
+{
+public:
+  isnone2t(const expr2tc &lhs, const expr2tc &rhs)
+    : isnone_expr_methods(get_bool_type(), isnone_id, lhs, rhs)
+  {
+  }
+
+  isnone2t(const isnone2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };

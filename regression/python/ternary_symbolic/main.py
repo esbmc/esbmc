@@ -1,15 +1,15 @@
 # Symbolic inputs for comprehensive verification
-a: int = int(input())
-b: int = int(input())  
-age: int = int(input())
-score: int = int(input())
-level: int = int(input())
-income: int = int(input())
-temperature: float = float(input())
-weight: float = float(input())
-height: float = float(input())
-urgent: bool = bool(int(input()))
-critical: bool = bool(int(input()))
+a: int = int()
+b: int = int()  
+age: int = int()
+score: int = int()
+level: int = int()
+income: int = int()
+temperature: float = float()
+weight: float = float()
+height: float = float()
+urgent: bool = bool(int())
+critical: bool = bool(int())
 
 # Test ternary with symbolic values - basic comparisons
 adult_status: int = 1 if age >= 18 else 0

@@ -146,6 +146,11 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **Concatenation (+ operator)**: Fully supports the list + list operation (e.g., `[1,2] + [3,4] → [1,2,3,4]`), producing a new list containing all elements of both operands in order.
   - **String Operations**:
     - **Membership Testing (in operator)**: Supports Python's `in` operator for substring testing (e.g., `"o" in "foo"` returns `True`).
+    - **Repetition (multiplication operator)**: Supports string repetition using the `*` operator with both orderings:
+      - `"a" * 3` returns `"aaa"` (string × integer)
+      - `3 * "a"` returns `"aaa"` (integer × string)
+      - **Supports boolean multipliers:** `"a" * True` returns `"a"`, `"a" * False` returns `""`
+      - Works with both string literals and string variables
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
     - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
     - **lstrip() method**: Removes leading whitespace characters from strings (e.g., `"  hello".lstrip()` returns `"hello"`).
@@ -175,6 +180,18 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Assertions**: Supports `assert` statements for program verification.
 - **Assumptions**: Supports `assume` statements for specifying assumptions for verification.
 
+### Cover Properties and Reachability Analysis
+- **Cover Properties**: Supports `__ESBMC_cover()` function for checking if conditions are satisfiable at specific program points.
+  - **Reachability Semantics**: Cover properties use inverted assertion semantics, where `cover(cond)` behaves as `assert(!cond)`:
+    - **Counterexample (failed assertion)**: condition is satisfiable (reachable).
+    - **Proof (passed assertion)**: condition is unsatisfiable (unreachable).
+  - **Use Cases**:
+    - **Path Reachability**: Verify that specific code branches can be executed.
+    - **Value Coverage**: Check if variables can achieve certain values or ranges.
+    - **Dead Code Detection**: Identify unreachable code paths.
+    - **Test Adequacy**: Ensure test scenarios exercise interesting program states.
+  - **Multi-Property Mode**: Cover properties work best with the `--multi-property` flag, allowing ESBMC to continue verification after satisfiable covers are found.
+
 ### Module System and Built-in Variables
 
 - **Module Imports**: Handles import styles and validates their usage.
@@ -190,7 +207,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Imports**: Handles import styles and validates their usage.
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
 - **Built-in Functions**: 
-  - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
+  - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `divmod`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
   - **any()**: Supports Python's `any()` built-in function with the following behavior:
@@ -299,6 +316,17 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
   - **PermissionError**: Raised when an operation lacks the necessary permissions (inherits from OSError).
 - **Exception Objects**: Exception instances contain message attributes and support string representation via __str__() method.
 - **Exception Raising**: Supports raise statements with exception instantiation and custom error messages.
+
+### Strict Type Checking
+ESBMC-Python provides an optional strict type-checking mode that enforces type compatibility for function arguments at verification time. 
+- **Command-Line Option**:
+  - **--strict-types**: Enables strict type checking for function arguments during verification. When this flag is provided, ESBMC validates that all arguments passed to functions match their declared parameter types.
+- **Behavior**:
+  - **Type Validation**: Checks that each argument's type matches the corresponding parameter's type annotation.
+  - **Instance Methods**: Automatically accounts for the implicit self parameter in instance methods.
+  - **Class Methods**: Automatically accounts for the implicit cls parameter in class methods.
+  - **Static Methods**: Validates all parameters without implicit parameter handling.
+  - **Type Errors**: When a type mismatch is detected, it generates a `TypeError` exception with a descriptive message indicating which argument has an incompatible type.
 
 ### Code Quality and Control Flow Analysis
 
@@ -803,6 +831,312 @@ Key Benefits of Missing Return Detection:
 - **Constructor Awareness**: Automatically excludes __init__ methods which don't need explicit returns.
 
 This analysis helps prevent `TypeError` exceptions that would occur at runtime when the missing return path is executed, as Python implicitly returns None for functions without explicit return statements.
+
+### Example 7: Strict Type Checking
+
+This example demonstrates ESBMC-Python's strict type checking feature, which enforces type compatibility for function arguments at verification time:
+
+```python
+def greet(name: str) -> str:
+    return name
+
+def add(a: int, b: int) -> int:
+    return a + b
+
+def process_data(value: int, factor: float, label: str) -> float:
+    return value * factor
+
+result1 = add(5, 10)  # Correct - both arguments are int
+assert result1 == 15
+
+result3 = add(5, "10")  # TypeError: second argument is str, expected int
+
+result4: str = greet(42)  # TypeError: argument is int, expected str
+
+result5 = process_data("wrong", 2.5, "label")  # TypeError: first argument is str, expected int
+```
+
+**Command (without strict type checking):**
+```bash
+$ esbmc main.py
+```
+
+**ESBMC Output:**
+```
+Converting
+Generating GOTO Program
+GOTO program creation time: 1.345s
+GOTO program processing time: 0.026s
+Starting Bounded Model Checking
+Symex completed in: 0.006s (13 assignments)
+Caching time: 0.000s (removed 0 assertions)
+Slicing time: 0.002s (removed 13 assignments)
+Generated 1 VCC(s), 0 remaining after simplification (0 assignments)
+BMC program time: 0.007s
+
+VERIFICATION SUCCESSFUL
+```
+
+**Command (with strict type checking):**
+```bash
+$ esbmc main.py --strict-types --multi-property
+```
+
+**ESBMC Output:**
+```
+Converting
+Generating GOTO Program
+GOTO program creation time: 1.433s
+GOTO program processing time: 0.029s
+Starting Bounded Model Checking
+ERROR: Exception thrown of type TypeError at file main.py line 13
+ERROR: Exception thrown of type TypeError at file main.py line 15
+ERROR: Exception thrown of type TypeError at file main.py line 17
+Symex completed in: 0.002s (10 assignments)
+Caching time: 0.000s (removed 2 assertions)
+Slicing time: 0.000s (removed 7 assignments)
+Generated 4 VCC(s), 1 remaining after simplification (1 assignments)
+No solver specified; defaulting to Boolector
+Slicing time: 0.000s (removed 0 assignments)
+No solver specified; defaulting to Boolector
+Solving claim 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 17 column 0' with solver Boolector 3.2.2
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.002s
+✗ FAILED: 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 17 column 0'
+
+[Counterexample]
+
+
+State 1 file main.py line 17 column 0 thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 17 column 0
+  Throwing an exception of type TypeError but there is not catch for it.
+
+Slicing time: 0.000s (removed 0 assignments)
+No solver specified; defaulting to Boolector
+Solving claim 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 15 column 0' with solver Boolector 3.2.2
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.000s
+✗ FAILED: 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 15 column 0'
+
+[Counterexample]
+
+
+State 1 file main.py line 15 column 0 thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 15 column 0
+  Throwing an exception of type TypeError but there is not catch for it.
+
+Slicing time: 0.000s (removed 0 assignments)
+No solver specified; defaulting to Boolector
+Solving claim 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 13 column 0' with solver Boolector 3.2.2
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.000s
+✗ FAILED: 'Throwing an exception of type TypeError but there is not catch for it. at file main.py line 13 column 0'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 0 thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 13 column 0
+  Throwing an exception of type TypeError but there is not catch for it.
+
+Properties: 3 verified, ✗ 3 failed
+Solver: Boolector 3.2.2 • Decision procedure total time: 0.002s • Avg: 0.000s/property
+
+VERIFICATION FAILED
+```
+
+In this example, ESBMC with `--strict-types` successfully detects all type mismatches during the parsing phase and generates corresponding verification failures:
+- **Line 13**: `add(5, "10")` - Argument 2 has incompatible type "str"; expected "int"
+- **Line 15**: `greet(42)` - Argument 1 has incompatible type "int"; expected "str"
+- **Line 17**: `process_data("wrong", 2.5, "label")` - Argument 1 has incompatible type "str"; expected "int"
+
+**Key Benefits of Strict Type Checking:**
+- **Early Detection**: Type errors are identified during the parsing phase with clear diagnostic messages.
+- **Type Safety Enforcement**: Catches type mismatches at verification time rather than runtime.
+- **Exception Modeling**: Type errors are modeled as uncaught `TypeError` exceptions, triggering verification failures.
+- **Descriptive Error Messages**: Provides a clear indication of which argument has a type error and what types were expected vs. actual.
+- **Optional Feature**: Disabled by default to allow flexible verification; enable only when type safety is critical.
+
+This feature helps prevent `TypeError` exceptions that would occur at runtime when incompatible types are passed to functions, improving code reliability through static type verification.
+
+### Example 8: Cover Properties for Reachability Analysis
+
+This example demonstrates how cover properties can be used to analyze program reachability and verify that specific conditions are possible:
+
+````Python
+def analyze_paths(x: int) -> str:
+    """Function with multiple execution paths"""
+    if x > 100:
+        return "high"
+    elif x > 50:
+        return "medium"
+    elif x > 0:
+        return "low"
+    else:
+        return "zero_or_negative"
+
+def test_reachability() -> None:
+    x: int = nondet_int()
+    
+    # Cover: Can x be greater than 100?
+    __ESBMC_cover(x > 100)
+    
+    # Cover: Can x be in the medium range?
+    __ESBMC_cover(50 < x <= 100)
+    
+    # Add constraint: x must be positive
+    __ESBMC_assume(x > 0)
+    
+    # Cover: Can x still be negative?
+    __ESBMC_cover(x < 0)
+    
+    # Cover: Can x be positive?
+    __ESBMC_cover(x > 0)
+    
+    result = analyze_paths(x)
+    
+    # Cover: Can we reach the "high" path?
+    __ESBMC_cover(result == "high")
+    
+    # Cover: Can we reach the "zero_or_negative" path?
+    __ESBMC_cover(result == "zero_or_negative")
+
+def test_dead_code_detection() -> None:
+    """Using cover to identify unreachable code"""
+    value: int = nondet_int()
+    __ESBMC_assume(value >= 0)
+    
+    if value < 0:
+        # This is dead code
+        __ESBMC_cover(True)
+        print("This branch is unreachable")
+    
+    if value >= 0:
+        # This is reachable code
+        __ESBMC_cover(True)
+        print("This branch is reachable")
+
+test_reachability()
+test_dead_code_detection()
+````
+
+**Command:**
+
+```bash
+$ esbmc main.py --unwind 10 --multi-property
+```
+
+**ESBMC Output:**
+```
+✗ FAILED: 'assertion at file main.py line 16 column 4 function test_reachability'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 9223372036854767699 (01111111 11111111 11111111 11111111 11111111 11111111 11100000 01010011)
+
+State 2 file main.py line 16 column 4 function test_reachability thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 16 column 4 function test_reachability
+  assertion
+  !(x > 100)
+
+✗ FAILED: 'assertion at file main.py line 19 column 4 function test_reachability'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 79 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 01001111)
+
+State 2 file main.py line 19 column 4 function test_reachability thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 19 column 4 function test_reachability
+  assertion
+  !(50 < x && x <= 100)
+
+✗ FAILED: 'assertion at file main.py line 28 column 4 function test_reachability'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 2047 (00000000 00000000 00000000 00000000 00000000 00000000 00000111 11111111)
+
+State 3 file main.py line 28 column 4 function test_reachability thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 28 column 4 function test_reachability
+  assertion
+  !(x > 0)
+
+✗ FAILED: 'assertion at file main.py line 33 column 4 function test_reachability'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 103 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 01100111)
+
+State 3 file main.py line 33 column 4 function test_reachability thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 33 column 4 function test_reachability
+  assertion
+  !(return_value$_strcmp$1 == 0)
+
+✗ FAILED: 'assertion at file main.py line 50 column 8 function test_dead_code_detection'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 4 function test_reachability thread 0
+----------------------------------------------------
+  x = 2047 (00000000 00000000 00000000 00000000 00000000 00000000 00000111 11111111)
+
+State 3 file main.py line 40 column 4 function test_dead_code_detection thread 0
+----------------------------------------------------
+  value = 0 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 5 file main.py line 50 column 8 function test_dead_code_detection thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 50 column 8 function test_dead_code_detection
+  assertion
+  !1
+````
+
+## Understanding Cover Property Results:
+
+- **FAILED (counterexample found)** = The condition is satisfiable/reachable.
+  - This is the expected outcome for conditions you want to verify as possible.
+  - ESBMC provides concrete values that satisfy the condition.
+- **PASSED (proof found)** = The condition is unsatisfiable/unreachable.
+  - This indicates the condition cannot be satisfied given the constraints.
+  - Useful for verifying dead code or proving certain states are unreachable.
+- **Key Insights from this Example**:
+  - **Lines 16, 19, 28, 33, 50**: These cover properties fail (have counterexamples), confirming that various values and code paths are reachable.
+  - **Lines 25, 36**: These cover properties pass (have proofs), demonstrating that after the `__ESBMC_assume(x > 0)`, negative values and the "zero_or_negative" path are provably unreachable.
+  - **Dead Code Detection**: The cover property at line 50 fails (counterexample), confirming that the branch is reachable. The cover at line 45 (in the `if value < 0` branch) would pass (proof), proving that the branch is dead code.
 
 # Numpy Formal Verification with ESBMC
 

@@ -67,6 +67,10 @@ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 --------------->8---------------
+ * HumanEval dataset test cases, found in regression/humaneval directory.
+   Under MIT license.
+---------------8<---------------
+--------------->8---------------
  * The preprocessor of the Portable C Compiler, found in ansi-c/cpp. This is
    distributed under the following licenses:
 ---------------8<---------------

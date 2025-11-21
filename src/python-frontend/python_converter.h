@@ -1,14 +1,16 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
 #include <python-frontend/global_scope.h>
+#include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python_math.h>
+#include <python-frontend/string_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
-#include <python-frontend/string_handler.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/symbol_generator.h>
-#include <nlohmann/json.hpp>
 #include <map>
 #include <set>
 #include <utility>
@@ -21,7 +23,16 @@ class function_call_expr;
 class type_handler;
 class string_builder;
 class module_locator;
+class tuple_handler;
+class python_class_builder;
 
+/**
+ * @class python_converter
+ * @brief Main converter for transforming Python AST into ESBMC's intermediate representation.
+ *
+ * This class is responsible for converting Python source code (represented as JSON AST)
+ * into GOTO programs that can be processed by ESBMC's symbolic execution engine.
+ */
 class python_converter
 {
 public:
@@ -36,9 +47,24 @@ public:
 
   string_builder &get_string_builder();
 
+  python_dict_handler *get_dict_handler()
+  {
+    return dict_handler_;
+  }
+
+  python_math &get_math_handler()
+  {
+    return math_handler_;
+  }
+
   string_handler &get_string_handler()
   {
     return string_handler_;
+  }
+
+  tuple_handler &get_tuple_handler()
+  {
+    return *tuple_handler_;
   }
 
   const nlohmann::json &ast() const
@@ -125,13 +151,33 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  /**
+   * @brief Resolves dictionary subscript types for binary operations.
+   *
+   * When comparing dictionary values with primitive types (int, bool, float),
+   * the dict subscript initially returns a char* pointer. This method detects
+   * such cases and re-fetches the dictionary value with the correct expected type.
+   *
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param lhs The left operand expression (may be modified).
+   * @param rhs The right operand expression (may be modified).
+   */
+  void resolve_dict_subscript_types(
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    exprt &lhs,
+    exprt &rhs);
+
 private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
-  bool processing_list_elements = false;
+  friend class tuple_handler;
+  friend class python_class_builder;
+  friend class python_dict_handler;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -164,10 +210,6 @@ private:
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
-  exprt handle_power_operator(exprt base, exprt exp);
-
-  exprt build_power_expression(const exprt &base, const BigInt &exp);
-
   bool is_bytes_literal(const nlohmann::json &element);
 
   exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
@@ -179,8 +221,6 @@ private:
   exprt get_function_constant_return(const exprt &func_value);
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
-
-  exprt handle_power_operator_sym(exprt base, exprt exp);
 
   symbolt create_assert_temp_variable(const locationt &location);
 
@@ -259,8 +299,6 @@ private:
 
   symbol_id create_symbol_id(const std::string &filename) const;
 
-  exprt compute_math_expr(const exprt &expr) const;
-
   void promote_int_to_float(exprt &op, const typet &target_type) const;
 
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
@@ -281,10 +319,18 @@ private:
     const symbol_id &id,
     const locationt &location);
 
+  size_t register_function_argument(
+    const nlohmann::json &element,
+    code_typet &type,
+    const symbol_id &id,
+    const locationt &location,
+    bool is_keyword_only);
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,
     exprt &function_body);
+
   exprt compare_constants_internal(
     const std::string &op,
     const exprt &lhs,
@@ -299,6 +345,9 @@ private:
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
+
+  exprt
+  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
 
   void get_attributes_from_self(
     const nlohmann::json &method_body,
@@ -345,9 +394,26 @@ private:
 
   std::string extract_non_none_type(const nlohmann::json &annotation_node);
 
-  // helper methods for get_var_assign
+  void
+  get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
+
+  // =========================================================================
+  // Helper methods for get_var_assign
+  // =========================================================================
+
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
+
+  void handle_array_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    exprt &rhs,
+    codet &target_block);
+
+  void handle_list_literal_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
 
   exprt create_lhs_expression(
     const nlohmann::json &target,
@@ -362,12 +428,182 @@ private:
     const nlohmann::json &ast_node,
     bool is_ctor_call);
 
+  // =========================================================================
   // Helper methods for binary operator expression handling
+  // =========================================================================
+
+  /**
+   * @brief Converts function calls in binary operands to side effects.
+   * @param lhs Left operand expression (may be modified).
+   * @param rhs Right operand expression (may be modified).
+   */
   void convert_function_calls_to_side_effects(exprt &lhs, exprt &rhs);
 
+  /**
+   * @brief Handles chained comparison expressions (e.g., 0 <= x <= 10).
+   * @param element The JSON AST node containing the chained comparison.
+   * @param bin_expr The base binary expression.
+   * @return The combined expression for the chained comparison.
+   */
   exprt handle_chained_comparisons_logic(
     const nlohmann::json &element,
     exprt &bin_expr);
+
+  /**
+   * @brief Determines if None comparison setup is needed.
+   *
+   * Checks whether the operation involves None comparisons that shouldn't
+   * unwrap optional types.
+   *
+   * @param op The operator string (e.g., "Eq", "Is").
+   * @param lhs The left operand expression.
+   * @param rhs The right operand expression.
+   * @return true if this is a None comparison, false otherwise.
+   */
+  bool handle_none_check_setup(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
+  /**
+   * @brief Handles array-related binary operations.
+   *
+   * Processes zero-length array comparisons and string concatenation.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified for concatenation).
+   * @param rhs The right operand expression (may be modified for concatenation).
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if not an array operation.
+   */
+  exprt handle_array_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles list-related binary operations.
+   *
+   * Processes list comparison, concatenation, and repetition.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified for repetition).
+   * @param rhs The right operand expression (may be modified for repetition).
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if not a list operation.
+   */
+  exprt handle_list_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles type mismatches in relational operations.
+   *
+   * Processes single-character comparisons and float-vs-string comparisons.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified).
+   * @param rhs The right operand expression (may be modified).
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if no special handling needed.
+   */
+  exprt handle_relational_type_mismatches(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles string-related binary operations.
+   *
+   * Processes string type inference and delegates to string handler.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified).
+   * @param rhs The right operand expression (may be modified).
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if not a string operation.
+   */
+  exprt handle_string_binary_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Builds a binary expression with proper type and location.
+   *
+   * Determines result type, sets location, handles type promotions,
+   * and adds operands to the expression.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified for type casting).
+   * @param rhs The right operand expression (may be modified for type casting).
+   * @return The constructed binary expression.
+   */
+  exprt build_binary_expression(const std::string &op, exprt &lhs, exprt &rhs);
+
+  /**
+   * @brief Promotes operands for IEEE floating-point operations.
+   *
+   * @param bin_expr The binary expression (operands may be modified).
+   * @param lhs The original left operand.
+   * @param rhs The original right operand.
+   */
+  void
+  promote_ieee_operands(exprt &bin_expr, const exprt &lhs, const exprt &rhs);
+
+  // =========================================================================
+  // String method helpers
+  // =========================================================================
+
+  exprt handle_str_join(const nlohmann::json &call_json);
+
+  exprt handle_string_type_mismatch(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &op);
+
+  // Create character comparison expression from preprocessed operands
+  exprt create_char_comparison_expr(
+    const std::string &op,
+    const exprt &lhs_char_value,
+    const exprt &rhs_char_value,
+    const exprt &lhs_source,
+    const exprt &rhs_source) const;
+
+  void process_forward_reference(
+    const nlohmann::json &annotation,
+    codet &target_block);
+
+  // =========================================================================
+  // Optional type helpers
+  // =========================================================================
+
+  /// Wrap values in Optional
+  exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+
+  /// Handle Optional value access
+  exprt unwrap_optional_if_needed(const exprt &expr);
+
+  // =========================================================================
+  // Member variables
+  // =========================================================================
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
@@ -386,6 +622,9 @@ private:
   code_blockt *current_block;
   exprt *current_lhs;
   string_handler string_handler_;
+  python_math math_handler_;
+  tuple_handler *tuple_handler_;
+  python_dict_handler *dict_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
@@ -394,12 +633,14 @@ private:
   bool base_ctor_called = false;
   bool build_static_lists = false;
 
-  // Map object to list of instance attributes
+  /// Map object to list of instance attributes
   std::map<std::string, std::set<std::string>> instance_attr_map;
-  // Map imported modules to their corresponding paths
+  /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
 
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;
   bool is_right = false;
+
+  exprt extract_type_from_boolean_op(const exprt &bool_op);
 };

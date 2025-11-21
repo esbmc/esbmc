@@ -387,15 +387,28 @@ private:
   void print_file_table(
     std::ostream &os,
     std::pair<const std::string_view, size_t>) const;
+
+  enum class Language
+  {
+    C_CPP,
+    Python,
+    Unknown
+  };
+
   struct code_lines
   {
-    explicit code_lines(const std::string &content) : content(content)
+    explicit code_lines(
+      const std::string &content,
+      Language lang = Language::C_CPP)
+      : content(content), language(lang)
     {
     }
     const std::string content;
+    Language language;
     std::string to_html() const;
   };
 
+  static Language detect_language(const std::string &filepath);
   struct code_steps
   {
     code_steps(const size_t step, const std::string &msg, bool is_jump)
@@ -449,8 +462,28 @@ const std::string html_report::generate_body() const
 {
   std::ostringstream body;
   const locationt &location = violation_step->pc->location;
-  const std::string filename{
-    std::filesystem::absolute(location.get_file().as_string()).string()};
+
+  // Get filename with validation, empty protection
+  std::string filename;
+  std::string raw_path = location.get_file().as_string();
+  if (raw_path.empty())
+  {
+    filename = "<unknown>";
+    log_warning("[HTML] Empty file path in violation location");
+  }
+  else
+  {
+    try
+    {
+      filename = std::filesystem::absolute(raw_path).string();
+    }
+    catch (const std::filesystem::filesystem_error &e)
+    {
+      filename = raw_path;
+      log_warning(
+        "[HTML] Cannot resolve absolute path for {}: {}", raw_path, e.what());
+    }
+  }
   // Bug Summary
   {
     const std::string position{fmt::format(
@@ -496,7 +529,10 @@ const std::string html_report::generate_body() const
     std::unordered_set<size_t> relevant_lines;
     for (const auto &step : goto_trace.steps)
     {
-      files.insert(step.pc->location.get_file().as_string());
+      // Only insert non-empty file paths
+      std::string file_path = step.pc->location.get_file().as_string();
+      if (!file_path.empty())
+        files.insert(file_path);
       if (!(step.is_assert() && step.guard))
         relevant_lines.insert(atoi(step.pc->location.get_line().c_str()));
     }
@@ -527,21 +563,40 @@ void html_report::print_file_table(
   std::ostream &os,
   std::pair<const std::string_view, size_t> file) const
 {
+  // Detect language from file extension
+  Language lang = detect_language(std::string(file.first));
   std::vector<code_lines> lines;
   {
     std::ifstream input(std::string(file.first));
     std::string line;
     while (std::getline(input, line))
     {
-      code_lines code_line(line);
+      code_lines code_line(line, lang);
       lines.push_back(code_line);
     }
   }
+  // Get display path with validation
+  std::string display_path;
+  if (file.first.empty())
+  {
+    display_path = "<unknown>";
+    log_warning("[HTML] Empty file path in trace");
+  }
+  else
+  {
+    try
+    {
+      display_path = std::filesystem::absolute(file.first).string();
+    }
+    catch (const std::filesystem::filesystem_error &e)
+    {
+      display_path = std::string(file.first);
+      log_warning(
+        "[HTML] Cannot resolve path for {}: {}", file.first, e.what());
+    }
+  }
   os << fmt::format(
-    "<div id=File{}><h4 class=FileName>{}</h4>",
-    file.second,
-    std::filesystem::absolute(file.first).string());
-
+    "<div id=File{}><h4 class=FileName>{}</h4>", file.second, display_path);
   std::unordered_map<size_t, std::list<code_steps>> steps;
   size_t counter = 0;
   for (const auto &step : goto_trace.steps)
@@ -637,27 +692,57 @@ void generate_html_report(
   report.output(html);
 }
 
+html_report::Language html_report::detect_language(const std::string &filepath)
+{
+  if (filepath.empty())
+    return Language::Unknown;
+
+  // Check file extension
+  size_t dot_pos = filepath.find_last_of('.');
+  if (dot_pos == std::string::npos)
+    return Language::Unknown;
+
+  std::string ext = filepath.substr(dot_pos);
+
+  if (ext == ".py")
+    return Language::Python;
+  else if (
+    ext == ".c" || ext == ".cpp" || ext == ".cc" || ext == ".cxx" ||
+    ext == ".h" || ext == ".hpp" || ext == ".hh" || ext == ".hxx")
+    return Language::C_CPP;
+
+  return Language::Unknown;
+}
+
 std::string html_report::code_lines::to_html() const
 {
   // TODO: C++23 has constexpr for regex
-  // TODO: Support for comments
-  constexpr std::array keywords{
-    "auto",     "break",  "case",    "char",   "const",    "continue",
-    "default",  "do",     "double",  "else",   "enum",     "extern",
-    "float",    "for",    "goto",    "if",     "int",      "long",
-    "register", "return", "short",   "signed", "sizeof",   "static",
-    "struct",   "switch", "typedef", "union",  "unsigned", "void",
-    "volatile", "while"};
+  // Use static regex objects for better performance
+  static const std::regex cpp_keywords_regex(
+    "\\b(auto|break|case|char|const|continue|default|do|double|else|enum|"
+    "extern|float|for|goto|if|int|long|register|return|short|signed|sizeof|"
+    "static|struct|switch|typedef|union|unsigned|void|volatile|while)"
+    "\\b(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)");
 
-  std::string output(content);
-  for (const auto &word : keywords)
-  {
-    std::regex e(
-      fmt::format("(\\b({}))(\\b)(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)", word));
-    output = std::regex_replace(
-      output, e, fmt::format("<span class='keyword'>{}</span>", word));
-  }
-  return output;
+  static const std::regex python_keywords_regex(
+    "\\b(False|None|True|and|as|assert|async|await|break|class|continue|def|"
+    "del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|"
+    "nonlocal|not|or|pass|raise|return|try|while|with|yield)"
+    "\\b(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)");
+
+  // Choose regex based on language
+  const std::regex *keywords_regex;
+  if (language == Language::Python)
+    keywords_regex = &python_keywords_regex;
+  else if (language == Language::C_CPP)
+    keywords_regex = &cpp_keywords_regex;
+  else
+    // No highlighting for unknown languages
+    return content;
+
+  // Single regex_replace instead of loop
+  return std::regex_replace(
+    content, *keywords_regex, "<span class='keyword'>$&</span>");
 }
 std::string html_report::code_steps::to_html(size_t last) const
 {
@@ -688,9 +773,26 @@ std::string html_report::code_steps::to_html(size_t last) const
   constexpr std::string_view end_format{
     R"(<tr><td class="num"></td><td class="line"><div id="EndPath" class="msg msgEvent" style="margin-left:{1}ex"><table class="msgT"><tr><td valign="top"><div class="PathIndex PathIndexEvent">{0}</div></td>{2}<td>{3}</td></table></div></td></tr>)"};
 
-  std::string format(is_jump ? jump_format : step_format);
+  if (step == last)
+    return fmt::format(
+      end_format,
+      step,
+      margin * step + 1,
+      previous_step_str,
+      msg,
+      next_step_str);
+
+  if (is_jump)
+    return fmt::format(
+      jump_format,
+      step,
+      margin * step + 1,
+      previous_step_str,
+      msg,
+      next_step_str);
+
   return fmt::format(
-    step == last ? end_format : format,
+    step_format,
     step,
     margin * step + 1,
     previous_step_str,

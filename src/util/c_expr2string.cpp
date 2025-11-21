@@ -2381,6 +2381,16 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
     return convert_function(src, "RACE_CHECK", precedence = 15);
   }
 
+  else if (src.id() == "isinstance")
+  {
+    return convert_function(src, "ISINSTANCE", precedence = 15);
+  }
+
+  else if (src.id() == "isnone")
+  {
+    return convert_function(src, "ISNONE", precedence = 15);
+  }
+
   else if (src.id() == "capability_base")
   {
     return convert_function(src, "CAPABILITY_BASE", precedence = 15);
