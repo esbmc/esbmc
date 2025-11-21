@@ -1351,9 +1351,83 @@ exprt python_converter::handle_string_type_mismatch(
   return nil_exprt(); // No action taken for other operators
 }
 
+void python_converter::resolve_dict_subscript_types(
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  exprt &lhs,
+  exprt &rhs)
+{
+  bool lhs_is_dict_subscript = type_utils::is_dict_subscript(left);
+  bool rhs_is_dict_subscript = type_utils::is_dict_subscript(right);
+
+  bool lhs_is_ptr = lhs.type().is_pointer();
+  bool rhs_is_ptr = rhs.type().is_pointer();
+
+  auto is_primitive_type = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_bool() ||
+           t.is_floatbv();
+  };
+
+  bool lhs_is_primitive = is_primitive_type(lhs.type());
+  bool rhs_is_primitive = is_primitive_type(rhs.type());
+
+  // Case 1: LHS is dict subscript (returning pointer) and RHS is primitive
+  if (lhs_is_dict_subscript && lhs_is_ptr && rhs_is_primitive)
+  {
+    exprt dict_expr = get_expr(left["value"]);
+    if (
+      dict_expr.type().is_struct() &&
+      dict_handler_->is_dict_type(dict_expr.type()))
+    {
+      lhs = dict_handler_->handle_dict_subscript(
+        dict_expr, left["slice"], rhs.type());
+    }
+  }
+
+  // Case 2: RHS is dict subscript (returning pointer) and LHS is primitive
+  if (rhs_is_dict_subscript && rhs_is_ptr && lhs_is_primitive)
+  {
+    exprt dict_expr = get_expr(right["value"]);
+    if (
+      dict_expr.type().is_struct() &&
+      dict_handler_->is_dict_type(dict_expr.type()))
+    {
+      rhs = dict_handler_->handle_dict_subscript(
+        dict_expr, right["slice"], lhs.type());
+    }
+  }
+
+  // Case 3: Both sides are dict subscripts (returning pointers)
+  // Default to long_int_type for dict-to-dict comparisons
+  if (
+    lhs_is_dict_subscript && rhs_is_dict_subscript && lhs_is_ptr && rhs_is_ptr)
+  {
+    typet default_type = long_int_type();
+
+    exprt lhs_dict = get_expr(left["value"]);
+    if (
+      lhs_dict.type().is_struct() &&
+      dict_handler_->is_dict_type(lhs_dict.type()))
+    {
+      lhs = dict_handler_->handle_dict_subscript(
+        lhs_dict, left["slice"], default_type);
+    }
+
+    exprt rhs_dict = get_expr(right["value"]);
+    if (
+      rhs_dict.type().is_struct() &&
+      dict_handler_->is_dict_type(rhs_dict.type()))
+    {
+      rhs = dict_handler_->handle_dict_subscript(
+        rhs_dict, right["slice"], default_type);
+    }
+  }
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  auto left = (element.contains("left")) ? element["left"] : element["target"];
+  // Extract left and right operands from AST
+  auto left = element.contains("left") ? element["left"] : element["target"];
 
   decltype(left) right;
   if (element.contains("right"))
@@ -1363,82 +1437,172 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("value"))
     right = element["value"];
 
+  // Convert operands to expressions
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
 
+  // Resolve dictionary subscript types for proper comparison
+  resolve_dict_subscript_types(left, right, lhs, rhs);
+
+  // Extract operator
   std::string op;
   if (element.contains("op"))
     op = element["op"]["_type"].get<std::string>();
   else if (element.contains("ops"))
     op = element["ops"][0]["_type"].get<std::string>();
-
   assert(!op.empty());
 
-  // Don't unwrap for 'is' and 'is not' comparisons - they check the Optional itself
-  bool is_none_check = (op == "Is" || op == "IsNot") &&
-                       (lhs.type() == none_type() || rhs.type() == none_type());
-
-  // Also don't unwrap for == and != with None
-  if (!is_none_check && (op == "Eq" || op == "NotEq"))
-  {
-    bool lhs_is_none = (lhs.type() == none_type());
-    bool rhs_is_none = (rhs.type() == none_type());
-
-    if (lhs_is_none || rhs_is_none)
-      is_none_check = true;
-  }
-
+  // Handle None comparisons (don't unwrap optionals for identity checks)
+  bool is_none_check = handle_none_check_setup(op, lhs, rhs);
   if (!is_none_check)
   {
     lhs = unwrap_optional_if_needed(lhs);
     rhs = unwrap_optional_if_needed(rhs);
   }
 
-  // Simplify comparison with NoneType
-  if ((lhs.type() == none_type()) || (rhs.type() == none_type()))
-  {
+  if (lhs.type() == none_type() || rhs.type() == none_type())
     return handle_none_comparison(op, lhs, rhs);
-  }
 
-  // Was an exception thrown? It has nothing to do with the following part
+  // Handle exceptions
   if (lhs.statement() == "cpp-throw")
     return lhs;
-
   if (rhs.statement() == "cpp-throw")
     return rhs;
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  // Handle 'in' and 'not in' operators
+  // Handle membership operators
   if (op == "In")
     return handle_membership_operator(lhs, rhs, element, false);
-
   if (op == "NotIn")
     return handle_membership_operator(lhs, rhs, element, true);
 
-  // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
+  // Convert function calls to side effects
   convert_function_calls_to_side_effects(lhs, rhs);
 
+  // Handle array/string operations
   if (lhs.type().is_array() || rhs.type().is_array())
   {
-    // Check for zero-length arrays
-    if (
-      string_handler_.is_zero_length_array(lhs) &&
-      string_handler_.is_zero_length_array(rhs) &&
-      (op == "Eq" || op == "NotEq"))
-    {
-      return gen_boolean(op == "Eq");
-    }
-
-    // Handle string concatenation with type promotion
-    if (op == "Add")
-      return string_handler_.handle_string_concatenation_with_promotion(
-        lhs, rhs, left, right);
+    exprt result = handle_array_operations(op, lhs, rhs, left, right, element);
+    if (!result.is_nil())
+      return result;
   }
 
   // Handle list operations
+  exprt list_result =
+    handle_list_operations(op, lhs, rhs, left, right, element);
+  if (!list_result.is_nil())
+    return list_result;
+
+  // Handle identity comparisons
+  if (op == "Is")
+    return get_binary_operator_expr_for_is(lhs, rhs);
+  if (op == "IsNot")
+    return get_negated_is_expr(lhs, rhs);
+
+  // Handle relational operation type mismatches
+  if (type_utils::is_relational_op(op))
+  {
+    exprt result = handle_relational_type_mismatches(op, lhs, rhs, element);
+    if (!result.is_nil())
+      return result;
+  }
+
+  // Handle string operations
+  exprt string_result =
+    handle_string_binary_operations(op, lhs, rhs, left, right, element);
+  if (!string_result.is_nil())
+    return string_result;
+
+  // Handle type mismatches
+  exprt type_mismatch_result = handle_string_type_mismatch(lhs, rhs, op);
+  if (!type_mismatch_result.is_nil())
+    return type_mismatch_result;
+
+  // Handle special mathematical operations
+  if (op == "Pow" || op == "power")
+    return math_handler_.handle_power(lhs, rhs);
+
+  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
+    return math_handler_.handle_modulo(lhs, rhs, element);
+
+  // Build the binary expression
+  exprt bin_expr = build_binary_expression(op, lhs, rhs);
+
+  // Handle float vs char comparisons
+  if (type_utils::is_float_vs_char(lhs, rhs))
+    return handle_float_vs_string(bin_expr, op);
+
+  // Handle floor division
+  if (op == "FloorDiv")
+    return math_handler_.handle_floor_division(lhs, rhs, bin_expr);
+
+  // Promote operands for IEEE operations
+  promote_ieee_operands(bin_expr, lhs, rhs);
+
+  // Handle chained comparisons
+  if (element.contains("comparators") && element["comparators"].size() > 1)
+    return handle_chained_comparisons_logic(element, bin_expr);
+
+  return bin_expr;
+}
+
+bool python_converter::handle_none_check_setup(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  bool is_none_check = (op == "Is" || op == "IsNot") &&
+                       (lhs.type() == none_type() || rhs.type() == none_type());
+
+  if (!is_none_check && (op == "Eq" || op == "NotEq"))
+  {
+    if (lhs.type() == none_type() || rhs.type() == none_type())
+      is_none_check = true;
+  }
+
+  return is_none_check;
+}
+
+exprt python_converter::handle_array_operations(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const nlohmann::json & /*element*/)
+{
+  if (!lhs.type().is_array() && !rhs.type().is_array())
+    return nil_exprt();
+
+  // Check for zero-length array comparisons
+  if (
+    string_handler_.is_zero_length_array(lhs) &&
+    string_handler_.is_zero_length_array(rhs) && (op == "Eq" || op == "NotEq"))
+  {
+    return gen_boolean(op == "Eq");
+  }
+
+  // Handle string concatenation
+  if (op == "Add")
+    return string_handler_.handle_string_concatenation_with_promotion(
+      lhs, rhs, left, right);
+
+  return nil_exprt();
+}
+
+exprt python_converter::handle_list_operations(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const nlohmann::json &element)
+{
   typet list_type = type_handler_.get_list_type();
+
+  // List comparison
   if (
     lhs.type() == list_type && rhs.type() == list_type &&
     (op == "Eq" || op == "NotEq"))
@@ -1446,122 +1610,116 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     python_list list(*this, element);
     return list.compare(lhs, rhs, op);
   }
-  // list + list  (concatenation)
+
+  // List concatenation
   if (lhs.type() == list_type && rhs.type() == list_type && op == "Add")
   {
     python_list list(*this, element);
     return list.build_concat_list_call(lhs, rhs, element);
   }
+
+  // List repetition
   if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
   {
-    // Compute resulting list
     if (is_right)
       return nil_exprt();
-
     python_list list(*this, element);
     return list.list_repetition(left, right, lhs, rhs);
   }
 
-  /// Handle 'is' and 'is not' Python identity comparisons
-  if (op == "Is")
-    return get_binary_operator_expr_for_is(lhs, rhs);
-  else if (op == "IsNot")
-    return get_negated_is_expr(lhs, rhs);
+  return nil_exprt();
+}
 
-  // Handle type mismatches for relational operations
-  if (type_utils::is_relational_op(op))
+exprt python_converter::handle_relational_type_mismatches(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  // Single character comparisons
+  if (type_utils::is_ordered_comparison(op))
   {
-    // Check for single character string comparisons (for <, >, <=, >=)
-    if (type_utils::is_ordered_comparison(op))
-    {
-      exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
-      if (!char_comp_result.is_nil())
-        return char_comp_result;
-    }
-
-    // Check for float vs string comparisons
-    bool lhs_is_float = lhs.type().is_floatbv();
-    bool rhs_is_float = rhs.type().is_floatbv();
-    bool lhs_is_str = type_utils::is_string_type(lhs.type());
-    bool rhs_is_str = type_utils::is_string_type(rhs.type());
-
-    if ((lhs_is_float && rhs_is_str) || (lhs_is_str && rhs_is_float))
-    {
-      // Create a binary expression for handle_float_vs_string with proper location
-      exprt binary_expr(get_op(op, bool_type()), bool_type());
-
-      // Set location from the AST element or operands
-      locationt loc = get_location_from_decl(element);
-      if (loc.is_nil() || loc.get_line().empty())
-      {
-        // Fallback to operand locations
-        if (!lhs.location().is_nil())
-          loc = lhs.location();
-        else if (!rhs.location().is_nil())
-          loc = rhs.location();
-      }
-      binary_expr.location() = loc;
-
-      return handle_float_vs_string(binary_expr, op);
-    }
+    exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
+    if (!char_comp_result.is_nil())
+      return char_comp_result;
   }
 
-  // Get LHS and RHS types
+  // Float vs string comparisons
+  bool lhs_is_float = lhs.type().is_floatbv();
+  bool rhs_is_float = rhs.type().is_floatbv();
+  bool lhs_is_str = type_utils::is_string_type(lhs.type());
+  bool rhs_is_str = type_utils::is_string_type(rhs.type());
+
+  if ((lhs_is_float && rhs_is_str) || (lhs_is_str && rhs_is_float))
+  {
+    exprt binary_expr(get_op(op, bool_type()), bool_type());
+
+    locationt loc = get_location_from_decl(element);
+    if (loc.is_nil() || loc.get_line().empty())
+    {
+      if (!lhs.location().is_nil())
+        loc = lhs.location();
+      else if (!rhs.location().is_nil())
+        loc = rhs.location();
+    }
+    binary_expr.location() = loc;
+
+    return handle_float_vs_string(binary_expr, op);
+  }
+
+  return nil_exprt();
+}
+
+exprt python_converter::handle_string_binary_operations(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const nlohmann::json &element)
+{
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
   std::string rhs_type = type_handler_.type_to_string(rhs.type());
 
-  // Infer the missing operand type if one side is explicitly a string and the operation is Eq or NotEq
+  // Infer string types for equality comparisons
   if (
     (op == "Eq" || op == "NotEq") && ((lhs_type.empty() && rhs_type == "str") ||
                                       (rhs_type.empty() && lhs_type == "str")))
   {
-    // Infer lhs_type if it is empty
     if (lhs_type.empty() && element.contains("left"))
     {
       const auto &lhs_expr = element["left"];
-      if (lhs_expr.contains("value") && lhs_expr["value"].is_string())
-        lhs_type = "str";
-      else if (lhs_expr.contains("id") && lhs_expr["id"].is_string())
+      if (
+        (lhs_expr.contains("value") && lhs_expr["value"].is_string()) ||
+        (lhs_expr.contains("id") && lhs_expr["id"].is_string()))
         lhs_type = "str";
     }
-    // Infer rhs_type if it is empty
     else if (
       rhs_type.empty() && element.contains("comparators") &&
       element["comparators"].is_array() && !element["comparators"].empty())
     {
       const auto &rhs_expr = element["comparators"][0];
-      if (rhs_expr.contains("value") && rhs_expr["value"].is_string())
-        rhs_type = "str";
-      else if (rhs_expr.contains("id") && rhs_expr["id"].is_string())
+      if (
+        (rhs_expr.contains("value") && rhs_expr["value"].is_string()) ||
+        (rhs_expr.contains("id") && rhs_expr["id"].is_string()))
         rhs_type = "str";
     }
   }
 
-  // Check for Add operations with string operands
+  // Check for string literals in Add operations
   if (op == "Add")
   {
-    // Check if either operand is a string constant in the JSON
-    bool lhs_is_str_literal = false;
-    bool rhs_is_str_literal = false;
-
     if (
       element.contains("left") && element["left"].contains("value") &&
       element["left"]["value"].is_string())
-    {
-      lhs_is_str_literal = true;
       lhs_type = "str";
-    }
 
     if (
       element.contains("right") && element["right"].contains("value") &&
       element["right"]["value"].is_string())
-    {
-      rhs_is_str_literal = true;
       rhs_type = "str";
-    }
 
-    // If one is a string literal, treat both as strings for concatenation
-    if (lhs_is_str_literal || rhs_is_str_literal)
+    if (!lhs_type.empty() || !rhs_type.empty())
     {
       if (lhs_type.empty())
         lhs_type = "str";
@@ -1571,7 +1729,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   }
 
   // Check if both operands are strings
-  // Use both type_to_string (for compatibility) and is_string_type (for pointer types)
   bool lhs_is_string =
     (lhs_type == "str") || type_utils::is_string_type(lhs.type());
   bool rhs_is_string =
@@ -1583,88 +1740,66 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
      (lhs_is_string || rhs_is_string || type_utils::is_char_type(lhs.type()) ||
       type_utils::is_char_type(rhs.type()))))
   {
-    const exprt &result = string_handler_.handle_string_operations(
+    return string_handler_.handle_string_operations(
       op, lhs, rhs, left, right, element);
-    if (!result.is_nil())
-      return result;
   }
 
-  // Handle string vs non-string type mismatches
-  exprt type_mismatch_result = handle_string_type_mismatch(lhs, rhs, op);
-  if (!type_mismatch_result.is_nil())
-    return type_mismatch_result;
+  return nil_exprt();
+}
 
-  // Replace ** operation with the resultant constant.
-  if (op == "Pow" || op == "power")
-    return math_handler_.handle_power(lhs, rhs);
-
-  // Handle floating-point modulo with Python semantics
-  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
-    return math_handler_.handle_modulo(lhs, rhs, element);
-
-  // Determine the result type of the binary operation:
+exprt python_converter::build_binary_expression(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs)
+{
+  // Determine result type
   typet type;
   if (type_utils::is_relational_op(op))
     type = bool_type();
   else if (op == "Div" || op == "div")
-    type = double_type(); // Python division always returns float
+    type = double_type();
   else if (lhs.type().is_floatbv() || rhs.type().is_floatbv())
-    type =
-      lhs.type().is_floatbv() ? lhs.type() : rhs.type(); // Promote to float
+    type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
   else
     type = lhs.type();
 
-  // Create a binary expression node with the determined type and location.
+  // Create expression
   exprt bin_expr(get_op(op, type), type);
+
+  // Set location
   if (lhs.is_symbol())
     bin_expr.location() = lhs.location();
   else if (rhs.is_symbol())
     bin_expr.location() = rhs.location();
 
-  // Handle type promotion for mixed signed/unsigned comparisons:
-  // If lhs is unsigned and rhs is signed, convert rhs to match lhs's type.
-  // This prevents signed-unsigned comparison issues.
+  // Handle signed/unsigned promotion
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     rhs.make_typecast(lhs.type());
 
-  // Promote both operands to float for Python-style true division ("/")
-  // In Python 3, the '/' operator ALWAYS performs floating-point division,
-  // regardless of operand types. Only '//' performs floor division.
+  // Handle division promotion
   if (op == "Div" || op == "div")
     math_handler_.handle_float_division(lhs, rhs, bin_expr);
 
-  // Add lhs and rhs as operands to the binary expression.
+  // Add operands
   bin_expr.copy_to_operands(lhs, rhs);
 
-  // Python 3 comparison behavior: equality (==, !=) between incompatible types
-  // returns False/True, but ordered comparisons (<, >, etc.) raise TypeError.
-  // This emulates that behavior in ESBMC's symbolic execution.
-  if (type_utils::is_float_vs_char(lhs, rhs))
-    return handle_float_vs_string(bin_expr, op);
-
-  // floor division (//) operation corresponds to an int division with floor rounding
-  // So we need to emulate this behavior here:
-  // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
-  // e.g.: -5//2 equals to -3, and 5//2 equals to 2
-  if (op == "FloorDiv")
-    return math_handler_.handle_floor_division(lhs, rhs, bin_expr);
-
-  // Promote operands to floating point if IEEE operator is used
-  if (is_ieee_op(bin_expr))
-  {
-    const typet &target_type =
-      lhs.type().is_floatbv() ? lhs.type() : rhs.type();
-    if (!lhs.type().is_floatbv())
-      bin_expr.op0() = typecast_exprt(lhs, target_type);
-    if (!rhs.type().is_floatbv())
-      bin_expr.op1() = typecast_exprt(rhs, target_type);
-  }
-
-  // Handle chained comparisons such as assert 0 <= x <= 1
-  if (element.contains("comparators") && element["comparators"].size() > 1)
-    return handle_chained_comparisons_logic(element, bin_expr);
-
   return bin_expr;
+}
+
+void python_converter::promote_ieee_operands(
+  exprt &bin_expr,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (!is_ieee_op(bin_expr))
+    return;
+
+  const typet &target_type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
+
+  if (!lhs.type().is_floatbv())
+    bin_expr.op0() = typecast_exprt(lhs, target_type);
+  if (!rhs.type().is_floatbv())
+    bin_expr.op1() = typecast_exprt(rhs, target_type);
 }
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
@@ -3282,14 +3417,12 @@ void python_converter::get_var_assign(
   // Extract type information
   auto [lhs_type, element_type] = extract_type_info(ast_node);
 
-  // Check if the RHS is a dictionary literal
+  // Check if the RHS is a dictionary literal - set the element type
   if (
     ast_node.contains("value") && !ast_node["value"].is_null() &&
     dict_handler_->is_dict_literal(ast_node["value"]))
   {
-    // For dict assignments, infer the type from the literal
-    exprt dict_expr = dict_handler_->get_dict_literal(ast_node["value"]);
-    element_type = dict_expr.type();
+    element_type = dict_handler_->get_dict_struct_type();
   }
 
   current_element_type = element_type;
@@ -3312,7 +3445,7 @@ void python_converter::get_var_assign(
     process_forward_reference(ast_node["value"]["func"], target_block);
   }
 
-  // Handle dict subscript assignment - unmark deleted key if re-assigned
+  // Handle dict subscript assignment
   if (target_type == "Subscript")
   {
     exprt container_expr = get_expr(target["value"]);
@@ -3329,48 +3462,17 @@ void python_converter::get_var_assign(
     if (container_type.id() == "symbol")
       container_type = ns.follow(container_type);
 
-    if (container_type.is_struct())
+    // Check if this is a dict subscript assignment
+    if (dict_handler_->is_dict_type(container_type))
     {
-      const struct_typet &struct_type = to_struct_type(container_type);
-      std::string tag = struct_type.tag().as_string();
+      // Handle dict[key] = value assignment
+      is_converting_rhs = true;
+      exprt rhs = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
 
-      if (
-        tag.find("dict_") != std::string::npos ||
-        tag.find("tag-dict") != std::string::npos)
-      {
-        std::string dict_id = container_expr.is_symbol()
-                                ? container_expr.identifier().as_string()
-                                : "anon_dict";
-
-        const nlohmann::json &slice = target["slice"];
-        std::string key;
-        if (slice["_type"] == "Constant")
-        {
-          if (slice["value"].is_string())
-            key = slice["value"].get<std::string>();
-          else if (slice["value"].is_number_integer())
-            key = std::to_string(slice["value"].get<int64_t>());
-        }
-        else if (slice["_type"] == "Name")
-        {
-          std::string var_name = slice["id"].get<std::string>();
-          nlohmann::json var_decl =
-            json_utils::find_var_decl(var_name, current_func_name_, *ast_json);
-          if (
-            !var_decl.empty() && var_decl.contains("value") &&
-            var_decl["value"]["_type"] == "Constant")
-          {
-            const auto &val = var_decl["value"]["value"];
-            if (val.is_string())
-              key = val.get<std::string>();
-            else if (val.is_number_integer())
-              key = std::to_string(val.get<int64_t>());
-          }
-        }
-
-        if (!key.empty())
-          dict_handler_->unmark_key_deleted(dict_id, key);
-      }
+      dict_handler_->handle_dict_subscript_assign(
+        container_expr, target["slice"], rhs, target_block);
+      return;
     }
   }
 
@@ -3428,8 +3530,38 @@ void python_converter::get_var_assign(
       is_right = true;
       if (!ast_node["value"].is_null())
       {
-        if (ast_node["_type"] != "Call")
-          rhs = get_expr(ast_node["value"]);
+        // Skip getting expr for dict literals - handle specially later
+        if (!dict_handler_->is_dict_literal(ast_node["value"]))
+        {
+          if (ast_node["_type"] != "Call")
+          {
+            // Handle dict subscript assignment to typed variable
+            // If RHS is a dict subscript and LHS has an integer type annotation,
+            // we need to fetch the dict value as an integer
+            if (
+              type_utils::is_dict_subscript(ast_node["value"]) &&
+              (current_element_type.is_signedbv() ||
+               current_element_type.is_unsignedbv()))
+            {
+              exprt dict_expr = get_expr(ast_node["value"]["value"]);
+              if (
+                dict_expr.type().is_struct() &&
+                dict_handler_->is_dict_type(dict_expr.type()))
+              {
+                rhs = dict_handler_->handle_dict_subscript(
+                  dict_expr, ast_node["value"]["slice"], current_element_type);
+              }
+              else
+              {
+                rhs = get_expr(ast_node["value"]);
+              }
+            }
+            else
+            {
+              rhs = get_expr(ast_node["value"]);
+            }
+          }
+        }
       }
       is_right = false;
     }
@@ -3475,8 +3607,6 @@ void python_converter::get_var_assign(
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
 
       // Add declaration statement ONLY for newly created local variables
-      // This ensures they are registered in current_names during symex to avoid
-      // being incorrectly classified as level2_global in pointer analysis
       if (symbol_created && !current_func_name_.empty() && !is_global)
       {
         code_declt decl(symbol_expr(*lhs_symbol));
@@ -3499,6 +3629,16 @@ void python_converter::get_var_assign(
 
     // Create LHS expression
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
+
+    // Handle dict literal assignment specially - after LHS is created
+    if (
+      ast_node.contains("value") && !ast_node["value"].is_null() &&
+      dict_handler_->is_dict_literal(ast_node["value"]))
+    {
+      dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
+      current_lhs = nullptr;
+      return;
+    }
   }
   else if (ast_node["_type"] == "Assign")
   {
@@ -3572,6 +3712,32 @@ void python_converter::get_var_assign(
       }
     }
 
+    // Special handling for dict literal assignments without type annotations
+    if (
+      !lhs_symbol && !is_global && ast_node.contains("value") &&
+      ast_node["value"].contains("_type") &&
+      dict_handler_->is_dict_literal(ast_node["value"]))
+    {
+      locationt location = get_location_from_decl(target);
+      std::string module_name = location.get_file().as_string();
+
+      symbolt symbol = create_symbol(
+        module_name,
+        name,
+        sid.to_string(),
+        location,
+        dict_handler_->get_dict_struct_type());
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+
+      lhs = create_lhs_expression(target, lhs_symbol, location);
+      dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
+      current_lhs = nullptr;
+      return;
+    }
+
     // Special handling for lambda assignments
     if (
       !lhs_symbol && !is_global && ast_node.contains("value") &&
@@ -3590,7 +3756,6 @@ void python_converter::get_var_assign(
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
     }
     // Special handling for function call assignments without type annotations
-    // Convert the RHS first to determine the type, then create the symbol
     if (
       !lhs_symbol && !is_global && ast_node.contains("value") &&
       ast_node["value"].contains("_type") &&
@@ -3630,7 +3795,7 @@ void python_converter::get_var_assign(
       locationt location = get_location_from_decl(target);
       std::string module_name = location.get_file().as_string();
 
-      // Use the actual return type from the boolean operation (BoolOp expression)
+      // Use the actual return type from the boolean operation
       typet inferred_type = rhs_expr.type();
       if (inferred_type.is_empty())
         inferred_type = any_type();
@@ -3659,25 +3824,57 @@ void python_converter::get_var_assign(
   if (!ast_node["value"].is_null())
   {
     is_converting_rhs = true;
-    rhs = get_expr(ast_node["value"]);
-    has_value = true;
+
+    // Handle dict subscript assignment to integer variable
+    if (lhs_symbol && type_utils::is_dict_subscript(ast_node["value"]))
+    {
+      typet target_type = lhs_symbol->type;
+      if (
+        target_type.is_signedbv() || target_type.is_unsignedbv() ||
+        target_type.is_bool())
+      {
+        exprt dict_expr = get_expr(ast_node["value"]["value"]);
+        if (
+          dict_expr.type().is_struct() &&
+          dict_handler_->is_dict_type(dict_expr.type()))
+        {
+          rhs = dict_handler_->handle_dict_subscript(
+            dict_expr, ast_node["value"]["slice"], target_type);
+          has_value = true;
+          is_converting_rhs = false;
+        }
+        else
+        {
+          rhs = get_expr(ast_node["value"]);
+          has_value = true;
+        }
+      }
+      else
+      {
+        rhs = get_expr(ast_node["value"]);
+        has_value = true;
+      }
+    }
+    else
+    {
+      rhs = get_expr(ast_node["value"]);
+      has_value = true;
+    }
+
     is_converting_rhs = false;
 
     if (lhs_type == "str" && type_utils::is_integer_type(rhs.type()))
     {
-      // Check if this is a string constant assignment like s: str = "h"
       if (
         ast_node["value"]["_type"] == "Constant" &&
         ast_node["value"]["value"].is_string())
       {
         std::string str_value = ast_node["value"]["value"].get<std::string>();
 
-        // Create proper string array with null terminator
         typet string_type =
           type_handler_.build_array(char_type(), str_value.length() + 1);
         exprt str_array = gen_zero(string_type);
 
-        // Fill the array with characters
         for (size_t i = 0; i < str_value.length(); ++i)
         {
           BigInt char_val(static_cast<unsigned char>(str_value[i]));
@@ -3713,7 +3910,6 @@ void python_converter::get_var_assign(
     // Function call handling
     if (rhs.is_function_call())
     {
-      // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in self
       if (is_ctor_call)
       {
         std::string func_name =
@@ -3734,7 +3930,6 @@ void python_converter::get_var_assign(
       }
       else
       {
-        // update lhs attributes with attributes from the return node
         symbolt *func_symbol =
           symbol_table_.find_symbol(rhs.op1().identifier().c_str());
         assert(func_symbol);
@@ -3751,15 +3946,12 @@ void python_converter::get_var_assign(
         }
       }
 
-      // Additionally, copy instance attributes from function arguments to LHS
-      // This handles cases such as: obj2 = func(obj1) where obj1 has instance attributes
       if (!is_ctor_call)
       {
         const code_function_callt &call =
           static_cast<const code_function_callt &>(rhs);
         for (const auto &arg : call.arguments())
         {
-          // Skip address_of wrappers (used for passing objects as self parameters)
           const exprt *arg_ptr = &arg;
           if (arg.is_address_of())
             arg_ptr = &arg.op0();
@@ -3772,11 +3964,8 @@ void python_converter::get_var_assign(
         }
       }
 
-      // For function calls returning pointers (including strings),
-      // we need to assign the result
       if (rhs.type().is_pointer() && !is_ctor_call)
       {
-        // Create an assignment: lhs = function_call()
         rhs.op0() = lhs;
       }
       else if (
@@ -3785,8 +3974,6 @@ void python_converter::get_var_assign(
 
       if (rhs.type() == type_handler_.get_list_type())
       {
-        /* Update the element types of the LHS list with the value returned.
-         * We should refine this to consider all reachable returns for this call.*/
         if (auto ret = get_return_from_func(rhs.op1().identifier().c_str());
             !ret.is_nil())
         {
@@ -3817,7 +4004,6 @@ void python_converter::get_var_assign(
 
     adjust_statement_types(lhs, rhs);
 
-    // Update list type info
     if (lhs.type() == rhs.type() && lhs.type() == type_handler_.get_list_type())
     {
       const std::string &lhs_identifier = lhs.identifier().as_string();
@@ -3831,13 +4017,8 @@ void python_converter::get_var_assign(
 #ifndef NDEBUG
       const array_typet &thetype = lhs.type();
       thetype.size().is_constant();
-      // I am curious what else could arrive here. So add a debug
-      // assertion just to prevent us from doing something bad and to
-      // know that we are about to do something weird.
       assert(thetype.size().is_nil());
 #endif
-      // For VLA is not enough to just update the type, we need to make an explicit
-      // declaration. This lets ESBMC do all the internal initializations
       lhs_symbol->type = rhs.type();
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
@@ -6231,12 +6412,7 @@ void python_converter::get_delete_statement(
                               ? dict_expr.identifier().as_string()
                               : "anon_dict";
 
-      dict_handler_->mark_key_deleted(dict_id, key);
-
-      locationt location = get_location_from_decl(ast_node);
-      code_skipt skip;
-      skip.location() = location;
-      target_block.copy_to_operands(skip);
+      dict_handler_->handle_dict_delete(dict_expr, slice, target_block);
     }
     else if (target["_type"] == "Name")
     {

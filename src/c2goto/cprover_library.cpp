@@ -165,7 +165,9 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_create_inf_obj",
   "__python_int",
   "__python_chr",
-  "__python_str_concat"};
+  "__python_str_concat",
+  "__ESBMC_list_find_index",
+  "__ESBMC_list_remove_at"};
 } // namespace
 
 static void generate_symbol_deps(

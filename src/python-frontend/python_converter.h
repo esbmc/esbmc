@@ -26,6 +26,13 @@ class module_locator;
 class tuple_handler;
 class python_class_builder;
 
+/**
+ * @class python_converter
+ * @brief Main converter for transforming Python AST into ESBMC's intermediate representation.
+ *
+ * This class is responsible for converting Python source code (represented as JSON AST)
+ * into GOTO programs that can be processed by ESBMC's symbolic execution engine.
+ */
 class python_converter
 {
 public:
@@ -144,6 +151,24 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  /**
+   * @brief Resolves dictionary subscript types for binary operations.
+   *
+   * When comparing dictionary values with primitive types (int, bool, float),
+   * the dict subscript initially returns a char* pointer. This method detects
+   * such cases and re-fetches the dictionary value with the correct expected type.
+   *
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param lhs The left operand expression (may be modified).
+   * @param rhs The right operand expression (may be modified).
+   */
+  void resolve_dict_subscript_types(
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    exprt &lhs,
+    exprt &rhs);
+
 private:
   friend class function_call_expr;
   friend class numpy_call_expr;
@@ -152,6 +177,7 @@ private:
   friend class python_list;
   friend class tuple_handler;
   friend class python_class_builder;
+  friend class python_dict_handler;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -371,7 +397,10 @@ private:
   void
   get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
 
-  // helper methods for get_var_assign
+  // =========================================================================
+  // Helper methods for get_var_assign
+  // =========================================================================
+
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
 
@@ -399,14 +428,150 @@ private:
     const nlohmann::json &ast_node,
     bool is_ctor_call);
 
+  // =========================================================================
   // Helper methods for binary operator expression handling
+  // =========================================================================
+
+  /**
+   * @brief Converts function calls in binary operands to side effects.
+   * @param lhs Left operand expression (may be modified).
+   * @param rhs Right operand expression (may be modified).
+   */
   void convert_function_calls_to_side_effects(exprt &lhs, exprt &rhs);
 
+  /**
+   * @brief Handles chained comparison expressions (e.g., 0 <= x <= 10).
+   * @param element The JSON AST node containing the chained comparison.
+   * @param bin_expr The base binary expression.
+   * @return The combined expression for the chained comparison.
+   */
   exprt handle_chained_comparisons_logic(
     const nlohmann::json &element,
     exprt &bin_expr);
 
+  /**
+   * @brief Determines if None comparison setup is needed.
+   *
+   * Checks whether the operation involves None comparisons that shouldn't
+   * unwrap optional types.
+   *
+   * @param op The operator string (e.g., "Eq", "Is").
+   * @param lhs The left operand expression.
+   * @param rhs The right operand expression.
+   * @return true if this is a None comparison, false otherwise.
+   */
+  bool handle_none_check_setup(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
+  /**
+   * @brief Handles array-related binary operations.
+   *
+   * Processes zero-length array comparisons and string concatenation.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified for concatenation).
+   * @param rhs The right operand expression (may be modified for concatenation).
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if not an array operation.
+   */
+  exprt handle_array_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles list-related binary operations.
+   *
+   * Processes list comparison, concatenation, and repetition.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified for repetition).
+   * @param rhs The right operand expression (may be modified for repetition).
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if not a list operation.
+   */
+  exprt handle_list_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles type mismatches in relational operations.
+   *
+   * Processes single-character comparisons and float-vs-string comparisons.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified).
+   * @param rhs The right operand expression (may be modified).
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if no special handling needed.
+   */
+  exprt handle_relational_type_mismatches(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles string-related binary operations.
+   *
+   * Processes string type inference and delegates to string handler.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified).
+   * @param rhs The right operand expression (may be modified).
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if not a string operation.
+   */
+  exprt handle_string_binary_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Builds a binary expression with proper type and location.
+   *
+   * Determines result type, sets location, handles type promotions,
+   * and adds operands to the expression.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified for type casting).
+   * @param rhs The right operand expression (may be modified for type casting).
+   * @return The constructed binary expression.
+   */
+  exprt build_binary_expression(const std::string &op, exprt &lhs, exprt &rhs);
+
+  /**
+   * @brief Promotes operands for IEEE floating-point operations.
+   *
+   * @param bin_expr The binary expression (operands may be modified).
+   * @param lhs The original left operand.
+   * @param rhs The original right operand.
+   */
+  void
+  promote_ieee_operands(exprt &bin_expr, const exprt &lhs, const exprt &rhs);
+
+  // =========================================================================
   // String method helpers
+  // =========================================================================
+
   exprt handle_str_join(const nlohmann::json &call_json);
 
   exprt handle_string_type_mismatch(
@@ -426,11 +591,19 @@ private:
     const nlohmann::json &annotation,
     codet &target_block);
 
-  // Wrap values in Optional
+  // =========================================================================
+  // Optional type helpers
+  // =========================================================================
+
+  /// Wrap values in Optional
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
 
-  // Handle Optional value access
+  /// Handle Optional value access
   exprt unwrap_optional_if_needed(const exprt &expr);
+
+  // =========================================================================
+  // Member variables
+  // =========================================================================
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
@@ -460,9 +633,9 @@ private:
   bool base_ctor_called = false;
   bool build_static_lists = false;
 
-  // Map object to list of instance attributes
+  /// Map object to list of instance attributes
   std::map<std::string, std::set<std::string>> instance_attr_map;
-  // Map imported modules to their corresponding paths
+  /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
 
   std::vector<std::string> global_declarations;

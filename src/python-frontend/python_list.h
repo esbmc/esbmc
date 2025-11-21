@@ -89,6 +89,8 @@ public:
   exprt get_empty_set();
 
 private:
+  friend class python_dict_handler;
+
   exprt create_vla(
     const nlohmann::json &element,
     const symbolt *list,

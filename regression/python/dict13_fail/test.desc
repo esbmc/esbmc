@@ -1,4 +1,4 @@
 CORE
 main.py
---multi-property
-^Properties: 4 verified, \✗ 4 failed$
+--unwind 12
+^VERIFICATION FAILED$
