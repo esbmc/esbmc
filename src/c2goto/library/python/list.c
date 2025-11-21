@@ -400,7 +400,7 @@ typedef struct __ESBMC_PyListObj
   size_t size;     /**< Number of elements currently in use */
 } PyListObject;
 
-// Methods
+// Forward definition of list methods
 size_t __python_list_size(__PyObject *obj);
 __PyObject *__python_list_concat(__PyObject *obj1, __PyObject *obj2);
 __PyObject *__python_list_repeat(__PyObject *self, size_t length);
@@ -415,10 +415,11 @@ __PyObject *__python_list_in_repeat(__PyObject *self, size_t length);
 _Bool __python_list_cmp(__PyObject *a, __PyObject *b, int op);
 static PyType __ESBMC_list_type;
 
-int value;
+// TODO: this should be moved to __ESBMC_main
+int __ESBMC_list_init;
 PyType *get_list_type()
 {
-  if (value)
+  if (__ESBMC_list_init)
     return &__ESBMC_list_type;
 
   __ESBMC_list_type.tp_name = "builtin.list";
@@ -437,7 +438,7 @@ PyType *get_list_type()
   methods.sq_inplace_repeat = __python_list_in_repeat;
   __ESBMC_list_type.as_sq = methods;
 
-  value = 1;
+  __ESBMC_list_init = 1;
   return &__ESBMC_list_type;
 }
 
@@ -454,7 +455,7 @@ PyListObject *__ESBMC_list_create()
 
 size_t __ESBMC_list_size(PyListObject *l)
 {
-  return get_list_type()->as_sq.sq_length(l);
+  return __python_list_size(l);
 }
 
 bool __ESBMC_list_push(
@@ -487,12 +488,12 @@ bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
 
 bool __ESBMC_list_eq(PyListObject *l1, PyListObject *l2)
 {
-  return get_list_type()->comparation(l1, l2, Py_EQ);
+  return __python_list_cmp(l1,l2, Py_EQ);
 }
 
 PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
-  return get_list_type()->as_sq.sq_item(l, index);
+  return __python_list_index(l,index);
 }
 
 bool __ESBMC_list_insert(
