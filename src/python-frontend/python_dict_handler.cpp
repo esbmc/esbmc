@@ -370,10 +370,78 @@ void python_dict_handler::handle_dict_delete(
   const nlohmann::json &slice_node,
   codet &target_block)
 {
-  (void)dict_expr;
-
   locationt location = converter_.get_location_from_decl(slice_node);
-  code_skipt skip;
-  skip.location() = location;
-  target_block.copy_to_operands(skip);
+  typet list_type = type_handler_.get_list_type();
+
+  exprt key_expr = get_key_expr(slice_node);
+
+  // Get dict.keys and dict.values
+  member_exprt keys_member(dict_expr, "keys", list_type);
+  member_exprt values_member(dict_expr, "values", list_type);
+
+  // Find __ESBMC_list_find_index function
+  const symbolt *find_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_find_index");
+  if (!find_func)
+    throw std::runtime_error(
+      "__ESBMC_list_find_index not found - add it to list.c model");
+
+  // Find __ESBMC_list_remove_at function
+  const symbolt *remove_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_remove_at");
+  if (!remove_func)
+    throw std::runtime_error(
+      "__ESBMC_list_remove_at not found - add it to list.c model");
+
+  // Create temp for index result
+  symbolt &index_var = converter_.create_tmp_symbol(
+    slice_node, "$dict_del_idx$", size_type(), gen_zero(size_type()));
+
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  target_block.copy_to_operands(index_decl);
+
+  // Get element info for the key
+  python_list list_handler(converter_, slice_node);
+  list_elem_info key_info =
+    list_handler.get_list_element_info(slice_node, key_expr);
+
+  // Call find_index(keys, key, type_hash, size) to get the index of the key
+  code_function_callt find_call;
+  find_call.function() = symbol_expr(*find_func);
+  find_call.lhs() = symbol_expr(index_var);
+  find_call.arguments().push_back(keys_member);
+
+  exprt key_arg;
+  if (
+    key_info.elem_symbol->type.is_pointer() &&
+    key_info.elem_symbol->type.subtype() == char_type())
+    key_arg = symbol_expr(*key_info.elem_symbol);
+  else
+    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+
+  find_call.arguments().push_back(key_arg);
+  find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  find_call.arguments().push_back(key_info.elem_size);
+  find_call.type() = size_type();
+  find_call.location() = location;
+  target_block.copy_to_operands(find_call);
+
+  // Call list_remove_at(keys, index) to remove the key
+  code_function_callt remove_key_call;
+  remove_key_call.function() = symbol_expr(*remove_func);
+  remove_key_call.arguments().push_back(keys_member);
+  remove_key_call.arguments().push_back(symbol_expr(index_var));
+  remove_key_call.type() = bool_type();
+  remove_key_call.location() = location;
+  target_block.copy_to_operands(remove_key_call);
+
+  // Call list_remove_at(values, index) to remove the corresponding value
+  code_function_callt remove_value_call;
+  remove_value_call.function() = symbol_expr(*remove_func);
+  remove_value_call.arguments().push_back(values_member);
+  remove_value_call.arguments().push_back(symbol_expr(index_var));
+  remove_value_call.type() = bool_type();
+  remove_value_call.location() = location;
+  target_block.copy_to_operands(remove_value_call);
 }

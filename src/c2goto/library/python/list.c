@@ -260,3 +260,21 @@ size_t __ESBMC_list_find_index(
   __ESBMC_assert(0, "KeyError: key not found in dictionary");
   return 0;
 }
+
+bool __ESBMC_list_remove_at(PyListObject *l, size_t index)
+{
+  __ESBMC_assert(l != NULL, "list_remove_at: list is null");
+  __ESBMC_assert(index < l->size, "list_remove_at: index out of bounds");
+
+  // Shift elements to fill the gap
+  size_t i = index;
+  while (i < l->size - 1)
+  {
+    l->items[i] = l->items[i + 1];
+    i++;
+  }
+
+  // Decrease size
+  l->size = l->size - 1;
+  return true;
+}
