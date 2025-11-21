@@ -1,14 +1,15 @@
-#include "python_dict_handler.h"
-#include <python-frontend/python_converter.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/symbol_id.h>
-#include <python-frontend/json_utils.h>
-#include <python-frontend/type_utils.h>
 #include <python-frontend/char_utils.h>
+#include <python-frontend/json_utils.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/symbol_id.h>
+#include <python-frontend/type_handler.h>
+#include <python-frontend/type_utils.h>
+#include <python-frontend/python_dict_handler.h>
 #include <util/c_types.h>
 #include <util/arith_tools.h>
 #include <util/context.h>
 #include <util/python_types.h>
+
 #include <sstream>
 
 int python_dict_handler::dict_counter_ = 0;
