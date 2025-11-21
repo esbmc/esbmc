@@ -17,7 +17,8 @@ if(ENABLE_GOTO_CONTRACTOR)
     include(FindIbex)
     add_library(gotocontractor goto_contractor.cpp)
     target_include_directories(gotocontractor PUBLIC ${IBEX_INCLUDE_DIRS} ${IBEX_INCLUDE_DIRS}/ibex ${IBEX_INCLUDE_DIRS}/ibex/3rd)
-    target_link_libraries(gotocontractor PUBLIC algorithms gotoprograms PkgConfig::IBEX)
+  target_link_libraries(gotocontractor PUBLIC algorithms gotoprograms ${IBEX_TARGET})
+
 endif()
 
 add_subdirectory(abstract-interpretation)

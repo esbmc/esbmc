@@ -33,7 +33,7 @@ jobs:
     name: static llvm-21 DebugOpt
     with:
       operating-system: ubuntu-22.04
-      build-flags: '-b DebugOpt -e On'
+      build-flags: '-b DebugOpt -e OFF'
       testing: true
 
   build-windows:
@@ -41,7 +41,7 @@ jobs:
     name: static llvm-16 DebugOpt
     with:
       operating-system: windows-latest
-      build-flags: '-b DebugOpt -e On'
+      build-flags: '-b DebugOpt -e OFF'
       testing: true
 
   build-arm:

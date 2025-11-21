@@ -12,10 +12,12 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
 #include <util/std_types.h>
+
+CC_DIAGNOSTIC_PUSH()
+CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+CC_DIAGNOSTIC_PUSH()
 #include <ibex.h>
-#include <ibex/ibex_Interval.h>
-#include <ibex/ibex_Expr.h>
-#include <ibex/ibex_Ctc.h>
+CC_DIAGNOSTIC_POP()
 #include <irep2/irep2.h>
 #include <util/type_byte_size.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
