@@ -189,9 +189,6 @@ public:
   /**
    * @brief Handles dictionary key deletion (e.g., `del dict['key']`).
    *
-   * @note Current implementation is a placeholder (generates skip instruction).
-   *       Full deletion semantics are not yet implemented.
-   *
    * @param dict_expr The expression representing the dictionary.
    * @param slice_node The JSON AST node for the key to delete.
    * @param target_block The code block to append generated instructions to.
