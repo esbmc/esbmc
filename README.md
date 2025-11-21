@@ -16,7 +16,7 @@ ESBMC supports:
 
 ESBMC also implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
-We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). For further information about our main components, check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md).
+We provide some background material/publications to help you understand what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). For further information about our main components, check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md).
 
 Our main website is [esbmc.org](http://esbmc.org). 
 
@@ -223,7 +223,7 @@ We refer the user to our [documentation webpage](https://ssvlab.github.io/esbmc/
 
 #### Verifying Python Programs
 
-ESBMC-Python supports the verification of Python code with type annotations, detecting errors such as division by zero, indexing errors, arithmetic overflow, and user-defined assertions.
+ESBMC-Python supports verifying Python code with type annotations, detecting errors such as division by zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 Example Python program to verify:
 
@@ -312,6 +312,15 @@ max-k-step = 100
 memory-leak-check = true
 context-bound = 2
 ```
+### HTML Report Generation
+
+ESBMC can generate interactive HTML reports that visualize counterexample traces, making it easier to understand and debug verification failures. Use the `--generate-html-report` flag to enable this feature.
+
+```bash
+esbmc program.c --generate-html-report
+```
+
+For detailed information about HTML reports, including keyboard shortcuts and interactive features, please see the [HTML Reports Documentation](HTML_REPORTS.md).
 
 ### Features
 

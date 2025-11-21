@@ -30,7 +30,8 @@ enum class StatementType
   UNKNOWN,
   GLOBAL,
   TRY,
-  EXCEPTHANDLER
+  EXCEPTHANDLER,
+  DELETE
 };
 
 enum class ExpressionType
@@ -248,6 +249,12 @@ public:
     }
 
     return false;
+  }
+
+  static bool is_dict_subscript(const nlohmann::json &element)
+  {
+    return element.contains("_type") && element["_type"] == "Subscript" &&
+           element.contains("value");
   }
 
 private:

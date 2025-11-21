@@ -74,7 +74,6 @@ PyListObject *__ESBMC_list_create()
   l->type = &__ESBMC_list_type;
   l->items = __ESBMC_create_inf_obj();
   l->size = 0;
-  //
   return l;
 }
 
@@ -232,4 +231,50 @@ void __ESBMC_list_clear(PyListObject *l)
   if (!l)
     return;
   l->size = 0;
+}
+
+size_t __ESBMC_list_find_index(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(l != NULL, "KeyError: dictionary is null");
+  __ESBMC_assert(item != NULL, "KeyError: key is null");
+  __ESBMC_assert(l->size > 0, "KeyError: dictionary is empty");
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      if (elem->value == item || memcmp(elem->value, item, item_size) == 0)
+        return i;
+    }
+
+    i = i + 1;
+  }
+
+  __ESBMC_assert(0, "KeyError: key not found in dictionary");
+  return 0;
+}
+
+bool __ESBMC_list_remove_at(PyListObject *l, size_t index)
+{
+  __ESBMC_assert(l != NULL, "list_remove_at: list is null");
+  __ESBMC_assert(index < l->size, "list_remove_at: index out of bounds");
+
+  // Shift elements to fill the gap
+  size_t i = index;
+  while (i < l->size - 1)
+  {
+    l->items[i] = l->items[i + 1];
+    i++;
+  }
+
+  // Decrease size
+  l->size = l->size - 1;
+  return true;
 }
