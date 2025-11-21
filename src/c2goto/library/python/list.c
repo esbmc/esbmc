@@ -355,6 +355,22 @@ typedef struct __ESBMC_PyType
 
 } PyType;
 
+
+
+#if 0
+__PyObject *__python_list_concat(__PyObject *obj1, __PyObject *obj2);
+__PyObject *__python_list_repeat(__PyObject *self, size_t length);
+__PyObject *__python_list_index(__PyObject *self, size_t index);
+int __python_list_index_assignment(
+  __PyObject *self,
+  size_t index,
+  __PyObject *value);
+int __python_list_contains(__PyObject *self, __PyObject *member);
+__PyObject *__python_list_in_concat(__PyObject *self, __PyObject *obj2);
+__PyObject *__python_list_in_repeat(__PyObject *self, size_t length);
+_Bool __python_list_cmp(__PyObject *a, __PyObject *b, int op);
+#endif
+
 // TODO: There is no such a thing as a generic type in python.
 static PyType __ESBMC_generic_type;
 
@@ -399,6 +415,9 @@ typedef struct __ESBMC_PyListObj
   PyObject *items; /**< Array of PyObject items (SMT infinite array concept) */
   size_t size;     /**< Number of elements currently in use */
 } PyListObject;
+static PyType __ESBMC_list_type;
+
+
 
 // Forward definition of list methods
 size_t __python_list_size(__PyObject *obj);
@@ -413,7 +432,23 @@ int __python_list_contains(__PyObject *self, __PyObject *member);
 __PyObject *__python_list_in_concat(__PyObject *self, __PyObject *obj2);
 __PyObject *__python_list_in_repeat(__PyObject *self, size_t length);
 _Bool __python_list_cmp(__PyObject *a, __PyObject *b, int op);
-static PyType __ESBMC_list_type;
+
+// Forward definition of list methods
+size_t __python_dyn_dispatch_size(__PyObject *obj)
+{
+  // Assume that the first element of the struct is a type,
+  // I am not sure if there is any way to ensure that this is the case though
+
+  // TODO: Should be a switch probably
+  PyType *type = *((PyType **) &obj[0]);
+
+  // TODO: Primitives should also have a PyType
+  // however, we may reach here with slices
+  __ESBMC_assert(type == &__ESBMC_list_type, "Only primitives for now");  
+  return __python_list_size(obj);
+  //return type->as_sq.sq_length(obj);
+}
+
 
 // TODO: this should be moved to __ESBMC_main
 int __ESBMC_list_init;

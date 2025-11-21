@@ -2183,7 +2183,6 @@ exprt function_call_expr::handle_general_function_call()
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);
     }
-
     if (
       function_id_.get_function() == "__ESBMC_get_object_size" &&
       (arg.type() == type_handler_.get_list_type() ||
@@ -2195,19 +2194,26 @@ exprt function_call_expr::handle_general_function_call()
       assert(list_symbol);
 
       const symbolt *list_size_func_sym =
-        converter_.find_symbol("c:@F@__ESBMC_list_size");
+        converter_.find_symbol("c:@F@__python_dyn_dispatch_size");
       assert(list_size_func_sym);
 
       code_function_callt list_size_func_call;
       list_size_func_call.function() = symbol_expr(*list_size_func_sym);
 
-      // passing arguments to list_size
-      list_size_func_call.arguments().push_back(symbol_expr(*list_symbol));
+      exprt self = symbol_expr(*list_symbol);
 
-      // setting return type
-      list_size_func_call.type() = signedbv_typet(64);
+      // TODO other types should reach here
+      // Arrays here is strange... are we a slice? Still, a slice is an idependent type that we still need to support
+      if (!is_array_like(list_symbol->type))
+      {
+	// passing arguments to list_size
+	list_size_func_call.arguments().push_back(self);
 
-      return list_size_func_call;
+	// setting return type
+	list_size_func_call.type() = signedbv_typet(64);
+
+	return list_size_func_call;
+      }
     }
 
     // Handle function calls used as arguments

@@ -102,6 +102,7 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_list_insert",
   "__ESBMC_list_push_object",
   "__ESBMC_list_size",
+     "__python_dyn_dispatch_size",
   "list_hash_string",
   "__ESBMC_list_eq",
   "strncmp",
