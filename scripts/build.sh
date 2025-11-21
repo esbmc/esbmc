@@ -146,15 +146,20 @@ macos_setup () {
     brew install \
         z3 gmp csmith boost ninja python3 automake bison flex \
         llvm@$CLANG_VERSION &&
-    
-    echo "Installing Python dependencies" &&
-    pip3 install meson ast2json mypy &&
-    pip3 install pyparsing toml tomli jira &&
+
+    VENV_PATH="$PWD/.esbmc-macos-venv" &&
+    echo "Creating Python virtual environment at $VENV_PATH" &&
+    python3 -m venv "$VENV_PATH" &&
+    export PATH="$VENV_PATH/bin:$PATH" &&
+    "$VENV_PATH/bin/python" -m pip install --upgrade pip &&
+    echo "Installing Python dependencies inside virtual environment" &&
+    "$VENV_PATH/bin/pip" install meson ast2json mypy &&
+    "$VENV_PATH/bin/pip" install pyparsing toml tomli jira &&
     echo "Verifying Python installations:" &&
-    meson --version &&
-    python3 -c "import ast2json; print('ast2json imported successfully')" &&
-    mypy --version &&
-    
+    "$VENV_PATH/bin/meson" --version &&
+    "$VENV_PATH/bin/python" -c "import ast2json; print('ast2json imported successfully')" &&
+    "$VENV_PATH/bin/mypy" --version &&
+
     # Append macOS-specific args to BASE_ARGS instead of replacing
     BASE_ARGS="$BASE_ARGS \
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
