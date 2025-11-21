@@ -312,6 +312,15 @@ max-k-step = 100
 memory-leak-check = true
 context-bound = 2
 ```
+### HTML Report Generation
+
+ESBMC can generate interactive HTML reports that visualize counterexample traces, making it easier to understand and debug verification failures. Use the `--generate-html-report` flag to enable this feature.
+
+```bash
+esbmc program.c --generate-html-report
+```
+
+For detailed information about HTML reports, including keyboard shortcuts and interactive features, please see the [HTML Reports Documentation](HTML_REPORTS.md).
 
 ### Features
 
