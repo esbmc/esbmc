@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 15 --no-pointer-check --no-bounds-check --no-align-check
+--unwind 15 --no-pointer-check --no-bounds-check --no-align-check --ir
 ^VERIFICATION SUCCESSFUL$
