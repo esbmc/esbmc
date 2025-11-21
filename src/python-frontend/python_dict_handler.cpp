@@ -106,9 +106,7 @@ struct_typet python_dict_handler::create_dict_struct_type(
   const auto &values = dict_node["values"];
 
   if (keys.size() != values.size())
-  {
     throw std::runtime_error("Dictionary keys and values size mismatch");
-  }
 
   // Create a component for each key-value pair
   for (size_t i = 0; i < keys.size(); ++i)
@@ -155,7 +153,7 @@ exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
   {
     exprt value_expr = converter_.get_expr(values[i]);
 
-    // Handle string values - convert arrays to pointers
+    // Handle string values: convert arrays to pointers
     if (
       value_expr.type().is_array() &&
       dict_type.components()[i].type().is_pointer())
@@ -225,9 +223,7 @@ exprt python_dict_handler::handle_dict_subscript(
   }
 
   if (!found)
-  {
     throw std::runtime_error("KeyError: '" + key + "' not found in dictionary");
-  }
 
   // Create member access expression
   member_exprt member_expr(dict_expr, key, field_type);
