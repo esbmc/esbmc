@@ -17,6 +17,7 @@ ignored_dirs=(
   "cover5"
   "convert-byte-update2"
   "constants"
+  "dict_del12_fail"
   "div6_fail"
   "div7_fail"
   "esbmc-assume"
