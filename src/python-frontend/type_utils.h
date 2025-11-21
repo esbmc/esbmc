@@ -251,6 +251,12 @@ public:
     return false;
   }
 
+  static bool is_dict_subscript(const nlohmann::json &element)
+  {
+    return element.contains("_type") && element["_type"] == "Subscript" &&
+           element.contains("value");
+  }
+
 private:
   static void
   update_type_flags_from_node(const nlohmann::json &node, TypeFlags &flags)
