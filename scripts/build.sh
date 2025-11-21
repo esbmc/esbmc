@@ -146,6 +146,14 @@ macos_setup () {
     brew install \
         z3 gmp csmith boost ninja python3 automake bison flex \
         llvm@$CLANG_VERSION &&
+    echo "Installing Python dependencies" &&
+    # Use pip3 from virtual environment if available, otherwise use system pip3
+    if [ -n "$VIRTUAL_ENV" ]; then
+        pip install meson ast2json mypy pyparsing toml tomli
+    else
+        pip3 install --user meson ast2json mypy pyparsing toml tomli
+    fi &&
+    meson --version &&
     BASE_ARGS="\
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
