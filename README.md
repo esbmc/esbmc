@@ -223,7 +223,7 @@ We refer the user to our [documentation webpage](https://ssvlab.github.io/esbmc/
 
 #### Verifying Python Programs
 
-ESBMC-Python supports the verification of Python code with type annotations, detecting errors such as division by zero, indexing errors, arithmetic overflow, and user-defined assertions.
+ESBMC-Python supports verifying Python code with type annotations, detecting errors such as division by zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 Example Python program to verify:
 
