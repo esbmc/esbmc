@@ -3410,6 +3410,398 @@ void python_converter::handle_list_literal_unpacking(
   }
 }
 
+bool python_converter::handle_dict_subscript_assignment(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  codet &target_block)
+{
+  if (target["_type"] != "Subscript")
+    return false;
+
+  exprt container_expr = get_expr(target["value"]);
+  typet container_type = container_expr.type();
+
+  if (container_expr.is_symbol())
+  {
+    const symbolt *sym = symbol_table_.find_symbol(container_expr.identifier());
+    if (sym)
+      container_type = sym->type;
+  }
+
+  if (container_type.id() == "symbol")
+    container_type = ns.follow(container_type);
+
+  if (!dict_handler_->is_dict_type(container_type))
+    return false;
+
+  // Handle dict[key] = value assignment
+  is_converting_rhs = true;
+  exprt rhs = get_expr(ast_node["value"]);
+  is_converting_rhs = false;
+
+  dict_handler_->handle_dict_subscript_assign(
+    container_expr, target["slice"], rhs, target_block);
+  return true;
+}
+
+bool python_converter::handle_dict_literal_assignment(
+  const nlohmann::json &ast_node,
+  const exprt &lhs)
+{
+  if (!ast_node.contains("value") || ast_node["value"].is_null())
+    return false;
+
+  if (!dict_handler_->is_dict_literal(ast_node["value"]))
+    return false;
+
+  dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
+  current_lhs = nullptr;
+  return true;
+}
+
+bool python_converter::handle_unannotated_dict_literal(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  const symbol_id &sid)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].contains("_type"))
+    return false;
+
+  if (!dict_handler_->is_dict_literal(ast_node["value"]))
+    return false;
+
+  locationt location = get_location_from_decl(target);
+  std::string module_name = location.get_file().as_string();
+  std::string name;
+
+  if (target["_type"] == "Name")
+    name = target["id"].get<std::string>();
+  else if (target["_type"] == "Attribute")
+    name = target["attr"].get<std::string>();
+
+  symbolt symbol = create_symbol(
+    module_name,
+    name,
+    sid.to_string(),
+    location,
+    dict_handler_->get_dict_struct_type());
+  symbol.lvalue = true;
+  symbol.file_local = true;
+  symbol.is_extern = false;
+  symbolt *lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+
+  exprt lhs = create_lhs_expression(target, lhs_symbol, location);
+  dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
+  current_lhs = nullptr;
+  return true;
+}
+
+exprt python_converter::get_rhs_with_dict_resolution(
+  const nlohmann::json &ast_node,
+  const typet &target_type)
+{
+  if (!type_utils::is_dict_subscript(ast_node["value"]))
+    return get_expr(ast_node["value"]);
+
+  // Check if we need special dict subscript handling for typed variables
+  if (
+    !target_type.is_signedbv() && !target_type.is_unsignedbv() &&
+    !target_type.is_bool())
+    return get_expr(ast_node["value"]);
+
+  exprt dict_expr = get_expr(ast_node["value"]["value"]);
+  if (
+    !dict_expr.type().is_struct() ||
+    !dict_handler_->is_dict_type(dict_expr.type()))
+    return get_expr(ast_node["value"]);
+
+  return dict_handler_->handle_dict_subscript(
+    dict_expr, ast_node["value"]["slice"], target_type);
+}
+
+std::string python_converter::infer_type_from_any_annotation(
+  const nlohmann::json &ast_node,
+  const std::string &lhs_type)
+{
+  if (lhs_type != "Any")
+    return lhs_type;
+
+  if (ast_node["value"].is_null() || ast_node["value"]["_type"] != "Call")
+    return lhs_type;
+
+  const auto &func_node = ast_node["value"]["func"];
+  std::string func_name;
+
+  if (func_node["_type"] == "Name")
+    func_name = func_node["id"].get<std::string>();
+  else if (func_node["_type"] == "Attribute")
+    func_name = func_node["attr"].get<std::string>();
+
+  if (func_name.empty())
+    return lhs_type;
+
+  symbol_id func_sid(current_python_file, "", func_name);
+  symbolt *func_symbol = symbol_table_.find_symbol(func_sid.to_string());
+
+  if (func_symbol && func_symbol->type.is_code())
+  {
+    const code_typet &func_type = to_code_type(func_symbol->type);
+    current_element_type = func_type.return_type();
+    return ""; // Clear to avoid further "Any" processing
+  }
+
+  return lhs_type;
+}
+
+bool python_converter::handle_unpacking_assignment(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  codet &target_block)
+{
+  const auto &target_type = target["_type"];
+
+  if (target_type != "Tuple" && target_type != "List")
+    return false;
+
+  // Get RHS
+  is_converting_rhs = true;
+  exprt rhs = get_expr(ast_node["value"]);
+  is_converting_rhs = false;
+
+  // Prepare RHS if it's a function call
+  rhs = tuple_handler_->prepare_rhs_for_unpacking(ast_node, rhs, target_block);
+
+  // Handle different unpacking types
+  if (rhs.type().id() == "struct")
+  {
+    tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+    return true;
+  }
+  else if (rhs.type().is_array())
+  {
+    handle_array_unpacking(ast_node, target, rhs, target_block);
+    return true;
+  }
+  else if (rhs.type().is_pointer())
+  {
+    const auto &value_node = ast_node["value"];
+    if (value_node["_type"] == "List")
+    {
+      handle_list_literal_unpacking(ast_node, target, target_block);
+      return true;
+    }
+  }
+
+  throw std::runtime_error(
+    "Cannot unpack " + rhs.type().id_string() +
+    " - only tuples and arrays can be unpacked");
+}
+
+symbolt *python_converter::create_symbol_for_unannotated_assign(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  const symbol_id &sid,
+  bool is_global)
+{
+  if (is_global)
+    return nullptr;
+
+  if (!ast_node.contains("value") || !ast_node["value"].contains("_type"))
+    return nullptr;
+
+  const std::string &value_type = ast_node["value"]["_type"];
+  locationt location = get_location_from_decl(target);
+  std::string module_name = location.get_file().as_string();
+  std::string name;
+
+  if (target["_type"] == "Name")
+    name = target["id"].get<std::string>();
+  else if (target["_type"] == "Attribute")
+    name = target["attr"].get<std::string>();
+
+  typet inferred_type;
+
+  if (value_type == "Lambda")
+  {
+    inferred_type = any_type();
+  }
+  else if (value_type == "Call" || value_type == "BoolOp")
+  {
+    // Convert RHS first to get its type
+    is_converting_rhs = true;
+    exprt rhs_expr = get_expr(ast_node["value"]);
+    is_converting_rhs = false;
+
+    inferred_type = rhs_expr.type();
+    if (inferred_type.is_empty())
+      inferred_type = any_type();
+  }
+  else
+  {
+    return nullptr;
+  }
+
+  symbolt symbol =
+    create_symbol(module_name, name, sid.to_string(), location, inferred_type);
+  symbol.lvalue = true;
+  symbol.file_local = true;
+  symbol.is_extern = false;
+  return symbol_table_.move_symbol_to_context(symbol);
+}
+
+void python_converter::handle_function_call_rhs(
+  const nlohmann::json &ast_node,
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  exprt &rhs,
+  const locationt &location,
+  bool is_ctor_call,
+  codet &target_block)
+{
+  if (is_ctor_call)
+  {
+    std::string func_name =
+      ast_node["value"]["func"].contains("id")
+        ? ast_node["value"]["func"]["id"].get<std::string>()
+        : ast_node["value"]["func"]["attr"].get<std::string>();
+
+    if (base_ctor_called)
+    {
+      auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
+      func_name = class_node["bases"][0]["id"].get<std::string>();
+      base_ctor_called = false;
+    }
+
+    update_instance_from_self(func_name, func_name, lhs_symbol->id.as_string());
+  }
+  else
+  {
+    symbolt *func_symbol =
+      symbol_table_.find_symbol(rhs.op1().identifier().c_str());
+    assert(func_symbol);
+    if (!static_cast<code_typet &>(func_symbol->type).return_type().is_empty())
+    {
+      if (auto ret = get_return_from_func(func_symbol->id.c_str());
+          !ret.is_nil())
+      {
+        copy_instance_attributes(
+          ret.op0().identifier().as_string(), lhs_symbol->id.as_string());
+      }
+    }
+  }
+
+  // Copy attributes from function arguments
+  if (!is_ctor_call)
+  {
+    const code_function_callt &call =
+      static_cast<const code_function_callt &>(rhs);
+    for (const auto &arg : call.arguments())
+    {
+      const exprt *arg_ptr = &arg;
+      if (arg.is_address_of())
+        arg_ptr = &arg.op0();
+
+      if (arg_ptr->is_symbol())
+      {
+        copy_instance_attributes(
+          arg_ptr->identifier().as_string(), lhs_symbol->id.as_string());
+      }
+    }
+  }
+
+  // Set return destination
+  if (rhs.type().is_pointer() && !is_ctor_call)
+  {
+    rhs.op0() = lhs;
+  }
+  else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
+    rhs.op0() = lhs;
+
+  // Special handling for list return type
+  if (rhs.type() == type_handler_.get_list_type())
+  {
+    if (auto ret = get_return_from_func(rhs.op1().identifier().c_str());
+        !ret.is_nil())
+    {
+      python_list::copy_type_info(
+        ret.op0().identifier().as_string(), lhs.identifier().as_string());
+    }
+
+    typet l_type = type_handler_.get_list_type();
+    symbolt &tmp_var_symbol =
+      create_tmp_symbol(ast_node, "tmp_var", l_type, gen_zero(l_type));
+
+    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+    tmp_var_decl.location() = get_location_from_decl(ast_node);
+    target_block.copy_to_operands(tmp_var_decl);
+
+    rhs.op0() = symbol_expr(tmp_var_symbol);
+    target_block.copy_to_operands(rhs);
+
+    code_assignt code_assign(lhs, symbol_expr(tmp_var_symbol));
+    code_assign.location() = location;
+    rhs = code_assign;
+  }
+
+  target_block.copy_to_operands(rhs);
+}
+
+exprt python_converter::handle_string_literal_rhs(
+  const nlohmann::json &ast_node,
+  const std::string &lhs_type,
+  const exprt &rhs)
+{
+  if (lhs_type != "str" || !type_utils::is_integer_type(rhs.type()))
+    return rhs;
+
+  if (
+    ast_node["value"]["_type"] != "Constant" ||
+    !ast_node["value"]["value"].is_string())
+    return rhs;
+
+  std::string str_value = ast_node["value"]["value"].get<std::string>();
+
+  typet string_type =
+    type_handler_.build_array(char_type(), str_value.length() + 1);
+  exprt str_array = gen_zero(string_type);
+
+  for (size_t i = 0; i < str_value.length(); ++i)
+  {
+    BigInt char_val(static_cast<unsigned char>(str_value[i]));
+    exprt char_expr = constant_exprt(
+      integer2binary(char_val, 8), integer2string(char_val), char_type());
+    str_array.operands().at(i) = char_expr;
+  }
+
+  return str_array;
+}
+
+bool python_converter::is_global_variable(const symbol_id &sid) const
+{
+  for (const std::string &s : global_declarations)
+  {
+    if (s == sid.global_to_string())
+      return true;
+  }
+  return false;
+}
+
+std::string
+python_converter::extract_target_name(const nlohmann::json &target) const
+{
+  const auto &target_type = target["_type"];
+
+  if (target_type == "Name")
+    return target["id"].get<std::string>();
+  else if (target_type == "Attribute")
+    return target["attr"].get<std::string>();
+  else if (target_type == "Subscript")
+    return target["value"]["id"].get<std::string>();
+
+  throw std::runtime_error(
+    "Unsupported assignment target type: " + target_type.get<std::string>());
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -3434,7 +3826,6 @@ void python_converter::get_var_assign(
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
-  const auto &target_type = target["_type"];
 
   // Handle forward references
   if (
@@ -3445,81 +3836,18 @@ void python_converter::get_var_assign(
     process_forward_reference(ast_node["value"]["func"], target_block);
   }
 
-  // Handle dict subscript assignment
-  if (target_type == "Subscript")
-  {
-    exprt container_expr = get_expr(target["value"]);
-    typet container_type = container_expr.type();
-
-    if (container_expr.is_symbol())
-    {
-      const symbolt *sym =
-        symbol_table_.find_symbol(container_expr.identifier());
-      if (sym)
-        container_type = sym->type;
-    }
-
-    if (container_type.id() == "symbol")
-      container_type = ns.follow(container_type);
-
-    // Check if this is a dict subscript assignment
-    if (dict_handler_->is_dict_type(container_type))
-    {
-      // Handle dict[key] = value assignment
-      is_converting_rhs = true;
-      exprt rhs = get_expr(ast_node["value"]);
-      is_converting_rhs = false;
-
-      dict_handler_->handle_dict_subscript_assign(
-        container_expr, target["slice"], rhs, target_block);
-      return;
-    }
-  }
+  // Handle dict subscript assignment: dict[key] = value
+  if (handle_dict_subscript_assignment(ast_node, target, target_block))
+    return;
 
   if (ast_node["_type"] == "AnnAssign")
   {
     // Extract name and set in symbol ID
-    std::string name;
-    if (!target.is_null())
-    {
-      if (target_type == "Name")
-        name = target["id"];
-      else if (target_type == "Attribute")
-        name = target["attr"];
-      else if (target_type == "Subscript")
-        name = target["value"]["id"];
+    std::string name = extract_target_name(target);
+    sid.set_object(name);
 
-      assert(!name.empty());
-
-      sid.set_object(name);
-    }
-
-    // If annotation is "Any" and value is a function call, infer type from function
-    if (
-      lhs_type == "Any" && !ast_node["value"].is_null() &&
-      ast_node["value"]["_type"] == "Call")
-    {
-      const auto &func_node = ast_node["value"]["func"];
-      std::string func_name;
-
-      if (func_node["_type"] == "Name")
-        func_name = func_node["id"].get<std::string>();
-      else if (func_node["_type"] == "Attribute")
-        func_name = func_node["attr"].get<std::string>();
-
-      if (!func_name.empty())
-      {
-        symbol_id func_sid(current_python_file, "", func_name);
-        symbolt *func_symbol = symbol_table_.find_symbol(func_sid.to_string());
-
-        if (func_symbol && func_symbol->type.is_code())
-        {
-          const code_typet &func_type = to_code_type(func_symbol->type);
-          current_element_type = func_type.return_type();
-          lhs_type = ""; // Clear to avoid further "Any" processing
-        }
-      }
-    }
+    // Infer type from function return if annotation is "Any"
+    lhs_type = infer_type_from_any_annotation(ast_node, lhs_type);
 
     // Process RHS before LHS if in function scope
     exprt rhs;
@@ -3535,31 +3863,7 @@ void python_converter::get_var_assign(
         {
           if (ast_node["_type"] != "Call")
           {
-            // Handle dict subscript assignment to typed variable
-            // If RHS is a dict subscript and LHS has an integer type annotation,
-            // we need to fetch the dict value as an integer
-            if (
-              type_utils::is_dict_subscript(ast_node["value"]) &&
-              (current_element_type.is_signedbv() ||
-               current_element_type.is_unsignedbv()))
-            {
-              exprt dict_expr = get_expr(ast_node["value"]["value"]);
-              if (
-                dict_expr.type().is_struct() &&
-                dict_handler_->is_dict_type(dict_expr.type()))
-              {
-                rhs = dict_handler_->handle_dict_subscript(
-                  dict_expr, ast_node["value"]["slice"], current_element_type);
-              }
-              else
-              {
-                rhs = get_expr(ast_node["value"]);
-              }
-            }
-            else
-            {
-              rhs = get_expr(ast_node["value"]);
-            }
+            rhs = get_rhs_with_dict_resolution(ast_node, current_element_type);
           }
         }
       }
@@ -3568,29 +3872,18 @@ void python_converter::get_var_assign(
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
-
     lhs_symbol = symbol_table_.find_symbol(sid.to_string().c_str());
 
-    bool is_global = false;
-
-    for (std::string &s : global_declarations)
-    {
-      if (s == sid.global_to_string())
-      {
-        is_global = true;
-        lhs_symbol = symbol_table_.find_symbol(sid.global_to_string().c_str());
-        break;
-      }
-    }
+    bool is_global = is_global_variable(sid);
+    if (is_global)
+      lhs_symbol = symbol_table_.find_symbol(sid.global_to_string().c_str());
 
     // Symbol creation
     bool symbol_created = false;
     if (!lhs_symbol || !is_global)
     {
-      // Debug module name
       std::string module_name = location_begin.get_file().as_string();
 
-      // Create/init symbol
       symbolt symbol = create_symbol(
         module_name,
         name,
@@ -3601,9 +3894,7 @@ void python_converter::get_var_assign(
       symbol.file_local = true;
       symbol.is_extern = false;
 
-      // Track if this is a new symbol (not just overwriting an existing one)
       symbol_created = (lhs_symbol == nullptr);
-
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
 
       // Add declaration statement ONLY for newly created local variables
@@ -3624,188 +3915,39 @@ void python_converter::get_var_assign(
           "Variable " + sid.get_object() + " in function " +
           current_func_name_ + " is uninitialized.");
       }
-      continue;
     }
 
     // Create LHS expression
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
 
     // Handle dict literal assignment specially - after LHS is created
-    if (
-      ast_node.contains("value") && !ast_node["value"].is_null() &&
-      dict_handler_->is_dict_literal(ast_node["value"]))
-    {
-      dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
-      current_lhs = nullptr;
+    if (handle_dict_literal_assignment(ast_node, lhs))
       return;
-    }
   }
   else if (ast_node["_type"] == "Assign")
   {
-    // Assign logic
     const auto &target = ast_node["targets"][0];
-    const auto &target_type = target["_type"];
 
     // Handle tuple/list unpacking
-    if (target_type == "Tuple" || target_type == "List")
-    {
-      // Get RHS
-      is_converting_rhs = true;
-      exprt rhs = get_expr(ast_node["value"]);
-      is_converting_rhs = false;
-
-      // Prepare RHS if it's a function call
-      rhs =
-        tuple_handler_->prepare_rhs_for_unpacking(ast_node, rhs, target_block);
-
-      // Handle different unpacking types
-      if (rhs.type().id() == "struct")
-      {
-        tuple_handler_->handle_tuple_unpacking(
-          ast_node, target, rhs, target_block);
-        return;
-      }
-      else if (rhs.type().is_array())
-      {
-        handle_array_unpacking(ast_node, target, rhs, target_block);
-        return;
-      }
-      else if (rhs.type().is_pointer())
-      {
-        const auto &value_node = ast_node["value"];
-        if (value_node["_type"] == "List")
-        {
-          handle_list_literal_unpacking(ast_node, target, target_block);
-          return;
-        }
-      }
-
-      throw std::runtime_error(
-        "Cannot unpack " + rhs.type().id_string() +
-        " - only tuples and arrays can be unpacked");
-    }
+    if (handle_unpacking_assignment(ast_node, target, target_block))
+      return;
 
     // Normal assignment handling
-    std::string name;
-    if (target_type == "Subscript")
-      name = target["value"]["id"].get<std::string>();
-    else if (target_type == "Attribute")
-      name = target["attr"].get<std::string>();
-    else if (target_type == "Name")
-      name = target["id"].get<std::string>();
-    else
-      throw std::runtime_error(
-        "Unsupported assignment target type: " +
-        target_type.get<std::string>());
-
+    std::string name = extract_target_name(target);
     sid.set_object(name);
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
 
-    bool is_global = false;
+    bool is_global = is_global_variable(sid);
 
-    for (std::string &s : global_declarations)
-    {
-      if (s == sid.global_to_string())
-      {
-        is_global = true;
-        break;
-      }
-    }
-
-    // Special handling for dict literal assignments without type annotations
-    if (
-      !lhs_symbol && !is_global && ast_node.contains("value") &&
-      ast_node["value"].contains("_type") &&
-      dict_handler_->is_dict_literal(ast_node["value"]))
-    {
-      locationt location = get_location_from_decl(target);
-      std::string module_name = location.get_file().as_string();
-
-      symbolt symbol = create_symbol(
-        module_name,
-        name,
-        sid.to_string(),
-        location,
-        dict_handler_->get_dict_struct_type());
-      symbol.lvalue = true;
-      symbol.file_local = true;
-      symbol.is_extern = false;
-      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
-
-      lhs = create_lhs_expression(target, lhs_symbol, location);
-      dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
-      current_lhs = nullptr;
+    // Handle unannotated dict literal assignment
+    if (!lhs_symbol && handle_unannotated_dict_literal(ast_node, target, sid))
       return;
-    }
 
-    // Special handling for lambda assignments
-    if (
-      !lhs_symbol && !is_global && ast_node.contains("value") &&
-      ast_node["value"].contains("_type") &&
-      ast_node["value"]["_type"] == "Lambda")
+    // Create symbol for unannotated assignments with inferrable types
+    if (!lhs_symbol && !is_global)
     {
-      locationt location = get_location_from_decl(target);
-      std::string module_name = location.get_file().as_string();
-      typet placeholder_type = any_type();
-
-      symbolt symbol = create_symbol(
-        module_name, name, sid.to_string(), location, placeholder_type);
-      symbol.lvalue = true;
-      symbol.file_local = true;
-      symbol.is_extern = false;
-      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
-    }
-    // Special handling for function call assignments without type annotations
-    if (
-      !lhs_symbol && !is_global && ast_node.contains("value") &&
-      ast_node["value"].contains("_type") &&
-      ast_node["value"]["_type"] == "Call")
-    {
-      // Convert RHS first to get its type
-      is_converting_rhs = true;
-      exprt rhs_expr = get_expr(ast_node["value"]);
-      is_converting_rhs = false;
-
-      locationt location = get_location_from_decl(target);
-      std::string module_name = location.get_file().as_string();
-
-      // Use the actual return type from the function call
-      typet inferred_type = rhs_expr.type();
-      if (inferred_type.is_empty())
-        inferred_type = any_type();
-
-      symbolt symbol = create_symbol(
-        module_name, name, sid.to_string(), location, inferred_type);
-      symbol.lvalue = true;
-      symbol.file_local = true;
-      symbol.is_extern = false;
-      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
-    }
-    // Special handling for boolop
-    if (
-      !lhs_symbol && !is_global && ast_node.contains("value") &&
-      ast_node["value"].contains("_type") &&
-      ast_node["value"]["_type"] == "BoolOp")
-    {
-      // Convert RHS first to get its type
-      is_converting_rhs = true;
-      exprt rhs_expr = get_expr(ast_node["value"]);
-      is_converting_rhs = false;
-
-      locationt location = get_location_from_decl(target);
-      std::string module_name = location.get_file().as_string();
-
-      // Use the actual return type from the boolean operation
-      typet inferred_type = rhs_expr.type();
-      if (inferred_type.is_empty())
-        inferred_type = any_type();
-
-      symbolt symbol = create_symbol(
-        module_name, name, sid.to_string(), location, inferred_type);
-      symbol.lvalue = true;
-      symbol.file_local = true;
-      symbol.is_extern = false;
-      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+      lhs_symbol =
+        create_symbol_for_unannotated_assign(ast_node, target, sid, is_global);
     }
 
     if (!lhs_symbol && !is_global)
@@ -3825,70 +3967,21 @@ void python_converter::get_var_assign(
   {
     is_converting_rhs = true;
 
-    // Handle dict subscript assignment to integer variable
-    if (lhs_symbol && type_utils::is_dict_subscript(ast_node["value"]))
-    {
-      typet target_type = lhs_symbol->type;
-      if (
-        target_type.is_signedbv() || target_type.is_unsignedbv() ||
-        target_type.is_bool())
-      {
-        exprt dict_expr = get_expr(ast_node["value"]["value"]);
-        if (
-          dict_expr.type().is_struct() &&
-          dict_handler_->is_dict_type(dict_expr.type()))
-        {
-          rhs = dict_handler_->handle_dict_subscript(
-            dict_expr, ast_node["value"]["slice"], target_type);
-          has_value = true;
-          is_converting_rhs = false;
-        }
-        else
-        {
-          rhs = get_expr(ast_node["value"]);
-          has_value = true;
-        }
-      }
-      else
-      {
-        rhs = get_expr(ast_node["value"]);
-        has_value = true;
-      }
-    }
+    if (lhs_symbol)
+      rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->type);
     else
-    {
       rhs = get_expr(ast_node["value"]);
-      has_value = true;
-    }
 
+    has_value = true;
     is_converting_rhs = false;
 
-    if (lhs_type == "str" && type_utils::is_integer_type(rhs.type()))
-    {
-      if (
-        ast_node["value"]["_type"] == "Constant" &&
-        ast_node["value"]["value"].is_string())
-      {
-        std::string str_value = ast_node["value"]["value"].get<std::string>();
-
-        typet string_type =
-          type_handler_.build_array(char_type(), str_value.length() + 1);
-        exprt str_array = gen_zero(string_type);
-
-        for (size_t i = 0; i < str_value.length(); ++i)
-        {
-          BigInt char_val(static_cast<unsigned char>(str_value[i]));
-          exprt char_expr = constant_exprt(
-            integer2binary(char_val, 8), integer2string(char_val), char_type());
-          str_array.operands().at(i) = char_expr;
-        }
-        rhs = str_array;
-      }
-    }
+    // Handle string literal conversion
+    rhs = handle_string_literal_rhs(ast_node, lhs_type, rhs);
   }
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
+    // Handle throw expression
     if (rhs.statement() == "cpp-throw")
     {
       rhs.location() = location_begin;
@@ -3910,100 +4003,21 @@ void python_converter::get_var_assign(
     // Function call handling
     if (rhs.is_function_call())
     {
-      if (is_ctor_call)
-      {
-        std::string func_name =
-          ast_node["value"]["func"].contains("id")
-            ? ast_node["value"]["func"]["id"].get<std::string>()
-            : ast_node["value"]["func"]["attr"].get<std::string>();
-
-        if (base_ctor_called)
-        {
-          auto class_node =
-            json_utils::find_class((*ast_json)["body"], func_name);
-          func_name = class_node["bases"][0]["id"].get<std::string>();
-          base_ctor_called = false;
-        }
-
-        update_instance_from_self(
-          func_name, func_name, lhs_symbol->id.as_string());
-      }
-      else
-      {
-        symbolt *func_symbol =
-          symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-        assert(func_symbol);
-        if (!static_cast<code_typet &>(func_symbol->type)
-               .return_type()
-               .is_empty())
-        {
-          if (auto ret = get_return_from_func(func_symbol->id.c_str());
-              !ret.is_nil())
-          {
-            copy_instance_attributes(
-              ret.op0().identifier().as_string(), lhs_symbol->id.as_string());
-          }
-        }
-      }
-
-      if (!is_ctor_call)
-      {
-        const code_function_callt &call =
-          static_cast<const code_function_callt &>(rhs);
-        for (const auto &arg : call.arguments())
-        {
-          const exprt *arg_ptr = &arg;
-          if (arg.is_address_of())
-            arg_ptr = &arg.op0();
-
-          if (arg_ptr->is_symbol())
-          {
-            copy_instance_attributes(
-              arg_ptr->identifier().as_string(), lhs_symbol->id.as_string());
-          }
-        }
-      }
-
-      if (rhs.type().is_pointer() && !is_ctor_call)
-      {
-        rhs.op0() = lhs;
-      }
-      else if (
-        !rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
-        rhs.op0() = lhs;
-
-      if (rhs.type() == type_handler_.get_list_type())
-      {
-        if (auto ret = get_return_from_func(rhs.op1().identifier().c_str());
-            !ret.is_nil())
-        {
-          python_list::copy_type_info(
-            ret.op0().identifier().as_string(), lhs.identifier().as_string());
-        }
-
-        typet l_type = type_handler_.get_list_type();
-        symbolt &tmp_var_symbol =
-          create_tmp_symbol(ast_node, "tmp_var", l_type, gen_zero(l_type));
-
-        code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
-        tmp_var_decl.location() = get_location_from_decl(ast_node);
-        target_block.copy_to_operands(tmp_var_decl);
-
-        rhs.op0() = symbol_expr(tmp_var_symbol);
-        target_block.copy_to_operands(rhs);
-
-        code_assignt code_assign(lhs, symbol_expr(tmp_var_symbol));
-        code_assign.location() = location_begin;
-        rhs = code_assign;
-      }
-
-      target_block.copy_to_operands(rhs);
+      handle_function_call_rhs(
+        ast_node,
+        lhs_symbol,
+        lhs,
+        rhs,
+        location_begin,
+        is_ctor_call,
+        target_block);
       current_lhs = nullptr;
       return;
     }
 
     adjust_statement_types(lhs, rhs);
 
+    // Handle list type info propagation
     if (lhs.type() == rhs.type() && lhs.type() == type_handler_.get_list_type())
     {
       const std::string &lhs_identifier = lhs.identifier().as_string();

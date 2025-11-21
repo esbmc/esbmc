@@ -429,6 +429,193 @@ private:
     bool is_ctor_call);
 
   // =========================================================================
+  // Dictionary assignment helper methods
+  // =========================================================================
+
+  /**
+   * @brief Handles dictionary subscript assignment (dict[key] = value).
+   *
+   * Detects and processes assignments where the target is a dictionary subscript
+   * expression, delegating to the dict_handler for the actual assignment.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target The assignment target (Subscript node).
+   * @param target_block The code block to add generated code to.
+   * @return true if this was a dict subscript assignment and was handled.
+   */
+  bool handle_dict_subscript_assignment(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
+  /**
+   * @brief Handles dictionary literal assignment to a typed variable.
+   *
+   * Processes assignments where the RHS is a dictionary literal ({...}),
+   * creating the dict structure and initializing it from the literal.
+   *
+   * @param ast_node The assignment AST node.
+   * @param lhs The left-hand side expression.
+   * @return true if this was a dict literal assignment and was handled.
+   */
+  bool handle_dict_literal_assignment(
+    const nlohmann::json &ast_node,
+    const exprt &lhs);
+
+  /**
+   * @brief Handles unannotated dictionary literal assignment.
+   *
+   * For Assign nodes (not AnnAssign) where the RHS is a dict literal and
+   * no symbol exists yet, creates the symbol with dict type and initializes it.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target The assignment target node.
+   * @param sid The symbol ID for the variable.
+   * @return true if this was an unannotated dict literal and was handled.
+   */
+  bool handle_unannotated_dict_literal(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const symbol_id &sid);
+
+  /**
+   * @brief Gets RHS expression with dict subscript type resolution.
+   *
+   * When the RHS is a dict subscript and the target has a primitive type
+   * (int, bool, etc.), fetches the dict value with the correct type instead
+   * of the default char* pointer.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target_type The expected type from the LHS.
+   * @return The RHS expression with proper type resolution.
+   */
+  exprt get_rhs_with_dict_resolution(
+    const nlohmann::json &ast_node,
+    const typet &target_type);
+
+  // =========================================================================
+  // Type inference helper methods
+  // =========================================================================
+
+  /**
+   * @brief Infers type from function return when annotation is "Any".
+   *
+   * When a variable is annotated with "Any" but initialized from a function
+   * call, attempts to infer the actual type from the function's return type.
+   *
+   * @param ast_node The assignment AST node.
+   * @param lhs_type The current LHS type string ("Any" or other).
+   * @return Updated type string (empty if type was inferred successfully).
+   */
+  std::string infer_type_from_any_annotation(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_type);
+
+  // =========================================================================
+  // Unpacking helper methods
+  // =========================================================================
+
+  /**
+   * @brief Handles tuple/list unpacking assignment.
+   *
+   * Detects and processes assignments where the target is a Tuple or List,
+   * performing unpacking of the RHS into multiple variables.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target The assignment target (Tuple or List node).
+   * @param target_block The code block to add generated code to.
+   * @return true if this was an unpacking assignment and was handled.
+   */
+  bool handle_unpacking_assignment(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
+  // =========================================================================
+  // Symbol creation helper methods
+  // =========================================================================
+
+  /**
+   * @brief Creates symbol for unannotated assignment with inferrable types.
+   *
+   * For assignments without type annotations where the RHS type can be
+   * inferred (Lambda, Call, BoolOp), creates the appropriate symbol.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target The assignment target node.
+   * @param sid The symbol ID for the variable.
+   * @param is_global Whether this is a global variable.
+   * @return Pointer to created symbol, or nullptr if not applicable.
+   */
+  symbolt *create_symbol_for_unannotated_assign(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const symbol_id &sid,
+    bool is_global);
+
+  /**
+   * @brief Checks if variable is in global declarations.
+   *
+   * @param sid The symbol ID to check.
+   * @return true if the variable is declared as global.
+   */
+  bool is_global_variable(const symbol_id &sid) const;
+
+  /**
+   * @brief Extracts variable name from assignment target.
+   *
+   * Handles Name, Attribute, and Subscript target types.
+   *
+   * @param target The assignment target node.
+   * @return The extracted variable name.
+   * @throws std::runtime_error if target type is unsupported.
+   */
+  std::string extract_target_name(const nlohmann::json &target) const;
+
+  // =========================================================================
+  // RHS processing helper methods
+  // =========================================================================
+
+  /**
+   * @brief Handles function call RHS assignment.
+   *
+   * Processes assignments where the RHS is a function call, handling
+   * constructor calls, instance attribute copying, and list return types.
+   *
+   * @param ast_node The assignment AST node.
+   * @param lhs_symbol The LHS symbol.
+   * @param lhs The LHS expression.
+   * @param rhs The RHS expression (function call).
+   * @param location The source location.
+   * @param is_ctor_call Whether this is a constructor call.
+   * @param target_block The code block to add generated code to.
+   */
+  void handle_function_call_rhs(
+    const nlohmann::json &ast_node,
+    symbolt *lhs_symbol,
+    exprt &lhs,
+    exprt &rhs,
+    const locationt &location,
+    bool is_ctor_call,
+    codet &target_block);
+
+  /**
+   * @brief Handles string literal assignment to str-typed variable.
+   *
+   * When assigning a string literal to a variable with str type annotation,
+   * converts the literal to a character array expression.
+   *
+   * @param ast_node The assignment AST node.
+   * @param lhs_type The LHS type string.
+   * @param rhs The current RHS expression.
+   * @return Updated RHS expression (character array if applicable).
+   */
+  exprt handle_string_literal_rhs(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_type,
+    const exprt &rhs);
+
+  // =========================================================================
   // Helper methods for binary operator expression handling
   // =========================================================================
 
