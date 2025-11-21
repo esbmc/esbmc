@@ -144,23 +144,36 @@ macos_setup () {
         error "static macOS build is currently not supported"
     fi
     brew install \
-        z3 gmp csmith boost ninja python3 automake bison flex \
+        z3 gmp csmith boost ninja python@3.12 automake bison flex \
         llvm@$CLANG_VERSION &&
     echo "Installing Python dependencies" &&
-    # Use pip3 from virtual environment if available, otherwise use system pip3
+    # Use Python 3.12 for compatibility (Python 3.14 removed ast.Str/ast.Num)
+    # Always use Python 3.12 on macOS (fixed version for CI compatibility)
+    PYTHON312_PATH=$(brew --prefix python@3.12)/bin/python3.12
+    export Python3_EXECUTABLE=$PYTHON312_PATH
+    PYTHON312_BIN=$(brew --prefix python@3.12)/bin
+    # Create python3 symlink to python3.12 in Python 3.12 bin directory (for ESBMC)
+    if [ ! -f "$PYTHON312_BIN/python3" ]; then
+        ln -sf python3.12 "$PYTHON312_BIN/python3"
+    fi
+    # Add Python 3.12 to PATH so that 'python3' command finds Python 3.12 (for ESBMC)
+    export PATH="$PYTHON312_BIN:$PATH"
+    # If virtual environment is available, use it for pip install; otherwise use system Python 3.12
     if [ -n "$VIRTUAL_ENV" ]; then
-        pip install meson ast2json mypy pyparsing toml tomli
+        pip install meson ast2json mypy pyparsing toml tomli jira
     else
-        pip3 install --user meson ast2json mypy pyparsing toml tomli
+        $PYTHON312_PATH -m pip install --user --break-system-packages meson ast2json mypy pyparsing toml tomli jira
+        # Add user Python bin directory to PATH for meson and other tools
+        export PATH="$HOME/Library/Python/3.12/bin:$PATH"
     fi &&
     meson --version &&
-    BASE_ARGS="\
+    BASE_ARGS="$BASE_ARGS \
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
         -DCMAKE_BUILD_TYPE=Debug \
-        -GNinja \
         -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release \
+        -DPython3_EXECUTABLE=$Python3_EXECUTABLE \
     " &&
     SOLVER_FLAGS=""
 }

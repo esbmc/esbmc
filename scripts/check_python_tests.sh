@@ -2,6 +2,12 @@
 
 cd regression/python
 
+# Activate virtual environment if it exists (from build-with-venv.sh)
+# CI builds will have dependencies installed by build.sh, so this is optional
+if [ -f "../esbmc-venv/bin/activate" ]; then
+    source ../esbmc-venv/bin/activate
+fi
+
 all_passed=true
 
 # List of directories to ignore
@@ -100,21 +106,17 @@ for dir in */; do
 
   echo ">>> Testing $dir"
 
-  # Skip platform-specific tests on macOS
-  # These tests fail on Linux due to type annotation evaluation but pass on macOS
-  # due to Python 3.14+ postponed evaluation (PEP 563)
-  macos_skip_tests=("ethereum_bug-fail" "return9-fail" "version")
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    for skip_test in "${macos_skip_tests[@]}"; do
-      if [[ "$dir" == "$skip_test" ]]; then
-        echo "🚫 IGNORED: $dir (platform-specific: behavior differs on macOS vs Linux)"
-        continue 2  # Skip this iteration of the outer loop
-      fi
-    done
-  fi
-
   # Run the script and capture the exit code
-  (cd "$dir" && python3 main.py > /dev/null 2>&1)
+  # Use virtual environment's python if activated
+  # Otherwise, on macOS use Python 3.12 (matching build.sh which installs python@3.12)
+  if [ -n "$VIRTUAL_ENV" ]; then
+    PYTHON_CMD="python"
+  elif [[ "$OSTYPE" == "darwin"* ]] && command -v python3.12 &> /dev/null; then
+    PYTHON_CMD="python3.12"
+  else
+    PYTHON_CMD="python3"
+  fi
+  (cd "$dir" && $PYTHON_CMD main.py > /dev/null 2>&1)
   result=$?
 
   if [[ "$dir" == *fail* ]]; then

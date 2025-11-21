@@ -32,9 +32,14 @@ jobs:
     - name: Check Python regression tests
       if: ${{ inputs.testing == true }}
       run: |
+        # Set PATH to include Python 3.12 (for ESBMC and scripts to find correct python3)
+        export PATH="$(brew --prefix python@3.12)/bin:$PATH"
         chmod +x scripts/check_python_tests.sh
         ./scripts/check_python_tests.sh
 
     - name: Run tests
       if: ${{ inputs.testing == true }}
-      run: cd build/ && ctest -j4 --output-on-failure --progress .
+      run: |
+        # Set PATH to include Python 3.12 (for ESBMC to find correct python3)
+        export PATH="$(brew --prefix python@3.12)/bin:$PATH"
+        cd build/ && ctest -j4 --output-on-failure --progress .
