@@ -2,6 +2,12 @@
 
 cd regression/python
 
+# Activate virtual environment if it exists (from build-with-venv.sh)
+# CI builds will have dependencies installed by build.sh, so this is optional
+if [ -f "../esbmc-venv/bin/activate" ]; then
+    source ../esbmc-venv/bin/activate
+fi
+
 all_passed=true
 
 # List of directories to ignore
@@ -101,7 +107,16 @@ for dir in */; do
   echo ">>> Testing $dir"
 
   # Run the script and capture the exit code
-  (cd "$dir" && python3 main.py > /dev/null 2>&1)
+  # Use virtual environment's python if activated
+  # Otherwise, on macOS use Python 3.12 (matching build.sh which installs python@3.12)
+  if [ -n "$VIRTUAL_ENV" ]; then
+    PYTHON_CMD="python"
+  elif [[ "$OSTYPE" == "darwin"* ]] && command -v python3.12 &> /dev/null; then
+    PYTHON_CMD="python3.12"
+  else
+    PYTHON_CMD="python3"
+  fi
+  (cd "$dir" && $PYTHON_CMD main.py > /dev/null 2>&1)
   result=$?
 
   if [[ "$dir" == *fail* ]]; then

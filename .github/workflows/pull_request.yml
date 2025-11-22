@@ -58,7 +58,7 @@ jobs:
     with:
       operating-system: macos-latest
       build-flags: '-c 21'
-      testing: false
+      testing: true
 
   build-cheri:
     uses: ./.github/workflows/build-unix.yml

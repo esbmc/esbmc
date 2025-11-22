@@ -32,9 +32,20 @@ jobs:
     - name: Check Python regression tests
       if: ${{ inputs.testing == true }}
       run: |
+        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
+        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
         chmod +x scripts/check_python_tests.sh
         ./scripts/check_python_tests.sh
 
     - name: Run tests
       if: ${{ inputs.testing == true }}
-      run: cd build/ && ctest -j4 --output-on-failure --progress .
+      run: |
+        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
+        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+        cd build/
+        # On macOS, only run Python tests; on other systems, run all tests
+        if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
+          ctest -j4 --output-on-failure --progress -L python
+        else
+          ctest -j4 --output-on-failure --progress .
+        fi
