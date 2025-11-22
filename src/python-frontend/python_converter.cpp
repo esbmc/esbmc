@@ -6080,7 +6080,13 @@ void python_converter::convert()
     const std::string &ast_output_dir =
       (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
-      "range", "int", "consensus", "random", "exceptions", "datetime"};
+      "range",
+      "int",
+      "consensus",
+      "random",
+      "exceptions",
+      "datetime",
+      "nondet"};
     std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)
