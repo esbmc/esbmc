@@ -1,6 +1,7 @@
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/string_builder.h>
 #include <python-frontend/type_handler.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -379,6 +380,52 @@ void python_dict_handler::handle_dict_delete(
   member_exprt keys_member(dict_expr, "keys", list_type);
   member_exprt values_member(dict_expr, "values", list_type);
 
+  // First, check if key exists using membership test
+  // This avoids calling __ESBMC_list_find_index on empty dict or missing key
+  nlohmann::json dummy_json;
+  python_list list_handler_check(converter_, dummy_json);
+  exprt key_exists = list_handler_check.contains(key_expr, keys_member);
+
+  // Create KeyError exception for when key doesn't exist
+  std::string exc_type_str = "KeyError";
+  typet keyerror_type = type_handler_.get_typet(exc_type_str);
+  std::string error_msg = "KeyError: key not found in dictionary";
+
+  // Build the error message as a string constant
+  exprt msg_size = constant_exprt(
+    integer2binary(error_msg.size(), bv_width(size_type())),
+    integer2string(error_msg.size()),
+    size_type());
+  typet str_type = array_typet(char_type(), msg_size);
+
+  // Create a temporary variable to hold the error message string
+  symbolt &error_msg_var = converter_.create_tmp_symbol(
+    slice_node, "$keyerror_msg$", str_type, exprt());
+
+  code_declt error_msg_decl(symbol_expr(error_msg_var));
+  error_msg_decl.location() = location;
+  target_block.copy_to_operands(error_msg_decl);
+
+  // Assign the string literal to the temp variable
+  exprt error_string =
+    converter_.get_string_builder().build_string_literal(error_msg);
+  code_assignt error_msg_assign(symbol_expr(error_msg_var), error_string);
+  error_msg_assign.location() = location;
+  target_block.copy_to_operands(error_msg_assign);
+
+  // Construct exception struct with address of the temp variable
+  exprt exception_struct("struct", keyerror_type);
+  exception_struct.copy_to_operands(
+    address_of_exprt(symbol_expr(error_msg_var)));
+
+  // Create the throw expression
+  exprt raise_keyerror = side_effect_exprt("cpp-throw", keyerror_type);
+  raise_keyerror.move_to_operands(exception_struct);
+  raise_keyerror.location() = location;
+
+  // Create the "then" branch: perform the actual deletion
+  code_blockt delete_block;
+
   // Find __ESBMC_list_find_index function
   const symbolt *find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_find_index");
@@ -399,7 +446,7 @@ void python_dict_handler::handle_dict_delete(
 
   code_declt index_decl(symbol_expr(index_var));
   index_decl.location() = location;
-  target_block.copy_to_operands(index_decl);
+  delete_block.copy_to_operands(index_decl);
 
   // Get element info for the key
   python_list list_handler(converter_, slice_node);
@@ -425,7 +472,7 @@ void python_dict_handler::handle_dict_delete(
   find_call.arguments().push_back(key_info.elem_size);
   find_call.type() = size_type();
   find_call.location() = location;
-  target_block.copy_to_operands(find_call);
+  delete_block.copy_to_operands(find_call);
 
   // Call list_remove_at(keys, index) to remove the key
   code_function_callt remove_key_call;
@@ -434,7 +481,7 @@ void python_dict_handler::handle_dict_delete(
   remove_key_call.arguments().push_back(symbol_expr(index_var));
   remove_key_call.type() = bool_type();
   remove_key_call.location() = location;
-  target_block.copy_to_operands(remove_key_call);
+  delete_block.copy_to_operands(remove_key_call);
 
   // Call list_remove_at(values, index) to remove the corresponding value
   code_function_callt remove_value_call;
@@ -443,5 +490,18 @@ void python_dict_handler::handle_dict_delete(
   remove_value_call.arguments().push_back(symbol_expr(index_var));
   remove_value_call.type() = bool_type();
   remove_value_call.location() = location;
-  target_block.copy_to_operands(remove_value_call);
+  delete_block.copy_to_operands(remove_value_call);
+
+  // Create the "else" branch: raise KeyError
+  code_expressiont raise_code(raise_keyerror);
+  raise_code.location() = location;
+
+  // Create if-then-else: if (key_exists) { delete } else { raise KeyError }
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = key_exists;
+  if_stmt.then_case() = delete_block;
+  if_stmt.else_case() = raise_code;
+  if_stmt.location() = location;
+
+  target_block.copy_to_operands(if_stmt);
 }
