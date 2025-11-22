@@ -88,6 +88,8 @@ def is_standard_library_file(filename):
         '/usr/lib/python',
         '/usr/local/lib/python',
         '/Library/Frameworks/Python.framework',
+        '/opt/homebrew/Cellar/python',  # Homebrew Python on macOS (Apple Silicon)
+        '/usr/local/Cellar/python',     # Homebrew Python on macOS (Intel)
     ]
     return any(filename.startswith(path) for path in stdlib_paths)
 
