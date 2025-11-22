@@ -21,7 +21,7 @@ using namespace json_utils;
 namespace
 {
 // Constants for input handling
-constexpr size_t MAX_INPUT_LENGTH = 16;
+constexpr int DEFAULT_NONDET_STR_LENGTH = 16;
 
 // Constants for UTF-8 encoding
 constexpr unsigned int UTF8_1_BYTE_MAX = 0x7F;
@@ -188,7 +188,7 @@ void function_call_expr::get_function_type()
 bool function_call_expr::is_nondet_call() const
 {
   static std::regex pattern(
-    R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
+    R"(nondet_(int|char|bool|float|str)|__VERIFIER_nondet_(int|char|bool|float|str))");
 
   return std::regex_match(function_id_.get_function(), pattern);
 }
@@ -205,14 +205,32 @@ bool function_call_expr::is_input_call() const
   return func_name == "input";
 }
 
+static int get_nondet_str_length()
+{
+  std::string opt_value = config.options.get_option("nondet-str-length");
+  if (!opt_value.empty())
+  {
+    try
+    {
+      int length = std::stoi(opt_value);
+      if (length > 0)
+        return length;
+    }
+    catch (...)
+    {
+    }
+  }
+  return DEFAULT_NONDET_STR_LENGTH;
+}
+
 exprt function_call_expr::handle_input() const
 {
   // input() returns a non-deterministic string
   // We'll model input() as returning a non-deterministic string
   // with a reasonable maximum length (e.g., 16 characters)
   // This is an under-approximation to model the input function
-
-  typet string_type = type_handler_.get_typet("str", MAX_INPUT_LENGTH);
+  int max_str_length = get_nondet_str_length();
+  typet string_type = type_handler_.get_typet("str", max_str_length);
   exprt rhs = exprt("sideeffect", string_type);
   rhs.statement("nondet");
 
@@ -226,6 +244,26 @@ exprt function_call_expr::build_nondet_call() const
   // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
   size_t underscore_pos = func_name.rfind("_");
   std::string type = func_name.substr(underscore_pos + 1);
+
+  if (type == "str")
+  {
+    int max_str_length = get_nondet_str_length();
+
+    typet char_array_type =
+      array_typet(char_type(), from_integer(max_str_length, size_type()));
+
+    exprt nondet_array = exprt("sideeffect", char_array_type);
+    nondet_array.statement("nondet");
+
+    exprt last_index = from_integer(max_str_length - 1, size_type());
+    exprt null_char = from_integer(0, char_type());
+
+    with_exprt result(nondet_array, last_index, null_char);
+    result.type() = char_array_type;
+
+    return result;
+  }
+
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
   rhs.statement("nondet");
   return rhs;
