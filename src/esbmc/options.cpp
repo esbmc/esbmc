@@ -79,6 +79,9 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Enforce strict type checking for function arguments during "
       "verification"},
+     {"nondet-str-length",
+      boost::program_options::value<int>()->default_value(16)->value_name("nr"),
+      "set maximum length for non-deterministic strings (default is 16)"},
    }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND

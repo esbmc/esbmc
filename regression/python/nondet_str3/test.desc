@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 9 --nondet-str-length 3 --ir
+^VERIFICATION SUCCESSFUL$
