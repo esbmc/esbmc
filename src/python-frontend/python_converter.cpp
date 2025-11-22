@@ -6376,56 +6376,7 @@ void python_converter::get_delete_statement(
           "del on subscript requires a dictionary (struct) type");
       }
 
-      std::string key;
-      if (slice["_type"] == "Constant")
-      {
-        // Handle both string and integer constant keys
-        if (slice["value"].is_string())
-          key = slice["value"].get<std::string>();
-        else if (slice["value"].is_number_integer())
-          key = std::to_string(slice["value"].get<int64_t>());
-        else
-          throw std::runtime_error(
-            "Dictionary key must be a string or integer constant");
-      }
-      else if (slice["_type"] == "Name")
-      {
-        // Variable reference - resolve its constant value from AST
-        std::string var_name = slice["id"].get<std::string>();
-        nlohmann::json var_decl =
-          json_utils::find_var_decl(var_name, current_func_name_, *ast_json);
-
-        if (
-          !var_decl.empty() && var_decl.contains("value") &&
-          var_decl["value"]["_type"] == "Constant")
-        {
-          const auto &val = var_decl["value"]["value"];
-          if (val.is_string())
-            key = val.get<std::string>();
-          else if (val.is_number_integer())
-            key = std::to_string(val.get<int64_t>());
-          else
-            throw std::runtime_error(
-              "del with variable key '" + var_name +
-              "' requires a constant string or integer value");
-        }
-        else
-        {
-          throw std::runtime_error(
-            "del with variable key '" + var_name +
-            "' requires a constant value");
-        }
-      }
-      else
-      {
-        throw std::runtime_error(
-          "Dictionary key must be a constant or variable");
-      }
-
-      std::string dict_id = dict_expr.is_symbol()
-                              ? dict_expr.identifier().as_string()
-                              : "anon_dict";
-
+      // Delegate to dict_handler which handles both constant and variable keys
       dict_handler_->handle_dict_delete(dict_expr, slice, target_block);
     }
     else if (target["_type"] == "Name")

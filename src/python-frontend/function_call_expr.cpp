@@ -21,7 +21,7 @@ using namespace json_utils;
 namespace
 {
 // Constants for input handling
-constexpr size_t MAX_INPUT_LENGTH = 256;
+constexpr size_t MAX_INPUT_LENGTH = 16;
 
 // Constants for UTF-8 encoding
 constexpr unsigned int UTF8_1_BYTE_MAX = 0x7F;
@@ -209,7 +209,7 @@ exprt function_call_expr::handle_input() const
 {
   // input() returns a non-deterministic string
   // We'll model input() as returning a non-deterministic string
-  // with a reasonable maximum length (e.g., 256 characters)
+  // with a reasonable maximum length (e.g., 16 characters)
   // This is an under-approximation to model the input function
 
   typet string_type = type_handler_.get_typet("str", MAX_INPUT_LENGTH);
