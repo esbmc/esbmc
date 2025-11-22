@@ -175,7 +175,14 @@ macos_setup () {
         -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release \
         -DPython3_EXECUTABLE=$Python3_EXECUTABLE \
     " &&
-    SOLVER_FLAGS=""
+    # macOS: Use Z3 solver (installed via brew)
+    SOLVER_FLAGS="\
+        -DENABLE_Z3=On \
+        -DZ3_DIR=$(brew --prefix z3) \
+        -DENABLE_BOOLECTOR=Off \
+        -DENABLE_BITWUZLA=Off \
+        -DENABLE_GOTO_CONTRACTOR=Off \
+    "
 }
 
 macos_post_setup () {

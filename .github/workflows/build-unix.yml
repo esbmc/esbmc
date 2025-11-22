@@ -42,4 +42,10 @@ jobs:
       run: |
         # Set PATH to include Python 3.12 (for ESBMC to find correct python3)
         export PATH="$(brew --prefix python@3.12)/bin:$PATH"
-        cd build/ && ctest -j4 --output-on-failure --progress .
+        cd build/
+        # On macOS, only run Python tests; on other systems, run all tests
+        if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
+          ctest -j4 --output-on-failure --progress -L python
+        else
+          ctest -j4 --output-on-failure --progress .
+        fi
