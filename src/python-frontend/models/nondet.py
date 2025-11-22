@@ -28,11 +28,11 @@ def nondet_list(max_size: int = _DEFAULT_NONDET_LIST_SIZE) -> list:
     size: int = nondet_int()
     __ESBMC_assume(size >= 0)
     __ESBMC_assume(size <= max_size)
-    
+
     i: int = 0
     while i < size:
         elem: int = nondet_int()
         result.append(elem)
         i = i + 1
-    
+
     return result
