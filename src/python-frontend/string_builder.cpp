@@ -238,6 +238,16 @@ exprt string_builder::concatenate_strings(
   if (!lhs_is_empty && rhs_is_empty)
     return lhs;
 
+  // Check if either operand contains non-deterministic/symbolic values
+  auto has_nondet = [](const exprt &e) -> bool {
+    if (!e.is_constant() && e.type().is_array())
+      return true;
+    return false;
+  };
+
+  if (has_nondet(lhs) || has_nondet(rhs))
+    return concatenate_strings_via_c_function(lhs, rhs, left);
+
   // Extract characters from both operands
   std::vector<exprt> lhs_chars = extract_string_chars(lhs, left);
   std::vector<exprt> rhs_chars = extract_string_chars(rhs, right);
