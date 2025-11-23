@@ -854,10 +854,23 @@ exprt python_list::handle_index_access(
         }
         catch (const std::out_of_range &)
         {
-          const locationt l = converter_.get_location_from_decl(list_value_);
-          throw std::runtime_error(
-            "List out of bounds at " + l.get_file().as_string() +
-            " line: " + l.get_line().as_string());
+          // Try annotation fallback before throwing error
+          const nlohmann::json list_value_node = json_utils::get_var_value(
+            list_value_["value"]["id"],
+            converter_.current_function_name(),
+            converter_.ast());
+
+          elem_type = get_elem_type_from_annotation(
+            list_value_node, converter_.get_type_handler());
+
+          // Only throw if annotation also fails
+          if (elem_type == typet())
+          {
+            const locationt l = converter_.get_location_from_decl(list_value_);
+            throw std::runtime_error(
+              "List out of bounds at " + l.get_file().as_string() +
+              " line: " + l.get_line().as_string());
+          }
         }
       }
     }
