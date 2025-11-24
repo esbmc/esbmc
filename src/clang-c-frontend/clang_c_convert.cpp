@@ -3048,10 +3048,11 @@ bool clang_c_convertert::get_cast_expr(
     break;
 #endif
 
+  // C11 atomic type casts - treat as pass-through for partial atomic support.
+  // Allow implicit casting of _Atomic to underlying type.
   case clang::CK_NonAtomicToAtomic:
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-      break;
-    [[fallthrough]];
+  case clang::CK_AtomicToNonAtomic:
+    break;
 
   default:
   {
