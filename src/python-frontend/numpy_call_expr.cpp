@@ -42,13 +42,9 @@ static value_type extract_value(const nlohmann::json &arg)
     auto operand = arg["operand"]["value"];
 
     if (operand.is_number_integer())
-    {
       return -operand.get<int64_t>();
-    }
     else if (operand.is_number_float())
-    {
       return -operand.get<double>();
-    }
   }
 
   if (!arg.contains("value"))
@@ -57,13 +53,9 @@ static value_type extract_value(const nlohmann::json &arg)
   auto value = arg["value"];
 
   if (value.is_number_integer())
-  {
     return value.get<int64_t>();
-  }
   else if (value.is_number_float())
-  {
     return value.get<double>();
-  }
 
   throw std::runtime_error("Unknown numeric type in JSON");
 }
@@ -460,9 +452,7 @@ exprt numpy_call_expr::create_expr_from_call()
           size_t rhs_len = rhs["elts"].size();
 
           if (lhs_len != rhs_len)
-          {
             throw std::runtime_error("Incompatible shapes for dot product");
-          }
 
           // Get element type from first element
           const auto &elem = lhs["elts"][0]["value"];
@@ -485,9 +475,7 @@ exprt numpy_call_expr::create_expr_from_call()
           size_t rhs_cols = rhs["elts"][0]["elts"].size();
 
           if (lhs_len != rhs_rows)
-          {
             throw std::runtime_error("Incompatible shapes for dot product");
-          }
 
           const auto &elem = rhs["elts"][0]["elts"][0]["value"];
           base_type = type_handler_.get_typet(elem);
@@ -509,9 +497,7 @@ exprt numpy_call_expr::create_expr_from_call()
           size_t rhs_len = rhs["elts"].size();
 
           if (lhs_cols != rhs_len)
-          {
             throw std::runtime_error("Incompatible shapes for dot product");
-          }
 
           const auto &elem = lhs["elts"][0]["elts"][0]["value"];
           base_type = type_handler_.get_typet(elem);
@@ -534,9 +520,7 @@ exprt numpy_call_expr::create_expr_from_call()
           p = rhs["elts"][0]["elts"].size();
 
           if (n != n2)
-          {
             throw std::runtime_error("Incompatible shapes for dot product");
-          }
 
           const auto &elem = lhs["elts"][0]["elts"][0]["value"];
           base_type = type_handler_.get_typet(elem);
@@ -616,14 +600,12 @@ exprt numpy_call_expr::get()
     int array_dims = type_handler_.get_array_dimensions(call_["args"][0]);
 
     if (array_dims >= 3)
-    {
       throw std::runtime_error(
         "ESBMC does not support 3D or higher dimensional arrays. "
         "Found " +
         std::to_string(array_dims) +
         "D array creation. "
         "Please use 1D or 2D arrays only.");
-    }
 
     typet size = type_handler_.get_typet(call_["args"][0]["elts"]);
     return converter_.get_static_array(call_["args"][0], size);
