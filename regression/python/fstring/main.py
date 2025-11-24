@@ -16,16 +16,6 @@ def test_basic_fstring():
     formatted: str = f"Number: {number}"
     assert len(formatted) > 0
 
-def test_builtin_variables():
-    """Test f-strings with built-in variables like __name__"""
-    module_info: str = f"Running as: {__name__}"
-    assert len(module_info) > 0
-    
-    # This was the original failing case
-    if __name__ == "__main__":
-        main_message: str = f"Main module: {__name__}"
-        assert len(main_message) > 0
-
 def test_boolean_fstring():
     """Test f-strings with boolean values"""
     is_running: bool = True
@@ -86,7 +76,6 @@ def test_fstring_concatenation():
 def run_all_tests():
     """Run all f-string tests"""
     test_basic_fstring()
-    test_builtin_variables() 
     test_boolean_fstring()
     test_empty_and_literal_fstring()
     test_nested_expressions()

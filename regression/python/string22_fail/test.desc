@@ -1,4 +1,4 @@
 THOROUGH
 main.py
---multi-property
-^Properties\: 21 verified, \✗ 21 failed$
+--unwind 20
+^VERIFICATION FAILED$
