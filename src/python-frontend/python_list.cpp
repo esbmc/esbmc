@@ -854,7 +854,23 @@ exprt python_list::handle_index_access(
         }
         catch (const std::out_of_range &)
         {
-          // Try annotation fallback before throwing error
+          // Only throw compile-time error if this is a static list with known elements
+          // For constant indices on static lists, this is a definite out-of-bounds error
+          if (
+            (slice_node["_type"] == "Constant" ||
+             (slice_node["_type"] == "UnaryOp" &&
+              slice_node["operand"]["_type"] == "Constant")) &&
+            !list_node.is_null() && list_node.contains("value") &&
+            list_node["value"].contains("elts") &&
+            list_node["value"]["elts"].is_array())
+          {
+            const locationt l = converter_.get_location_from_decl(list_value_);
+            throw std::runtime_error(
+              "List out of bounds at " + l.get_file().as_string() +
+              " line: " + l.get_line().as_string());
+          }
+
+          // Try annotation fallback for dynamic lists or function parameters
           const nlohmann::json list_value_node = json_utils::get_var_value(
             list_value_["value"]["id"],
             converter_.current_function_name(),
