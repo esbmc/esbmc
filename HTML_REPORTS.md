@@ -10,7 +10,7 @@ To generate an HTML report when verification fails, use the `--generate-html-rep
 esbmc example.c --generate-html-report
 ```
 
-When verification fails and a counterexample is found, ESBMC will create an HTML file named `report-<n>.html` in the current directory.
+When verification fails, and a counterexample is found, ESBMC will create an HTML file named `report-<n>.html` in the current directory.
 
 ### Example Output
 
@@ -22,7 +22,7 @@ Generating HTML report for trace: 1
 VERIFICATION FAILED
 ```
 
-This creates `report-1.html` which can be opened in any web browser.
+This creates `report-1.html`, which can be opened in any web browser.
 
 ## Report Features
 
