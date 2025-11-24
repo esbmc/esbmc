@@ -1,5 +1,6 @@
 import numpy as np
 
+
 result_1 = np.divide(2.0, 4.0)
 assert result_1 == 0.5
 
@@ -35,3 +36,13 @@ assert result_11 == 25.0
 
 result_12 = np.divide(7.0, -3.5)
 assert result_12 == -2.0
+
+result_13 = np.divide([6,8],[2,4])
+assert result_13[0] == 3
+assert result_13[1] == 2
+
+d = np.array([6,4])
+e = np.array([2,2])
+result_14 = np.divide(d, e)
+assert result_14[0] == 3
+assert result_14[1] == 2

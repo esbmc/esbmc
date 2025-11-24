@@ -5740,16 +5740,38 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         element["exc"]["func"]["id"].get<std::string>());
       locationt location = get_location_from_decl(element);
 
-      exprt arg = get_expr(element["exc"]["args"][0]);
-      arg = string_constantt(
-        string_handler_.process_format_spec(element["exc"]["args"][0]),
-        arg.type(),
-        string_constantt::k_default);
+      exprt raise;
+      if (type_utils::is_python_exceptions(
+            element["exc"]["func"]["id"].get<std::string>()))
+      {
+        // Construct a constant struct to throw:
+        // raise { .message=&"Error message" }
+        exprt arg = get_expr(element["exc"]["args"][0]);
+        arg = string_constantt(
+          string_handler_.process_format_spec(element["exc"]["args"][0]),
+          arg.type(),
+          string_constantt::k_default);
 
-      // Construct a constant struct to throw:
-      // raise { .message=&"Error message" }
-      exprt raise("struct", type);
-      raise.copy_to_operands(address_of_exprt(arg));
+        raise.id("struct");
+        raise.type() = type;
+        raise.copy_to_operands(address_of_exprt(arg));
+      }
+      else
+      {
+        // For custom exceptions:
+        // DECL MyException return_value;
+        // FUNCTION_CALL:  MyException(&return_value, &"message");
+        // Throw MyException return_value;
+        raise = get_expr(element["exc"]);
+        code_function_callt call =
+          to_code_function_call(convert_expression_to_code(raise));
+        side_effect_expr_function_callt tmp;
+        tmp.function() = call.function();
+        tmp.arguments() = call.arguments();
+        tmp.type() = type;
+        tmp.location() = location;
+        raise = tmp;
+      }
 
       exprt side = side_effect_exprt("cpp-throw", type);
       side.location() = location;
