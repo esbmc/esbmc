@@ -6416,9 +6416,6 @@ void python_converter::convert()
     throw std::runtime_error(
       "The main function is already defined in another module");
   }
-
-  // Set entry point for ESBMC
-  config.main = "__ESBMC_main";
 }
 
 exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
