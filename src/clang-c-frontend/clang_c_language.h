@@ -52,6 +52,7 @@ public:
   }
 
   clang_c_languaget();
+  ~clang_c_languaget();
 
 protected:
   virtual std::string internal_additions();

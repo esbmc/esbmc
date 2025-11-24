@@ -21,19 +21,31 @@ jobs:
     runs-on: ${{ inputs.operating-system }}
     steps:
     - uses: actions/checkout@v4
-    - name: Add apt.llvm.org repository
-      run: |
-        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc &&
-        source /etc/os-release &&
-        sudo add-apt-repository -y "deb http://apt.llvm.org/${UBUNTU_CODENAME}/ llvm-toolchain-${UBUNTU_CODENAME}-16 main" &&
-        sudo apt-get update
-      if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
+
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }}
     - uses: actions/upload-artifact@v4
       with:
         name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
         path: ./release
+    
+    - name: Check Python regression tests
+      if: ${{ inputs.testing == true }}
+      run: |
+        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
+        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+        chmod +x scripts/check_python_tests.sh
+        ./scripts/check_python_tests.sh
+
     - name: Run tests
       if: ${{ inputs.testing == true }}
-      run: cd build/ && ctest -j4 --output-on-failure --progress .
+      run: |
+        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
+        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+        cd build/
+        # On macOS, only run Python tests; on other systems, run all tests
+        if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
+          ctest -j4 --output-on-failure --progress -L python
+        else
+          ctest -j4 --output-on-failure --progress .
+        fi

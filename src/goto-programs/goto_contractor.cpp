@@ -56,7 +56,22 @@ void goto_contractort::get_intervals(
         while (it != map.var_map.end())
         {
           auto var_name = to_symbol2t(it->second.getSymbol()).get_symbol_name();
-          auto _new_interval = interval_analysis[i_it].intervals->at(var_name);
+
+          // Check if the variable exists in the intervals map before accessing
+          auto intervals_map = interval_analysis[i_it].intervals;
+          if (intervals_map->find(var_name) == intervals_map->end())
+          {
+            // Variable not found in interval analysis for this location
+            log_debug(
+              "contractor",
+              "Variable {} not found in interval analysis at location {}",
+              var_name,
+              i_it->location_number);
+            it++;
+            continue;
+          }
+
+          auto _new_interval = intervals_map->at(var_name);
           if (_new_interval.index() != 0)
           {
             it++;

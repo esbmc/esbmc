@@ -64,6 +64,7 @@ public:
   size_t claim_to_keep;
   std::string claim_msg;
   std::string claim_loc;
+  std::string claim_cstr;
   bool show_slice_info;
   bool is_goto_cov;
   namespacet ns;
@@ -117,6 +118,10 @@ public:
    * Holds the symbols the current equation depends on.
    */
   std::unordered_set<std::string> depends;
+
+  /**
+ * Hold a map of array symbols and indexes. All other indexes can be cut */
+  std::unordered_map<std::string, std::unordered_set<size_t>> indexes;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
 

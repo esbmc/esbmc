@@ -32,3 +32,13 @@ assert result_10 == 1
 
 result_11 = np.multiply(9, -2)
 assert result_11 == -18
+
+result_12 = np.multiply([3,4],[1,3])
+assert result_12[0] == 3
+assert result_12[1] == 12
+
+c = np.array([5,4])
+d = np.array([2,2])
+result_13 = np.multiply(c, d)
+assert result_13[0] == 10
+assert result_13[1] == 8

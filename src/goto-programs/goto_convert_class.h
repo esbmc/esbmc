@@ -461,6 +461,7 @@ protected:
     const exprt &rhs,
     const exprt::operandst &arguments,
     goto_programt &dest);
+  void get_alloc_size(typet &alloc_type, exprt &alloc_size);
 };
 
 #endif

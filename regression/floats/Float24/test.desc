@@ -1,0 +1,4 @@
+CORE
+main.c
+--floatbv --ir
+^Using integer\/real arithmetic mode; defaulting to Z3$

@@ -3,7 +3,7 @@ add_subdirectory(AST)
 
 add_library(clangcfrontend_stuff clang_c_language.cpp clang_c_convert.cpp
             clang_c_main.cpp clang_c_adjust_expr.cpp typecast.cpp clang_c_adjust_code.cpp
-            clang_c_convert_literals.cpp clang_headers.cpp padding.cpp symbolic_types.cpp
+            clang_c_convert_literals.cpp clang_headers.cpp padding.cpp
             clang_c_adjust_polymorphic_functions.cpp)
 target_include_directories(clangcfrontend_stuff
     PRIVATE ${CMAKE_BINARY_DIR}/src
@@ -12,6 +12,7 @@ target_include_directories(clangcfrontend_stuff
     PRIVATE ${Boost_INCLUDE_DIRS}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
+target_compile_definitions(clangcfrontend_stuff PUBLIC BOOST_ALL_NO_LIB)
 target_link_libraries(clangcfrontend_stuff gotoprograms ${cheaders_lib} ${ESBMC_CLANG_LIBS})
 
 add_library(clangcfrontend INTERFACE)

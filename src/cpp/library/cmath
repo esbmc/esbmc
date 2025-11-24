@@ -12,6 +12,7 @@
 /* delegates to math.h in the C++ headers */
 #include <math.h>
 #include <type_traits>
+#include <stdlib.h>
 
 namespace std
 {
@@ -29,6 +30,7 @@ inline long double abs(long double num)
   return ::fabsl(num);
 }
 
+using ::abs;
 using ::fabs;
 using ::fabsf;
 using ::fabsl;

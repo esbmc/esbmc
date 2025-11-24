@@ -5,7 +5,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <AST/build_ast.h>
-#include <ansi-c/c_preprocess.h>
+#include <clang-c-frontend/c_preprocess.h>
 #include <boost/filesystem.hpp>
 #include <c2goto/cprover_library.h>
 #include <clang-c-frontend/clang_c_adjust.h>
@@ -19,6 +19,8 @@ CC_DIAGNOSTIC_POP()
 #include <util/filesystem.h>
 
 #include <ac_config.h>
+
+clang_c_languaget::~clang_c_languaget() = default;
 
 languaget *new_clang_c_language()
 {
@@ -44,6 +46,7 @@ void clang_c_languaget::build_include_args(
   {
     compiler_args.push_back("-isystem");
     compiler_args.push_back(*libc_headers);
+    compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
   compiler_args.push_back("-resource-dir");
@@ -121,6 +124,7 @@ void clang_c_languaget::build_compiler_args(
     bool is_purecap = config.ansi_c.cheri == configt::ansi_ct::CHERI_PURECAP;
     compiler_args.emplace_back(
       "-cheri=" + std::to_string(config.ansi_c.capability_width()));
+    compiler_args.emplace_back("-cheri-bounds=subobject-safe");
 
     if (config.ansi_c.target
           .is_riscv()) /* unused as of yet: arch is mips64el */
@@ -170,7 +174,6 @@ void clang_c_languaget::build_compiler_args(
 
     /* TODO: DEMO */
     compiler_args.emplace_back("-D__builtin_cheri_tag_get(p)=1");
-    compiler_args.emplace_back("-D__builtin_clzll(n)=__esbmc_clzll(n)");
 
     switch (config.ansi_c.cheri)
     {
@@ -238,10 +241,15 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-D_INC_TIME_INL");
     compiler_args.push_back("-D__CRT__NO_INLINE");
     compiler_args.push_back("-D_USE_MATH_DEFINES");
+    compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
 #if ESBMC_SVCOMP
   compiler_args.push_back("-D__ESBMC_SVCOMP");
+  // No longer show compiler warnings for SV-COMP
+  compiler_args.push_back("-w");
+  compiler_args.push_back("-Wno-incompatible-function-pointer-types");
+  compiler_args.push_back("-Wno-int-conversion");
 #endif
 
   // Increase maximum bracket depth
@@ -356,6 +364,7 @@ std::string clang_c_languaget::internal_additions()
 # 1 "esbmc_intrinsics.h" 1
 void __ESBMC_assume(_Bool);
 void __ESBMC_assert(_Bool, const char *);
+void __ESBMC_cover(_Bool);
 _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
@@ -385,8 +394,9 @@ _Bool __ESBMC_is_little_endian();
 
 int __ESBMC_rounding_mode = 0;
 
-void *__ESBMC_memset(void *, int, unsigned int);
-
+void *__ESBMC_memset(void *, int, __SIZE_TYPE__);
+      void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
+      
 /* same semantics as memcpy(tgt, src, size) where size matches the size of the
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
@@ -404,6 +414,19 @@ void __ESBMC_pthread_end_main_hook(void);
 // Forward decl of the intrinsic function that calls atexit registered functions.
 // We need this here or it won't be pulled from the C library
 void __ESBMC_atexit_handler(void);
+
+// Define a macro to generate overflow result structures and function declarations
+#define DEFINE_ESBMC_OVERFLOW_TYPE(type)              \
+  typedef struct {                                          \
+    _Bool overflow;                                         \
+    type result;                                            \
+  } __attribute__((packed)) __ESBMC_overflow_result;          \
+                                                            \
+__ESBMC_overflow_result __ESBMC_overflow_result_plus(type, type);  \
+__ESBMC_overflow_result __ESBMC_overflow_result_minus(type, type); \
+__ESBMC_overflow_result __ESBMC_overflow_result_mult(type, type);  \
+__ESBMC_overflow_result __ESBMC_overflow_result_shl(type, type);   \
+__ESBMC_overflow_result __ESBMC_overflow_result_unary_minus(type);
 
 // Forward declarations for nondeterministic types.
 int nondet_int();
@@ -438,9 +461,14 @@ void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
 
+/* Support for CPROVER R_OK: This should return True if reading length bytes 
+ * of addr will not extrapolate the object that addr is pointing to.
+ */
+_Bool __ESBMC_r_ok(void *, unsigned long);
+
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
-void __ESBMC_unreachable();
+_Noreturn void __ESBMC_unreachable();
 /* Quantifiers
  * Right now we only support one element and they transform the symbol into a nondet one (for the closure)
  * For example:
@@ -452,6 +480,21 @@ void __ESBMC_unreachable();
 
 _Bool __ESBMC_forall(void*, _Bool);
 _Bool __ESBMC_exists(void*, _Bool);
+
+/* This function is used to check loop invariants
+ * It should be run with multi-property:
+ * 1. Check if it is preserved in the loop
+ * 2. Use the invariants to help the following of the loop continue with a simple assumption
+ */
+void __ESBMC_loop_invariant(_Bool);
+
+
+#define __builtin_offsetof(type, member) \
+    ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
+
+
+#define __builtin_object_size(ptr, type) \
+    __ESBMC_builtin_object_size(ptr, type)
     )";
 
   if (config.ansi_c.cheri)
@@ -468,6 +511,11 @@ __UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability);
 _Bool __esbmc_cheri_sealed_get(void *__capability);
 #endif
 __UINT64_TYPE__ __esbmc_clzll(__UINT64_TYPE__);
+
+struct cap_info {__SIZE_TYPE__ base; __SIZE_TYPE__ top;};
+
+__attribute__((annotate("__ESBMC_inf_size")))
+struct cap_info __ESBMC_cheri_info[1];
     )";
   }
 

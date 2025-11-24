@@ -1,4 +1,4 @@
 CORE
 main.c
---memory-leak-check --claim 1 -Wno-error=implicit-function-declaration
+--memory-leak-check --claim 1 -Wno-error=implicit-function-declaration --no-reachable-memory-leak --no-abnormal-memory-leak
 ^VERIFICATION FAILED$

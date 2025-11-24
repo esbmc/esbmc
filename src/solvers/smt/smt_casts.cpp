@@ -298,7 +298,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
       // Operands have differing signs (and same width). Just return.
       return convert_ast(cast.from);
 
-    std::runtime_error("Unrecognized equal-width int typecast format");
+    throw std::runtime_error("Unrecognized equal-width int typecast format");
   }
 
   if (from_width < to_width)
@@ -401,7 +401,7 @@ capability_from_components(const expr2tc &pesbt, const expr2tc &cursor)
 
 smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 {
-  // First, sanity check -- typecast from one kind of a pointer to another kind
+  // First, sanity check -- typecast from one kind of pointer to another kind
   // is a simple operation. Check for that first.
   if (is_pointer_type(cast.from))
     return convert_ast(cast.from);
@@ -561,7 +561,7 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
     symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
     obj_num);
 
-  // We've now grabbed the pointer struct, now get first element. Represent
+  // We've now grabbed the pointer struct, now get the first element. Represent
   // as fetching the first element of the struct representation.
   const struct_type2t &addr_space_ty = to_struct_type(addr_space_type);
   expr2tc from_start = member2tc(
@@ -593,7 +593,7 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   new_names.reserve(struct_type_to.members.size());
 
   // This all goes to pot when we consider polymorphism, and in particular,
-  // multiple inheritance. So, for normal structs, as usual check that each
+  // multiple inheritance. So, for normal structs, as usual, check that each
   // field has a compatible type. But for classes, check that either they're
   // the same class, or the source is a subclass of the target type. If so,
   // we just select out the common fields, which drops any additional data in
@@ -662,7 +662,7 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
         i3 != struct_type_from.member_names.size() &&
         "Superclass field doesn't exist in subclass during conversion "
         "cast");
-      // Could assert that the types are the same, however Z3 is going to
+      // Could assert that the types are the same; however, Z3 is going to
       // complain mightily if we get it wrong.
 
       smt_astt args[2];
@@ -688,6 +688,38 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     // When using --ir mode and --floatbv, we ignore the fp-to-fp typecasting
     // and the just encode the original fp term using real mode
     return convert_ast(cast.from);
+  }
+
+  // Handle float-to-integer conversions when int_encoding is enabled
+  if (
+    int_encoding && is_floatbv_type(cast.from->type) &&
+    (is_bv_type(cast.type) || is_fixedbv_type(cast.type)))
+  {
+    // Convert float to real, then to integer
+    smt_astt from_real = convert_ast(cast.from);
+
+    // Convert real to integer using appropriate SMT operation
+    if (is_signedbv_type(cast.type))
+      return round_real_to_int(from_real);
+    else
+    {
+      // For unsigned types, ensure non-negative conversion
+      smt_astt int_val = round_real_to_int(from_real);
+      smt_astt zero = mk_smt_int(BigInt(0));
+      smt_astt is_negative = mk_lt(int_val, zero);
+      return mk_ite(is_negative, zero, int_val);
+    }
+  }
+
+  // Handle integer-to-float conversions when int_encoding is enabled
+  if (
+    int_encoding &&
+    (is_bv_type(cast.from->type) || is_fixedbv_type(cast.from->type)) &&
+    is_floatbv_type(cast.type))
+  {
+    // Convert integer to real (which represents float in int_encoding mode)
+    smt_astt from_int = convert_ast(cast.from);
+    return mk_int2real(from_int);
   }
 
   if (cast.type == cast.from->type)

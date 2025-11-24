@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 app.c picosat.c --unwind 2
 ^VERIFICATION FAILED$

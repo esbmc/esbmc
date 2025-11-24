@@ -1,5 +1,6 @@
 #include <bitwuzla_conv.h>
 #include <cstring>
+#include <cstdio>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
@@ -825,10 +826,35 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
     arrsort);
 }
 
-void bitwuzla_convt::dump_smt()
+std::string bitwuzla_convt::dump_smt()
 {
-  // Print formulas using binary bit-vector output format
-  bitwuzla_print_formula(bitw, "smt2", messaget::state.out, 2);
+  FILE *temp_file = tmpfile();
+  if (!temp_file)
+  {
+    log_error("Failed to create temporary file for SMT dump");
+    return "";
+  }
+
+  bitwuzla_print_formula(bitw, "smt2", temp_file, 2);
+
+  // Get file size and read entire content
+  fseek(temp_file, 0, SEEK_END);
+  long file_size = ftell(temp_file);
+  fseek(temp_file, 0, SEEK_SET);
+
+  if (file_size <= 0)
+  {
+    fclose(temp_file);
+    return "";
+  }
+
+  // Allocate buffer for entire file content
+  std::vector<char> buffer(file_size + 1);
+  size_t bytes_read = fread(buffer.data(), 1, file_size, temp_file);
+  buffer[bytes_read] = '\0'; // Null terminate
+
+  fclose(temp_file);
+  return std::string(buffer.data(), bytes_read);
 }
 
 void bitw_smt_ast::dump() const
@@ -946,4 +972,14 @@ smt_sortt bitwuzla_convt::mk_bvfp_rm_sort()
 {
   return new solver_smt_sort<BitwuzlaSort>(
     SMT_SORT_BVFP_RM, bitwuzla_mk_bv_sort(bitw_term_manager, 3), 3);
+}
+
+smt_astt bitwuzla_convt::mk_quantifier(
+  [[maybe_unused]] bool is_forall,
+  [[maybe_unused]] std::vector<smt_astt> lhs,
+  [[maybe_unused]] smt_astt rhs)
+{
+  log_error("Bitwuzla does not support quantifiers");
+  abort();
+  return nullptr;
 }

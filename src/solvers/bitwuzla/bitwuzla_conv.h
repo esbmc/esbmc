@@ -101,8 +101,13 @@ public:
 
   smt_astt overflow_arith(const expr2tc &expr) override;
 
-  void dump_smt() override;
+  std::string dump_smt() override;
   void print_model() override;
+
+  smt_astt mk_quantifier(
+    bool is_forall,
+    std::vector<smt_astt> lhs,
+    smt_astt rhs) override;
 
   // Members
   Bitwuzla *bitw;

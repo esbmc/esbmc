@@ -2,13 +2,14 @@
 #define STL_ITERATOR
 
 #include "iostream"
-#include "vector"
 #include "streambuf"
-#include "string"
 #include "utility"
 
 namespace std
 {
+template <class CharT>
+struct char_traits;
+
 template <
   class Category,
   class T,
@@ -89,7 +90,6 @@ public:
   explicit back_insert_iterator(Container &x) : container(&x)
   {
   }
-  back_insert_iterator<Container> &operator=(std::vector<int>::iterator value);
   back_insert_iterator<Container> &
   operator=(typename Container::const_reference value)
   {
@@ -186,33 +186,34 @@ front_insert_iterator<Container> front_inserter(Container &x);
 template <class Container, class Inserter>
 insert_iterator<Container> inserter(Container &x, Inserter i);
 
-
 template <class Iterator>
-class reverse_iterator : public std::iterator<typename std::iterator_traits<Iterator>::iterator_category,
-                                              typename std::iterator_traits<Iterator>::value_type,
-                                              typename std::iterator_traits<Iterator>::difference_type,
-                                              typename std::iterator_traits<Iterator>::pointer,
-                                              typename std::iterator_traits<Iterator>::reference>
+class reverse_iterator
+  : public std::iterator<
+      typename std::iterator_traits<Iterator>::iterator_category,
+      typename std::iterator_traits<Iterator>::value_type,
+      typename std::iterator_traits<Iterator>::difference_type,
+      typename std::iterator_traits<Iterator>::pointer,
+      typename std::iterator_traits<Iterator>::reference>
 {
 public:
-    typedef typename std::iterator_traits<Iterator>::difference_type difference_type;
-    typedef typename std::iterator_traits<Iterator>::pointer pointer;
-    typedef typename std::iterator_traits<Iterator>::reference reference;
+  typedef
+    typename std::iterator_traits<Iterator>::difference_type difference_type;
+  typedef typename std::iterator_traits<Iterator>::pointer pointer;
+  typedef typename std::iterator_traits<Iterator>::reference reference;
 
-    Iterator base() const;
-    reference operator*() const;
-    reverse_iterator operator+(difference_type n) const;
-    reverse_iterator& operator++();
-    reverse_iterator operator++(int);
-    reverse_iterator& operator+=(difference_type n);
-    reverse_iterator operator-(difference_type n) const;
-    reverse_iterator& operator--();
-    reverse_iterator operator--(int);
-    reverse_iterator& operator-=(difference_type n);
-    pointer operator->() const;
-    reference operator[](difference_type n) const;
+  Iterator base() const;
+  reference operator*() const;
+  reverse_iterator operator+(difference_type n) const;
+  reverse_iterator &operator++();
+  reverse_iterator operator++(int);
+  reverse_iterator &operator+=(difference_type n);
+  reverse_iterator operator-(difference_type n) const;
+  reverse_iterator &operator--();
+  reverse_iterator operator--(int);
+  reverse_iterator &operator-=(difference_type n);
+  pointer operator->() const;
+  reference operator[](difference_type n) const;
 };
-
 
 template <
   class T,
@@ -263,7 +264,7 @@ public:
 	}*/
 };
 
-template <class T, class charT = char, class traits = char_traits<charT> >
+template <class T, class charT = char, class traits = char_traits<charT>>
 class ostream_iterator
   : public iterator<output_iterator_tag, void, void, void, void>
 {

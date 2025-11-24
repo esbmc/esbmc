@@ -30,6 +30,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
@@ -58,10 +59,6 @@ extern "C"
 #  include <sys/wait.h>
 #  include <execinfo.h>
 #  include <fcntl.h>
-#endif
-
-#ifdef ENABLE_OLD_FRONTEND
-#  include <ansi-c/c_preprocess.h>
 #endif
 
 #ifdef ENABLE_GOTO_CONTRACTOR
@@ -339,12 +336,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("compact-trace"))
     options.set_option("no-slice", true);
 
-  if (cmdline.isset("smt-during-symex"))
-  {
-    log_status("Enabling --no-slice due to presence of --smt-during-symex");
-    options.set_option("no-slice", true);
-  }
-
   if (
     cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") ||
     cmdline.isset("smt-symex-assert") || cmdline.isset("smt-symex-assume"))
@@ -479,6 +470,13 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
+  // parallel solving activates "--multi-property"
+  if (cmdline.isset("parallel-solving"))
+  {
+    options.set_option("base-case", true);
+    options.set_option("multi-property", true);
+  }
+
   // If multi-property is on, we should set base-case
   if (cmdline.isset("multi-property"))
   {
@@ -501,6 +499,62 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("override-return-annotation"))
     options.set_option("override-return-annotation", true);
+
+  if (cmdline.isset("witness-output-yaml"))
+  {
+    std::string filename = cmdline.getval("witness-output-yaml");
+    boost::filesystem::path n(filename);
+
+    if (n.extension() == ".yaml" || n.extension() == ".yml")
+    {
+      // expected extension
+    }
+    else if (!n.has_extension())
+    {
+      if (n != "-")
+        options.set_option("witness-output-yaml", filename + ".yml");
+    }
+    else
+    {
+      log_error(
+        "Output file has extension {}, expected yaml or yml.",
+        n.extension().string());
+      abort();
+    }
+  }
+
+  if (cmdline.isset("witness-output-graphml"))
+  {
+    std::string filename = cmdline.getval("witness-output-graphml");
+    boost::filesystem::path n(filename);
+
+    if (n.extension() == ".graphml")
+    {
+      // expected extension
+    }
+    else if (!n.has_extension())
+    {
+      if (n != "-")
+        options.set_option("witness-output-graphml", filename + ".graphml");
+    }
+    else
+    {
+      log_error(
+        "Output file has extension {}, expected graphml.",
+        n.extension().string());
+      abort();
+    }
+  }
+
+  if (cmdline.isset("witness-output"))
+  {
+    std::string filename = cmdline.getval("witness-output");
+    boost::filesystem::path n(filename);
+    n.replace_extension("");
+
+    options.set_option("witness-output-yaml", filename + ".yml");
+    options.set_option("witness-output-graphml", filename + ".graphml");
+  }
 
   config.options = options;
 }
@@ -568,7 +622,7 @@ int esbmc_parseoptionst::doit()
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
 
-    if (cmdline.isset("function"))
+    if (cmdline.isset("function") && cmdline.isset("assign-param-nondet"))
     {
       // assign parameters to "nondet"
       goto_preprocess_algorithms.emplace_back(
@@ -1666,8 +1720,33 @@ bool esbmc_parseoptionst::create_goto_program(
     // If the user is providing the GOTO functions, we don't need to parse
     if (cmdline.isset("binary"))
     {
+      if (cmdline.isset("cprover"))
+        log_warning(
+          "Be sure you are manually linking with the cprover libraries. This "
+          "will be automated in the future.");
       if (read_goto_binary(goto_functions))
         return true;
+
+      if (cmdline.isset("function"))
+      {
+        Forall_goto_program_instructions (
+          it, goto_functions.function_map["__ESBMC_main"].body)
+        {
+          if (!it->is_function_call())
+            continue;
+
+          if (
+            !is_symbol2t(to_code_function_call2t(it->code).function) ||
+            to_symbol2t(to_code_function_call2t(it->code).function).thename !=
+              "c:@F@main")
+            continue;
+
+          to_code_function_call2t(it->code).function =
+            symbol2tc(get_empty_type(), cmdline.getval("function"));
+        }
+      }
+
+      goto_functions.update();
     }
     else
     {
@@ -1803,7 +1882,8 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
-    bool is_mul = cmdline.isset("multi-property");
+    bool is_mul =
+      cmdline.isset("multi-property") || cmdline.isset("parallel-solving");
     is_coverage = cmdline.isset("assertion-coverage") ||
                   cmdline.isset("assertion-coverage-claims") ||
                   cmdline.isset("condition-coverage") ||
@@ -1922,6 +2002,13 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_k_induction(goto_functions);
     }
 
+    if (cmdline.isset("loop-invariant"))
+    {
+      // Process loop invariants and insert assert/assume/havoc
+      remove_no_op(goto_functions);
+      goto_loop_invariant(goto_functions);
+    }
+
     if (
       cmdline.isset("goto-contractor") ||
       cmdline.isset("goto-contractor-condition"))
@@ -1936,9 +2023,6 @@ bool esbmc_parseoptionst::process_goto_program(
       abort();
 #endif
     }
-
-    if (cmdline.isset("termination"))
-      goto_termination(goto_functions);
 
     goto_check(ns, options, goto_functions);
 
@@ -1955,16 +2039,13 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_functions.update();
 
-    if (cmdline.isset("data-races-check"))
+    if (
+      cmdline.isset("data-races-check") ||
+      cmdline.isset("data-races-check-only"))
     {
       log_status("Adding Data Race Checks");
-
-      value_set_analysist value_set_analysis(ns);
-      value_set_analysis(goto_functions);
-
-      add_race_assertions(value_set_analysis, context, goto_functions);
-
-      value_set_analysis.update(goto_functions);
+      options.set_option("data-races-check", true);
+      add_race_assertions(context, goto_functions);
     }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
@@ -2055,6 +2136,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
+
       tmp.branch_coverage();
     }
     if (
@@ -2073,7 +2155,16 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+
       tmp.branch_function_coverage();
+    }
+
+    if (cmdline.isset("negating-property"))
+    {
+      std::string tgt_fname = cmdline.getval("negating-property");
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.negating_asserts(tgt_fname);
     }
   }
 
@@ -2467,7 +2558,6 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
     expr->foreach_operand([&globals, &ns](const expr2tc &e) {
       globals += calc_globals_used(ns, e);
     });
-
     return globals;
   }
 
@@ -2529,6 +2619,7 @@ void esbmc_parseoptionst::print_ileave_points(
       case CATCH:
       case THROW_DECL:
       case THROW_DECL_END:
+      case LOOP_INVARIANT:
         break;
       }
 

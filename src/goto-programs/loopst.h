@@ -15,6 +15,7 @@ public:
 
   const loop_varst &get_modified_loop_vars() const;
   const loop_varst &get_unmodified_loop_vars() const;
+  bool contains_only_pointers() const;
 
   const goto_programt::targett get_original_loop_exit() const;
   void set_original_loop_exit(goto_programt::targett _loop_exit);

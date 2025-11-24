@@ -1,0 +1,4 @@
+KNOWNBUG
+main.cpp
+--loop-invariant --timeout 1
+^VERIFICATION SUCCESSFUL$

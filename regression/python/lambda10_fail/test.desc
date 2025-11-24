@@ -1,0 +1,4 @@
+CORE
+main.py
+--multi-property
+^Properties\: 5 verified, \✗ 5 failed$

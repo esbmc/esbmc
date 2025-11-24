@@ -112,6 +112,32 @@ __ESBMC_HIDE:;
 
   double l = log(fabs(x));
   double r = exp(l * y);
+
+  /* Special handling for fractional exponents that represent perfect roots.
+   * This compensates for precision loss in Taylor series approximations
+   * and matches Python's behavior for cases such as 8**(1/3) == 2.0, 
+   * 27**(1/3) == 3.0, etc. */
+  if (!is_int && fabs(y) > 0.0 && fabs(y) <= 1.0)
+  {
+    double y_abs = fabs(y);
+    double recip = 1.0 / y_abs;
+    double recip_rounded = round(recip);
+
+    /* Check if 1/y is a small integer (common roots: 2-10) */
+    if (
+      fabs(recip - recip_rounded) < 1e-10 && recip_rounded >= 2.0 &&
+      recip_rounded <= 10.0)
+    {
+      /* Adjust for negative exponents (reciprocal) */
+      double r_check = signbit(y) ? 1.0 / r : r;
+      double r_rounded = round(r_check);
+
+      /* If result is very close to an integer, use the exact value */
+      if (fabs(r_check - r_rounded) < 1e-9 && r_rounded > 0.0)
+        r = signbit(y) ? 1.0 / r_rounded : r_rounded;
+    }
+  }
+
   return odd_int ? copysign(r, x) : r;
 }
 

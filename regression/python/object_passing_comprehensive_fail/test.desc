@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+--multi-property
+^Properties: 64 verified, \✗ 64 failed$

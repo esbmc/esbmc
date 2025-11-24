@@ -1,4 +1,4 @@
-def foo(s:str) -> None:
+def foo(s):
     x:int = len(s)
     assert x == 4
 

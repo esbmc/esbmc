@@ -68,5 +68,6 @@ void ssa_step_algorithm::run_on_step(symex_target_equationt::SSA_stept &step)
     break;
   default:
     log_warning("Invalid type for SSA step");
+    abort();
   }
 }

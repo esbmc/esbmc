@@ -14,7 +14,7 @@ bitlsh = 2 << 1
 bitrsh = 2 >> 1
 
 
-def add_nums(x:int, y:int) -> int:
+def add_nums(x, y):
   z = x + y
   return z
 

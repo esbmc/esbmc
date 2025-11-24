@@ -38,14 +38,13 @@ error() {
 ubuntu_setup () {
     # Tested on ubuntu 22.04
     PKGS="\
-        clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
         python-is-python3 csmith python3 \
         git ccache unzip wget curl libcsmith-dev gperf \
-        libgmp-dev cmake bison flex g++-multilib linux-libc-dev \
+        cmake bison flex g++-multilib linux-libc-dev \
         libboost-all-dev ninja-build python3-setuptools \
         libtinfo-dev pkg-config python3-pip python3-toml \
-        openjdk-11-jdk \
-    "
+        openjdk-11-jdk tar xz-utils \
+    "    
     if [ -z "$STATIC" ]; then STATIC=ON; fi
     if [ $STATIC = OFF ]; then
         PKGS="$PKGS \
@@ -71,6 +70,7 @@ ubuntu_setup () {
         SOLVER_FLAGS="$SOLVER_FLAGS \
             -DENABLE_Z3=On -DZ3_DIR=/usr \
             -DENABLE_GOTO_CONTRACTOR=OFF \
+            -DENABLE_BITWUZLA=OFF \
         "
         return
     fi
@@ -78,14 +78,52 @@ ubuntu_setup () {
     sudo apt-get update &&
     sudo apt-get install -y $PKGS &&
 
+    # Install GMP 6.3.0 from source (needed for bitwuzla)
+    echo "Installing GMP 6.3.0 from source..." &&
+    ORIGINAL_DIR="$PWD" &&
+    cd /tmp &&
+
+    URLS="https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz \
+        https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz \
+        https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz \
+    "
+
+    for url in $URLS; do
+        echo "Trying $url ..."
+        if wget -q --show-progress "$url"; then
+            SUCCESS=1
+            break
+        fi
+    done &&
+
+    [ "$SUCCESS" -eq 1 ] || { echo "ERROR: Failed to download GMP"; exit 1; } &&
+
+    tar -xf gmp-6.3.0.tar.xz &&
+    cd gmp-6.3.0 &&
+    ./configure --prefix=/usr/local --enable-cxx --enable-static &&
+    make -j"$(nproc)" &&
+    sudo make install &&
+    sudo ldconfig &&
+    echo "GMP 6.3.0 installed successfully" &&
+    cd "$ORIGINAL_DIR" &&
+
     echo "Installing Python dependencies" &&
-    pip3 install --user meson ast2json &&
+    pip3 install --user meson ast2json mypy &&
     pip3 install --user pyparsing toml &&
     pip3 install --user pyparsing tomli &&
     meson --version &&
 
+    # Set environment variables for cmake to find the new GMP
+    export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH" &&
+    export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH" &&
+    export CMAKE_PREFIX_PATH="/usr/local:$CMAKE_PREFIX_PATH" &&
+
+    # Verify GMP installation
+    echo "Verifying GMP installation..." &&
+    pkg-config --modversion gmp || echo "Warning: GMP not found in pkg-config" &&
+    ls -la /usr/local/lib/libgmp* || echo "Warning: GMP libraries not found" &&
+
     BASE_ARGS="$BASE_ARGS \
-        -DENABLE_OLD_FRONTEND=Off \
         -DBUILD_STATIC=$STATIC \
     " &&
     SOLVER_FLAGS="$SOLVER_FLAGS \
@@ -106,17 +144,45 @@ macos_setup () {
         error "static macOS build is currently not supported"
     fi
     brew install \
-        z3 gmp csmith cmake boost ninja python3 automake bison flex \
+        z3 gmp csmith boost ninja python@3.12 automake bison flex \
         llvm@$CLANG_VERSION &&
-    BASE_ARGS="\
+    echo "Installing Python dependencies" &&
+    # Use Python 3.12 for compatibility (Python 3.14 removed ast.Str/ast.Num)
+    # Always use Python 3.12 on macOS (fixed version for CI compatibility)
+    PYTHON312_PATH=$(brew --prefix python@3.12)/bin/python3.12
+    export Python3_EXECUTABLE=$PYTHON312_PATH
+    PYTHON312_BIN=$(brew --prefix python@3.12)/bin
+    # Create python3 symlink to python3.12 in Python 3.12 bin directory (for ESBMC)
+    if [ ! -f "$PYTHON312_BIN/python3" ]; then
+        ln -sf python3.12 "$PYTHON312_BIN/python3"
+    fi
+    # Add Python 3.12 to PATH so that 'python3' command finds Python 3.12 (for ESBMC)
+    export PATH="$PYTHON312_BIN:$PATH"
+    # If virtual environment is available, use it for pip install; otherwise use system Python 3.12
+    if [ -n "$VIRTUAL_ENV" ]; then
+        pip install meson ast2json mypy pyparsing toml tomli jira
+    else
+        $PYTHON312_PATH -m pip install --user --break-system-packages meson ast2json mypy pyparsing toml tomli jira
+        # Add user Python bin directory to PATH for meson and other tools
+        export PATH="$HOME/Library/Python/3.12/bin:$PATH"
+    fi &&
+    meson --version &&
+    BASE_ARGS="$BASE_ARGS \
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
         -DCMAKE_BUILD_TYPE=Debug \
-        -GNinja \
         -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release \
+        -DPython3_EXECUTABLE=$Python3_EXECUTABLE \
     " &&
-    SOLVER_FLAGS=""
+    # macOS: Use Z3 solver (installed via brew)
+    SOLVER_FLAGS="\
+        -DENABLE_Z3=On \
+        -DZ3_DIR=$(brew --prefix z3) \
+        -DENABLE_BOOLECTOR=Off \
+        -DENABLE_BITWUZLA=Off \
+        -DENABLE_GOTO_CONTRACTOR=Off \
+    "
 }
 
 macos_post_setup () {
@@ -138,6 +204,7 @@ usage() {
     echo "  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [11]"
     echo "  -C         build an SV-COMP version [disabled]"
     echo "  -B ON|OFF  enable/disable esbmc bundled libc [ON]"
+    echo "  -x ON|OFF  enable/disable esbmc cheri [OFF]"
     echo
     echo "This script prepares the environment, downloads dependencies, configures"
     echo "the ESBMC build and runs the commands to compile and install ESBMC into"
@@ -149,7 +216,7 @@ usage() {
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts hb:s:e:r:dS:c:CB: flag
+while getopts hb:s:e:r:dS:c:CB:x flag
 do
     case "${flag}" in
     h) usage; exit 0 ;;
@@ -164,14 +231,15 @@ do
     C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
        SOLVER_FLAGS="\
           -DENABLE_BOOLECTOR=On \
-          -DENABLE_YICES=ON \
+          -DENABLE_YICES=On \
           -DENABLE_CVC4=OFF \
           -DENABLE_BITWUZLA=On \
           -DENABLE_Z3=On \
           -DENABLE_MATHSAT=ON \
-          -DENABLE_GOTO_CONTRACTOR=On \
+          -DENABLE_GOTO_CONTRACTOR=OFF \
           -DACADEMIC_BUILD=ON"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
+    x) BASE_ARGS="$BASE_ARGS -DESBMC_CHERI=ON" ;;
     *) exit 1 ;;
     esac
 done
@@ -197,11 +265,12 @@ case $OS in
   *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
 esac || exit $?
 
+
 # Configure ESBMC
 printf "Running CMake:"
 printf " '%s'" $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS
 echo
-$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS &&
+$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
 # Compile ESBMC
 cmake --build . && ninja install || exit $?
 

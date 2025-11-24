@@ -7,7 +7,6 @@
 #include <util/guard.h>
 #include <util/i2string.h>
 #include <util/location.h>
-#include <util/simplify_expr.h>
 #include <util/mp_arith.h>
 
 class goto_checkt
@@ -65,6 +64,11 @@ protected:
     const locationt &loc);
 
   void float_overflow_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
+  void cast_overflow_check(
     const expr2tc &expr,
     const guardt &guard,
     const locationt &loc);
@@ -216,6 +220,33 @@ void goto_checkt::float_overflow_check(
   }
 }
 
+void goto_checkt::cast_overflow_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
+{
+  if (
+    !options.get_bool_option("int-encoding") ||
+    (!enable_overflow_check && !enable_unsigned_overflow_check))
+    return;
+
+  // First, check type.
+  const type2tc &resolved_type = ns.follow(expr->type);
+  if (!is_signedbv_type(resolved_type) && !is_unsignedbv_type(resolved_type))
+    return;
+
+  // Create cast overflow check expression
+  expr2tc cast_overflow = overflow_cast2tc(expr, resolved_type->get_width());
+  make_not(cast_overflow);
+
+  add_guarded_claim(
+    cast_overflow,
+    std::string("Cast arithmetic overflow on ") + get_expr_id(expr),
+    "overflow",
+    loc,
+    guard);
+}
+
 void goto_checkt::overflow_check(
   const expr2tc &expr,
   const guardt &guard,
@@ -365,10 +396,16 @@ void goto_checkt::input_overflow_check(
     arg_names.push_back(arg_name);
   }
 
-  if (limits.size() != arg_names.size())
+  if (limits.size() > arg_names.size())
   {
-    log_error("the format specifiers do not match with the arguments");
+    log_error("too few arguments for format specifiers");
     return;
+  }
+  else if (limits.size() < arg_names.size())
+  {
+    log_debug(
+      "scanf", "extra arguments provided beyond format specifiers (ignored)");
+    arg_names.resize(limits.size());
   }
 
   // do checks
@@ -815,6 +852,12 @@ void goto_checkt::check_rec(
   case expr2t::mul_id:
   {
     overflow_check(expr, guard, loc);
+    break;
+  }
+
+  case expr2t::typecast_id:
+  {
+    cast_overflow_check(expr, guard, loc);
     break;
   }
 

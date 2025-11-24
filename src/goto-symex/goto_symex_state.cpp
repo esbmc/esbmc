@@ -20,6 +20,7 @@ goto_symex_statet::goto_symex_statet(
   num_instructions = 0;
   thread_ended = false;
   guard.make_true();
+  has_loop_invariant = false;
 }
 
 goto_symex_statet::goto_symex_statet(
@@ -43,6 +44,8 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
+  pending_invariants = state.pending_invariants;
+  has_loop_invariant = state.has_loop_invariant;
   return *this;
 }
 
@@ -133,14 +136,61 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   // important benchmarks (i.e. TACAS) work better with some propagation
   if (is_with2t(expr))
   {
-    const with2t &with = to_with2t(expr);
-    // For now, we focus on propagating constants for structs only.
-    // TODO: enable other type will regress performance, need a TC
-    // to reproduce
     if (
-      is_symbol2t(with.source_value) && is_struct_type(with.source_value) &&
-      is_constant_expr(with.update_value))
-      return true;
+      config.options.get_bool_option("incremental-bmc") ||
+      config.options.get_bool_option("k-induction"))
+      // When this option is enabled, the constant propagation
+      // with feature will significantly impact performance.
+      // More importantly, the use of incremental-BMC / k-induction does not heavily
+      // rely on constants to determine the boundaries. Even if there is a known
+      // loop size, esbmc starts unwinding from min k
+      return false;
+
+    // Handle WITH chains for structs where all updates are constants
+    if (is_struct_type(expr->type))
+    {
+      // Check if this is a chain of WITHs with all constant updates
+      bool all_constant_updates = true;
+      expr2tc current = expr;
+
+      while (is_with2t(current))
+      {
+        const with2t &w = to_with2t(current);
+        if (!is_constant_expr(w.update_value))
+        {
+          all_constant_updates = false;
+          break;
+        }
+        current = w.source_value;
+      }
+
+      // If we reached a symbol and all updates were constants, propagate
+      if (all_constant_updates && !is_member2t(current))
+        return true;
+    }
+
+    // Handle WITH chains for structs where all updates are constants
+    if (is_array_type(expr->type))
+    {
+      // Check if this is a chain of WITHs with all constant updates
+      bool all_constant_updates = true;
+      expr2tc current = expr;
+
+      while (is_with2t(current))
+      {
+        const with2t &w = to_with2t(current);
+        if (!constant_propagation(w.update_value))
+        {
+          all_constant_updates = false;
+          break;
+        }
+        current = w.source_value;
+      }
+
+      // If we reached a symbol and all updates were constants, propagate
+      if (all_constant_updates)
+        return true;
+    }
 
     return false;
   }

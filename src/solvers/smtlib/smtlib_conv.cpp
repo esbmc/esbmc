@@ -160,18 +160,22 @@ smt_convt *create_new_smtlib_solver(
   return conv;
 }
 
-void smtlib_convt::dump_smt()
+std::string smtlib_convt::dump_smt()
 {
   auto path = config.options.get_option("output");
-  if (path != "")
+  if (path.empty() || path == "-")
   {
     assert(emit_opt_output);
     emit_opt_output.emit("%s\n", "(check-sat)");
-    if (path == "-")
-      log_status("SMT formula written to standard output");
-    else
-      log_status("SMT formula written to output file {}", path);
+    log_status("SMT formula written to standard output");
   }
+  else
+  {
+    assert(emit_opt_output);
+    emit_opt_output.emit("%s\n", "(check-sat)");
+    log_status("SMT formula written to output file {}", path);
+  }
+  return "SMT formula dumped successfully";
 }
 
 smtlib_convt::file_emitter::file_emitter(const std::string &path)

@@ -70,18 +70,37 @@ bool clang_c_maint::clang_main()
     // if user provided class/contract name
     if (!config.cname.empty() && !config.main.empty())
     {
-      const std::string fmt = "@" + config.cname + "@F@" + main;
-      if (it->second.as_string().find(fmt) == std::string::npos)
-        continue;
+      // Allow user to provide a range. e.g.
+      // --class "A B" --function test
+      // --contract "Base Derieve" --function _ESBMC_main
+      // yet only the first matched one will get verified
+      std::istringstream iss(config.cname);
+      std::string tgt_cname;
+      bool is_found_sym = false;
+      while (iss >> tgt_cname)
+      {
+        const std::string fmt = "@" + tgt_cname + "@F@" + main;
+        if (it->second.as_string().find(fmt) != std::string::npos)
+        {
+          is_found_sym = true;
+          break;
+        }
+      }
+      if (is_found_sym)
+      {
+        symbolt *s = context.find_symbol(it->second);
+        if (s != nullptr && s->type.is_code())
+          matches.push_back(it->second);
+        break; // prevent ambiguous
+      }
     }
-    // look it up
-    symbolt *s = context.find_symbol(it->second);
-
-    if (s == nullptr)
-      continue;
-
-    if (s->type.is_code())
-      matches.push_back(it->second);
+    else
+    {
+      // look it up
+      symbolt *s = context.find_symbol(it->second);
+      if (s != nullptr && s->type.is_code())
+        matches.push_back(it->second);
+    }
   }
 
   if (matches.empty())
@@ -149,11 +168,6 @@ bool clang_c_maint::clang_main()
       mult.copy_to_operands(
         add, char_pointer_size); // (argc + 1) * sizeof(char *)
 
-      // Adjust __ESBMC_alloc_size as argv is handled as dynamic array
-      exprt dynamic_size("dynamic_size", size_type());
-      dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
-      init_code.copy_to_operands(code_assignt(dynamic_size, mult));
-
       // assume argc is at least one
       exprt ge(">=", bool_type());
       ge.copy_to_operands(symbol_expr(argc_symbol), one);
@@ -180,22 +194,27 @@ bool clang_c_maint::clang_main()
 
       init_code.copy_to_operands(code_assumet(le));
 
-      // assign argv[argc] to NULL
+      // assign argv = { NULL };
+      // Adjust __ESBMC_alloc_size as argv is handled as dynamic array
+      exprt dynamic_size("dynamic_size", size_type());
+      dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
+      init_code.copy_to_operands(code_assignt(dynamic_size, mult));
+
       constant_exprt null(
         irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
 
-      exprt index_expr("index", argv_symbol.type.subtype());
+      // Define an array type
+      array_typet argv_type(argv_symbol.type.subtype(), dynamic_size);
 
-      index_exprt argv_index(
-        symbol_expr(argv_symbol),
-        symbol_expr(argc_symbol),
-        argv_symbol.type.subtype());
+      // Create an array filled with NULL (no explicit size)
+      array_of_exprt null_array(null, argv_type);
 
+      // Assign the initialized array to argv_symbol
       // disable bounds check on that one
-      // Logic to perform this ^ moved into goto_check, rather than load
-      // irep2 with additional baggage.
-
-      init_code.copy_to_operands(code_assignt(argv_index, null));
+      // Logic to perform this ^ moved into goto_check and dereference,
+      // rather than load irep2 with additional baggage.
+      init_code.copy_to_operands(
+        code_assignt(symbol_expr(argv_symbol), null_array));
 
       exprt::operandst &operands = call.arguments();
 

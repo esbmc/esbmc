@@ -39,8 +39,18 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
         if (node["returns"].is_null())
           continue;
 
-        if (node["returns"]["_type"] == "Subscript")
+        // Handle PEP 604 union syntax: int | bool
+        if (node["returns"]["_type"] == "BinOp")
+          f.return_type_ = "Union";
+        else if (node["returns"]["_type"] == "Subscript")
           f.return_type_ = node["returns"]["value"]["id"];
+        else if (node["returns"]["_type"] == "Tuple")
+          f.return_type_ = "Tuple";
+        else if (
+          node["returns"]["_type"] == "Constant" ||
+          node["returns"]["_type"] == "Str")
+          // Handle string annotations like -> "int" (legacy forward references)
+          f.return_type_ = node["returns"]["value"];
         else if (
           node["returns"].contains("value") &&
           node["returns"]["value"].is_null())
@@ -62,7 +72,6 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
   }
   catch (const std::exception &e)
   {
-    log_error("Unknown error: {}", e.what());
     return nullptr;
   }
 }

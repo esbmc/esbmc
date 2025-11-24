@@ -29,3 +29,23 @@ assert result_9 == -5
 
 result_10 = np.subtract(3.2, 0)
 assert result_10 == 3.2
+
+result_11 = np.subtract(4.0, 1.0)
+assert result_11 == 3.0
+
+result_12 = np.subtract(1.0, 4.0)
+assert result_12 == -3.0
+
+result_13 = np.subtract(5,3)
+assert result_13 == 2
+
+result_14 = np.subtract([3,4],[1,3])
+assert result_14[0] == 2
+assert result_14[1] == 1
+
+e = np.array([5,4])
+f = np.array([2,2])
+result_15 = np.subtract(e, f)
+
+assert result_15[0] == 3
+assert result_15[1] == 2

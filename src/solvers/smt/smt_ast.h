@@ -16,9 +16,9 @@ class smt_convt;
  *
  *  While an expression becomes an smt_ast, the inverse is not true, and a
  *  single expression may in fact become many smt_asts in various places. See
- *  smt_convt for more detail on how conversion occurs.
+ *  smt_convt for more details on how conversion occurs.
  *
- *  The function arguments, and the actual function application itself are all
+ *  The function arguments and the actual function application itself are all
  *  abstract and dealt with by the solver converter class. Only the sort needs
  *  to be available for us to make conversion decisions.
  *  @see smt_convt
@@ -58,7 +58,7 @@ public:
    *  @return AST representing the assigned symbol */
   virtual void assign(smt_convt *ctx, smt_astt sym) const;
 
-  /** Abstractly produce an "update", i.e. an array 'with' or tuple 'with'.
+  /** Abstractly produce an "update", i.e., an array 'with' or tuple 'with'.
    *  @param ctx SMT context to make this update in.
    *  @param value Value to insert into the updated field
    *  @param idx Array index or tuple field

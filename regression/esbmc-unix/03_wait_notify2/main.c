@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include <global_vars.h>
+#include <assert.h>
 
 #include <ecsc.h>
 

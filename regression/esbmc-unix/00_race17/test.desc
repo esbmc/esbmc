@@ -1,4 +1,0 @@
-CORE
-main.c
---data-races-check --atomicity-check --context-bound 2
-^VERIFICATION FAILED$

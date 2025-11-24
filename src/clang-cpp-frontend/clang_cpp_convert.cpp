@@ -25,6 +25,7 @@ CC_DIAGNOSTIC_POP()
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/c_types.h>
+#include <util/string_constant.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -271,8 +272,13 @@ bool clang_cpp_convertert::get_type(
       return true;
 
     typet class_type;
+#if CLANG_VERSION_MAJOR >= 21
+    if (get_type(*mpt.getQualifier()->getAsType(), class_type))
+      return true;
+#else
     if (get_type(*mpt.getClass(), class_type))
       return true;
+#endif
 
     new_type = gen_pointer_type(sub_type);
     new_type.set("to-member", class_type);
@@ -661,17 +667,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
-  case clang::Stmt::ExprWithCleanupsClass:
-  {
-    const clang::ExprWithCleanups &ewc =
-      static_cast<const clang::ExprWithCleanups &>(stmt);
-
-    if (get_expr(*ewc.getSubExpr(), new_expr))
-      return true;
-
-    break;
-  }
-
   case clang::Stmt::CXXBindTemporaryExprClass:
   {
     const clang::CXXBindTemporaryExpr &cxxbtmp =
@@ -987,8 +982,43 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXTypeidExpr &cxxtid =
       static_cast<const clang::CXXTypeidExpr &>(stmt);
 
-    if (get_expr(*cxxtid.getExprOperand(), new_expr))
+    std::string type_name;
+    if (cxxtid.isTypeOperand())
+    {
+      const clang::QualType qtype = cxxtid.getTypeOperand(*ASTContext);
+      type_name = qtype.getAsString();
+    }
+    else
+    {
+      const clang::QualType qtype = cxxtid.getExprOperand()->getType();
+      if (!cxxtid.isMostDerived(*ASTContext) && qtype->getAsCXXRecordDecl())
+        log_warning("Typeid for polymorphism is not implemented");
+      type_name = qtype.getAsString();
+    }
+
+    exprt size = constant_exprt(
+      integer2binary(type_name.size(), bv_width(size_type())),
+      integer2string(type_name.size()),
+      size_type());
+
+    typet arr = array_typet(char_type(), size);
+    string_constantt string_name(type_name, arr, string_constantt::k_default);
+
+    typet t;
+    if (get_type(cxxtid.getType(), t))
       return true;
+
+    // In the front-end implementation, constant struct is constructed and
+    // assigned to the temporary object
+    // tmp = { .__name=&"int"[0], .std::type_info@vtable_pointer=0 }
+    // const std::type_info& = &tmp
+    // Front end can't account for polymorphism
+    exprt sym("struct", t);
+    sym.copy_to_operands(address_of_exprt(string_name));
+    sym.copy_to_operands(gen_zero(pointer_type()));
+    make_temporary(sym);
+
+    new_expr = sym;
 
     break;
   }

@@ -1,0 +1,4 @@
+THOROUGH
+contract.solast
+--k-induction --no-standard-checks --unbound --sol contract.sol  
+^VERIFICATION FAILED$
