@@ -5,7 +5,7 @@ def test_nondet_list_in_conditional():
     x.append(a)
     x.append(b)
 
-    result = []  # Initialize result as a list
+    result = []
 
     if len(x) == 0:
         result.append(False)
@@ -14,9 +14,9 @@ def test_nondet_list_in_conditional():
 
     y = nondet_bool()
     x.append(y)
-    x.append(y)  # Append the new value to result
+    x.append(y)
 
-    assert x[len(x)-1] == y  # This now correctly checks the last item in result
+    assert x[len(x)-1] == y
 
 test_nondet_list_in_conditional()
 
