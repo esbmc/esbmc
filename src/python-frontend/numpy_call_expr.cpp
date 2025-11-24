@@ -32,7 +32,8 @@ static numeric_value make_float_value(double value)
 
 static double to_double(const numeric_value &value)
 {
-  return value.is_int ? static_cast<double>(value.int_value) : value.double_value;
+  return value.is_int ? static_cast<double>(value.int_value)
+                      : value.double_value;
 }
 
 static numeric_value extract_value(const nlohmann::json &arg)
@@ -312,8 +313,7 @@ exprt numpy_call_expr::create_expr_from_call()
   nlohmann::json expr;
 
   // Resolve variables if they are names
-  auto resolve_var = [this](nlohmann::json &var)
-  {
+  auto resolve_var = [this](nlohmann::json &var) {
     if (var["_type"] == "Name")
     {
       var = json_utils::find_var_decl(
@@ -650,8 +650,7 @@ exprt numpy_call_expr::get()
   // Handle math function calls
   if (is_math_function())
   {
-    auto is_scalar_node = [](const nlohmann::json &node)
-    {
+    auto is_scalar_node = [](const nlohmann::json &node) {
       const std::string type = node["_type"];
       return type == "Constant" || type == "UnaryOp";
     };
