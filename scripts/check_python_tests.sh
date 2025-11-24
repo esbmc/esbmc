@@ -82,6 +82,7 @@ ignored_dirs=(
   "while-random-fail"
   "while-random-fail2"
   "while-random-fail3"
+  "github_3181_fail"
 )
 
 for dir in */; do
