@@ -230,8 +230,36 @@ exprt python_list::build_push_list_call(
   }
   else
   {
-    // For all other types, we must pass address of the value
-    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+    // For bool types, cast to signed long int before taking address
+    // This ensures proper storage and retrieval
+    if (elem_info.elem_symbol->type == bool_type())
+    {
+      symbolt &bool_as_long = converter_.create_tmp_symbol(
+        op,
+        "$bool_as_long$",
+        signedbv_typet(config.ansi_c.long_int_width),
+        exprt());
+
+      typecast_exprt bool_cast(
+        symbol_expr(*elem_info.elem_symbol),
+        signedbv_typet(config.ansi_c.long_int_width));
+
+      code_declt bool_long_decl(symbol_expr(bool_as_long));
+      bool_long_decl.copy_to_operands(bool_cast);
+      bool_long_decl.location() = elem_info.location;
+      converter_.add_instruction(bool_long_decl);
+
+      element_arg = address_of_exprt(symbol_expr(bool_as_long));
+
+      // Update elem_size to match
+      elem_info.elem_size =
+        from_integer(BigInt(config.ansi_c.long_int_width / 8), size_type());
+    }
+    else
+    {
+      // For all other types, we must pass address of the value
+      element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+    }
   }
 
   push_func_call.arguments().push_back(element_arg); // element or &element
