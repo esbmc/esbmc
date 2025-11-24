@@ -20,8 +20,7 @@ from typing import Any
 _DEFAULT_NONDET_LIST_SIZE: int = 8
 
 
-def nondet_list(max_size: int = _DEFAULT_NONDET_LIST_SIZE,
-                nondet_type: Any = None) -> list:
+def nondet_list(max_size: int = _DEFAULT_NONDET_LIST_SIZE, nondet_type: Any = None) -> list:
     """
     Return a non-deterministic list with specified element type.
     
