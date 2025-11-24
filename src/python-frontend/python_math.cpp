@@ -136,7 +136,8 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     return handle_power_symbolic(lhs, rhs);
 
   // Helper lambda to check if expression is a math expression
-  auto is_math_expr = [](const exprt &expr) {
+  auto is_math_expr = [](const exprt &expr)
+  {
     const std::string &id = expr.id().as_string();
     return id == "+" || id == "-" || id == "*" || id == "/";
   };
@@ -191,13 +192,13 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     return from_integer(1, lhs.type());
   }
 
-  // Handle negative exponents more gracefully
+  // Handle negative exponents via pow() to preserve semantics
   if (exponent < 0)
   {
     log_warning(
-      "ESBMC-Python does not support power expressions with negative "
-      "exponents, treating as symbolic");
-    return from_integer(1, lhs.type());
+      "Handling negative exponents via pow() and returning a floating-point "
+      "value");
+    return handle_power_symbolic(lhs, rhs);
   }
 
   // Handle special cases first
@@ -319,7 +320,8 @@ void python_math::handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr)
 {
   const typet float_type = double_type();
 
-  auto promote_to_float = [&](exprt &e) {
+  auto promote_to_float = [&](exprt &e)
+  {
     const typet &t = e.type();
     const bool is_integer = type_utils::is_integer_type(t);
 
