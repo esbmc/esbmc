@@ -4521,6 +4521,12 @@ typet python_converter::get_type_from_annotation(
        annotation_node["value"]["id"] == "List"))
       return type_handler_.get_list_type();
 
+    if (
+      annotation_node.contains("value") &&
+      (annotation_node["value"]["id"] == "dict" ||
+       annotation_node["value"]["id"] == "Dict"))
+      return dict_handler_->get_dict_struct_type();
+
     // Handle Literal[T]: extract the type from the literal value
     if (
       annotation_node.contains("value") &&
