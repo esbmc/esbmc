@@ -4805,7 +4805,19 @@ typet python_converter::get_type_from_annotation(
     annotation_node["_type"] == "Attribute" && annotation_node.contains("attr"))
     return type_handler_.get_typet(annotation_node["attr"].get<std::string>());
   else if (annotation_node.contains("id"))
-    return type_handler_.get_typet(annotation_node["id"].get<std::string>());
+  {
+    std::string type_id = annotation_node["id"].get<std::string>();
+
+    // Special handling for dict type
+    if (type_id == "dict" || type_id == "Dict")
+      return dict_handler_->get_dict_struct_type();
+
+    // Special handling for list type
+    if (type_id == "list" || type_id == "List")
+      return type_handler_.get_list_type();
+
+    return type_handler_.get_typet(type_id);
+  }
   else
   {
     throw std::runtime_error(

@@ -143,6 +143,28 @@ PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
   return &l->items[index];
 }
 
+bool __ESBMC_list_set_at(
+  PyListObject *l,
+  size_t index,
+  const void *value,
+  size_t type_id,
+  size_t type_size)
+{
+  __ESBMC_assert(l != NULL, "list_set_at: list is null");
+  __ESBMC_assert(index < l->size, "list_set_at: index out of bounds");
+
+  // Make a copy of the new value
+  void *copied_value = __ESBMC_alloca(type_size);
+  memcpy(copied_value, value, type_size);
+
+  // Update the element at the given index
+  l->items[index].value = copied_value;
+  l->items[index].type_id = type_id;
+  l->items[index].size = type_size;
+
+  return true;
+}
+
 bool __ESBMC_list_insert(
   PyListObject *l,
   size_t index,
