@@ -83,7 +83,8 @@ goto_symext::goto_symext(
         if (func_name.substr(0, 3) != "c:@")
           func_name = "c:@" + func_name;
 
-        unsigned loop_index = atoi(val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
+        unsigned loop_index = atoi(
+          val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
         BigInt uw(val.substr(second_colon + 1).c_str());
         unwind_func_set[std::make_pair(func_name, loop_index)] = uw;
       }
