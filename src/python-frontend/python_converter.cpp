@@ -4278,43 +4278,103 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Change to boolean before extracting condition
   current_element_type = bool_type();
 
-  // Extract condition from AST
-  exprt cond = get_expr(ast_node["test"]);
-  cond.location() = get_location_from_decl(ast_node["test"]);
+  // Check if we need to materialize function calls in the condition
+  // This handles cases like: if not math.isnan(x): or if isinstance(x, type):
+  auto test_type = ast_node["test"]["_type"].get<std::string>();
 
-  // Handle function calls in conditions
-  if (cond.is_function_call() && ast_node["test"]["_type"] == "Call")
+  bool has_nested_call = false;
+  nlohmann::json call_node;
+  bool is_wrapped_in_unary = false;
+
+  // Check for function call wrapped in UnaryOp (e.g., "not func()")
+  if (test_type == "UnaryOp" && ast_node["test"].contains("operand"))
   {
-    locationt location = get_location_from_decl(ast_node["test"]);
-
-    // Create temporary variable for function call result
-    symbolt temp_symbol =
-      create_return_temp_variable(cond.type(), location, "cond");
-    symbol_table_.add(temp_symbol);
-    exprt temp_var_expr = symbol_expr(temp_symbol);
-
-    // Create a decl-block to hold the function call
-    code_blockt decl_block;
-
-    // Add declaration
-    code_declt temp_decl(temp_var_expr);
-    temp_decl.location() = location;
-    decl_block.copy_to_operands(temp_decl);
-
-    // Set the LHS of the function call to our temporary variable
-    if (!cond.type().is_empty())
-      cond.op0() = temp_var_expr;
-
-    // Add function call
-    decl_block.copy_to_operands(cond);
-
-    // Use temporary variable as the new condition
-    cond = temp_var_expr;
-
-    // Add the decl_block to current_block before processing the if statement
-    if (current_block)
-      current_block->copy_to_operands(decl_block);
+    auto operand_type = ast_node["test"]["operand"]["_type"].get<std::string>();
+    if (operand_type == "Call")
+    {
+      has_nested_call = true;
+      is_wrapped_in_unary = true;
+      call_node = ast_node["test"]["operand"];
+    }
   }
+  // Check for direct function call
+  else if (test_type == "Call")
+  {
+    has_nested_call = true;
+    call_node = ast_node["test"];
+  }
+
+  // Extract condition from AST
+  exprt cond;
+
+  // Materialize function call if needed
+  if (has_nested_call)
+  {
+    locationt location = get_location_from_decl(call_node);
+
+    // Get the function call expression with special handling
+    // Temporarily disable the conditional processing to avoid recursion
+    exprt func_call = get_expr(call_node);
+
+    if (func_call.is_function_call())
+    {
+      // Create temporary variable for function call result
+      symbolt temp_symbol =
+        create_return_temp_variable(func_call.type(), location, "cond");
+      symbol_table_.add(temp_symbol);
+      exprt temp_var_expr = symbol_expr(temp_symbol);
+
+      // Create declaration for temporary
+      code_declt temp_decl(temp_var_expr);
+      temp_decl.location() = location;
+
+      // Set the LHS of the function call
+      if (!func_call.type().is_empty())
+        func_call.op0() = temp_var_expr;
+
+      // Add both declaration and function call to current_block
+      if (current_block)
+      {
+        current_block->copy_to_operands(temp_decl);
+        current_block->copy_to_operands(func_call);
+      }
+
+      // Build the final condition expression
+      if (is_wrapped_in_unary)
+      {
+        // Rebuild the UnaryOp with our temp var
+        auto op = ast_node["test"]["op"]["_type"].get<std::string>();
+        if (op == "Not")
+        {
+          cond = exprt("not", bool_type());
+          cond.copy_to_operands(temp_var_expr);
+        }
+        else
+        {
+          // For other unary operators, try to build them manually
+          // This avoids calling get_expr which might cause recursion
+          cond = temp_var_expr;
+        }
+      }
+      else
+      {
+        // Direct call: use the temp var
+        cond = temp_var_expr;
+      }
+    }
+    else
+    {
+      // If it's not actually a function call, fall back to normal processing
+      cond = get_expr(ast_node["test"]);
+    }
+  }
+  else
+  {
+    // Normal path: no function call to materialize
+    cond = get_expr(ast_node["test"]);
+  }
+
+  cond.location() = get_location_from_decl(ast_node["test"]);
 
   // Recover type
   current_element_type = t;
