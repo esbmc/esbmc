@@ -442,6 +442,14 @@ bool goto_symext::get_unwind(
   unsigned id = source.pc->loop_number;
   BigInt this_loop_max_unwind = max_unwind;
 
+  // Check if there's a function-specific unwind bound, this
+  // done before the loop unwindset loop IDs as they take
+  // precedence.
+  std::string func_name = source.pc->function.as_string();
+  if (unwind_func_set.count(func_name) != 0)
+    this_loop_max_unwind = unwind_func_set[func_name];
+
+  // Loop-specific bound overrides function-specific bound
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
 

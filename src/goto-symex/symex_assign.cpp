@@ -60,6 +60,26 @@ goto_symext::goto_symext(
     idx = next;
   }
 
+  // Parse --unwindsetname option (function_name:bound,...)
+  const std::string &func_set = options.get_option("unwindsetname");
+  unsigned int func_length = func_set.length();
+
+  for (unsigned int idx = 0; idx < func_length; idx++)
+  {
+    std::string::size_type next = func_set.find(",", idx);
+    std::string val = func_set.substr(idx, next - idx);
+    std::string::size_type colon_pos = val.find(":");
+    if (colon_pos != std::string::npos)
+    {
+      std::string func_name = val.substr(0, colon_pos);
+      BigInt uw(val.substr(colon_pos + 1).c_str());
+      unwind_func_set[func_name] = uw;
+    }
+    if (next == std::string::npos)
+      break;
+    idx = next;
+  }
+
   art1 = nullptr;
 
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
@@ -87,6 +107,7 @@ goto_symext::goto_symext(const goto_symext &sym)
 goto_symext &goto_symext::operator=(const goto_symext &sym)
 {
   unwind_set = sym.unwind_set;
+  unwind_func_set = sym.unwind_func_set;
   max_unwind = sym.max_unwind;
   constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;

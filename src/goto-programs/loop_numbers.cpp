@@ -5,7 +5,9 @@
 #include <util/xml.h>
 #include <util/xml_irep.h>
 
-void show_loop_numbers(const goto_programt &goto_program)
+void show_loop_numbers(
+  const goto_programt &goto_program,
+  const std::string &function_name)
 {
   for (const auto &instruction : goto_program.instructions)
   {
@@ -13,7 +15,12 @@ void show_loop_numbers(const goto_programt &goto_program)
     {
       unsigned loop_id = instruction.loop_number;
 
-      log_status("goto-loop Loop {}:\n {}\n", loop_id, instruction.location);
+      log_status(
+        "goto-loop Loop {} ({}:{}):\n {}\n",
+        loop_id,
+        function_name,
+        loop_id,
+        instruction.location);
     }
   }
 }
@@ -21,5 +28,5 @@ void show_loop_numbers(const goto_programt &goto_program)
 void show_loop_numbers(const goto_functionst &goto_functions)
 {
   for (const auto &it : goto_functions.function_map)
-    show_loop_numbers(it.second.body);
+    show_loop_numbers(it.second.body, it.first.as_string());
 }
