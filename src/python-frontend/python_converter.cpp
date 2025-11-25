@@ -5948,6 +5948,38 @@ void python_converter::convert()
       init_code.copy_to_operands(all_imports_block);
   }
 
+  // Create python_init function for initialization code (hidden from coverage)
+  if (!init_code.operands().empty())
+  {
+    code_typet init_type;
+    init_type.return_type() = empty_typet();
+
+    symbolt init_symbol;
+    init_symbol.id = "python_init";
+    init_symbol.name = "python_init";
+    init_symbol.type = init_type;
+    init_symbol.lvalue = true;
+    init_symbol.is_extern = false;
+    init_symbol.file_local = false;
+    init_symbol.location = get_location_from_decl(*ast_json);
+
+    // Add __ESBMC_HIDE label to hide from coverage
+    code_labelt esbmc_hide;
+    esbmc_hide.set_label("__ESBMC_HIDE");
+    esbmc_hide.code() = code_skipt();
+
+    code_blockt init_body;
+    init_body.copy_to_operands(esbmc_hide);
+    init_body.copy_to_operands(init_code);
+    init_symbol.value.swap(init_body);
+
+    if (symbol_table_.move(init_symbol))
+    {
+      throw std::runtime_error(
+        "The python_init function is already defined");
+    }
+  }
+
   // Create python_user_main function containing only user code
   code_typet user_main_type;
   user_main_type.return_type() = empty_typet();
@@ -5966,6 +5998,13 @@ void python_converter::convert()
   {
     throw std::runtime_error(
       "The python_user_main function is already defined");
+  }
+
+  // Get the moved symbol from symbol table for later use
+  const symbolt *user_main_sym = symbol_table_.find_symbol("python_user_main");
+  if (!user_main_sym)
+  {
+    throw std::runtime_error("python_user_main symbol not found after move");
   }
 
   // Create __ESBMC_main that initializes and calls user code
@@ -5994,13 +6033,21 @@ void python_converter::convert()
       }
     });
 
-  // 2. Add initialization code (intrinsics and imports)
+  // 2. Call python_init (if exists) for initialization
   if (!init_code.operands().empty())
-    main_body.copy_to_operands(init_code);
+  {
+    const symbolt *init_sym = symbol_table_.find_symbol("python_init");
+    if (init_sym)
+    {
+      code_function_callt init_call;
+      init_call.function() = symbol_expr(*init_sym);
+      main_body.copy_to_operands(init_call);
+    }
+  }
 
   // 3. Call python_user_main
   code_function_callt user_main_call;
-  user_main_call.function() = symbol_expr(user_main_symbol);
+  user_main_call.function() = symbol_expr(*user_main_sym);
   main_body.copy_to_operands(user_main_call);
 
   main_symbol.value.swap(main_body);
