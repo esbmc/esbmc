@@ -5725,10 +5725,6 @@ void python_converter::convert()
   main_symbol.lvalue = true;
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
-<<<<<<< HEAD
-=======
-  main_symbol.location = get_location_from_decl(*ast_json);
->>>>>>> a50970213 ([python] Fix Python ESBMC_main to match Solidity implementation)
 
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
