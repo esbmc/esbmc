@@ -5740,16 +5740,38 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         element["exc"]["func"]["id"].get<std::string>());
       locationt location = get_location_from_decl(element);
 
-      exprt arg = get_expr(element["exc"]["args"][0]);
-      arg = string_constantt(
-        string_handler_.process_format_spec(element["exc"]["args"][0]),
-        arg.type(),
-        string_constantt::k_default);
+      exprt raise;
+      if (type_utils::is_python_exceptions(
+            element["exc"]["func"]["id"].get<std::string>()))
+      {
+        // Construct a constant struct to throw:
+        // raise { .message=&"Error message" }
+        exprt arg = get_expr(element["exc"]["args"][0]);
+        arg = string_constantt(
+          string_handler_.process_format_spec(element["exc"]["args"][0]),
+          arg.type(),
+          string_constantt::k_default);
 
-      // Construct a constant struct to throw:
-      // raise { .message=&"Error message" }
-      exprt raise("struct", type);
-      raise.copy_to_operands(address_of_exprt(arg));
+        raise.id("struct");
+        raise.type() = type;
+        raise.copy_to_operands(address_of_exprt(arg));
+      }
+      else
+      {
+        // For custom exceptions:
+        // DECL MyException return_value;
+        // FUNCTION_CALL:  MyException(&return_value, &"message");
+        // Throw MyException return_value;
+        raise = get_expr(element["exc"]);
+        code_function_callt call =
+          to_code_function_call(convert_expression_to_code(raise));
+        side_effect_expr_function_callt tmp;
+        tmp.function() = call.function();
+        tmp.arguments() = call.arguments();
+        tmp.type() = type;
+        tmp.location() = location;
+        raise = tmp;
+      }
 
       exprt side = side_effect_exprt("cpp-throw", type);
       side.location() = location;
@@ -6296,7 +6318,27 @@ void python_converter::convert()
       init_code.copy_to_operands(all_imports_block);
   }
 
-  // Create python_init function for initialization code (hidden from coverage)
+  /*
+   * Create three-function architecture for coverage support (similar to Solidity Frontend):
+   *
+   * 1. python_init
+   *    - Contains models, intrinsics, and imports initialization
+   *    - Marked with __ESBMC_HIDE label to exclude from coverage statistics
+   *    - Only created if there is initialization code
+   *
+   * 2. python_user_main 
+   *    - Contains only user code from the main module
+   *    - This is what gets analyzed for branch/decision/assertion coverage
+   *
+   * 3. __ESBMC_main
+   *    - Entry point for ESBMC verification
+   *    - Initializes static lifetime variables
+   *    - Calls python_init() if it exists
+   *    - Calls python_user_main()
+   *
+   * This architecture ensures that coverage analysis only counts user code,
+   * not initialization/library code, making Python behave consistently with C.
+   */
   if (!init_code.operands().empty())
   {
     code_typet init_type;
@@ -6388,12 +6430,14 @@ void python_converter::convert()
 
   // 3. Call python_user_main
   const symbolt *user_main_sym = symbol_table_.find_symbol("python_user_main");
-  if (user_main_sym)
+  if (!user_main_sym)
   {
-    code_function_callt user_main_call;
-    user_main_call.function() = symbol_expr(*user_main_sym);
-    main_body.copy_to_operands(user_main_call);
+    throw std::runtime_error("python_user_main symbol not found after move");
   }
+
+  code_function_callt user_main_call;
+  user_main_call.function() = symbol_expr(*user_main_sym);
+  main_body.copy_to_operands(user_main_call);
 
   main_symbol.value.swap(main_body);
 
