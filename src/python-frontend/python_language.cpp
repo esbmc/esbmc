@@ -143,11 +143,9 @@ bool python_languaget::parse(const std::string &path)
   return false;
 }
 
-bool python_languaget::final(contextt &context)
+bool python_languaget::final(contextt &)
 {
-  // Let clang_c_main create __ESBMC_main that calls python_user_main
-  clang_c_maint c_main(context);
-  return c_main.clang_main();
+  return false;
 }
 
 bool python_languaget::typecheck(contextt &context, const std::string &)
