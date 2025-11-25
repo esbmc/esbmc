@@ -6,7 +6,6 @@
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/python_class_builder.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
@@ -70,8 +69,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Raise", StatementType::RAISE},
   {"Global", StatementType::GLOBAL},
   {"Try", StatementType::TRY},
-  {"ExceptHandler", StatementType::EXCEPTHANDLER},
-  {"Delete", StatementType::DELETE}};
+  {"ExceptHandler", StatementType::EXCEPTHANDLER}};
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -190,8 +188,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"Set", ExpressionType::LIST},
     {"Lambda", ExpressionType::FUNC_CALL},
     {"JoinedStr", ExpressionType::FSTRING},
-    {"Tuple", ExpressionType::TUPLE},
-    {"Dict", ExpressionType::LITERAL}};
+    {"Tuple", ExpressionType::TUPLE}};
 
   const auto &type = element["_type"];
   auto it = type_map.find(type);
@@ -1262,31 +1259,6 @@ exprt python_converter::handle_membership_operator(
   const nlohmann::json &element,
   bool invert)
 {
-  // Check if rhs is a dictionary (struct type with dict tag)
-  typet rhs_resolved_type = rhs.type();
-  if (rhs.is_symbol())
-  {
-    const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
-    if (sym)
-      rhs_resolved_type = sym->type;
-  }
-
-  if (rhs_resolved_type.id() == "symbol")
-    rhs_resolved_type = ns.follow(rhs_resolved_type);
-
-  if (rhs_resolved_type.is_struct())
-  {
-    const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
-    std::string tag = struct_type.tag().as_string();
-
-    if (
-      tag.find("dict_") != std::string::npos ||
-      tag.find("tag-dict") != std::string::npos)
-    {
-      return dict_handler_->handle_dict_membership(lhs, rhs, invert);
-    }
-  }
-
   typet list_type = type_handler_.get_list_type();
 
   // Handle set/list membership:
@@ -1351,83 +1323,9 @@ exprt python_converter::handle_string_type_mismatch(
   return nil_exprt(); // No action taken for other operators
 }
 
-void python_converter::resolve_dict_subscript_types(
-  const nlohmann::json &left,
-  const nlohmann::json &right,
-  exprt &lhs,
-  exprt &rhs)
-{
-  bool lhs_is_dict_subscript = type_utils::is_dict_subscript(left);
-  bool rhs_is_dict_subscript = type_utils::is_dict_subscript(right);
-
-  bool lhs_is_ptr = lhs.type().is_pointer();
-  bool rhs_is_ptr = rhs.type().is_pointer();
-
-  auto is_primitive_type = [](const typet &t) {
-    return t.is_signedbv() || t.is_unsignedbv() || t.is_bool() ||
-           t.is_floatbv();
-  };
-
-  bool lhs_is_primitive = is_primitive_type(lhs.type());
-  bool rhs_is_primitive = is_primitive_type(rhs.type());
-
-  // Case 1: LHS is dict subscript (returning pointer) and RHS is primitive
-  if (lhs_is_dict_subscript && lhs_is_ptr && rhs_is_primitive)
-  {
-    exprt dict_expr = get_expr(left["value"]);
-    if (
-      dict_expr.type().is_struct() &&
-      dict_handler_->is_dict_type(dict_expr.type()))
-    {
-      lhs = dict_handler_->handle_dict_subscript(
-        dict_expr, left["slice"], rhs.type());
-    }
-  }
-
-  // Case 2: RHS is dict subscript (returning pointer) and LHS is primitive
-  if (rhs_is_dict_subscript && rhs_is_ptr && lhs_is_primitive)
-  {
-    exprt dict_expr = get_expr(right["value"]);
-    if (
-      dict_expr.type().is_struct() &&
-      dict_handler_->is_dict_type(dict_expr.type()))
-    {
-      rhs = dict_handler_->handle_dict_subscript(
-        dict_expr, right["slice"], lhs.type());
-    }
-  }
-
-  // Case 3: Both sides are dict subscripts (returning pointers)
-  // Default to long_int_type for dict-to-dict comparisons
-  if (
-    lhs_is_dict_subscript && rhs_is_dict_subscript && lhs_is_ptr && rhs_is_ptr)
-  {
-    typet default_type = long_int_type();
-
-    exprt lhs_dict = get_expr(left["value"]);
-    if (
-      lhs_dict.type().is_struct() &&
-      dict_handler_->is_dict_type(lhs_dict.type()))
-    {
-      lhs = dict_handler_->handle_dict_subscript(
-        lhs_dict, left["slice"], default_type);
-    }
-
-    exprt rhs_dict = get_expr(right["value"]);
-    if (
-      rhs_dict.type().is_struct() &&
-      dict_handler_->is_dict_type(rhs_dict.type()))
-    {
-      rhs = dict_handler_->handle_dict_subscript(
-        rhs_dict, right["slice"], default_type);
-    }
-  }
-}
-
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  // Extract left and right operands from AST
-  auto left = element.contains("left") ? element["left"] : element["target"];
+  auto left = (element.contains("left")) ? element["left"] : element["target"];
 
   decltype(left) right;
   if (element.contains("right"))
@@ -1437,172 +1335,82 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("value"))
     right = element["value"];
 
-  // Convert operands to expressions
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
 
-  // Resolve dictionary subscript types for proper comparison
-  resolve_dict_subscript_types(left, right, lhs, rhs);
-
-  // Extract operator
   std::string op;
   if (element.contains("op"))
     op = element["op"]["_type"].get<std::string>();
   else if (element.contains("ops"))
     op = element["ops"][0]["_type"].get<std::string>();
+
   assert(!op.empty());
 
-  // Handle None comparisons (don't unwrap optionals for identity checks)
-  bool is_none_check = handle_none_check_setup(op, lhs, rhs);
+  // Don't unwrap for 'is' and 'is not' comparisons - they check the Optional itself
+  bool is_none_check = (op == "Is" || op == "IsNot") &&
+                       (lhs.type() == none_type() || rhs.type() == none_type());
+
+  // Also don't unwrap for == and != with None
+  if (!is_none_check && (op == "Eq" || op == "NotEq"))
+  {
+    bool lhs_is_none = (lhs.type() == none_type());
+    bool rhs_is_none = (rhs.type() == none_type());
+
+    if (lhs_is_none || rhs_is_none)
+      is_none_check = true;
+  }
+
   if (!is_none_check)
   {
     lhs = unwrap_optional_if_needed(lhs);
     rhs = unwrap_optional_if_needed(rhs);
   }
 
-  if (lhs.type() == none_type() || rhs.type() == none_type())
+  // Simplify comparison with NoneType
+  if ((lhs.type() == none_type()) || (rhs.type() == none_type()))
+  {
     return handle_none_comparison(op, lhs, rhs);
+  }
 
-  // Handle exceptions
+  // Was an exception thrown? It has nothing to do with the following part
   if (lhs.statement() == "cpp-throw")
     return lhs;
+
   if (rhs.statement() == "cpp-throw")
     return rhs;
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  // Handle membership operators
+  // Handle 'in' and 'not in' operators
   if (op == "In")
     return handle_membership_operator(lhs, rhs, element, false);
+
   if (op == "NotIn")
     return handle_membership_operator(lhs, rhs, element, true);
 
-  // Convert function calls to side effects
+  // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
   convert_function_calls_to_side_effects(lhs, rhs);
 
-  // Handle array/string operations
   if (lhs.type().is_array() || rhs.type().is_array())
   {
-    exprt result = handle_array_operations(op, lhs, rhs, left, right, element);
-    if (!result.is_nil())
-      return result;
+    // Check for zero-length arrays
+    if (
+      string_handler_.is_zero_length_array(lhs) &&
+      string_handler_.is_zero_length_array(rhs) &&
+      (op == "Eq" || op == "NotEq"))
+    {
+      return gen_boolean(op == "Eq");
+    }
+
+    // Handle string concatenation with type promotion
+    if (op == "Add")
+      return string_handler_.handle_string_concatenation_with_promotion(
+        lhs, rhs, left, right);
   }
 
   // Handle list operations
-  exprt list_result =
-    handle_list_operations(op, lhs, rhs, left, right, element);
-  if (!list_result.is_nil())
-    return list_result;
-
-  // Handle identity comparisons
-  if (op == "Is")
-    return get_binary_operator_expr_for_is(lhs, rhs);
-  if (op == "IsNot")
-    return get_negated_is_expr(lhs, rhs);
-
-  // Handle relational operation type mismatches
-  if (type_utils::is_relational_op(op))
-  {
-    exprt result = handle_relational_type_mismatches(op, lhs, rhs, element);
-    if (!result.is_nil())
-      return result;
-  }
-
-  // Handle string operations
-  exprt string_result =
-    handle_string_binary_operations(op, lhs, rhs, left, right, element);
-  if (!string_result.is_nil())
-    return string_result;
-
-  // Handle type mismatches
-  exprt type_mismatch_result = handle_string_type_mismatch(lhs, rhs, op);
-  if (!type_mismatch_result.is_nil())
-    return type_mismatch_result;
-
-  // Handle special mathematical operations
-  if (op == "Pow" || op == "power")
-    return math_handler_.handle_power(lhs, rhs);
-
-  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
-    return math_handler_.handle_modulo(lhs, rhs, element);
-
-  // Build the binary expression
-  exprt bin_expr = build_binary_expression(op, lhs, rhs);
-
-  // Handle float vs char comparisons
-  if (type_utils::is_float_vs_char(lhs, rhs))
-    return handle_float_vs_string(bin_expr, op);
-
-  // Handle floor division
-  if (op == "FloorDiv")
-    return math_handler_.handle_floor_division(lhs, rhs, bin_expr);
-
-  // Promote operands for IEEE operations
-  promote_ieee_operands(bin_expr, lhs, rhs);
-
-  // Handle chained comparisons
-  if (element.contains("comparators") && element["comparators"].size() > 1)
-    return handle_chained_comparisons_logic(element, bin_expr);
-
-  return bin_expr;
-}
-
-bool python_converter::handle_none_check_setup(
-  const std::string &op,
-  const exprt &lhs,
-  const exprt &rhs)
-{
-  bool is_none_check = (op == "Is" || op == "IsNot") &&
-                       (lhs.type() == none_type() || rhs.type() == none_type());
-
-  if (!is_none_check && (op == "Eq" || op == "NotEq"))
-  {
-    if (lhs.type() == none_type() || rhs.type() == none_type())
-      is_none_check = true;
-  }
-
-  return is_none_check;
-}
-
-exprt python_converter::handle_array_operations(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs,
-  const nlohmann::json &left,
-  const nlohmann::json &right,
-  const nlohmann::json & /*element*/)
-{
-  if (!lhs.type().is_array() && !rhs.type().is_array())
-    return nil_exprt();
-
-  // Check for zero-length array comparisons
-  if (
-    string_handler_.is_zero_length_array(lhs) &&
-    string_handler_.is_zero_length_array(rhs) && (op == "Eq" || op == "NotEq"))
-  {
-    return gen_boolean(op == "Eq");
-  }
-
-  // Handle string concatenation
-  if (op == "Add")
-    return string_handler_.handle_string_concatenation_with_promotion(
-      lhs, rhs, left, right);
-
-  return nil_exprt();
-}
-
-exprt python_converter::handle_list_operations(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs,
-  const nlohmann::json &left,
-  const nlohmann::json &right,
-  const nlohmann::json &element)
-{
   typet list_type = type_handler_.get_list_type();
-
-  // List comparison
   if (
     lhs.type() == list_type && rhs.type() == list_type &&
     (op == "Eq" || op == "NotEq"))
@@ -1610,116 +1418,122 @@ exprt python_converter::handle_list_operations(
     python_list list(*this, element);
     return list.compare(lhs, rhs, op);
   }
-
-  // List concatenation
+  // list + list  (concatenation)
   if (lhs.type() == list_type && rhs.type() == list_type && op == "Add")
   {
     python_list list(*this, element);
     return list.build_concat_list_call(lhs, rhs, element);
   }
-
-  // List repetition
   if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
   {
+    // Compute resulting list
     if (is_right)
       return nil_exprt();
+
     python_list list(*this, element);
     return list.list_repetition(left, right, lhs, rhs);
   }
 
-  return nil_exprt();
-}
+  /// Handle 'is' and 'is not' Python identity comparisons
+  if (op == "Is")
+    return get_binary_operator_expr_for_is(lhs, rhs);
+  else if (op == "IsNot")
+    return get_negated_is_expr(lhs, rhs);
 
-exprt python_converter::handle_relational_type_mismatches(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs,
-  const nlohmann::json &element)
-{
-  // Single character comparisons
-  if (type_utils::is_ordered_comparison(op))
+  // Handle type mismatches for relational operations
+  if (type_utils::is_relational_op(op))
   {
-    exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
-    if (!char_comp_result.is_nil())
-      return char_comp_result;
-  }
-
-  // Float vs string comparisons
-  bool lhs_is_float = lhs.type().is_floatbv();
-  bool rhs_is_float = rhs.type().is_floatbv();
-  bool lhs_is_str = type_utils::is_string_type(lhs.type());
-  bool rhs_is_str = type_utils::is_string_type(rhs.type());
-
-  if ((lhs_is_float && rhs_is_str) || (lhs_is_str && rhs_is_float))
-  {
-    exprt binary_expr(get_op(op, bool_type()), bool_type());
-
-    locationt loc = get_location_from_decl(element);
-    if (loc.is_nil() || loc.get_line().empty())
+    // Check for single character string comparisons (for <, >, <=, >=)
+    if (type_utils::is_ordered_comparison(op))
     {
-      if (!lhs.location().is_nil())
-        loc = lhs.location();
-      else if (!rhs.location().is_nil())
-        loc = rhs.location();
+      exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
+      if (!char_comp_result.is_nil())
+        return char_comp_result;
     }
-    binary_expr.location() = loc;
 
-    return handle_float_vs_string(binary_expr, op);
+    // Check for float vs string comparisons
+    bool lhs_is_float = lhs.type().is_floatbv();
+    bool rhs_is_float = rhs.type().is_floatbv();
+    bool lhs_is_str = type_utils::is_string_type(lhs.type());
+    bool rhs_is_str = type_utils::is_string_type(rhs.type());
+
+    if ((lhs_is_float && rhs_is_str) || (lhs_is_str && rhs_is_float))
+    {
+      // Create a binary expression for handle_float_vs_string with proper location
+      exprt binary_expr(get_op(op, bool_type()), bool_type());
+
+      // Set location from the AST element or operands
+      locationt loc = get_location_from_decl(element);
+      if (loc.is_nil() || loc.get_line().empty())
+      {
+        // Fallback to operand locations
+        if (!lhs.location().is_nil())
+          loc = lhs.location();
+        else if (!rhs.location().is_nil())
+          loc = rhs.location();
+      }
+      binary_expr.location() = loc;
+
+      return handle_float_vs_string(binary_expr, op);
+    }
   }
 
-  return nil_exprt();
-}
-
-exprt python_converter::handle_string_binary_operations(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs,
-  const nlohmann::json &left,
-  const nlohmann::json &right,
-  const nlohmann::json &element)
-{
+  // Get LHS and RHS types
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
   std::string rhs_type = type_handler_.type_to_string(rhs.type());
 
-  // Infer string types for equality comparisons
+  // Infer the missing operand type if one side is explicitly a string and the operation is Eq or NotEq
   if (
     (op == "Eq" || op == "NotEq") && ((lhs_type.empty() && rhs_type == "str") ||
                                       (rhs_type.empty() && lhs_type == "str")))
   {
+    // Infer lhs_type if it is empty
     if (lhs_type.empty() && element.contains("left"))
     {
       const auto &lhs_expr = element["left"];
-      if (
-        (lhs_expr.contains("value") && lhs_expr["value"].is_string()) ||
-        (lhs_expr.contains("id") && lhs_expr["id"].is_string()))
+      if (lhs_expr.contains("value") && lhs_expr["value"].is_string())
+        lhs_type = "str";
+      else if (lhs_expr.contains("id") && lhs_expr["id"].is_string())
         lhs_type = "str";
     }
+    // Infer rhs_type if it is empty
     else if (
       rhs_type.empty() && element.contains("comparators") &&
       element["comparators"].is_array() && !element["comparators"].empty())
     {
       const auto &rhs_expr = element["comparators"][0];
-      if (
-        (rhs_expr.contains("value") && rhs_expr["value"].is_string()) ||
-        (rhs_expr.contains("id") && rhs_expr["id"].is_string()))
+      if (rhs_expr.contains("value") && rhs_expr["value"].is_string())
+        rhs_type = "str";
+      else if (rhs_expr.contains("id") && rhs_expr["id"].is_string())
         rhs_type = "str";
     }
   }
 
-  // Check for string literals in Add operations
+  // Check for Add operations with string operands
   if (op == "Add")
   {
+    // Check if either operand is a string constant in the JSON
+    bool lhs_is_str_literal = false;
+    bool rhs_is_str_literal = false;
+
     if (
       element.contains("left") && element["left"].contains("value") &&
       element["left"]["value"].is_string())
+    {
+      lhs_is_str_literal = true;
       lhs_type = "str";
+    }
 
     if (
       element.contains("right") && element["right"].contains("value") &&
       element["right"]["value"].is_string())
+    {
+      rhs_is_str_literal = true;
       rhs_type = "str";
+    }
 
-    if (!lhs_type.empty() || !rhs_type.empty())
+    // If one is a string literal, treat both as strings for concatenation
+    if (lhs_is_str_literal || rhs_is_str_literal)
     {
       if (lhs_type.empty())
         lhs_type = "str";
@@ -1729,6 +1543,7 @@ exprt python_converter::handle_string_binary_operations(
   }
 
   // Check if both operands are strings
+  // Use both type_to_string (for compatibility) and is_string_type (for pointer types)
   bool lhs_is_string =
     (lhs_type == "str") || type_utils::is_string_type(lhs.type());
   bool rhs_is_string =
@@ -1740,66 +1555,88 @@ exprt python_converter::handle_string_binary_operations(
      (lhs_is_string || rhs_is_string || type_utils::is_char_type(lhs.type()) ||
       type_utils::is_char_type(rhs.type()))))
   {
-    return string_handler_.handle_string_operations(
+    const exprt &result = string_handler_.handle_string_operations(
       op, lhs, rhs, left, right, element);
+    if (!result.is_nil())
+      return result;
   }
 
-  return nil_exprt();
-}
+  // Handle string vs non-string type mismatches
+  exprt type_mismatch_result = handle_string_type_mismatch(lhs, rhs, op);
+  if (!type_mismatch_result.is_nil())
+    return type_mismatch_result;
 
-exprt python_converter::build_binary_expression(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs)
-{
-  // Determine result type
+  // Replace ** operation with the resultant constant.
+  if (op == "Pow" || op == "power")
+    return math_handler_.handle_power(lhs, rhs);
+
+  // Handle floating-point modulo with Python semantics
+  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
+    return math_handler_.handle_modulo(lhs, rhs, element);
+
+  // Determine the result type of the binary operation:
   typet type;
   if (type_utils::is_relational_op(op))
     type = bool_type();
   else if (op == "Div" || op == "div")
-    type = double_type();
+    type = double_type(); // Python division always returns float
   else if (lhs.type().is_floatbv() || rhs.type().is_floatbv())
-    type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
+    type =
+      lhs.type().is_floatbv() ? lhs.type() : rhs.type(); // Promote to float
   else
     type = lhs.type();
 
-  // Create expression
+  // Create a binary expression node with the determined type and location.
   exprt bin_expr(get_op(op, type), type);
-
-  // Set location
   if (lhs.is_symbol())
     bin_expr.location() = lhs.location();
   else if (rhs.is_symbol())
     bin_expr.location() = rhs.location();
 
-  // Handle signed/unsigned promotion
+  // Handle type promotion for mixed signed/unsigned comparisons:
+  // If lhs is unsigned and rhs is signed, convert rhs to match lhs's type.
+  // This prevents signed-unsigned comparison issues.
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     rhs.make_typecast(lhs.type());
 
-  // Handle division promotion
+  // Promote both operands to float for Python-style true division ("/")
+  // In Python 3, the '/' operator ALWAYS performs floating-point division,
+  // regardless of operand types. Only '//' performs floor division.
   if (op == "Div" || op == "div")
     math_handler_.handle_float_division(lhs, rhs, bin_expr);
 
-  // Add operands
+  // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
 
+  // Python 3 comparison behavior: equality (==, !=) between incompatible types
+  // returns False/True, but ordered comparisons (<, >, etc.) raise TypeError.
+  // This emulates that behavior in ESBMC's symbolic execution.
+  if (type_utils::is_float_vs_char(lhs, rhs))
+    return handle_float_vs_string(bin_expr, op);
+
+  // floor division (//) operation corresponds to an int division with floor rounding
+  // So we need to emulate this behavior here:
+  // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
+  // e.g.: -5//2 equals to -3, and 5//2 equals to 2
+  if (op == "FloorDiv")
+    return math_handler_.handle_floor_division(lhs, rhs, bin_expr);
+
+  // Promote operands to floating point if IEEE operator is used
+  if (is_ieee_op(bin_expr))
+  {
+    const typet &target_type =
+      lhs.type().is_floatbv() ? lhs.type() : rhs.type();
+    if (!lhs.type().is_floatbv())
+      bin_expr.op0() = typecast_exprt(lhs, target_type);
+    if (!rhs.type().is_floatbv())
+      bin_expr.op1() = typecast_exprt(rhs, target_type);
+  }
+
+  // Handle chained comparisons such as assert 0 <= x <= 1
+  if (element.contains("comparators") && element["comparators"].size() > 1)
+    return handle_chained_comparisons_logic(element, bin_expr);
+
   return bin_expr;
-}
-
-void python_converter::promote_ieee_operands(
-  exprt &bin_expr,
-  const exprt &lhs,
-  const exprt &rhs)
-{
-  if (!is_ieee_op(bin_expr))
-    return;
-
-  const typet &target_type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
-
-  if (!lhs.type().is_floatbv())
-    bin_expr.op0() = typecast_exprt(lhs, target_type);
-  if (!rhs.type().is_floatbv())
-    bin_expr.op1() = typecast_exprt(rhs, target_type);
 }
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
@@ -2662,12 +2499,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LITERAL:
   {
-    if (dict_handler_->is_dict_literal(element))
-    {
-      expr = dict_handler_->get_dict_literal(element);
-      break;
-    }
-
     expr = get_literal(element);
     break;
   }
@@ -2944,14 +2775,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (tuple_handler_->is_tuple_type(array.type()))
     {
       expr = tuple_handler_->handle_tuple_subscript(array, slice, element);
-      break;
-    }
-
-    // Handle dictionary subscript
-    if (array.type().is_struct())
-    {
-      // This is a dictionary access
-      expr = dict_handler_->handle_dict_subscript(array, slice);
       break;
     }
 
@@ -3410,413 +3233,12 @@ void python_converter::handle_list_literal_unpacking(
   }
 }
 
-bool python_converter::handle_dict_subscript_assignment(
-  const nlohmann::json &ast_node,
-  const nlohmann::json &target,
-  codet &target_block)
-{
-  if (target["_type"] != "Subscript")
-    return false;
-
-  exprt container_expr = get_expr(target["value"]);
-  typet container_type = container_expr.type();
-
-  if (container_expr.is_symbol())
-  {
-    const symbolt *sym = symbol_table_.find_symbol(container_expr.identifier());
-    if (sym)
-      container_type = sym->type;
-  }
-
-  if (container_type.id() == "symbol")
-    container_type = ns.follow(container_type);
-
-  if (!dict_handler_->is_dict_type(container_type))
-    return false;
-
-  // Handle dict[key] = value assignment
-  is_converting_rhs = true;
-  exprt rhs = get_expr(ast_node["value"]);
-  is_converting_rhs = false;
-
-  dict_handler_->handle_dict_subscript_assign(
-    container_expr, target["slice"], rhs, target_block);
-  return true;
-}
-
-bool python_converter::handle_dict_literal_assignment(
-  const nlohmann::json &ast_node,
-  const exprt &lhs)
-{
-  if (!ast_node.contains("value") || ast_node["value"].is_null())
-    return false;
-
-  if (!dict_handler_->is_dict_literal(ast_node["value"]))
-    return false;
-
-  dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
-  current_lhs = nullptr;
-  return true;
-}
-
-bool python_converter::handle_unannotated_dict_literal(
-  const nlohmann::json &ast_node,
-  const nlohmann::json &target,
-  const symbol_id &sid)
-{
-  if (!ast_node.contains("value") || !ast_node["value"].contains("_type"))
-    return false;
-
-  if (!dict_handler_->is_dict_literal(ast_node["value"]))
-    return false;
-
-  locationt location = get_location_from_decl(target);
-  std::string module_name = location.get_file().as_string();
-  std::string name;
-
-  if (target["_type"] == "Name")
-    name = target["id"].get<std::string>();
-  else if (target["_type"] == "Attribute")
-    name = target["attr"].get<std::string>();
-
-  symbolt symbol = create_symbol(
-    module_name,
-    name,
-    sid.to_string(),
-    location,
-    dict_handler_->get_dict_struct_type());
-  symbol.lvalue = true;
-  symbol.file_local = true;
-  symbol.is_extern = false;
-  symbolt *lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
-
-  exprt lhs = create_lhs_expression(target, lhs_symbol, location);
-  dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
-  current_lhs = nullptr;
-  return true;
-}
-
-exprt python_converter::get_rhs_with_dict_resolution(
-  const nlohmann::json &ast_node,
-  const typet &target_type)
-{
-  if (!type_utils::is_dict_subscript(ast_node["value"]))
-    return get_expr(ast_node["value"]);
-
-  // Check if we need special dict subscript handling for typed variables
-  if (
-    !target_type.is_signedbv() && !target_type.is_unsignedbv() &&
-    !target_type.is_bool())
-    return get_expr(ast_node["value"]);
-
-  exprt dict_expr = get_expr(ast_node["value"]["value"]);
-  if (
-    !dict_expr.type().is_struct() ||
-    !dict_handler_->is_dict_type(dict_expr.type()))
-    return get_expr(ast_node["value"]);
-
-  return dict_handler_->handle_dict_subscript(
-    dict_expr, ast_node["value"]["slice"], target_type);
-}
-
-std::string python_converter::infer_type_from_any_annotation(
-  const nlohmann::json &ast_node,
-  const std::string &lhs_type)
-{
-  if (lhs_type != "Any")
-    return lhs_type;
-
-  if (ast_node["value"].is_null() || ast_node["value"]["_type"] != "Call")
-    return lhs_type;
-
-  const auto &func_node = ast_node["value"]["func"];
-  std::string func_name;
-
-  if (func_node["_type"] == "Name")
-    func_name = func_node["id"].get<std::string>();
-  else if (func_node["_type"] == "Attribute")
-    func_name = func_node["attr"].get<std::string>();
-
-  if (func_name.empty())
-    return lhs_type;
-
-  symbol_id func_sid(current_python_file, "", func_name);
-  symbolt *func_symbol = symbol_table_.find_symbol(func_sid.to_string());
-
-  if (func_symbol && func_symbol->type.is_code())
-  {
-    const code_typet &func_type = to_code_type(func_symbol->type);
-    current_element_type = func_type.return_type();
-    return ""; // Clear to avoid further "Any" processing
-  }
-
-  return lhs_type;
-}
-
-bool python_converter::handle_unpacking_assignment(
-  const nlohmann::json &ast_node,
-  const nlohmann::json &target,
-  codet &target_block)
-{
-  const auto &target_type = target["_type"];
-
-  if (target_type != "Tuple" && target_type != "List")
-    return false;
-
-  // Get RHS
-  is_converting_rhs = true;
-  exprt rhs = get_expr(ast_node["value"]);
-  is_converting_rhs = false;
-
-  // Prepare RHS if it's a function call
-  rhs = tuple_handler_->prepare_rhs_for_unpacking(ast_node, rhs, target_block);
-
-  // Handle different unpacking types
-  if (rhs.type().id() == "struct")
-  {
-    tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
-    return true;
-  }
-  else if (rhs.type().is_array())
-  {
-    handle_array_unpacking(ast_node, target, rhs, target_block);
-    return true;
-  }
-  else if (rhs.type().is_pointer())
-  {
-    const auto &value_node = ast_node["value"];
-    if (value_node["_type"] == "List")
-    {
-      handle_list_literal_unpacking(ast_node, target, target_block);
-      return true;
-    }
-  }
-
-  throw std::runtime_error(
-    "Cannot unpack " + rhs.type().id_string() +
-    " - only tuples and arrays can be unpacked");
-}
-
-symbolt *python_converter::create_symbol_for_unannotated_assign(
-  const nlohmann::json &ast_node,
-  const nlohmann::json &target,
-  const symbol_id &sid,
-  bool is_global)
-{
-  if (is_global)
-    return nullptr;
-
-  if (!ast_node.contains("value") || !ast_node["value"].contains("_type"))
-    return nullptr;
-
-  const std::string &value_type = ast_node["value"]["_type"];
-  locationt location = get_location_from_decl(target);
-  std::string module_name = location.get_file().as_string();
-  std::string name;
-
-  if (target["_type"] == "Name")
-    name = target["id"].get<std::string>();
-  else if (target["_type"] == "Attribute")
-    name = target["attr"].get<std::string>();
-
-  typet inferred_type;
-
-  if (value_type == "Lambda")
-  {
-    inferred_type = any_type();
-  }
-  else if (value_type == "Call" || value_type == "BoolOp")
-  {
-    // Convert RHS first to get its type
-    is_converting_rhs = true;
-    exprt rhs_expr = get_expr(ast_node["value"]);
-    is_converting_rhs = false;
-
-    inferred_type = rhs_expr.type();
-    if (inferred_type.is_empty())
-      inferred_type = any_type();
-  }
-  else
-  {
-    return nullptr;
-  }
-
-  symbolt symbol =
-    create_symbol(module_name, name, sid.to_string(), location, inferred_type);
-  symbol.lvalue = true;
-  symbol.file_local = true;
-  symbol.is_extern = false;
-  return symbol_table_.move_symbol_to_context(symbol);
-}
-
-void python_converter::handle_function_call_rhs(
-  const nlohmann::json &ast_node,
-  symbolt *lhs_symbol,
-  exprt &lhs,
-  exprt &rhs,
-  const locationt &location,
-  bool is_ctor_call,
-  codet &target_block)
-{
-  if (is_ctor_call)
-  {
-    std::string func_name =
-      ast_node["value"]["func"].contains("id")
-        ? ast_node["value"]["func"]["id"].get<std::string>()
-        : ast_node["value"]["func"]["attr"].get<std::string>();
-
-    if (base_ctor_called)
-    {
-      auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
-      func_name = class_node["bases"][0]["id"].get<std::string>();
-      base_ctor_called = false;
-    }
-
-    update_instance_from_self(func_name, func_name, lhs_symbol->id.as_string());
-  }
-  else
-  {
-    symbolt *func_symbol =
-      symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-    assert(func_symbol);
-    if (!static_cast<code_typet &>(func_symbol->type).return_type().is_empty())
-    {
-      if (auto ret = get_return_from_func(func_symbol->id.c_str());
-          !ret.is_nil())
-      {
-        copy_instance_attributes(
-          ret.op0().identifier().as_string(), lhs_symbol->id.as_string());
-      }
-    }
-  }
-
-  // Copy attributes from function arguments
-  if (!is_ctor_call)
-  {
-    const code_function_callt &call =
-      static_cast<const code_function_callt &>(rhs);
-    for (const auto &arg : call.arguments())
-    {
-      const exprt *arg_ptr = &arg;
-      if (arg.is_address_of())
-        arg_ptr = &arg.op0();
-
-      if (arg_ptr->is_symbol())
-      {
-        copy_instance_attributes(
-          arg_ptr->identifier().as_string(), lhs_symbol->id.as_string());
-      }
-    }
-  }
-
-  // Set return destination
-  if (rhs.type().is_pointer() && !is_ctor_call)
-  {
-    rhs.op0() = lhs;
-  }
-  else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
-    rhs.op0() = lhs;
-
-  // Special handling for list return type
-  if (rhs.type() == type_handler_.get_list_type())
-  {
-    if (auto ret = get_return_from_func(rhs.op1().identifier().c_str());
-        !ret.is_nil())
-    {
-      python_list::copy_type_info(
-        ret.op0().identifier().as_string(), lhs.identifier().as_string());
-    }
-
-    typet l_type = type_handler_.get_list_type();
-    symbolt &tmp_var_symbol =
-      create_tmp_symbol(ast_node, "tmp_var", l_type, gen_zero(l_type));
-
-    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
-    tmp_var_decl.location() = get_location_from_decl(ast_node);
-    target_block.copy_to_operands(tmp_var_decl);
-
-    rhs.op0() = symbol_expr(tmp_var_symbol);
-    target_block.copy_to_operands(rhs);
-
-    code_assignt code_assign(lhs, symbol_expr(tmp_var_symbol));
-    code_assign.location() = location;
-    rhs = code_assign;
-  }
-
-  target_block.copy_to_operands(rhs);
-}
-
-exprt python_converter::handle_string_literal_rhs(
-  const nlohmann::json &ast_node,
-  const std::string &lhs_type,
-  const exprt &rhs)
-{
-  if (lhs_type != "str" || !type_utils::is_integer_type(rhs.type()))
-    return rhs;
-
-  if (
-    ast_node["value"]["_type"] != "Constant" ||
-    !ast_node["value"]["value"].is_string())
-    return rhs;
-
-  std::string str_value = ast_node["value"]["value"].get<std::string>();
-
-  typet string_type =
-    type_handler_.build_array(char_type(), str_value.length() + 1);
-  exprt str_array = gen_zero(string_type);
-
-  for (size_t i = 0; i < str_value.length(); ++i)
-  {
-    BigInt char_val(static_cast<unsigned char>(str_value[i]));
-    exprt char_expr = constant_exprt(
-      integer2binary(char_val, 8), integer2string(char_val), char_type());
-    str_array.operands().at(i) = char_expr;
-  }
-
-  return str_array;
-}
-
-bool python_converter::is_global_variable(const symbol_id &sid) const
-{
-  for (const std::string &s : global_declarations)
-  {
-    if (s == sid.global_to_string())
-      return true;
-  }
-  return false;
-}
-
-std::string
-python_converter::extract_target_name(const nlohmann::json &target) const
-{
-  const auto &target_type = target["_type"];
-
-  if (target_type == "Name")
-    return target["id"].get<std::string>();
-  else if (target_type == "Attribute")
-    return target["attr"].get<std::string>();
-  else if (target_type == "Subscript")
-    return target["value"]["id"].get<std::string>();
-
-  throw std::runtime_error(
-    "Unsupported assignment target type: " + target_type.get<std::string>());
-}
-
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
   // Extract type information
   auto [lhs_type, element_type] = extract_type_info(ast_node);
-
-  // Check if the RHS is a dictionary literal - set the element type
-  if (
-    ast_node.contains("value") && !ast_node["value"].is_null() &&
-    dict_handler_->is_dict_literal(ast_node["value"]))
-  {
-    element_type = dict_handler_->get_dict_struct_type();
-  }
-
   current_element_type = element_type;
 
   exprt lhs;
@@ -3826,6 +3248,7 @@ void python_converter::get_var_assign(
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
+  const auto &target_type = target["_type"];
 
   // Handle forward references
   if (
@@ -3836,18 +3259,50 @@ void python_converter::get_var_assign(
     process_forward_reference(ast_node["value"]["func"], target_block);
   }
 
-  // Handle dict subscript assignment: dict[key] = value
-  if (handle_dict_subscript_assignment(ast_node, target, target_block))
-    return;
-
   if (ast_node["_type"] == "AnnAssign")
   {
     // Extract name and set in symbol ID
-    std::string name = extract_target_name(target);
-    sid.set_object(name);
+    std::string name;
+    if (!target.is_null())
+    {
+      if (target_type == "Name")
+        name = target["id"];
+      else if (target_type == "Attribute")
+        name = target["attr"];
+      else if (target_type == "Subscript")
+        name = target["value"]["id"];
 
-    // Infer type from function return if annotation is "Any"
-    lhs_type = infer_type_from_any_annotation(ast_node, lhs_type);
+      assert(!name.empty());
+
+      sid.set_object(name);
+    }
+
+    // If annotation is "Any" and value is a function call, infer type from function
+    if (
+      lhs_type == "Any" && !ast_node["value"].is_null() &&
+      ast_node["value"]["_type"] == "Call")
+    {
+      const auto &func_node = ast_node["value"]["func"];
+      std::string func_name;
+
+      if (func_node["_type"] == "Name")
+        func_name = func_node["id"].get<std::string>();
+      else if (func_node["_type"] == "Attribute")
+        func_name = func_node["attr"].get<std::string>();
+
+      if (!func_name.empty())
+      {
+        symbol_id func_sid(current_python_file, "", func_name);
+        symbolt *func_symbol = symbol_table_.find_symbol(func_sid.to_string());
+
+        if (func_symbol && func_symbol->type.is_code())
+        {
+          const code_typet &func_type = to_code_type(func_symbol->type);
+          current_element_type = func_type.return_type();
+          lhs_type = ""; // Clear to avoid further "Any" processing
+        }
+      }
+    }
 
     // Process RHS before LHS if in function scope
     exprt rhs;
@@ -3858,32 +3313,36 @@ void python_converter::get_var_assign(
       is_right = true;
       if (!ast_node["value"].is_null())
       {
-        // Skip getting expr for dict literals - handle specially later
-        if (!dict_handler_->is_dict_literal(ast_node["value"]))
-        {
-          if (ast_node["_type"] != "Call")
-          {
-            rhs = get_rhs_with_dict_resolution(ast_node, current_element_type);
-          }
-        }
+        if (ast_node["_type"] != "Call")
+          rhs = get_expr(ast_node["value"]);
       }
       is_right = false;
     }
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
+
     lhs_symbol = symbol_table_.find_symbol(sid.to_string().c_str());
 
-    bool is_global = is_global_variable(sid);
-    if (is_global)
-      lhs_symbol = symbol_table_.find_symbol(sid.global_to_string().c_str());
+    bool is_global = false;
+
+    for (std::string &s : global_declarations)
+    {
+      if (s == sid.global_to_string())
+      {
+        is_global = true;
+        lhs_symbol = symbol_table_.find_symbol(sid.global_to_string().c_str());
+        break;
+      }
+    }
 
     // Symbol creation
-    bool symbol_created = false;
     if (!lhs_symbol || !is_global)
     {
+      // Debug module name
       std::string module_name = location_begin.get_file().as_string();
 
+      // Create/init symbol
       symbolt symbol = create_symbol(
         module_name,
         name,
@@ -3893,17 +3352,7 @@ void python_converter::get_var_assign(
       symbol.lvalue = true;
       symbol.file_local = true;
       symbol.is_extern = false;
-
-      symbol_created = (lhs_symbol == nullptr);
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
-
-      // Add declaration statement ONLY for newly created local variables
-      if (symbol_created && !current_func_name_.empty() && !is_global)
-      {
-        code_declt decl(symbol_expr(*lhs_symbol));
-        decl.location() = location_begin;
-        target_block.copy_to_operands(decl);
-      }
     }
 
     // Check for uninitialized usage
@@ -3915,39 +3364,153 @@ void python_converter::get_var_assign(
           "Variable " + sid.get_object() + " in function " +
           current_func_name_ + " is uninitialized.");
       }
+      continue;
     }
 
     // Create LHS expression
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
-
-    // Handle dict literal assignment specially - after LHS is created
-    if (handle_dict_literal_assignment(ast_node, lhs))
-      return;
   }
   else if (ast_node["_type"] == "Assign")
   {
+    // Assign logic
     const auto &target = ast_node["targets"][0];
+    const auto &target_type = target["_type"];
 
     // Handle tuple/list unpacking
-    if (handle_unpacking_assignment(ast_node, target, target_block))
-      return;
+    if (target_type == "Tuple" || target_type == "List")
+    {
+      // Get RHS
+      is_converting_rhs = true;
+      exprt rhs = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+
+      // Prepare RHS if it's a function call
+      rhs =
+        tuple_handler_->prepare_rhs_for_unpacking(ast_node, rhs, target_block);
+
+      // Handle different unpacking types
+      if (rhs.type().id() == "struct")
+      {
+        tuple_handler_->handle_tuple_unpacking(
+          ast_node, target, rhs, target_block);
+        return;
+      }
+      else if (rhs.type().is_array())
+      {
+        handle_array_unpacking(ast_node, target, rhs, target_block);
+        return;
+      }
+      else if (rhs.type().is_pointer())
+      {
+        const auto &value_node = ast_node["value"];
+        if (value_node["_type"] == "List")
+        {
+          handle_list_literal_unpacking(ast_node, target, target_block);
+          return;
+        }
+      }
+
+      throw std::runtime_error(
+        "Cannot unpack " + rhs.type().id_string() +
+        " - only tuples and arrays can be unpacked");
+    }
 
     // Normal assignment handling
-    std::string name = extract_target_name(target);
+    std::string name;
+    if (target_type == "Subscript")
+      name = target["value"]["id"].get<std::string>();
+    else if (target_type == "Attribute")
+      name = target["attr"].get<std::string>();
+    else if (target_type == "Name")
+      name = target["id"].get<std::string>();
+    else
+      throw std::runtime_error(
+        "Unsupported assignment target type: " +
+        target_type.get<std::string>());
+
     sid.set_object(name);
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
 
-    bool is_global = is_global_variable(sid);
+    bool is_global = false;
 
-    // Handle unannotated dict literal assignment
-    if (!lhs_symbol && handle_unannotated_dict_literal(ast_node, target, sid))
-      return;
-
-    // Create symbol for unannotated assignments with inferrable types
-    if (!lhs_symbol && !is_global)
+    for (std::string &s : global_declarations)
     {
-      lhs_symbol =
-        create_symbol_for_unannotated_assign(ast_node, target, sid, is_global);
+      if (s == sid.global_to_string())
+      {
+        is_global = true;
+        break;
+      }
+    }
+
+    // Special handling for lambda assignments
+    if (
+      !lhs_symbol && !is_global && ast_node.contains("value") &&
+      ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "Lambda")
+    {
+      locationt location = get_location_from_decl(target);
+      std::string module_name = location.get_file().as_string();
+      typet placeholder_type = any_type();
+
+      symbolt symbol = create_symbol(
+        module_name, name, sid.to_string(), location, placeholder_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+    }
+    // Special handling for function call assignments without type annotations
+    // Convert the RHS first to determine the type, then create the symbol
+    if (
+      !lhs_symbol && !is_global && ast_node.contains("value") &&
+      ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "Call")
+    {
+      // Convert RHS first to get its type
+      is_converting_rhs = true;
+      exprt rhs_expr = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+
+      locationt location = get_location_from_decl(target);
+      std::string module_name = location.get_file().as_string();
+
+      // Use the actual return type from the function call
+      typet inferred_type = rhs_expr.type();
+      if (inferred_type.is_empty())
+        inferred_type = any_type();
+
+      symbolt symbol = create_symbol(
+        module_name, name, sid.to_string(), location, inferred_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+    }
+    // Special handling for boolop
+    if (
+      !lhs_symbol && !is_global && ast_node.contains("value") &&
+      ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "BoolOp")
+    {
+      // Convert RHS first to get its type
+      is_converting_rhs = true;
+      exprt rhs_expr = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+
+      locationt location = get_location_from_decl(target);
+      std::string module_name = location.get_file().as_string();
+
+      // Use the actual return type from the boolean operation (BoolOp expression)
+      typet inferred_type = rhs_expr.type();
+      if (inferred_type.is_empty())
+        inferred_type = any_type();
+
+      symbolt symbol = create_symbol(
+        module_name, name, sid.to_string(), location, inferred_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
     }
 
     if (!lhs_symbol && !is_global)
@@ -3966,22 +3529,39 @@ void python_converter::get_var_assign(
   if (!ast_node["value"].is_null())
   {
     is_converting_rhs = true;
-
-    if (lhs_symbol)
-      rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->type);
-    else
-      rhs = get_expr(ast_node["value"]);
-
+    rhs = get_expr(ast_node["value"]);
     has_value = true;
     is_converting_rhs = false;
 
-    // Handle string literal conversion
-    rhs = handle_string_literal_rhs(ast_node, lhs_type, rhs);
+    if (lhs_type == "str" && type_utils::is_integer_type(rhs.type()))
+    {
+      // Check if this is a string constant assignment like s: str = "h"
+      if (
+        ast_node["value"]["_type"] == "Constant" &&
+        ast_node["value"]["value"].is_string())
+      {
+        std::string str_value = ast_node["value"]["value"].get<std::string>();
+
+        // Create proper string array with null terminator
+        typet string_type =
+          type_handler_.build_array(char_type(), str_value.length() + 1);
+        exprt str_array = gen_zero(string_type);
+
+        // Fill the array with characters
+        for (size_t i = 0; i < str_value.length(); ++i)
+        {
+          BigInt char_val(static_cast<unsigned char>(str_value[i]));
+          exprt char_expr = constant_exprt(
+            integer2binary(char_val, 8), integer2string(char_val), char_type());
+          str_array.operands().at(i) = char_expr;
+        }
+        rhs = str_array;
+      }
+    }
   }
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
-    // Handle throw expression
     if (rhs.statement() == "cpp-throw")
     {
       rhs.location() = location_begin;
@@ -4003,21 +3583,111 @@ void python_converter::get_var_assign(
     // Function call handling
     if (rhs.is_function_call())
     {
-      handle_function_call_rhs(
-        ast_node,
-        lhs_symbol,
-        lhs,
-        rhs,
-        location_begin,
-        is_ctor_call,
-        target_block);
+      // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in self
+      if (is_ctor_call)
+      {
+        std::string func_name =
+          ast_node["value"]["func"].contains("id")
+            ? ast_node["value"]["func"]["id"].get<std::string>()
+            : ast_node["value"]["func"]["attr"].get<std::string>();
+
+        if (base_ctor_called)
+        {
+          auto class_node =
+            json_utils::find_class((*ast_json)["body"], func_name);
+          func_name = class_node["bases"][0]["id"].get<std::string>();
+          base_ctor_called = false;
+        }
+
+        update_instance_from_self(
+          func_name, func_name, lhs_symbol->id.as_string());
+      }
+      else
+      {
+        // update lhs attributes with attributes from the return node
+        symbolt *func_symbol =
+          symbol_table_.find_symbol(rhs.op1().identifier().c_str());
+        assert(func_symbol);
+        if (!static_cast<code_typet &>(func_symbol->type)
+               .return_type()
+               .is_empty())
+        {
+          if (auto ret = get_return_from_func(func_symbol->id.c_str());
+              !ret.is_nil())
+          {
+            copy_instance_attributes(
+              ret.op0().identifier().as_string(), lhs_symbol->id.as_string());
+          }
+        }
+      }
+
+      // Additionally, copy instance attributes from function arguments to LHS
+      // This handles cases such as: obj2 = func(obj1) where obj1 has instance attributes
+      if (!is_ctor_call)
+      {
+        const code_function_callt &call =
+          static_cast<const code_function_callt &>(rhs);
+        for (const auto &arg : call.arguments())
+        {
+          // Skip address_of wrappers (used for passing objects as self parameters)
+          const exprt *arg_ptr = &arg;
+          if (arg.is_address_of())
+            arg_ptr = &arg.op0();
+
+          if (arg_ptr->is_symbol())
+          {
+            copy_instance_attributes(
+              arg_ptr->identifier().as_string(), lhs_symbol->id.as_string());
+          }
+        }
+      }
+
+      // For function calls returning pointers (including strings),
+      // we need to assign the result
+      if (rhs.type().is_pointer() && !is_ctor_call)
+      {
+        // Create an assignment: lhs = function_call()
+        rhs.op0() = lhs;
+      }
+      else if (
+        !rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
+        rhs.op0() = lhs;
+
+      if (rhs.type() == type_handler_.get_list_type())
+      {
+        /* Update the element types of the LHS list with the value returned.
+         * We should refine this to consider all reachable returns for this call.*/
+        if (auto ret = get_return_from_func(rhs.op1().identifier().c_str());
+            !ret.is_nil())
+        {
+          python_list::copy_type_info(
+            ret.op0().identifier().as_string(), lhs.identifier().as_string());
+        }
+
+        typet l_type = type_handler_.get_list_type();
+        symbolt &tmp_var_symbol =
+          create_tmp_symbol(ast_node, "tmp_var", l_type, gen_zero(l_type));
+
+        code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+        tmp_var_decl.location() = get_location_from_decl(ast_node);
+        target_block.copy_to_operands(tmp_var_decl);
+
+        rhs.op0() = symbol_expr(tmp_var_symbol);
+        target_block.copy_to_operands(rhs);
+
+        code_assignt code_assign(lhs, symbol_expr(tmp_var_symbol));
+        code_assign.location() = location_begin;
+        rhs = code_assign;
+      }
+
+      target_block.copy_to_operands(rhs);
       current_lhs = nullptr;
       return;
     }
 
     adjust_statement_types(lhs, rhs);
 
-    // Handle list type info propagation
+    // Update list type info
     if (lhs.type() == rhs.type() && lhs.type() == type_handler_.get_list_type())
     {
       const std::string &lhs_identifier = lhs.identifier().as_string();
@@ -4031,8 +3701,13 @@ void python_converter::get_var_assign(
 #ifndef NDEBUG
       const array_typet &thetype = lhs.type();
       thetype.size().is_constant();
+      // I am curious what else could arrive here. So add a debug
+      // assertion just to prevent us from doing something bad and to
+      // know that we are about to do something weird.
       assert(thetype.size().is_nil());
 #endif
+      // For VLA is not enough to just update the type, we need to make an explicit
+      // declaration. This lets ESBMC do all the internal initializations
       lhs_symbol->type = rhs.type();
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
@@ -5178,29 +4853,17 @@ void python_converter::get_attributes_from_self(
     {
       const std::string &attr_name = stmt["target"]["attr"];
 
-      // Handle both simple names (id) and module-qualified names (Attribute)
-      std::string annotated_type;
-
-      if (stmt["annotation"].contains("id"))
-      {
-        // Simple type annotation such as self._md: Bar
-        annotated_type = stmt["annotation"]["id"].get<std::string>();
-      }
-      else if (
-        stmt["annotation"].contains("_type") &&
-        stmt["annotation"]["_type"] == "Attribute")
-      {
-        // Module-qualified type annotation like: self._md: md.Bar
-        // Extract just the class name (the attribute part)
-        annotated_type = stmt["annotation"]["attr"].get<std::string>();
-      }
-      else
+      // Check if "id" exists before accessing it
+      if (!stmt["annotation"].contains("id"))
       {
         log_warning(
           "Skipping attribute '{}' with unsupported annotation type",
           attr_name);
         continue;
       }
+
+      const std::string &annotated_type =
+        stmt["annotation"]["id"].get<std::string>();
 
       typet type;
       if (annotated_type == "str")
@@ -5211,7 +4874,8 @@ void python_converter::get_attributes_from_self(
         type = gen_pointer_type(base_type);
       }
       else
-        type = type_handler_.get_typet(annotated_type);
+        type =
+          type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
 
       struct_typet::componentt comp =
         build_component(current_class_name_, attr_name, type);
@@ -5760,11 +5424,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       block.move_to_operands(code_expr);
       break;
     }
-    case StatementType::DELETE:
-    {
-      get_delete_statement(element, block);
-      break;
-    }
+
     /* "https://docs.python.org/3/tutorial/controlflow.html:
      * "The pass statement does nothing. It can be used when a statement
      *  is required syntactically but the program requires no action." */
@@ -5827,8 +5487,7 @@ python_converter::python_converter(
     current_lhs(nullptr),
     string_handler_(*this, symbol_table_, type_handler_, string_builder_),
     math_handler_(*this, symbol_table_, type_handler_),
-    tuple_handler_(new tuple_handler(*this, type_handler_)),
-    dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_))
+    tuple_handler_(new tuple_handler(*this, type_handler_))
 {
 }
 
@@ -5836,7 +5495,6 @@ python_converter::~python_converter()
 {
   delete string_builder_;
   delete tuple_handler_;
-  delete dict_handler_;
 }
 
 string_builder &python_converter::get_string_builder()
@@ -6067,6 +5725,10 @@ void python_converter::convert()
   main_symbol.lvalue = true;
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
+<<<<<<< HEAD
+=======
+  main_symbol.location = get_location_from_decl(*ast_json);
+>>>>>>> a50970213 ([python] Fix Python ESBMC_main to match Solidity implementation)
 
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
@@ -6074,22 +5736,13 @@ void python_converter::convert()
   // Create built-in symbols for main module (__name__ = "__main__")
   create_builtin_symbols();
 
-  // Block to accumulate model library code
-  code_blockt models_block;
-
   if (!config.options.get_bool_option("no-library"))
   {
     // Load operational models
     const std::string &ast_output_dir =
       (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
-      "range",
-      "int",
-      "consensus",
-      "random",
-      "exceptions",
-      "datetime",
-      "nondet"};
+      "range", "int", "consensus", "random", "exceptions", "datetime"};
     std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)
@@ -6122,8 +5775,8 @@ void python_converter::convert()
 
       convert_expression_to_code(model_code);
 
-      // Accumulate model code
-      models_block.copy_to_operands(model_code);
+      // Add imported code to main symbol
+      main_symbol.value.swap(model_code);
       current_python_file = main_python_file;
     }
     is_loading_models = false;
@@ -6132,10 +5785,6 @@ void python_converter::convert()
   // Create a block to hold intrinsic assignments and load C intrinsics
   code_blockt intrinsic_block;
   load_c_intrisics(intrinsic_block);
-
-  // Variables to hold user code and initialization code
-  codet user_code;  // Pure user code for python_user_main
-  code_blockt init_code;  // Initialization code (imports, intrinsics)
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
@@ -6223,15 +5872,42 @@ void python_converter::convert()
     convert_expression_to_code(call);
     convert_expression_to_code(block);
 
-    // Prepare user code: class definitions + function call
-    code_blockt user_code_body;
-    user_code_body.copy_to_operands(block);
-    user_code_body.copy_to_operands(call);
-    user_code.swap(user_code_body);
+    // Build __ESBMC_main with proper initialization structure
+    code_blockt main_body;
 
-    // Add models to init code (intrinsics are already in block)
-    if (!models_block.operands().empty())
-      init_code.copy_to_operands(models_block);
+    // 1. Initialize static lifetime variables
+    symbol_table_.foreach_operand_in_order(
+      [&main_body](const symbolt &s) {
+        if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+        {
+          code_assignt assign(symbol_expr(s), s.value);
+          assign.location() = s.location;
+          main_body.copy_to_operands(assign);
+        }
+      });
+
+    // 2. Add thread start hook
+    code_function_callt thread_start_call;
+    thread_start_call.function() =
+      symbol_exprt("c:@F@__ESBMC_pthread_start_main_hook");
+    main_body.copy_to_operands(thread_start_call);
+
+    // 3. Add user code (class definitions and function call)
+    main_body.copy_to_operands(block);
+    main_body.copy_to_operands(call);
+
+    // 4. Add atexit handler
+    code_function_callt atexit_call;
+    atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
+    main_body.copy_to_operands(atexit_call);
+
+    // 5. Add thread end hook
+    code_function_callt thread_end_call;
+    thread_end_call.function() =
+      symbol_exprt("c:@F@__ESBMC_pthread_end_main_hook");
+    main_body.copy_to_operands(thread_end_call);
+
+    main_symbol.value.swap(main_body);
   }
   else
   {
@@ -6297,116 +5973,50 @@ void python_converter::convert()
 
     // Convert main statements
     exprt main_block = get_block((*ast_json)["body"]);
-    user_code = convert_expression_to_code(main_block);
+    codet main_code = convert_expression_to_code(main_block);
 
-    // Prepare initialization code: models + intrinsics + imports
-    if (!models_block.operands().empty())
-      init_code.copy_to_operands(models_block);
-    init_code.copy_to_operands(intrinsic_block);
+    // Build __ESBMC_main with proper initialization structure
+    code_blockt main_body;
+
+    // 1. Initialize static lifetime variables
+    symbol_table_.foreach_operand_in_order(
+      [&main_body](const symbolt &s) {
+        if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+        {
+          code_assignt assign(symbol_expr(s), s.value);
+          assign.location() = s.location;
+          main_body.copy_to_operands(assign);
+        }
+      });
+
+    // 2. Add thread start hook
+    code_function_callt thread_start_call;
+    thread_start_call.function() =
+      symbol_exprt("c:@F@__ESBMC_pthread_start_main_hook");
+    main_body.copy_to_operands(thread_start_call);
+
+    // 3. Add intrinsics and user top-level code
+    main_body.copy_to_operands(intrinsic_block);
+
+    // Add all accumulated imports
     if (!all_imports_block.operands().empty())
-      init_code.copy_to_operands(all_imports_block);
+      main_body.copy_to_operands(all_imports_block);
+
+    main_body.copy_to_operands(main_code);
+
+    // 4. Add atexit handler
+    code_function_callt atexit_call;
+    atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
+    main_body.copy_to_operands(atexit_call);
+
+    // 5. Add thread end hook
+    code_function_callt thread_end_call;
+    thread_end_call.function() =
+      symbol_exprt("c:@F@__ESBMC_pthread_end_main_hook");
+    main_body.copy_to_operands(thread_end_call);
+
+    main_symbol.value.swap(main_body);
   }
-
-  // Create python_init function for initialization code (hidden from coverage)
-  if (!init_code.operands().empty())
-  {
-    code_typet init_type;
-    init_type.return_type() = empty_typet();
-
-    symbolt init_symbol;
-    init_symbol.id = "python_init";
-    init_symbol.name = "python_init";
-    init_symbol.type = init_type;
-    init_symbol.lvalue = true;
-    init_symbol.is_extern = false;
-    init_symbol.file_local = false;
-    init_symbol.location = get_location_from_decl(*ast_json);
-
-    // Add __ESBMC_HIDE label to hide from coverage
-    code_labelt esbmc_hide;
-    esbmc_hide.set_label("__ESBMC_HIDE");
-    esbmc_hide.code() = code_skipt();
-
-    code_blockt init_body;
-    init_body.copy_to_operands(esbmc_hide);
-    init_body.copy_to_operands(init_code);
-    init_symbol.value.swap(init_body);
-
-    if (symbol_table_.move(init_symbol))
-    {
-      throw std::runtime_error(
-        "The python_init function is already defined");
-    }
-  }
-
-  // Create python_user_main function containing only user code
-  code_typet user_main_type;
-  user_main_type.return_type() = empty_typet();
-
-  symbolt user_main_symbol;
-  user_main_symbol.id = "python_user_main";
-  user_main_symbol.name = "python_user_main";
-  user_main_symbol.type = user_main_type;
-  user_main_symbol.lvalue = true;
-  user_main_symbol.is_extern = false;
-  user_main_symbol.file_local = false;
-  user_main_symbol.location = get_location_from_decl(*ast_json);
-  user_main_symbol.value = user_code;
-
-  if (symbol_table_.move(user_main_symbol))
-  {
-    throw std::runtime_error(
-      "The python_user_main function is already defined");
-  }
-
-  // Create __ESBMC_main that initializes and calls user code
-  code_typet main_type;
-  main_type.return_type() = empty_typet();
-
-  symbolt main_symbol;
-  main_symbol.id = "__ESBMC_main";
-  main_symbol.name = "__ESBMC_main";
-  main_symbol.type = main_type;
-  main_symbol.lvalue = true;
-  main_symbol.is_extern = false;
-  main_symbol.file_local = false;
-  main_symbol.location = get_location_from_decl(*ast_json);
-
-  code_blockt main_body;
-
-  // 1. Initialize static lifetime variables
-  symbol_table_.foreach_operand_in_order(
-    [&main_body](const symbolt &s) {
-      if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
-      {
-        code_assignt assign(symbol_expr(s), s.value);
-        assign.location() = s.location;
-        main_body.copy_to_operands(assign);
-      }
-    });
-
-  // 2. Call python_init (if exists) for initialization
-  if (!init_code.operands().empty())
-  {
-    const symbolt *init_sym = symbol_table_.find_symbol("python_init");
-    if (init_sym)
-    {
-      code_function_callt init_call;
-      init_call.function() = symbol_expr(*init_sym);
-      main_body.copy_to_operands(init_call);
-    }
-  }
-
-  // 3. Call python_user_main
-  const symbolt *user_main_sym = symbol_table_.find_symbol("python_user_main");
-  if (user_main_sym)
-  {
-    code_function_callt user_main_call;
-    user_main_call.function() = symbol_expr(*user_main_sym);
-    main_body.copy_to_operands(user_main_call);
-  }
-
-  main_symbol.value.swap(main_body);
 
   if (symbol_table_.move(main_symbol))
   {
@@ -6456,53 +6066,4 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
     return gen_zero(any_type());
 
   return found_type.is_empty() ? gen_zero(any_type()) : gen_zero(found_type);
-}
-
-void python_converter::get_delete_statement(
-  const nlohmann::json &ast_node,
-  codet &target_block)
-{
-  if (!ast_node.contains("targets") || !ast_node["targets"].is_array())
-  {
-    throw std::runtime_error("Delete statement missing targets");
-  }
-
-  for (const auto &target : ast_node["targets"])
-  {
-    if (target["_type"] == "Subscript")
-    {
-      exprt dict_expr = get_expr(target["value"]);
-      const nlohmann::json &slice = target["slice"];
-
-      typet dict_type = dict_expr.type();
-      if (dict_expr.is_symbol())
-      {
-        const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
-        if (sym)
-          dict_type = sym->type;
-      }
-
-      if (dict_type.id() == "symbol")
-        dict_type = ns.follow(dict_type);
-
-      if (!dict_type.is_struct())
-      {
-        throw std::runtime_error(
-          "del on subscript requires a dictionary (struct) type");
-      }
-
-      // Delegate to dict_handler which handles both constant and variable keys
-      dict_handler_->handle_dict_delete(dict_expr, slice, target_block);
-    }
-    else if (target["_type"] == "Name")
-    {
-      log_warning("del on simple variables is not fully supported");
-    }
-    else
-    {
-      throw std::runtime_error(
-        "Delete statement target type not supported: " +
-        target["_type"].get<std::string>());
-    }
-  }
 }
