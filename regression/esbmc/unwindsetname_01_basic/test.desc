@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--unwindsetname c:@F@compute_sum:10 --z3
+^VERIFICATION SUCCESSFUL$

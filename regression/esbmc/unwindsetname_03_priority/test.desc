@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--unwindsetname c:@F@test_priority:3 --unwindset 1:10 --z3
+^VERIFICATION SUCCESSFUL$
