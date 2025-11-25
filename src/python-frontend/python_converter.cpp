@@ -6145,8 +6145,8 @@ void python_converter::convert()
   load_c_intrisics(intrinsic_block);
 
   // Variables to hold user code and initialization code
-  codet user_code;  // Pure user code for python_user_main
-  code_blockt init_code;  // Initialization code (imports, intrinsics)
+  codet user_code;  
+  code_blockt init_code; 
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
@@ -6240,7 +6240,7 @@ void python_converter::convert()
     user_code_body.copy_to_operands(call);
     user_code.swap(user_code_body);
 
-    // Add models to init code (intrinsics are already in block)
+    // Add models to init code
     if (!models_block.operands().empty())
       init_code.copy_to_operands(models_block);
   }
@@ -6416,7 +6416,7 @@ void python_converter::convert()
       }
     });
 
-  // 2. Call python_init (if exists) for initialization
+  // 2. Call python_init for initialization
   if (!init_code.operands().empty())
   {
     const symbolt *init_sym = symbol_table_.find_symbol("python_init");
