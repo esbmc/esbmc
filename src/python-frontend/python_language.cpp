@@ -2,6 +2,10 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
+<<<<<<< HEAD
+=======
+#include <clang-c-frontend/clang_c_main.h>
+>>>>>>> aa5f27941 ([python] update __ESBMC_HIDE)
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -144,6 +148,12 @@ bool python_languaget::parse(const std::string &path)
 
 bool python_languaget::final(contextt &)
 {
+<<<<<<< HEAD
+=======
+  // __ESBMC_main is already created in python_converter::convert()
+  // We don't use clang_c_main() because it requires pthread hooks
+  // that are not loaded in Python's filtered C library
+>>>>>>> aa5f27941 ([python] update __ESBMC_HIDE)
   return false;
 }
 

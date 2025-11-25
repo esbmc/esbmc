@@ -6339,7 +6339,7 @@ void python_converter::convert()
     }
   }
 
-  // Create python_user_main function that calls init and runs user code
+  // Create python_user_main function containing only user code
   code_typet user_main_type;
   user_main_type.return_type() = empty_typet();
 
@@ -6351,26 +6351,7 @@ void python_converter::convert()
   user_main_symbol.is_extern = false;
   user_main_symbol.file_local = false;
   user_main_symbol.location = get_location_from_decl(*ast_json);
-
-  // Build the function body: call python_init then run user code
-  code_blockt user_main_body;
-
-  // Call python_init if it exists
-  if (!init_code.operands().empty())
-  {
-    const symbolt *init_sym = symbol_table_.find_symbol("python_init");
-    if (init_sym)
-    {
-      code_function_callt init_call;
-      init_call.function() = symbol_expr(*init_sym);
-      user_main_body.copy_to_operands(init_call);
-    }
-  }
-
-  // Add user code
-  user_main_body.copy_to_operands(user_code);
-
-  user_main_symbol.value = user_main_body;
+  user_main_symbol.value = user_code;
 
   if (symbol_table_.move(user_main_symbol))
   {
@@ -6378,8 +6359,60 @@ void python_converter::convert()
       "The python_user_main function is already defined");
   }
 
-  // Set entry point for clang_c_main to wrap
-  config.main = "python_user_main";
+  // Create __ESBMC_main that initializes and calls user code
+  code_typet main_type;
+  main_type.return_type() = empty_typet();
+
+  symbolt main_symbol;
+  main_symbol.id = "__ESBMC_main";
+  main_symbol.name = "__ESBMC_main";
+  main_symbol.type = main_type;
+  main_symbol.lvalue = true;
+  main_symbol.is_extern = false;
+  main_symbol.file_local = false;
+  main_symbol.location = get_location_from_decl(*ast_json);
+
+  code_blockt main_body;
+
+  // 1. Initialize static lifetime variables
+  symbol_table_.foreach_operand_in_order(
+    [&main_body](const symbolt &s) {
+      if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+      {
+        code_assignt assign(symbol_expr(s), s.value);
+        assign.location() = s.location;
+        main_body.copy_to_operands(assign);
+      }
+    });
+
+  // 2. Call python_init (if exists) for initialization
+  if (!init_code.operands().empty())
+  {
+    const symbolt *init_sym = symbol_table_.find_symbol("python_init");
+    if (init_sym)
+    {
+      code_function_callt init_call;
+      init_call.function() = symbol_expr(*init_sym);
+      main_body.copy_to_operands(init_call);
+    }
+  }
+
+  // 3. Call python_user_main
+  const symbolt *user_main_sym = symbol_table_.find_symbol("python_user_main");
+  if (user_main_sym)
+  {
+    code_function_callt user_main_call;
+    user_main_call.function() = symbol_expr(*user_main_sym);
+    main_body.copy_to_operands(user_main_call);
+  }
+
+  main_symbol.value.swap(main_body);
+
+  if (symbol_table_.move(main_symbol))
+  {
+    throw std::runtime_error(
+      "The main function is already defined in another module");
+  }
 }
 
 exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
