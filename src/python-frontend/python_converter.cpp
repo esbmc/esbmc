@@ -3145,7 +3145,9 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
     if (var_type_str.empty())
       return {var_type_str, var_typet};
 
-    if (var_type_str == "list" || var_type_str == "List")
+    if (var_type_str == "dict" || var_type_str == "Dict")
+      var_typet = dict_handler_->get_dict_struct_type();
+    else if (var_type_str == "list" || var_type_str == "List")
       var_typet = type_handler_.get_list_type();
     else
       var_typet = type_handler_.get_typet(var_type_str, type_size);
@@ -5127,6 +5129,10 @@ void python_converter::get_function_definition(
     else if (return_type == "list" || return_type == "List")
     {
       type.return_type() = type_handler_.get_list_type();
+    }
+    else if (return_type == "dict" || return_type == "Dict")
+    {
+      type.return_type() = dict_handler_->get_dict_struct_type();
     }
     else if (return_type == "str")
     {
