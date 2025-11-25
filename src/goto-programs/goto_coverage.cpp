@@ -920,9 +920,9 @@ bool goto_coveraget::filter(
 
   // Skip the function that is labelled with "__ESBMC_HIDE"
   // Extended to support Python in addition to Solidity
-  if (goto_program.hide &&
-      (config.language.lid == language_idt::SOLIDITY ||
-       config.language.lid == language_idt::PYTHON))
+  if (
+    goto_program.hide && (config.language.lid == language_idt::SOLIDITY ||
+                          config.language.lid == language_idt::PYTHON))
     return true;
   return false;
 }

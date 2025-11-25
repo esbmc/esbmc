@@ -6205,8 +6205,8 @@ void python_converter::convert()
   load_c_intrisics(intrinsic_block);
 
   // Variables to hold user code and initialization code
-  codet user_code;  
-  code_blockt init_code; 
+  codet user_code;
+  code_blockt init_code;
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
@@ -6425,8 +6425,7 @@ void python_converter::convert()
 
     if (symbol_table_.move(init_symbol))
     {
-      throw std::runtime_error(
-        "The python_init function is already defined");
+      throw std::runtime_error("The python_init function is already defined");
     }
   }
 
@@ -6466,15 +6465,14 @@ void python_converter::convert()
   code_blockt main_body;
 
   // 1. Initialize static lifetime variables
-  symbol_table_.foreach_operand_in_order(
-    [&main_body](const symbolt &s) {
-      if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
-      {
-        code_assignt assign(symbol_expr(s), s.value);
-        assign.location() = s.location;
-        main_body.copy_to_operands(assign);
-      }
-    });
+  symbol_table_.foreach_operand_in_order([&main_body](const symbolt &s) {
+    if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+    {
+      code_assignt assign(symbol_expr(s), s.value);
+      assign.location() = s.location;
+      main_body.copy_to_operands(assign);
+    }
+  });
 
   // 2. Call python_init for initialization
   if (!init_code.operands().empty())
