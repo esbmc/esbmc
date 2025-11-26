@@ -6163,22 +6163,14 @@ void python_converter::process_module_imports(
 
 void python_converter::convert()
 {
-  code_typet main_type;
-  main_type.return_type() = empty_typet();
-
-  symbolt main_symbol;
-  main_symbol.id = "__ESBMC_main";
-  main_symbol.name = "__ESBMC_main";
-  main_symbol.type.swap(main_type);
-  main_symbol.lvalue = true;
-  main_symbol.is_extern = false;
-  main_symbol.file_local = false;
-
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
 
   // Create built-in symbols for main module (__name__ = "__main__")
   create_builtin_symbols();
+
+  // Block to accumulate model library code
+  code_blockt models_block;
 
   if (!config.options.get_bool_option("no-library"))
   {
@@ -6225,8 +6217,8 @@ void python_converter::convert()
 
       convert_expression_to_code(model_code);
 
-      // Add imported code to main symbol
-      main_symbol.value.swap(model_code);
+      // Accumulate model code
+      models_block.copy_to_operands(model_code);
       current_python_file = main_python_file;
     }
     is_loading_models = false;
@@ -6235,6 +6227,10 @@ void python_converter::convert()
   // Create a block to hold intrinsic assignments and load C intrinsics
   code_blockt intrinsic_block;
   load_c_intrisics(intrinsic_block);
+
+  // Variables to hold user code and initialization code
+  codet user_code;
+  code_blockt init_code;
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
@@ -6322,9 +6318,15 @@ void python_converter::convert()
     convert_expression_to_code(call);
     convert_expression_to_code(block);
 
-    main_symbol.value.swap(
-      block); // Add class definitions and global variable assignments
-    main_symbol.value.copy_to_operands(call); // Add function call
+    // Prepare user code: class definitions + function call
+    code_blockt user_code_body;
+    user_code_body.copy_to_operands(block);
+    user_code_body.copy_to_operands(call);
+    user_code.swap(user_code_body);
+
+    // Add models to init code
+    if (!models_block.operands().empty())
+      init_code.copy_to_operands(models_block);
   }
   else
   {
@@ -6390,20 +6392,136 @@ void python_converter::convert()
 
     // Convert main statements
     exprt main_block = get_block((*ast_json)["body"]);
-    codet main_code = convert_expression_to_code(main_block);
+    user_code = convert_expression_to_code(main_block);
 
-    // Create the final main block with intrinsic assignments first
-    code_blockt final_block;
-    final_block.copy_to_operands(intrinsic_block);
-
-    // Add all accumulated imports
+    // Prepare initialization code: models + intrinsics + imports
+    if (!models_block.operands().empty())
+      init_code.copy_to_operands(models_block);
+    init_code.copy_to_operands(intrinsic_block);
     if (!all_imports_block.operands().empty())
-      final_block.copy_to_operands(all_imports_block);
-
-    final_block.copy_to_operands(main_code);
-
-    main_symbol.value.swap(final_block);
+      init_code.copy_to_operands(all_imports_block);
   }
+
+  /*
+   * Create three-function architecture for coverage support (similar to Solidity Frontend):
+   *
+   * 1. python_init
+   *    - Contains models, intrinsics, and imports initialization
+   *    - Marked with __ESBMC_HIDE label to exclude from coverage statistics
+   *    - Only created if there is initialization code
+   *
+   * 2. python_user_main 
+   *    - Contains only user code from the main module
+   *    - This is what gets analyzed for branch/decision/assertion coverage
+   *
+   * 3. __ESBMC_main
+   *    - Entry point for ESBMC verification
+   *    - Initializes static lifetime variables
+   *    - Calls python_init() if it exists
+   *    - Calls python_user_main()
+   *
+   * This architecture ensures that coverage analysis only counts user code,
+   * not initialization/library code, making Python behave consistently with C.
+   */
+  if (!init_code.operands().empty())
+  {
+    code_typet init_type;
+    init_type.return_type() = empty_typet();
+
+    symbolt init_symbol;
+    init_symbol.id = "python_init";
+    init_symbol.name = "python_init";
+    init_symbol.type = init_type;
+    init_symbol.lvalue = true;
+    init_symbol.is_extern = false;
+    init_symbol.file_local = false;
+    init_symbol.location = get_location_from_decl(*ast_json);
+
+    // Add __ESBMC_HIDE label to hide from coverage
+    code_labelt esbmc_hide;
+    esbmc_hide.set_label("__ESBMC_HIDE");
+    esbmc_hide.code() = code_skipt();
+
+    code_blockt init_body;
+    init_body.copy_to_operands(esbmc_hide);
+    init_body.copy_to_operands(init_code);
+    init_symbol.value.swap(init_body);
+
+    if (symbol_table_.move(init_symbol))
+    {
+      throw std::runtime_error("The python_init function is already defined");
+    }
+  }
+
+  // Create python_user_main function containing only user code
+  code_typet user_main_type;
+  user_main_type.return_type() = empty_typet();
+
+  symbolt user_main_symbol;
+  user_main_symbol.id = "python_user_main";
+  user_main_symbol.name = "python_user_main";
+  user_main_symbol.type = user_main_type;
+  user_main_symbol.lvalue = true;
+  user_main_symbol.is_extern = false;
+  user_main_symbol.file_local = false;
+  user_main_symbol.location = get_location_from_decl(*ast_json);
+  user_main_symbol.value = user_code;
+
+  if (symbol_table_.move(user_main_symbol))
+  {
+    throw std::runtime_error(
+      "The python_user_main function is already defined");
+  }
+
+  // Create __ESBMC_main that initializes and calls user code
+  code_typet main_type;
+  main_type.return_type() = empty_typet();
+
+  symbolt main_symbol;
+  main_symbol.id = "__ESBMC_main";
+  main_symbol.name = "__ESBMC_main";
+  main_symbol.type = main_type;
+  main_symbol.lvalue = true;
+  main_symbol.is_extern = false;
+  main_symbol.file_local = false;
+  main_symbol.location = get_location_from_decl(*ast_json);
+
+  code_blockt main_body;
+
+  // 1. Initialize static lifetime variables
+  symbol_table_.foreach_operand_in_order([&main_body](const symbolt &s) {
+    if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+    {
+      code_assignt assign(symbol_expr(s), s.value);
+      assign.location() = s.location;
+      main_body.copy_to_operands(assign);
+    }
+  });
+
+  // 2. Call python_init for initialization
+  if (!init_code.operands().empty())
+  {
+    const symbolt *init_sym = symbol_table_.find_symbol("python_init");
+    if (init_sym)
+    {
+      code_function_callt init_call;
+      init_call.function() = symbol_expr(*init_sym);
+      main_body.copy_to_operands(init_call);
+    }
+  }
+
+  // 3. Call python_user_main
+  const symbolt *user_main_sym = symbol_table_.find_symbol("python_user_main");
+  if (!user_main_sym)
+  {
+    throw std::runtime_error("python_user_main symbol not found after move");
+  }
+
+  code_function_callt user_main_call;
+  user_main_call.function() = symbol_expr(*user_main_sym);
+  main_body.copy_to_operands(user_main_call);
+
+  main_symbol.value.swap(main_body);
 
   if (symbol_table_.move(main_symbol))
   {
