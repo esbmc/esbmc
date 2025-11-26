@@ -162,42 +162,10 @@ private:
           continue; // Skip this recursive call
         }
 
-        // Try to infer type from the return value
-        if (return_val["_type"] == "Constant")
-        {
-          const auto &value = return_val["value"];
-          if (value.is_number_integer())
-            return "int";
-          if (value.is_number_float())
-            return "float";
-          if (value.is_boolean())
-            return "bool";
-          if (value.is_string())
-            return "str";
-          if (value.is_null())
-            return "NoneType";
-        }
-        else if (return_val["_type"] == "Name")
-        {
-          // Try to find the variable's type
-          Json var_node =
-            json_utils::find_var_decl(return_val["id"], func_name, ast_);
-          if (
-            !var_node.empty() && var_node.contains("annotation") &&
-            !var_node["annotation"].is_null() &&
-            var_node["annotation"].contains("id"))
-          {
-            return var_node["annotation"]["id"];
-          }
-        }
-        else if (return_val["_type"] == "BinOp")
-        {
-          // For binary operations, try to infer from operands
-          Json dummy_stmt = {{"value", return_val}};
-          std::string type = get_type_from_binary_expr(dummy_stmt, ast_);
-          if (!type.empty())
-            return type;
-        }
+        // Reuse get_argument_type to infer the return value type
+        std::string inferred_type = get_argument_type(return_val);
+        if (!inferred_type.empty())
+          return inferred_type;
       }
 
       // Recursively check nested blocks (if/while/for/try)
