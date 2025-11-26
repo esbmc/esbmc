@@ -5,8 +5,8 @@ USAGE:
     # Lists:
     x = nondet_list()                                    # int list, size [0, 8]
     x = nondet_list(5)                                   # int list, size [0, 5]
-    x = nondet_list(type=nondet_float())                 # float list, size [0, 8]
-    x = nondet_list(max_size=10, type=nondet_bool())     # bool list, size [0, 10]
+    x = nondet_list(elem_type=nondet_float())                 # float list, size [0, 8]
+    x = nondet_list(max_size=10, elem_type=nondet_bool())     # bool list, size [0, 10]
     
     # Dictionaries:
     x = nondet_dict()                                    # str->int dict, size [0, 8]
@@ -37,29 +37,29 @@ def _nondet_size(max_size: int) -> int:
     return size
 
 
-def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, type: Any = None) -> list:
+def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> list:
     """
     Return a non-deterministic list with specified element type.
     
     Args:
         max_size: Maximum size of the list (default: 8).
                   The actual size will be in range [0, max_size].
-        type: Type constructor for list elements (default: nondet_int()).
+        elem_type: Type constructor for list elements (default: nondet_int()).
               Supported: nondet_int(), nondet_float(), nondet_bool()
     
     Returns:
         list: A list with arbitrary size and contents of specified type.
     """
     # Default to nondet_int if no type specified
-    if type is None:
-        type = nondet_int()
+    if elem_type is None:
+        elem_type = nondet_int()
 
     result: list = []
     size: int = _nondet_size(max_size)
 
     i: int = 0
     while i < size:
-        result.append(type)
+        result.append(elem_type)
         i = i + 1
 
     return result
