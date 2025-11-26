@@ -3145,7 +3145,9 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
     if (var_type_str.empty())
       return {var_type_str, var_typet};
 
-    if (var_type_str == "list" || var_type_str == "List")
+    if (var_type_str == "dict" || var_type_str == "Dict")
+      var_typet = dict_handler_->get_dict_struct_type();
+    else if (var_type_str == "list" || var_type_str == "List")
       var_typet = type_handler_.get_list_type();
     else
       var_typet = type_handler_.get_typet(var_type_str, type_size);
@@ -4519,6 +4521,12 @@ typet python_converter::get_type_from_annotation(
        annotation_node["value"]["id"] == "List"))
       return type_handler_.get_list_type();
 
+    if (
+      annotation_node.contains("value") &&
+      (annotation_node["value"]["id"] == "dict" ||
+       annotation_node["value"]["id"] == "Dict"))
+      return dict_handler_->get_dict_struct_type();
+
     // Handle Literal[T]: extract the type from the literal value
     if (
       annotation_node.contains("value") &&
@@ -4797,7 +4805,19 @@ typet python_converter::get_type_from_annotation(
     annotation_node["_type"] == "Attribute" && annotation_node.contains("attr"))
     return type_handler_.get_typet(annotation_node["attr"].get<std::string>());
   else if (annotation_node.contains("id"))
-    return type_handler_.get_typet(annotation_node["id"].get<std::string>());
+  {
+    std::string type_id = annotation_node["id"].get<std::string>();
+
+    // Special handling for dict type
+    if (type_id == "dict" || type_id == "Dict")
+      return dict_handler_->get_dict_struct_type();
+
+    // Special handling for list type
+    if (type_id == "list" || type_id == "List")
+      return type_handler_.get_list_type();
+
+    return type_handler_.get_typet(type_id);
+  }
   else
   {
     throw std::runtime_error(
@@ -5127,6 +5147,10 @@ void python_converter::get_function_definition(
     else if (return_type == "list" || return_type == "List")
     {
       type.return_type() = type_handler_.get_list_type();
+    }
+    else if (return_type == "dict" || return_type == "Dict")
+    {
+      type.return_type() = dict_handler_->get_dict_struct_type();
     }
     else if (return_type == "str")
     {
