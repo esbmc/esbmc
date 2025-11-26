@@ -296,6 +296,11 @@ elif "COVER( init(main()), FQL(COVER EDGES(@CALL(__VERIFIER_error))) )" in prope
     category_property = Property.reach
 elif "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )" in property_file_content:
     category_property = Property.reach
+# 2025 new properties: 
+elif "COVER( init(main()), FQL(COVER EDGES(@CALL(reach_error))) )" in property_file_content:
+    category_property = Property.reach 
+elif "CHECK( init(main()), LTL(G ! call(reach_error())) )" in property_file_content:
+    category_property = Property.reach
 else:
     print ("Unsupported Property")
     exit(1)
