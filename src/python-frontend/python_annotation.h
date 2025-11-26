@@ -558,10 +558,13 @@ private:
     add_annotation(function_element);
 
     auto return_node = json_utils::find_return_node(function_element["body"]);
-    if (
-      !return_node.empty() &&
-      (function_element["returns"].is_null() ||
-       config.options.get_bool_option("override-return-annotation")))
+
+    // Check if we should override the return annotation
+    bool should_override =
+      config.options.get_bool_option("override-return-annotation");
+    bool has_no_annotation = function_element["returns"].is_null();
+
+    if (!return_node.empty() && (has_no_annotation || should_override))
     {
       std::string inferred_type;
       if (
@@ -816,10 +819,14 @@ private:
       {
         if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
         {
+          // When override flag is set, always infer instead of using annotation
+          bool should_override =
+            config.options.get_bool_option("override-return-annotation");
+
           // Check if function has explicit return type annotation
           if (
-            elem.contains("returns") && !elem["returns"].is_null() &&
-            elem["returns"].contains("id"))
+            !should_override && elem.contains("returns") &&
+            !elem["returns"].is_null() && elem["returns"].contains("id"))
           {
             functions_in_analysis_.erase(func_name);
             return elem["returns"]["id"];
@@ -857,59 +864,68 @@ private:
       }
     }
 
+    // Check override flag
+    bool should_override =
+      config.options.get_bool_option("override-return-annotation");
+
     // Search the top-level AST body for a matching function definition
     for (const Json &elem : ast["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
-        // Check if function has a return type annotation first (before inferring)
-        if (elem.contains("returns") && !elem["returns"].is_null())
+        // If override is set, skip annotation and go straight to inference
+        if (!should_override)
         {
-          const auto &returns = elem["returns"];
-
-          // Handle different return type annotation structures
-          if (returns.contains("_type"))
+          // Check if function has a return type annotation first (before inferring)
+          if (elem.contains("returns") && !elem["returns"].is_null())
           {
-            const std::string &return_type = returns["_type"];
+            const auto &returns = elem["returns"];
 
-            // Handle Subscript type (e.g., List[int], Dict[str, int])
-            if (return_type == "Subscript")
+            // Handle different return type annotation structures
+            if (returns.contains("_type"))
             {
-              functions_in_analysis_.erase(func_name);
-              if (returns.contains("value") && returns["value"].contains("id"))
-                return returns["value"]["id"];
-              else
-                return "Any"; // Default for complex subscript types
-            }
-            // Handle Constant type (e.g., None)
-            else if (return_type == "Constant")
-            {
-              functions_in_analysis_.erase(func_name);
-              if (returns.contains("value") && returns["value"].is_null())
-                return "NoneType";
-              else if (returns.contains("value"))
-                return "Any"; // Other constant types
-            }
-            // Handle other annotation types
-            else
-            {
-              // Try to extract id if it exists
-              if (returns.contains("id"))
+              const std::string &return_type = returns["_type"];
+
+              // Handle Subscript type (e.g., List[int], Dict[str, int])
+              if (return_type == "Subscript")
               {
                 functions_in_analysis_.erase(func_name);
-                return returns["id"];
+                if (
+                  returns.contains("value") && returns["value"].contains("id"))
+                  return returns["value"]["id"];
+                else
+                  return "Any"; // Default for complex subscript types
+              }
+              // Handle Constant type (e.g., None)
+              else if (return_type == "Constant")
+              {
+                functions_in_analysis_.erase(func_name);
+                if (returns.contains("value") && returns["value"].is_null())
+                  return "NoneType";
+                else if (returns.contains("value"))
+                  return "Any"; // Other constant types
+              }
+              // Handle other annotation types
+              else
+              {
+                // Try to extract id if it exists
+                if (returns.contains("id"))
+                {
+                  functions_in_analysis_.erase(func_name);
+                  return returns["id"];
+                }
               }
             }
-          }
-          // Handle case where returns exists but doesn't have expected structure
-          else
-          {
-            log_warning(
-              "Unrecognized return type annotation for function "
-              "{}",
-              func_name);
-            functions_in_analysis_.erase(func_name);
-            return "Any"; // Safe default
+            // Handle case where returns exists but doesn't have expected structure
+            else
+            {
+              log_warning(
+                "Unrecognized return type annotation for function "
+                "{}",
+                func_name);
+              functions_in_analysis_.erase(func_name);
+              return "Any"; // Safe default
+            }
           }
         }
 
