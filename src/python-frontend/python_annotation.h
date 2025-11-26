@@ -142,6 +142,53 @@ public:
   }
 
 private:
+  // Infer return type from non-recursive return statements
+  std::string
+  infer_from_return_statements(const Json &body, const std::string &func_name)
+  {
+    for (const Json &stmt : body)
+    {
+      // Found a return statement
+      if (stmt["_type"] == "Return" && !stmt["value"].is_null())
+      {
+        const Json &return_val = stmt["value"];
+
+        // Skip recursive calls
+        if (
+          return_val["_type"] == "Call" && return_val.contains("func") &&
+          return_val["func"]["_type"] == "Name" &&
+          return_val["func"]["id"] == func_name)
+        {
+          continue; // Skip this recursive call
+        }
+
+        // Reuse get_argument_type to infer the return value type
+        std::string inferred_type = get_argument_type(return_val);
+        if (!inferred_type.empty())
+          return inferred_type;
+      }
+
+      // Recursively check nested blocks (if/while/for/try)
+      if (stmt.contains("body") && stmt["body"].is_array())
+      {
+        std::string nested_type =
+          infer_from_return_statements(stmt["body"], func_name);
+        if (!nested_type.empty())
+          return nested_type;
+      }
+
+      if (stmt.contains("orelse") && stmt["orelse"].is_array())
+      {
+        std::string nested_type =
+          infer_from_return_statements(stmt["orelse"], func_name);
+        if (!nested_type.empty())
+          return nested_type;
+      }
+    }
+
+    return ""; // Couldn't infer
+  }
+
   // Method to infer and annotate unannotated function parameters
   void infer_parameter_types(Json &function_element)
   {
@@ -511,10 +558,13 @@ private:
     add_annotation(function_element);
 
     auto return_node = json_utils::find_return_node(function_element["body"]);
-    if (
-      !return_node.empty() &&
-      (function_element["returns"].is_null() ||
-       config.options.get_bool_option("override-return-annotation")))
+
+    // Check if we should override the return annotation
+    bool should_override =
+      config.options.get_bool_option("override-return-annotation");
+    bool has_no_annotation = function_element["returns"].is_null();
+
+    if (!return_node.empty() && (has_no_annotation || should_override))
     {
       std::string inferred_type;
       if (
@@ -761,76 +811,136 @@ private:
   std::string
   get_function_return_type(const std::string &func_name, const Json &ast)
   {
+    // Guard against infinite recursion
+    if (functions_in_analysis_.count(func_name) > 0)
+    {
+      // Function is calling itself: try to infer from non-recursive return statements
+      for (const Json &elem : ast["body"])
+      {
+        if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+        {
+          // When override flag is set, always infer instead of using annotation
+          bool should_override =
+            config.options.get_bool_option("override-return-annotation");
+
+          // Check if function has explicit return type annotation
+          if (
+            !should_override && elem.contains("returns") &&
+            !elem["returns"].is_null() && elem["returns"].contains("id"))
+          {
+            functions_in_analysis_.erase(func_name);
+            return elem["returns"]["id"];
+          }
+
+          // Try to infer from return statements (excluding recursive calls)
+          std::string inferred =
+            infer_from_return_statements(elem["body"], func_name);
+          if (!inferred.empty())
+          {
+            functions_in_analysis_.erase(func_name);
+            return inferred;
+          }
+
+          // No annotation and can't infer: return empty to avoid crash
+          functions_in_analysis_.erase(func_name);
+          return "";
+        }
+      }
+      functions_in_analysis_.erase(func_name);
+      return "";
+    }
+
+    // Add function to set before analysis
+    functions_in_analysis_.insert(func_name);
+
     // Get type from nondet_<type> functions
     if (func_name.find("nondet_") == 0)
     {
       size_t last_underscore_pos = func_name.find_last_of('_');
       if (last_underscore_pos != std::string::npos)
       {
-        // Return the substring from the position after the last underscore to the end
+        functions_in_analysis_.erase(func_name);
         return func_name.substr(last_underscore_pos + 1);
       }
     }
+
+    // Check override flag
+    bool should_override =
+      config.options.get_bool_option("override-return-annotation");
 
     // Search the top-level AST body for a matching function definition
     for (const Json &elem : ast["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        // If override is set, skip annotation and go straight to inference
+        if (!should_override)
+        {
+          // Check if function has a return type annotation first (before inferring)
+          if (elem.contains("returns") && !elem["returns"].is_null())
+          {
+            const auto &returns = elem["returns"];
+
+            // Handle different return type annotation structures
+            if (returns.contains("_type"))
+            {
+              const std::string &return_type = returns["_type"];
+
+              // Handle Subscript type (e.g., List[int], Dict[str, int])
+              if (return_type == "Subscript")
+              {
+                functions_in_analysis_.erase(func_name);
+                if (
+                  returns.contains("value") && returns["value"].contains("id"))
+                  return returns["value"]["id"];
+                else
+                  return "Any"; // Default for complex subscript types
+              }
+              // Handle Constant type (e.g., None)
+              else if (return_type == "Constant")
+              {
+                functions_in_analysis_.erase(func_name);
+                if (returns.contains("value") && returns["value"].is_null())
+                  return "NoneType";
+                else if (returns.contains("value"))
+                  return "Any"; // Other constant types
+              }
+              // Handle other annotation types
+              else
+              {
+                // Try to extract id if it exists
+                if (returns.contains("id"))
+                {
+                  functions_in_analysis_.erase(func_name);
+                  return returns["id"];
+                }
+              }
+            }
+            // Handle case where returns exists but doesn't have expected structure
+            else
+            {
+              log_warning(
+                "Unrecognized return type annotation for function "
+                "{}",
+                func_name);
+              functions_in_analysis_.erase(func_name);
+              return "Any"; // Safe default
+            }
+          }
+        }
+
         // Try to infer return type from actual return statements
         auto return_node = json_utils::find_return_node(elem["body"]);
         if (!return_node.empty())
         {
           std::string inferred_type;
           infer_type(return_node, elem, inferred_type);
+          functions_in_analysis_.erase(func_name);
           return inferred_type;
         }
 
-        // Check if function has a return type annotation
-        if (elem.contains("returns") && !elem["returns"].is_null())
-        {
-          const auto &returns = elem["returns"];
-
-          // Handle different return type annotation structures
-          if (returns.contains("_type"))
-          {
-            const std::string &return_type = returns["_type"];
-
-            // Handle Subscript type (e.g., List[int], Dict[str, int])
-            if (return_type == "Subscript")
-            {
-              if (returns.contains("value") && returns["value"].contains("id"))
-                return returns["value"]["id"];
-              else
-                return "Any"; // Default for complex subscript types
-            }
-            // Handle Constant type (e.g., None)
-            else if (return_type == "Constant")
-            {
-              if (returns.contains("value") && returns["value"].is_null())
-                return "NoneType";
-              else if (returns.contains("value"))
-                return "Any"; // Other constant types
-            }
-            // Handle other annotation types
-            else
-            {
-              // Try to extract id if it exists
-              if (returns.contains("id"))
-                return returns["id"];
-            }
-          }
-          // Handle case where returns exists but doesn't have expected structure
-          else
-          {
-            log_warning(
-              "Unrecognized return type annotation for function "
-              "{}",
-              func_name);
-            return "Any"; // Safe default
-          }
-        }
         // If function has no explicit return statements, assume void/None
+        functions_in_analysis_.erase(func_name);
         return "NoneType";
       }
     }
@@ -843,7 +953,10 @@ private:
       lambda_elem = find_lambda_in_body(func_name, (*current_func)["body"]);
 
     if (!lambda_elem.empty())
+    {
+      functions_in_analysis_.erase(func_name);
       return infer_lambda_return_type(lambda_elem);
+    }
 
     // Get type from imported functions
     try
@@ -866,14 +979,17 @@ private:
           {
             // It might be a class constructor (__init__ returns None)
             // Return the class name as the type
+            functions_in_analysis_.erase(func_name);
             return func_name;
           }
 
+          functions_in_analysis_.erase(func_name);
           return func_info.return_type_;
         }
         catch (std::runtime_error &)
         {
           // If get_function fails, it might be a class
+          functions_in_analysis_.erase(func_name);
           return func_name;
         }
       }
@@ -886,8 +1002,11 @@ private:
     auto it = builtin_functions.find(func_name);
     if (it != builtin_functions.end())
     {
+      functions_in_analysis_.erase(func_name);
       return it->second;
     }
+
+    functions_in_analysis_.erase(func_name);
 
     std::ostringstream oss;
     oss << "Function \"" << func_name << "\" not found (" << python_filename_
@@ -2014,4 +2133,5 @@ private:
   std::string python_filename_;
   bool filter_global_elements_ = false;
   std::vector<Json> referenced_global_elements;
+  std::set<std::string> functions_in_analysis_;
 };
