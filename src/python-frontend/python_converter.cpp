@@ -35,7 +35,6 @@
 #include <unordered_map>
 
 #include <boost/filesystem.hpp>
-#include <iostream>
 
 using namespace json_utils;
 namespace fs = boost::filesystem;
@@ -3983,8 +3982,7 @@ void python_converter::emit_type_annotation_assertion(
         type_assert))
     return;
 
-  std::cerr << "[emit] " << context_name << " types " << allowed_types.size()
-            << std::endl;
+  log_error("[emit] {} types {}", context_name, allowed_types.size());
   target_block.copy_to_operands(type_assert);
 }
 
