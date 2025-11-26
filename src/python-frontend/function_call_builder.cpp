@@ -275,9 +275,18 @@ symbol_id function_call_builder::build_function_id() const
           }
         }
       }
-      if (
+      if (var_type == "dict")
+      {
+        // Mark this as a dict len() call
+        func_name = "__ESBMC_len_dict";
+        function_id.clear();
+        function_id.set_prefix("esbmc:");
+        function_id.set_function(func_name);
+        return function_id;
+      }
+      else if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
-        var_type == "set" || var_type == "dict")
+        var_type == "set")
       {
         func_name = kGetObjectSize;
       }
@@ -408,6 +417,33 @@ exprt function_call_builder::build() const
 
     // Fallback
     return from_integer(0, size_type());
+  }
+
+  if (function_id.get_function() == "__ESBMC_len_dict")
+  {
+    const auto &arg = call_["args"][0];
+    exprt obj_expr = converter_.get_expr(arg);
+
+    // Get the keys member from the dictionary struct
+    typet keys_type = pointer_typet(struct_typet()); // Type of the keys pointer
+    member_exprt keys_member(obj_expr, "keys", keys_type);
+
+    // Create the list_get_size function symbol
+    code_typet list_get_size_type;
+    list_get_size_type.return_type() = size_type();
+    code_typet::argumentt arg_type;
+    arg_type.type() = keys_type;
+    list_get_size_type.arguments().push_back(arg_type);
+
+    symbol_exprt list_get_size_func(
+      "c:@F@__ESBMC_list_size", list_get_size_type);
+
+    // Create the function call
+    side_effect_expr_function_callt call_expr(size_type());
+    call_expr.function() = list_get_size_func;
+    call_expr.arguments().push_back(keys_member);
+
+    return call_expr;
   }
 
   // Special handling for assume calls: convert to code_assume instead of function call
