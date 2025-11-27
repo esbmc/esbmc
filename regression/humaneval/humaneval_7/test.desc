@@ -1,4 +1,4 @@
-KNOWNBUG
+THOROUGH
 main.py
 --unwind 30 --no-bounds-check --no-pointer-check --no-align-check
 ^VERIFICATION SUCCESSFUL$
