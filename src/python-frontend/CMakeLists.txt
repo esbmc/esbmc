@@ -19,6 +19,7 @@ add_library(pythonfrontend STATIC
             python_list.cpp
             python_math.cpp
             python_set.cpp
+            python_typechecking.cpp
             pythonastgen.c
             module_manager.cpp
             module_locator.cpp
@@ -37,6 +38,7 @@ add_library(pythonfrontend STATIC
 target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_BINARY_DIR}/src/python-frontend
+    PUBLIC ${CMAKE_SOURCE_DIR}/src
     PUBLIC ${Boost_INCLUDE_DIRS}
 )
 

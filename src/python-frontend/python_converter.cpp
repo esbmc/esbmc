@@ -8,6 +8,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/python_typechecking.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
@@ -1430,188 +1431,7 @@ void python_converter::resolve_dict_subscript_types(
   }
 }
 
-std::vector<typet> python_converter::collect_annotation_types(
-  const nlohmann::json &annotation) const
-{
-  std::vector<typet> collected;
-  if (annotation.is_null() || !annotation.contains("_type"))
-    return collected;
-
-  std::function<void(const nlohmann::json &)> collect =
-    [&](const nlohmann::json &node)
-  {
-    if (node.is_null() || !node.contains("_type"))
-      return;
-
-    const std::string node_type = node["_type"].get<std::string>();
-
-    if (
-      node_type == "BinOp" && node.contains("op") &&
-      node["op"].contains("_type") && node["op"]["_type"] == "BitOr")
-    {
-      collect(node["left"]);
-      collect(node["right"]);
-      return;
-    }
-
-    if (
-      node_type == "Subscript" && node.contains("value") &&
-      node["value"].contains("id"))
-    {
-      const std::string base = node["value"]["id"].get<std::string>();
-      if (base == "Union")
-      {
-        if (node.contains("slice"))
-        {
-          const auto &slice = node["slice"];
-          if (slice.contains("elts"))
-          {
-            for (const auto &elt : slice["elts"])
-              collect(elt);
-          }
-          else
-            collect(slice);
-        }
-        return;
-      }
-      if (base == "Optional")
-      {
-        if (node.contains("slice"))
-          collect(node["slice"]);
-        collected.push_back(none_type());
-        return;
-      }
-      if (base == "List" || base == "list")
-      {
-        collected.push_back(type_handler_.get_list_type());
-        return;
-      }
-      if (base == "Dict" || base == "dict")
-      {
-        collected.push_back(dict_handler_->get_dict_struct_type());
-        return;
-      }
-    }
-
-    if (node_type == "Constant" && node.contains("value"))
-    {
-      if (node["value"].is_null())
-      {
-        collected.push_back(none_type());
-        return;
-      }
-    }
-
-    if (node_type == "Name" && node.contains("id"))
-    {
-      collected.push_back(
-        type_handler_.get_typet(node["id"].get<std::string>()));
-      return;
-    }
-
-    if (node_type == "Attribute" && node.contains("attr"))
-    {
-      collected.push_back(
-        type_handler_.get_typet(node["attr"].get<std::string>()));
-      return;
-    }
-
-    try
-    {
-      collected.push_back(
-        const_cast<python_converter *>(this)->get_type_from_annotation(
-          node, node));
-    }
-    catch (const std::exception &)
-    {
-    }
-  };
-
-  collect(annotation);
-
-  std::vector<typet> unique_types;
-  for (const auto &type : collected)
-  {
-    bool exists = false;
-    for (const auto &current : unique_types)
-    {
-      if (type == current)
-      {
-        exists = true;
-        break;
-      }
-    }
-    if (!exists)
-      unique_types.push_back(type);
-  }
-  return unique_types;
-}
-
-void python_converter::cache_annotation_types(
-  const symbolt &symbol,
-  const nlohmann::json &annotation)
-{
-  if (annotation.is_null())
-    return;
-  auto key = symbol.id.as_string();
-  if (annotation_type_cache_.find(key) != annotation_type_cache_.end())
-    return;
-
-  auto types = collect_annotation_types(annotation);
-  if (!types.empty())
-  {
-    annotation_type_cache_[key] = types;
-  }
-}
-
-std::vector<typet>
-python_converter::get_annotation_types(const std::string &symbol_id) const
-{
-  auto it = annotation_type_cache_.find(symbol_id);
-  if (it != annotation_type_cache_.end())
-    return it->second;
-  return {};
-}
-
-std::string
-python_converter::get_constructor_name(const nlohmann::json &func_node) const
-{
-  if (!func_node.contains("_type"))
-    return {};
-
-  if (func_node["_type"] == "Name" && func_node.contains("id"))
-    return func_node["id"].get<std::string>();
-
-  if (func_node["_type"] == "Attribute" && func_node.contains("attr"))
-    return func_node["attr"].get<std::string>();
-
-  return {};
-}
-
-bool python_converter::class_derives_from(
-  const std::string &class_name,
-  const std::string &expected_base) const
-{
-  if (class_name == expected_base)
-    return true;
-
-  const auto class_node =
-    json_utils::find_class((*ast_json)["body"], class_name);
-  if (class_node.empty() || !class_node.contains("bases"))
-    return false;
-
-  for (const auto &base : class_node["bases"])
-  {
-    std::string base_name;
-    if (base.contains("_type") && base["_type"] == "Name")
-      base_name = base["id"].get<std::string>();
-    else if (base.contains("_type") && base["_type"] == "Attribute")
-      base_name = base["attr"].get<std::string>();
-    if (!base_name.empty() && class_derives_from(base_name, expected_base))
-      return true;
-  }
-  return false;
-}
+// (annotation type collection & inheritance helpers moved to python_typechecking)
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
@@ -3831,241 +3651,7 @@ std::string python_converter::infer_type_from_any_annotation(
   return lhs_type;
 }
 
-bool python_converter::should_skip_type_assertion(
-  const typet &annotated_type) const
-{
-  if (annotated_type.is_nil() || annotated_type.id().empty())
-    return true;
-
-  if (
-    annotated_type.id() == "pointer" &&
-    annotated_type.subtype().id() == "empty")
-    return true; // Any
-
-  if (annotated_type.id() == "struct")
-  {
-    const struct_typet &struct_type = to_struct_type(annotated_type);
-    const std::string &tag = struct_type.tag().as_string();
-    if (tag.rfind("tag-Optional_", 0) == 0)
-      return true;
-  }
-
-  return false;
-}
-
-exprt python_converter::build_isinstance_check(
-  const exprt &value_expr,
-  const typet &annotated_type) const
-{
-  if (should_skip_type_assertion(annotated_type))
-    return nil_exprt();
-
-  typet effective_type = annotated_type;
-
-  if (effective_type.id() == "pointer")
-  {
-    typet pointed_type = effective_type.subtype();
-
-    if (pointed_type.is_symbol())
-    {
-      const symbolt *symbol = ns.lookup(pointed_type);
-      if (symbol != nullptr)
-        pointed_type = symbol->type;
-    }
-
-    if (pointed_type.is_struct())
-      effective_type = pointed_type;
-  }
-
-  exprt type_operand;
-  if (effective_type.is_symbol())
-  {
-    const symbolt *symbol = ns.lookup(effective_type);
-    if (symbol == nullptr)
-      return nil_exprt();
-    type_operand = symbol_expr(*symbol);
-  }
-  else
-    type_operand = gen_zero(effective_type);
-
-  exprt isinstance_expr("isinstance", typet("bool"));
-  isinstance_expr.copy_to_operands(value_expr);
-  isinstance_expr.move_to_operands(type_operand);
-  return isinstance_expr;
-}
-
-bool python_converter::build_type_assertion(
-  const exprt &value_expr,
-  const typet &annotated_type,
-  const std::vector<typet> &allowed_types,
-  const std::string &context_name,
-  const locationt &location,
-  code_assertt &out_assert) const
-{
-  std::vector<typet> effective_types = allowed_types;
-  if (effective_types.empty() && !should_skip_type_assertion(annotated_type))
-    effective_types.push_back(annotated_type);
-
-  std::vector<exprt> checks;
-  for (const auto &type : effective_types)
-  {
-    if (type == none_type())
-      continue;
-
-    exprt isinstance_expr = build_isinstance_check(value_expr, type);
-    if (!isinstance_expr.is_nil())
-      checks.push_back(isinstance_expr);
-  }
-
-  if (checks.empty())
-    return false;
-
-  exprt assertion_expr = checks.front();
-  for (size_t i = 1; i < checks.size(); ++i)
-  {
-    exprt or_expr("or", typet("bool"));
-    or_expr.move_to_operands(assertion_expr);
-    or_expr.move_to_operands(checks[i]);
-    assertion_expr = or_expr;
-  }
-
-  out_assert = code_assertt(assertion_expr);
-  out_assert.location() = location;
-
-  if (!context_name.empty())
-  {
-    std::string type_label = type_handler_.type_to_string(annotated_type);
-    if (type_label.empty())
-    {
-      if (annotated_type.id() == "struct")
-      {
-        const auto &struct_type = to_struct_type(annotated_type);
-        std::string tag = struct_type.tag().as_string();
-        type_label = tag.rfind("tag-", 0) == 0 ? tag.substr(4) : tag;
-      }
-      else if (annotated_type.id() == "symbol")
-      {
-        type_label = annotated_type.identifier().as_string();
-      }
-    }
-
-    if (!type_label.empty())
-    {
-      out_assert.location().comment(
-        "Expected '" + context_name + "' to be of type '" + type_label + "'");
-    }
-    else
-    {
-      out_assert.location().comment(
-        "Type annotation check for '" + context_name + "'");
-    }
-  }
-
-  return true;
-}
-
-void python_converter::emit_type_annotation_assertion(
-  const exprt &value_expr,
-  const typet &annotated_type,
-  const std::vector<typet> &allowed_types,
-  const std::string &context_name,
-  const locationt &location,
-  codet &target_block)
-{
-  code_assertt type_assert;
-  if (!build_type_assertion(
-        value_expr,
-        annotated_type,
-        allowed_types,
-        context_name,
-        location,
-        type_assert))
-    return;
-
-  log_error("[emit] {} types {}", context_name, allowed_types.size());
-  target_block.copy_to_operands(type_assert);
-}
-
-void python_converter::inject_parameter_type_assertions(
-  const nlohmann::json &function_node,
-  const symbol_id &function_id,
-  const code_typet &type,
-  exprt &function_body)
-{
-  if (function_body.statement() != "block")
-    return;
-
-  if (!function_node.contains("args") || !function_node["args"].is_object())
-    return;
-
-  const auto &args_node = function_node["args"];
-  if (
-    !args_node.contains("args") && !args_node.contains("posonlyargs") &&
-    !args_node.contains("kwonlyargs"))
-    return;
-
-  std::unordered_map<std::string, typet> param_types;
-  for (const auto &arg : type.arguments())
-  {
-    const std::string base = arg.get_base_name().as_string();
-    if (!base.empty())
-      param_types.emplace(base, arg.type());
-  }
-
-  std::vector<code_assertt> assertions;
-  auto try_append_assert = [&](const nlohmann::json &arg_json)
-  {
-    if (
-      !arg_json.contains("annotation") || arg_json["annotation"].is_null() ||
-      !arg_json.contains("arg"))
-      return;
-
-    std::string arg_name = arg_json["arg"].get<std::string>();
-    if (arg_name.empty() || arg_name == "self" || arg_name == "cls")
-      return;
-
-    auto type_it = param_types.find(arg_name);
-    if (type_it == param_types.end())
-      return;
-
-    std::string symbol_id = function_id.to_string() + "@" + arg_name;
-    symbol_exprt param_expr(symbol_id, type_it->second);
-    locationt loc = get_location_from_decl(arg_json);
-    std::vector<typet> allowed_types = get_annotation_types(symbol_id);
-
-    code_assertt type_assert;
-    if (build_type_assertion(
-          param_expr,
-          type_it->second,
-          allowed_types,
-          arg_name,
-          loc,
-          type_assert))
-      assertions.push_back(type_assert);
-  };
-
-  auto process_arg_array = [&](const nlohmann::json &arr)
-  {
-    if (!arr.is_array())
-      return;
-    for (const auto &elem : arr)
-      try_append_assert(elem);
-  };
-
-  if (args_node.contains("posonlyargs"))
-    process_arg_array(args_node["posonlyargs"]);
-  if (args_node.contains("args"))
-    process_arg_array(args_node["args"]);
-  if (args_node.contains("kwonlyargs"))
-    process_arg_array(args_node["kwonlyargs"]);
-
-  if (assertions.empty())
-    return;
-
-  code_blockt &block = static_cast<code_blockt &>(function_body);
-  auto &ops = block.operands();
-  ops.insert(ops.begin(), assertions.begin(), assertions.end());
-}
+// (type assertion helpers moved to python_typechecking)
 
 bool python_converter::handle_unpacking_assignment(
   const nlohmann::json &ast_node,
@@ -4429,13 +4015,15 @@ void python_converter::get_var_assign(
       }
     }
 
-    if (lhs_symbol && ast_node.contains("annotation"))
+    if (type_assertions_enabled() && lhs_symbol &&
+        ast_node.contains("annotation"))
     {
-      cache_annotation_types(*lhs_symbol, ast_node["annotation"]);
-      annotation_types = get_annotation_types(lhs_symbol->id.as_string());
+      auto &tc = get_typechecker();
+      tc.cache_annotation_types(*lhs_symbol, ast_node["annotation"]);
+      annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
       if (
         !annotation_types.empty() &&
-        !should_skip_type_assertion(annotated_type))
+        !tc.should_skip_type_assertion(annotated_type))
       {
         annotated_type = annotation_types.front();
         can_emit_annotation_check = true;
@@ -4462,8 +4050,8 @@ void python_converter::get_var_assign(
     // Handle dict literal assignment specially - after LHS is created
     if (handle_dict_literal_assignment(ast_node, lhs))
     {
-      if (can_emit_annotation_check)
-        emit_type_annotation_assertion(
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
           lhs,
           annotated_type,
           annotation_types,
@@ -4505,12 +4093,13 @@ void python_converter::get_var_assign(
 
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
 
-    if (lhs_symbol)
+    if (type_assertions_enabled() && lhs_symbol)
     {
-      annotation_types = get_annotation_types(lhs_symbol->id.as_string());
+      auto &tc = get_typechecker();
+      annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
       if (
         !annotation_types.empty() &&
-        !should_skip_type_assertion(lhs_symbol->type))
+        !tc.should_skip_type_assertion(lhs_symbol->type))
       {
         annotated_type = annotation_types.front();
         can_emit_annotation_check = true;
@@ -4522,8 +4111,9 @@ void python_converter::get_var_assign(
   }
 
   if (
-    can_emit_annotation_check && annotation_candidates.empty() &&
-    !should_skip_type_assertion(annotated_type))
+    type_assertions_enabled() && can_emit_annotation_check &&
+    annotation_candidates.empty() &&
+    !get_typechecker().should_skip_type_assertion(annotated_type))
     annotation_candidates.push_back(annotated_type);
 
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
@@ -4552,11 +4142,11 @@ void python_converter::get_var_assign(
   if (has_value && rhs != exprt("_init_undefined"))
   {
     // Handle throw expression
-    if (rhs.statement() == "cpp-throw")
-    {
-      rhs.location() = location_begin;
-      codet code_expr("expression");
-      code_expr.operands().push_back(rhs);
+  if (rhs.statement() == "cpp-throw")
+  {
+    rhs.location() = location_begin;
+    codet code_expr("expression");
+    code_expr.operands().push_back(rhs);
       code_declt decl(symbol_expr(*lhs_symbol));
       decl.location() = location_begin;
 
@@ -4578,17 +4168,18 @@ void python_converter::get_var_assign(
       // constructor is a different, non-derived class (e.g., Car), inject
       // an assertion failure.
       if (
-        can_emit_annotation_check && is_ctor_call &&
-        ast_node.contains("annotation") &&
+        type_assertions_enabled() && can_emit_annotation_check &&
+        is_ctor_call && ast_node.contains("annotation") &&
         ast_node["annotation"].contains("id"))
       {
         std::string expected_base =
           ast_node["annotation"]["id"].get<std::string>();
-        std::string ctor_name = get_constructor_name(ast_node["value"]["func"]);
+        std::string ctor_name =
+          get_typechecker().get_constructor_name(ast_node["value"]["func"]);
 
         if (
           !expected_base.empty() &&
-          !class_derives_from(ctor_name, expected_base))
+          !get_typechecker().class_derives_from(ctor_name, expected_base))
         {
           code_assertt ctor_assert(gen_boolean(false));
           ctor_assert.location() = location_begin;
@@ -4607,8 +4198,8 @@ void python_converter::get_var_assign(
         location_begin,
         is_ctor_call,
         target_block);
-      if (can_emit_annotation_check)
-        emit_type_annotation_assertion(
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
           lhs,
           annotated_type,
           annotation_types,
@@ -4642,8 +4233,8 @@ void python_converter::get_var_assign(
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
       decl.location() = location_begin;
       target_block.copy_to_operands(decl);
-      if (can_emit_annotation_check)
-        emit_type_annotation_assertion(
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
           lhs,
           annotated_type,
           annotation_types,
@@ -4657,8 +4248,8 @@ void python_converter::get_var_assign(
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
-    if (can_emit_annotation_check)
-      emit_type_annotation_assertion(
+    if (type_assertions_enabled() && can_emit_annotation_check)
+      get_typechecker().emit_type_annotation_assertion(
         lhs,
         annotated_type,
         annotation_types,
@@ -5602,7 +5193,7 @@ size_t python_converter::register_function_argument(
   param_symbol.is_extern = false;
   symbol_table_.add(param_symbol);
   if (element.contains("annotation") && !element["annotation"].is_null())
-    cache_annotation_types(param_symbol, element["annotation"]);
+    get_typechecker().cache_annotation_types(param_symbol, element["annotation"]);
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via
@@ -5858,7 +5449,9 @@ void python_converter::get_function_definition(
   exprt function_body = get_block(function_node["body"]);
 
   // Inject runtime checks for annotated parameters
-  inject_parameter_type_assertions(function_node, id, type, function_body);
+    if (type_assertions_enabled())
+      get_typechecker().inject_parameter_type_assertions(
+        function_node, id, type, function_body);
 
   // Add ESBMC_Hide label for models/imports
   if (is_loading_models || is_importing_module)
@@ -6664,7 +6257,8 @@ python_converter::python_converter(
     string_handler_(*this, symbol_table_, type_handler_, string_builder_),
     math_handler_(*this, symbol_table_, type_handler_),
     tuple_handler_(new tuple_handler(*this, type_handler_)),
-    dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_))
+    dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_)),
+    typechecker_(new python_typechecking(*this))
 {
 }
 
@@ -6673,6 +6267,24 @@ python_converter::~python_converter()
   delete string_builder_;
   delete tuple_handler_;
   delete dict_handler_;
+  delete typechecker_;
+}
+
+python_typechecking &python_converter::get_typechecker()
+{
+  return *typechecker_;
+}
+
+const python_typechecking &python_converter::get_typechecker() const
+{
+  return *typechecker_;
+}
+
+bool python_converter::type_assertions_enabled() const
+{
+  // Type-assertion injection is currently disabled to preserve
+  // existing regression behaviour.
+  return false;
 }
 
 string_builder &python_converter::get_string_builder()

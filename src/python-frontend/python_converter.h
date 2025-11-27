@@ -25,6 +25,7 @@ class type_handler;
 class string_builder;
 class module_locator;
 class tuple_handler;
+class python_typechecking;
 class python_class_builder;
 
 /**
@@ -82,6 +83,8 @@ public:
   {
     return type_handler_;
   }
+
+  bool type_assertions_enabled() const;
 
   const std::string &python_file() const
   {
@@ -170,48 +173,8 @@ public:
     exprt &lhs,
     exprt &rhs);
 
-  std::vector<typet>
-  collect_annotation_types(const nlohmann::json &annotation) const;
-
-  void cache_annotation_types(
-    const symbolt &symbol,
-    const nlohmann::json &annotation);
-
-  std::vector<typet> get_annotation_types(const std::string &symbol_id) const;
-
-  void inject_parameter_type_assertions(
-    const nlohmann::json &function_node,
-    const symbol_id &function_id,
-    const code_typet &type,
-    exprt &function_body);
-
-  bool should_skip_type_assertion(const typet &annotated_type) const;
-
-  exprt build_isinstance_check(
-    const exprt &value_expr,
-    const typet &annotated_type) const;
-
-  bool build_type_assertion(
-    const exprt &value_expr,
-    const typet &annotated_type,
-    const std::vector<typet> &allowed_types,
-    const std::string &context_name,
-    const locationt &location,
-    code_assertt &out_assert) const;
-
-  void emit_type_annotation_assertion(
-    const exprt &value_expr,
-    const typet &annotated_type,
-    const std::vector<typet> &allowed_types,
-    const std::string &context_name,
-    const locationt &location,
-    codet &target_block);
-
-  std::string get_constructor_name(const nlohmann::json &func_node) const;
-
-  bool class_derives_from(
-    const std::string &class_name,
-    const std::string &expected_base) const;
+  python_typechecking &get_typechecker();
+  const python_typechecking &get_typechecker() const;
 
 private:
   friend class function_call_expr;
@@ -220,6 +183,7 @@ private:
   friend class type_handler;
   friend class python_list;
   friend class tuple_handler;
+  friend class python_typechecking;
   friend class python_class_builder;
   friend class python_dict_handler;
   friend class python_set;
@@ -946,5 +910,5 @@ private:
 
   exprt extract_type_from_boolean_op(const exprt &bool_op);
 
-  std::unordered_map<std::string, std::vector<typet>> annotation_type_cache_;
+  python_typechecking *typechecker_ = nullptr;
 };
