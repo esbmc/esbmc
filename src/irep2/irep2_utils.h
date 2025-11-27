@@ -317,18 +317,22 @@ inline bool has_bitfields(const type2tc &type)
   }
   return false;
 }
-inline bool struct_contains_arrays(const type2tc &type){
-   if(!is_struct_type(type))
-      return false;
+inline bool struct_contains_arrays(const type2tc &type)
+{
+  if (!is_struct_type(type))
+    return false;
 
-   const struct_type2t &stype = to_struct_type(type);
-   for(const auto &member : stype.members){
-      if(is_array_type(member) || (is_struct_type(member) && struct_contains_arrays(member))) {
-        return true;
-      }
-   }
-   return false;
-      
+  const struct_type2t &stype = to_struct_type(type);
+  for (const auto &member : stype.members)
+  {
+    if (
+      is_array_type(member) ||
+      (is_struct_type(member) && struct_contains_arrays(member)))
+    {
+      return true;
+    }
+  }
+  return false;
 }
 inline bool is_packed_struct(const type2tc &type)
 {
