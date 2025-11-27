@@ -428,6 +428,74 @@ void goto_symext::finalize_realloc_result(
   dynamic_memory.emplace_back(result_copy, alloc_guard, false, symbol_name);
 }
 
+expr2tc goto_symext::symex_mem_inf(
+  const expr2tc &lhs,
+  const type2tc &base_type,
+  const guardt &guard)
+{
+  if (is_nil_expr(lhs))
+    return expr2tc(); // ignore
+
+  // size
+  type2tc type = base_type;
+
+  assert(!is_nil_type(base_type));
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  // value
+  symbolt symbol;
+
+  symbol.name = "dynamic_" + i2string(dynamic_counter) + "_inf_array";
+
+  symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
+  symbol.lvalue = true;
+
+  typet renamedtype = ns.follow(migrate_type_back(type));
+
+  symbol.type = array_typet(renamedtype, exprt("infinity", size_type()));
+  symbol.type.dynamic(true);
+  symbol.type.set(
+    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+  symbol.mode = "C";
+  new_context.add(symbol);
+
+  type2tc new_type = migrate_type(symbol.type);
+
+  type2tc rhs_type;
+  expr2tc rhs_ptr_obj;
+
+  type2tc subtype = migrate_type(symbol.type.subtype());
+  expr2tc sym = symbol2tc(new_type, symbol.id);
+  expr2tc idx_val = gen_long(size_type2(), 0L);
+  expr2tc idx = index2tc(subtype, sym, idx_val);
+  rhs_type = migrate_type(symbol.type.subtype());
+  rhs_ptr_obj = idx;
+
+  expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  expr2tc rhs = rhs_addrof;
+  expr2tc ptr_rhs = rhs;
+  guardt alloc_guard = cur_state->guard;
+
+  if (rhs->type != lhs->type)
+    rhs = typecast2tc(lhs->type, rhs);
+
+  cur_state->rename(rhs);
+  expr2tc rhs_copy(rhs);
+
+  symex_assign(code_assign2tc(lhs, rhs), true, guard);
+
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+
+  track_new_pointer(ptr_obj, new_type, guard, gen_one(size_type2()));
+
+  alloc_guard.append(guard);
+  dynamic_memory.emplace_back(
+    rhs_copy, alloc_guard, true, symbol.name.as_string());
+
+  return to_address_of2t(rhs_addrof).ptr_obj;
+}
+
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
@@ -757,6 +825,51 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   }
   else
     abort();
+
+  // Only perform dereference checks if printf-check is enabled
+  if (options.get_bool_option("printf-check"))
+  {
+    // Dereference check all pointer arguments after the format string
+    for (size_t i = idx; i < new_rhs.operands.size(); i++)
+    {
+      expr2tc &arg = new_rhs.operands[i];
+
+      if (!arg)
+        continue;
+
+      if (!is_pointer_type(arg->type))
+        continue;
+
+      if (cur_state->guard.is_false())
+        continue;
+
+      // Check the entire expression tree for L2 symbols, not just top-level
+      bool has_l2_symbols = false;
+      arg->foreach_operand([&has_l2_symbols](const expr2tc &e) {
+        if (is_symbol2t(e))
+        {
+          const symbol2t &sym = to_symbol2t(e);
+          if (
+            sym.rlevel == symbol2t::renaming_level::level2 ||
+            sym.rlevel == symbol2t::renaming_level::level2_global)
+          {
+            has_l2_symbols = true;
+          }
+        }
+      });
+
+      if (has_l2_symbols)
+        continue;
+
+      type2tc subtype = to_pointer_type(arg->type).subtype;
+
+      if (is_empty_type(subtype) || is_nil_type(subtype))
+        continue;
+
+      expr2tc deref_expr = dereference2tc(subtype, arg);
+      dereference(deref_expr, dereferencet::READ);
+    }
+  }
 
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
@@ -2968,5 +3081,83 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       expr = gen_true_expr();
     else
       expr = gen_false_expr();
+  }
+  else if (is_isnone2t(expr))
+  {
+    const isnone2t &cmp = to_isnone2t(expr);
+    expr2tc lhs = cmp.side_1;
+    expr2tc rhs = cmp.side_2;
+
+    cur_state->rename(lhs);
+    cur_state->rename(rhs);
+
+    // Remove typecasts to get original types
+    while (is_typecast2t(lhs))
+      lhs = to_typecast2t(lhs).from;
+    while (is_typecast2t(rhs))
+      rhs = to_typecast2t(rhs).from;
+
+    auto is_none_type = [](const expr2tc &e) -> bool {
+      // None is represented as pointer to bool
+      return is_pointer_type(e) &&
+             is_bool_type(to_pointer_type(e->type).subtype);
+    };
+
+    const bool lhs_is_none = is_none_type(lhs);
+    const bool rhs_is_none = is_none_type(rhs);
+
+    // Handle Optional[T] vs None
+    auto handle_optional_side =
+      [&](const expr2tc &side, bool other_is_none) -> std::optional<expr2tc> {
+      if (is_struct_type(side))
+      {
+        const struct_type2t &struct_type = to_struct_type(side->type);
+        const std::string &tag = struct_type.name.as_string();
+        if (tag.starts_with("tag-Optional_") && other_is_none)
+        {
+          // Access is_none field from Optional struct
+          // isnone always checks equality, so return the field directly
+          return member2tc(get_bool_type(), side, "is_none");
+        }
+      }
+      return std::nullopt;
+    };
+
+    if (!lhs_is_none)
+    {
+      if (auto res = handle_optional_side(lhs, rhs_is_none))
+      {
+        expr = *res;
+        return;
+      }
+    }
+    if (!rhs_is_none)
+    {
+      if (auto res = handle_optional_side(rhs, lhs_is_none))
+      {
+        expr = *res;
+        return;
+      }
+    }
+
+    // Handle None vs None pointer comparisons (identity check)
+    if (lhs_is_none && rhs_is_none)
+    {
+      const expr2tc &ptr_expr = lhs;
+      expr2tc null_ptr = gen_zero(ptr_expr->type);
+      expr = equality2tc(ptr_expr, null_ptr);
+      return;
+    }
+
+    // Handle None vs non-None comparison
+    if ((lhs_is_none && !rhs_is_none) || (rhs_is_none && !lhs_is_none))
+    {
+      // None is never equal to non-None values
+      expr = gen_false_expr();
+      return;
+    }
+
+    // Handle non-None comparisons
+    expr = gen_true_expr();
   }
 }

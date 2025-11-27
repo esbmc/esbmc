@@ -79,6 +79,9 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Enforce strict type checking for function arguments during "
       "verification"},
+     {"nondet-str-length",
+      boost::program_options::value<int>()->default_value(16)->value_name("nr"),
+      "set maximum length for non-deterministic strings (default is 16)"},
    }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
@@ -187,6 +190,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Don't crash on unsupported extensions."},
     {"witness-output",
+     boost::program_options::value<std::string>()->value_name("path"),
+     "generate the verification result witness in both Yaml and GraphML "
+     "format."},
+    {"witness-output-graphml",
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
      "generate the verification result witness in GraphML format; use '-' for "
      "output to stdout"},
@@ -386,6 +393,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-reachable-memory-leak",
      NULL,
      "exclude still reachable objects from --memory-leak-check"},
+    {"printf-check", NULL, "enable pointer validation for printf arguments"},
     {"nan-check", NULL, "check floating-point for NaN"},
     {"memory-leak-check", NULL, "enable memory leak check"},
     {"overflow-check", NULL, "enable arithmetic over- and underflow check"},

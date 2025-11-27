@@ -30,7 +30,8 @@ enum class StatementType
   UNKNOWN,
   GLOBAL,
   TRY,
-  EXCEPTHANDLER
+  EXCEPTHANDLER,
+  DELETE
 };
 
 enum class ExpressionType
@@ -68,7 +69,7 @@ public:
       name == "set" || name == "frozenset" || name == "bytes" ||
       name == "set" || name == "bytearray" || name == "range" ||
       name == "complex" || name == "type" || name == "object" ||
-      name == "None");
+      name == "None" || name == "divmod");
   }
 
   static bool is_consensus_type(const std::string &name)
@@ -125,7 +126,7 @@ public:
            func_name == "det" || func_name == "matmul" || func_name == "pow" ||
            func_name == "log" || func_name == "pow_by_squaring" ||
            func_name == "log2" || func_name == "log1p_taylor" ||
-           func_name == "ldexp" || func_name == "fmod";
+           func_name == "ldexp";
   }
 
   static bool is_ordered_comparison(const std::string &op)
@@ -233,8 +234,27 @@ public:
   static bool is_string_type(const typet &type)
   {
     // String types are represented as arrays or pointers to char
-    return type.is_array() ||
-           (type.is_pointer() && type.subtype() == char_type());
+    if (type.is_array() && type.subtype() == char_type())
+      return true;
+
+    if (type.is_pointer())
+    {
+      const typet &subtype = type.subtype();
+      // Direct pointer to char: char*
+      if (subtype == char_type())
+        return true;
+      // Pointer to char array: char(*)[N] (string literals)
+      if (subtype.is_array() && subtype.subtype() == char_type())
+        return true;
+    }
+
+    return false;
+  }
+
+  static bool is_dict_subscript(const nlohmann::json &element)
+  {
+    return element.contains("_type") && element["_type"] == "Subscript" &&
+           element.contains("value");
   }
 
 private:

@@ -207,7 +207,7 @@ exprt python_list::build_push_list_call(
   list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *push_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_push");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push");
 
   if (!push_func_sym)
   {
@@ -217,8 +217,52 @@ exprt python_list::build_push_list_call(
   code_function_callt push_func_call;
   push_func_call.function() = symbol_expr(*push_func_sym);
   push_func_call.arguments().push_back(symbol_expr(list)); // list
-  push_func_call.arguments().push_back(                    // &element
-    address_of_exprt(symbol_expr(*elem_info.elem_symbol)));
+
+  // For string types (pointer to char), we must pass the pointer value directly
+  // For other types (including other pointers such None/bool*), we must pass the address
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->type.is_pointer() &&
+    elem_info.elem_symbol->type.subtype() == char_type())
+  {
+    // For string type (char*), we must pass the pointer value itself
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  }
+  else
+  {
+    // For bool types, cast to signed long int before taking address
+    // This ensures proper storage and retrieval
+    if (elem_info.elem_symbol->type == bool_type())
+    {
+      symbolt &bool_as_long = converter_.create_tmp_symbol(
+        op,
+        "$bool_as_long$",
+        signedbv_typet(config.ansi_c.long_int_width),
+        exprt());
+
+      typecast_exprt bool_cast(
+        symbol_expr(*elem_info.elem_symbol),
+        signedbv_typet(config.ansi_c.long_int_width));
+
+      code_declt bool_long_decl(symbol_expr(bool_as_long));
+      bool_long_decl.copy_to_operands(bool_cast);
+      bool_long_decl.location() = elem_info.location;
+      converter_.add_instruction(bool_long_decl);
+
+      element_arg = address_of_exprt(symbol_expr(bool_as_long));
+
+      // Update elem_size to match
+      elem_info.elem_size =
+        from_integer(BigInt(config.ansi_c.long_int_width / 8), size_type());
+    }
+    else
+    {
+      // For all other types, we must pass address of the value
+      element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+    }
+  }
+
+  push_func_call.arguments().push_back(element_arg); // element or &element
   push_func_call.arguments().push_back(
     symbol_expr(*elem_info.elem_type_sym));                  // type hash
   push_func_call.arguments().push_back(elem_info.elem_size); // element size
@@ -238,7 +282,7 @@ exprt python_list::build_insert_list_call(
   list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *insert_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_insert");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_insert");
   if (!insert_func_sym)
     throw std::runtime_error("Insert function symbol not found");
 
@@ -267,11 +311,11 @@ exprt python_list::build_concat_list_call(
 
   // Helpers we’ll call from the C model
   const symbolt *size_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_size");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
   const symbolt *at_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_at");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
   const symbolt *push_obj_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   assert(size_sym && at_sym && push_obj_sym);
 
   auto copy_list = [&](const exprt &src_list) {
@@ -380,28 +424,10 @@ symbolt &python_list::create_list()
   locationt location = converter_.get_location_from_decl(list_value_);
   const type_handler &type_handler = converter_.get_type_handler();
 
-  // Create infinite array type for list storage
-  const array_typet inf_array_type(
-    type_handler.get_list_element_type(), exprt("infinity", size_type()));
-
-  exprt inf_array_value =
-    gen_zero(get_complete_type(inf_array_type, converter_.ns), true);
-
-  // Create and configure infinite array symbol
-  symbolt &inf_array_symbol = converter_.create_tmp_symbol(
-    list_value_, "$storage$", inf_array_type, inf_array_value);
-  inf_array_symbol.value.zero_initializer(true);
-  inf_array_symbol.static_lifetime = true;
-
-  // Declare infinite array
-  code_declt inf_array_decl(symbol_expr(inf_array_symbol));
-  inf_array_decl.location() = location;
-  converter_.add_instruction(inf_array_decl);
-
   // Create list symbol
   const typet list_type = type_handler.get_list_type();
   symbolt &list_symbol =
-    converter_.create_tmp_symbol(list_value_, "$list$", list_type, exprt());
+    converter_.create_tmp_symbol(list_value_, "$py_list$", list_type, exprt());
 
   // Declare list
   code_declt list_decl(symbol_expr(list_symbol));
@@ -410,19 +436,13 @@ symbolt &python_list::create_list()
 
   // Initialize list with storage array
   const symbolt *create_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_create");
-  if (!create_func_sym)
-  {
-    throw std::runtime_error("List creation function symbol not found");
-  }
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_create");
+  assert(create_func_sym);
 
   // Add list_create call to the block
   code_function_callt list_create_func_call;
   list_create_func_call.function() = symbol_expr(*create_func_sym);
   list_create_func_call.lhs() = symbol_expr(list_symbol);
-  list_create_func_call.arguments().push_back(
-    converter_.get_string_handler().get_array_base_address(
-      symbol_expr(inf_array_symbol)));
   list_create_func_call.type() = list_type;
   list_create_func_call.location() = location;
   converter_.add_instruction(list_create_func_call);
@@ -465,7 +485,7 @@ exprt python_list::build_list_at_call(
   pointer_typet obj_type(converter_.get_type_handler().get_list_element_type());
 
   const symbolt *list_at_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_at");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
   assert(list_at_func_sym);
 
   side_effect_expr_function_callt list_at_call;
@@ -528,19 +548,36 @@ exprt python_list::handle_range_slice(
   const typet list_type = converter_.get_type_handler().get_list_type();
 
   // Handle regular array/string slicing (not list slicing)
-  if (array.type() != list_type && array.type().is_array())
+  // String parameters come as pointer-to-char, so handle both arrays and char pointers
+  bool is_string_slice =
+    (array.type() != list_type && array.type().is_array()) ||
+    (array.type().is_pointer() && array.type().subtype() == char_type());
+
+  if (is_string_slice)
   {
-    const array_typet &src_type = to_array_type(array.type());
     locationt location = converter_.get_location_from_decl(slice_node);
 
-    // Get array length
-    exprt array_len = src_type.size();
+    // Determine element type and logical length
+    typet elem_type;
+    exprt array_len;
+    exprt logical_len;
 
-    // For char arrays (strings), exclude the null terminator from length
-    // when calculating negative indices, to match Python string behavior
-    exprt logical_len = array_len;
-    if (src_type.subtype() == char_type())
-      logical_len = minus_exprt(array_len, gen_one(size_type()));
+    if (array.type().is_array())
+    {
+      const array_typet &src_type = to_array_type(array.type());
+      elem_type = src_type.subtype();
+      array_len = src_type.size();
+      // For char arrays (strings), exclude null terminator from logical length
+      logical_len = (elem_type == char_type())
+                      ? minus_exprt(array_len, gen_one(size_type()))
+                      : array_len;
+    }
+    else // pointer case
+    {
+      elem_type = array.type().subtype();
+      array_len = exprt();   // Not used for pointers
+      logical_len = exprt(); // Will use explicit bounds only
+    }
 
     // Process slice bounds (handles null, negative indices)
     auto process_bound =
@@ -554,7 +591,8 @@ exprt python_list::handle_range_slice(
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
       {
         exprt abs_value = converter_.get_expr(bound["operand"]);
-        return minus_exprt(logical_len, abs_value);
+        return logical_len.is_nil() ? abs_value
+                                    : minus_exprt(logical_len, abs_value);
       }
 
       exprt e = converter_.get_expr(bound);
@@ -570,7 +608,7 @@ exprt python_list::handle_range_slice(
 
     // Create result array type with extra space for null terminator
     plus_exprt result_size(slice_len, gen_one(size_type()));
-    array_typet result_type(src_type.subtype(), result_size);
+    array_typet result_type(elem_type, result_size);
 
     // Create temporary for sliced array
     symbolt &result = converter_.create_tmp_symbol(
@@ -592,8 +630,8 @@ exprt python_list::handle_range_slice(
     code_blockt body;
     // result[i] = array[lower + i]
     plus_exprt src_idx(lower_expr, symbol_expr(idx));
-    index_exprt src(array, src_idx, src_type.subtype());
-    index_exprt dst(symbol_expr(result), symbol_expr(idx), src_type.subtype());
+    index_exprt src(array, src_idx, elem_type);
+    index_exprt dst(symbol_expr(result), symbol_expr(idx), elem_type);
     code_assignt assign(dst, src);
     body.copy_to_operands(assign);
 
@@ -608,8 +646,8 @@ exprt python_list::handle_range_slice(
     converter_.add_instruction(loop);
 
     // Add null terminator at result[slice_len]
-    index_exprt null_pos(symbol_expr(result), slice_len, src_type.subtype());
-    code_assignt add_null(null_pos, gen_zero(src_type.subtype()));
+    index_exprt null_pos(symbol_expr(result), slice_len, elem_type);
+    code_assignt add_null(null_pos, gen_zero(elem_type));
     add_null.location() = location;
     converter_.add_instruction(add_null);
 
@@ -620,19 +658,46 @@ exprt python_list::handle_range_slice(
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
-  // Get bound expressions (handles null/missing)
-  auto get_list_bound = [&](const std::string &bound_name) -> exprt {
+  auto get_list_bound =
+    [&](const std::string &bound_name, bool is_upper) -> exprt {
     if (slice_node.contains(bound_name) && !slice_node[bound_name].is_null())
       return converter_.get_expr(slice_node[bound_name]);
 
-    // For lists, we'd need the list size here, but that's not easily accessible
-    // For now, keep existing behavior - assumes bounds are present
-    throw std::runtime_error(
-      "List slicing with missing bounds not yet supported");
+    if (is_upper)
+    {
+      const symbolt *size_func =
+        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+      assert(size_func);
+
+      side_effect_expr_function_callt size_call;
+      size_call.function() = symbol_expr(*size_func);
+
+      // Check if array is already a pointer, don't take address again
+      if (array.type().is_pointer())
+        size_call.arguments().push_back(array); // Already a pointer
+      else
+        size_call.arguments().push_back(
+          address_of_exprt(array)); // Take address
+
+      size_call.type() = size_type();
+      size_call.location() = converter_.get_location_from_decl(list_value_);
+
+      symbolt &size_sym = converter_.create_tmp_symbol(
+        list_value_, "$list_size$", size_type(), exprt());
+      code_declt size_decl(symbol_expr(size_sym));
+      size_decl.copy_to_operands(size_call);
+      converter_.add_instruction(size_decl);
+
+      return symbol_expr(size_sym);
+    }
+    else
+    {
+      return gen_zero(size_type());
+    }
   };
 
-  const exprt lower_expr = get_list_bound("lower");
-  const exprt upper_expr = get_list_bound("upper");
+  const exprt lower_expr = get_list_bound("lower", false);
+  const exprt upper_expr = get_list_bound("upper", true);
 
   // Initialize counter: int counter = lower
   symbolt &counter = converter_.create_tmp_symbol(
@@ -663,7 +728,7 @@ exprt python_list::handle_range_slice(
 
   // Push element to sliced list
   const symbolt *push_func =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   if (!push_func)
   {
     throw std::runtime_error("Push function symbol not found");
@@ -844,10 +909,39 @@ exprt python_list::handle_index_access(
         }
         catch (const std::out_of_range &)
         {
-          const locationt l = converter_.get_location_from_decl(list_value_);
-          throw std::runtime_error(
-            "List out of bounds at " + l.get_file().as_string() +
-            " line: " + l.get_line().as_string());
+          // Only throw compile-time error if this is a static list with known elements
+          // For constant indices on static lists, this is a definite out-of-bounds error
+          if (
+            (slice_node["_type"] == "Constant" ||
+             (slice_node["_type"] == "UnaryOp" &&
+              slice_node["operand"]["_type"] == "Constant")) &&
+            !list_node.is_null() && list_node.contains("value") &&
+            list_node["value"].contains("elts") &&
+            list_node["value"]["elts"].is_array())
+          {
+            const locationt l = converter_.get_location_from_decl(list_value_);
+            throw std::runtime_error(
+              "List out of bounds at " + l.get_file().as_string() +
+              " line: " + l.get_line().as_string());
+          }
+
+          // Try annotation fallback for dynamic lists or function parameters
+          const nlohmann::json list_value_node = json_utils::get_var_value(
+            list_value_["value"]["id"],
+            converter_.current_function_name(),
+            converter_.ast());
+
+          elem_type = get_elem_type_from_annotation(
+            list_value_node, converter_.get_type_handler());
+
+          // Only throw if annotation also fails
+          if (elem_type == typet())
+          {
+            const locationt l = converter_.get_location_from_decl(list_value_);
+            throw std::runtime_error(
+              "List out of bounds at " + l.get_file().as_string() +
+              " line: " + l.get_line().as_string());
+          }
         }
       }
     }
@@ -911,10 +1005,21 @@ exprt python_list::handle_index_access(
       base.swap(deref);
     }
 
-    // Cast from void* to target type pointer and dereference
+    // For array types, return pointer to element type instead of pointer to array
+    // The dereference system doesn't support array types as target types
+    // Callers will handle the conversion when needed (similar to single-char string handling)
+    if (elem_type.is_array())
+    {
+      const array_typet &arr_type = to_array_type(elem_type);
+      // Cast to pointer to element type (e.g., char* instead of char[2]*)
+      typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
+      return tc;
+    }
+
+    // Cast from void* to target type pointer
     typecast_exprt tc(obj_value, pointer_typet(elem_type));
 
-    // Dereference to get the actual value
+    // Dereference to get the actual value (for non-array types)
     dereference_exprt deref(elem_type);
     deref.op0() = tc;
     return deref;
@@ -930,7 +1035,7 @@ exprt python_list::compare(
   const std::string &op)
 {
   const symbolt *list_eq_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_eq");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_eq");
   assert(list_eq_func_sym);
 
   const symbolt *lhs_symbol =
@@ -1085,10 +1190,8 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   // Find the list_contains function
   const symbolt *list_contains_func =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_contains");
-  if (!list_contains_func)
-    throw std::runtime_error(
-      "list_contains function not found in symbol table");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  assert(list_contains_func);
 
   // Create a temporary variable to store the result
   symbolt &contains_ret = converter_.create_tmp_symbol(
@@ -1124,8 +1227,8 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   exprt type_hash = symbol_expr(*item_info.elem_type_sym);
   exprt elem_size = item_info.elem_size;
 
-  // Check if item is a pointer (void* or char* - from loop iteration over strings)
-  if (item_info.elem_symbol->type.is_pointer())
+  // Check if item is a void pointer (from loop iteration over strings)
+  if (item_info.elem_symbol->type == pointer_typet(empty_typet()))
   {
     const std::string &list_name = list.identifier().as_string();
     auto type_map_it = list_type_map.find(list_name);
@@ -1140,7 +1243,7 @@ exprt python_list::contains(const exprt &item, const exprt &list)
         // Check if stored type is a char array (string)
         if (stored_type.is_array() && stored_type.subtype() == char_type())
         {
-          // Use the stored string array type instead of pointer type
+          // Use the stored string array type instead of void pointer type
           const type_handler type_handler_ = converter_.get_type_handler();
           const std::string stored_type_name =
             type_handler_.type_to_string(stored_type);
@@ -1151,15 +1254,35 @@ exprt python_list::contains(const exprt &item, const exprt &list)
             config.ansi_c.address_width));
           type_hash = stored_hash;
 
-          // Recalculate size for stored array type
-          const array_typet &array_type =
-            static_cast<const array_typet &>(stored_type);
-          const size_t array_length =
-            std::stoull(array_type.size().value().as_string(), nullptr, 2);
-          const size_t subtype_size_bits =
-            std::stoull(stored_type.subtype().width().as_string(), nullptr, 10);
-          size_t size_bytes = (array_length * subtype_size_bits) / 8;
-          elem_size = from_integer(BigInt(size_bytes), size_type());
+          // Use strlen for void* strings from iteration
+          const symbolt *strlen_symbol =
+            converter_.symbol_table().find_symbol("c:@F@strlen");
+          if (strlen_symbol)
+          {
+            // Call strlen to get actual string length
+            symbolt &strlen_result = converter_.create_tmp_symbol(
+              list_value_,
+              "$strlen_result$",
+              size_type(),
+              gen_zero(size_type()));
+            code_declt strlen_decl(symbol_expr(strlen_result));
+            strlen_decl.location() = item_info.location;
+            converter_.add_instruction(strlen_decl);
+
+            code_function_callt strlen_call;
+            strlen_call.function() = symbol_expr(*strlen_symbol);
+            strlen_call.lhs() = symbol_expr(strlen_result);
+            strlen_call.arguments().push_back(
+              symbol_expr(*item_info.elem_symbol));
+            strlen_call.type() = size_type();
+            strlen_call.location() = item_info.location;
+            converter_.add_instruction(strlen_call);
+
+            // Add 1 for null terminator: size = strlen(s) + 1
+            exprt one_const = from_integer(1, strlen_result.type);
+            elem_size = exprt("+", strlen_result.type);
+            elem_size.copy_to_operands(symbol_expr(strlen_result), one_const);
+          }
 
           break; // Found string array type, use it
         }
@@ -1187,9 +1310,8 @@ exprt python_list::build_extend_list_call(
   const exprt &other_list)
 {
   const symbolt *extend_func_sym =
-    converter_.symbol_table().find_symbol("c:list.c@F@list_extend");
-  if (!extend_func_sym)
-    throw std::runtime_error("Extend function symbol not found");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_extend");
+  assert(extend_func_sym);
 
   locationt location = converter_.get_location_from_decl(op);
 
@@ -1214,4 +1336,15 @@ exprt python_list::build_extend_list_call(
   extend_func_call.location() = location;
 
   return extend_func_call;
+}
+
+exprt python_list::get_empty_set()
+{
+  // Create an empty list structure for the set
+  symbolt &list_symbol = create_list();
+  list_symbol.is_set = true;
+
+  // No elements to add for empty set
+  // Type information will be determined when elements are added
+  return symbol_expr(list_symbol);
 }

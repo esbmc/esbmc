@@ -1,20 +1,51 @@
 import numpy as np
 
-a = np.subtract(4.0, 1.0)
-assert a == 3.0
+result_1 = np.subtract(10, 4)
+assert result_1 == 6
 
-b = np.subtract(1.0, 4.0)
-assert b == -3.0
+result_2 = np.subtract(5.5, 2.5)
+assert result_2 == 3.0
 
-c = np.subtract(5,3)
-assert c == 2
+result_3 = np.subtract(7, 2.5)
+assert result_3 == 4.5
 
-d = np.subtract([3,4],[1,3])
-assert d[0] == 2
-assert d[1] == 1
+result_4 = np.subtract(6.8, 2)
+assert result_4 == 4.8
+
+result_5 = np.subtract(-3, -7)
+assert result_5 == 4
+
+result_6 = np.subtract(-5.5, 2.5)
+assert result_6 == -8.0
+
+result_7 = np.subtract(5, -3)
+assert result_7 == 8
+
+result_8 = np.subtract(-2.0, 4.0)
+assert result_8 == -6.0
+
+result_9 = np.subtract(0, 5)
+assert result_9 == -5
+
+result_10 = np.subtract(3.2, 0)
+assert result_10 == 3.2
+
+result_11 = np.subtract(4.0, 1.0)
+assert result_11 == 3.0
+
+result_12 = np.subtract(1.0, 4.0)
+assert result_12 == -3.0
+
+result_13 = np.subtract(5, 3)
+assert result_13 == 2
+
+result_14 = np.subtract([3, 4], [1, 3])
+assert result_14[0] == 2
+assert result_14[1] == 1
 
 e = np.array([5,4])
 f = np.array([2,2])
-g = np.subtract(e, f)
-assert g[0] == 3
-assert g[1] == 2
+result_15 = np.subtract(e, f)
+
+assert result_15[0] == 3
+assert result_15[1] == 2

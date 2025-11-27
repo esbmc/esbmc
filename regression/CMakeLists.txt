@@ -2,14 +2,28 @@
 include(CTest)
 enable_testing()
 
-find_package(Python)
-# TODO: Use add dependency
+# Use Python3_EXECUTABLE if set (from build.sh), otherwise find Python
+if(DEFINED Python3_EXECUTABLE)
+    set(Python_EXECUTABLE ${Python3_EXECUTABLE})
+    message(STATUS "Using Python3_EXECUTABLE: ${Python_EXECUTABLE}")
+else()
+    find_package(Python)
+    # TODO: Use add dependency
+endif()
 
 if(ENABLE_PYTHON_FRONTEND)
 # Install Jira package with pip before running tests (needed by regression/python/try-fail)
+# Use --break-system-packages for externally-managed Python environments (PEP 668)
 execute_process(
-    COMMAND ${Python_EXECUTABLE} -m pip install jira
+    COMMAND ${Python_EXECUTABLE} -m pip install --user --break-system-packages jira
+    RESULT_VARIABLE pip_result
 )
+if(pip_result)
+    # Fallback: try without --break-system-packages (for older Python or non-externally-managed)
+    execute_process(
+        COMMAND ${Python_EXECUTABLE} -m pip install --user jira
+    )
+endif()
 endif()
 
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
@@ -85,6 +99,7 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_NUMPY numpy)
     set(REGRESSIONS_HUMANEVAL humaneval)
     set(REGRESSIONS_QUIXBUGS quixbugs)
+    set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
 endif()
 
 if(ESBMC_CHERI_CLANG)
@@ -180,6 +195,7 @@ if(APPLE)
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_PYTHON_COVERAGE}
                     ltl
                     goto-transcoder
                     loop-invariants
@@ -244,6 +260,7 @@ else()
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_PYTHON_COVERAGE}
                     ltl
                     goto-coverage
                     goto-transcoder

@@ -2,6 +2,12 @@
 
 cd regression/python
 
+# Activate virtual environment if it exists (from build-with-venv.sh)
+# CI builds will have dependencies installed by build.sh, so this is optional
+if [ -f "../esbmc-venv/bin/activate" ]; then
+    source ../esbmc-venv/bin/activate
+fi
+
 all_passed=true
 
 # List of directories to ignore
@@ -10,8 +16,17 @@ ignored_dirs=(
   "AssertionError2_fail"
   "branch_coverage-fail"
   "built-in-functions"
+  "cover1"
+  "cover2"
+  "cover3"
+  "cover4"
+  "cover5"
   "convert-byte-update2"
   "constants"
+  "dict_del12_fail"
+  "dict_del13_fail"
+  "dict_del14"
+  "dict_del14_fail"
   "div6_fail"
   "div7_fail"
   "esbmc-assume"
@@ -24,7 +39,12 @@ ignored_dirs=(
   "github_2993_fail"
   "github_2993_2_fail"
   "github_3012_3_fail"
+  "github_3090_4"
+  "github_3090_4_fail"
+  "github_3090_5"
+  "github_3090_5_fail"
   "global"
+  "infer-func-no-return_fail"
   "integer_squareroot_fail"
   "int_from_bytes"
   "input"
@@ -35,6 +55,7 @@ ignored_dirs=(
   "insertion_fail"
   "insertion3_fail"
   "jpl"
+  "jpl_1"
   "list9"
   "list10"
   "list15_fail"
@@ -62,6 +83,7 @@ ignored_dirs=(
   "while-random-fail"
   "while-random-fail2"
   "while-random-fail3"
+  "github_3181_fail"
 )
 
 for dir in */; do
@@ -90,7 +112,16 @@ for dir in */; do
   echo ">>> Testing $dir"
 
   # Run the script and capture the exit code
-  (cd "$dir" && python3 main.py > /dev/null 2>&1)
+  # Use virtual environment's python if activated
+  # Otherwise, on macOS use Python 3.12 (matching build.sh which installs python@3.12)
+  if [ -n "$VIRTUAL_ENV" ]; then
+    PYTHON_CMD="python"
+  elif [[ "$OSTYPE" == "darwin"* ]] && command -v python3.12 &> /dev/null; then
+    PYTHON_CMD="python3.12"
+  else
+    PYTHON_CMD="python3"
+  fi
+  (cd "$dir" && $PYTHON_CMD main.py > /dev/null 2>&1)
   result=$?
 
   if [[ "$dir" == *fail* ]]; then
