@@ -287,7 +287,7 @@ Assertion Instances Coverage: 100%
 ## Technical Notes
 
 - Coverage analysis in ESBMC uses **symbolic execution** and **SMT solving**
-- Unlike traditional testing tools, ESBMC **proves** coverage percentage with mathematical certainty.
+- Unlike traditional testing tools, ESBMC **determines path reachability** and calculates exact coverage percentages
 - All paths are explored **automatically** without manual test case writing
 - Coverage analysis adds false assertions to test each branch/condition
 - Verification time increases with code complexity
