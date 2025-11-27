@@ -5617,9 +5617,6 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         break;
       }
 
-      if (!test.type().is_bool())
-        test.make_typecast(current_element_type);
-
       // Attach assertion message if present
       auto attach_assert_message = [&element](code_assertt &assert_code) {
         if (element.contains("msg") && !element["msg"].is_null())
@@ -5643,7 +5640,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         }
       };
 
-      // Check for function calls in assertions (direct or negated)
+      // Check for function calls in assertions before typecast
       const exprt *func_call_expr = nullptr;
       bool is_negated = false;
 
@@ -5667,6 +5664,28 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       if (func_call_expr != nullptr)
       {
         locationt location = get_location_from_decl(element);
+
+        // Check if function returns None
+        const typet &return_type = func_call_expr->type();
+
+        // Check for None type: either none_type() or empty type
+        if (return_type == none_type() || return_type.id() == "empty")
+        {
+          // Function returns None: execute call and assert False (Python behavior)
+          exprt func_call_copy = *func_call_expr;
+          codet code_stmt = convert_expression_to_code(func_call_copy);
+          block.move_to_operands(code_stmt);
+
+          // In Python, assert None always fails
+          code_assertt assert_code;
+          assert_code.assertion() = false_exprt();
+          assert_code.location() = location;
+          assert_code.location().comment(
+            "Assertion on None-returning function");
+          attach_assert_message(assert_code);
+          block.move_to_operands(assert_code);
+          break;
+        }
 
         // Create temporary variable
         symbolt temp_symbol = create_assert_temp_variable(location);
@@ -5701,7 +5720,11 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       }
       else
       {
-        // For expressions without function calls, use direct assertion
+        // For non-function-call expressions, apply typecast if needed
+        if (!test.type().is_bool())
+          test.make_typecast(current_element_type);
+
+        // Use direct assertion
         code_assertt assert_code;
         assert_code.assertion() = test;
         assert_code.location() = get_location_from_decl(element);
