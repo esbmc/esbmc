@@ -322,6 +322,22 @@ esbmc program.c --generate-html-report
 
 For detailed information about HTML reports, including keyboard shortcuts and interactive features, please see the [HTML Reports Documentation](HTML_REPORTS.md).
 
+### Coverage Analysis
+
+ESBMC supports coverage analysis to assess how adequately the test inputs cover the code. 
+
+Supported coverage modes:
+- **Branch coverage**: Verifies that all branches of conditional statements are executed
+- **Condition coverage**: Verifies each boolean sub-expression evaluates to both true and false
+- **Assertion coverage**: Verifies that all assertions in the code are reached
+Example usage:
+```bash
+esbmc program.c --branch-coverage
+
+esbmc program.py --condition-coverage
+```
+For detailed information for coverage, please see the [Coverage Documentation](COVERAGE.md)
+
 ### Features
 
 ESBMC detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of implementation errors that can be detected include:
