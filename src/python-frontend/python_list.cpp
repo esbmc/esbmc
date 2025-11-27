@@ -658,19 +658,46 @@ exprt python_list::handle_range_slice(
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
-  // Get bound expressions (handles null/missing)
-  auto get_list_bound = [&](const std::string &bound_name) -> exprt {
+  auto get_list_bound =
+    [&](const std::string &bound_name, bool is_upper) -> exprt {
     if (slice_node.contains(bound_name) && !slice_node[bound_name].is_null())
       return converter_.get_expr(slice_node[bound_name]);
 
-    // For lists, we'd need the list size here, but that's not easily accessible
-    // For now, keep existing behavior - assumes bounds are present
-    throw std::runtime_error(
-      "List slicing with missing bounds not yet supported");
+    if (is_upper)
+    {
+      const symbolt *size_func =
+        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+      assert(size_func);
+
+      side_effect_expr_function_callt size_call;
+      size_call.function() = symbol_expr(*size_func);
+
+      // Check if array is already a pointer, don't take address again
+      if (array.type().is_pointer())
+        size_call.arguments().push_back(array); // Already a pointer
+      else
+        size_call.arguments().push_back(
+          address_of_exprt(array)); // Take address
+
+      size_call.type() = size_type();
+      size_call.location() = converter_.get_location_from_decl(list_value_);
+
+      symbolt &size_sym = converter_.create_tmp_symbol(
+        list_value_, "$list_size$", size_type(), exprt());
+      code_declt size_decl(symbol_expr(size_sym));
+      size_decl.copy_to_operands(size_call);
+      converter_.add_instruction(size_decl);
+
+      return symbol_expr(size_sym);
+    }
+    else
+    {
+      return gen_zero(size_type());
+    }
   };
 
-  const exprt lower_expr = get_list_bound("lower");
-  const exprt upper_expr = get_list_bound("upper");
+  const exprt lower_expr = get_list_bound("lower", false);
+  const exprt upper_expr = get_list_bound("upper", true);
 
   // Initialize counter: int counter = lower
   symbolt &counter = converter_.create_tmp_symbol(
