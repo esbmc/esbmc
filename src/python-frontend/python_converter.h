@@ -398,6 +398,48 @@ private:
   get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
 
   // =========================================================================
+  // Assertion helper methods
+  // =========================================================================
+
+  /**
+   * @brief Handles assertions on list expressions.
+   *
+   * In Python, empty lists are falsy, so `assert []` should fail.
+   * This method converts `assert list_var` to `assert len(list_var) > 0`
+   * by calling __ESBMC_list_size and checking the result.
+   *
+   * @param element The assertion AST node.
+   * @param test The test expression (a list or list-returning function call).
+   * @param block The code block to add generated statements to.
+   * @param attach_assert_message Lambda to attach user assertion messages.
+   */
+  void handle_list_assertion(
+    const nlohmann::json &element,
+    const exprt &test,
+    code_blockt &block,
+    const std::function<void(code_assertt &)> &attach_assert_message);
+
+  /**
+   * @brief Handles assertions on function call expressions.
+   *
+   * Materializes function calls in assertions.
+   * For None-returning functions, executes the call and asserts False.
+   * For other functions, stores result in temp var and asserts on that.
+   *
+   * @param element The assertion AST node.
+   * @param func_call_expr The function call expression to assert on.
+   * @param is_negated Whether the assertion is negated (assert not func()).
+   * @param block The code block to add generated statements to.
+   * @param attach_assert_message Lambda to attach user assertion messages.
+   */
+  void handle_function_call_assertion(
+    const nlohmann::json &element,
+    const exprt &func_call_expr,
+    bool is_negated,
+    code_blockt &block,
+    const std::function<void(code_assertt &)> &attach_assert_message);
+
+  // =========================================================================
   // Helper methods for get_var_assign
   // =========================================================================
 
