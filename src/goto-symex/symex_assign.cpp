@@ -60,6 +60,55 @@ goto_symext::goto_symext(
     idx = next;
   }
 
+  // Parse --unwindsetname option (function_name:loop_index:bound,...)
+  const std::string &func_set = options.get_option("unwindsetname");
+  unsigned int func_length = func_set.length();
+
+  for (unsigned int idx = 0; idx < func_length; idx++)
+  {
+    std::string::size_type next = func_set.find(",", idx);
+    std::string val = func_set.substr(idx, next - idx);
+
+    // Parse function_name:loop_index:bound
+    std::string::size_type first_colon = val.find(":");
+    if (first_colon != std::string::npos)
+    {
+      std::string::size_type second_colon = val.find(":", first_colon + 1);
+      if (second_colon != std::string::npos)
+      {
+        // Three-part format: function:index:bound
+        std::string func_name = val.substr(0, first_colon);
+
+        // Auto-prepend "c:@" if not present (for cleaner user syntax)
+        if (func_name.substr(0, 3) != "c:@")
+          func_name = "c:@" + func_name;
+
+        unsigned loop_index = atoi(
+          val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
+        BigInt uw(val.substr(second_colon + 1).c_str());
+        unwind_func_set[std::make_pair(func_name, loop_index)] = uw;
+      }
+    }
+
+    if (next == std::string::npos)
+      break;
+    idx = next;
+  }
+
+  // Build mapping from global loop IDs to per-function 0-indexed loop numbers
+  for (const auto &func_pair : _goto_functions.function_map)
+  {
+    unsigned loop_index = 0;
+    for (const auto &instruction : func_pair.second.body.instructions)
+    {
+      if (instruction.is_backwards_goto())
+      {
+        loop_id_to_index[instruction.loop_number] = loop_index;
+        loop_index++;
+      }
+    }
+  }
+
   art1 = nullptr;
 
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
@@ -87,6 +136,8 @@ goto_symext::goto_symext(const goto_symext &sym)
 goto_symext &goto_symext::operator=(const goto_symext &sym)
 {
   unwind_set = sym.unwind_set;
+  unwind_func_set = sym.unwind_func_set;
+  loop_id_to_index = sym.loop_id_to_index;
   max_unwind = sym.max_unwind;
   constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
