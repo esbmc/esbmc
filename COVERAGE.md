@@ -261,7 +261,7 @@ Condition Properties - UNSATISFIED:  0
 Condition Coverage: 100%
 ```
 
-The **Condition Coverage: 100%** shows each condition was tested as both true and false.
+The **Condition Coverage: 100%** indicates that each condition was tested with both true and false inputs.
 
 ### Assertion Coverage
 
