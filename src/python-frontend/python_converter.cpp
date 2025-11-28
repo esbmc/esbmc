@@ -1797,6 +1797,23 @@ exprt python_converter::build_binary_expression(
   exprt &lhs,
   exprt &rhs)
 {
+  // Adjust types for non-relational operations
+  if (!type_utils::is_relational_op(op))
+  {
+    // Check for critical type incompatibilities
+    const typet &lhs_type = lhs.type();
+    const typet &rhs_type = rhs.type();
+
+    // Check for bitvector width mismatch
+    if (
+      (lhs_type.is_signedbv() || lhs_type.is_unsignedbv()) &&
+      (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()) &&
+      lhs_type.width() != rhs_type.width())
+    {
+      adjust_statement_types(lhs, rhs);
+    }
+  }
+
   // Determine result type
   typet type;
   if (type_utils::is_relational_op(op))
