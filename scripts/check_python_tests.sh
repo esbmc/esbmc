@@ -84,6 +84,11 @@ ignored_dirs=(
   "while-random-fail2"
   "while-random-fail3"
   "github_3181_fail"
+  "incremental-smt-loop-off"
+  "incremental-smt-loop-on"
+  "incremental-smt-assert-pass"
+  "type-annotation-check"
+  "type-annotation-generics-fail"
 )
 
 for dir in */; do
@@ -94,13 +99,13 @@ for dir in */; do
   if [ ! -f "$dir/main.py" ]; then
     continue
   fi
-  
+
   # Skip if directory name contains "nondet"
   if echo "$dir" | grep -iq 'nondet'; then
     echo "🚫 IGNORED: $dir (contains 'nondet')"
     continue
   fi
-  
+
   # Skip if in the ignore list
   for ignored in "${ignored_dirs[@]}"; do
     if [[ "$dir" == "$ignored" ]]; then

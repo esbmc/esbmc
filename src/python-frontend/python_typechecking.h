@@ -25,7 +25,7 @@ public:
   collect_annotation_types(const nlohmann::json &annotation) const;
 
   void cache_annotation_types(
-    const symbolt &symbol,
+    symbolt &symbol,
     const nlohmann::json &annotation);
 
   std::vector<typet> get_annotation_types(const std::string &symbol_id) const;

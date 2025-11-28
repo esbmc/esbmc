@@ -131,19 +131,24 @@ std::vector<typet> python_typechecking::collect_annotation_types(
 }
 
 void python_typechecking::cache_annotation_types(
-  const symbolt &symbol,
+  symbolt &symbol,
   const nlohmann::json &annotation)
 {
   if (annotation.is_null())
     return;
   auto key = symbol.id.as_string();
   if (annotation_type_cache_.find(key) != annotation_type_cache_.end())
+  {
+    if (symbol.python_annotation_types.empty())
+      symbol.python_annotation_types = annotation_type_cache_.at(key);
     return;
+  }
 
   auto types = collect_annotation_types(annotation);
   if (!types.empty())
   {
     annotation_type_cache_[key] = types;
+    symbol.python_annotation_types = types;
   }
 }
 
@@ -160,6 +165,9 @@ bool python_typechecking::should_skip_type_assertion(
   const typet &annotated_type) const
 {
   if (annotated_type.is_nil() || annotated_type.id().empty())
+    return true;
+
+  if (annotated_type.id() == "empty")
     return true;
 
   if (
@@ -203,6 +211,9 @@ exprt python_typechecking::build_isinstance_check(
     if (pointed_type.is_struct())
       effective_type = pointed_type;
   }
+
+  if (effective_type.id() == "empty")
+    return nil_exprt();
 
   exprt type_operand;
   if (effective_type.is_symbol())
@@ -428,4 +439,3 @@ bool python_typechecking::class_derives_from(
   }
   return false;
 }
-

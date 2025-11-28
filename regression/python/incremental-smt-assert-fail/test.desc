@@ -1,4 +1,4 @@
 CORE
 main.py
---smt-during-symex --smt-symex-assert --unwind 2
+--python-type-check --smt-during-symex --smt-symex-assert --unwind 2
 ^VERIFICATION FAILED$

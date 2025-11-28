@@ -1,3 +1,4 @@
 CORE
 main.py
+--python-type-check
 ^VERIFICATION FAILED$

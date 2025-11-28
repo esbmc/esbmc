@@ -4015,11 +4015,14 @@ void python_converter::get_var_assign(
       }
     }
 
+    if (lhs_symbol && ast_node.contains("annotation"))
+      get_typechecker().cache_annotation_types(
+        *lhs_symbol, ast_node["annotation"]);
+
     if (type_assertions_enabled() && lhs_symbol &&
         ast_node.contains("annotation"))
     {
       auto &tc = get_typechecker();
-      tc.cache_annotation_types(*lhs_symbol, ast_node["annotation"]);
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
       if (
         !annotation_types.empty() &&
@@ -4092,6 +4095,10 @@ void python_converter::get_var_assign(
       throw std::runtime_error("Type undefined for \"" + name + "\"");
 
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
+
+    if (lhs_symbol && ast_node.contains("annotation"))
+      get_typechecker().cache_annotation_types(
+        *lhs_symbol, ast_node["annotation"]);
 
     if (type_assertions_enabled() && lhs_symbol)
     {
@@ -6282,9 +6289,7 @@ const python_typechecking &python_converter::get_typechecker() const
 
 bool python_converter::type_assertions_enabled() const
 {
-  // Type-assertion injection is currently disabled to preserve
-  // existing regression behaviour.
-  return false;
+  return config.options.get_bool_option("python-type-check");
 }
 
 string_builder &python_converter::get_string_builder()
