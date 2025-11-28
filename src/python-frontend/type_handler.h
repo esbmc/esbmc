@@ -101,6 +101,14 @@ public:
 
   typet build_optional_type(const typet &base_type);
 
+  /*
+   * Returns true if `class_name` is the same as, or derives (directly or
+   * indirectly) from, `expected_base` in the current AST.
+   */
+  bool class_derives_from(
+    const std::string &class_name,
+    const std::string &expected_base) const;
+
 private:
   /// Encapsulate the const_cast in one place with clear documentation
   exprt get_expr_helper(const nlohmann::json &json) const;

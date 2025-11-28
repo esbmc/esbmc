@@ -395,24 +395,6 @@ bool python_typechecking::class_derives_from(
   const std::string &class_name,
   const std::string &expected_base) const
 {
-  if (class_name == expected_base)
-    return true;
-
-  const auto &ast = converter_.ast();
-  const auto class_node =
-    json_utils::find_class(ast["body"], class_name);
-  if (class_node.empty() || !class_node.contains("bases"))
-    return false;
-
-  for (const auto &base : class_node["bases"])
-  {
-    std::string base_name;
-    if (base.contains("_type") && base["_type"] == "Name")
-      base_name = base["id"].get<std::string>();
-    else if (base.contains("_type") && base["_type"] == "Attribute")
-      base_name = base["attr"].get<std::string>();
-    if (!base_name.empty() && class_derives_from(base_name, expected_base))
-      return true;
-  }
-  return false;
+  return converter_.get_type_handler().class_derives_from(
+    class_name, expected_base);
 }
