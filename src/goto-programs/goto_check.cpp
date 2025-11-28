@@ -31,7 +31,7 @@ public:
         options.get_bool_option("unsigned-overflow-check")),
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check")),
-      enable_python_type_check(options.get_bool_option("python-type-check"))
+      enable_is_instance_check(options.get_bool_option("is-instance-check"))
   {
   }
 
@@ -96,7 +96,7 @@ protected:
   void
   nan_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
 
-  void python_type_check(
+  void is_instance_check(
     goto_programt::targett target,
     goto_programt &goto_program,
     const expr2tc &lhs,
@@ -136,7 +136,7 @@ protected:
   bool enable_unsigned_overflow_check;
   bool enable_ub_shift_check;
   bool enable_nan_check;
-  bool enable_python_type_check;
+  bool enable_is_instance_check;
 };
 
 void goto_checkt::div_by_zero_check(
@@ -616,14 +616,14 @@ void goto_checkt::nan_check(
   add_guarded_claim(isnan, "NaN on " + get_expr_id(expr), "NaN", loc, guard);
 }
 
-void goto_checkt::python_type_check(
+void goto_checkt::is_instance_check(
   goto_programt::targett target,
   goto_programt &goto_program,
   const expr2tc &lhs,
   const expr2tc &rhs,
   const locationt &loc)
 {
-  if (!enable_python_type_check)
+  if (!enable_is_instance_check)
     return;
 
   if (!is_symbol2t(lhs))
@@ -649,7 +649,7 @@ void goto_checkt::python_type_check(
                          : symbol->name.as_string();
   new_inst->location.comment(
     "Type annotation check for '" + var_name + "'");
-  new_inst->location.property("python-type-check");
+  new_inst->location.property("is-instance-check");
 }
 
 expr2tc goto_checkt::build_python_type_assertion(
@@ -1105,7 +1105,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       {
         check(assign.target, loc);
         check(assign.source, loc);
-        python_type_check(it, goto_program, assign.target, assign.source, loc);
+        is_instance_check(it, goto_program, assign.target, assign.source, loc);
       }
     }
     else if (i.is_function_call())
