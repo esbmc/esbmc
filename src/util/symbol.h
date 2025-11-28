@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include <list>
+#include <vector>
 #include <util/config.h>
 #include <util/expr.h>
 #include <util/location.h>
@@ -27,6 +28,7 @@ public:
 
   // For python use
   bool is_set;
+  std::vector<typet> python_annotation_types;
 
   symbolt();
 
