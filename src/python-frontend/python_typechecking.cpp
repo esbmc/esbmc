@@ -77,29 +77,6 @@ std::vector<typet> python_typechecking::collect_annotation_types(
         }
       }
 
-      if (node_type == "Constant" && node.contains("value"))
-      {
-        if (node["value"].is_null())
-        {
-          collected.push_back(none_type());
-          return;
-        }
-      }
-
-      if (node_type == "Name" && node.contains("id"))
-      {
-        collected.push_back(
-          type_handler.get_typet(node["id"].get<std::string>()));
-        return;
-      }
-
-      if (node_type == "Attribute" && node.contains("attr"))
-      {
-        collected.push_back(
-          type_handler.get_typet(node["attr"].get<std::string>()));
-        return;
-      }
-
       try
       {
         collected.push_back(
