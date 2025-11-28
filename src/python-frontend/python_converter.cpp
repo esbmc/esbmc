@@ -1602,6 +1602,51 @@ exprt python_converter::handle_list_operations(
 {
   typet list_type = type_handler_.get_list_type();
 
+  // Resolve function calls that return lists to temporary variables
+  auto resolve_list_call = [&](exprt &expr) -> bool {
+    // Check if this is a side effect function call
+    if (expr.id().as_string() != "sideeffect")
+      return false;
+
+    if (expr.get("statement") != "function_call")
+      return false;
+
+    if (expr.type() != list_type)
+      return false;
+
+    locationt location = get_location_from_decl(element);
+
+    // Create temporary variable for the list
+    symbolt &tmp_var_symbol = create_tmp_symbol(
+      element, "tmp_func_ret", list_type, gen_zero(list_type));
+
+    // Declare the temporary
+    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+    tmp_var_decl.location() = location;
+    current_block->copy_to_operands(tmp_var_decl);
+
+    // Build function call statement from side effect expression
+    side_effect_expr_function_callt &side_effect =
+      to_side_effect_expr_function_call(expr);
+
+    code_function_callt call;
+    call.function() = side_effect.function();
+    call.arguments() = side_effect.arguments();
+    call.lhs() = symbol_expr(tmp_var_symbol);
+    call.type() = list_type;
+    call.location() = location;
+
+    current_block->copy_to_operands(call);
+
+    // Replace expr with the temp variable
+    expr = symbol_expr(tmp_var_symbol);
+    return true;
+  };
+
+  // Resolve both sides if they are function calls
+  resolve_list_call(lhs);
+  resolve_list_call(rhs);
+
   // List comparison
   if (
     lhs.type() == list_type && rhs.type() == list_type &&

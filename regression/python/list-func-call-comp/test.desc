@@ -1,4 +1,5 @@
-THOROUGH
+CORE
 main.py
 --unwind 9 --no-bounds-check --no-pointer-check --no-align-check --no-div-by-zero-check
-^VERIFICATION FAILED$
+
+^VERIFICATION SUCCESSFUL$
