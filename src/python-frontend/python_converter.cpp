@@ -1624,7 +1624,8 @@ exprt python_converter::handle_list_operations(
   typet list_type = type_handler_.get_list_type();
 
   // Resolve function calls that return lists to temporary variables
-  auto resolve_list_call = [&](exprt &expr) -> bool {
+  auto resolve_list_call = [&](exprt &expr) -> bool
+  {
     // Check if this is a side effect function call
     if (expr.id().as_string() != "sideeffect")
       return false;
@@ -4019,8 +4020,9 @@ void python_converter::get_var_assign(
       get_typechecker().cache_annotation_types(
         *lhs_symbol, ast_node["annotation"]);
 
-    if (type_assertions_enabled() && lhs_symbol &&
-        ast_node.contains("annotation"))
+    if (
+      type_assertions_enabled() && lhs_symbol &&
+      ast_node.contains("annotation"))
     {
       auto &tc = get_typechecker();
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
@@ -4149,11 +4151,11 @@ void python_converter::get_var_assign(
   if (has_value && rhs != exprt("_init_undefined"))
   {
     // Handle throw expression
-  if (rhs.statement() == "cpp-throw")
-  {
-    rhs.location() = location_begin;
-    codet code_expr("expression");
-    code_expr.operands().push_back(rhs);
+    if (rhs.statement() == "cpp-throw")
+    {
+      rhs.location() = location_begin;
+      codet code_expr("expression");
+      code_expr.operands().push_back(rhs);
       code_declt decl(symbol_expr(*lhs_symbol));
       decl.location() = location_begin;
 
@@ -5200,7 +5202,8 @@ size_t python_converter::register_function_argument(
   param_symbol.is_extern = false;
   symbol_table_.add(param_symbol);
   if (element.contains("annotation") && !element["annotation"].is_null())
-    get_typechecker().cache_annotation_types(param_symbol, element["annotation"]);
+    get_typechecker().cache_annotation_types(
+      param_symbol, element["annotation"]);
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via
@@ -5456,9 +5459,9 @@ void python_converter::get_function_definition(
   exprt function_body = get_block(function_node["body"]);
 
   // Inject runtime checks for annotated parameters
-    if (type_assertions_enabled())
-      get_typechecker().inject_parameter_type_assertions(
-        function_node, id, type, function_body);
+  if (type_assertions_enabled())
+    get_typechecker().inject_parameter_type_assertions(
+      function_node, id, type, function_body);
 
   // Add ESBMC_Hide label for models/imports
   if (is_loading_models || is_importing_module)
@@ -6289,7 +6292,7 @@ const python_typechecking &python_converter::get_typechecker() const
 
 bool python_converter::type_assertions_enabled() const
 {
-  return config.options.get_bool_option("python-type-check");
+  return config.options.get_bool_option("is-instance-check");
 }
 
 string_builder &python_converter::get_string_builder()
@@ -6836,14 +6839,16 @@ void python_converter::convert()
   code_blockt main_body;
 
   // 1. Initialize static lifetime variables
-  symbol_table_.foreach_operand_in_order([&main_body](const symbolt &s) {
-    if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+  symbol_table_.foreach_operand_in_order(
+    [&main_body](const symbolt &s)
     {
-      code_assignt assign(symbol_expr(s), s.value);
-      assign.location() = s.location;
-      main_body.copy_to_operands(assign);
-    }
-  });
+      if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+      {
+        code_assignt assign(symbol_expr(s), s.value);
+        assign.location() = s.location;
+        main_body.copy_to_operands(assign);
+      }
+    });
 
   // 2. Call python_init for initialization
   if (!init_code.operands().empty())
