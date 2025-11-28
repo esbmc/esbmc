@@ -5555,6 +5555,127 @@ code_function_callt create_function_call_statement(
   return function_call;
 }
 
+void python_converter::handle_list_assertion(
+  const nlohmann::json &element,
+  const exprt &test,
+  code_blockt &block,
+  const std::function<void(code_assertt &)> &attach_assert_message)
+{
+  locationt location = get_location_from_decl(element);
+
+  // Materialize function call if needed
+  exprt list_expr = test;
+  if (test.is_function_call())
+  {
+    // Create temp variable to store function result (pointer to list)
+    symbolt &list_temp =
+      create_tmp_symbol(element, "$list_assert_temp$", test.type(), exprt());
+    code_declt list_decl(symbol_expr(list_temp));
+    list_decl.location() = location;
+    block.move_to_operands(list_decl);
+
+    // Execute function call
+    code_function_callt &func_call =
+      static_cast<code_function_callt &>(const_cast<exprt &>(test));
+    func_call.lhs() = symbol_expr(list_temp);
+    block.move_to_operands(func_call);
+
+    list_expr = symbol_expr(list_temp);
+  }
+
+  // Get list size using __ESBMC_list_size
+  const symbolt *size_sym = symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+  if (!size_sym)
+    throw std::runtime_error("__ESBMC_list_size function not found");
+
+  // Create temp var to store size
+  symbolt &size_result = create_tmp_symbol(
+    element, "$list_size_result$", size_type(), gen_zero(size_type()));
+  code_declt size_decl(symbol_expr(size_result));
+  size_decl.location() = location;
+  block.move_to_operands(size_decl);
+
+  // Call list_size(list)
+  code_function_callt size_func_call;
+  size_func_call.function() = symbol_expr(*size_sym);
+  if (list_expr.type().is_pointer())
+    size_func_call.arguments().push_back(list_expr);
+  else
+    size_func_call.arguments().push_back(address_of_exprt(list_expr));
+  size_func_call.lhs() = symbol_expr(size_result);
+  size_func_call.type() = size_type();
+  size_func_call.location() = location;
+  block.move_to_operands(size_func_call);
+
+  // Assert size > 0
+  exprt assertion(">", bool_type());
+  assertion.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+
+  code_assertt assert_code;
+  assert_code.assertion() = assertion;
+  assert_code.location() = location;
+  attach_assert_message(assert_code);
+  block.move_to_operands(assert_code);
+}
+
+void python_converter::handle_function_call_assertion(
+  const nlohmann::json &element,
+  const exprt &func_call_expr,
+  bool is_negated,
+  code_blockt &block,
+  const std::function<void(code_assertt &)> &attach_assert_message)
+{
+  locationt location = get_location_from_decl(element);
+
+  // Check if function returns None
+  const typet &return_type = func_call_expr.type();
+
+  if (return_type == none_type() || return_type.id() == "empty")
+  {
+    // Function returns None: execute call and assert False
+    exprt func_call_copy = func_call_expr;
+    codet code_stmt = convert_expression_to_code(func_call_copy);
+    block.move_to_operands(code_stmt);
+
+    code_assertt assert_code;
+    assert_code.assertion() = false_exprt();
+    assert_code.location() = location;
+    assert_code.location().comment("Assertion on None-returning function");
+    attach_assert_message(assert_code);
+    block.move_to_operands(assert_code);
+    return;
+  }
+
+  // Create temporary variable
+  symbolt temp_symbol = create_assert_temp_variable(location);
+  symbol_table_.add(temp_symbol);
+  exprt temp_var_expr = symbol_expr(temp_symbol);
+
+  // Create function call statement
+  code_function_callt function_call =
+    create_function_call_statement(func_call_expr, temp_var_expr, location);
+  block.move_to_operands(function_call);
+
+  // Create assertion based on negation
+  exprt assertion_expr;
+  if (is_negated)
+  {
+    assertion_expr = not_exprt(temp_var_expr);
+  }
+  else
+  {
+    exprt cast_expr = typecast_exprt(temp_var_expr, signedbv_typet(32));
+    exprt one_expr = constant_exprt("1", signedbv_typet(32));
+    assertion_expr = equality_exprt(cast_expr, one_expr);
+  }
+
+  code_assertt assert_code;
+  assert_code.assertion() = assertion_expr;
+  assert_code.location() = location;
+  attach_assert_message(assert_code);
+  block.move_to_operands(assert_code);
+}
+
 exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
   code_blockt block, *old_block = current_block;
@@ -5617,9 +5738,6 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         break;
       }
 
-      if (!test.type().is_bool())
-        test.make_typecast(current_element_type);
-
       // Attach assertion message if present
       auto attach_assert_message = [&element](code_assertt &assert_code) {
         if (element.contains("msg") && !element["msg"].is_null())
@@ -5643,7 +5761,17 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         }
       };
 
-      // Check for function calls in assertions (direct or negated)
+      // Handle list assertions
+      if (
+        test.type() == type_handler_.get_list_type() ||
+        (test.type().is_pointer() &&
+         test.type().subtype() == type_handler_.get_list_type()))
+      {
+        handle_list_assertion(element, test, block, attach_assert_message);
+        break;
+      }
+
+      // Check for function call assertions
       const exprt *func_call_expr = nullptr;
       bool is_negated = false;
 
@@ -5663,45 +5791,17 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         is_negated = true;
       }
 
-      // Transform function call assertions to prevent solver crashes
       if (func_call_expr != nullptr)
       {
-        locationt location = get_location_from_decl(element);
-
-        // Create temporary variable
-        symbolt temp_symbol = create_assert_temp_variable(location);
-        symbol_table_.add(temp_symbol);
-        exprt temp_var_expr = symbol_expr(temp_symbol);
-
-        // Create function call statement: temp_var = func(args)
-        code_function_callt function_call = create_function_call_statement(
-          *func_call_expr, temp_var_expr, location);
-        block.move_to_operands(function_call);
-
-        // Create appropriate assertion based on negation
-        exprt assertion_expr;
-        if (is_negated)
-        {
-          // assert not func() -> assert !temp_var
-          assertion_expr = not_exprt(temp_var_expr);
-        }
-        else
-        {
-          // assert func() -> assert temp_var == 1
-          exprt cast_expr = typecast_exprt(temp_var_expr, signedbv_typet(32));
-          exprt one_expr = constant_exprt("1", signedbv_typet(32));
-          assertion_expr = equality_exprt(cast_expr, one_expr);
-        }
-
-        code_assertt assert_code;
-        assert_code.assertion() = assertion_expr;
-        assert_code.location() = location;
-        attach_assert_message(assert_code); // Add message if present
-        block.move_to_operands(assert_code);
+        handle_function_call_assertion(
+          element, *func_call_expr, is_negated, block, attach_assert_message);
       }
       else
       {
-        // For expressions without function calls, use direct assertion
+        // Direct assertion
+        if (!test.type().is_bool())
+          test.make_typecast(current_element_type);
+
         code_assertt assert_code;
         assert_code.assertion() = test;
         assert_code.location() = get_location_from_decl(element);
