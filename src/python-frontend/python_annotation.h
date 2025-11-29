@@ -808,6 +808,45 @@ private:
       return "Any"; // Default for other lambda expressions
   }
 
+  // Helper method to recursively search for a function in the AST
+  Json
+  find_function_recursive(const std::string &func_name, const Json &body) const
+  {
+    for (const Json &elem : body)
+    {
+      // Found the function at this level
+      if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+      {
+        return elem;
+      }
+
+      // Recursively search in nested function bodies
+      if (elem["_type"] == "FunctionDef" && elem.contains("body"))
+      {
+        Json nested = find_function_recursive(func_name, elem["body"]);
+        if (!nested.empty())
+          return nested;
+      }
+
+      // Also search in control flow blocks
+      if (elem.contains("body") && elem["body"].is_array())
+      {
+        Json nested = find_function_recursive(func_name, elem["body"]);
+        if (!nested.empty())
+          return nested;
+      }
+
+      if (elem.contains("orelse") && elem["orelse"].is_array())
+      {
+        Json nested = find_function_recursive(func_name, elem["orelse"]);
+        if (!nested.empty())
+          return nested;
+      }
+    }
+
+    return Json(); // Not found
+  }
+
   std::string
   get_function_return_type(const std::string &func_name, const Json &ast)
   {
@@ -868,81 +907,86 @@ private:
     bool should_override =
       config.options.get_bool_option("override-return-annotation");
 
-    // Search the top-level AST body for a matching function definition
-    for (const Json &elem : ast["body"])
+    // Search for function (including nested functions) using recursive helper
+    Json func_elem = find_function_recursive(func_name, ast_["body"]);
+
+    // Also check current function scope for local nested functions
+    if (func_elem.empty() && current_func != nullptr)
     {
-      if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+      func_elem = find_function_recursive(func_name, (*current_func)["body"]);
+    }
+
+    // Process the found function (if any)
+    if (!func_elem.empty())
+    {
+      // If override is set, skip annotation and go straight to inference
+      if (!should_override)
       {
-        // If override is set, skip annotation and go straight to inference
-        if (!should_override)
+        // Check if function has a return type annotation first (before inferring)
+        if (func_elem.contains("returns") && !func_elem["returns"].is_null())
         {
-          // Check if function has a return type annotation first (before inferring)
-          if (elem.contains("returns") && !elem["returns"].is_null())
+          const auto &returns = func_elem["returns"];
+
+          // Handle different return type annotation structures
+          if (returns.contains("_type"))
           {
-            const auto &returns = elem["returns"];
+            const std::string &return_type = returns["_type"];
 
-            // Handle different return type annotation structures
-            if (returns.contains("_type"))
+            // Handle Subscript type (e.g., List[int], Dict[str, int])
+            if (return_type == "Subscript")
             {
-              const std::string &return_type = returns["_type"];
-
-              // Handle Subscript type (e.g., List[int], Dict[str, int])
-              if (return_type == "Subscript")
-              {
-                functions_in_analysis_.erase(func_name);
-                if (
-                  returns.contains("value") && returns["value"].contains("id"))
-                  return returns["value"]["id"];
-                else
-                  return "Any"; // Default for complex subscript types
-              }
-              // Handle Constant type (e.g., None)
-              else if (return_type == "Constant")
-              {
-                functions_in_analysis_.erase(func_name);
-                if (returns.contains("value") && returns["value"].is_null())
-                  return "NoneType";
-                else if (returns.contains("value"))
-                  return "Any"; // Other constant types
-              }
-              // Handle other annotation types
+              functions_in_analysis_.erase(func_name);
+              if (returns.contains("value") && returns["value"].contains("id"))
+                return returns["value"]["id"];
               else
-              {
-                // Try to extract id if it exists
-                if (returns.contains("id"))
-                {
-                  functions_in_analysis_.erase(func_name);
-                  return returns["id"];
-                }
-              }
+                return "Any"; // Default for complex subscript types
             }
-            // Handle case where returns exists but doesn't have expected structure
+            // Handle Constant type (e.g., None)
+            else if (return_type == "Constant")
+            {
+              functions_in_analysis_.erase(func_name);
+              if (returns.contains("value") && returns["value"].is_null())
+                return "NoneType";
+              else if (returns.contains("value"))
+                return "Any"; // Other constant types
+            }
+            // Handle other annotation types
             else
             {
-              log_warning(
-                "Unrecognized return type annotation for function "
-                "{}",
-                func_name);
-              functions_in_analysis_.erase(func_name);
-              return "Any"; // Safe default
+              // Try to extract id if it exists
+              if (returns.contains("id"))
+              {
+                functions_in_analysis_.erase(func_name);
+                return returns["id"];
+              }
             }
           }
+          // Handle case where returns exists but doesn't have expected structure
+          else
+          {
+            log_warning(
+              "Unrecognized return type annotation for function "
+              "{}",
+              func_name);
+            functions_in_analysis_.erase(func_name);
+            return "Any"; // Safe default
+          }
         }
-
-        // Try to infer return type from actual return statements
-        auto return_node = json_utils::find_return_node(elem["body"]);
-        if (!return_node.empty())
-        {
-          std::string inferred_type;
-          infer_type(return_node, elem, inferred_type);
-          functions_in_analysis_.erase(func_name);
-          return inferred_type;
-        }
-
-        // If function has no explicit return statements, assume void/None
-        functions_in_analysis_.erase(func_name);
-        return "NoneType";
       }
+
+      // Try to infer return type from actual return statements
+      auto return_node = json_utils::find_return_node(func_elem["body"]);
+      if (!return_node.empty())
+      {
+        std::string inferred_type;
+        infer_type(return_node, func_elem, inferred_type);
+        functions_in_analysis_.erase(func_name);
+        return inferred_type;
+      }
+
+      // If function has no explicit return statements, assume void/None
+      functions_in_analysis_.erase(func_name);
+      return "NoneType";
     }
 
     // Check for lambda assignments when regular function not found
@@ -1469,8 +1513,8 @@ private:
       // Recursively resolve nested attribute chain (e.g., self.b.a -> [self, b, a])
       std::function<std::string(const Json &, std::vector<std::string> &)>
         extract_attr_chain =
-          [&](
-            const Json &node, std::vector<std::string> &chain) -> std::string {
+          [&](const Json &node, std::vector<std::string> &chain) -> std::string
+      {
         if (node["_type"] == "Attribute")
         {
           std::string attr = node["attr"].template get<std::string>();
@@ -1871,6 +1915,15 @@ private:
         continue;
       }
 
+      if (stmt_type == "FunctionDef")
+      {
+        // Only annotate nested functions, not the current function itself
+        if (current_func != nullptr && &element != current_func)
+          annotate_function(element);
+
+        continue;
+      }
+
       const std::string function_flag = config.options.get_option("function");
       if (!function_flag.empty())
       {
@@ -2004,7 +2057,8 @@ private:
     element.erase("type_comment");
 
     // Update value fields with the correct offsets - with null safety
-    auto update_offsets = [&inferred_type](Json &value) {
+    auto update_offsets = [&inferred_type](Json &value)
+    {
       if (value.contains("col_offset") && !value["col_offset"].is_null())
       {
         value["col_offset"] =
