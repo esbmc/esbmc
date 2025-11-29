@@ -5,6 +5,7 @@
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <unordered_set>
 #include <util/std_types.h>
 
 python_typechecking::python_typechecking(python_converter &converter)
@@ -89,19 +90,12 @@ std::vector<typet> python_typechecking::collect_annotation_types(
 
   collect(annotation);
 
+  std::unordered_set<typet, irep_full_hash, irep_full_eq> seen_types;
   std::vector<typet> unique_types;
+  unique_types.reserve(collected.size());
   for (const auto &type : collected)
   {
-    bool exists = false;
-    for (const auto &current : unique_types)
-    {
-      if (type == current)
-      {
-        exists = true;
-        break;
-      }
-    }
-    if (!exists)
+    if (seen_types.insert(type).second)
       unique_types.push_back(type);
   }
   return unique_types;

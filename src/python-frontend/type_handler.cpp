@@ -113,11 +113,17 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   if (ref.empty())
     return std::string();
 
+  if (!ref.contains("annotation") || ref["annotation"].is_null())
+    return std::string();
+
   const auto &annotation = ref["annotation"];
-  if (annotation.contains("id"))
+  if (annotation.is_object() && annotation.contains("id"))
     return annotation["id"].get<std::string>();
 
-  if (annotation.contains("_type") && annotation["_type"] == "Subscript")
+  if (
+    annotation.is_object() && annotation.contains("_type") &&
+    annotation["_type"] == "Subscript" && annotation.contains("value") &&
+    annotation["value"].is_object() && annotation["value"].contains("id"))
     return annotation["value"]["id"];
 
   return std::string();
