@@ -1348,3 +1348,19 @@ exprt python_list::get_empty_set()
   // Type information will be determined when elements are added
   return symbol_expr(list_symbol);
 }
+
+typet python_list::get_list_element_type(
+  const std::string &list_id,
+  size_t index)
+{
+  auto type_map_it = list_type_map.find(list_id);
+
+  if (type_map_it == list_type_map.end() || type_map_it->second.empty())
+    return typet();
+
+  // If index is out of bounds, return the first element's type
+  if (index >= type_map_it->second.size())
+    index = 0;
+
+  return type_map_it->second[index].second;
+}
