@@ -2122,8 +2122,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     (!element.contains("args") || element["args"].empty()))
   {
     // Create an empty set (modeled as list)
-    python_list list(*this, element);
-    return list.get_empty_set();
+    python_set set_handler(*this, element);
+    return set_handler.get_empty_set();
   }
 
   const std::string function = config.options.get_option("function");
@@ -2747,15 +2747,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
-    // For now, treat set literals such as lists
-    // Store elements in order they appear (order doesn't matter for sets)
-    if (build_static_lists)
+    if (element["_type"] == "Set")
     {
-      typet size = type_handler_.get_typet(element["elts"]);
-      return get_static_array(element, size);
+      python_set set_handler(*this, element);
+      expr = set_handler.get();
+      break;
     }
+
+    // Existing list handling...
     python_list list(*this, element);
-    expr = list.get(element["_type"] == "Set");
+    expr = list.get();
     break;
   }
   case ExpressionType::VARIABLE_REF:
@@ -6845,15 +6846,15 @@ exprt python_converter::handle_set_operations(
   resolve_list_call(lhs);
   resolve_list_call(rhs);
 
-  python_list list(*this, element);
+  python_set set_handler(*this, element);
 
   // Map Python set operations to internal functions
   if (op == "Sub") // Set difference: a - b
-    return list.build_set_difference_call(lhs, rhs, element);
+    return set_handler.build_set_difference_call(lhs, rhs, element);
   else if (op == "BitAnd") // Set intersection: a & b
-    return list.build_set_intersection_call(lhs, rhs, element);
+    return set_handler.build_set_intersection_call(lhs, rhs, element);
   else if (op == "BitOr") // Set union: a | b
-    return list.build_set_union_call(lhs, rhs, element);
+    return set_handler.build_set_union_call(lhs, rhs, element);
 
   return nil_exprt();
 }

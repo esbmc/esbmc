@@ -29,7 +29,7 @@ public:
   {
   }
 
-  exprt get(bool is_set = false);
+  exprt get();
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
@@ -61,21 +61,6 @@ public:
 
   // Build: result = lhs + rhs   (concatenation)
   exprt build_concat_list_call(
-    const exprt &lhs,
-    const exprt &rhs,
-    const nlohmann::json &element);
-
-  exprt build_set_difference_call(
-    const exprt &lhs,
-    const exprt &rhs,
-    const nlohmann::json &element);
-
-  exprt build_set_intersection_call(
-    const exprt &lhs,
-    const exprt &rhs,
-    const nlohmann::json &element);
-
-  exprt build_set_union_call(
     const exprt &lhs,
     const exprt &rhs,
     const nlohmann::json &element);
