@@ -2747,6 +2747,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
+    // For now, treat set literals such as lists
+    // Store elements in order they appear (order doesn't matter for sets)
     if (element["_type"] == "Set")
     {
       python_set set_handler(*this, element);
@@ -2754,7 +2756,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
-    // Existing list handling...
+    // List handling
     python_list list(*this, element);
     expr = list.get();
     break;
