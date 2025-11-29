@@ -65,6 +65,21 @@ public:
     const exprt &rhs,
     const nlohmann::json &element);
 
+  exprt build_set_difference_call(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
+  exprt build_set_intersection_call(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
+  exprt build_set_union_call(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
   void add_type_info(
     const std::string &list_symbol_id,
     const std::string &elem_id,
