@@ -225,6 +225,7 @@ private:
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
+  exprt handle_list_pop() const;
 
   /*
    * Check if the current function call is to a regular expression module function

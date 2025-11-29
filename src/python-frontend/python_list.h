@@ -88,6 +88,14 @@ public:
    */
   exprt get_empty_set();
 
+  /**
+   * Get the element type for a list at a given index.
+   * If index is not specified or out of bounds, returns the first element's type.
+   * Returns empty typet() if type information is not available.
+   */
+  static typet
+  get_list_element_type(const std::string &list_id, size_t index = 0);
+
 private:
   friend class python_dict_handler;
 
