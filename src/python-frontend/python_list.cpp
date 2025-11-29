@@ -1364,3 +1364,438 @@ typet python_list::get_list_element_type(
 
   return type_map_it->second[index].second;
 }
+
+exprt python_list::build_set_difference_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  symbolt &result_set = create_list();
+  result_set.is_set = true;
+
+  locationt loc = converter_.get_location_from_decl(element);
+
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  const symbolt *at_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+  const symbolt *contains_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  const symbolt *push_obj_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+
+  assert(size_func && at_func && contains_func && push_obj_func);
+
+  symbolt &n_sym = converter_.create_tmp_symbol(
+    element, "$lhs_size$", size_type(), gen_zero(size_type()));
+  code_declt n_decl(symbol_expr(n_sym));
+  converter_.add_instruction(n_decl);
+
+  code_function_callt get_size;
+  get_size.function() = symbol_expr(*size_func);
+  get_size.arguments().push_back(
+    lhs.type().is_pointer() ? lhs : address_of_exprt(lhs));
+  get_size.lhs() = symbol_expr(n_sym);
+  get_size.type() = size_type();
+  get_size.location() = loc;
+  converter_.add_instruction(get_size);
+
+  symbolt &i_sym = converter_.create_tmp_symbol(
+    element, "$i$", size_type(), gen_zero(size_type()));
+  code_declt i_decl(symbol_expr(i_sym));
+  converter_.add_instruction(i_decl);
+
+  code_assignt i_init(symbol_expr(i_sym), gen_zero(size_type()));
+  converter_.add_instruction(i_init);
+
+  exprt cond("<", bool_type());
+  cond.copy_to_operands(symbol_expr(i_sym), symbol_expr(n_sym));
+
+  code_blockt body;
+
+  side_effect_expr_function_callt at_call;
+  at_call.function() = symbol_expr(*at_func);
+  at_call.arguments().push_back(
+    lhs.type().is_pointer() ? lhs : address_of_exprt(lhs));
+  at_call.arguments().push_back(symbol_expr(i_sym));
+  at_call.type() =
+    pointer_typet(converter_.get_type_handler().get_list_element_type());
+  at_call.location() = loc;
+
+  symbolt &elem_sym = converter_.create_tmp_symbol(
+    element,
+    "$elem$",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt elem_decl(symbol_expr(elem_sym));
+  elem_decl.copy_to_operands(at_call);
+  body.copy_to_operands(elem_decl);
+
+  symbolt &contains_result = converter_.create_tmp_symbol(
+    element, "$contains$", bool_type(), gen_boolean(false));
+  code_declt contains_decl(symbol_expr(contains_result));
+  body.copy_to_operands(contains_decl);
+
+  code_function_callt contains_call;
+  contains_call.function() = symbol_expr(*contains_func);
+  contains_call.lhs() = symbol_expr(contains_result);
+  contains_call.arguments().push_back(
+    rhs.type().is_pointer() ? rhs : address_of_exprt(rhs));
+
+  member_exprt elem_value(
+    symbol_expr(elem_sym), "value", pointer_typet(empty_typet()));
+  {
+    exprt &base = elem_value.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  contains_call.arguments().push_back(elem_value);
+
+  member_exprt elem_type_id(symbol_expr(elem_sym), "type_id", size_type());
+  {
+    exprt &base = elem_type_id.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  contains_call.arguments().push_back(elem_type_id);
+
+  member_exprt elem_size(symbol_expr(elem_sym), "size", size_type());
+  {
+    exprt &base = elem_size.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  contains_call.arguments().push_back(elem_size);
+
+  contains_call.type() = bool_type();
+  contains_call.location() = loc;
+  body.copy_to_operands(contains_call);
+
+  code_blockt then_block;
+
+  side_effect_expr_function_callt push_call;
+  push_call.function() = symbol_expr(*push_obj_func);
+  push_call.arguments().push_back(symbol_expr(result_set));
+  push_call.arguments().push_back(symbol_expr(elem_sym));
+  push_call.type() = bool_type();
+  push_call.location() = loc;
+  then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
+
+  exprt not_contains("not", bool_type());
+  not_contains.copy_to_operands(symbol_expr(contains_result));
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(not_contains, then_block);
+  body.copy_to_operands(if_stmt);
+
+  plus_exprt i_inc(symbol_expr(i_sym), gen_one(size_type()));
+  code_assignt i_step(symbol_expr(i_sym), i_inc);
+  body.copy_to_operands(i_step);
+
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter_.add_instruction(loop);
+
+  return symbol_expr(result_set);
+}
+
+exprt python_list::build_set_intersection_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  symbolt &result_set = create_list();
+  result_set.is_set = true;
+
+  locationt loc = converter_.get_location_from_decl(element);
+
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  const symbolt *at_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+  const symbolt *contains_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  const symbolt *push_obj_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+
+  assert(size_func && at_func && contains_func && push_obj_func);
+
+  symbolt &n_sym = converter_.create_tmp_symbol(
+    element, "$lhs_size$", size_type(), gen_zero(size_type()));
+  code_declt n_decl(symbol_expr(n_sym));
+  converter_.add_instruction(n_decl);
+
+  code_function_callt get_size;
+  get_size.function() = symbol_expr(*size_func);
+  get_size.arguments().push_back(
+    lhs.type().is_pointer() ? lhs : address_of_exprt(lhs));
+  get_size.lhs() = symbol_expr(n_sym);
+  get_size.type() = size_type();
+  get_size.location() = loc;
+  converter_.add_instruction(get_size);
+
+  symbolt &i_sym = converter_.create_tmp_symbol(
+    element, "$i$", size_type(), gen_zero(size_type()));
+  code_declt i_decl(symbol_expr(i_sym));
+  converter_.add_instruction(i_decl);
+
+  code_assignt i_init(symbol_expr(i_sym), gen_zero(size_type()));
+  converter_.add_instruction(i_init);
+
+  exprt cond("<", bool_type());
+  cond.copy_to_operands(symbol_expr(i_sym), symbol_expr(n_sym));
+
+  code_blockt body;
+
+  side_effect_expr_function_callt at_call;
+  at_call.function() = symbol_expr(*at_func);
+  at_call.arguments().push_back(
+    lhs.type().is_pointer() ? lhs : address_of_exprt(lhs));
+  at_call.arguments().push_back(symbol_expr(i_sym));
+  at_call.type() =
+    pointer_typet(converter_.get_type_handler().get_list_element_type());
+  at_call.location() = loc;
+
+  symbolt &elem_sym = converter_.create_tmp_symbol(
+    element,
+    "$elem$",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt elem_decl(symbol_expr(elem_sym));
+  elem_decl.copy_to_operands(at_call);
+  body.copy_to_operands(elem_decl);
+
+  symbolt &contains_result = converter_.create_tmp_symbol(
+    element, "$contains$", bool_type(), gen_boolean(false));
+  code_declt contains_decl(symbol_expr(contains_result));
+  body.copy_to_operands(contains_decl);
+
+  code_function_callt contains_call;
+  contains_call.function() = symbol_expr(*contains_func);
+  contains_call.lhs() = symbol_expr(contains_result);
+  contains_call.arguments().push_back(
+    rhs.type().is_pointer() ? rhs : address_of_exprt(rhs));
+
+  member_exprt elem_value(
+    symbol_expr(elem_sym), "value", pointer_typet(empty_typet()));
+  {
+    exprt &base = elem_value.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  contains_call.arguments().push_back(elem_value);
+
+  member_exprt elem_type_id(symbol_expr(elem_sym), "type_id", size_type());
+  {
+    exprt &base = elem_type_id.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  contains_call.arguments().push_back(elem_type_id);
+
+  member_exprt elem_size(symbol_expr(elem_sym), "size", size_type());
+  {
+    exprt &base = elem_size.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  contains_call.arguments().push_back(elem_size);
+
+  contains_call.type() = bool_type();
+  contains_call.location() = loc;
+  body.copy_to_operands(contains_call);
+
+  code_blockt then_block;
+
+  side_effect_expr_function_callt push_call;
+  push_call.function() = symbol_expr(*push_obj_func);
+  push_call.arguments().push_back(symbol_expr(result_set));
+  push_call.arguments().push_back(symbol_expr(elem_sym));
+  push_call.type() = bool_type();
+  push_call.location() = loc;
+  then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(symbol_expr(contains_result), then_block);
+  body.copy_to_operands(if_stmt);
+
+  plus_exprt i_inc(symbol_expr(i_sym), gen_one(size_type()));
+  code_assignt i_step(symbol_expr(i_sym), i_inc);
+  body.copy_to_operands(i_step);
+
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter_.add_instruction(loop);
+
+  return symbol_expr(result_set);
+}
+
+exprt python_list::build_set_union_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  symbolt &result_set = create_list();
+  result_set.is_set = true;
+
+  locationt loc = converter_.get_location_from_decl(element);
+
+  const symbolt *extend_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_extend");
+  assert(extend_func);
+
+  code_function_callt extend_call;
+  extend_call.function() = symbol_expr(*extend_func);
+  extend_call.arguments().push_back(symbol_expr(result_set));
+  extend_call.arguments().push_back(
+    lhs.type().is_pointer() ? lhs : address_of_exprt(lhs));
+  extend_call.type() = empty_typet();
+  extend_call.location() = loc;
+  converter_.add_instruction(extend_call);
+
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  const symbolt *at_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+  const symbolt *contains_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  const symbolt *push_obj_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+
+  assert(size_func && at_func && contains_func && push_obj_func);
+
+  symbolt &n_sym = converter_.create_tmp_symbol(
+    element, "$rhs_size$", size_type(), gen_zero(size_type()));
+  code_declt n_decl(symbol_expr(n_sym));
+  converter_.add_instruction(n_decl);
+
+  code_function_callt get_size;
+  get_size.function() = symbol_expr(*size_func);
+  get_size.arguments().push_back(
+    rhs.type().is_pointer() ? rhs : address_of_exprt(rhs));
+  get_size.lhs() = symbol_expr(n_sym);
+  get_size.type() = size_type();
+  get_size.location() = loc;
+  converter_.add_instruction(get_size);
+
+  symbolt &i_sym = converter_.create_tmp_symbol(
+    element, "$i$", size_type(), gen_zero(size_type()));
+  code_declt i_decl(symbol_expr(i_sym));
+  converter_.add_instruction(i_decl);
+
+  code_assignt i_init(symbol_expr(i_sym), gen_zero(size_type()));
+  converter_.add_instruction(i_init);
+
+  exprt cond("<", bool_type());
+  cond.copy_to_operands(symbol_expr(i_sym), symbol_expr(n_sym));
+
+  code_blockt body;
+
+  side_effect_expr_function_callt at_call;
+  at_call.function() = symbol_expr(*at_func);
+  at_call.arguments().push_back(
+    rhs.type().is_pointer() ? rhs : address_of_exprt(rhs));
+  at_call.arguments().push_back(symbol_expr(i_sym));
+  at_call.type() =
+    pointer_typet(converter_.get_type_handler().get_list_element_type());
+  at_call.location() = loc;
+
+  symbolt &elem_sym = converter_.create_tmp_symbol(
+    element,
+    "$elem$",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt elem_decl(symbol_expr(elem_sym));
+  elem_decl.copy_to_operands(at_call);
+  body.copy_to_operands(elem_decl);
+
+  symbolt &contains_result = converter_.create_tmp_symbol(
+    element, "$contains$", bool_type(), gen_boolean(false));
+  code_declt contains_decl(symbol_expr(contains_result));
+  body.copy_to_operands(contains_decl);
+
+  code_function_callt contains_call;
+  contains_call.function() = symbol_expr(*contains_func);
+  contains_call.lhs() = symbol_expr(contains_result);
+  contains_call.arguments().push_back(symbol_expr(result_set));
+
+  member_exprt elem_value(
+    symbol_expr(elem_sym), "value", pointer_typet(empty_typet()));
+  {
+    exprt &base = elem_value.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  contains_call.arguments().push_back(elem_value);
+
+  member_exprt elem_type_id(symbol_expr(elem_sym), "type_id", size_type());
+  {
+    exprt &base = elem_type_id.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  contains_call.arguments().push_back(elem_type_id);
+
+  member_exprt elem_size(symbol_expr(elem_sym), "size", size_type());
+  {
+    exprt &base = elem_size.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+  contains_call.arguments().push_back(elem_size);
+
+  contains_call.type() = bool_type();
+  contains_call.location() = loc;
+  body.copy_to_operands(contains_call);
+
+  code_blockt then_block;
+
+  side_effect_expr_function_callt push_call;
+  push_call.function() = symbol_expr(*push_obj_func);
+  push_call.arguments().push_back(symbol_expr(result_set));
+  push_call.arguments().push_back(symbol_expr(elem_sym));
+  push_call.type() = bool_type();
+  push_call.location() = loc;
+  then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
+
+  exprt not_contains("not", bool_type());
+  not_contains.copy_to_operands(symbol_expr(contains_result));
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(not_contains, then_block);
+  body.copy_to_operands(if_stmt);
+
+  plus_exprt i_inc(symbol_expr(i_sym), gen_one(size_type()));
+  code_assignt i_step(symbol_expr(i_sym), i_inc);
+  body.copy_to_operands(i_step);
+
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter_.add_instruction(loop);
+
+  return symbol_expr(result_set);
+}

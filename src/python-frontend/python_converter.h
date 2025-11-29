@@ -736,6 +736,14 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  exprt handle_set_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
   /**
    * @brief Handles type mismatches in relational operations.
    *
