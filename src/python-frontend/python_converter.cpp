@@ -2756,7 +2756,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
-    // List handling
+    // Check if we should use static arrays (for numpy and similar operations)
+    if (build_static_lists)
+    {
+      typet size = type_handler_.get_typet(element["elts"]);
+      expr = get_static_array(element, size);
+      break;
+    }
+
+    // List handling (dynamic lists)
     python_list list(*this, element);
     expr = list.get();
     break;
