@@ -1,0 +1,4 @@
+CORE
+main.c
+--printf-check
+^  printf has more format specifiers than arguments$
