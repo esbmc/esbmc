@@ -7,6 +7,7 @@
 #include <python-frontend/string_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_set.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
@@ -178,6 +179,7 @@ private:
   friend class tuple_handler;
   friend class python_class_builder;
   friend class python_dict_handler;
+  friend class python_set;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -396,6 +398,48 @@ private:
 
   void
   get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
+
+  // =========================================================================
+  // Assertion helper methods
+  // =========================================================================
+
+  /**
+   * @brief Handles assertions on list expressions.
+   *
+   * In Python, empty lists are falsy, so `assert []` should fail.
+   * This method converts `assert list_var` to `assert len(list_var) > 0`
+   * by calling __ESBMC_list_size and checking the result.
+   *
+   * @param element The assertion AST node.
+   * @param test The test expression (a list or list-returning function call).
+   * @param block The code block to add generated statements to.
+   * @param attach_assert_message Lambda to attach user assertion messages.
+   */
+  void handle_list_assertion(
+    const nlohmann::json &element,
+    const exprt &test,
+    code_blockt &block,
+    const std::function<void(code_assertt &)> &attach_assert_message);
+
+  /**
+   * @brief Handles assertions on function call expressions.
+   *
+   * Materializes function calls in assertions.
+   * For None-returning functions, executes the call and asserts False.
+   * For other functions, stores result in temp var and asserts on that.
+   *
+   * @param element The assertion AST node.
+   * @param func_call_expr The function call expression to assert on.
+   * @param is_negated Whether the assertion is negated (assert not func()).
+   * @param block The code block to add generated statements to.
+   * @param attach_assert_message Lambda to attach user assertion messages.
+   */
+  void handle_function_call_assertion(
+    const nlohmann::json &element,
+    const exprt &func_call_expr,
+    bool is_negated,
+    code_blockt &block,
+    const std::function<void(code_assertt &)> &attach_assert_message);
 
   // =========================================================================
   // Helper methods for get_var_assign
@@ -687,6 +731,34 @@ private:
    * @return The result expression, or nil_exprt if not a list operation.
    */
   exprt handle_list_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles set-related binary operations.
+   *
+   * Processes set difference, intersection, and union operations.
+   * Sets are internally represented as lists with unique elements.
+   * Materializes function call results into temporary variables when needed.
+   *
+   * Supported operations:
+   * - Sub (-)    : Set difference (elements in lhs but not in rhs)
+   * - BitAnd (&) : Set intersection (elements in both lhs and rhs)
+   * - BitOr (|)  : Set union (elements in either lhs or rhs, without duplicates)
+   *
+   * @param op The operator string ("Sub", "BitAnd", or "BitOr").
+   * @param lhs The left operand expression (may be modified to resolve function calls).
+   * @param rhs The right operand expression (may be modified to resolve function calls).
+   * @param left The left operand JSON AST node (unused, kept for consistency).
+   * @param right The right operand JSON AST node (unused, kept for consistency).
+   * @param element The full binary operation JSON AST node for location information.
+   * @return The result expression representing the new set, or nil_exprt if not a set operation.
+   */
+  exprt handle_set_operations(
     const std::string &op,
     exprt &lhs,
     exprt &rhs,

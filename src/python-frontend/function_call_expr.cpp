@@ -1448,6 +1448,127 @@ exprt function_call_expr::handle_list_clear() const
   return clear_call;
 }
 
+exprt function_call_expr::handle_list_pop() const
+{
+  const auto &args = call_["args"];
+
+  // pop() can take 0 or 1 arguments (default pops last element)
+  if (args.size() > 1)
+    throw std::runtime_error("pop() takes at most 1 argument");
+
+  // Get the list object name
+  std::string list_name = get_object_name();
+
+  // Find the list symbol
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  // Determine the index (default is -1 for last element)
+  exprt index_expr;
+  if (args.empty())
+  {
+    // No argument: pop last element (index -1)
+    index_expr = from_integer(-1, signedbv_typet(64));
+  }
+  else
+  {
+    // Use provided index
+    index_expr = converter_.get_expr(args[0]);
+  }
+
+  // Find the list_pop C function
+  const symbolt *pop_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_pop");
+  assert(pop_func);
+
+  // Create temporary to hold the PyObject* result
+  const typet pyobject_ptr_type =
+    pointer_typet(converter_.get_type_handler().get_list_element_type());
+
+  symbolt &pop_result_sym = converter_.create_tmp_symbol(
+    call_, "$pop_result$", pyobject_ptr_type, exprt());
+
+  code_declt pop_result_decl(symbol_expr(pop_result_sym));
+  pop_result_decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(pop_result_decl);
+
+  // Build function call
+  code_function_callt pop_call;
+  pop_call.function() = symbol_expr(*pop_func);
+  pop_call.lhs() = symbol_expr(pop_result_sym);
+  pop_call.arguments().push_back(symbol_expr(*list_symbol));
+  pop_call.arguments().push_back(index_expr);
+  pop_call.type() = pyobject_ptr_type;
+  pop_call.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(pop_call);
+
+  // Determine the element type from the list's type map
+  const std::string &list_id = list_symbol->id.as_string();
+  typet elem_type = python_list::get_list_element_type(list_id);
+
+  // If type map lookup failed, try to infer from list declaration
+  if (elem_type == typet())
+  {
+    nlohmann::json list_node = json_utils::find_var_decl(
+      list_name, converter_.current_function_name(), converter_.ast());
+
+    if (
+      !list_node.is_null() && list_node.contains("value") &&
+      list_node["value"].contains("elts") &&
+      list_node["value"]["elts"].is_array() &&
+      !list_node["value"]["elts"].empty())
+    {
+      // Get type from first element
+      elem_type = converter_.get_expr(list_node["value"]["elts"][0]).type();
+    }
+    else
+    {
+      // Last resort: assume int
+      log_warning(
+        "Could not determine list element type for '{}', defaulting to int",
+        list_name);
+      elem_type = converter_.get_type_handler().get_typet("int", 0);
+    }
+  }
+
+  // Extract value from PyObject: pop_result->value
+  member_exprt obj_value(
+    symbol_expr(pop_result_sym), "value", pointer_typet(empty_typet()));
+
+  // Dereference the PyObject*
+  {
+    exprt &base = obj_value.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+
+  // Handle array types specially
+  if (elem_type.is_array())
+  {
+    const array_typet &arr_type = to_array_type(elem_type);
+    // Cast from void* to pointer to element type (e.g., char* instead of char[2]*)
+    // This matches how python_list::handle_index_access() handles array access
+    typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
+    return tc;
+  }
+
+  // Cast from void* to the actual element type pointer (for non-array types)
+  typecast_exprt tc(obj_value, pointer_typet(elem_type));
+
+  // Dereference to get the actual value
+  dereference_exprt deref_value(elem_type);
+  deref_value.op0() = tc;
+
+  return deref_value;
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1474,6 +1595,8 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_extend();
   if (method_name == "clear")
     return handle_list_clear();
+  if (method_name == "pop")
+    return handle_list_pop();
 
   // Add other methods as needed
 

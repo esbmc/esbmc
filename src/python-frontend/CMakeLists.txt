@@ -18,6 +18,7 @@ add_library(pythonfrontend STATIC
             python_dict_handler.cpp
             python_list.cpp
             python_math.cpp
+            python_set.cpp
             pythonastgen.c
             module_manager.cpp
             module_locator.cpp

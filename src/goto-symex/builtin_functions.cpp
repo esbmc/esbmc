@@ -826,6 +826,89 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   else
     abort();
 
+  // Check format specifiers against original operands before renaming/conversion
+  if (options.get_bool_option("printf-check"))
+  {
+    const code_printf2t &original_rhs = to_code_printf2t(rhs);
+    std::string format_str = fmt.as_string();
+    size_t arg_idx = 0;
+
+    for (size_t i = 0; i < format_str.length(); i++)
+    {
+      if (format_str[i] == '%')
+      {
+        if (i + 1 < format_str.length() && format_str[i + 1] == '%')
+        {
+          i++; // Skip %%
+          continue;
+        }
+
+        // Skip flags, width, precision
+        i++;
+        while (i < format_str.length() &&
+               (format_str[i] == '-' || format_str[i] == '+' ||
+                format_str[i] == ' ' || format_str[i] == '#' ||
+                format_str[i] == '0'))
+          i++;
+        while (i < format_str.length() && isdigit(format_str[i]))
+          i++;
+        if (i < format_str.length() && format_str[i] == '.')
+        {
+          i++;
+          while (i < format_str.length() && isdigit(format_str[i]))
+            i++;
+        }
+
+        // Skip length modifiers
+        while (i < format_str.length() &&
+               (format_str[i] == 'h' || format_str[i] == 'l' ||
+                format_str[i] == 'L' || format_str[i] == 'z' ||
+                format_str[i] == 'j' || format_str[i] == 't'))
+          i++;
+
+        // Check conversion specifier against original operands
+        if (i < format_str.length())
+        {
+          char spec = format_str[i];
+          size_t actual_arg_idx = idx + arg_idx;
+
+          // Check if we have enough arguments (skip %n and %*)
+          if (spec != 'n' && spec != '*')
+          {
+            if (actual_arg_idx >= original_rhs.operands.size())
+            {
+              claim(
+                gen_false_expr(),
+                "printf has more format specifiers than arguments");
+            }
+            else
+            {
+              const expr2tc &arg = original_rhs.operands[actual_arg_idx];
+
+              if (arg)
+              {
+                if (spec == 's' || spec == 'p')
+                {
+                  // %s and %p require pointer types
+                  if (!is_pointer_type(arg->type))
+                  {
+                    claim(
+                      gen_false_expr(),
+                      spec == 's'
+                        ? "printf format specifier %s requires pointer argument"
+                        : "printf format specifier %p requires pointer "
+                          "argument");
+                  }
+                }
+              }
+            }
+            arg_idx++;
+          }
+        }
+      }
+    }
+  }
+
   // Only perform dereference checks if printf-check is enabled
   if (options.get_bool_option("printf-check"))
   {
