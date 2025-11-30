@@ -885,14 +885,20 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
             {
               const expr2tc &arg = original_rhs.operands[actual_arg_idx];
 
-              if (arg && spec == 's')
+              if (arg)
               {
-                // %s requires a pointer type
-                if (!is_pointer_type(arg->type))
+                if (spec == 's' || spec == 'p')
                 {
-                  claim(
-                    gen_false_expr(),
-                    "printf format specifier %s requires pointer argument");
+                  // %s and %p require pointer types
+                  if (!is_pointer_type(arg->type))
+                  {
+                    claim(
+                      gen_false_expr(),
+                      spec == 's'
+                        ? "printf format specifier %s requires pointer argument"
+                        : "printf format specifier %p requires pointer "
+                          "argument");
+                  }
                 }
               }
             }
