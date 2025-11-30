@@ -270,7 +270,8 @@ typet tuple_handler::get_tuple_type_from_annotation(
 {
   assert(
     annotation_node["_type"] == "Subscript" &&
-    annotation_node["value"]["id"] == "tuple");
+    (annotation_node["value"]["id"] == "tuple" ||
+     annotation_node["value"]["id"] == "Tuple"));
 
   struct_typet tuple_type;
   const auto &slice = annotation_node["slice"];
