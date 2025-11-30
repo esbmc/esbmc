@@ -867,27 +867,37 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
           i++;
 
         // Check conversion specifier against original operands
-        size_t actual_arg_idx = idx + arg_idx;
-        if (
-          i < format_str.length() &&
-          actual_arg_idx < original_rhs.operands.size())
+        if (i < format_str.length())
         {
           char spec = format_str[i];
-          const expr2tc &arg = original_rhs.operands[actual_arg_idx];
+          size_t actual_arg_idx = idx + arg_idx;
 
-          if (arg && spec == 's')
+          // Check if we have enough arguments (skip %n and %*)
+          if (spec != 'n' && spec != '*')
           {
-            // %s requires a pointer type
-            if (!is_pointer_type(arg->type))
+            if (actual_arg_idx >= original_rhs.operands.size())
             {
               claim(
                 gen_false_expr(),
-                "printf format specifier %s requires pointer argument");
+                "printf has more format specifiers than arguments");
             }
-          }
+            else
+            {
+              const expr2tc &arg = original_rhs.operands[actual_arg_idx];
 
-          if (spec != 'n' && spec != '*')
+              if (arg && spec == 's')
+              {
+                // %s requires a pointer type
+                if (!is_pointer_type(arg->type))
+                {
+                  claim(
+                    gen_false_expr(),
+                    "printf format specifier %s requires pointer argument");
+                }
+              }
+            }
             arg_idx++;
+          }
         }
       }
     }
