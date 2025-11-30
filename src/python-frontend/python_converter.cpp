@@ -1472,6 +1472,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
+  // Handle set operations (difference, intersection, union)
+  typet list_type = type_handler_.get_list_type();
+  if (
+    (lhs.type() == list_type || rhs.type() == list_type) &&
+    (op == "Sub" || op == "BitAnd" || op == "BitOr"))
+  {
+    exprt set_result =
+      handle_set_operations(op, lhs, rhs, left, right, element);
+    if (!set_result.is_nil())
+      return set_result;
+  }
+
   // Handle membership operators
   if (op == "In")
     return handle_membership_operator(lhs, rhs, element, false);
@@ -1797,6 +1809,23 @@ exprt python_converter::build_binary_expression(
   exprt &lhs,
   exprt &rhs)
 {
+  // Adjust types for non-relational operations
+  if (!type_utils::is_relational_op(op))
+  {
+    // Check for critical type incompatibilities
+    const typet &lhs_type = lhs.type();
+    const typet &rhs_type = rhs.type();
+
+    // Check for bitvector width mismatch
+    if (
+      (lhs_type.is_signedbv() || lhs_type.is_unsignedbv()) &&
+      (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()) &&
+      lhs_type.width() != rhs_type.width())
+    {
+      adjust_statement_types(lhs, rhs);
+    }
+  }
+
   // Determine result type
   typet type;
   if (type_utils::is_relational_op(op))
@@ -2093,8 +2122,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     (!element.contains("args") || element["args"].empty()))
   {
     // Create an empty set (modeled as list)
-    python_list list(*this, element);
-    return list.get_empty_set();
+    python_set set_handler(*this, element);
+    return set_handler.get_empty_set();
   }
 
   const std::string function = config.options.get_option("function");
@@ -2720,13 +2749,24 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     // For now, treat set literals such as lists
     // Store elements in order they appear (order doesn't matter for sets)
+    if (element["_type"] == "Set")
+    {
+      python_set set_handler(*this, element);
+      expr = set_handler.get();
+      break;
+    }
+
+    // Check if we should use static arrays (for numpy and similar operations)
     if (build_static_lists)
     {
       typet size = type_handler_.get_typet(element["elts"]);
-      return get_static_array(element, size);
+      expr = get_static_array(element, size);
+      break;
     }
+
+    // List handling (dynamic lists)
     python_list list(*this, element);
-    expr = list.get(element["_type"] == "Set");
+    expr = list.get();
     break;
   }
   case ExpressionType::VARIABLE_REF:
@@ -6765,4 +6805,66 @@ void python_converter::get_delete_statement(
         target["_type"].get<std::string>());
     }
   }
+}
+
+exprt python_converter::handle_set_operations(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json & /* left */,
+  const nlohmann::json & /* right */,
+  const nlohmann::json &element)
+{
+  typet list_type = type_handler_.get_list_type();
+
+  // Ensure both operands are lists (sets are represented as lists)
+  if (lhs.type() != list_type || rhs.type() != list_type)
+    return nil_exprt();
+
+  // Resolve function calls to temporary variables
+  auto resolve_list_call = [&](exprt &expr) -> bool {
+    if (
+      expr.id().as_string() != "sideeffect" ||
+      expr.get("statement") != "function_call" || expr.type() != list_type)
+      return false;
+
+    locationt location = get_location_from_decl(element);
+
+    // Create temporary variable for the list
+    symbolt &tmp_var_symbol =
+      create_tmp_symbol(element, "tmp_set_op", list_type, gen_zero(list_type));
+
+    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+    tmp_var_decl.location() = location;
+    current_block->copy_to_operands(tmp_var_decl);
+
+    side_effect_expr_function_callt &side_effect =
+      to_side_effect_expr_function_call(expr);
+
+    code_function_callt call;
+    call.function() = side_effect.function();
+    call.arguments() = side_effect.arguments();
+    call.lhs() = symbol_expr(tmp_var_symbol);
+    call.type() = list_type;
+    call.location() = location;
+
+    current_block->copy_to_operands(call);
+    expr = symbol_expr(tmp_var_symbol);
+    return true;
+  };
+
+  resolve_list_call(lhs);
+  resolve_list_call(rhs);
+
+  python_set set_handler(*this, element);
+
+  // Map Python set operations to internal functions
+  if (op == "Sub") // Set difference: a - b
+    return set_handler.build_set_difference_call(lhs, rhs, element);
+  else if (op == "BitAnd") // Set intersection: a & b
+    return set_handler.build_set_intersection_call(lhs, rhs, element);
+  else if (op == "BitOr") // Set union: a | b
+    return set_handler.build_set_union_call(lhs, rhs, element);
+
+  return nil_exprt();
 }

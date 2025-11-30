@@ -450,23 +450,15 @@ symbolt &python_list::create_list()
   return list_symbol;
 }
 
-exprt python_list::get(bool is_set)
+exprt python_list::get()
 {
   symbolt &list_symbol = create_list();
-  list_symbol.is_set = true;
 
   const std::string &list_id = list_symbol.id.as_string();
 
-  // TODO: if same element is added indirectly this will fail
-  //       e.g. (2, 1+1)
-  std::set<exprt> elements;
   for (auto &e : list_value_["elts"])
   {
     exprt elem = converter_.get_expr(e);
-    if (is_set && elements.count(elem))
-      continue;
-
-    elements.insert(elem);
     exprt list_push_func_call =
       build_push_list_call(list_symbol, list_value_, elem);
     converter_.add_instruction(list_push_func_call);
@@ -1338,13 +1330,18 @@ exprt python_list::build_extend_list_call(
   return extend_func_call;
 }
 
-exprt python_list::get_empty_set()
+typet python_list::get_list_element_type(
+  const std::string &list_id,
+  size_t index)
 {
-  // Create an empty list structure for the set
-  symbolt &list_symbol = create_list();
-  list_symbol.is_set = true;
+  auto type_map_it = list_type_map.find(list_id);
 
-  // No elements to add for empty set
-  // Type information will be determined when elements are added
-  return symbol_expr(list_symbol);
+  if (type_map_it == list_type_map.end() || type_map_it->second.empty())
+    return typet();
+
+  // If index is out of bounds, return the first element's type
+  if (index >= type_map_it->second.size())
+    index = 0;
+
+  return type_map_it->second[index].second;
 }

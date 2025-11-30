@@ -300,3 +300,48 @@ bool __ESBMC_list_remove_at(PyListObject *l, size_t index)
   l->size = l->size - 1;
   return true;
 }
+
+PyObject *__ESBMC_list_pop(PyListObject *l, int64_t index)
+{
+  __ESBMC_assert(l != NULL, "IndexError: pop from empty list");
+  __ESBMC_assert(l->size > 0, "IndexError: pop from empty list");
+
+  // Handle negative index or default (pop last element)
+  size_t actual_index;
+  if (index < 0)
+  {
+    // Convert negative index to positive
+    int64_t positive_index = (int64_t)l->size + index;
+    __ESBMC_assert(positive_index >= 0, "IndexError: pop index out of range");
+    actual_index = (size_t)positive_index;
+  }
+  else
+    actual_index = (size_t)index;
+
+  __ESBMC_assert(actual_index < l->size, "IndexError: pop index out of range");
+
+  // Make a copy of the element to return before shifting
+  PyObject *popped = __ESBMC_alloca(sizeof(PyObject));
+
+  // Copy the element's data
+  popped->value = __ESBMC_alloca(l->items[actual_index].size);
+  memcpy(
+    (void *)popped->value,
+    l->items[actual_index].value,
+    l->items[actual_index].size);
+  popped->type_id = l->items[actual_index].type_id;
+  popped->size = l->items[actual_index].size;
+
+  // Now shift elements to fill the gap
+  size_t i = actual_index;
+  while (i < l->size - 1)
+  {
+    l->items[i] = l->items[i + 1];
+    i++;
+  }
+
+  // Decrease size
+  l->size = l->size - 1;
+
+  return popped;
+}
