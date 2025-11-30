@@ -989,6 +989,12 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_obj_cpy")
+  {
+    intrinsic_obj_cpy(func_call, art);
+    return;
+  }
+
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
     "The name in question: {}\n"

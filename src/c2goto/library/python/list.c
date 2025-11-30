@@ -68,6 +68,13 @@ PyObject *__ESBMC_create_inf_obj()
   return NULL;
 };
 
+void *__ESBMC_obj_cpy(const void *value, size_t type_size)
+{
+  (void)value;
+  (void)type_size;
+  return NULL;
+}
+
 PyListObject *__ESBMC_list_create()
 {
   PyListObject *l = __ESBMC_alloca(sizeof(PyListObject));
@@ -88,9 +95,7 @@ bool __ESBMC_list_push(
   size_t type_id,
   size_t type_size)
 {
-  // TODO: __ESBMC_obj_cpy
-  void *copied_value = __ESBMC_alloca(type_size);
-  memcpy(copied_value, value, type_size);
+  void *copied_value = __ESBMC_obj_cpy(value, type_size);
 
   l->items[l->size].value = copied_value;
   l->items[l->size].type_id = type_id;

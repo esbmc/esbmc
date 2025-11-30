@@ -2980,3 +2980,87 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     expr = gen_true_expr();
   }
 }
+
+void goto_symext::intrinsic_obj_cpy(
+  const code_function_call2t &func_call,
+  reachability_treet &)
+{
+  assert(func_call.operands.size() == 2 && "Wrong __ESBMC_obj_cpy signature");
+
+  expr2tc src_ptr = func_call.operands[0];   // const void *value
+  expr2tc size_expr = func_call.operands[1]; // size_t type_size
+
+  // Rename and simplify
+  cur_state->rename(src_ptr);
+  cur_state->rename(size_expr);
+  do_simplify(size_expr);
+
+  // Handle zero-size
+  if (
+    is_constant_int2t(size_expr) &&
+    to_constant_int2t(size_expr).value.is_zero())
+  {
+    symex_assign(
+      code_assign2tc(func_call.ret, gen_zero(func_call.ret->type)), true);
+    return;
+  }
+
+  // Dereference source
+  internal_deref_items.clear();
+  expr2tc src_deref = dereference2tc(get_empty_type(), src_ptr);
+  dereference(src_deref, dereferencet::INTERNAL);
+
+  if (internal_deref_items.empty())
+  {
+    log_debug("obj_cpy", "Could not dereference source pointer");
+    symex_assign(
+      code_assign2tc(func_call.ret, gen_zero(func_call.ret->type)), true);
+    return;
+  }
+
+  // Get source object and type
+  expr2tc src_obj = internal_deref_items.front().object;
+  cur_state->rename(src_obj);
+  type2tc src_type = src_obj->type;
+
+  // Allocate memory
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  symbolt symbol;
+  symbol.name = "dynamic_" + i2string(dynamic_counter) + "_obj_cpy";
+  symbol.id = std::string("symex_dynamic::alloca::") + id2string(symbol.name);
+  symbol.lvalue = true;
+  symbol.mode = "C";
+  symbol.type = migrate_type_back(src_type);
+  symbol.type.dynamic(true);
+  symbol.type.set(
+    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+
+  new_context.add(symbol);
+  type2tc new_type = migrate_type(symbol.type);
+
+  // Create allocated object and take its address
+  expr2tc allocated_obj = symbol2tc(new_type, symbol.id);
+  expr2tc result_ptr = address_of2tc(new_type, allocated_obj);
+
+  if (result_ptr->type != func_call.ret->type)
+    result_ptr = typecast2tc(func_call.ret->type, result_ptr);
+
+  cur_state->rename(result_ptr);
+
+  // Assign the pointer to return value
+  symex_assign(code_assign2tc(func_call.ret, result_ptr), true);
+
+  // Copy the actual data
+  symex_assign(code_assign2tc(allocated_obj, src_obj), false, cur_state->guard);
+
+  // Track the pointer
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), result_ptr);
+  track_new_pointer(ptr_obj, new_type, cur_state->guard, size_expr);
+
+  // Add to dynamic memory tracking (auto-deallocated)
+  guardt alloc_guard = cur_state->guard;
+  dynamic_memory.emplace_back(
+    result_ptr, alloc_guard, true, symbol.name.as_string());
+}

@@ -517,6 +517,10 @@ protected:
 
   void simplify_python_builtins(expr2tc &expr);
 
+  void intrinsic_obj_cpy(
+    const code_function_call2t &func_call,
+    reachability_treet &art);
+
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 
