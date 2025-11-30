@@ -25,6 +25,7 @@ class type_handler;
 class string_builder;
 class module_locator;
 class tuple_handler;
+class python_typechecking;
 class python_class_builder;
 
 /**
@@ -82,6 +83,8 @@ public:
   {
     return type_handler_;
   }
+
+  bool type_assertions_enabled() const;
 
   const std::string &python_file() const
   {
@@ -170,6 +173,9 @@ public:
     exprt &lhs,
     exprt &rhs);
 
+  python_typechecking &get_typechecker();
+  const python_typechecking &get_typechecker() const;
+
 private:
   friend class function_call_expr;
   friend class numpy_call_expr;
@@ -177,6 +183,7 @@ private:
   friend class type_handler;
   friend class python_list;
   friend class tuple_handler;
+  friend class python_typechecking;
   friend class python_class_builder;
   friend class python_dict_handler;
   friend class python_set;
@@ -902,4 +909,6 @@ private:
   bool is_right = false;
 
   exprt extract_type_from_boolean_op(const exprt &bool_op);
+
+  python_typechecking *typechecker_ = nullptr;
 };
