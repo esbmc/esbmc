@@ -5202,7 +5202,7 @@ void python_converter::get_function_definition(
       // String return types should be pointers, not arrays
       type.return_type() = gen_pointer_type(char_type());
     }
-    else if (return_type == "tuple" && return_node["_type"] == "Subscript")
+    else if ((return_type == "Tuple" || return_type == "tuple") && return_node["_type"] == "Subscript")
     {
       type.return_type() =
         tuple_handler_->get_tuple_type_from_annotation(return_node);
