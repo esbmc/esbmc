@@ -150,7 +150,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   if (witness_graphml_output != "")
     violation_graphml_goto_trace(options, ns, goto_trace);
 
-  // Disable the violation witness in YAML format
+    // Disable the violation witness in YAML format
 #if 0
   if (witness_yaml_output != "")
     violation_yaml_goto_trace(options, ns, goto_trace);
