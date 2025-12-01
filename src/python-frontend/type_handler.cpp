@@ -113,11 +113,17 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   if (ref.empty())
     return std::string();
 
+  if (!ref.contains("annotation") || ref["annotation"].is_null())
+    return std::string();
+
   const auto &annotation = ref["annotation"];
-  if (annotation.contains("id"))
+  if (annotation.is_object() && annotation.contains("id"))
     return annotation["id"].get<std::string>();
 
-  if (annotation.contains("_type") && annotation["_type"] == "Subscript")
+  if (
+    annotation.is_object() && annotation.contains("_type") &&
+    annotation["_type"] == "Subscript" && annotation.contains("value") &&
+    annotation["value"].is_object() && annotation["value"].contains("id"))
     return annotation["value"]["id"];
 
   return std::string();
@@ -865,4 +871,29 @@ typet type_handler::build_optional_type(const typet &base_type)
   optional_type.components().push_back(value_field);
 
   return optional_type;
+}
+
+bool type_handler::class_derives_from(
+  const std::string &class_name,
+  const std::string &expected_base) const
+{
+  if (class_name == expected_base)
+    return true;
+
+  const auto &ast = converter_.ast();
+  const auto class_node = json_utils::find_class(ast["body"], class_name);
+  if (class_node.empty() || !class_node.contains("bases"))
+    return false;
+
+  for (const auto &base : class_node["bases"])
+  {
+    std::string base_name;
+    if (base.contains("_type") && base["_type"] == "Name")
+      base_name = base["id"].get<std::string>();
+    else if (base.contains("_type") && base["_type"] == "Attribute")
+      base_name = base["attr"].get<std::string>();
+    if (!base_name.empty() && class_derives_from(base_name, expected_base))
+      return true;
+  }
+  return false;
 }

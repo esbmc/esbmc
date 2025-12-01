@@ -35,7 +35,7 @@ static typet get_elem_type_from_annotation(
   const auto &annotation = node["annotation"];
 
   // Case 1: Direct subscript annotation like list[str]
-  if (annotation.contains("slice"))
+  if (annotation.is_object() && annotation.contains("slice"))
   {
     typet elem_type = extract_subscript_elem(annotation);
     if (elem_type != typet())
@@ -43,10 +43,15 @@ static typet get_elem_type_from_annotation(
   }
 
   // Case 2: Union type annotation such as list[str] | None
-  if (annotation["_type"] == "BinOp")
+  if (
+    annotation.is_object() && annotation.contains("_type") &&
+    annotation["_type"] == "BinOp")
   {
     // Try left side first (e.g., handles list[str] | None)
-    if (annotation["left"]["_type"] == "Subscript")
+    if (
+      annotation.contains("left") && annotation["left"].is_object() &&
+      annotation["left"].contains("_type") &&
+      annotation["left"]["_type"] == "Subscript")
     {
       typet elem_type = extract_subscript_elem(annotation["left"]);
       if (elem_type != typet())
@@ -54,7 +59,10 @@ static typet get_elem_type_from_annotation(
     }
 
     // Try right side (e.g., handles None | list[str])
-    if (annotation["right"]["_type"] == "Subscript")
+    if (
+      annotation.contains("right") && annotation["right"].is_object() &&
+      annotation["right"].contains("_type") &&
+      annotation["right"]["_type"] == "Subscript")
     {
       typet elem_type = extract_subscript_elem(annotation["right"]);
       if (elem_type != typet())

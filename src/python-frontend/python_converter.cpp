@@ -8,11 +8,13 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/python_typechecking.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
+#include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/encoding.h>
@@ -1423,6 +1425,8 @@ void python_converter::resolve_dict_subscript_types(
     }
   }
 }
+
+// (annotation type collection & inheritance helpers moved to python_typechecking)
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
@@ -3270,6 +3274,9 @@ void python_converter::handle_assignment_type_adjustments(
   const nlohmann::json &ast_node,
   bool is_ctor_call)
 {
+  const bool has_annotation =
+    ast_node.contains("annotation") && !ast_node["annotation"].is_null();
+
   // Handle lambda assignments
   if (
     ast_node.contains("value") && ast_node["value"].contains("_type") &&
@@ -3359,6 +3366,17 @@ void python_converter::handle_assignment_type_adjustments(
     else if (rhs.type() == none_type())
     {
       // Adjust pointer_type() to pointer_typet(empty_typet())
+      lhs_symbol->type = rhs.type();
+      lhs.type() = rhs.type();
+    }
+    else if (
+      !has_annotation && !rhs.type().is_empty() && lhs.type() != rhs.type() &&
+      !rhs.type().is_code() &&
+      !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
+    {
+      // Default case: allow Python's dynamic typing by updating the variable
+      // type to match the assigned value. Type annotations are enforced via
+      // runtime assertions rather than static typing.
       lhs_symbol->type = rhs.type();
       lhs.type() = rhs.type();
     }
@@ -3640,6 +3658,8 @@ std::string python_converter::infer_type_from_any_annotation(
   return lhs_type;
 }
 
+// (type assertion helpers moved to python_typechecking)
+
 bool python_converter::handle_unpacking_assignment(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -3905,6 +3925,12 @@ void python_converter::get_var_assign(
   }
 
   current_element_type = element_type;
+  typet annotated_type = element_type;
+  std::vector<typet> annotation_types;
+  bool can_emit_annotation_check = false;
+  locationt annotation_location;
+  std::string annotated_name;
+  std::vector<typet> annotation_candidates;
 
   exprt lhs;
   symbolt *lhs_symbol = nullptr;
@@ -3932,6 +3958,7 @@ void python_converter::get_var_assign(
     // Extract name and set in symbol ID
     std::string name = extract_target_name(target);
     sid.set_object(name);
+    annotated_name = name;
 
     // Infer type from function return if annotation is "Any"
     lhs_type = infer_type_from_any_annotation(ast_node, lhs_type);
@@ -3959,6 +3986,8 @@ void python_converter::get_var_assign(
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
+    annotation_location = location_begin;
+    can_emit_annotation_check = true;
     lhs_symbol = symbol_table_.find_symbol(sid.to_string().c_str());
 
     bool is_global = is_global_variable(sid);
@@ -3993,6 +4022,28 @@ void python_converter::get_var_assign(
       }
     }
 
+    if (lhs_symbol && ast_node.contains("annotation"))
+      get_typechecker().cache_annotation_types(
+        *lhs_symbol, ast_node["annotation"]);
+
+    if (
+      type_assertions_enabled() && lhs_symbol &&
+      ast_node.contains("annotation"))
+    {
+      auto &tc = get_typechecker();
+      annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
+      if (
+        !annotation_types.empty() &&
+        !tc.should_skip_type_assertion(annotated_type))
+      {
+        annotated_type = annotation_types.front();
+        can_emit_annotation_check = true;
+        annotation_location = location_begin;
+        annotated_name = name;
+        annotation_candidates = annotation_types;
+      }
+    }
+
     // Check for uninitialized usage
     for (std::string &s : local_loads)
     {
@@ -4009,11 +4060,22 @@ void python_converter::get_var_assign(
 
     // Handle dict literal assignment specially - after LHS is created
     if (handle_dict_literal_assignment(ast_node, lhs))
+    {
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
+          lhs,
+          annotated_type,
+          annotation_types,
+          annotated_name,
+          annotation_location,
+          target_block);
       return;
+    }
   }
   else if (ast_node["_type"] == "Assign")
   {
     const auto &target = ast_node["targets"][0];
+    location_begin = get_location_from_decl(target);
 
     // Handle tuple/list unpacking
     if (handle_unpacking_assignment(ast_node, target, target_block))
@@ -4041,7 +4103,33 @@ void python_converter::get_var_assign(
       throw std::runtime_error("Type undefined for \"" + name + "\"");
 
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
+
+    if (lhs_symbol && ast_node.contains("annotation"))
+      get_typechecker().cache_annotation_types(
+        *lhs_symbol, ast_node["annotation"]);
+
+    if (type_assertions_enabled() && lhs_symbol)
+    {
+      auto &tc = get_typechecker();
+      annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
+      if (
+        !annotation_types.empty() &&
+        !tc.should_skip_type_assertion(lhs_symbol->type))
+      {
+        annotated_type = annotation_types.front();
+        can_emit_annotation_check = true;
+        annotation_location = location_begin;
+        annotated_name = name;
+        annotation_candidates = annotation_types;
+      }
+    }
   }
+
+  if (
+    type_assertions_enabled() && can_emit_annotation_check &&
+    annotation_candidates.empty() &&
+    !get_typechecker().should_skip_type_assertion(annotated_type))
+    annotation_candidates.push_back(annotated_type);
 
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
   current_lhs = &lhs;
@@ -4090,6 +4178,33 @@ void python_converter::get_var_assign(
     // Function call handling
     if (rhs.is_function_call())
     {
+      // Static constructor compatibility check for annotated variables:
+      // if var is annotated with a class type (e.g., Animal) and the RHS
+      // constructor is a different, non-derived class (e.g., Car), inject
+      // an assertion failure.
+      if (
+        type_assertions_enabled() && can_emit_annotation_check &&
+        is_ctor_call && ast_node.contains("annotation") &&
+        ast_node["annotation"].contains("id"))
+      {
+        std::string expected_base =
+          ast_node["annotation"]["id"].get<std::string>();
+        std::string ctor_name =
+          get_typechecker().get_constructor_name(ast_node["value"]["func"]);
+
+        if (
+          !expected_base.empty() && !ctor_name.empty() &&
+          !get_typechecker().class_derives_from(ctor_name, expected_base))
+        {
+          code_assertt ctor_assert(gen_boolean(false));
+          ctor_assert.location() = location_begin;
+          ctor_assert.location().comment(
+            "Constructor '" + ctor_name +
+            "' is incompatible with annotated type '" + expected_base + "'");
+          target_block.copy_to_operands(ctor_assert);
+        }
+      }
+
       handle_function_call_rhs(
         ast_node,
         lhs_symbol,
@@ -4098,6 +4213,14 @@ void python_converter::get_var_assign(
         location_begin,
         is_ctor_call,
         target_block);
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
+          lhs,
+          annotated_type,
+          annotation_types,
+          annotated_name,
+          annotation_location,
+          target_block);
       current_lhs = nullptr;
       return;
     }
@@ -4125,6 +4248,14 @@ void python_converter::get_var_assign(
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
       decl.location() = location_begin;
       target_block.copy_to_operands(decl);
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
+          lhs,
+          annotated_type,
+          annotation_types,
+          annotated_name,
+          annotation_location,
+          target_block);
       current_lhs = nullptr;
       return;
     }
@@ -4132,6 +4263,14 @@ void python_converter::get_var_assign(
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
+    if (type_assertions_enabled() && can_emit_annotation_check)
+      get_typechecker().emit_type_annotation_assertion(
+        lhs,
+        annotated_type,
+        annotation_types,
+        annotated_name,
+        annotation_location,
+        target_block);
   }
   else
   {
@@ -4154,9 +4293,31 @@ typet python_converter::resolve_variable_type(
 
   if (!decl_node.empty())
   {
-    std::string type_annotation =
-      decl_node["annotation"]["id"].get<std::string>();
-    return type_handler_.get_typet(type_annotation);
+    if (decl_node.contains("annotation") && !decl_node["annotation"].is_null())
+    {
+      const auto &annotation = decl_node["annotation"];
+
+      try
+      {
+        // Handle rich annotations such as Union, Optional, module attributes,
+        // etc. via the unified helper.
+        return get_type_from_annotation(annotation, decl_node);
+      }
+      catch (const std::exception &e)
+      {
+        log_warning(
+          "Failed to resolve complex annotation for '{}': {}. Falling back to "
+          "simple identifier lookup.",
+          var_name,
+          e.what());
+      }
+
+      if (annotation.contains("id"))
+      {
+        std::string type_annotation = annotation["id"].get<std::string>();
+        return type_handler_.get_typet(type_annotation);
+      }
+    }
   }
 
   std::string filename = loc.get_file().as_string();
@@ -4557,31 +4718,61 @@ python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
     // Handle Subscript nodes (such as Literal["bar"] or Sequence[str])
     if (node.contains("_type") && node["_type"] == "Subscript")
     {
-      if (node.contains("value") && node["value"].contains("id"))
+      if (node.contains("value") && node["value"].is_object())
       {
-        std::string subscript_type = node["value"]["id"].get<std::string>();
-        if (subscript_type == "Literal")
-          return "__LITERAL__"; // Special marker for Literal types
-        // For Sequence[str], List[int], etc., return "list" as the concrete type
-        if (subscript_type == "Sequence" || subscript_type == "List")
-          return "list";
-        // For other generic types, return the base type
-        return subscript_type;
+        const auto &value_node = node["value"];
+        // Handle Name nodes (e.g., List[int], Literal["bar"])
+        if (value_node.contains("id"))
+        {
+          std::string subscript_type = value_node["id"].get<std::string>();
+          if (subscript_type == "Literal")
+            return "__LITERAL__"; // Special marker for Literal types
+          // For Sequence[str], List[int], etc., return "list" as the concrete type
+          if (subscript_type == "Sequence" || subscript_type == "List")
+            return "list";
+          // For other generic types, return the base type
+          return subscript_type;
+        }
+        // Handle Attribute nodes (e.g., re.Match[str], typing.Optional[int])
+        if (
+          value_node.contains("_type") && value_node["_type"] == "Attribute" &&
+          value_node.contains("attr"))
+        {
+          // Return special marker for external module types that should be
+          // treated as opaque/any type (e.g., re.Match, typing.Pattern, etc.)
+          return "__EXTERNAL_TYPE__";
+        }
       }
       return ""; // Other subscript types
+    }
+
+    // Handle standalone Attribute nodes (e.g., module.Type without subscript)
+    if (
+      node.contains("_type") && node["_type"] == "Attribute" &&
+      node.contains("attr"))
+    {
+      return "__EXTERNAL_TYPE__";
     }
 
     // Recursively handle nested BinOp (e.g., bool | str in bool | str | None)
     if (node.contains("_type") && node["_type"] == "BinOp")
     {
-      std::string left_type = extract_type(node["left"]);
-      if (!left_type.empty())
-        return left_type;
-      return extract_type(node["right"]);
+      if (node.contains("left"))
+      {
+        std::string left_type = extract_type(node["left"]);
+        if (!left_type.empty())
+          return left_type;
+      }
+      if (node.contains("right"))
+        return extract_type(node["right"]);
     }
 
     return "";
   };
+
+  // Guard: ensure annotation_node has left and right before accessing
+  if (!annotation_node.contains("left") || !annotation_node.contains("right"))
+    return "";
 
   const auto &left = annotation_node["left"];
   const auto &right = annotation_node["right"];
@@ -4598,24 +4789,70 @@ typet python_converter::get_type_from_annotation(
   const nlohmann::json &annotation_node,
   const nlohmann::json &element)
 {
+  // Be defensive: not all annotation nodes are guaranteed to have the same
+  // structure. In particular, forward references or tool-generated annotations
+  // may appear as plain strings or objects without a "_type" field. On some
+  // platforms (e.g., macOS debug builds) accessing a missing key via
+  // operator[] triggers an assertion inside nlohmann::json, so we must guard
+  // all such uses.
+  if (!annotation_node.is_object())
+  {
+    // String-like forward reference, e.g. "CoordinateData | None"
+    if (annotation_node.is_string())
+    {
+      std::string type_string = annotation_node.get<std::string>();
+      type_string = type_utils::remove_quotes(type_string);
+      return type_handler_.get_typet(type_string);
+    }
+
+    // Unknown/unsupported shape – fall back to empty type (no assertion
+    // should be emitted for this annotation).
+    return empty_typet();
+  }
+
+  if (!annotation_node.contains("_type"))
+  {
+    // Minimal object with direct "id" field, e.g. {"id": "int"}
+    if (annotation_node.contains("id"))
+    {
+      std::string type_id = annotation_node["id"].get<std::string>();
+
+      if (type_id == "dict" || type_id == "Dict")
+        return dict_handler_->get_dict_struct_type();
+      if (type_id == "list" || type_id == "List")
+        return type_handler_.get_list_type();
+
+      return type_handler_.get_typet(type_id);
+    }
+
+    // Nothing recognizable – treat as empty/unknown
+    return empty_typet();
+  }
+
   if (annotation_node["_type"] == "Subscript")
   {
-    if (
-      annotation_node.contains("value") &&
-      (annotation_node["value"]["id"] == "list" ||
-       annotation_node["value"]["id"] == "List"))
+    // Helper to safely get id from value node
+    auto get_value_id = [&]() -> std::string {
+      if (
+        annotation_node.contains("value") &&
+        annotation_node["value"].is_object() &&
+        annotation_node["value"].contains("id"))
+      {
+        return annotation_node["value"]["id"].get<std::string>();
+      }
+      return "";
+    };
+
+    std::string value_id = get_value_id();
+
+    if (value_id == "list" || value_id == "List")
       return type_handler_.get_list_type();
 
-    if (
-      annotation_node.contains("value") &&
-      (annotation_node["value"]["id"] == "dict" ||
-       annotation_node["value"]["id"] == "Dict"))
+    if (value_id == "dict" || value_id == "Dict")
       return dict_handler_->get_dict_struct_type();
 
     // Handle Literal[T]: extract the type from the literal value
-    if (
-      annotation_node.contains("value") &&
-      annotation_node["value"]["id"] == "Literal")
+    if (value_id == "Literal")
     {
       // Infer type from a literal constant value
       auto infer_literal_type = [](const nlohmann::json &value) -> typet {
@@ -4636,8 +4873,12 @@ typet python_converter::get_type_from_annotation(
       // Resolve a slice element to a constant value
       auto resolve_to_constant =
         [this](const nlohmann::json &elem) -> nlohmann::json {
+        // Guard: ensure elem is an object with _type
+        if (!elem.is_object() || !elem.contains("_type"))
+          return nlohmann::json();
+
         // Direct constant
-        if (elem["_type"] == "Constant")
+        if (elem["_type"] == "Constant" && elem.contains("value"))
           return elem["value"];
         // Variable reference: resolve it
         if (elem["_type"] == "Name" && elem.contains("id"))
@@ -4647,7 +4888,10 @@ typet python_converter::get_type_from_annotation(
             json_utils::find_var_decl(var_name, "", *ast_json);
           if (
             !var_decl.empty() && var_decl.contains("value") &&
-            var_decl["value"]["_type"] == "Constant")
+            var_decl["value"].is_object() &&
+            var_decl["value"].contains("_type") &&
+            var_decl["value"]["_type"] == "Constant" &&
+            var_decl["value"].contains("value"))
           {
             return var_decl["value"]["value"];
           }
@@ -4682,15 +4926,27 @@ typet python_converter::get_type_from_annotation(
       if (annotation_node.contains("slice"))
       {
         const auto &slice = annotation_node["slice"];
+
+        // Guard: ensure slice is an object with _type
+        if (!slice.is_object() || !slice.contains("_type"))
+          return empty_typet();
+
+        // Helper to safely check if node is a Literal subscript
+        auto is_literal_subscript_node =
+          [](const nlohmann::json &node) -> bool {
+          return node.is_object() && node.contains("_type") &&
+                 node["_type"] == "Subscript" && node.contains("value") &&
+                 node["value"].is_object() && node["value"].contains("id") &&
+                 node["value"]["id"] == "Literal";
+        };
+
         // Handle nested Literal (e.g., Literal[Literal["foo"]])
-        if (
-          slice["_type"] == "Subscript" && slice.contains("value") &&
-          slice["value"]["id"] == "Literal")
+        if (is_literal_subscript_node(slice))
         {
           return get_type_from_annotation(slice, element);
         }
         // Handle Literal with single value (e.g., Literal["foo"] or Literal[NAME])
-        if (slice["_type"] == "Constant")
+        if (slice["_type"] == "Constant" && slice.contains("value"))
         {
           typet result = infer_literal_type(slice["value"]);
           if (!result.is_empty())
@@ -4705,10 +4961,16 @@ typet python_converter::get_type_from_annotation(
             if (!result.is_empty())
               return result;
           }
+          if (slice.contains("id"))
+          {
+            throw std::runtime_error(
+              "Literal annotation references variable '" +
+              slice["id"].get<std::string>() +
+              "' which could not be resolved to a constant value.");
+          }
           throw std::runtime_error(
-            "Literal annotation references variable '" +
-            slice["id"].get<std::string>() +
-            "' which could not be resolved to a constant value.");
+            "Literal annotation references variable which could not be "
+            "resolved to a constant value.");
         }
         // Handle Literal with multiple values
         else if (slice["_type"] == "Tuple" && slice.contains("elts"))
@@ -4725,9 +4987,7 @@ typet python_converter::get_type_from_annotation(
           {
             const auto &elem = elts[i];
             // Handle nested Literal in tuple
-            if (
-              elem["_type"] == "Subscript" && elem.contains("value") &&
-              elem["value"]["id"] == "Literal")
+            if (is_literal_subscript_node(elem))
             {
               typet nested_type = get_type_from_annotation(elem, element);
               update_type_flags(nested_type, type_flags, has_string, has_none);
@@ -4739,7 +4999,9 @@ typet python_converter::get_type_from_annotation(
             {
               std::string error_msg =
                 "Literal tuple element at index " + std::to_string(i);
-              if (elem["_type"] == "Name")
+              if (
+                elem.is_object() && elem.contains("_type") &&
+                elem["_type"] == "Name" && elem.contains("id"))
                 error_msg +=
                   " references variable '" + elem["id"].get<std::string>() +
                   "' which could not be resolved to a constant value.";
@@ -4785,10 +5047,13 @@ typet python_converter::get_type_from_annotation(
     // Handle Optional[T] - extract the inner type T
     if (
       annotation_node.contains("value") &&
+      annotation_node["value"].is_object() &&
+      annotation_node["value"].contains("id") &&
       annotation_node["value"]["id"] == "Optional")
     {
       if (
         annotation_node.contains("slice") &&
+        annotation_node["slice"].is_object() &&
         annotation_node["slice"].contains("id"))
       {
         std::string inner_type =
@@ -4797,6 +5062,17 @@ typet python_converter::get_type_from_annotation(
         // Always use pointer type for Optional to properly represent None
         return gen_pointer_type(base_type);
       }
+    }
+
+    // Handle external module types in Subscript (e.g., re.Match[str])
+    // Treat as opaque/any type
+    if (
+      annotation_node.contains("value") &&
+      annotation_node["value"].is_object() &&
+      annotation_node["value"].contains("_type") &&
+      annotation_node["value"]["_type"] == "Attribute")
+    {
+      return any_type();
     }
 
     return type_handler_.get_list_type(element);
@@ -4813,13 +5089,23 @@ typet python_converter::get_type_from_annotation(
       const auto &left = annotation_node["left"];
       const auto &right = annotation_node["right"];
 
-      const auto &literal_node =
-        (left.contains("_type") && left["_type"] == "Subscript" &&
-         left.contains("value") && left["value"]["id"] == "Literal")
-          ? left
-          : right;
+      // Helper to check if a node is a Literal subscript
+      auto is_literal_subscript = [](const nlohmann::json &node) -> bool {
+        return node.contains("_type") && node["_type"] == "Subscript" &&
+               node.contains("value") && node["value"].is_object() &&
+               node["value"].contains("id") && node["value"]["id"] == "Literal";
+      };
+
+      const auto &literal_node = is_literal_subscript(left) ? left : right;
 
       return get_type_from_annotation(literal_node, element);
+    }
+
+    // Special handling for external module types (e.g., re.Match[str] | None)
+    // Treat them as opaque pointers (any_type)
+    if (inner_type == "__EXTERNAL_TYPE__")
+    {
+      return any_type();
     }
 
     if (inner_type.empty())
@@ -4833,6 +5119,10 @@ typet python_converter::get_type_from_annotation(
     std::function<void(const nlohmann::json &)> collect_types;
     bool contains_none = false;
     collect_types = [&](const nlohmann::json &node) {
+      // Guard: only process objects
+      if (!node.is_object())
+        return;
+
       if (
         node.contains("_type") && node["_type"] == "Constant" &&
         node.contains("value") && node["value"].is_null())
@@ -4843,10 +5133,31 @@ typet python_converter::get_type_from_annotation(
       }
       if (node.contains("id"))
         type_names.insert(node["id"].get<std::string>());
+      // Handle Attribute nodes (e.g., re.Match in re.Match[str])
+      if (
+        node.contains("_type") && node["_type"] == "Attribute" &&
+        node.contains("attr"))
+        type_names.insert(node["attr"].get<std::string>());
+      // Handle Subscript nodes (e.g., re.Match[str], List[int])
+      if (node.contains("_type") && node["_type"] == "Subscript")
+      {
+        if (node.contains("value") && node["value"].is_object())
+        {
+          const auto &value_node = node["value"];
+          if (value_node.contains("id"))
+            type_names.insert(value_node["id"].get<std::string>());
+          else if (
+            value_node.contains("_type") &&
+            value_node["_type"] == "Attribute" && value_node.contains("attr"))
+            type_names.insert(value_node["attr"].get<std::string>());
+        }
+      }
       if (node.contains("_type") && node["_type"] == "BinOp")
       {
-        collect_types(node["left"]);
-        collect_types(node["right"]);
+        if (node.contains("left"))
+          collect_types(node["left"]);
+        if (node.contains("right"))
+          collect_types(node["right"]);
       }
     };
     collect_types(annotation_node);
@@ -5064,6 +5375,9 @@ size_t python_converter::register_function_argument(
   param_symbol.static_lifetime = false;
   param_symbol.is_extern = false;
   symbol_table_.add(param_symbol);
+  if (element.contains("annotation") && !element["annotation"].is_null())
+    get_typechecker().cache_annotation_types(
+      param_symbol, element["annotation"]);
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via
@@ -5317,6 +5631,11 @@ void python_converter::get_function_definition(
 
   // Process function body
   exprt function_body = get_block(function_node["body"]);
+
+  // Inject runtime checks for annotated parameters
+  if (type_assertions_enabled())
+    get_typechecker().inject_parameter_type_assertions(
+      function_node, id, type, function_body);
 
   // Add ESBMC_Hide label for models/imports
   if (is_loading_models || is_importing_module)
@@ -6121,7 +6440,8 @@ python_converter::python_converter(
     string_handler_(*this, symbol_table_, type_handler_, string_builder_),
     math_handler_(*this, symbol_table_, type_handler_),
     tuple_handler_(new tuple_handler(*this, type_handler_)),
-    dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_))
+    dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_)),
+    typechecker_(new python_typechecking(*this))
 {
 }
 
@@ -6130,6 +6450,22 @@ python_converter::~python_converter()
   delete string_builder_;
   delete tuple_handler_;
   delete dict_handler_;
+  delete typechecker_;
+}
+
+python_typechecking &python_converter::get_typechecker()
+{
+  return *typechecker_;
+}
+
+const python_typechecking &python_converter::get_typechecker() const
+{
+  return *typechecker_;
+}
+
+bool python_converter::type_assertions_enabled() const
+{
+  return config.options.get_bool_option("is-instance-check");
 }
 
 string_builder &python_converter::get_string_builder()
@@ -6597,7 +6933,7 @@ void python_converter::convert()
    *    - Marked with __ESBMC_HIDE label to exclude from coverage statistics
    *    - Only created if there is initialization code
    *
-   * 2. python_user_main 
+   * 2. python_user_main
    *    - Contains only user code from the main module
    *    - This is what gets analyzed for branch/decision/assertion coverage
    *
