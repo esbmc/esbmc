@@ -332,19 +332,7 @@ private:
           var_node["annotation"]["value"].contains("id"))
         {
           std::string base_type = var_node["annotation"]["value"]["id"];
-
-          // Get the element type from slice
-          if (
-            var_node["annotation"].contains("slice") &&
-            var_node["annotation"]["slice"].contains("id"))
-          {
-            std::string element_type = var_node["annotation"]["slice"]["id"];
-            return base_type + "[" + element_type + "]";
-          }
-          else
-          {
-            return base_type; // Return base type if slice info unavailable
-          }
+          return base_type; // Return base type if slice info unavailable
         }
         // Handle simple type annotations like int, str (Name nodes)
         else if (var_node["annotation"].contains("id"))
@@ -370,6 +358,30 @@ private:
       return "set";
     else if (arg["_type"] == "Tuple")
       return "tuple";
+    else if (arg["_type"] == "Call")
+    {
+      // Handle function calls like abs(a - b), len(list), etc.
+      if (arg["func"]["_type"] == "Name")
+      {
+        const std::string &func_name = arg["func"]["id"];
+
+        // Check built-in functions first
+        auto it = builtin_functions.find(func_name);
+        if (it != builtin_functions.end())
+          return it->second;
+
+        // For user-defined functions, try to get return type
+        try
+        {
+          return get_function_return_type(func_name, ast_);
+        }
+        catch (std::runtime_error &)
+        {
+          // Function not found, return empty
+          return "";
+        }
+      }
+    }
 
     return ""; // Cannot determine type
   }
@@ -557,19 +569,18 @@ private:
     // Add type annotations within the function
     add_annotation(function_element);
 
-    auto return_node = json_utils::find_return_node(function_element["body"]);
-
     // Check if we should override the return annotation
     bool should_override =
       config.options.get_bool_option("override-return-annotation");
     bool has_no_annotation = function_element["returns"].is_null();
 
-    if (!return_node.empty() && (has_no_annotation || should_override))
+    if (has_no_annotation || should_override)
     {
-      std::string inferred_type;
-      if (
-        infer_type(return_node, function_element, inferred_type) ==
-        InferResult::OK)
+      const std::string &func_name = function_element["name"];
+      std::string inferred_type =
+        infer_from_return_statements(function_element["body"], func_name);
+
+      if (!inferred_type.empty())
       {
         // Update the function node to include the return type annotation
         function_element["returns"] = {
@@ -1513,8 +1524,8 @@ private:
       // Recursively resolve nested attribute chain (e.g., self.b.a -> [self, b, a])
       std::function<std::string(const Json &, std::vector<std::string> &)>
         extract_attr_chain =
-          [&](
-            const Json &node, std::vector<std::string> &chain) -> std::string {
+          [&](const Json &node, std::vector<std::string> &chain) -> std::string
+      {
         if (node["_type"] == "Attribute")
         {
           std::string attr = node["attr"].template get<std::string>();
@@ -2057,7 +2068,8 @@ private:
     element.erase("type_comment");
 
     // Update value fields with the correct offsets - with null safety
-    auto update_offsets = [&inferred_type](Json &value) {
+    auto update_offsets = [&inferred_type](Json &value)
+    {
       if (value.contains("col_offset") && !value["col_offset"].is_null())
       {
         value["col_offset"] =
