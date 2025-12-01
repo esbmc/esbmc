@@ -24,69 +24,68 @@ std::vector<typet> python_typechecking::collect_annotation_types(
   python_dict_handler *dict_handler = converter_.get_dict_handler();
 
   std::function<void(const nlohmann::json &)> collect =
-    [&](const nlohmann::json &node)
-  {
-    if (node.is_null() || !node.contains("_type"))
-      return;
+    [&](const nlohmann::json &node) {
+      if (node.is_null() || !node.contains("_type"))
+        return;
 
-    const std::string node_type = node["_type"].get<std::string>();
+      const std::string node_type = node["_type"].get<std::string>();
 
-    if (
-      node_type == "BinOp" && node.contains("op") &&
-      node["op"].contains("_type") && node["op"]["_type"] == "BitOr")
-    {
-      collect(node["left"]);
-      collect(node["right"]);
-      return;
-    }
-
-    if (
-      node_type == "Subscript" && node.contains("value") &&
-      node["value"].contains("id"))
-    {
-      const std::string base = node["value"]["id"].get<std::string>();
-      if (base == "Union")
+      if (
+        node_type == "BinOp" && node.contains("op") &&
+        node["op"].contains("_type") && node["op"]["_type"] == "BitOr")
       {
-        if (node.contains("slice"))
+        collect(node["left"]);
+        collect(node["right"]);
+        return;
+      }
+
+      if (
+        node_type == "Subscript" && node.contains("value") &&
+        node["value"].contains("id"))
+      {
+        const std::string base = node["value"]["id"].get<std::string>();
+        if (base == "Union")
         {
-          const auto &slice = node["slice"];
-          if (slice.contains("elts"))
+          if (node.contains("slice"))
           {
-            for (const auto &elt : slice["elts"])
-              collect(elt);
+            const auto &slice = node["slice"];
+            if (slice.contains("elts"))
+            {
+              for (const auto &elt : slice["elts"])
+                collect(elt);
+            }
+            else
+              collect(slice);
           }
-          else
-            collect(slice);
+          return;
         }
-        return;
+        if (base == "Optional")
+        {
+          if (node.contains("slice"))
+            collect(node["slice"]);
+          collected.push_back(none_type());
+          return;
+        }
+        if (base == "List" || base == "list")
+        {
+          collected.push_back(type_handler.get_list_type());
+          return;
+        }
+        if (base == "Dict" || base == "dict")
+        {
+          collected.push_back(dict_handler->get_dict_struct_type());
+          return;
+        }
       }
-      if (base == "Optional")
-      {
-        if (node.contains("slice"))
-          collect(node["slice"]);
-        collected.push_back(none_type());
-        return;
-      }
-      if (base == "List" || base == "list")
-      {
-        collected.push_back(type_handler.get_list_type());
-        return;
-      }
-      if (base == "Dict" || base == "dict")
-      {
-        collected.push_back(dict_handler->get_dict_struct_type());
-        return;
-      }
-    }
 
-    try
-    {
-      collected.push_back(converter_.get_type_from_annotation(node, node));
-    }
-    catch (const std::exception &)
-    {
-    }
-  };
+      try
+      {
+        collected.push_back(converter_.get_type_from_annotation(node, node));
+      }
+      catch (const std::exception &)
+      {
+      }
+    };
 
   collect(annotation);
 
@@ -323,8 +322,7 @@ void python_typechecking::inject_parameter_type_assertions(
   }
 
   std::vector<code_assertt> assertions;
-  auto try_append_assert = [&](const nlohmann::json &arg_json)
-  {
+  auto try_append_assert = [&](const nlohmann::json &arg_json) {
     if (
       !arg_json.contains("annotation") || arg_json["annotation"].is_null() ||
       !arg_json.contains("arg"))
@@ -354,8 +352,7 @@ void python_typechecking::inject_parameter_type_assertions(
       assertions.push_back(type_assert);
   };
 
-  auto process_arg_array = [&](const nlohmann::json &arr)
-  {
+  auto process_arg_array = [&](const nlohmann::json &arr) {
     if (!arr.is_array())
       return;
     for (const auto &elem : arr)

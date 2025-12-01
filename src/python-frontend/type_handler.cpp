@@ -881,8 +881,7 @@ bool type_handler::class_derives_from(
     return true;
 
   const auto &ast = converter_.ast();
-  const auto class_node =
-    json_utils::find_class(ast["body"], class_name);
+  const auto class_node = json_utils::find_class(ast["body"], class_name);
   if (class_node.empty() || !class_node.contains("bases"))
     return false;
 

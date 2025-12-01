@@ -155,8 +155,7 @@ void symbolt::from_irep(const irept &src)
   if (!annotations.is_nil())
   {
     for (const auto &type : annotations.get_sub())
-      python_annotation_types.emplace_back(
-        static_cast<const typet &>(type));
+      python_annotation_types.emplace_back(static_cast<const typet &>(type));
   }
 }
 

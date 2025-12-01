@@ -645,10 +645,8 @@ void goto_checkt::is_instance_check(
   new_inst->location = loc;
 
   const std::string var_name =
-    symbol->name.empty() ? symbol->id.as_string()
-                         : symbol->name.as_string();
-  new_inst->location.comment(
-    "Type annotation check for '" + var_name + "'");
+    symbol->name.empty() ? symbol->id.as_string() : symbol->name.as_string();
+  new_inst->location.comment("Type annotation check for '" + var_name + "'");
   new_inst->location.property("is-instance-check");
 }
 
