@@ -2080,6 +2080,10 @@ expr2tc bitnot2t::do_simplify() const
 
 expr2tc shl2t::do_simplify() const
 {
+  // x << 0 = x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
+    return side_1;
+
   auto op = [](uint64_t op1, uint64_t op2) { return op1 << op2; };
 
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
