@@ -70,12 +70,30 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_array_type(expr))
   {
     array_type2t arr = to_array_type(expr->type);
-
-    // Don't permit const propagation of infinite-size arrays. They're going to
-    // be special modelling arrays that require special handling either at SMT
-    // or some other level, so attempting to optimize them is a Bad Plan (TM).
+    // Don't permit const propagation of infinite-size arrays in most contexts
     if (arr.size_is_infinite)
+    {
+      // Special case 1: Allow CONSTANT_ARRAY_OF with infinite size
+      if (is_constant_array_of2t(expr))
+      {
+        const expr2tc &init = to_constant_array_of2t(expr).initializer;
+        if (is_constant_expr(init))
+          return true;
+      }
+      // Special case 2: Allow WITH expressions updating a constant array
+      else if (is_with2t(expr))
+      {
+        const with2t &with_expr = to_with2t(expr);
+        if (is_constant_array_of2t(with_expr.source_value))
+        {
+          const expr2tc &init =
+            to_constant_array_of2t(with_expr.source_value).initializer;
+          return !is_bool_type(init);
+        }
+      }
+
       return false;
+    }
 
     // Don't propagate multi dimensional arrays
     if (is_array_type(arr.subtype))
