@@ -665,6 +665,10 @@ expr2tc div2t::do_simplify() const
 
 expr2tc modulus2t::do_simplify() const
 {
+  // x % x = 0
+  if (side_1 == side_2)
+    return gen_zero(type);
+
   return simplify_arith_2ops<Modtor, modulus2t>(type, side_1, side_2);
 }
 
