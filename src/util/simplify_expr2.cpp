@@ -443,6 +443,12 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
 
 expr2tc add2t::do_simplify() const
 {
+  // x + (-x) = 0
+  if (is_neg2t(side_2) && to_neg2t(side_2).value == side_1)
+    return gen_zero(type);
+  if (is_neg2t(side_1) && to_neg2t(side_1).value == side_2)
+    return gen_zero(type);
+
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if (!is_nil_expr(res))
     return res;
@@ -578,6 +584,12 @@ struct Multor
 
 expr2tc mul2t::do_simplify() const
 {
+  // x * (-1) = -x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value == -1)
+    return neg2tc(type, side_1);
+  if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value == -1)
+    return neg2tc(type, side_2);
+
   return simplify_arith_2ops<Multor, mul2t>(type, side_1, side_2);
 }
 
@@ -665,6 +677,10 @@ expr2tc div2t::do_simplify() const
 
 expr2tc modulus2t::do_simplify() const
 {
+  // x % x = 0
+  if (side_1 == side_2)
+    return gen_zero(type);
+
   return simplify_arith_2ops<Modtor, modulus2t>(type, side_1, side_2);
 }
 
@@ -2064,6 +2080,10 @@ expr2tc bitnot2t::do_simplify() const
 
 expr2tc shl2t::do_simplify() const
 {
+  // x << 0 = x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
+    return side_1;
+
   auto op = [](uint64_t op1, uint64_t op2) { return op1 << op2; };
 
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
