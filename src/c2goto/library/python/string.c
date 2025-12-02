@@ -1,5 +1,7 @@
 #include <ctype.h>
 #include <limits.h>
+#include <stddef.h>
+#include <string.h>
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
@@ -101,6 +103,82 @@ __ESBMC_HIDE:;
   }
 
   return s;
+}
+
+// Python string strip: removes leading and trailing whitespace characters
+char *__python_str_strip(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  // Skip leading whitespace
+  const char *start = s;
+  while (
+    *start &&
+    (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\v' ||
+     *start == '\f' || *start == '\r'))
+  {
+    start++;
+  }
+
+  // Identify end position after removing trailing whitespace
+  const char *end = start;
+  const char *cursor = start;
+  while (*cursor)
+  {
+    if (
+      !(*cursor == ' ' || *cursor == '\t' || *cursor == '\n' ||
+        *cursor == '\v' || *cursor == '\f' || *cursor == '\r'))
+    {
+      end = cursor + 1;
+    }
+    cursor++;
+  }
+
+  size_t len = (size_t)(end - start);
+  char *buffer = __ESBMC_alloca(len + 1);
+
+  for (size_t i = 0; i < len; ++i)
+    buffer[i] = start[i];
+  buffer[len] = '\0';
+
+  return buffer;
+}
+
+// Python string count: counts non-overlapping occurrences of substring
+int __python_str_count(const char *haystack, const char *needle)
+{
+__ESBMC_HIDE:;
+  if (!haystack || !needle)
+    return 0;
+
+  size_t needle_len = strlen(needle);
+
+  if (needle_len == 0)
+    return (int)(strlen(haystack) + 1);
+
+  int count = 0;
+  const char *cursor = haystack;
+
+  while (*cursor)
+  {
+    size_t i = 0;
+    while (i < needle_len && cursor[i] && needle[i] == cursor[i])
+      ++i;
+
+    if (i == needle_len)
+    {
+      ++count;
+      cursor += needle_len;
+    }
+    else
+    {
+      ++cursor;
+    }
+  }
+
+  return count;
 }
 
 // Python character islower - checks if a single character is lowercase
