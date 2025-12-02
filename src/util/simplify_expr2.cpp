@@ -520,6 +520,20 @@ expr2tc sub2t::do_simplify() const
   if (side_1 == side_2)
     return gen_zero(side_1->type);
 
+  // Recognize (ptr + offset) - offset = ptr pattern
+  if (is_pointer_type(side_1) && is_add2t(side_1))
+  {
+    const add2t &add = to_add2t(side_1);
+
+    // Check if we're subtracting the same value we added
+    // Pattern: (base + X) - X = base
+    if (add.side_2 == side_2)
+      return add.side_1;
+
+    if (add.side_1 == side_2)
+      return add.side_2;
+  }
+
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }
 
