@@ -25,8 +25,8 @@ bool clang_c_adjust::adjust()
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-  context.Foreach_operand_in_order(
-    [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
+  context.Foreach_operand_in_order([&symbol_list](symbolt &s)
+                                   { symbol_list.push_back(&s); });
 
   // Adjust types first, so that symbolic-type resolution always receives
   // fixed up types.
@@ -1127,9 +1127,13 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if (compare_float_suffix(identifier, "sqrt"))
     {
-      exprt new_expr("ieee_sqrt", expr.type());
-      new_expr.operands() = expr.arguments();
-      expr.swap(new_expr);
+      // Skip Python user-defined functions
+      if (!has_prefix(id2string(to_symbol_expr(f_op).identifier()), "py:"))
+      {
+        exprt new_expr("ieee_sqrt", expr.type());
+        new_expr.operands() = expr.arguments();
+        expr.swap(new_expr);
+      }
     }
     else if (identifier == "__builtin_nontemporal_load")
     {
