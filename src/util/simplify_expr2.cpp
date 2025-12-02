@@ -520,13 +520,11 @@ expr2tc sub2t::do_simplify() const
   if (side_1 == side_2)
     return gen_zero(side_1->type);
 
-  // Recognize (ptr + offset) - offset = ptr pattern
-  if (is_pointer_type(side_1) && is_add2t(side_1))
+  // Recognize (base + X) - X = base pattern
+  if (is_add2t(side_1))
   {
     const add2t &add = to_add2t(side_1);
 
-    // Check if we're subtracting the same value we added
-    // Pattern: (base + X) - X = base
     if (add.side_2 == side_2)
       return add.side_1;
 
@@ -1101,12 +1099,18 @@ expr2tc pointer_offset2t::do_simplify() const
   else if (is_typecast2t(ptr_obj))
   {
     const typecast2t &cast = to_typecast2t(ptr_obj);
+
+    // pointer_offset doesn't depend on the pointer type, only the address
+    // So we can strip the typecast entirely
     expr2tc new_ptr_offs = pointer_offset2tc(type, cast.from);
     expr2tc reduced = new_ptr_offs->simplify();
 
     // If we got a good simplification, return it
     if (!is_nil_expr(reduced))
       return reduced;
+
+    // Even if no further simplification, return without the typecast
+    return new_ptr_offs;
   }
   else if (is_add2t(ptr_obj))
   {
