@@ -641,6 +641,10 @@ void goto_symext::track_new_pointer(
   const guardt &guard,
   const expr2tc &size)
 {
+  // Simplify ptr_obj before using it in any expressions
+  expr2tc simplified_ptr_obj = ptr_obj;
+  do_simplify(simplified_ptr_obj);
+
   // Also update all the accounting data.
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
