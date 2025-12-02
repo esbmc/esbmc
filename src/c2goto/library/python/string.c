@@ -114,10 +114,8 @@ __ESBMC_HIDE:;
 
   // Skip leading whitespace
   const char *start = s;
-  while (
-    *start &&
-    (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\v' ||
-     *start == '\f' || *start == '\r'))
+  while (*start && (*start == ' ' || *start == '\t' || *start == '\n' ||
+                    *start == '\v' || *start == '\f' || *start == '\r'))
   {
     start++;
   }
@@ -127,9 +125,8 @@ __ESBMC_HIDE:;
   const char *cursor = start;
   while (*cursor)
   {
-    if (
-      !(*cursor == ' ' || *cursor == '\t' || *cursor == '\n' ||
-        *cursor == '\v' || *cursor == '\f' || *cursor == '\r'))
+    if (!(*cursor == ' ' || *cursor == '\t' || *cursor == '\n' ||
+          *cursor == '\v' || *cursor == '\f' || *cursor == '\r'))
     {
       end = cursor + 1;
     }

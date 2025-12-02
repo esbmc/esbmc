@@ -1,4 +1,4 @@
 THOROUGH
 main.py
 --multi-property
-^Properties: 64 verified, \✗ 64 failed$
+^Properties: 64 verified ✓ 2 passed, \✗ 62 failed$
