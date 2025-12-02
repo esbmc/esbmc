@@ -203,6 +203,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
       command_line += "--branch-function-coverage "
   elif prop == Property.reach:
     command_line += "--base-k-step 5 --enable-unreachability-intrinsic "
+    command_line += "--generate-testcase "
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
