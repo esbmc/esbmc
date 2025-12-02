@@ -9,5 +9,9 @@ int main()
   assert(__ESBMC_POINTER_OFFSET((ptr + 8) - 8) == __ESBMC_POINTER_OFFSET(ptr));
   assert(__ESBMC_POINTER_OFFSET((ptr + 8/2) - 16/4) == __ESBMC_POINTER_OFFSET(ptr));
   assert(__ESBMC_POINTER_OFFSET((ptr + 8%2) - 16%4) == __ESBMC_POINTER_OFFSET(ptr));
+  assert(__ESBMC_POINTER_OFFSET((ptr - 8) + 8) == __ESBMC_POINTER_OFFSET(ptr));
+  assert(__ESBMC_POINTER_OFFSET((ptr - 8/2) + 16/4) == __ESBMC_POINTER_OFFSET(ptr));
+  assert(__ESBMC_POINTER_OFFSET((ptr - 8%2) + 16%4) == __ESBMC_POINTER_OFFSET(ptr));
+  assert(__ESBMC_POINTER_OFFSET(offset + (ptr - offset)) == __ESBMC_POINTER_OFFSET(ptr));
   return 0;
 }
