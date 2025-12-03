@@ -1,3 +1,4 @@
+#include <python-frontend/char_utils.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string_builder.h>
@@ -13,7 +14,6 @@
 #include <util/symbol.h>
 #include <util/type.h>
 
-#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <iomanip>
@@ -409,6 +409,11 @@ exprt string_handler::handle_string_concatenation(
   return string_builder_->concatenate_strings(lhs, rhs, left, right);
 }
 
+exprt string_handler::handle_string_repetition(exprt &lhs, exprt &rhs)
+{
+  return string_builder_->handle_string_repetition(lhs, rhs);
+}
+
 bool string_handler::is_zero_length_array(const exprt &expr)
 {
   if (expr.id() == "sideeffect")
@@ -467,6 +472,9 @@ exprt string_handler::handle_string_operations(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
+  if (op == "Mult")
+    return handle_string_repetition(lhs, rhs);
+
   ensure_string_array(lhs);
   ensure_string_array(rhs);
 
@@ -475,8 +483,7 @@ exprt string_handler::handle_string_operations(
 
   if (op == "Eq" || op == "NotEq")
     return handle_string_comparison(op, lhs, rhs, element);
-
-  if (op == "Add")
+  else if (op == "Add")
     return handle_string_concatenation(lhs, rhs, left, right);
 
   return nil_exprt();
@@ -912,20 +919,8 @@ exprt string_handler::handle_string_membership(
   // Get the width of char type from config
   std::size_t char_width = config.ansi_c.char_width;
 
-  // Check if lhs is a pointer to a single character
-  if (lhs.type().is_pointer())
-  {
-    const typet &subtype = lhs.type().subtype();
-    if (
-      (subtype.is_signedbv() || subtype.is_unsignedbv()) &&
-      bv_width(subtype) == char_width)
-    {
-      lhs_is_char_value = true;
-    }
-  }
-
   // Check if lhs is a symbol holding a character value
-  if (!lhs_is_char_value && lhs.is_symbol())
+  if (lhs.is_symbol())
   {
     const symbolt *sym =
       symbol_table_.find_symbol(lhs.get_string("identifier"));
@@ -991,6 +986,124 @@ exprt string_handler::handle_string_membership(
   // Use strstr for substring membership testing
   exprt lhs_str = ensure_null_terminated_string(lhs);
   exprt rhs_str = ensure_null_terminated_string(rhs);
+
+  // Obtain the actual array expression (handle both constants and symbols)
+  auto get_array_expr = [this](const exprt &e) -> const exprt * {
+    if (e.is_constant() && e.type().is_array())
+      return &e;
+    if (e.is_symbol())
+    {
+      const symbolt *sym = symbol_table_.find_symbol(e.identifier());
+      if (sym && sym->value.is_constant() && sym->value.type().is_array())
+        return &sym->value;
+    }
+    return nullptr;
+  };
+
+  const exprt *needle_array = get_array_expr(lhs_str);
+  const exprt *haystack_array = get_array_expr(rhs_str);
+
+  // Special case: empty needle is always found in any haystack (Python semantics)
+  if (needle_array && !needle_array->operands().empty())
+  {
+    const exprt::operandst &needle_ops = needle_array->operands();
+
+    // Check if needle is empty (just the null terminator)
+    if (needle_ops.size() == 1 && needle_ops[0].is_constant())
+    {
+      BigInt first_val = binary2integer(
+        needle_ops[0].value().as_string(), needle_ops[0].type().is_signedbv());
+
+      if (first_val == 0)
+      {
+        // Empty string is always "in" any string in Python
+        return gen_boolean(true);
+      }
+    }
+  }
+
+  // Special case: Check if needle starts with '\0' (but is not empty)
+  // Python strings with null characters are valid, but we need to handle
+  // the C null-terminator semantics vs Python string semantics
+  if (needle_array && haystack_array)
+  {
+    const exprt::operandst &needle_ops = needle_array->operands();
+    const exprt::operandst &haystack_ops = haystack_array->operands();
+
+    // Check if needle starts with '\0' and has more than just the terminator
+    if (
+      needle_ops.size() > 1 && !needle_ops.empty() &&
+      needle_ops[0].is_constant())
+    {
+      BigInt first_val = binary2integer(
+        needle_ops[0].value().as_string(), needle_ops[0].type().is_signedbv());
+
+      if (first_val == 0)
+      {
+        // Needle starts with '\0' but has more characters
+        // Check if haystack has any embedded nulls (before the final terminator)
+        bool has_embedded_null = false;
+        for (size_t i = 0; i + 1 < haystack_ops.size(); ++i)
+        {
+          if (haystack_ops[i].is_constant())
+          {
+            BigInt val = binary2integer(
+              haystack_ops[i].value().as_string(),
+              haystack_ops[i].type().is_signedbv());
+            if (val == 0)
+            {
+              has_embedded_null = true;
+              break;
+            }
+          }
+        }
+
+        // If haystack has no embedded nulls, needle starting with '\0' won't be found
+        if (!has_embedded_null)
+          return gen_boolean(false);
+
+        // Needle is like '\0x' or '\0abc' - need to search for this pattern
+        // in haystack that may contain embedded nulls
+        bool found = false;
+        for (size_t h = 0; h + needle_ops.size() <= haystack_ops.size(); ++h)
+        {
+          bool match = true;
+          for (size_t n = 0; n + 1 < needle_ops.size(); ++n)
+          {
+            if (
+              !haystack_ops[h + n].is_constant() ||
+              !needle_ops[n].is_constant())
+            {
+              match = false;
+              break;
+            }
+            BigInt h_val = binary2integer(
+              haystack_ops[h + n].value().as_string(),
+              haystack_ops[h + n].type().is_signedbv());
+            BigInt n_val = binary2integer(
+              needle_ops[n].value().as_string(),
+              needle_ops[n].type().is_signedbv());
+            if (h_val != n_val)
+            {
+              match = false;
+              break;
+            }
+          }
+          if (match)
+          {
+            found = true;
+            break;
+          }
+        }
+        return gen_boolean(found);
+      }
+    }
+  }
+
+  // TODO: This falls back to C's strstr for non-constant strings,
+  // which is unsound if 'lhs' or 'rhs' contain embedded nulls ('\0').
+  // For full Python semantics, a null-aware 'strstr' for
+  // symbolic/non-constant strings is required.
 
   // Get base addresses for C string functions
   exprt lhs_addr = get_array_base_address(lhs_str);
@@ -1218,4 +1331,49 @@ exprt string_handler::handle_int_conversion_with_base(
   }
 
   return handle_string_to_int(arg, base_expr, location);
+}
+
+exprt string_handler::handle_chr_conversion(
+  const exprt &codepoint_arg,
+  const locationt &location)
+{
+  // Ensure the argument is an integer type
+  exprt codepoint_expr = codepoint_arg;
+
+  // If not already an integer, try to convert it
+  if (!type_utils::is_integer_type(codepoint_expr.type()))
+  {
+    // If it's a float, truncate to integer
+    if (codepoint_expr.type().is_floatbv())
+      codepoint_expr = typecast_exprt(codepoint_expr, int_type());
+    // If it's a boolean, convert to 0 or 1
+    else if (codepoint_expr.type().is_bool())
+    {
+      exprt result("if", int_type());
+      result.copy_to_operands(codepoint_expr);
+      result.copy_to_operands(from_integer(1, int_type()));
+      result.copy_to_operands(from_integer(0, int_type()));
+      codepoint_expr = result;
+    }
+    else
+      throw std::runtime_error("chr() argument must be an integer");
+  }
+
+  // Cast to int type if it's a different integer width
+  if (codepoint_expr.type() != int_type())
+    codepoint_expr = typecast_exprt(codepoint_expr, int_type());
+
+  // Find the __python_chr function symbol
+  symbolt *chr_symbol = symbol_table_.find_symbol("c:@F@__python_chr");
+  if (!chr_symbol)
+    throw std::runtime_error("__python_chr function not found in symbol table");
+
+  // Call __python_chr(codepoint)
+  side_effect_expr_function_callt chr_call;
+  chr_call.function() = symbol_expr(*chr_symbol);
+  chr_call.arguments().push_back(codepoint_expr);
+  chr_call.location() = location;
+  chr_call.type() = pointer_typet(char_type());
+
+  return chr_call;
 }

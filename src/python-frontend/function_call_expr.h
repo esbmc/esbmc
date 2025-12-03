@@ -1,10 +1,10 @@
 #pragma once
 
-#include <python-frontend/python_converter.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/symbol_id.h>
-#include <util/expr.h>
 #include <nlohmann/json.hpp>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/symbol_id.h>
+#include <python-frontend/type_handler.h>
+#include <util/expr.h>
 
 enum class FunctionType
 {
@@ -43,7 +43,8 @@ private:
    */
   exprt check_argument_types(
     const symbolt *func_symbol,
-    const nlohmann::json &args) const;
+    const nlohmann::json &args,
+    const nlohmann::json &keywords) const;
 
   // Helper methods for AttributeError detection
   std::vector<std::string>
@@ -224,6 +225,7 @@ private:
   exprt handle_list_insert() const;
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
+  exprt handle_list_pop() const;
 
   /*
    * Check if the current function call is to a regular expression module function

@@ -163,7 +163,13 @@ const static std::vector<std::string> python_c_models = {
   "__python_char_lower",
   "__python_str_lower",
   "__ESBMC_create_inf_obj",
-  "__python_int"};
+  "__python_int",
+  "__python_chr",
+  "__python_str_concat",
+  "__ESBMC_list_find_index",
+  "__ESBMC_list_remove_at",
+  "__ESBMC_list_set_at",
+  "__ESBMC_list_pop"};
 } // namespace
 
 static void generate_symbol_deps(
@@ -280,7 +286,11 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (clib->size == 0)
   {
     if (language)
-      return add_bundled_library_sources(context, *language);
+    {
+      // C library sources must be parsed with C frontend, not the current language
+      std::unique_ptr<languaget> c_lang(new_language(language_idt::C));
+      return add_bundled_library_sources(context, *c_lang);
+    }
     log_error("Zero-lengthed internal C library");
     abort();
   }

@@ -469,10 +469,12 @@ expr2tc goto_symext::symex_mem_inf(
   expr2tc sym = symbol2tc(new_type, symbol.id);
   expr2tc idx_val = gen_long(size_type2(), 0L);
   expr2tc idx = index2tc(subtype, sym, idx_val);
+  do_simplify(idx);
   rhs_type = migrate_type(symbol.type.subtype());
   rhs_ptr_obj = idx;
 
   expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
   guardt alloc_guard = cur_state->guard;
@@ -577,11 +579,13 @@ expr2tc goto_symext::symex_mem(
     expr2tc sym = symbol2tc(new_type, symbol.id);
     expr2tc idx_val = gen_long(size->type, 0L);
     expr2tc idx = index2tc(subtype, sym, idx_val);
+    do_simplify(idx);
     rhs_type = migrate_type(symbol.type.subtype());
     rhs_ptr_obj = idx;
   }
 
   expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
 
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
@@ -641,6 +645,10 @@ void goto_symext::track_new_pointer(
   const guardt &guard,
   const expr2tc &size)
 {
+  // Simplify ptr_obj before using it in any expressions
+  expr2tc simplified_ptr_obj = ptr_obj;
+  do_simplify(simplified_ptr_obj);
+
   // Also update all the accounting data.
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
@@ -825,6 +833,134 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   }
   else
     abort();
+
+  // Check format specifiers against original operands before renaming/conversion
+  if (options.get_bool_option("printf-check"))
+  {
+    const code_printf2t &original_rhs = to_code_printf2t(rhs);
+    std::string format_str = fmt.as_string();
+    size_t arg_idx = 0;
+
+    for (size_t i = 0; i < format_str.length(); i++)
+    {
+      if (format_str[i] == '%')
+      {
+        if (i + 1 < format_str.length() && format_str[i + 1] == '%')
+        {
+          i++; // Skip %%
+          continue;
+        }
+
+        // Skip flags, width, precision
+        i++;
+        while (i < format_str.length() &&
+               (format_str[i] == '-' || format_str[i] == '+' ||
+                format_str[i] == ' ' || format_str[i] == '#' ||
+                format_str[i] == '0'))
+          i++;
+        while (i < format_str.length() && isdigit(format_str[i]))
+          i++;
+        if (i < format_str.length() && format_str[i] == '.')
+        {
+          i++;
+          while (i < format_str.length() && isdigit(format_str[i]))
+            i++;
+        }
+
+        // Skip length modifiers
+        while (i < format_str.length() &&
+               (format_str[i] == 'h' || format_str[i] == 'l' ||
+                format_str[i] == 'L' || format_str[i] == 'z' ||
+                format_str[i] == 'j' || format_str[i] == 't'))
+          i++;
+
+        // Check conversion specifier against original operands
+        if (i < format_str.length())
+        {
+          char spec = format_str[i];
+          size_t actual_arg_idx = idx + arg_idx;
+
+          // Check if we have enough arguments (skip %n and %*)
+          if (spec != 'n' && spec != '*')
+          {
+            if (actual_arg_idx >= original_rhs.operands.size())
+            {
+              claim(
+                gen_false_expr(),
+                "printf has more format specifiers than arguments");
+            }
+            else
+            {
+              const expr2tc &arg = original_rhs.operands[actual_arg_idx];
+
+              if (arg)
+              {
+                if (spec == 's' || spec == 'p')
+                {
+                  // %s and %p require pointer types
+                  if (!is_pointer_type(arg->type))
+                  {
+                    claim(
+                      gen_false_expr(),
+                      spec == 's'
+                        ? "printf format specifier %s requires pointer argument"
+                        : "printf format specifier %p requires pointer "
+                          "argument");
+                  }
+                }
+              }
+            }
+            arg_idx++;
+          }
+        }
+      }
+    }
+  }
+
+  // Only perform dereference checks if printf-check is enabled
+  if (options.get_bool_option("printf-check"))
+  {
+    // Dereference check all pointer arguments after the format string
+    for (size_t i = idx; i < new_rhs.operands.size(); i++)
+    {
+      expr2tc &arg = new_rhs.operands[i];
+
+      if (!arg)
+        continue;
+
+      if (!is_pointer_type(arg->type))
+        continue;
+
+      if (cur_state->guard.is_false())
+        continue;
+
+      // Check the entire expression tree for L2 symbols, not just top-level
+      bool has_l2_symbols = false;
+      arg->foreach_operand([&has_l2_symbols](const expr2tc &e) {
+        if (is_symbol2t(e))
+        {
+          const symbol2t &sym = to_symbol2t(e);
+          if (
+            sym.rlevel == symbol2t::renaming_level::level2 ||
+            sym.rlevel == symbol2t::renaming_level::level2_global)
+          {
+            has_l2_symbols = true;
+          }
+        }
+      });
+
+      if (has_l2_symbols)
+        continue;
+
+      type2tc subtype = to_pointer_type(arg->type).subtype;
+
+      if (is_empty_type(subtype) || is_nil_type(subtype))
+        continue;
+
+      expr2tc deref_expr = dereference2tc(subtype, arg);
+      dereference(deref_expr, dereferencet::READ);
+    }
+  }
 
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
@@ -2952,8 +3088,9 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       rhs = to_typecast2t(rhs).from;
 
     auto is_none_type = [](const expr2tc &e) -> bool {
-      return is_struct_type(e) &&
-             to_struct_type(e->type).name.as_string() == "tag-NoneType";
+      // None is represented as pointer to bool
+      return is_pointer_type(e) &&
+             is_bool_type(to_pointer_type(e->type).subtype);
     };
 
     const bool lhs_is_none = is_none_type(lhs);
@@ -2993,28 +3130,24 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       }
     }
 
-    // Handle None vs pointer comparisons
-    if (
-      (lhs_is_none && is_pointer_type(rhs)) ||
-      (rhs_is_none && is_pointer_type(lhs)))
+    // Handle None vs None pointer comparisons (identity check)
+    if (lhs_is_none && rhs_is_none)
     {
-      const expr2tc &ptr_expr = is_pointer_type(lhs) ? lhs : rhs;
+      const expr2tc &ptr_expr = lhs;
       expr2tc null_ptr = gen_zero(ptr_expr->type);
-
-      // isnone always checks equality
       expr = equality2tc(ptr_expr, null_ptr);
       return;
     }
 
-    // Handle None vs non-pointer constant folding
+    // Handle None vs non-None comparison
     if ((lhs_is_none && !rhs_is_none) || (rhs_is_none && !lhs_is_none))
     {
-      // isnone checks equality, so None == non-None is false
+      // None is never equal to non-None values
       expr = gen_false_expr();
       return;
     }
 
-    // Handle None == None (both sides are None, so always true)
+    // Handle non-None comparisons
     expr = gen_true_expr();
   }
 }

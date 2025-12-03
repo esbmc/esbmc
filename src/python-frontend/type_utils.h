@@ -30,7 +30,8 @@ enum class StatementType
   UNKNOWN,
   GLOBAL,
   TRY,
-  EXCEPTHANDLER
+  EXCEPTHANDLER,
+  DELETE
 };
 
 enum class ExpressionType
@@ -233,8 +234,27 @@ public:
   static bool is_string_type(const typet &type)
   {
     // String types are represented as arrays or pointers to char
-    return type.is_array() ||
-           (type.is_pointer() && type.subtype() == char_type());
+    if (type.is_array() && type.subtype() == char_type())
+      return true;
+
+    if (type.is_pointer())
+    {
+      const typet &subtype = type.subtype();
+      // Direct pointer to char: char*
+      if (subtype == char_type())
+        return true;
+      // Pointer to char array: char(*)[N] (string literals)
+      if (subtype.is_array() && subtype.subtype() == char_type())
+        return true;
+    }
+
+    return false;
+  }
+
+  static bool is_dict_subscript(const nlohmann::json &element)
+  {
+    return element.contains("_type") && element["_type"] == "Subscript" &&
+           element.contains("value");
   }
 
 private:

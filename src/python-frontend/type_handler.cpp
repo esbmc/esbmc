@@ -42,6 +42,13 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   /* The statement is a constructor call if the function call on the
    * rhs corresponds to the name of a class. */
 
+  // First, check if the class is defined in the AST (handles forward references)
+  // example: class Foo: -> "Bar":
+  // Bar is a class here defined later
+  if (json_utils::is_class(func_name, converter_.ast()))
+    return true;
+
+  // Then check the symbol table for already-processed classes
   bool is_ctor_call = false;
 
   const contextt &symbol_table = converter_.symbol_table();
@@ -106,11 +113,17 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   if (ref.empty())
     return std::string();
 
+  if (!ref.contains("annotation") || ref["annotation"].is_null())
+    return std::string();
+
   const auto &annotation = ref["annotation"];
-  if (annotation.contains("id"))
+  if (annotation.is_object() && annotation.contains("id"))
     return annotation["id"].get<std::string>();
 
-  if (annotation.contains("_type") && annotation["_type"] == "Subscript")
+  if (
+    annotation.is_object() && annotation.contains("_type") &&
+    annotation["_type"] == "Subscript" && annotation.contains("value") &&
+    annotation["value"].is_object() && annotation["value"].contains("id"))
     return annotation["value"]["id"];
 
   return std::string();
@@ -301,6 +314,12 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "list")
     return get_list_type();
 
+  // dict — handle dict type annotations
+  // For generic "dict" without key/value types, return empty type
+  // so the actual type is inferred from the dictionary literal
+  if (ast_type == "dict")
+    return empty_typet();
+
   // Reuse list infrastructure for simplicity for now
   if (ast_type == "set")
     return get_list_type();
@@ -314,14 +333,6 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // Check if it's a defined class in the AST
   bool is_defined = json_utils::is_class(ast_type, converter_.ast());
 
-  // Check if it's a built-in type (handles tuple, list, dict, etc.)
-  if (!is_defined)
-    is_defined = type_utils::is_builtin_type(ast_type);
-
-  // Check if it's imported
-  if (!is_defined)
-    is_defined = converter_.is_imported_module(ast_type);
-
   // Look up the type in the symbol table
   if (!is_defined)
   {
@@ -329,6 +340,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     if (s)
       return s->type;
   }
+
+  // Check if it's a built-in type (handles tuple, list, dict, etc.)
+  if (!is_defined)
+    is_defined = type_utils::is_builtin_type(ast_type);
+
+  // Check if it's imported
+  if (!is_defined)
+    is_defined = converter_.is_imported_module(ast_type);
 
   // If still not found, it's a NameError
   if (!is_defined)
@@ -852,4 +871,29 @@ typet type_handler::build_optional_type(const typet &base_type)
   optional_type.components().push_back(value_field);
 
   return optional_type;
+}
+
+bool type_handler::class_derives_from(
+  const std::string &class_name,
+  const std::string &expected_base) const
+{
+  if (class_name == expected_base)
+    return true;
+
+  const auto &ast = converter_.ast();
+  const auto class_node = json_utils::find_class(ast["body"], class_name);
+  if (class_node.empty() || !class_node.contains("bases"))
+    return false;
+
+  for (const auto &base : class_node["bases"])
+  {
+    std::string base_name;
+    if (base.contains("_type") && base["_type"] == "Name")
+      base_name = base["id"].get<std::string>();
+    else if (base.contains("_type") && base["_type"] == "Attribute")
+      base_name = base["attr"].get<std::string>();
+    if (!base_name.empty() && class_derives_from(base_name, expected_base))
+      return true;
+  }
+  return false;
 }

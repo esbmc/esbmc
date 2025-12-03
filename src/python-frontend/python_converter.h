@@ -1,15 +1,17 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
 #include <python-frontend/global_scope.h>
+#include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_math.h>
+#include <python-frontend/string_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
-#include <python-frontend/string_handler.h>
+#include <python-frontend/python_set.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/symbol_generator.h>
-#include <nlohmann/json.hpp>
 #include <map>
 #include <set>
 #include <utility>
@@ -22,7 +24,17 @@ class function_call_expr;
 class type_handler;
 class string_builder;
 class module_locator;
+class tuple_handler;
+class python_typechecking;
+class python_class_builder;
 
+/**
+ * @class python_converter
+ * @brief Main converter for transforming Python AST into ESBMC's intermediate representation.
+ *
+ * This class is responsible for converting Python source code (represented as JSON AST)
+ * into GOTO programs that can be processed by ESBMC's symbolic execution engine.
+ */
 class python_converter
 {
 public:
@@ -37,6 +49,11 @@ public:
 
   string_builder &get_string_builder();
 
+  python_dict_handler *get_dict_handler()
+  {
+    return dict_handler_;
+  }
+
   python_math &get_math_handler()
   {
     return math_handler_;
@@ -45,6 +62,11 @@ public:
   string_handler &get_string_handler()
   {
     return string_handler_;
+  }
+
+  tuple_handler &get_tuple_handler()
+  {
+    return *tuple_handler_;
   }
 
   const nlohmann::json &ast() const
@@ -61,6 +83,8 @@ public:
   {
     return type_handler_;
   }
+
+  bool type_assertions_enabled() const;
 
   const std::string &python_file() const
   {
@@ -131,13 +155,38 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  /**
+   * @brief Resolves dictionary subscript types for binary operations.
+   *
+   * When comparing dictionary values with primitive types (int, bool, float),
+   * the dict subscript initially returns a char* pointer. This method detects
+   * such cases and re-fetches the dictionary value with the correct expected type.
+   *
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param lhs The left operand expression (may be modified).
+   * @param rhs The right operand expression (may be modified).
+   */
+  void resolve_dict_subscript_types(
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    exprt &lhs,
+    exprt &rhs);
+
+  python_typechecking &get_typechecker();
+  const python_typechecking &get_typechecker() const;
+
 private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
-  bool processing_list_elements = false;
+  friend class tuple_handler;
+  friend class python_typechecking;
+  friend class python_class_builder;
+  friend class python_dict_handler;
+  friend class python_set;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -279,10 +328,18 @@ private:
     const symbol_id &id,
     const locationt &location);
 
+  size_t register_function_argument(
+    const nlohmann::json &element,
+    code_typet &type,
+    const symbol_id &id,
+    const locationt &location,
+    bool is_keyword_only);
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,
     exprt &function_body);
+
   exprt compare_constants_internal(
     const std::string &op,
     const exprt &lhs,
@@ -297,6 +354,9 @@ private:
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
+
+  exprt
+  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
 
   void get_attributes_from_self(
     const nlohmann::json &method_body,
@@ -343,9 +403,68 @@ private:
 
   std::string extract_non_none_type(const nlohmann::json &annotation_node);
 
-  // helper methods for get_var_assign
+  void
+  get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
+
+  // =========================================================================
+  // Assertion helper methods
+  // =========================================================================
+
+  /**
+   * @brief Handles assertions on list expressions.
+   *
+   * In Python, empty lists are falsy, so `assert []` should fail.
+   * This method converts `assert list_var` to `assert len(list_var) > 0`
+   * by calling __ESBMC_list_size and checking the result.
+   *
+   * @param element The assertion AST node.
+   * @param test The test expression (a list or list-returning function call).
+   * @param block The code block to add generated statements to.
+   * @param attach_assert_message Lambda to attach user assertion messages.
+   */
+  void handle_list_assertion(
+    const nlohmann::json &element,
+    const exprt &test,
+    code_blockt &block,
+    const std::function<void(code_assertt &)> &attach_assert_message);
+
+  /**
+   * @brief Handles assertions on function call expressions.
+   *
+   * Materializes function calls in assertions.
+   * For None-returning functions, executes the call and asserts False.
+   * For other functions, stores result in temp var and asserts on that.
+   *
+   * @param element The assertion AST node.
+   * @param func_call_expr The function call expression to assert on.
+   * @param is_negated Whether the assertion is negated (assert not func()).
+   * @param block The code block to add generated statements to.
+   * @param attach_assert_message Lambda to attach user assertion messages.
+   */
+  void handle_function_call_assertion(
+    const nlohmann::json &element,
+    const exprt &func_call_expr,
+    bool is_negated,
+    code_blockt &block,
+    const std::function<void(code_assertt &)> &attach_assert_message);
+
+  // =========================================================================
+  // Helper methods for get_var_assign
+  // =========================================================================
+
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
+
+  void handle_array_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    exprt &rhs,
+    codet &target_block);
+
+  void handle_list_literal_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
 
   exprt create_lhs_expression(
     const nlohmann::json &target,
@@ -360,21 +479,397 @@ private:
     const nlohmann::json &ast_node,
     bool is_ctor_call);
 
+  // =========================================================================
+  // Dictionary assignment helper methods
+  // =========================================================================
+
+  /**
+   * @brief Handles dictionary subscript assignment (dict[key] = value).
+   *
+   * Detects and processes assignments where the target is a dictionary subscript
+   * expression, delegating to the dict_handler for the actual assignment.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target The assignment target (Subscript node).
+   * @param target_block The code block to add generated code to.
+   * @return true if this was a dict subscript assignment and was handled.
+   */
+  bool handle_dict_subscript_assignment(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
+  /**
+   * @brief Handles dictionary literal assignment to a typed variable.
+   *
+   * Processes assignments where the RHS is a dictionary literal ({...}),
+   * creating the dict structure and initializing it from the literal.
+   *
+   * @param ast_node The assignment AST node.
+   * @param lhs The left-hand side expression.
+   * @return true if this was a dict literal assignment and was handled.
+   */
+  bool handle_dict_literal_assignment(
+    const nlohmann::json &ast_node,
+    const exprt &lhs);
+
+  /**
+   * @brief Handles unannotated dictionary literal assignment.
+   *
+   * For Assign nodes (not AnnAssign) where the RHS is a dict literal and
+   * no symbol exists yet, creates the symbol with dict type and initializes it.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target The assignment target node.
+   * @param sid The symbol ID for the variable.
+   * @return true if this was an unannotated dict literal and was handled.
+   */
+  bool handle_unannotated_dict_literal(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const symbol_id &sid);
+
+  /**
+   * @brief Gets RHS expression with dict subscript type resolution.
+   *
+   * When the RHS is a dict subscript and the target has a primitive type
+   * (int, bool, etc.), fetches the dict value with the correct type instead
+   * of the default char* pointer.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target_type The expected type from the LHS.
+   * @return The RHS expression with proper type resolution.
+   */
+  exprt get_rhs_with_dict_resolution(
+    const nlohmann::json &ast_node,
+    const typet &target_type);
+
+  // =========================================================================
+  // Type inference helper methods
+  // =========================================================================
+
+  /**
+   * @brief Infers type from function return when annotation is "Any".
+   *
+   * When a variable is annotated with "Any" but initialized from a function
+   * call, attempts to infer the actual type from the function's return type.
+   *
+   * @param ast_node The assignment AST node.
+   * @param lhs_type The current LHS type string ("Any" or other).
+   * @return Updated type string (empty if type was inferred successfully).
+   */
+  std::string infer_type_from_any_annotation(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_type);
+
+  // =========================================================================
+  // Unpacking helper methods
+  // =========================================================================
+
+  /**
+   * @brief Handles tuple/list unpacking assignment.
+   *
+   * Detects and processes assignments where the target is a Tuple or List,
+   * performing unpacking of the RHS into multiple variables.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target The assignment target (Tuple or List node).
+   * @param target_block The code block to add generated code to.
+   * @return true if this was an unpacking assignment and was handled.
+   */
+  bool handle_unpacking_assignment(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
+  // =========================================================================
+  // Symbol creation helper methods
+  // =========================================================================
+
+  /**
+   * @brief Creates symbol for unannotated assignment with inferrable types.
+   *
+   * For assignments without type annotations where the RHS type can be
+   * inferred (Lambda, Call, BoolOp), creates the appropriate symbol.
+   *
+   * @param ast_node The assignment AST node.
+   * @param target The assignment target node.
+   * @param sid The symbol ID for the variable.
+   * @param is_global Whether this is a global variable.
+   * @return Pointer to created symbol, or nullptr if not applicable.
+   */
+  symbolt *create_symbol_for_unannotated_assign(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const symbol_id &sid,
+    bool is_global);
+
+  /**
+   * @brief Checks if variable is in global declarations.
+   *
+   * @param sid The symbol ID to check.
+   * @return true if the variable is declared as global.
+   */
+  bool is_global_variable(const symbol_id &sid) const;
+
+  /**
+   * @brief Extracts variable name from assignment target.
+   *
+   * Handles Name, Attribute, and Subscript target types.
+   *
+   * @param target The assignment target node.
+   * @return The extracted variable name.
+   * @throws std::runtime_error if target type is unsupported.
+   */
+  std::string extract_target_name(const nlohmann::json &target) const;
+
+  // =========================================================================
+  // RHS processing helper methods
+  // =========================================================================
+
+  /**
+   * @brief Handles function call RHS assignment.
+   *
+   * Processes assignments where the RHS is a function call, handling
+   * constructor calls, instance attribute copying, and list return types.
+   *
+   * @param ast_node The assignment AST node.
+   * @param lhs_symbol The LHS symbol.
+   * @param lhs The LHS expression.
+   * @param rhs The RHS expression (function call).
+   * @param location The source location.
+   * @param is_ctor_call Whether this is a constructor call.
+   * @param target_block The code block to add generated code to.
+   */
+  void handle_function_call_rhs(
+    const nlohmann::json &ast_node,
+    symbolt *lhs_symbol,
+    exprt &lhs,
+    exprt &rhs,
+    const locationt &location,
+    bool is_ctor_call,
+    codet &target_block);
+
+  /**
+   * @brief Handles string literal assignment to str-typed variable.
+   *
+   * When assigning a string literal to a variable with str type annotation,
+   * converts the literal to a character array expression.
+   *
+   * @param ast_node The assignment AST node.
+   * @param lhs_type The LHS type string.
+   * @param rhs The current RHS expression.
+   * @return Updated RHS expression (character array if applicable).
+   */
+  exprt handle_string_literal_rhs(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_type,
+    const exprt &rhs);
+
+  // =========================================================================
   // Helper methods for binary operator expression handling
+  // =========================================================================
+
+  /**
+   * @brief Converts function calls in binary operands to side effects.
+   * @param lhs Left operand expression (may be modified).
+   * @param rhs Right operand expression (may be modified).
+   */
   void convert_function_calls_to_side_effects(exprt &lhs, exprt &rhs);
 
+  /**
+   * @brief Handles chained comparison expressions (e.g., 0 <= x <= 10).
+   * @param element The JSON AST node containing the chained comparison.
+   * @param bin_expr The base binary expression.
+   * @return The combined expression for the chained comparison.
+   */
   exprt handle_chained_comparisons_logic(
     const nlohmann::json &element,
     exprt &bin_expr);
 
+  /**
+   * @brief Determines if None comparison setup is needed.
+   *
+   * Checks whether the operation involves None comparisons that shouldn't
+   * unwrap optional types.
+   *
+   * @param op The operator string (e.g., "Eq", "Is").
+   * @param lhs The left operand expression.
+   * @param rhs The right operand expression.
+   * @return true if this is a None comparison, false otherwise.
+   */
+  bool handle_none_check_setup(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
+  /**
+   * @brief Handles array-related binary operations.
+   *
+   * Processes zero-length array comparisons and string concatenation.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified for concatenation).
+   * @param rhs The right operand expression (may be modified for concatenation).
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if not an array operation.
+   */
+  exprt handle_array_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles list-related binary operations.
+   *
+   * Processes list comparison, concatenation, and repetition.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified for repetition).
+   * @param rhs The right operand expression (may be modified for repetition).
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if not a list operation.
+   */
+  exprt handle_list_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles set-related binary operations.
+   *
+   * Processes set difference, intersection, and union operations.
+   * Sets are internally represented as lists with unique elements.
+   * Materializes function call results into temporary variables when needed.
+   *
+   * Supported operations:
+   * - Sub (-)    : Set difference (elements in lhs but not in rhs)
+   * - BitAnd (&) : Set intersection (elements in both lhs and rhs)
+   * - BitOr (|)  : Set union (elements in either lhs or rhs, without duplicates)
+   *
+   * @param op The operator string ("Sub", "BitAnd", or "BitOr").
+   * @param lhs The left operand expression (may be modified to resolve function calls).
+   * @param rhs The right operand expression (may be modified to resolve function calls).
+   * @param left The left operand JSON AST node (unused, kept for consistency).
+   * @param right The right operand JSON AST node (unused, kept for consistency).
+   * @param element The full binary operation JSON AST node for location information.
+   * @return The result expression representing the new set, or nil_exprt if not a set operation.
+   */
+  exprt handle_set_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles type mismatches in relational operations.
+   *
+   * Processes single-character comparisons and float-vs-string comparisons.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified).
+   * @param rhs The right operand expression (may be modified).
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if no special handling needed.
+   */
+  exprt handle_relational_type_mismatches(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Handles string-related binary operations.
+   *
+   * Processes string type inference and delegates to string handler.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified).
+   * @param rhs The right operand expression (may be modified).
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @param element The full binary operation JSON AST node.
+   * @return The result expression, or nil_exprt if not a string operation.
+   */
+  exprt handle_string_binary_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Builds a binary expression with proper type and location.
+   *
+   * Determines result type, sets location, handles type promotions,
+   * and adds operands to the expression.
+   *
+   * @param op The operator string.
+   * @param lhs The left operand expression (may be modified for type casting).
+   * @param rhs The right operand expression (may be modified for type casting).
+   * @return The constructed binary expression.
+   */
+  exprt build_binary_expression(const std::string &op, exprt &lhs, exprt &rhs);
+
+  /**
+   * @brief Promotes operands for IEEE floating-point operations.
+   *
+   * @param bin_expr The binary expression (operands may be modified).
+   * @param lhs The original left operand.
+   * @param rhs The original right operand.
+   */
+  void
+  promote_ieee_operands(exprt &bin_expr, const exprt &lhs, const exprt &rhs);
+
+  // =========================================================================
   // String method helpers
+  // =========================================================================
+
   exprt handle_str_join(const nlohmann::json &call_json);
 
-  // Wrap values in Optional
+  exprt handle_string_type_mismatch(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &op);
+
+  // Create character comparison expression from preprocessed operands
+  exprt create_char_comparison_expr(
+    const std::string &op,
+    const exprt &lhs_char_value,
+    const exprt &rhs_char_value,
+    const exprt &lhs_source,
+    const exprt &rhs_source) const;
+
+  void process_forward_reference(
+    const nlohmann::json &annotation,
+    codet &target_block);
+
+  // =========================================================================
+  // Optional type helpers
+  // =========================================================================
+
+  /// Wrap values in Optional
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
 
-  // Handle Optional value access
+  /// Handle Optional value access
   exprt unwrap_optional_if_needed(const exprt &expr);
+
+  // =========================================================================
+  // Member variables
+  // =========================================================================
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
@@ -394,6 +889,8 @@ private:
   exprt *current_lhs;
   string_handler string_handler_;
   python_math math_handler_;
+  tuple_handler *tuple_handler_;
+  python_dict_handler *dict_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
@@ -402,9 +899,9 @@ private:
   bool base_ctor_called = false;
   bool build_static_lists = false;
 
-  // Map object to list of instance attributes
+  /// Map object to list of instance attributes
   std::map<std::string, std::set<std::string>> instance_attr_map;
-  // Map imported modules to their corresponding paths
+  /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
 
   std::vector<std::string> global_declarations;
@@ -412,4 +909,6 @@ private:
   bool is_right = false;
 
   exprt extract_type_from_boolean_op(const exprt &bool_op);
+
+  python_typechecking *typechecker_ = nullptr;
 };

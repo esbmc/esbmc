@@ -17,7 +17,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   {
     if (is_signed && !int_encoding)
     {
-      // Two cases: pos/pos, and neg/neg, which can over and underflow resp.
+      // Two cases: pos/pos, and neg/neg, which can over- and under-flow resp.
       // In pos/neg cases, no overflow or underflow is possible, for any value.
       expr2tc op1pos = lessthan2tc(zero, opers.side_1);
       expr2tc op2pos = lessthan2tc(zero, opers.side_2);
@@ -362,7 +362,7 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
     expr2tc min_int =
       constant_int2tc(operand->type, -BigInt::power2(width - 1));
 
-    // Overflow occurs if operand is INT_MIN
+    // Overflow occurs if the operand is INT_MIN
     expr2tc val = equality2tc(operand, min_int);
 
     return convert_ast(val);

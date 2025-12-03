@@ -157,6 +157,16 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Handle string repetition
+   * @param op multiply operator (Eq, Mult)
+   * @param lhs Left operand
+   * @param rhs Right operand
+   * @param element JSON element with location info
+   * @return Repetition expression
+   */
+  exprt handle_string_repetition(exprt &lhs, exprt &rhs);
+
+  /**
    * @brief Handle general string operations
    * @param op Operation type
    * @param lhs Left operand
@@ -330,6 +340,17 @@ public:
     const exprt &arg,
     const exprt &base,
     const locationt &location);
+
+  /**
+   * Handle chr() builtin function
+   * Converts a Unicode code point to its string representation
+   * Supports chr(i) where i is an integer in range [0, 0x10FFFF]
+   * @param codepoint_arg The integer code point to convert
+   * @param location Source location for error reporting
+   * @return Expression representing the resulting string (char array pointer)
+   */
+  exprt
+  handle_chr_conversion(const exprt &codepoint_arg, const locationt &location);
 
 private:
   python_converter &converter_;

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <string>
+#include <algorithm>
 #include <fstream>
 #include <sstream>
-#include <algorithm>
+#include <string>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 

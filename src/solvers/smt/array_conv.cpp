@@ -27,7 +27,7 @@ array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true), ctx(_ctx)
 void array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
 {
   // Implement array assignments by simply making the destination AST track the
-  // same array. No new variables need be introduced, saving lots of searching
+  // same array. No new variables need to be introduced, saving lots of searching
   // hopefully. This works because we're working with an SSA program where the
   // source array will never be modified.
 
@@ -45,7 +45,7 @@ unsigned int array_convt::new_array_id()
 {
   unsigned int new_base_array_id = array_indexes.size();
 
-  // Pouplate tracking data with empt containers
+  // Pouplate tracking data with empty containers
   idx_record_containert tmp_set;
   array_indexes.push_back(tmp_set);
 
