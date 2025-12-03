@@ -1426,8 +1426,6 @@ void python_converter::resolve_dict_subscript_types(
   }
 }
 
-// (annotation type collection & inheritance helpers moved to python_typechecking)
-
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   // Extract left and right operands from AST
