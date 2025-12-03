@@ -4,7 +4,7 @@ ESBMC can generate interactive HTML reports that visualize counterexample traces
 
 ## Usage
 
-To generate an HTML report when verification fails, use the `--generate-html-report` flag:
+To generate an HTML report when verification fails, use the `--generate-html-report` flag as follows:
 
 ```bash
 esbmc example.c --generate-html-report
