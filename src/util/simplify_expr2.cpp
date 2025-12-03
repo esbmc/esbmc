@@ -449,6 +449,15 @@ expr2tc add2t::do_simplify() const
   if (is_neg2t(side_1) && to_neg2t(side_1).value == side_2)
     return gen_zero(type);
 
+  // Recognize (base - X) + X = base pattern
+  if (is_sub2t(side_1))
+  {
+    const sub2t &sub = to_sub2t(side_1);
+
+    if (sub.side_2 == side_2)
+      return sub.side_1;
+  }
+
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if (!is_nil_expr(res))
     return res;
@@ -519,6 +528,15 @@ expr2tc sub2t::do_simplify() const
   // x - x = 0 (self-subtraction)
   if (side_1 == side_2)
     return gen_zero(side_1->type);
+
+  // Recognize (base + X) - X = base pattern
+  if (is_add2t(side_1))
+  {
+    const add2t &add = to_add2t(side_1);
+
+    if (add.side_2 == side_2)
+      return add.side_1;
+  }
 
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }

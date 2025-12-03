@@ -469,10 +469,12 @@ expr2tc goto_symext::symex_mem_inf(
   expr2tc sym = symbol2tc(new_type, symbol.id);
   expr2tc idx_val = gen_long(size_type2(), 0L);
   expr2tc idx = index2tc(subtype, sym, idx_val);
+  do_simplify(idx);
   rhs_type = migrate_type(symbol.type.subtype());
   rhs_ptr_obj = idx;
 
   expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
   guardt alloc_guard = cur_state->guard;
@@ -577,11 +579,13 @@ expr2tc goto_symext::symex_mem(
     expr2tc sym = symbol2tc(new_type, symbol.id);
     expr2tc idx_val = gen_long(size->type, 0L);
     expr2tc idx = index2tc(subtype, sym, idx_val);
+    do_simplify(idx);
     rhs_type = migrate_type(symbol.type.subtype());
     rhs_ptr_obj = idx;
   }
 
   expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
 
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
@@ -641,6 +645,10 @@ void goto_symext::track_new_pointer(
   const guardt &guard,
   const expr2tc &size)
 {
+  // Simplify ptr_obj before using it in any expressions
+  expr2tc simplified_ptr_obj = ptr_obj;
+  do_simplify(simplified_ptr_obj);
+
   // Also update all the accounting data.
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array

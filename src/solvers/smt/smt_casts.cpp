@@ -579,7 +579,12 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
   }
 
   // Finally, type-cast the address to the destination's type
-  return convert_ast(typecast2tc(cast.type, pointer));
+  if (address->type->get_width() == cast.type->get_width())
+  {
+    // avoid redundant typecast chain
+    return convert_ast(address);
+  }
+  return convert_ast(typecast2tc(cast.type, address));
 }
 
 smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
