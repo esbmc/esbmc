@@ -2650,6 +2650,10 @@ expr2tc smt_convt::get(const expr2tc &expr)
           array,
           to_constant_int2t(idx).value.to_uint64(),
           get_flattened_array_subtype(res->type));
+
+      // If we got a nil result, return original expression
+      if (is_nil_expr(res))
+        return expr;
     }
 
     // TODO: Give up, then what?
