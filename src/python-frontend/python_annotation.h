@@ -162,6 +162,27 @@ private:
           continue; // Skip this recursive call
         }
 
+        // Handle function calls (including nested functions)
+        if (
+          return_val["_type"] == "Call" && return_val.contains("func") &&
+          return_val["func"]["_type"] == "Name")
+        {
+          const std::string &called_func = return_val["func"]["id"];
+
+          // Try to get the return type of the called function
+          try
+          {
+            std::string called_func_type =
+              get_function_return_type(called_func, ast_);
+            if (!called_func_type.empty() && called_func_type != "NoneType")
+              return called_func_type;
+          }
+          catch (std::runtime_error &)
+          {
+            // Function not found, continue with normal inference
+          }
+        }
+
         // Reuse get_argument_type to infer the return value type
         std::string inferred_type = get_argument_type(return_val);
         if (!inferred_type.empty())
@@ -561,6 +582,27 @@ private:
 
   void annotate_function(Json &function_element)
   {
+    std::string saved_func_name_context = current_func_name_context_;
+    const std::string &func_name =
+      function_element["name"].template get<std::string>();
+
+    // Build hierarchical path ONLY if we're not inside a class
+    if (!current_class_name_.empty())
+    {
+      // We're inside a class - do NOT accumulate hierarchical context
+      current_func_name_context_ = func_name;
+    }
+    else if (!saved_func_name_context.empty())
+    {
+      // Nested function outside a class - accumulate context
+      current_func_name_context_ = saved_func_name_context + "@F@" + func_name;
+    }
+    else
+    {
+      // Top-level function
+      current_func_name_context_ = func_name;
+    }
+
     current_func = &function_element;
 
     // Infer types for unannotated parameters based on function calls
@@ -569,6 +611,29 @@ private:
     // Add type annotations within the function
     add_annotation(function_element);
 
+    // Skip return type inference for __init__ (constructors always return None)
+    if (func_name == "__init__")
+    {
+      // Constructors return None by default - no need to infer
+      if (function_element["returns"].is_null())
+      {
+        function_element["returns"] = {
+          {"_type", "Constant"},
+          {"value", nullptr}, // None
+          {"lineno", function_element["lineno"]},
+          {"col_offset", function_element["col_offset"]},
+          {"end_lineno", function_element["lineno"]},
+          {"end_col_offset",
+           function_element["col_offset"].template get<int>() + 4}};
+      }
+
+      // Update the end column offset after adding annotations
+      update_end_col_offset(function_element);
+      current_func = nullptr;
+      current_func_name_context_ = saved_func_name_context;
+      return; // Exit early for __init__
+    }
+
     // Check if we should override the return annotation
     bool should_override =
       config.options.get_bool_option("override-return-annotation");
@@ -576,10 +641,10 @@ private:
 
     if (has_no_annotation || should_override)
     {
-      const std::string &func_name = function_element["name"];
       std::string inferred_type =
         infer_from_return_statements(function_element["body"], func_name);
 
+      // Only add annotation if we successfully inferred a type from return statements
       if (!inferred_type.empty())
       {
         // Update the function node to include the return type annotation
@@ -594,16 +659,25 @@ private:
            function_element["col_offset"].template get<int>() +
              inferred_type.size()}};
       }
+      // If no return type could be inferred, leave returns as null
+      // (function has no explicit return statement)
     }
 
     // Update the end column offset after adding annotations
     update_end_col_offset(function_element);
 
     current_func = nullptr;
+    current_func_name_context_ = saved_func_name_context;
   }
 
   void annotate_class(Json &class_element)
   {
+    std::string saved_class_name = current_class_name_;
+    std::string saved_context = current_func_name_context_;
+    //    current_func_name_context_ = ""; // Reset for class methods
+
+    current_class_name_ = class_element["name"].template get<std::string>();
+
     for (Json &class_member : class_element["body"])
     {
       // Process methods in the class
@@ -637,14 +711,14 @@ private:
         }
       }
     }
+
+    current_class_name_ = saved_class_name;
+    current_func_name_context_ = saved_context;
   }
 
   std::string get_current_func_name()
   {
-    if (!current_func)
-      return std::string();
-
-    return (*current_func)["name"];
+    return current_func_name_context_;
   }
 
   std::string get_type_from_constant(const Json &element)
@@ -2198,4 +2272,6 @@ private:
   bool filter_global_elements_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
+  std::string current_func_name_context_;
+  std::string current_class_name_;
 };

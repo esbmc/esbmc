@@ -965,7 +965,14 @@ TEST_CASE("Add type annotation")
                     "end_lineno": 3,
                     "lineno": 2,
                     "name": "__init__",
-                    "returns": null,
+                    "returns": {
+                      "_type": "Constant",
+                      "col_offset": 4,
+                      "end_col_offset": 8,
+                      "end_lineno": 2,
+                      "lineno": 2,
+                      "value": null
+                    },
                     "type_comment": null
                 }
             ],
