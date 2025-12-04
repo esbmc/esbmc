@@ -2,6 +2,7 @@
 #include <util/i2string.h>
 #include <util/message.h>
 #include <util/message/format.h>
+#include <util/usr_utils.h>
 #include <util/xml.h>
 #include <util/xml_irep.h>
 
@@ -16,10 +17,8 @@ void show_loop_numbers(
     {
       unsigned loop_id = instruction.loop_number;
 
-      // Strip "c:@" prefix for cleaner user-facing output
-      std::string display_name = function_name;
-      if (display_name.substr(0, 3) == "c:@")
-        display_name = display_name.substr(3);
+      // Convert internal USR format to user-friendly --unwindsetname syntax
+      std::string display_name = usr_to_user_name(function_name);
 
       log_status(
         "goto-loop Loop {} ({}:{}):\n {}\n",
