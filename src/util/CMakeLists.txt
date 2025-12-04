@@ -18,6 +18,8 @@ target_link_libraries(crypto_hash PUBLIC ${Boost_LIBRARIES})
 
 add_library(string_container string_container.cpp)
 
+add_library(usr_utils usr_utils.cpp)
+
 add_library(util_esbmc xml_irep.cpp xml.cpp
         arith_tools.cpp base_type.cpp cmdline.cpp config.cpp config_file.cpp context.cpp
         expr_util.cpp i2string.cpp location.cpp
