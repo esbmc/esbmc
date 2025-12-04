@@ -22,6 +22,18 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 ### How to build/install ESBMC
 
+### Installing via PPA (Ubuntu - Recommended)
+
+The easiest way to install ESBMC on Ubuntu is through our official [PPA](https://launchpad.net/~esbmc/+archive/ubuntu/esbmc), which provides stable releases for automatic installation:
+
+````
+sudo add-apt-repository ppa:esbmc/esbmc
+sudo apt update
+sudo apt install esbmc
+````
+
+This method is recommended for general users and supports Ubuntu 22.04 (Jammy) and 24.04 (Noble).
+
 #### Ubuntu 24.04
 
 To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
