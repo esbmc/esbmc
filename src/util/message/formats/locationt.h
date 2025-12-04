@@ -23,6 +23,6 @@ struct fmt::formatter<locationt>
   template <typename FormatContext>
   auto format(const locationt &p, FormatContext &ctx) const
   {
-    return format_to(ctx.out(), "{}", p.as_string());
+    return fmt::format_to(ctx.out(), "{}", p.as_string());
   }
 };
