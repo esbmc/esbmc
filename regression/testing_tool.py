@@ -239,7 +239,9 @@ def _add_test(test_case, executor):
 
         if (test_case.test_mode in FAIL_MODES) and matches_regex:
             rel_path = os.path.relpath(test_case.test_dir, os.path.dirname(__file__))
-            print(f"\033[33mERROR: Test '{rel_path}' passed but is marked as KNOWNBUG. Consider reclassifying it as CORE.\033[0m")
+            print(
+                f"\033[33mERROR: Test '{rel_path}' passed but is marked as KNOWNBUG. Consider reclassifying it as CORE.\033[0m"
+            )
             sys.exit(77)
         elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):
             if RegressionBase.FAIL_WITH_WORD is not None:
@@ -371,6 +373,7 @@ TEST_SUITES = [
     "esbmc-cpp/vector",
     "esbmc-cpp/functional",
     "esbmc-cpp/bitset",
+    "esbmc-cpp/unwindsetname",
     "esbmc-cpp11/constructors",
     "esbmc-cpp11/cpp",
     "esbmc-cpp11/new-delete",
@@ -388,8 +391,7 @@ TEST_SUITES = [
     "k-induction",
     "goto-contractor",
     "k-induction-parallel",
-    "termination"
-    "linux",
+    "termination" "linux",
     "llvm",
     "mathsat",
     "nonz3",

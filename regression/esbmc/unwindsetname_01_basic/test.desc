@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---unwindsetname c:@F@compute_sum:10 --z3
+--unwindsetname compute_sum:0:11 --z3
 ^VERIFICATION SUCCESSFUL$

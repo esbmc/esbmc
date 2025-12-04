@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---unwindsetname c:@F@func_ten:10,c:@F@func_five:5,c:@F@func_three:3 --z3
+--unwindsetname func_ten:0:11,func_five:0:6,func_three:0:4 --z3
 ^VERIFICATION SUCCESSFUL$

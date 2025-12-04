@@ -1,4 +1,0 @@
-THOROUGH
-main.cpp
---unwindsetname c:@N@ModuleA@F@process#:10,c:@N@ModuleB@F@process#:5 --z3
-^VERIFICATION SUCCESSFUL$

@@ -1,4 +1,0 @@
-THOROUGH
-main.c
---unwindsetname c:main.c@F@helper:7 --z3
-^VERIFICATION SUCCESSFUL$
