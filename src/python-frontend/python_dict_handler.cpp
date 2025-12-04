@@ -256,22 +256,27 @@ exprt python_dict_handler::handle_dict_subscript(
   if (expected_type.is_floatbv())
   {
     typecast_exprt value_as_float_ptr(obj_value, pointer_typet(expected_type));
-    return dereference_exprt(value_as_float_ptr, expected_type);
+    dereference_exprt result(value_as_float_ptr, expected_type);
+    result.type() = expected_type;
+    return result;
   }
 
   // Handle integer types: cast void* to int*, then dereference
   if (expected_type.is_signedbv() || expected_type.is_unsignedbv())
   {
-    typet int_type = expected_type.is_nil() ? long_int_type() : expected_type;
-    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(int_type));
-    return dereference_exprt(value_as_int_ptr, int_type);
+    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(expected_type));
+    dereference_exprt result(value_as_int_ptr, expected_type);
+    result.type() = expected_type;
+    return result;
   }
 
   // Handle boolean types: cast void* to bool*, then dereference
   if (expected_type.is_bool())
   {
     typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
-    return dereference_exprt(value_as_bool_ptr, bool_type());
+    dereference_exprt result(value_as_bool_ptr, bool_type());
+    result.type() = bool_type();
+    return result;
   }
 
   // Default: cast void* to char* for string values
