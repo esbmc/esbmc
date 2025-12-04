@@ -3641,10 +3641,14 @@ exprt python_converter::get_rhs_with_dict_resolution(
     return get_expr(ast_node["value"]);
 
   // Check if we need special dict subscript handling for typed variables
+  // Including list type
+  typet list_type = type_handler_.get_list_type();
   if (
     !target_type.is_signedbv() && !target_type.is_unsignedbv() &&
-    !target_type.is_bool())
+    !target_type.is_bool() && target_type != list_type)
+  {
     return get_expr(ast_node["value"]);
+  }
 
   exprt dict_expr = get_expr(ast_node["value"]["value"]);
   if (
