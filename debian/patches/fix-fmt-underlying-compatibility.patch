@@ -1,0 +1,42 @@
+Description: Add compatibility layer for fmt::underlying in older fmt versions
+ This patch adds a compatibility layer for fmt::underlying() which was
+ introduced in fmt 9.0.0. For Ubuntu 22.04 (jammy) which uses an older
+ fmt version, this provides a compatible implementation. For Ubuntu 24.04
+ (noble) with fmt >= 9.0.0, the native implementation is used.
+ .
+ This fixes compilation errors: 'underlying' is not a member of 'fmt'
+ in 10 locations across the codebase.
+Author: Weiqi Wang <lukewang19@icloud.com>
+Forwarded: no
+Last-Update: 2024-12-04
+
+--- a/src/util/message/format.h
++++ b/src/util/message/format.h
+@@ -7,6 +7,7 @@ Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
+ 
+ #pragma once
+ #include <string>
++#include <type_traits>
+ #include <util/compiler_defs.h>
+ 
+ CC_DIAGNOSTIC_PUSH()
+@@ -21,6 +22,19 @@ CC_DIAGNOSTIC_PUSH()
+ #include <fmt/format.h>
+ CC_DIAGNOSTIC_POP()
+ 
++// Compatibility layer for fmt::underlying (introduced in fmt 9.0.0)
++// FMT_VERSION format: MMmmpp (e.g., 9.0.0 = 90000, 8.1.1 = 80101)
++#if !defined(FMT_VERSION) || FMT_VERSION < 90000
++namespace fmt
++{
++  template <typename Enum>
++  constexpr auto underlying(Enum e) -> std::underlying_type_t<Enum>
++  {
++    return static_cast<std::underlying_type_t<Enum>>(e);
++  }
++}
++#endif
++
+ #define ESBMC_FORMATS_START_ASSERTION
+ 
+ // For more in-depth for how this specialization work look at

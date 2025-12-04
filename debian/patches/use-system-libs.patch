@@ -1,0 +1,51 @@
+Description: Use system libraries instead of FetchContent for fmt, yaml-cpp, and nlohmann-json
+ This patch modifies ExternalDependencies.cmake to use system packages
+ instead of downloading dependencies via FetchContent. It also creates
+ necessary target aliases to ensure compatibility with ESBMC's expected
+ target names (e.g., fmt::fmt).
+Author: Weiqi Wang <lukewang19@icloud.com>
+Forwarded: no
+
+--- a/scripts/cmake/ExternalDependencies.cmake
++++ b/scripts/cmake/ExternalDependencies.cmake
+@@ -1,23 +1,29 @@
+ # Module to add dependencies that do not belong
+ # anywhere else
+ 
+-include(FetchContent)
+-# FMT
+-FetchContent_Declare(fmt
+-  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+-  GIT_TAG 12.1.0)
+-FetchContent_MakeAvailable(fmt)
++# Use system libraries instead of FetchContent
++
++# FMT - find system library and create alias if needed
++find_package(fmt REQUIRED)
++if(TARGET fmt AND NOT TARGET fmt::fmt)
++  add_library(fmt::fmt ALIAS fmt)
++endif()
+ 
+ #nlohmann json
+-FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
+-FetchContent_MakeAvailable(json)
++find_package(nlohmann_json 3.2.0 REQUIRED)
++if(TARGET nlohmann_json AND NOT TARGET nlohmann_json::nlohmann_json)
++  add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
++endif()
+ 
+ # yaml-cpp
+-FetchContent_Declare(yaml-cpp
+-  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git)
+-FetchContent_MakeAvailable(yaml-cpp)
++find_package(yaml-cpp REQUIRED)
++# yaml-cpp system package provides 'yaml-cpp' target, create alias for namespace version
++if(TARGET yaml-cpp AND NOT TARGET yaml-cpp::yaml-cpp)
++  add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
++endif()
+ 
+ if(ESBMC_CHERI_CLANG)
++  include(FetchContent)
+   FetchContent_Declare(cheri_compressed_cap
+     GIT_REPOSITORY https://github.com/CTSRD-CHERI/cheri-compressed-cap.git)
+   FetchContent_GetProperties(cheri_compressed_cap)

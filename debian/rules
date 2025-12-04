@@ -1,0 +1,35 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=cmake
+
+export DEB_CFLAGS_MAINT_APPEND=-fno-lto
+export DEB_CXXFLAGS_MAINT_APPEND=-fno-lto
+export DEB_LDFLAGS_MAINT_APPEND=-fno-lto -Wl,--unresolved-symbols=ignore-in-object-files
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf obj-*/.cmake obj-*/CMakeCache.txt obj-*/CMakeFiles
+	find . -name "CMakeCache.txt" -delete 2>/dev/null || true
+	find . -name "CMakeFiles" -type d -exec rm -rf {} + 2>/dev/null || true
+	find . -name "ac_config.h" -delete 2>/dev/null || true
+
+override_dh_auto_configure:
+	pip3 install --user ast2json || true
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_STATIC=OFF \
+		-DDOWNLOAD_DEPENDENCIES=OFF \
+		-DBUILD_TESTING=OFF \
+		-DENABLE_Z3=ON \
+		-DENABLE_BOOLECTOR=OFF \
+		-DENABLE_MATHSAT=OFF \
+		-DENABLE_YICES=OFF \
+		-DENABLE_BITWUZLA=OFF \
+		-DENABLE_CVC4=OFF \
+		-DENABLE_CVC5=OFF \
+		-DENABLE_PYTHON_FRONTEND=ON \
+		-DZ3_DIR=/usr
+
+override_dh_auto_test:
+	# Skip tests during package build

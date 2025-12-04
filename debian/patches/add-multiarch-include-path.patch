@@ -1,0 +1,30 @@
+Description: Add multiarch include path to fix bits/libc-header-start.h not found
+ This patch adds the multiarch include path (/usr/include/x86_64-linux-gnu)
+ to Clang's compiler arguments when building on Linux systems. This fixes
+ the compilation error when building clib32.goto and clib32_fp.goto where
+ the system header fenv.h requires bits/libc-header-start.h.
+Author: Weiqi Wang <lukewang19@icloud.com>
+Forwarded: no
+
+--- a/src/clang-c-frontend/clang_c_language.cpp
++++ b/src/clang-c-frontend/clang_c_language.cpp
+@@ -52,6 +52,17 @@ void clang_c_languaget::build_include_args(
+   compiler_args.push_back("-resource-dir");
+   compiler_args.push_back(clang_resource_dir());
+ 
++  // Add multiarch include path for Linux systems to find bits/libc-header-start.h
++  if (config.ansi_c.target.os == "linux" && !config.ansi_c.target.arch.empty())
++  {
++    std::string multiarch_path = "/usr/include/" + config.ansi_c.target.arch + "-linux-gnu";
++    if (boost::filesystem::exists(multiarch_path))
++    {
++      compiler_args.push_back("-isystem");
++      compiler_args.push_back(multiarch_path);
++    }
++  }
++
+   for (const auto &dir : config.ansi_c.idirafter_paths)
+   {
+     compiler_args.push_back("-idirafter");
+     compiler_args.push_back(dir);
+   }

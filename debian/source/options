@@ -1,0 +1,1 @@
+extend-diff-ignore = "^build/|^\.cache/|^obj-|^release/|^\.idea/|^\.vscode/|^\.vs/|^\.mypy_cache/|^__pycache__/|^\.claude/|\.DS_Store$|\.pyc$|\.a$|\.o$|^src/solvers/smtlib/smtlib\.(cpp|hpp|tok\.hpp)$|^src/solvers/solver_config\.h$|^create-orig-tarball\.sh$|^regression/"

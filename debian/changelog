@@ -1,0 +1,213 @@
+esbmc (7.11.0+fix1-9) noble; urgency=medium
+
+  * Fix C++ frontend stddef.h resolution: add multiarch include path
+    (/usr/include/<arch>-linux-gnu) to Clang compiler arguments so that
+    #include_next <stddef.h> in ESBMC's header wrappers can find the system
+    stddef.h (fixes "fatal error: 'stddef.h' file not found" when parsing C++ code)
+  * Fix Python frontend mypy invocation: use python -m mypy instead of
+    relying on a standalone "mypy" executable in PATH (fixes
+    FileNotFoundError when python3-mypy package is installed but no mypy
+    binary is available)
+  * Add python3-mypy runtime dependency for Python frontend (parser.py requires mypy)
+  * Add libstdc++6 and libstdc++-dev runtime dependencies for C++ standard library
+    support (Clang needs system C++ headers to parse user code)
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+  * Add missing build dependencies: libc6-dev, linux-libc-dev, and gcc-multilib
+  * Fix compilation error: missing bits/libc-header-start.h when building
+    clib32.goto and clib32_fp.goto
+  * Add multiarch include path (/usr/include/x86_64-linux-gnu) to Clang
+    compiler arguments to find bits/libc-header-start.h
+  * Fix compilation error: missing gnu/stubs-32.h when building 32-bit code
+    (clib32.goto and clib32_fp.goto) by adding gcc-multilib dependency
+  * Enable Python frontend support: add -DENABLE_PYTHON_FRONTEND=ON and
+    install ast2json via pip during build
+  * Use alternative dependencies (llvm-16-dev | llvm-14-dev) to support
+    both Ubuntu 22.04 and 24.04
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 02:10:00 +0000
+
+esbmc (7.11.0+fix1-9~jammy1) jammy; urgency=medium
+
+  * Backport to Ubuntu 22.04 Jammy
+  * Fix C++ frontend stddef.h resolution: add multiarch include path
+    (/usr/include/<arch>-linux-gnu) to Clang compiler arguments so that
+    #include_next <stddef.h> in ESBMC's header wrappers can find the system
+    stddef.h (fixes "fatal error: 'stddef.h' file not found" when parsing C++ code)
+  * Fix Python frontend mypy invocation: use python -m mypy instead of
+    relying on a standalone "mypy" executable in PATH (fixes
+    FileNotFoundError when python3-mypy package is installed but no mypy
+    binary is available)
+  * Add python3-mypy runtime dependency for Python frontend (parser.py requires mypy)
+  * Add libstdc++6 and libstdc++-dev runtime dependencies for C++ standard library
+    support (Clang needs system C++ headers to parse user code)
+  * Fix fmt::underlying compatibility: add compatibility layer for fmt < 9.0.0
+    to support Ubuntu 22.04's older fmt library version
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+  * Add missing build dependencies: libc6-dev, linux-libc-dev, and gcc-multilib
+  * Fix compilation error: missing bits/libc-header-start.h when building
+    clib32.goto and clib32_fp.goto
+  * Add multiarch include path (/usr/include/x86_64-linux-gnu) to Clang
+    compiler arguments to find bits/libc-header-start.h
+  * Fix compilation error: missing gnu/stubs-32.h when building 32-bit code
+    (clib32.goto and clib32_fp.goto) by adding gcc-multilib dependency
+  * Enable Python frontend support: add -DENABLE_PYTHON_FRONTEND=ON and
+    install ast2json via pip during build
+  * Use alternative dependencies (llvm-16-dev | llvm-14-dev) to support
+    both Ubuntu 22.04 and 24.04
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 02:20:00 +0000
+
+esbmc (7.11.0+fix1-7~jammy1) jammy; urgency=medium
+
+  * Backport to Ubuntu 22.04 Jammy
+  * Fix fmt::underlying compatibility: add compatibility layer for fmt < 9.0.0
+    to support Ubuntu 22.04's older fmt library version
+
+esbmc (7.11.0+fix1-6~jammy1) jammy; urgency=medium
+
+  * Backport to Ubuntu 22.04 Jammy
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+  * Add missing build dependencies: libc6-dev, linux-libc-dev, and gcc-multilib
+  * Fix compilation error: missing bits/libc-header-start.h when building
+    clib32.goto and clib32_fp.goto
+  * Add multiarch include path (/usr/include/x86_64-linux-gnu) to Clang
+    compiler arguments to find bits/libc-header-start.h
+  * Fix compilation error: missing gnu/stubs-32.h when building 32-bit code
+    (clib32.goto and clib32_fp.goto) by adding gcc-multilib dependency
+  * Enable Python frontend support: add -DENABLE_PYTHON_FRONTEND=ON and
+    install ast2json via pip during build
+  * Use alternative dependencies (llvm-16-dev | llvm-14-dev) to support
+    both Ubuntu 22.04 and 24.04
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 00:50:00 +0000
+
+esbmc (7.11.0+fix1-6) noble; urgency=medium
+
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+  * Add missing build dependencies: libc6-dev, linux-libc-dev, and gcc-multilib
+  * Fix compilation error: missing bits/libc-header-start.h when building
+    clib32.goto and clib32_fp.goto
+  * Add multiarch include path (/usr/include/x86_64-linux-gnu) to Clang
+    compiler arguments to find bits/libc-header-start.h
+  * Fix compilation error: missing gnu/stubs-32.h when building 32-bit code
+    (clib32.goto and clib32_fp.goto) by adding gcc-multilib dependency
+  * Enable Python frontend support: add -DENABLE_PYTHON_FRONTEND=ON and
+    install ast2json via pip during build
+  * Add support for Ubuntu 22.04 (jammy): use alternative dependencies
+    (llvm-16-dev | llvm-14-dev) to support both Ubuntu 22.04 and 24.04
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 00:45:00 +0000
+
+esbmc (7.11.0+fix1-5) noble; urgency=medium
+
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+  * Add missing build dependencies: libc6-dev, linux-libc-dev, and gcc-multilib
+  * Fix compilation error: missing bits/libc-header-start.h when building
+    clib32.goto and clib32_fp.goto
+  * Add multiarch include path (/usr/include/x86_64-linux-gnu) to Clang
+    compiler arguments to find bits/libc-header-start.h
+  * Fix compilation error: missing gnu/stubs-32.h when building 32-bit code
+    (clib32.goto and clib32_fp.goto) by adding gcc-multilib dependency
+  * Enable Python frontend support: add -DENABLE_PYTHON_FRONTEND=ON and
+    install ast2json via pip during build
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 00:35:00 +0000
+
+esbmc (7.11.0+fix1-4) noble; urgency=medium
+
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+  * Add missing build dependencies: libc6-dev, linux-libc-dev, and gcc-multilib
+  * Fix compilation error: missing bits/libc-header-start.h when building
+    clib32.goto and clib32_fp.goto
+  * Add multiarch include path (/usr/include/x86_64-linux-gnu) to Clang
+    compiler arguments to find bits/libc-header-start.h
+  * Fix compilation error: missing gnu/stubs-32.h when building 32-bit code
+    (clib32.goto and clib32_fp.goto) by adding gcc-multilib dependency
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 00:30:00 +0000
+
+esbmc (7.11.0+fix1-3) noble; urgency=medium
+
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+  * Add missing build dependencies: libc6-dev and linux-libc-dev
+  * Fix compilation error: missing bits/libc-header-start.h when building
+    clib32.goto and clib32_fp.goto
+  * Add multiarch include path (/usr/include/x86_64-linux-gnu) to Clang
+    compiler arguments to find bits/libc-header-start.h
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 00:25:00 +0000
+
+esbmc (7.11.0+fix1-2) noble; urgency=medium
+
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+  * Add missing build dependencies: libc6-dev and linux-libc-dev
+  * Fix compilation error: missing bits/libc-header-start.h when building
+    clib32.goto and clib32_fp.goto
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 00:20:00 +0000
+
+esbmc (7.11.0+fix1-1) noble; urgency=medium
+
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+  * Add missing build dependency: linux-libc-dev
+  * Fix compilation error: missing bits/libc-header-start.h when building
+    clib32.goto and clib32_fp.goto
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 00:15:00 +0000
+
+esbmc (7.11.0-2) noble; urgency=medium
+
+  * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+    ambiguity with std::format_to in GCC 13
+  * Fix compilation errors in formatter specializations for:
+    - bigint, irep_idt, typet, exprt, expr2t, type2t
+    - irept, locationt, symbolt, side_effect_expr_function_callt
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Wed, 04 Dec 2024 00:00:00 +0000
+
+esbmc (7.11.0-1) noble; urgency=medium
+
+  * Initial release for Ubuntu PPA
+  * Built with Z3 solver support (version 4.8.12)
+  * Support for C/C++ program verification
+  * Built with LLVM 16 and Clang 16
+  * Use system libraries (fmt, yaml-cpp, nlohmann-json) instead of bundled versions
+  * Disabled LTO for compatibility with build system
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Tue, 03 Dec 2024 22:20:00 +0000

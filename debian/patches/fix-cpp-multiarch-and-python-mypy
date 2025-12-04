@@ -1,0 +1,99 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ esbmc (7.11.0+fix1-8~jammy1) jammy; urgency=medium
+ .
+   * Backport to Ubuntu 22.04 Jammy
+   * Add python3-mypy runtime dependency for Python frontend (parser.py requires mypy)
+   * Add libstdc++6 and libstdc++-dev runtime dependencies for C++ standard library
+     support (Clang needs system C++ headers to parse user code)
+   * Fix fmt::underlying compatibility: add compatibility layer for fmt < 9.0.0
+     to support Ubuntu 22.04's older fmt library version
+   * Fix C++23 compatibility: explicitly use fmt::format_to to avoid
+     ambiguity with std::format_to in GCC 13
+   * Fix compilation errors in formatter specializations for:
+     - bigint, irep_idt, typet, exprt, expr2t, type2t
+     - irept, locationt, symbolt, side_effect_expr_function_callt
+   * Add missing build dependencies: libc6-dev, linux-libc-dev, and gcc-multilib
+   * Fix compilation error: missing bits/libc-header-start.h when building
+     clib32.goto and clib32_fp.goto
+   * Add multiarch include path (/usr/include/x86_64-linux-gnu) to Clang
+     compiler arguments to find bits/libc-header-start.h
+   * Fix compilation error: missing gnu/stubs-32.h when building 32-bit code
+     (clib32.goto and clib32_fp.goto) by adding gcc-multilib dependency
+   * Enable Python frontend support: add -DENABLE_PYTHON_FRONTEND=ON and
+     install ast2json via pip during build
+   * Use alternative dependencies (llvm-16-dev | llvm-14-dev) to support
+     both Ubuntu 22.04 and 24.04
+Author: Weiqi Wang <lukewang19@icloud.com>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: <vendor|upstream|other>, <url of original patch>
+Bug: <url in upstream bugtracker>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: <no|not-needed|url proving that it has been forwarded>
+Reviewed-By: <name and email of someone who approved the patch>
+Last-Update: 2025-12-04
+
+--- esbmc-7.11.0+fix1.orig/src/clang-c-frontend/clang_c_language.cpp
++++ esbmc-7.11.0+fix1/src/clang-c-frontend/clang_c_language.cpp
+@@ -49,6 +49,29 @@ void clang_c_languaget::build_include_ar
+     compiler_args.push_back("-Wno-implicit-function-declaration");
+   }
+ 
++  // On some distributions (e.g., Ubuntu 24.04), the system C headers such as
++  // stddef.h only live in the multiarch directory
++  //   /usr/include/<arch>-linux-gnu
++  // and are not reachable from the ESBMC sysroot alone.  Our internal
++  // header wrappers (e.g., headers/stddef.h) use `#include_next <stddef.h>`
++  // to fall back to the system variant, so we must ensure that Clang can
++  // actually see the multiarch include directory.
++  //
++  // This is particularly important for the C++ frontend, where standard
++  // library headers from the host toolchain include <cstddef>, which
++  // in turn relies on stddef.h being resolvable via include_next.
++  if (config.ansi_c.target.os == "linux" && !config.ansi_c.target.arch.empty())
++  {
++    std::string multiarch_path =
++      "/usr/include/" + config.ansi_c.target.arch + "-linux-gnu";
++
++    if (boost::filesystem::exists(multiarch_path))
++    {
++      compiler_args.push_back("-isystem");
++      compiler_args.push_back(multiarch_path);
++    }
++  }
++
+   compiler_args.push_back("-resource-dir");
+   compiler_args.push_back(clang_resource_dir());
+ 
+--- esbmc-7.11.0+fix1.orig/src/python-frontend/parser.py
++++ esbmc-7.11.0+fix1/src/python-frontend/parser.py
+@@ -455,10 +455,15 @@ def main():
+     output_dir = sys.argv[2]
+ 
+     # Type checking input program with mypy
++    # Use the current Python interpreter to invoke mypy as a module to avoid
++    # relying on a standalone "mypy" executable being present in $PATH.  This
++    # works reliably with the python3-mypy package on Debian/Ubuntu, where the
++    # library is importable as "mypy" even if no "mypy" binary is installed.
++    mypy_cmd = [sys.executable, "-m", "mypy", "--strict", filename]
+     result = subprocess.run(
+-    ["mypy", "--strict", filename],
+-    capture_output=True,
+-    text=True)
++        mypy_cmd,
++        capture_output=True,
++        text=True)
+ 
+     if result.returncode != 0:
+         print("\033[93m\nType checking warning:\033[0m")
