@@ -70,21 +70,19 @@ goto_symext::goto_symext(
     {
       std::string::size_type comma = func_set.find(",", start);
       std::string val = func_set.substr(
-        start,
-        comma == std::string::npos ? std::string::npos : comma - start);
+        start, comma == std::string::npos ? std::string::npos : comma - start);
 
       // Parse name:index:bound format
       std::string::size_type first_colon = val.find(":");
-      std::string::size_type second_colon =
-        first_colon != std::string::npos ? val.find(":", first_colon + 1)
-                                         : std::string::npos;
+      std::string::size_type second_colon = first_colon != std::string::npos
+                                              ? val.find(":", first_colon + 1)
+                                              : std::string::npos;
 
       if (first_colon != std::string::npos && second_colon != std::string::npos)
       {
         std::string user_name = val.substr(0, first_colon);
-        unsigned loop_index =
-          atoi(val.substr(first_colon + 1, second_colon - first_colon - 1)
-                 .c_str());
+        unsigned loop_index = atoi(
+          val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
         BigInt bound(val.substr(second_colon + 1).c_str());
 
         // Convert user syntax to internal USR format with trailing #
@@ -918,9 +916,11 @@ void goto_symext::replace_nondet(expr2tc &expr)
   }
   else
   {
-    expr->Foreach_operand([this](expr2tc &e) {
-      if (!is_nil_expr(e))
-        replace_nondet(e);
-    });
+    expr->Foreach_operand(
+      [this](expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          replace_nondet(e);
+      });
   }
 }
