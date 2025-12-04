@@ -237,3 +237,11 @@ void generate_testcase(
   const std::string &file_name,
   const symex_target_equationt &target,
   smt_convt &smt_conv);
+
+/// Generate pytest test file from counterexample (Python frontend)
+void generate_testcase_python(
+  const std::string &file_name,
+  const symex_target_equationt &target,
+  smt_convt &smt_conv,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
