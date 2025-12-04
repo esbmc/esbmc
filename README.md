@@ -22,7 +22,7 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 ### How to build/install ESBMC
 
-### Installing via PPA (Ubuntu - Recommended)
+#### Installing via PPA (Ubuntu - Recommended)
 
 The easiest way to install ESBMC on Ubuntu is through our official [PPA](https://launchpad.net/~esbmc/+archive/ubuntu/esbmc), which provides stable releases for automatic installation:
 
