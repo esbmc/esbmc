@@ -1,0 +1,4 @@
+CORE
+main.c
+--printf-check
+^  printf format specifier \%s requires pointer argument$

@@ -14,13 +14,25 @@ ESBMC supports:
 - Implements the Solidity grammar production rules as its Solidity frontend;
 - Supports IEEE floating-point arithmetic for various SMT solvers.
 
-ESBMC also implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
+ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
 We provide some background material/publications to help you understand what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). For further information about our main components, check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md).
 
 Our main website is [esbmc.org](http://esbmc.org). 
 
 ### How to build/install ESBMC
+
+#### Installing via PPA (Ubuntu - Recommended)
+
+The easiest way to install ESBMC on Ubuntu is through our official [PPA](https://launchpad.net/~esbmc/+archive/ubuntu/esbmc), which provides stable releases for automatic installation:
+
+````
+sudo add-apt-repository ppa:esbmc/esbmc
+sudo apt update
+sudo apt install esbmc
+````
+
+This method is recommended for general users and supports Ubuntu 22.04 (Jammy) and 24.04 (Noble).
 
 #### Ubuntu 24.04
 
@@ -321,6 +333,22 @@ esbmc program.c --generate-html-report
 ```
 
 For detailed information about HTML reports, including keyboard shortcuts and interactive features, please see the [HTML Reports Documentation](HTML_REPORTS.md).
+
+### Coverage Analysis
+
+ESBMC supports coverage analysis to assess how adequately the test inputs cover the code. 
+
+Supported coverage modes:
+- **Branch coverage**: Verifies that all branches of conditional statements are executed
+- **Condition coverage**: Verifies each boolean sub-expression evaluates to both true and false
+- **Assertion coverage**: Verifies that all assertions in the code are reached
+Example usage:
+```bash
+esbmc program.c --branch-coverage
+
+esbmc program.py --condition-coverage
+```
+For detailed information for coverage, please see the [Coverage Documentation](COVERAGE.md)
 
 ### Features
 

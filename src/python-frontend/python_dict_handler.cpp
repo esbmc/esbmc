@@ -256,22 +256,27 @@ exprt python_dict_handler::handle_dict_subscript(
   if (expected_type.is_floatbv())
   {
     typecast_exprt value_as_float_ptr(obj_value, pointer_typet(expected_type));
-    return dereference_exprt(value_as_float_ptr, expected_type);
+    dereference_exprt result(value_as_float_ptr, expected_type);
+    result.type() = expected_type;
+    return result;
   }
 
   // Handle integer types: cast void* to int*, then dereference
   if (expected_type.is_signedbv() || expected_type.is_unsignedbv())
   {
-    typet int_type = expected_type.is_nil() ? long_int_type() : expected_type;
-    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(int_type));
-    return dereference_exprt(value_as_int_ptr, int_type);
+    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(expected_type));
+    dereference_exprt result(value_as_int_ptr, expected_type);
+    result.type() = expected_type;
+    return result;
   }
 
   // Handle boolean types: cast void* to bool*, then dereference
   if (expected_type.is_bool())
   {
     typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
-    return dereference_exprt(value_as_bool_ptr, bool_type());
+    dereference_exprt result(value_as_bool_ptr, bool_type());
+    result.type() = bool_type();
+    return result;
   }
 
   // Default: cast void* to char* for string values
@@ -293,20 +298,47 @@ void python_dict_handler::handle_dict_subscript_assign(
   member_exprt keys_member(dict_expr, "keys", list_type);
   member_exprt values_member(dict_expr, "values", list_type);
 
-  const symbolt *push_func =
-    symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
-  if (!push_func)
-    throw std::runtime_error("__ESBMC_list_push not found");
+  // Check if key exists using membership test
+  nlohmann::json dummy_json;
+  python_list list_handler_check(converter_, dummy_json);
+  exprt key_exists = list_handler_check.contains(key_expr, keys_member);
+
+  // Create the "key exists" branch: update existing value
+  code_blockt update_block;
+
+  // Find __ESBMC_list_find_index function
+  const symbolt *find_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_find_index");
+  if (!find_func)
+    throw std::runtime_error(
+      "__ESBMC_list_find_index not found - add it to list.c model");
+
+  // Find __ESBMC_list_set_at function
+  const symbolt *set_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_set_at");
+  if (!set_func)
+    throw std::runtime_error(
+      "__ESBMC_list_set_at not found - add it to list.c model");
 
   python_list list_handler(converter_, slice_node);
 
-  // Push key
+  // Create temp for index result
+  symbolt &index_var = converter_.create_tmp_symbol(
+    slice_node, "$dict_update_idx$", size_type(), gen_zero(size_type()));
+
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  update_block.copy_to_operands(index_decl);
+
+  // Get element info for the key
   list_elem_info key_info =
     list_handler.get_list_element_info(slice_node, key_expr);
 
-  code_function_callt push_key_call;
-  push_key_call.function() = symbol_expr(*push_func);
-  push_key_call.arguments().push_back(keys_member);
+  // Call find_index(keys, key, type_hash, size) to get the index
+  code_function_callt find_call;
+  find_call.function() = symbol_expr(*find_func);
+  find_call.lhs() = symbol_expr(index_var);
+  find_call.arguments().push_back(keys_member);
 
   exprt key_arg;
   if (
@@ -316,20 +348,21 @@ void python_dict_handler::handle_dict_subscript_assign(
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
 
-  push_key_call.arguments().push_back(key_arg);
-  push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
-  push_key_call.arguments().push_back(key_info.elem_size);
-  push_key_call.type() = bool_type();
-  push_key_call.location() = location;
-  target_block.copy_to_operands(push_key_call);
+  find_call.arguments().push_back(key_arg);
+  find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  find_call.arguments().push_back(key_info.elem_size);
+  find_call.type() = size_type();
+  find_call.location() = location;
+  update_block.copy_to_operands(find_call);
 
-  // Push value
+  // Update value at index using list_set_at
   list_elem_info value_info =
     list_handler.get_list_element_info(slice_node, value);
 
-  code_function_callt push_value_call;
-  push_value_call.function() = symbol_expr(*push_func);
-  push_value_call.arguments().push_back(values_member);
+  code_function_callt set_value_call;
+  set_value_call.function() = symbol_expr(*set_func);
+  set_value_call.arguments().push_back(values_member);
+  set_value_call.arguments().push_back(symbol_expr(index_var));
 
   exprt value_arg;
   if (
@@ -339,12 +372,51 @@ void python_dict_handler::handle_dict_subscript_assign(
   else
     value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
 
+  set_value_call.arguments().push_back(value_arg);
+  set_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
+  set_value_call.arguments().push_back(value_info.elem_size);
+  set_value_call.type() = bool_type();
+  set_value_call.location() = location;
+  update_block.copy_to_operands(set_value_call);
+
+  // Create the "key doesn't exist" branch: push new key-value pair
+  code_blockt insert_block;
+
+  const symbolt *push_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
+  if (!push_func)
+    throw std::runtime_error("__ESBMC_list_push not found");
+
+  // Push key
+  code_function_callt push_key_call;
+  push_key_call.function() = symbol_expr(*push_func);
+  push_key_call.arguments().push_back(keys_member);
+  push_key_call.arguments().push_back(key_arg);
+  push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  push_key_call.arguments().push_back(key_info.elem_size);
+  push_key_call.type() = bool_type();
+  push_key_call.location() = location;
+  insert_block.copy_to_operands(push_key_call);
+
+  // Push value
+  code_function_callt push_value_call;
+  push_value_call.function() = symbol_expr(*push_func);
+  push_value_call.arguments().push_back(values_member);
   push_value_call.arguments().push_back(value_arg);
   push_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
   push_value_call.arguments().push_back(value_info.elem_size);
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
-  target_block.copy_to_operands(push_value_call);
+  insert_block.copy_to_operands(push_value_call);
+
+  // Create if-then-else: if (key_exists) { update } else { insert }
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = key_exists;
+  if_stmt.then_case() = update_block;
+  if_stmt.else_case() = insert_block;
+  if_stmt.location() = location;
+
+  target_block.copy_to_operands(if_stmt);
 }
 
 exprt python_dict_handler::handle_dict_membership(

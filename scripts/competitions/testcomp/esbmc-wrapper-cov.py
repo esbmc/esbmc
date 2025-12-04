@@ -203,6 +203,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
       command_line += "--branch-function-coverage "
   elif prop == Property.reach:
     command_line += "--base-k-step 5 --enable-unreachability-intrinsic "
+    command_line += "--generate-testcase "
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
@@ -295,6 +296,11 @@ elif "COVER( init(main()), FQL(COVER EDGES(@BASICBLOCKENTRY)) )" in property_fil
 elif "COVER( init(main()), FQL(COVER EDGES(@CALL(__VERIFIER_error))) )" in property_file_content:
     category_property = Property.reach
 elif "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )" in property_file_content:
+    category_property = Property.reach
+# 2025 new properties: 
+elif "COVER( init(main()), FQL(COVER EDGES(@CALL(reach_error))) )" in property_file_content:
+    category_property = Property.reach 
+elif "CHECK( init(main()), LTL(G ! call(reach_error())) )" in property_file_content:
     category_property = Property.reach
 else:
     print ("Unsupported Property")

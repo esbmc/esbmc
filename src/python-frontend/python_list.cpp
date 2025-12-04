@@ -35,7 +35,7 @@ static typet get_elem_type_from_annotation(
   const auto &annotation = node["annotation"];
 
   // Case 1: Direct subscript annotation like list[str]
-  if (annotation.contains("slice"))
+  if (annotation.is_object() && annotation.contains("slice"))
   {
     typet elem_type = extract_subscript_elem(annotation);
     if (elem_type != typet())
@@ -43,10 +43,15 @@ static typet get_elem_type_from_annotation(
   }
 
   // Case 2: Union type annotation such as list[str] | None
-  if (annotation["_type"] == "BinOp")
+  if (
+    annotation.is_object() && annotation.contains("_type") &&
+    annotation["_type"] == "BinOp")
   {
     // Try left side first (e.g., handles list[str] | None)
-    if (annotation["left"]["_type"] == "Subscript")
+    if (
+      annotation.contains("left") && annotation["left"].is_object() &&
+      annotation["left"].contains("_type") &&
+      annotation["left"]["_type"] == "Subscript")
     {
       typet elem_type = extract_subscript_elem(annotation["left"]);
       if (elem_type != typet())
@@ -54,7 +59,10 @@ static typet get_elem_type_from_annotation(
     }
 
     // Try right side (e.g., handles None | list[str])
-    if (annotation["right"]["_type"] == "Subscript")
+    if (
+      annotation.contains("right") && annotation["right"].is_object() &&
+      annotation["right"].contains("_type") &&
+      annotation["right"]["_type"] == "Subscript")
     {
       typet elem_type = extract_subscript_elem(annotation["right"]);
       if (elem_type != typet())
@@ -450,23 +458,15 @@ symbolt &python_list::create_list()
   return list_symbol;
 }
 
-exprt python_list::get(bool is_set)
+exprt python_list::get()
 {
   symbolt &list_symbol = create_list();
-  list_symbol.is_set = true;
 
   const std::string &list_id = list_symbol.id.as_string();
 
-  // TODO: if same element is added indirectly this will fail
-  //       e.g. (2, 1+1)
-  std::set<exprt> elements;
   for (auto &e : list_value_["elts"])
   {
     exprt elem = converter_.get_expr(e);
-    if (is_set && elements.count(elem))
-      continue;
-
-    elements.insert(elem);
     exprt list_push_func_call =
       build_push_list_call(list_symbol, list_value_, elem);
     converter_.add_instruction(list_push_func_call);
@@ -658,19 +658,46 @@ exprt python_list::handle_range_slice(
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
-  // Get bound expressions (handles null/missing)
-  auto get_list_bound = [&](const std::string &bound_name) -> exprt {
+  auto get_list_bound =
+    [&](const std::string &bound_name, bool is_upper) -> exprt {
     if (slice_node.contains(bound_name) && !slice_node[bound_name].is_null())
       return converter_.get_expr(slice_node[bound_name]);
 
-    // For lists, we'd need the list size here, but that's not easily accessible
-    // For now, keep existing behavior - assumes bounds are present
-    throw std::runtime_error(
-      "List slicing with missing bounds not yet supported");
+    if (is_upper)
+    {
+      const symbolt *size_func =
+        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+      assert(size_func);
+
+      side_effect_expr_function_callt size_call;
+      size_call.function() = symbol_expr(*size_func);
+
+      // Check if array is already a pointer, don't take address again
+      if (array.type().is_pointer())
+        size_call.arguments().push_back(array); // Already a pointer
+      else
+        size_call.arguments().push_back(
+          address_of_exprt(array)); // Take address
+
+      size_call.type() = size_type();
+      size_call.location() = converter_.get_location_from_decl(list_value_);
+
+      symbolt &size_sym = converter_.create_tmp_symbol(
+        list_value_, "$list_size$", size_type(), exprt());
+      code_declt size_decl(symbol_expr(size_sym));
+      size_decl.copy_to_operands(size_call);
+      converter_.add_instruction(size_decl);
+
+      return symbol_expr(size_sym);
+    }
+    else
+    {
+      return gen_zero(size_type());
+    }
   };
 
-  const exprt lower_expr = get_list_bound("lower");
-  const exprt upper_expr = get_list_bound("upper");
+  const exprt lower_expr = get_list_bound("lower", false);
+  const exprt upper_expr = get_list_bound("upper", true);
 
   // Initialize counter: int counter = lower
   symbolt &counter = converter_.create_tmp_symbol(
@@ -1311,13 +1338,18 @@ exprt python_list::build_extend_list_call(
   return extend_func_call;
 }
 
-exprt python_list::get_empty_set()
+typet python_list::get_list_element_type(
+  const std::string &list_id,
+  size_t index)
 {
-  // Create an empty list structure for the set
-  symbolt &list_symbol = create_list();
-  list_symbol.is_set = true;
+  auto type_map_it = list_type_map.find(list_id);
 
-  // No elements to add for empty set
-  // Type information will be determined when elements are added
-  return symbol_expr(list_symbol);
+  if (type_map_it == list_type_map.end() || type_map_it->second.empty())
+    return typet();
+
+  // If index is out of bounds, return the first element's type
+  if (index >= type_map_it->second.size())
+    index = 0;
+
+  return type_map_it->second[index].second;
 }

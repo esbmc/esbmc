@@ -99,6 +99,7 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_NUMPY numpy)
     set(REGRESSIONS_HUMANEVAL humaneval)
     set(REGRESSIONS_QUIXBUGS quixbugs)
+    set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
 endif()
 
 if(ESBMC_CHERI_CLANG)
@@ -195,6 +196,7 @@ if(APPLE)
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_PYTHON_COVERAGE}
                     ltl
                     goto-transcoder
                     loop-invariants
@@ -259,6 +261,7 @@ else()
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_PYTHON_COVERAGE}
                     ltl
                     goto-coverage
                     goto-transcoder

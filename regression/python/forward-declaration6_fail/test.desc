@@ -1,4 +1,5 @@
 CORE
 main.py
 
-^ERROR\: Function \"g\" not found \(.*main\.py line 2\)$
+Unsupported function 'g' is reached
+

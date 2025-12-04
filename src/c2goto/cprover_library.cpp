@@ -167,7 +167,9 @@ const static std::vector<std::string> python_c_models = {
   "__python_chr",
   "__python_str_concat",
   "__ESBMC_list_find_index",
-  "__ESBMC_list_remove_at"};
+  "__ESBMC_list_remove_at",
+  "__ESBMC_list_set_at",
+  "__ESBMC_list_pop"};
 } // namespace
 
 static void generate_symbol_deps(

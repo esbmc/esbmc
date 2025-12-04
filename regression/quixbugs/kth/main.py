@@ -14,7 +14,7 @@ def kth(arr, k):
     else:
         return pivot
 
-#assert kth([1, 2, 3, 4, 5, 6, 7], 4) == 5
+assert kth([1, 2, 3, 4, 5, 6, 7], 4) == 5
 #assert kth([3, 6, 7, 1, 6, 3, 8, 9], 5) == 7
 #assert kth([3, 6, 7, 1, 6, 3, 8, 9], 2) == 3
 #assert kth([2, 6, 8, 3, 5, 7], 0) == 2
