@@ -6,6 +6,7 @@
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
+#include <util/usr_utils.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>
@@ -60,41 +61,47 @@ goto_symext::goto_symext(
     idx = next;
   }
 
-  // Parse --unwindsetname option (function_name:loop_index:bound,...)
+  // Parse --unwindsetname option (name:loop_index:bound,...)
   const std::string &func_set = options.get_option("unwindsetname");
-  unsigned int func_length = func_set.length();
-
-  for (unsigned int idx = 0; idx < func_length; idx++)
+  if (!func_set.empty())
   {
-    std::string::size_type next = func_set.find(",", idx);
-    std::string val = func_set.substr(idx, next - idx);
-
-    // Parse function_name:loop_index:bound
-    std::string::size_type first_colon = val.find(":");
-    if (first_colon != std::string::npos)
+    std::string::size_type start = 0;
+    while (start < func_set.length())
     {
-      std::string::size_type second_colon = val.find(":", first_colon + 1);
-      if (second_colon != std::string::npos)
+      std::string::size_type comma = func_set.find(",", start);
+      std::string val = func_set.substr(
+        start,
+        comma == std::string::npos ? std::string::npos : comma - start);
+
+      // Parse name:index:bound format
+      std::string::size_type first_colon = val.find(":");
+      std::string::size_type second_colon =
+        first_colon != std::string::npos ? val.find(":", first_colon + 1)
+                                         : std::string::npos;
+
+      if (first_colon != std::string::npos && second_colon != std::string::npos)
       {
-        // Three-part format: function:index:bound
-        std::string func_name = val.substr(0, first_colon);
+        std::string user_name = val.substr(0, first_colon);
+        unsigned loop_index =
+          atoi(val.substr(first_colon + 1, second_colon - first_colon - 1)
+                 .c_str());
+        BigInt bound(val.substr(second_colon + 1).c_str());
 
-        // Auto-prepend "c:@" if not present (for cleaner user syntax)
-        if (func_name.substr(0, 3) != "c:@")
-          func_name = "c:@" + func_name;
+        // Convert user syntax to internal USR format with trailing #
+        std::string usr_name = user_name_to_usr(user_name);
 
-        unsigned loop_index = atoi(val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
-        BigInt uw(val.substr(second_colon + 1).c_str());
-        unwind_func_set[std::make_pair(func_name, loop_index)] = uw;
+        // Only add valid entries (must have function name)
+        if (!usr_name.empty())
+          unwind_func_set[std::make_pair(usr_name, loop_index)] = bound;
       }
-    }
 
-    if (next == std::string::npos)
-      break;
-    idx = next;
+      if (comma == std::string::npos)
+        break;
+      start = comma + 1;
+    }
   }
 
-  // Build mapping from global loop IDs to per-function 0-indexed loop numbers
+  // Build mapping: global_loop_id -> (function_name, per-function loop index)
   for (const auto &func_pair : _goto_functions.function_map)
   {
     unsigned loop_index = 0;
@@ -102,7 +109,8 @@ goto_symext::goto_symext(
     {
       if (instruction.is_backwards_goto())
       {
-        loop_id_to_index[instruction.loop_number] = loop_index;
+        loop_id_to_func_index[instruction.loop_number] =
+          std::make_pair(func_pair.first.as_string(), loop_index);
         loop_index++;
       }
     }
@@ -136,7 +144,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
 {
   unwind_set = sym.unwind_set;
   unwind_func_set = sym.unwind_func_set;
-  loop_id_to_index = sym.loop_id_to_index;
+  loop_id_to_func_index = sym.loop_id_to_func_index;
   max_unwind = sym.max_unwind;
   constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
