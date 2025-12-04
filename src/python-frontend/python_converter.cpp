@@ -1383,6 +1383,9 @@ void python_converter::resolve_dict_subscript_types(
     {
       lhs = dict_handler_->handle_dict_subscript(
         dict_expr, left["slice"], rhs.type());
+      // Dereference the pointer to get the actual value
+      if (lhs.type().is_pointer())
+        lhs = dereference_exprt(lhs, lhs.type().subtype());
     }
   }
 
@@ -1396,6 +1399,9 @@ void python_converter::resolve_dict_subscript_types(
     {
       rhs = dict_handler_->handle_dict_subscript(
         dict_expr, right["slice"], lhs.type());
+      // Dereference the pointer to get the actual value
+      if (rhs.type().is_pointer())
+        rhs = dereference_exprt(rhs, rhs.type().subtype());
     }
   }
 
@@ -1413,6 +1419,9 @@ void python_converter::resolve_dict_subscript_types(
     {
       lhs = dict_handler_->handle_dict_subscript(
         lhs_dict, left["slice"], default_type);
+      // Dereference the pointer to get the actual value
+      if (lhs.type().is_pointer())
+        lhs = dereference_exprt(lhs, lhs.type().subtype());
     }
 
     exprt rhs_dict = get_expr(right["value"]);
@@ -1422,6 +1431,11 @@ void python_converter::resolve_dict_subscript_types(
     {
       rhs = dict_handler_->handle_dict_subscript(
         rhs_dict, right["slice"], default_type);
+      // Dereference the pointer to get the actual value
+      if (rhs.type().is_pointer())
+      {
+        rhs = dereference_exprt(rhs, rhs.type().subtype());
+      }
     }
   }
 }
