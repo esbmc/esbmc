@@ -257,11 +257,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name(
        "name:idx:nr,..."),
      "unwind loop idx (0-indexed) in function name with nr times.\n"
-     "\tScopes: F@func (function), N@ns@F@func# (namespace), S@class@F@method# "
-     "(class), file.c@F@func (static).\n"
-     "Example: F@compute:0:10,F@process:1:5\n Use --show-loops to see "
-     "available "
-     "functions and loop indices"},
+     "\tSyntax: func, N@ns@func, S@Class@method, file.c@func,\n"
+     "\t        N@ns@S@Class@method, file.c@N@ns@S@Class@method\n"
+     "\tExample: --unwindsetname compute:0:10,N@math@sum:1:5\n"
+     "\tUse --show-loops to see available functions and loop indices"},
     {"no-unwinding-assertions", NULL, "do not generate unwinding assertions"},
     {"no-remove-unreachable",
      NULL,
