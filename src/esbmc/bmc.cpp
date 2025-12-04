@@ -155,8 +155,22 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   if (options.get_bool_option("generate-testcase"))
   {
-    generate_testcase_metadata();
-    generate_testcase("testcase.xml", eq, smt_conv);
+    // Check if input file is Python
+    std::string input_file = options.get_option("input-file");
+    bool is_python = input_file.size() >= 3 &&
+                     input_file.substr(input_file.size() - 3) == ".py";
+
+    if (is_python)
+    {
+      // Generate pytest test file for Python
+      generate_testcase_python("test_counterexample.py", eq, smt_conv, ns, goto_trace);
+    }
+    else
+    {
+      // Generate XML test case for C (Test-Comp format)
+      generate_testcase_metadata();
+      generate_testcase("testcase.xml", eq, smt_conv);
+    }
   }
 
   if (options.get_bool_option("generate-html-report"))
@@ -480,9 +494,26 @@ void bmct::report_multi_property_trace(
 
     if (options.get_bool_option("generate-testcase"))
     {
-      generate_testcase_metadata();
-      generate_testcase(
-        "testcase-" + std::to_string(ce_counter) + ".xml", local_eq, *solver);
+      // Check if input file is Python
+      std::string input_file = options.get_option("input-file");
+      bool is_python = input_file.size() >= 3 &&
+                       input_file.substr(input_file.size() - 3) == ".py";
+
+      if (is_python)
+      {
+        // Generate pytest test file for Python
+        std::string pytest_filename =
+          "test_counterexample_" + std::to_string(ce_counter) + ".py";
+        generate_testcase_python(
+          pytest_filename, local_eq, *solver, ns, goto_trace);
+      }
+      else
+      {
+        // Generate XML test case for C (Test-Comp format)
+        generate_testcase_metadata();
+        generate_testcase(
+          "testcase-" + std::to_string(ce_counter) + ".xml", local_eq, *solver);
+      }
     }
     if (options.get_bool_option("generate-html-report"))
       generate_html_report(std::to_string(ce_counter), ns, goto_trace, options);
