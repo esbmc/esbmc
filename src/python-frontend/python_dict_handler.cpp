@@ -252,6 +252,19 @@ exprt python_dict_handler::handle_dict_subscript(
     "value",
     pointer_typet(empty_typet()));
 
+  // Handle list types
+  if (expected_type == list_type)
+  {
+    // obj_value is void* pointing to a (PyListObj*)
+    // We need to:
+    // 1. Cast void* to (PyListObj**)  - pointer to pointer to list
+    // 2. Dereference to get PyListObj*
+    typecast_exprt value_as_list_ptr_ptr(obj_value, pointer_typet(list_type));
+    dereference_exprt list_ptr(value_as_list_ptr_ptr, list_type);
+    list_ptr.type() = list_type;
+    return list_ptr;
+  }
+
   // Handle float types: cast void* to double*, then dereference
   if (expected_type.is_floatbv())
   {
