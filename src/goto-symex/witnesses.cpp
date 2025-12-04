@@ -1219,7 +1219,7 @@ void generate_testcase_python(
           }
         }
       }
-      violation_comment = step.comment.as_string();
+      violation_comment = step.comment;
       violation_property = from_expr(ns, "", step.pc->guard);
       break;
     }
