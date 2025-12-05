@@ -121,8 +121,16 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   // Calculate element size in bytes
   exprt elem_size;
 
+  // For list pointers (PyListObj*), use pointer size
+  typet list_type = converter_.get_type_handler().get_list_type();
+  if (elem_symbol.type == list_type)
+  {
+    // This is a pointer to PyListObj: use pointer size
+    const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
+    elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
+  }
   // For string pointers (char*), calculate length at runtime using strlen
-  if (
+  else if (
     elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == char_type())
   {
     // Call strlen to get actual string length

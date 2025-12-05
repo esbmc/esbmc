@@ -78,6 +78,23 @@ symbol_id function_call_builder::build_function_id() const
     // Map Python loop invariant name to ESBMC internal name
     if (func_name == kLoopInvariant)
       func_name = kEsbmcLoopInvariant;
+
+    // Try to resolve as nested function first
+    if (!current_function_name.empty())
+    {
+      std::string nested_id = current_function_name + "@F@" + func_name;
+      symbol_id nested_sid(python_file, current_class_name, nested_id);
+
+      // Check if nested function exists in symbol table
+      const symbolt *nested_symbol =
+        converter_.symbol_table().find_symbol(nested_sid.to_string());
+
+      if (nested_symbol)
+      {
+        // Found nested function - return its ID directly
+        return nested_sid;
+      }
+    }
   }
   else if (func_type == "Attribute") // Handling obj_name.func_name() calls
   {
