@@ -1413,7 +1413,7 @@ void collect_pytest_test_data(
       continue;
 
     // Try to extract function name from source location
-    if (function_name.empty() && SSA_step.source.pc &&
+    if (function_name.empty() &&
         SSA_step.source.pc->location.function() != "")
     {
       std::string full_func = SSA_step.source.pc->location.function().as_string();
