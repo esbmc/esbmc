@@ -377,18 +377,14 @@ const JsonType get_list_element(const JsonType &list_value, int pos)
   }
 
   // Handle Subscript (e.g., d['a'] where d is a dict containing lists)
-  // Return empty JSON - caller should use type annotations instead
+  // Return empty JSON: caller should use type annotations instead
   if (list_value["_type"] == "Subscript")
-  {
     return JsonType();
-  }
 
   // Handle Name reference (variable that holds a list)
-  // Return empty JSON - caller should resolve the variable
+  // Return empty JSON: caller should resolve the variable
   if (list_value["_type"] == "Name")
-  {
     return JsonType();
-  }
 
   return JsonType();
 }

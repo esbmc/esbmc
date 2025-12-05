@@ -989,47 +989,65 @@ exprt python_list::handle_index_access(
           // Check if the value is a Subscript (such as d['a'])
           if (list_node["value"]["_type"] == "Subscript")
           {
-            // First, get the dict variable name
+            // For ESBMC_iter_0 = d['a'], get element type from dict's actual value
             if (list_node["value"]["value"]["_type"] == "Name")
             {
               std::string dict_var_name =
                 list_node["value"]["value"]["id"].get<std::string>();
-              // Find the dict's declaration to get its type annotation
+
+              // Find the dict's declaration
               nlohmann::json dict_node = json_utils::find_var_decl(
                 dict_var_name,
                 converter_.current_function_name(),
                 converter_.ast());
-              if (!dict_node.is_null() && dict_node.contains("annotation"))
+
+              if (!dict_node.is_null() && dict_node.contains("value"))
               {
-                const auto &dict_annotation = dict_node["annotation"];
-                // Handle dict[K, V] annotation structure
-                if (
-                  dict_annotation["_type"] == "Subscript" &&
-                  dict_annotation["value"]["id"] == "dict" &&
-                  dict_annotation.contains("slice"))
+                const auto &dict_value = dict_node["value"];
+
+                // Get the key being accessed (e.g., 'a' in d['a'])
+                if (list_node["value"].contains("slice"))
                 {
-                  const auto &slice = dict_annotation["slice"];
-                  // For dict[str, list[int]], slice is a Tuple with two elements
+                  const auto &key_node = list_node["value"]["slice"];
+
+                  // Handle constant string key
                   if (
-                    slice["_type"] == "Tuple" && slice.contains("elts") &&
-                    slice["elts"].size() >= 2)
+                    key_node["_type"] == "Constant" &&
+                    key_node.contains("value"))
                   {
-                    // The second element is the value type (list[int])
-                    const auto &value_type = slice["elts"][1];
-                    // If the value type is list[T], extract T
+                    std::string key = key_node["value"].get<std::string>();
+
+                    // For dict literals, get the corresponding value
                     if (
-                      value_type["_type"] == "Subscript" &&
-                      value_type["value"]["id"] == "list" &&
-                      value_type.contains("slice"))
+                      dict_value["_type"] == "Dict" &&
+                      dict_value.contains("keys") &&
+                      dict_value.contains("values"))
                     {
-                      // Get the element type from list[T]
-                      const auto &list_elem_slice = value_type["slice"];
-                      if (list_elem_slice.contains("id"))
+                      const auto &keys = dict_value["keys"];
+                      const auto &values = dict_value["values"];
+
+                      // Find the matching key
+                      for (size_t i = 0; i < keys.size(); i++)
                       {
-                        std::string elem_type_name =
-                          list_elem_slice["id"].get<std::string>();
-                        elem_type = converter_.get_type_handler().get_typet(
-                          elem_type_name);
+                        if (
+                          keys[i]["_type"] == "Constant" &&
+                          keys[i]["value"].get<std::string>() == key)
+                        {
+                          // Found the value: now get its element type
+                          const auto &list_value = values[i];
+
+                          // Get the first element from the list using json_utils
+                          nlohmann::json first_elem =
+                            json_utils::get_list_element(list_value, 0);
+
+                          if (!first_elem.is_null() && !first_elem.empty())
+                          {
+                            // Use type_handler to infer the element type
+                            elem_type = converter_.get_type_handler().get_typet(
+                              first_elem);
+                          }
+                          break;
+                        }
                       }
                     }
                   }
@@ -1037,13 +1055,18 @@ exprt python_list::handle_index_access(
               }
             }
           }
-        }
-        else
-        {
-          elem_type =
-            converter_
-              .get_expr(json_utils::get_list_element(list_node["value"], 0))
-              .type();
+          else if (
+            list_node["value"].contains("elts") &&
+            list_node["value"]["elts"].is_array() &&
+            !list_node["value"]["elts"].empty())
+          {
+            // Get element type from first list element using json_utils
+            nlohmann::json first_elem =
+              json_utils::get_list_element(list_node["value"], 0);
+
+            if (!first_elem.is_null() && !first_elem.empty())
+              elem_type = converter_.get_type_handler().get_typet(first_elem);
+          }
         }
       }
     }
