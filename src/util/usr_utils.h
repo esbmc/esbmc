@@ -2,6 +2,7 @@
 #define CPROVER_UTIL_USR_UTILS_H
 
 #include <string>
+#include <string_view>
 
 /**
  * Convert user-friendly function name to Clang USR format.
@@ -17,7 +18,7 @@
  * @param user_name User-friendly function name
  * @return Clang USR format with trailing #
  */
-std::string user_name_to_usr(const std::string &user_name);
+std::string user_name_to_usr(std::string_view user_name);
 
 /**
  * Convert Clang USR format to user-friendly function name.
@@ -28,6 +29,6 @@ std::string user_name_to_usr(const std::string &user_name);
  * @param usr_name Clang USR format (e.g., c:@F@func# or c:@N@ns@S@Class@F@method#)
  * @return User-friendly name (e.g., func or N@ns@S@Class@method)
  */
-std::string usr_to_user_name(const std::string &usr_name);
+std::string usr_to_user_name(std::string_view usr_name);
 
 #endif

@@ -1,12 +1,12 @@
 #include <util/usr_utils.h>
 #include <vector>
 
-std::string user_name_to_usr(const std::string &user_name)
+std::string user_name_to_usr(std::string_view user_name)
 {
   // If already in internal USR format, ensure trailing #
   if (user_name.length() >= 3 && user_name.substr(0, 3) == "c:@")
   {
-    std::string usr = user_name;
+    std::string usr(user_name);
     if (usr.back() != '#')
       usr += '#';
     return usr;
@@ -20,10 +20,10 @@ std::string user_name_to_usr(const std::string &user_name)
     std::string::size_type next = user_name.find('@', pos);
     if (next == std::string::npos)
     {
-      parts.push_back(user_name.substr(pos));
+      parts.push_back(std::string(user_name.substr(pos)));
       break;
     }
-    parts.push_back(user_name.substr(pos, next - pos));
+    parts.push_back(std::string(user_name.substr(pos, next - pos)));
     pos = next + 1;
   }
 
@@ -71,13 +71,13 @@ std::string user_name_to_usr(const std::string &user_name)
   return "";
 }
 
-std::string usr_to_user_name(const std::string &usr_name)
+std::string usr_to_user_name(std::string_view usr_name)
 {
   // Strip "c:@" prefix if present
   if (usr_name.length() < 3 || usr_name.substr(0, 3) != "c:@")
-    return usr_name; // Not in USR format, return as-is
+    return std::string(usr_name); // Not in USR format, return as-is
 
-  std::string usr = usr_name.substr(3); // Strip "c:@" prefix
+  std::string usr(usr_name.substr(3)); // Strip "c:@" prefix
   std::string user_name;
 
   // Parse USR components: [file][@N@ns][@S@Class]@F@func#
@@ -138,5 +138,5 @@ std::string usr_to_user_name(const std::string &usr_name)
       pos++;
   }
 
-  return user_name.empty() ? usr_name : user_name;
+  return user_name.empty() ? std::string(usr_name) : user_name;
 }
