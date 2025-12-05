@@ -53,9 +53,9 @@ class TestCase:
         with open(os.path.join(self.test_dir, "test.desc")) as fp:
             # First line - TEST MODE
             self.test_mode = fp.readline().strip()
-            assert self.test_mode in SUPPORTED_TEST_MODES, (
-                str(self.test_mode) + " is not supported"
-            )
+            assert (
+                self.test_mode in SUPPORTED_TEST_MODES
+            ), f"{self.test_dir}: {self.test_mode} is not supported"
 
             # Second line - Test file
             self.test_file = fp.readline().strip()
