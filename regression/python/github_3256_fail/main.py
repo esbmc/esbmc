@@ -15,6 +15,6 @@ def fruit_basket(my_fruit: Fruit) -> list[Fruit]:
 def test_my_fruit_in_basket(my_fruit: Fruit, fruit_basket: list[Fruit]) -> None:
     assert my_fruit in fruit_basket
 
-f1 = Fruit("apple")
+f1 = Fruit("banana")
 f2 = Fruit("apple")
 assert f1.name == f2.name

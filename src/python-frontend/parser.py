@@ -237,7 +237,6 @@ def filter_imports(tree: ast.AST) -> ast.AST:
             if filtered_names:
                 node.names = filtered_names
                 filtered_body.append(node)
-            
 
         elif isinstance(node, ast.ImportFrom):
             # Filter out "from testing_framework import ..." statements
