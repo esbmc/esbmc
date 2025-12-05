@@ -15,13 +15,13 @@ if(ENABLE_PYTHON_FRONTEND)
 # Install Jira package with pip before running tests (needed by regression/python/try-fail)
 # Use --break-system-packages for externally-managed Python environments (PEP 668)
 execute_process(
-    COMMAND ${Python_EXECUTABLE} -m pip install --user --break-system-packages jira
+    COMMAND ${Python_EXECUTABLE} -m pip install --break-system-packages jira
     RESULT_VARIABLE pip_result
 )
 if(pip_result)
     # Fallback: try without --break-system-packages (for older Python or non-externally-managed)
     execute_process(
-        COMMAND ${Python_EXECUTABLE} -m pip install --user jira
+        COMMAND ${Python_EXECUTABLE} -m pip install jira
     )
 endif()
 endif()

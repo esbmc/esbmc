@@ -116,3 +116,4 @@ def is_valid_parenthesization(parens):
 assert is_valid_parenthesization("((()()))()") == True
 assert is_valid_parenthesization(")()(") == False
 assert is_valid_parenthesization("((") == False
+
