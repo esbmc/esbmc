@@ -359,6 +359,7 @@ const JsonType get_var_value(
 template <typename JsonType>
 const JsonType get_list_element(const JsonType &list_value, int pos)
 {
+  // Handle direct List node
   if (
     list_value["_type"] == "List" && list_value.contains("elts") &&
     !list_value["elts"].empty())
@@ -366,12 +367,27 @@ const JsonType get_list_element(const JsonType &list_value, int pos)
     return list_value["elts"][pos];
   }
 
+  // Handle BinOp (e.g., list concatenation or repetition)
   if (list_value["_type"] == "BinOp")
   {
     if (list_value["left"]["_type"] == "List")
       return list_value["left"]["elts"][pos];
-    if (list_value["rigth"]["_type"] == "List")
+    if (list_value["right"]["_type"] == "List")
       return list_value["right"]["elts"][pos];
+  }
+
+  // Handle Subscript (e.g., d['a'] where d is a dict containing lists)
+  // Return empty JSON - caller should use type annotations instead
+  if (list_value["_type"] == "Subscript")
+  {
+    return JsonType();
+  }
+
+  // Handle Name reference (variable that holds a list)
+  // Return empty JSON - caller should resolve the variable
+  if (list_value["_type"] == "Name")
+  {
+    return JsonType();
   }
 
   return JsonType();
