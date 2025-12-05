@@ -32,6 +32,13 @@ def is_unsupported_module(module_name):
     unsuported_modules = ["blah"]
     return module_name in unsuported_modules
 
+def is_testing_framework(module_name):
+    # Check if module is a testing framework that should be skipped.
+    testing_frameworks = [
+        "pytest",
+    ]
+    return module_name in testing_frameworks
+
 
 def import_module_by_name(module_name, output_dir):
     if is_unsupported_module(module_name):
@@ -42,6 +49,10 @@ def import_module_by_name(module_name, output_dir):
 
     # Skip typing module - it's for type annotations only and doesn't need AST processing.
     if base_module == "typing":
+        return None
+
+    # Skip testing frameworks - they don't contain logic to verify
+    if is_testing_framework(base_module):
         return None
 
     if is_imported_model(base_module):
@@ -208,6 +219,41 @@ def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
     return filename
 
 
+def filter_imports(tree: ast.AST) -> ast.AST:
+    """Remove import statements for verification-agnostic testing frameworks(import pytest) from the AST.
+    This prevents the C++ backend from trying to open JSON files for
+    imported testing frameworks that we intentionally skip.
+    """
+    filtered_body = []
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            # Filter out frameworks
+            filtered_names = []
+            for alias in node.names:
+                base_module = alias.name.split(".")[0]
+                if not is_testing_framework(base_module):
+                    filtered_names.append(alias)
+            # If all imports were testing frameworks, skip the entire import statement
+            if filtered_names:
+                node.names = filtered_names
+                filtered_body.append(node)
+            
+
+        elif isinstance(node, ast.ImportFrom):
+            # Filter out "from testing_framework import ..." statements
+            if node.module:
+                base_module = node.module.split(".")[0]
+                if not is_testing_framework(base_module):
+                    filtered_body.append(node)
+            else:
+                # Relative import without module (from . import x)
+                filtered_body.append(node)
+        else:
+            filtered_body.append(node)
+
+    tree.body = filtered_body
+    return tree
+
 def parse_file(filename: str) -> ast.AST:
     """Open, parse, and run Preprocessor on a Python source file."""
     with open(filename, "r", encoding="utf-8") as src:
@@ -331,7 +377,8 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
         - output_dir: The directory to save the generated JSON file.
     """
 
-
+    # Remove verification-agnostic testing framework imports
+    tree = filter_imports(tree)
 
     # Filter elements to be imported from the module
     filtered_nodes = []
