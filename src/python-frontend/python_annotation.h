@@ -66,8 +66,6 @@ static const std::map<std::string, std::string> builtin_functions = {
   {"oct", "str"},
   {"hex", "str"},
   {"format", "str"},
-  {"all", "bool"},
-  {"any", "bool"},
 
   // Iteration functions
   {"iter", "iterator"},

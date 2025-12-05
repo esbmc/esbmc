@@ -17,13 +17,13 @@ def all(iterable: list[Any]) -> bool:
     return True
 
 
-def any(iterable: list[Any]) -> bool:
-    """Return True if any element of the iterable is true."""
-    i: int = 0
-    length: int = len(iterable)
-    while i < length:
-        element: bool = iterable[i]
-        if element:
-            return True
-        i = i + 1
-    return False
+# def any(iterable: list[Any]) -> bool:
+#     """Return True if any element of the iterable is true."""
+#     i: int = 0
+#     length: int = len(iterable)
+#     while i < length:
+#         element: bool = iterable[i]
+#         if element:
+#             return True
+#         i = i + 1
+#     return False
