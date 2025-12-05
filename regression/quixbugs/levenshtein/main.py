@@ -24,3 +24,4 @@ assert levenshtein("rosettacode", "raisethysword") == 8
 assert levenshtein("abcdefg", "gabcdef") == 2
 assert levenshtein("", "") == 0
 assert levenshtein("hello", "olleh") == 4
+
