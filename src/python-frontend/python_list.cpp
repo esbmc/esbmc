@@ -984,7 +984,61 @@ exprt python_list::handle_index_access(
           elem_type = get_elem_type_from_annotation(
             list_node, converter_.get_type_handler());
         }
-        else if (elem_type == typet() && list_node.contains("value"))
+        else if (!list_node.is_null() && list_node.contains("value"))
+        {
+          // Check if the value is a Subscript (such as d['a'])
+          if (list_node["value"]["_type"] == "Subscript")
+          {
+            // First, get the dict variable name
+            if (list_node["value"]["value"]["_type"] == "Name")
+            {
+              std::string dict_var_name =
+                list_node["value"]["value"]["id"].get<std::string>();
+              // Find the dict's declaration to get its type annotation
+              nlohmann::json dict_node = json_utils::find_var_decl(
+                dict_var_name,
+                converter_.current_function_name(),
+                converter_.ast());
+              if (!dict_node.is_null() && dict_node.contains("annotation"))
+              {
+                const auto &dict_annotation = dict_node["annotation"];
+                // Handle dict[K, V] annotation structure
+                if (
+                  dict_annotation["_type"] == "Subscript" &&
+                  dict_annotation["value"]["id"] == "dict" &&
+                  dict_annotation.contains("slice"))
+                {
+                  const auto &slice = dict_annotation["slice"];
+                  // For dict[str, list[int]], slice is a Tuple with two elements
+                  if (
+                    slice["_type"] == "Tuple" && slice.contains("elts") &&
+                    slice["elts"].size() >= 2)
+                  {
+                    // The second element is the value type (list[int])
+                    const auto &value_type = slice["elts"][1];
+                    // If the value type is list[T], extract T
+                    if (
+                      value_type["_type"] == "Subscript" &&
+                      value_type["value"]["id"] == "list" &&
+                      value_type.contains("slice"))
+                    {
+                      // Get the element type from list[T]
+                      const auto &list_elem_slice = value_type["slice"];
+                      if (list_elem_slice.contains("id"))
+                      {
+                        std::string elem_type_name =
+                          list_elem_slice["id"].get<std::string>();
+                        elem_type = converter_.get_type_handler().get_typet(
+                          elem_type_name);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        else
         {
           elem_type =
             converter_
