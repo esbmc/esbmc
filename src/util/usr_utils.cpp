@@ -1,16 +1,36 @@
 #include <util/usr_utils.h>
 #include <vector>
 
+namespace
+{
+/**
+ * Check if a string is already in USR format.
+ * USR format: c:[@][@N@ns][@S@Class]@F@func[#]
+ */
+bool is_usr_format(std::string_view str)
+{
+  // All USRs start with "c:" and contain "@F@" (function marker)
+  return str.length() >= 3 && str.substr(0, 2) == "c:" &&
+         str.find("@F@") != std::string_view::npos;
+}
+
+/**
+ * Ensure USR string ends with '#'
+ */
+std::string ensure_usr_terminator(std::string_view usr)
+{
+  std::string result(usr);
+  if (result.back() != '#')
+    result += '#';
+  return result;
+}
+} // namespace
+
 std::string user_name_to_usr(std::string_view user_name)
 {
-  // If already in internal USR format, ensure trailing #
-  if (user_name.length() >= 3 && user_name.substr(0, 3) == "c:@")
-  {
-    std::string usr(user_name);
-    if (usr.back() != '#')
-      usr += '#';
-    return usr;
-  }
+  // If already in USR format, just ensure trailing #
+  if (is_usr_format(user_name))
+    return ensure_usr_terminator(user_name);
 
   // Split by '@' to parse scope components
   std::vector<std::string> parts;
@@ -73,29 +93,34 @@ std::string user_name_to_usr(std::string_view user_name)
 
 std::string usr_to_user_name(std::string_view usr_name)
 {
-  // Strip "c:@" prefix if present
-  if (usr_name.length() < 3 || usr_name.substr(0, 3) != "c:@")
+  // Check if it's in USR format (starts with c:)
+  if (usr_name.length() < 3 || usr_name.substr(0, 2) != "c:")
     return std::string(usr_name); // Not in USR format, return as-is
 
-  std::string usr(usr_name.substr(3)); // Strip "c:@" prefix
+  // Always strip "c:" and handle optional "@" or "file@" prefix uniformly
+  std::string usr(usr_name.substr(2)); // Strip "c:"
   std::string user_name;
-
-  // Parse USR components: [file][@N@ns][@S@Class]@F@func#
   size_t pos = 0;
 
-  // Check for file prefix (before first @ or before @F@)
-  size_t first_at = usr.find('@');
-  if (first_at != std::string::npos)
+  if (!usr.empty() && usr[0] == '@')
   {
-    std::string potential_file = usr.substr(0, first_at);
-    if (
-      potential_file.find('.') != std::string::npos ||
-      potential_file.find('/') != std::string::npos)
-    {
-      user_name = potential_file + "@";
-      pos = first_at + 1;
-    }
+    // Regular format: starts with @ (e.g., c:@F@func#)
+    // Strip the @ and continue parsing
+    usr = usr.substr(1);
   }
+  else
+  {
+    // File-scoped format: starts with filename (e.g., c:file@F@func#)
+    size_t first_at = usr.find('@');
+    if (first_at == std::string::npos)
+      return std::string(usr_name); // No @, invalid format
+
+    // Extract filename prefix
+    user_name = usr.substr(0, first_at) + "@";
+    pos = first_at + 1;
+  }
+
+  // Parse USR components: [@N@ns][@S@Class]@F@func#
 
   // Process scope markers
   while (pos < usr.length())

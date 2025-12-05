@@ -45,6 +45,11 @@ TEST_CASE(
   REQUIRE(user_name_to_usr("file.c@func") == "c:file.c@F@func#");
   REQUIRE(user_name_to_usr("test.cpp@helper") == "c:test.cpp@F@helper#");
   REQUIRE(user_name_to_usr("src/main.c@init") == "c:src/main.c@F@init#");
+
+  // Note: Filenames must contain '.' or '/' to be recognized as file-scoped
+  // This avoids ambiguity. "main@func" without '.' or '/' is parsed as:
+  // ["main", "func"] where "main" becomes the function name (not file-scoped)
+  REQUIRE(user_name_to_usr("main@func") == "c:@F@main#");
 }
 
 TEST_CASE(
@@ -131,6 +136,11 @@ TEST_CASE(
   REQUIRE(usr_to_user_name("c:file.c@F@func#") == "file.c@func");
   REQUIRE(usr_to_user_name("c:test.cpp@F@helper#") == "test.cpp@helper");
   REQUIRE(usr_to_user_name("c:src/main.c@F@init#") == "src/main.c@init");
+
+  // Unlike user input, USR format has no ambiguity, so filenames without
+  // extensions are supported (c:file@ is clearly file-scoped vs c:@)
+  REQUIRE(usr_to_user_name("c:main@F@func#") == "main@func");
+  REQUIRE(usr_to_user_name("c:file1@F@helper#") == "file1@helper");
 }
 
 TEST_CASE(

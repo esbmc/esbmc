@@ -67,7 +67,7 @@ sudo dnf install --best --allowerasing "@Development Tools" clang llvm llvm-deve
 git clone https://github.com/esbmc/esbmc.git
 cd esbmc
 mkdir build && cd build
-cmake .. -DENABLE_Z3=1 -DZ3_DIR=/usr/include/z3
+CXX=g++ CC=gcc cmake .. -DENABLE_Z3=1 -DBUILD_TESTING=On -DENABLE_REGRESSION=1 -DZ3_DIR=/usr/include/z3
 make -j4
 ```
 

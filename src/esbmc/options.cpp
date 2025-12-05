@@ -259,6 +259,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "unwind loop idx (0-indexed) in function name with nr times.\n"
      "\tSyntax: func, N@ns@func, S@Class@method, file.c@func,\n"
      "\t        N@ns@S@Class@method, file.c@N@ns@S@Class@method\n"
+     "\tAlso accepts Clang USR format (e.g., c:@F@func# or c:file.c@F@func#)\n"
      "\tExample: --unwindsetname compute:0:10,N@math@sum:1:5\n"
      "\tUse --show-loops to see available functions and loop indices"},
     {"no-unwinding-assertions", NULL, "do not generate unwinding assertions"},
