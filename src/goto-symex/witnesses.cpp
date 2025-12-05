@@ -1386,6 +1386,7 @@ void generate_pytest_testcase(
 // Global storage for pytest test data (for coverage mode)
 static std::vector<std::vector<std::string>> collected_test_cases;
 static std::vector<std::string> collected_param_names;
+static std::string collected_function_name;  // Store the tested function name
 static std::mutex pytest_data_mutex;
 
 void clear_pytest_test_data()
@@ -1393,6 +1394,7 @@ void clear_pytest_test_data()
   std::lock_guard<std::mutex> lock(pytest_data_mutex);
   collected_test_cases.clear();
   collected_param_names.clear();
+  collected_function_name.clear();
 }
 
 void collect_pytest_test_data(
@@ -1402,12 +1404,35 @@ void collect_pytest_test_data(
   std::vector<std::string> current_params;
   std::vector<std::string> current_param_names;
   std::unordered_set<std::string> seen_nondets;
+  std::string function_name;
 
-  // Extract nondet values from counterexample
+  // Extract nondet values and function name from counterexample
   for (auto const &SSA_step : target.SSA_steps)
   {
     if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
       continue;
+
+    // Try to extract function name from source location
+    if (function_name.empty() && SSA_step.source.pc &&
+        SSA_step.source.pc->location.function() != "")
+    {
+      std::string full_func = SSA_step.source.pc->location.function().as_string();
+
+      // Skip internal functions
+      if (!has_prefix(full_func, "python_") &&
+          !has_prefix(full_func, "__ESBMC_") &&
+          !has_prefix(full_func, "__VERIFIER_") &&
+          full_func != "c::__ESBMC_main" &&
+          full_func != "c::python_user_main" &&
+          full_func != "c::python_init")
+      {
+        // Clean up function name (remove "c::" prefix if present)
+        if (has_prefix(full_func, "c::"))
+          function_name = full_func.substr(3);
+        else
+          function_name = full_func;
+      }
+    }
 
     if (SSA_step.is_assignment())
     {
@@ -1475,6 +1500,10 @@ void collect_pytest_test_data(
     // Initialize param names on first collection
     if (collected_param_names.empty())
       collected_param_names = current_param_names;
+
+    // Store function name if we found one
+    if (!function_name.empty() && collected_function_name.empty())
+      collected_function_name = function_name;
 
     collected_test_cases.push_back(current_params);
   }
@@ -1551,10 +1580,29 @@ void generate_pytest_from_collected_data(const std::string &file_name)
   pytest_file << "])\n";
 
   // Generate test function
-  pytest_file << "def test_coverage(" << param_list << "):\n";
-  pytest_file << "    \"\"\"Auto-generated test cases for coverage\"\"\"\n";
-  pytest_file << "    # Call the function being tested\n";
-  pytest_file << "    pass  # Add function call here\n\n";
+  std::string test_func_name = collected_function_name.empty() ? "coverage" : collected_function_name;
+
+  pytest_file << "def test_" << test_func_name << "(" << param_list << "):\n";
+  pytest_file << "    \"\"\"Auto-generated test cases for " << test_func_name << "\"\"\"\n";
+
+  if (!collected_function_name.empty())
+  {
+    // Generate actual function call
+    pytest_file << "    " << collected_function_name << "(";
+    for (size_t i = 0; i < collected_param_names.size(); ++i)
+    {
+      if (i > 0)
+        pytest_file << ", ";
+      pytest_file << collected_param_names[i];
+    }
+    pytest_file << ")\n\n";
+  }
+  else
+  {
+    // Fallback if we couldn't determine the function name
+    pytest_file << "    # Could not determine function name\n";
+    pytest_file << "    pass\n\n";
+  }
 
   pytest_file.close();
   log_status("Generated pytest test case with {} test(s): {}",
