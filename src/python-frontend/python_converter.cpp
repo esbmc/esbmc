@@ -6750,6 +6750,7 @@ void python_converter::convert()
     const std::string &ast_output_dir =
       (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
+      "builtins",
       "range",
       "int",
       "consensus",

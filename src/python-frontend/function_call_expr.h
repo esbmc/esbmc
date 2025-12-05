@@ -195,6 +195,10 @@ private:
    */
   exprt handle_abs(nlohmann::json &arg) const;
 
+  exprt handle_all(nlohmann::json &arg) const;
+
+  exprt handle_any(nlohmann::json &arg) const;
+
   /*
    * Checks if the current function call is a min() or max() built-in function.
    * Returns true if the function name matches "min" or "max", false otherwise.

@@ -1008,6 +1008,37 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   return nil_exprt();
 }
 
+exprt function_call_expr::handle_all(nlohmann::json &arg) const
+{
+  // For all(), we rely on the Python model in builtins.py
+  // The model will be inlined by the converter
+
+  // Create a function call to the model
+  exprt all_call("all", bool_typet());
+
+  // Convert the iterable argument
+  exprt iterable_expr = converter_.get_expr(arg);
+  all_call.copy_to_operands(iterable_expr);
+
+  return all_call;
+}
+
+exprt function_call_expr::handle_any(nlohmann::json &arg) const
+{
+  // For any(), we rely on the Python model in builtins.py
+  // The model will be inlined by the converter
+
+  // Create a function call to the model
+  exprt any_call("any", bool_typet());
+
+  // Convert the iterable argument
+  exprt iterable_expr = converter_.get_expr(arg);
+  any_call.copy_to_operands(iterable_expr);
+
+  return any_call;
+}
+
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -1276,6 +1307,14 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle abs: Returns the absolute value of an integer or float literal
   else if (func_name == "abs")
     return handle_abs(arg);
+
+  // Handle all: Returns True if all elements are truthy
+  else if (func_name == "all")
+    return handle_all(arg);
+
+  // Handle any: Returns True if any element is truthy
+  else if (func_name == "any")
+    return handle_any(arg);
 
   else if (func_name == "str")
     arg_size = handle_str(arg);
