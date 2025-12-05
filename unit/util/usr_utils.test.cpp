@@ -75,8 +75,11 @@ TEST_CASE(
 
   // File-scoped USRs (c:file@...) - critical for --show-loops -> --unwindsetname workflow
   REQUIRE(user_name_to_usr("c:file.c@F@func#") == "c:file.c@F@func#");
-  REQUIRE(user_name_to_usr("c:test.cpp@N@ns@F@func#") == "c:test.cpp@N@ns@F@func#");
-  REQUIRE(user_name_to_usr("c:file.c@S@Class@F@method#") == "c:file.c@S@Class@F@method#");
+  REQUIRE(
+    user_name_to_usr("c:test.cpp@N@ns@F@func#") == "c:test.cpp@N@ns@F@func#");
+  REQUIRE(
+    user_name_to_usr("c:file.c@S@Class@F@method#") ==
+    "c:file.c@S@Class@F@method#");
 
   // Without trailing # - should add it
   REQUIRE(user_name_to_usr("c:file.c@F@func") == "c:file.c@F@func#");
@@ -165,9 +168,7 @@ TEST_CASE(
   REQUIRE(usr_to_user_name("@F@func#") == "@F@func#");
 }
 
-TEST_CASE(
-  "round-trip conversion preserves function names",
-  "[util][usr_utils]")
+TEST_CASE("round-trip conversion preserves function names", "[util][usr_utils]")
 {
   // All function name formats should round-trip correctly
   std::vector<std::string> test_names = {
