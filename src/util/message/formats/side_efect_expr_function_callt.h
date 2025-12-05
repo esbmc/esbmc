@@ -24,6 +24,6 @@ struct fmt::formatter<side_effect_expr_function_callt>
   auto
   format(const side_effect_expr_function_callt &p, FormatContext &ctx) const
   {
-    return format_to(ctx.out(), "{}", p.pretty(0));
+    return fmt::format_to(ctx.out(), "{}", p.pretty(0));
   }
 };

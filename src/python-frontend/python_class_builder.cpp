@@ -67,6 +67,16 @@ bool python_class_builder::get_bases(struct_typet &st)
  * into ESBMC symbols. Recursively processes referenced classes. */
 void python_class_builder::get_members(struct_typet &st, codet &out)
 {
+  std::string saved_class_name = conv_.current_class_name_;
+  if (conv_.current_class_name_.empty())
+  {
+    // Extract class name from struct tag (e.g., "tag-int" -> "int")
+    std::string class_name = st.tag().as_string();
+    if (class_name.starts_with("tag-"))
+      class_name = class_name.substr(4);
+    conv_.current_class_name_ = class_name;
+  }
+
   for (const auto &n : cls_.at("body"))
   {
     const std::string kind = n.value("_type", "");
@@ -76,13 +86,37 @@ void python_class_builder::get_members(struct_typet &st, codet &out)
       if (mname == "__init__")
         mname = conv_.current_class_name_;
 
-      conv_.current_func_name_ = mname;
+      // For class methods, we don't want the hierarchical path
+      // Just the simple method name
+      std::string saved_func_name = conv_.current_func_name_;
+      conv_.current_func_name_ = "";
+
       conv_.get_function_definition(n);
 
-      exprt me = symbol_expr(
-        *conv_.symbol_table_.find_symbol(conv_.create_symbol_id().to_string()));
-      st.methods().emplace_back(me.name(), me.type());
-      conv_.current_func_name_.clear();
+      std::string saved_func_for_lookup = conv_.current_func_name_;
+      conv_.current_func_name_ = mname; // Apenas o nome simples
+      symbol_id method_sid = conv_.create_symbol_id();
+      conv_.current_func_name_ = saved_func_for_lookup;
+
+      symbolt *method_symbol =
+        conv_.symbol_table_.find_symbol(method_sid.to_string());
+
+      try
+      {
+        exprt me = symbol_expr(*method_symbol);
+        st.methods().emplace_back(me.name(), me.type());
+      }
+      catch (const std::exception &e)
+      {
+        log_error(
+          "Exception creating symbol_expr for {}: {}",
+          method_sid.to_string(),
+          e.what());
+        conv_.current_func_name_ = saved_func_name;
+        continue;
+      }
+
+      conv_.current_func_name_ = saved_func_name;
     }
     else if (kind == "AnnAssign")
     {
@@ -108,6 +142,7 @@ void python_class_builder::get_members(struct_typet &st, codet &out)
       sym->static_lifetime = true;
     }
   }
+  conv_.current_class_name_ = saved_class_name;
 }
 
 /* Extracts instance attributes assigned to self (e.g., self.x = ...)

@@ -907,6 +907,7 @@ private:
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;
   bool is_right = false;
+  std::vector<std::string> scope_stack_;
 
   exprt extract_type_from_boolean_op(const exprt &bool_op);
 
