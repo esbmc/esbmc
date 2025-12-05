@@ -1257,10 +1257,30 @@ void generate_pytest_testcase(
         const symbol2t &lhs_sym = to_symbol2t(SSA_step.lhs);
         var_name = lhs_sym.get_symbol_name();
 
-        // Remove SSA suffixes (e.g., "a!0@1" -> "a")
+        // Clean up ESBMC internal name to get user's variable name
+        // Examples:
+        //   "py:test.py@F@check_sign@n?1" -> "n"
+        //   "a!0@1" -> "a"
+        //   "c::main::x!2@3" -> "x"
+
+        // Remove everything before the last '@' (Python mangling)
+        size_t at_pos = var_name.rfind('@');
+        if (at_pos != std::string::npos)
+          var_name = var_name.substr(at_pos + 1);
+
+        // Remove everything after '!' (SSA suffix)
         size_t exclaim_pos = var_name.find('!');
         if (exclaim_pos != std::string::npos)
           var_name = var_name.substr(0, exclaim_pos);
+
+        // Remove everything after '?' (other suffix)
+        size_t question_pos = var_name.find('?');
+        if (question_pos != std::string::npos)
+          var_name = var_name.substr(0, question_pos);
+
+        // Remove "c::main::" prefix if present
+        if (has_prefix(var_name, "c::main::"))
+          var_name = var_name.substr(9);
       }
 
       collect_nondet(symex_slicet::get_nondet_symbol(SSA_step.rhs), var_name);
@@ -1317,16 +1337,29 @@ void generate_pytest_testcase(
     // Generate @pytest.mark.parametrize
     pytest_file << "@pytest.mark.parametrize(\"" << param_list << "\", [\n";
 
+    // Single parameter: no tuple wrapper needed
+    // Multiple parameters: use tuple wrapper
+    bool single_param = (params.size() == 1);
+
     for (const auto &test_case : test_cases)
     {
-      pytest_file << "    (";
-      for (size_t i = 0; i < test_case.size(); ++i)
+      if (single_param)
       {
-        if (i > 0)
-          pytest_file << ", ";
-        pytest_file << test_case[i];
+        // Single parameter: "5," not "(5,)"
+        pytest_file << "    " << test_case[0] << ",\n";
       }
-      pytest_file << "),\n";
+      else
+      {
+        // Multiple parameters: "(5, 3),"
+        pytest_file << "    (";
+        for (size_t i = 0; i < test_case.size(); ++i)
+        {
+          if (i > 0)
+            pytest_file << ", ";
+          pytest_file << test_case[i];
+        }
+        pytest_file << "),\n";
+      }
     }
 
     pytest_file << "])\n";
