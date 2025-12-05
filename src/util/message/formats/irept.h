@@ -23,6 +23,6 @@ struct fmt::formatter<irept>
   template <typename FormatContext>
   auto format(const irept &p, FormatContext &ctx) const
   {
-    return format_to(ctx.out(), "{}", p.pretty(0));
+    return fmt::format_to(ctx.out(), "{}", p.pretty(0));
   }
 };
