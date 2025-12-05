@@ -68,7 +68,8 @@ public:
       name == "tuple" || name == "list" || name == "dict" || name == "set" ||
       name == "frozenset" || name == "bytes" || name == "set" ||
       name == "bytearray" || name == "range" || name == "complex" ||
-      name == "type" || name == "object" || name == "abs" || name == "None" || name == "divmod");
+      name == "type" || name == "object" || name == "abs" || name == "None" ||
+      name == "divmod");
   }
 
   static bool is_consensus_type(const std::string &name)
@@ -97,8 +98,7 @@ public:
     return (
       name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_" ||
       name == "bit_length" || name == "from_bytes" || name == "to_bytes" ||
-      name == "randint" || name == "random"|| name == "all" ||
-      name == "any");
+      name == "randint" || name == "random" || name == "all" || name == "any");
   }
 
   static bool is_python_exceptions(const std::string &name)

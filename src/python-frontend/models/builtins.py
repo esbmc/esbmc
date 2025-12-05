@@ -5,12 +5,12 @@
 #         return -x
 
 
-def all(iterable:list[Any]) -> bool:
+def all(iterable: list[Any]) -> bool:
     """Return True if all elements of the iterable are true (or if empty)."""
     i: int = 0
     length: int = len(iterable)
     while i < length:
-        element:bool = iterable[i]
+        element: bool = iterable[i]
         if not element:
             return False
         i = i + 1
@@ -22,7 +22,7 @@ def any(iterable: list[Any]) -> bool:
     i: int = 0
     length: int = len(iterable)
     while i < length:
-        element:bool = iterable[i]
+        element: bool = iterable[i]
         if element:
             return True
         i = i + 1

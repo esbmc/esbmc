@@ -1038,7 +1038,6 @@ exprt function_call_expr::handle_any(nlohmann::json &arg) const
   return any_call;
 }
 
-
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
