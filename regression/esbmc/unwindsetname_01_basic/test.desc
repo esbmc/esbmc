@@ -1,4 +1,3 @@
-THOROUGH
 main.c
---unwindsetname compute_sum:0:11 --z3
+--unwindsetname compute_sum:0:11
 ^VERIFICATION SUCCESSFUL$
