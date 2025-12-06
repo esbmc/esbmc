@@ -47,6 +47,14 @@ protected:
   virtual bool
   output_goto_program(optionst &options, goto_functionst &goto_functions);
 
+  /// \brief Process function contracts if enabled
+  /// \param options Command line options
+  /// \param goto_functions GOTO functions
+  /// \return True if processing should stop, false otherwise
+  bool process_function_contracts(
+    optionst &options,
+    goto_functionst &goto_functions);
+
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
 
   int doit_k_induction_parallel();

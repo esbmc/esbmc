@@ -54,6 +54,7 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
+#include <goto-programs/contracts/contracts.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
@@ -2026,6 +2027,10 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_check(ns, options, goto_functions);
 
+    // Process function contracts if enabled
+    if (process_function_contracts(options, goto_functions))
+      return true;
+
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
 
@@ -2626,6 +2631,100 @@ void esbmc_parseoptionst::print_ileave_points(
       if (print_insn)
         pit->output_instruction(ns, pit->function, std::cout);
     }
+}
+
+// Process function contracts if enabled
+bool esbmc_parseoptionst::process_function_contracts(
+  [[maybe_unused]] optionst &options,
+  goto_functionst &goto_functions)
+{
+  // Only process contracts if explicitly requested
+  bool has_enforce = cmdline.isset("enforce-contract");
+  bool has_replace = cmdline.isset("replace-call-with-contract");
+
+  if (!has_enforce && !has_replace)
+    return false;  // No contract processing requested
+
+  namespacet ns(context);
+  code_contractst contracts(goto_functions, context, ns);
+
+  // Process enforce-contract option
+  if (has_enforce)
+  {
+    std::set<std::string> to_enforce;
+    const std::list<std::string> &enforce_list = cmdline.get_values("enforce-contract");
+
+    for (const auto &func : enforce_list)
+    {
+      if (func == "*")
+      {
+        // Enforce contracts for all functions with contracts
+        // We'll collect them by scanning all functions
+        forall_goto_functions(it, goto_functions)
+        {
+          if (it->second.body_available && contracts.has_contracts(it->second.body))
+          {
+            std::string func_name = id2string(it->first);
+            // Skip compiler-generated functions
+            if (func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
+              continue;
+            to_enforce.insert(func_name);
+          }
+        }
+        break;  // "*" means all, so we can break after collecting
+      }
+      else
+      {
+        to_enforce.insert(func);
+      }
+    }
+
+    if (!to_enforce.empty())
+    {
+      log_status("Enforcing contracts for {} function(s)", to_enforce.size());
+      contracts.enforce_contracts(to_enforce);
+    }
+  }
+
+  // Process replace-call-with-contract option
+  if (has_replace)
+  {
+    std::set<std::string> to_replace;
+    const std::list<std::string> &replace_list = cmdline.get_values("replace-call-with-contract");
+
+    for (const auto &func : replace_list)
+    {
+      if (func == "*")
+      {
+        // Replace calls for all functions with contracts
+        // We'll collect them by scanning all functions
+        forall_goto_functions(it, goto_functions)
+        {
+          if (it->second.body_available && contracts.has_contracts(it->second.body))
+          {
+            std::string func_name = id2string(it->first);
+            // Skip compiler-generated functions
+            if (func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
+              continue;
+            to_replace.insert(func_name);
+          }
+        }
+        break;  // "*" means all, so we can break after collecting
+      }
+      else
+      {
+        to_replace.insert(func);
+      }
+    }
+
+    if (!to_replace.empty())
+    {
+      log_status("Replacing calls with contracts for {} function(s)", to_replace.size());
+      contracts.replace_calls(to_replace);
+    }
+  }
+
+  return false;  // Continue processing
 }
 
 // This prints the ESBMC version and a list of CMD options

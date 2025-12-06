@@ -234,6 +234,13 @@ const struct group_opt_templ all_cmd_options[] = {
 #endif
     {"funsigned-char", NULL, "make \"char\" unsigned by default"},
     {"fms-extensions", NULL, "enable microsoft C extensions"}}},
+  {"Function Contracts",
+   {{"enforce-contract",
+     boost::program_options::value<std::vector<std::string>>()->value_name("fun"),
+     "wrap function to check its contract (use \"*\" for all functions)"},
+    {"replace-call-with-contract",
+     boost::program_options::value<std::vector<std::string>>()->value_name("fun"),
+     "replace function calls with contract semantics (use \"*\" for all functions)"}}},
   {"BMC",
    {{"function",
      boost::program_options::value<std::string>()->value_name("name"),

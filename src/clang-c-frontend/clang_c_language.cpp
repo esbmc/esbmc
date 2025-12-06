@@ -365,6 +365,8 @@ std::string clang_c_languaget::internal_additions()
 void __ESBMC_assume(_Bool);
 void __ESBMC_assert(_Bool, const char *);
 void __ESBMC_cover(_Bool);
+void __ESBMC_requires(_Bool);
+void __ESBMC_ensures(_Bool);
 _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
@@ -487,6 +489,13 @@ _Bool __ESBMC_exists(void*, _Bool);
  * 2. Use the invariants to help the following of the loop continue with a simple assumption
  */
 void __ESBMC_loop_invariant(_Bool);
+
+/* Function contract support
+ * __ESBMC_requires: precondition clause
+ * __ESBMC_ensures: postcondition clause
+ * __ESBMC_return_value: special variable representing function return value in ensures clauses
+ */
+extern int __ESBMC_return_value;
 
 
 #define __builtin_offsetof(type, member) \

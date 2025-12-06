@@ -548,8 +548,10 @@ void goto_convertt::do_function_call_symbol(
   bool is_assert = (base_name == "assert");
 
   bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");
+  bool is_requires = (base_name == "__ESBMC_requires");
+  bool is_ensures = (base_name == "__ESBMC_ensures");
 
-  if (is_assume || is_assert || is_loop_invariant)
+  if (is_assume || is_assert || is_loop_invariant || is_requires || is_ensures)
   {
     if (arguments.size() != 1)
     {
@@ -590,8 +592,17 @@ void goto_convertt::do_function_call_symbol(
     }
     else
     {
-      t = dest.add_instruction(is_assume ? ASSUME : ASSERT);
-      t->guard = guard;
+      // For contract functions, generate ASSUME instructions with special markers
+      if (is_requires || is_ensures)
+      {
+        t = dest.add_instruction(ASSUME);
+        t->guard = guard;
+      }
+      else
+      {
+        t = dest.add_instruction(is_assume ? ASSUME : ASSERT);
+        t->guard = guard;
+      }
     }
 
     // The user may have re-declared the assert or assume functions to take an
@@ -612,6 +623,12 @@ void goto_convertt::do_function_call_symbol(
 
     if (is_assert)
       t->location.property("assertion");
+
+    // Mark contract clauses with special comments
+    if (is_requires)
+      t->location.comment("contract::requires");
+    else if (is_ensures)
+      t->location.comment("contract::ensures");
 
     if (lhs.is_not_nil())
     {
