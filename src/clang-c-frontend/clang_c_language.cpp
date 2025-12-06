@@ -522,7 +522,8 @@ struct cap_info __ESBMC_cheri_info[1];
   // Function contract support - only add symbols when contract processing is enabled
   // Check if enforce-contract or replace-call-with-contract options are set
   std::string enforce_opt = config.options.get_option("enforce-contract");
-  std::string replace_opt = config.options.get_option("replace-call-with-contract");
+  std::string replace_opt =
+    config.options.get_option("replace-call-with-contract");
   if (!enforce_opt.empty() || !replace_opt.empty())
   {
     intrinsics += R"(

@@ -54,7 +54,8 @@ code_contractst::code_contractst(
 {
 }
 
-bool code_contractst::is_compiler_generated(const std::string &function_name) const
+bool code_contractst::is_compiler_generated(
+  const std::string &function_name) const
 {
   // Skip destructors (start with ~)
   if (!function_name.empty() && function_name[0] == '~')
@@ -95,7 +96,9 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
   return context.find_symbol(func_id);
 }
 
-void code_contractst::rename_function(const irep_idt &old_id, const irep_idt &new_id)
+void code_contractst::rename_function(
+  const irep_idt &old_id,
+  const irep_idt &new_id)
 {
   auto it = goto_functions.function_map.find(old_id);
   if (it == goto_functions.function_map.end())
@@ -122,12 +125,13 @@ void code_contractst::rename_function(const irep_idt &old_id, const irep_idt &ne
   // Do NOT erase the old function yet - we'll replace it with the wrapper
 }
 
-expr2tc code_contractst::extract_requires_from_body(const goto_programt &function_body)
+expr2tc
+code_contractst::extract_requires_from_body(const goto_programt &function_body)
 {
   std::vector<expr2tc> requires_clauses;
 
   // Scan function body for contract::requires annotations
-  forall_goto_program_instructions(it, function_body)
+  forall_goto_program_instructions (it, function_body)
   {
     if (it->is_assume())
     {
@@ -153,12 +157,13 @@ expr2tc code_contractst::extract_requires_from_body(const goto_programt &functio
   return result;
 }
 
-expr2tc code_contractst::extract_ensures_from_body(const goto_programt &function_body)
+expr2tc
+code_contractst::extract_ensures_from_body(const goto_programt &function_body)
 {
   std::vector<expr2tc> ensures_clauses;
 
   // Scan function body for contract::ensures annotations
-  forall_goto_program_instructions(it, function_body)
+  forall_goto_program_instructions (it, function_body)
   {
     if (it->is_assume())
     {
@@ -209,13 +214,15 @@ expr2tc code_contractst::extract_ensures_clause(const symbolt &contract_symbol)
   return gen_true_expr();
 }
 
-expr2tc code_contractst::extract_assigns_clause(const symbolt & /* contract_symbol */)
+expr2tc
+code_contractst::extract_assigns_clause(const symbolt & /* contract_symbol */)
 {
   // TODO: Extract assigns clause from contract symbol
   return expr2tc();
 }
 
-std::vector<expr2tc> code_contractst::extract_assigns_targets(const expr2tc &assigns_clause)
+std::vector<expr2tc>
+code_contractst::extract_assigns_targets(const expr2tc &assigns_clause)
 {
   std::vector<expr2tc> targets;
   if (is_nil_expr(assigns_clause))
@@ -264,7 +271,9 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
 
     // Find the function in goto_functions
     auto func_it = goto_functions.function_map.find(func_sym->id);
-    if (func_it == goto_functions.function_map.end() || !func_it->second.body_available)
+    if (
+      func_it == goto_functions.function_map.end() ||
+      !func_it->second.body_available)
     {
       log_warning("Function body for {} not available", function_name);
       continue;
@@ -281,8 +290,10 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
     expr2tc ensures_clause = extract_ensures_from_body(func_it->second.body);
 
     // Skip if no contracts found (should not happen after has_contracts check, but double-check)
-    bool has_requires = !is_constant_bool2t(requires_clause) || !to_constant_bool2t(requires_clause).value;
-    bool has_ensures = !is_constant_bool2t(ensures_clause) || !to_constant_bool2t(ensures_clause).value;
+    bool has_requires = !is_constant_bool2t(requires_clause) ||
+                        !to_constant_bool2t(requires_clause).value;
+    bool has_ensures = !is_constant_bool2t(ensures_clause) ||
+                       !to_constant_bool2t(ensures_clause).value;
 
     if (!has_requires && !has_ensures)
     {
@@ -291,13 +302,15 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
 
     // Rename original function
     irep_idt original_id = func_sym->id;
-    std::string original_name_str = "__ESBMC_contracts_original_" + function_name;
+    std::string original_name_str =
+      "__ESBMC_contracts_original_" + function_name;
     irep_idt original_name_id(original_name_str);
 
     rename_function(original_id, original_name_id);
 
     // Generate wrapper function
-    goto_programt wrapper = generate_checking_wrapper(*func_sym, requires_clause, ensures_clause, original_name_id);
+    goto_programt wrapper = generate_checking_wrapper(
+      *func_sym, requires_clause, ensures_clause, original_name_id);
 
     // Create new function entry
     goto_functiont new_func;
@@ -335,7 +348,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   else if (is_constant_bool2t(requires_clause))
   {
     const constant_bool2t &b = to_constant_bool2t(requires_clause);
-    if (b.value)  // Only add if not trivially true
+    if (b.value) // Only add if not trivially true
     {
       goto_programt::targett t = wrapper.add_instruction(ASSUME);
       t->guard = requires_clause;
@@ -423,7 +436,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   else if (is_constant_bool2t(ensures_clause))
   {
     const constant_bool2t &b = to_constant_bool2t(ensures_clause);
-    if (b.value)  // Only add if not trivially true
+    if (b.value) // Only add if not trivially true
     {
       goto_programt::targett t = wrapper.add_instruction(ASSERT);
       t->guard = ensures_clause;
@@ -479,7 +492,7 @@ expr2tc code_contractst::replace_return_value_in_expr(
 bool code_contractst::has_contracts(const goto_programt &function_body) const
 {
   // Quick check: scan for contract markers without extracting full clauses
-  forall_goto_program_instructions(it, function_body)
+  forall_goto_program_instructions (it, function_body)
   {
     if (it->is_assume())
     {
@@ -541,9 +554,7 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     for (size_t i = 0; i < calls_to_replace.size(); ++i)
     {
       generate_replacement_at_call(
-        *contracts_to_use[i],
-        calls_to_replace[i],
-        it->second.body);
+        *contracts_to_use[i], calls_to_replace[i], it->second.body);
     }
   }
 
@@ -614,4 +625,3 @@ void code_contractst::build_contract_symbols()
   // TODO: Implement contract symbol building if needed
   // This would scan goto programs and create contract symbols
 }
-

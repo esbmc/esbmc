@@ -112,7 +112,8 @@ private:
   /// \param expr Expression to replace symbols in
   /// \param ret_val Actual return value expression
   /// \return Expression with __ESBMC_return_value replaced
-  expr2tc replace_return_value_in_expr(const expr2tc &expr, const expr2tc &ret_val);
+  expr2tc
+  replace_return_value_in_expr(const expr2tc &expr, const expr2tc &ret_val);
 
   /// \brief Havoc assigns targets (similar to loop invariant approach)
   /// \param assigns_clause Assigns clause expression
@@ -130,4 +131,3 @@ private:
 };
 
 #endif // ESBMC_CONTRACTS_H
-
