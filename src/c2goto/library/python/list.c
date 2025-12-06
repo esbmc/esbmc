@@ -209,6 +209,18 @@ bool __ESBMC_list_insert(
   return true;
 }
 
+static inline bool
+__ESBMC_values_equal(const void *a, const void *b, size_t size)
+{
+  if (a == b)
+    return true;
+
+  if (size == 8)
+    return *(const uint64_t *)a == *(const uint64_t *)b;
+  else
+    return memcmp(a, b, size) == 0;
+}
+
 bool __ESBMC_list_contains(
   const PyListObject *l,
   const void *item,
@@ -228,7 +240,7 @@ bool __ESBMC_list_contains(
     {
       // Compare the actual data
       // TODO: Not sure if this works for recursive types
-      if (elem->value == item || memcmp(elem->value, item, item_size) == 0)
+      if (__ESBMC_values_equal(elem->value, item, item_size))
         return true;
     }
 
@@ -285,7 +297,7 @@ size_t __ESBMC_list_find_index(
 
     if (elem->type_id == item_type_id && elem->size == item_size)
     {
-      if (elem->value == item || memcmp(elem->value, item, item_size) == 0)
+      if (__ESBMC_values_equal(elem->value, item, item_size))
         return i;
     }
 
