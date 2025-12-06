@@ -1,4 +1,4 @@
 CORE
 main.py
---is-instance-check
+--incremental-bmc
 ^VERIFICATION FAILED$
