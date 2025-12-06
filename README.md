@@ -44,6 +44,12 @@ curl 'https://raw.githubusercontent.com/esbmc/esbmc/refs/heads/master/scripts/we
 
 >Please review the script before running it: https://github.com/esbmc/esbmc/blob/master/scripts/web-install.sh
 
+To update to a later version you can rerun the command or save the command as a script (make sure `~/.local/bin` is in your `PATH`):
+
+```sh
+curl 'https://raw.githubusercontent.com/esbmc/esbmc/refs/heads/master/scripts/web-install.sh' > ~/.local/bin/esbmc-update && chmod +x ~/.local/bin/esbmc-update;
+```
+
 ## Building ESBMC
 
 ### Ubuntu 24.04
