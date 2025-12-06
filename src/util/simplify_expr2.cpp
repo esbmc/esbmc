@@ -458,6 +458,14 @@ expr2tc add2t::do_simplify() const
       return sub.side_1;
   }
 
+  // x + (-y) -> x - y
+  if (is_neg2t(side_2))
+    return sub2tc(type, side_1, to_neg2t(side_2).value);
+
+  // (-x) + y -> y - x
+  if (is_neg2t(side_1))
+    return sub2tc(type, side_2, to_neg2t(side_1).value);
+
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if (!is_nil_expr(res))
     return res;
