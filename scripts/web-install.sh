@@ -17,6 +17,8 @@ echo
 
 TMP_DIR="/tmp/esbmc-web-install-$(uuidgen)"
 
+echo "🚧 Working Directory: $TMP_DIR"
+
 cleanup() {
     if [ -d "$TMP_DIR" ]; then
         echo "🧹☁️ Cleaning up $TMP_DIR..."
@@ -74,7 +76,9 @@ download_and_install() {
         exit 1
     fi
 
+    echo
     echo "🌟 $("$HOME/.local/bin/esbmc" --version 2>&1) is successfully installed at ~/.local/bin/esbmc"
+    echo
 
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
         echo ""
