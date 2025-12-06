@@ -2664,6 +2664,26 @@ struct Equalitytor
   }
 };
 
+/**
+ * Check if value fits in given bit width without overflow
+ */
+static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed)
+{
+  if (is_signed)
+  {
+    BigInt min_val = -(BigInt::power2(width - 1));
+    BigInt max_val = BigInt::power2(width - 1) - 1;
+    return value >= min_val && value <= max_val;
+  }
+  else
+  {
+    if (value < 0)
+      return false;
+    BigInt max_val = BigInt::power2(width) - 1;
+    return value <= max_val;
+  }
+}
+
 expr2tc equality2t::do_simplify() const
 {
   // Self-comparison: x == x is always true (except for floats with NaN)
@@ -2674,6 +2694,38 @@ expr2tc equality2t::do_simplify() const
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
     return simplify_floatbv_relations<IEEE_equalitytor, equality2t>(
       type, side_1, side_2);
+
+  // (x + c1) == c2 -> x == (c2 - c1)
+  if (is_add2t(side_1) && is_constant_int2t(side_2))
+  {
+    const add2t &add_expr = to_add2t(side_1);
+
+    if (is_constant_int2t(add_expr.side_2))
+    {
+      const BigInt &c1 = to_constant_int2t(add_expr.side_2).value;
+      const BigInt &c2 = to_constant_int2t(side_2).value;
+      BigInt diff = c2 - c1;
+
+      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      {
+        expr2tc new_const = constant_int2tc(side_2->type, diff);
+        return equality2tc(add_expr.side_1, new_const);
+      }
+    }
+
+    if (is_constant_int2t(add_expr.side_1))
+    {
+      const BigInt &c1 = to_constant_int2t(add_expr.side_1).value;
+      const BigInt &c2 = to_constant_int2t(side_2).value;
+      BigInt diff = c2 - c1;
+
+      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      {
+        expr2tc new_const = constant_int2tc(side_2->type, diff);
+        return equality2tc(add_expr.side_2, new_const);
+      }
+    }
+  }
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
