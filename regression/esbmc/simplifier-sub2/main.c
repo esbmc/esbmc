@@ -7,6 +7,11 @@ int main()
 
   // x - (-y) → x + y
   assert((x - (-y)) == (x + y));
+  assert((x + y) == (x - (-y)));
+
+  // (-x) - y → -(x + y)
+  assert(((-x) - y) == -(x + y));
+  assert(-(x + y) == ((-x) - y));
 
   return 0;
 }

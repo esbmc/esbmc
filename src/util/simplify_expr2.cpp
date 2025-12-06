@@ -542,6 +542,13 @@ expr2tc sub2t::do_simplify() const
   if (is_neg2t(side_2))
     return add2tc(type, side_1, to_neg2t(side_2).value);
 
+  // (-x) - y -> -(x + y)
+  if (is_neg2t(side_1))
+  {
+    expr2tc sum = add2tc(type, to_neg2t(side_1).value, side_2);
+    return neg2tc(type, sum);
+  }
+
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }
 
