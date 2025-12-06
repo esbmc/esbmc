@@ -2746,6 +2746,31 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
+  // (x * c) == 0 -> x == 0 (when c != 0)
+  if (is_mul2t(side_1) && is_constant_int2t(side_2))
+  {
+    const mul2t &mul_expr = to_mul2t(side_1);
+    const BigInt &c2 = to_constant_int2t(side_2).value;
+
+    if (c2 == 0)
+    {
+      // Check if either operand is a non-zero constant
+      if (is_constant_int2t(mul_expr.side_2))
+      {
+        const BigInt &c1 = to_constant_int2t(mul_expr.side_2).value;
+        if (c1 != 0)
+          return equality2tc(mul_expr.side_1, side_2);
+      }
+
+      if (is_constant_int2t(mul_expr.side_1))
+      {
+        const BigInt &c1 = to_constant_int2t(mul_expr.side_1).value;
+        if (c1 != 0)
+          return equality2tc(mul_expr.side_2, side_2);
+      }
+    }
+  }
+
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
 
