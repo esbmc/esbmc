@@ -538,6 +538,10 @@ expr2tc sub2t::do_simplify() const
       return add.side_1;
   }
 
+  // x - (-y) -> x + y
+  if (is_neg2t(side_2))
+    return add2tc(type, side_1, to_neg2t(side_2).value);
+
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }
 
