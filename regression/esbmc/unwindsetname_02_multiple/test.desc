@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--unwindsetname func_ten:0:11,func_five:0:6,func_three:0:4 --z3
+^VERIFICATION SUCCESSFUL$
