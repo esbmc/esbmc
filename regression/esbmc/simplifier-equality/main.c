@@ -7,6 +7,8 @@ int main()
 
   assert(((x + c1) == c2) == (x == (c2 - c1)));
   assert((x == (c2 - c1)) == ((x + c1) == c2));
-
+  
+  assert(((x - c1) == c2) == (x == (c2 + c1)));
+  assert((x == (c2 + c1)) == ((x - c1) == c2));
   return 0;
 }

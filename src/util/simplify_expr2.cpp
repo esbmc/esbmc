@@ -2727,6 +2727,25 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
+  // (x - c1) == c2 -> x == (c2 + c1)
+  if (is_sub2t(side_1) && is_constant_int2t(side_2))
+  {
+    const sub2t &sub_expr = to_sub2t(side_1);
+
+    if (is_constant_int2t(sub_expr.side_2))
+    {
+      const BigInt &c1 = to_constant_int2t(sub_expr.side_2).value;
+      const BigInt &c2 = to_constant_int2t(side_2).value;
+      BigInt sum = c2 + c1;
+
+      if (fits_in_width(sum, type->get_width(), is_signedbv_type(type)))
+      {
+        expr2tc new_const = constant_int2tc(side_2->type, sum);
+        return equality2tc(sub_expr.side_1, new_const);
+      }
+    }
+  }
+
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
 
