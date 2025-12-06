@@ -237,3 +237,21 @@ void generate_testcase(
   const std::string &file_name,
   const symex_target_equationt &target,
   smt_convt &smt_conv);
+
+/// This generates pytest test-cases for Python programs
+void generate_pytest_testcase(
+  const std::string &file_name,
+  const symex_target_equationt &target,
+  smt_convt &smt_conv,
+  const namespacet &ns);
+
+/// Collect test case data from counterexample (for coverage mode)
+void collect_pytest_test_data(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);
+
+/// Generate pytest file from collected test data (for coverage mode)
+void generate_pytest_from_collected_data(const std::string &file_name);
+
+/// Clear collected pytest test data
+void clear_pytest_test_data();

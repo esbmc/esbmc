@@ -159,6 +159,26 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     generate_testcase("testcase.xml", eq, smt_conv);
   }
 
+  if (options.get_bool_option("generate-pytest-testcase"))
+  {
+    // Generate pytest filename based on source file: test_<module>.py
+    std::string input_file = options.get_option("input-file");
+    std::string module_name = input_file;
+
+    // Remove .py extension
+    size_t dot_pos = module_name.rfind(".py");
+    if (dot_pos != std::string::npos)
+      module_name = module_name.substr(0, dot_pos);
+
+    // Remove directory path
+    size_t slash_pos = module_name.rfind("/");
+    if (slash_pos != std::string::npos)
+      module_name = module_name.substr(slash_pos + 1);
+
+    std::string pytest_filename = "test_" + module_name + ".py";
+    generate_pytest_testcase(pytest_filename, eq, smt_conv, ns);
+  }
+
   if (options.get_bool_option("generate-html-report"))
     generate_html_report("1", ns, goto_trace, options);
 
@@ -484,6 +504,7 @@ void bmct::report_multi_property_trace(
       generate_testcase(
         "testcase-" + std::to_string(ce_counter) + ".xml", local_eq, *solver);
     }
+    // Note: pytest generation is handled in the main BMC path, not here
     if (options.get_bool_option("generate-html-report"))
       generate_html_report(std::to_string(ce_counter), ns, goto_trace, options);
 
@@ -729,6 +750,26 @@ void report_coverage(
       log_result("Branch Coverage: {}%", tracked_instance * 100.0 / total);
     else
       log_result("Branch Coverage: 0%");
+  }
+
+  // Generate pytest test case from collected data (for coverage mode)
+  if (options.get_bool_option("generate-pytest-testcase"))
+  {
+    std::string input_file = options.get_option("input-file");
+    std::string module_name = input_file;
+
+    // Remove .py extension
+    size_t dot_pos = module_name.rfind(".py");
+    if (dot_pos != std::string::npos)
+      module_name = module_name.substr(0, dot_pos);
+
+    // Remove directory path
+    size_t slash_pos = module_name.rfind("/");
+    if (slash_pos != std::string::npos)
+      module_name = module_name.substr(slash_pos + 1);
+
+    std::string pytest_filename = "test_" + module_name + ".py";
+    generate_pytest_from_collected_data(pytest_filename);
   }
 }
 
@@ -1105,6 +1146,10 @@ void bmct::bidirectional_search(
 
 smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 {
+  // Clear collected pytest test data at the start of coverage run
+  if (options.get_bool_option("generate-pytest-testcase"))
+    clear_pytest_test_data();
+
   fine_timet symex_start = current_time();
   try
   {
@@ -1535,6 +1580,10 @@ smt_convt::resultt bmct::multi_property_check(
 
       goto_tracet goto_trace;
       build_goto_trace(local_eq, *solver_ptr, goto_trace, is_compact_trace);
+
+      // Collect pytest test data if requested (for coverage mode)
+      if (options.get_bool_option("generate-pytest-testcase"))
+        collect_pytest_test_data(local_eq, *solver_ptr);
 
       // Store claim signature
       if (is_assert_cov)
