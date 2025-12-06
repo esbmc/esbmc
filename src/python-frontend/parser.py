@@ -102,6 +102,12 @@ def is_standard_library_file(filename):
         '/opt/homebrew/Cellar/python',  # Homebrew Python on macOS (Apple Silicon)
         '/usr/local/Cellar/python',     # Homebrew Python on macOS (Intel)
     ]
+    # Check pyenv paths
+    pyenv_root = os.environ.get('PYENV_ROOT', os.path.expanduser('~/.pyenv'))
+    if pyenv_root and filename.startswith(pyenv_root):
+        # Check if it's in the versions directory (standard library location)
+        if '/versions/' in filename and '/lib/python' in filename:
+            return True
     return any(filename.startswith(path) for path in stdlib_paths)
 
 
