@@ -561,7 +561,7 @@ void goto_convertt::do_function_call_symbol(
 
     if (
       options.get_bool_option("no-assertions") && !is_assume &&
-      !is_loop_invariant)
+      !is_loop_invariant && !is_requires && !is_ensures)
       return;
 
     // Rafael's invariant merging: combine consecutive __invariant() calls

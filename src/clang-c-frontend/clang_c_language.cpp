@@ -365,8 +365,6 @@ std::string clang_c_languaget::internal_additions()
 void __ESBMC_assume(_Bool);
 void __ESBMC_assert(_Bool, const char *);
 void __ESBMC_cover(_Bool);
-void __ESBMC_requires(_Bool);
-void __ESBMC_ensures(_Bool);
 _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
@@ -490,13 +488,6 @@ _Bool __ESBMC_exists(void*, _Bool);
  */
 void __ESBMC_loop_invariant(_Bool);
 
-/* Function contract support
- * __ESBMC_requires: precondition clause
- * __ESBMC_ensures: postcondition clause
- * __ESBMC_return_value: special variable representing function return value in ensures clauses
- */
-extern int __ESBMC_return_value;
-
 
 #define __builtin_offsetof(type, member) \
     ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
@@ -525,6 +516,24 @@ struct cap_info {__SIZE_TYPE__ base; __SIZE_TYPE__ top;};
 
 __attribute__((annotate("__ESBMC_inf_size")))
 struct cap_info __ESBMC_cheri_info[1];
+    )";
+  }
+
+  // Function contract support - only add symbols when contract processing is enabled
+  // Check if enforce-contract or replace-call-with-contract options are set
+  std::string enforce_opt = config.options.get_option("enforce-contract");
+  std::string replace_opt = config.options.get_option("replace-call-with-contract");
+  if (!enforce_opt.empty() || !replace_opt.empty())
+  {
+    intrinsics += R"(
+/* Function contract support
+ * __ESBMC_requires: precondition clause
+ * __ESBMC_ensures: postcondition clause
+ * __ESBMC_return_value: special variable representing function return value in ensures clauses
+ */
+void __ESBMC_requires(_Bool);
+void __ESBMC_ensures(_Bool);
+extern int __ESBMC_return_value;
     )";
   }
 
