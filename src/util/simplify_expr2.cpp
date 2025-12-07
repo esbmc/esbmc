@@ -577,24 +577,6 @@ expr2tc sub2t::do_simplify() const
     return neg2tc(type, sum);
   }
 
-  // Nested constant folding: (x - c1) - c2 → x - (c1 + c2)
-  if (is_sub2t(side_1) && is_constant_int2t(side_2))
-  {
-    const sub2t &inner_sub = to_sub2t(side_1);
-    if (is_constant_int2t(inner_sub.side_2))
-    {
-      const BigInt &c1 = to_constant_int2t(inner_sub.side_2).value;
-      const BigInt &c2 = to_constant_int2t(side_2).value;
-      BigInt sum = c1 + c2;
-
-      if (fits_in_width(sum, type->get_width(), is_signedbv_type(type)))
-      {
-        expr2tc new_const = constant_int2tc(type, sum);
-        return sub2tc(type, inner_sub.side_1, new_const);
-      }
-    }
-  }
-
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }
 
