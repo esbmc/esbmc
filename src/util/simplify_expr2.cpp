@@ -3012,6 +3012,40 @@ expr2tc greaterthanequal2t::do_simplify() const
     type, side_1, side_2);
 }
 
+// Check if two conditions are equivalent (accounting for casts)
+static bool conditions_equivalent(const expr2tc &a, const expr2tc &b)
+{
+  if (a == b)
+    return true;
+
+  // Strip typecast from a
+  expr2tc a_stripped = a;
+  while (is_typecast2t(a_stripped))
+    a_stripped = to_typecast2t(a_stripped).from;
+
+  // Strip typecast from b
+  expr2tc b_stripped = b;
+  while (is_typecast2t(b_stripped))
+    b_stripped = to_typecast2t(b_stripped).from;
+
+  // Also handle (x != 0) <-> x pattern
+  if (is_notequal2t(a_stripped))
+  {
+    const notequal2t &ne = to_notequal2t(a_stripped);
+    if (is_constant_int2t(ne.side_2) && to_constant_int2t(ne.side_2).value == 0)
+      a_stripped = ne.side_1;
+  }
+
+  if (is_notequal2t(b_stripped))
+  {
+    const notequal2t &ne = to_notequal2t(b_stripped);
+    if (is_constant_int2t(ne.side_2) && to_constant_int2t(ne.side_2).value == 0)
+      b_stripped = ne.side_1;
+  }
+
+  return a_stripped == b_stripped;
+}
+
 expr2tc if2t::do_simplify() const
 {
   if (is_bool_type(type))
@@ -3103,6 +3137,31 @@ expr2tc if2t::do_simplify() const
     const if2t &inner_if = to_if2t(false_value);
     if (inner_if.cond == cond)
       return if2tc(type, cond, true_value, inner_if.false_value);
+  }
+
+  // (c ? x : (!c ? y : z)) == (c ? x : y)
+  if (is_if2t(false_value))
+  {
+    const if2t &inner_if = to_if2t(false_value);
+    if (is_not2t(inner_if.cond))
+    {
+      const not2t &inner_neg = to_not2t(inner_if.cond);
+      if (conditions_equivalent(inner_neg.value, cond))
+        return if2tc(type, cond, true_value, inner_if.true_value);
+    }
+  }
+
+  // (!c ? x : (c ? y : z)) == (c ? y : x)
+  if (is_not2t(cond))
+  {
+    const not2t &neg = to_not2t(cond);
+    if (is_if2t(false_value))
+    {
+      const if2t &inner_if = to_if2t(false_value);
+      if (conditions_equivalent(inner_if.cond, neg.value))
+        // Use inner_if.cond instead of neg.value to preserve the exact form
+        return if2tc(type, inner_if.cond, inner_if.true_value, true_value);
+    }
   }
 
   return expr2tc();
