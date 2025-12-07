@@ -82,6 +82,16 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return false;
   }
 
+  // Handle byte_update operations with constant operands
+  if (is_byte_update2t(expr))
+  {
+    const byte_update2t &bu = to_byte_update2t(expr);
+
+    // Check offset and value
+    if (is_constant_expr(bu.source_offset) && is_constant_expr(bu.update_value))
+      return true;
+  }
+
   if (is_vector_type(expr))
     return true;
 

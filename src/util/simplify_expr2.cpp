@@ -3926,6 +3926,21 @@ expr2tc byte_extract2t::do_simplify() const
   expr2tc src = try_simplification(source_value);
   expr2tc off = try_simplification(source_offset);
 
+  // Simplify byte_extract(byte_update(source, off1, val), off2)
+  // when off1 == off2 and endianness matches
+  if (is_byte_update2t(src))
+  {
+    const byte_update2t &update = to_byte_update2t(src);
+    // Check if endianness matches and offsets are equal
+    if (update.big_endian == big_endian && update.source_offset == off)
+    {
+      // If the update value has the same type as our result type,
+      // we can directly return it
+      if (update.update_value->type == type)
+        return update.update_value;
+    }
+  }
+
   if (is_array_type(src))
   {
     const array_type2t &at = to_array_type(src->type);
