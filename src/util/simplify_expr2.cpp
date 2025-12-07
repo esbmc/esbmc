@@ -3159,7 +3159,6 @@ expr2tc if2t::do_simplify() const
     {
       const if2t &inner_if = to_if2t(false_value);
       if (conditions_equivalent(inner_if.cond, neg.value))
-        // Use inner_if.cond instead of neg.value to preserve the exact form
         return if2tc(type, inner_if.cond, inner_if.true_value, true_value);
     }
   }
