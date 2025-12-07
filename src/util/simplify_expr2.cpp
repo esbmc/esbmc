@@ -3097,6 +3097,14 @@ expr2tc if2t::do_simplify() const
       return if2tc(type, cond, inner_if.true_value, false_value);
   }
 
+  // (c ? x : (c ? y : z)) == (c ? x : z)
+  if (is_if2t(false_value))
+  {
+    const if2t &inner_if = to_if2t(false_value);
+    if (inner_if.cond == cond)
+      return if2tc(type, cond, true_value, inner_if.false_value);
+  }
+
   return expr2tc();
 }
 

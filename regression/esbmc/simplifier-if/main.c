@@ -11,5 +11,8 @@ int main()
   // (c ? (c ? x : y) : z) -> (c ? x : z)
   assert((c ? (c ? x : y) : z) == (c ? x : z));
 
+  // (c ? x : (c ? y : z)) → (c ? x : z)
+  assert((c ? x : (c ? y : z)) == (c ? x : z));
+
   return 0;
 }
