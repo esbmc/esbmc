@@ -3,6 +3,10 @@ title: ESBMC
 toc: false
 ---
 
+{{< callout type="important" icon="sparkles" >}} **NEW:** Read our new website
+announcement [here](/news/new-website-announcement). {{< /callout >}}
+
+
 {{< cards >}}
   {{< card link="https://dblp.org/pid/42/4311" title="Publications" icon="book-open" >}}
   {{< card link="/sv-comp" title="SV-COMP" icon="book-open" >}}
