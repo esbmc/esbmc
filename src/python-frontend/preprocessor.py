@@ -1,4 +1,5 @@
 import ast
+from tail_recursion_transformer import transform_tail_recursion
 
 class Preprocessor(ast.NodeTransformer):
     def __init__(self, module_name):
@@ -14,6 +15,21 @@ class Preprocessor(ast.NodeTransformer):
         self.helper_functions_added = False  # Track if helper functions have been added
         self.functionKwonlyParams = {}
         self.listcomp_counter = 0  # Counter for list comprehension temporaries
+
+
+    def apply_tail_recursion_transformation(self, tree):
+        """Apply tail recursion to loop transformation"""
+        try:
+            source_code = ast.unparse(tree)
+            transformed_code = transform_tail_recursion(source_code)
+            new_tree = ast.parse(transformed_code)
+            ast.fix_missing_locations(new_tree)
+            return new_tree
+        except Exception as e:
+            import sys
+            print(f"[WARNING] Tail recursion transformation failed: {e}", file=sys.stderr)
+            return tree
+
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""

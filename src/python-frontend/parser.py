@@ -530,6 +530,7 @@ def main():
 
     # Apply AST transformations
     preprocessor = Preprocessor(filename)
+    tree = preprocessor.apply_tail_recursion_transformation(tree)
     tree = preprocessor.visit(tree)
 
     # Tracking of imported modules and aliases
