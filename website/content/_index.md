@@ -3,6 +3,10 @@ title: ESBMC
 toc: false
 ---
 
+{{< callout type="important" icon="sparkles" >}} **NEW:** Read our new website
+announcement [here](/news/new-website-announcement). {{< /callout >}}
+
+
 {{< cards >}}
   {{< card link="https://dblp.org/pid/42/4311" title="Publications" icon="book-open" >}}
   {{< card link="/sv-comp" title="SV-COMP" icon="book-open" >}}
@@ -34,11 +38,11 @@ toc: false
 
 {{% /details %}}
 
-ESBMC is a mature, permissively licensed open-source SMT-based context-bounded model checker for single- and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It automatically detects or proves the absence of runtime errors (e.g., bounds checks, pointer safety, overflow) and verifies user-defined assertions without requiring pre- or postconditions. For multi-threaded programs, ESBMC supports lazy and schedule-recording approaches, encoding verification conditions into SMT formulas solved directly by an SMT solver.
+ESBMC is a mature, permissively licensed open-source SMT-based context-bounded model checker for single and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It automatically detects or proves the absence of runtime errors (e.g., bounds checks, pointer safety, overflow) and verifies user-defined assertions without requiring pre- or postconditions. For multi-threaded programs, ESBMC supports lazy and schedule-recording approaches, encoding verification conditions into SMT formulas solved directly by an SMT solver.
 
 ## Features
 
-ESBMC aims to support all of C11, and detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of problems that can be detected include:
+ESBMC aims to support all C features up to version 14, and detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of problems that can be detected include:
 
 
 - The Clang compiler as its C/C++/CHERI/CUDA frontend;
