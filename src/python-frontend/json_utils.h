@@ -298,6 +298,16 @@ find_var_in_function(const std::string &var_name, const JsonType &func_node)
     }
   }
 
+  // Search in keyword-only arguments (after *)
+  if (func_node.contains("args") && func_node["args"].contains("kwonlyargs"))
+  {
+    for (const auto &arg : func_node["args"]["kwonlyargs"])
+    {
+      if (arg.contains("arg") && arg["arg"] == var_name)
+        return arg;
+    }
+  }
+
   // Then search in function body
   return get_var_node(var_name, func_node);
 }
