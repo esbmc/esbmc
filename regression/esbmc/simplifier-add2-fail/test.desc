@@ -1,4 +1,4 @@
 CORE
 main.c
---overflow-check --multi-property
-^Properties: 28 verified, \✓ 12 skipped, \✗ 16 failed$
+--overflow-check
+^VERIFICATION FAILED$
