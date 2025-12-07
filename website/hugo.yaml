@@ -63,3 +63,7 @@ params:
   editURL:
     enable: true
     base: "https://github.com/esbmc/esbmc/edit/master/website"
+
+  blog:
+    list:
+      displayTags: true
