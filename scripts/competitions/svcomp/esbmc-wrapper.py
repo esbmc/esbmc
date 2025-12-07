@@ -227,7 +227,7 @@ esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
-esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
+esbmc_dargs += "--no-align-check --k-step 5 --floatbv --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
