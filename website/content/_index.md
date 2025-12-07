@@ -4,14 +4,35 @@ toc: false
 ---
 
 {{< cards >}}
-  {{< card link="/publications" title="Publications" icon="book-open" >}}
+  {{< card link="https://dblp.org/pid/42/4311" title="Publications" icon="book-open" >}}
   {{< card link="/sv-comp" title="SV-COMP" icon="book-open" >}}
   {{< card link="/test-comp" title="Test-COMP" icon="book-open" >}}
   {{< card link="https://ssvlab.github.io/" title="SSV Lab" icon="book-open" >}}
-  {{< card link="https://github.com/esbmc/esbmc" title="Source Code" icon="github" >}}
-  {{< card link="https://github.com/esbmc/esbmc/releases/latest" title="Download" icon="download" >}}
+  {{< card link="https://github.com/esbmc/esbmc/releases/latest" title="GitHub" icon="github" >}}
+  {{< card link="https://github.com/esbmc/esbmc-web" title="Web Interface" icon="external-link" >}}
+  {{< card link="https://github.com/esbmc/vscode-esbmc" title="VSCode Extension" icon="external-link" >}}
   {{< card link="https://esbmc.github.io/esbmc-ai" title="ESBMC-AI" icon="external-link" >}}
 {{< /cards >}}
+
+
+{{% details title="Download" closed="true" %}}
+
+{{< tabs items="Windows,Linux" >}}
+  {{< tab >}}
+    {{< cards >}}
+      {{< card link="https://github.com/esbmc/esbmc/releases/latest/download/esbmc-windows.zip" title="Download" icon="download" >}}
+    {{< /cards >}}
+  {{< /tab >}}
+
+  {{< tab >}}
+    {{< cards >}}
+      {{< card link="https://github.com/esbmc/esbmc/releases/latest/download/esbmc-linux.zip" title="Download" icon="download" >}}
+    {{< /cards >}}
+  {{< /tab >}}
+
+{{< /tabs >}}
+
+{{% /details %}}
 
 ESBMC is a mature, permissively licensed open-source SMT-based context-bounded model checker for single- and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It automatically detects or proves the absence of runtime errors (e.g., bounds checks, pointer safety, overflow) and verifies user-defined assertions without requiring pre- or postconditions. For multi-threaded programs, ESBMC supports lazy and schedule-recording approaches, encoding verification conditions into SMT formulas solved directly by an SMT solver.
 
