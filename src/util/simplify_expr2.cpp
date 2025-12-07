@@ -3123,14 +3123,6 @@ expr2tc if2t::do_simplify() const
     (gen_one(false_value->type) == false_value) && is_true(false_value))
     return typecast_check_return(type, not2tc(cond));
 
-  // (c ? (c ? x : y) : z) == (c ? x : z)
-  if (is_if2t(true_value))
-  {
-    const if2t &inner_if = to_if2t(true_value);
-    if (inner_if.cond == cond)
-      return if2tc(type, cond, inner_if.true_value, false_value);
-  }
-
   // (c ? x : (c ? y : z)) == (c ? x : z)
   if (is_if2t(false_value))
   {
