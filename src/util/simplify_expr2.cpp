@@ -458,6 +458,14 @@ expr2tc add2t::do_simplify() const
       return sub.side_1;
   }
 
+  // x + (-y) -> x - y
+  if (is_neg2t(side_2))
+    return sub2tc(type, side_1, to_neg2t(side_2).value);
+
+  // (-x) + y -> y - x
+  if (is_neg2t(side_1))
+    return sub2tc(type, side_2, to_neg2t(side_1).value);
+
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
   if (!is_nil_expr(res))
     return res;
@@ -523,6 +531,26 @@ struct Subtor
   }
 };
 
+/**
+ * Check if value fits in given bit width without overflow
+ */
+static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed)
+{
+  if (is_signed)
+  {
+    BigInt min_val = -(BigInt::power2(width - 1));
+    BigInt max_val = BigInt::power2(width - 1) - 1;
+    return value >= min_val && value <= max_val;
+  }
+  else
+  {
+    if (value < 0)
+      return false;
+    BigInt max_val = BigInt::power2(width) - 1;
+    return value <= max_val;
+  }
+}
+
 expr2tc sub2t::do_simplify() const
 {
   // x - x = 0 (self-subtraction)
@@ -536,6 +564,17 @@ expr2tc sub2t::do_simplify() const
 
     if (add.side_2 == side_2)
       return add.side_1;
+  }
+
+  // x - (-y) -> x + y
+  if (is_neg2t(side_2))
+    return add2tc(type, side_1, to_neg2t(side_2).value);
+
+  // (-x) - y -> -(x + y)
+  if (is_neg2t(side_1))
+  {
+    expr2tc sum = add2tc(type, to_neg2t(side_1).value, side_2);
+    return neg2tc(type, sum);
   }
 
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
@@ -2674,6 +2713,82 @@ expr2tc equality2t::do_simplify() const
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
     return simplify_floatbv_relations<IEEE_equalitytor, equality2t>(
       type, side_1, side_2);
+
+  // (x + c1) == c2 -> x == (c2 - c1)
+  if (is_add2t(side_1) && is_constant_int2t(side_2))
+  {
+    const add2t &add_expr = to_add2t(side_1);
+
+    if (is_constant_int2t(add_expr.side_2))
+    {
+      const BigInt &c1 = to_constant_int2t(add_expr.side_2).value;
+      const BigInt &c2 = to_constant_int2t(side_2).value;
+      BigInt diff = c2 - c1;
+
+      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      {
+        expr2tc new_const = constant_int2tc(side_2->type, diff);
+        return equality2tc(add_expr.side_1, new_const);
+      }
+    }
+
+    if (is_constant_int2t(add_expr.side_1))
+    {
+      const BigInt &c1 = to_constant_int2t(add_expr.side_1).value;
+      const BigInt &c2 = to_constant_int2t(side_2).value;
+      BigInt diff = c2 - c1;
+
+      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      {
+        expr2tc new_const = constant_int2tc(side_2->type, diff);
+        return equality2tc(add_expr.side_2, new_const);
+      }
+    }
+  }
+
+  // (x - c1) == c2 -> x == (c2 + c1)
+  if (is_sub2t(side_1) && is_constant_int2t(side_2))
+  {
+    const sub2t &sub_expr = to_sub2t(side_1);
+
+    if (is_constant_int2t(sub_expr.side_2))
+    {
+      const BigInt &c1 = to_constant_int2t(sub_expr.side_2).value;
+      const BigInt &c2 = to_constant_int2t(side_2).value;
+      BigInt sum = c2 + c1;
+
+      if (fits_in_width(sum, type->get_width(), is_signedbv_type(type)))
+      {
+        expr2tc new_const = constant_int2tc(side_2->type, sum);
+        return equality2tc(sub_expr.side_1, new_const);
+      }
+    }
+  }
+
+  // (x * c) == 0 -> x == 0 (when c != 0)
+  if (is_mul2t(side_1) && is_constant_int2t(side_2))
+  {
+    const mul2t &mul_expr = to_mul2t(side_1);
+    const BigInt &c2 = to_constant_int2t(side_2).value;
+
+    if (c2 == 0)
+    {
+      // Check if either operand is a non-zero constant
+      if (is_constant_int2t(mul_expr.side_2))
+      {
+        const BigInt &c1 = to_constant_int2t(mul_expr.side_2).value;
+        if (c1 != 0)
+          return equality2tc(mul_expr.side_1, side_2);
+      }
+
+      if (is_constant_int2t(mul_expr.side_1))
+      {
+        const BigInt &c1 = to_constant_int2t(mul_expr.side_1).value;
+        if (c1 != 0)
+          return equality2tc(mul_expr.side_2, side_2);
+      }
+    }
+  }
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }

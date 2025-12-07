@@ -94,7 +94,11 @@ class python_annotation
 {
 public:
   python_annotation(Json &ast, global_scope &gs)
-    : ast_(ast), gs_(gs), current_func(nullptr), current_line_(0)
+    : ast_(ast),
+      gs_(gs),
+      current_func(nullptr),
+      parent_func(nullptr),
+      current_line_(0)
   {
     python_filename_ = ast_["filename"].template get<std::string>();
     if (ast_.contains("ast_output_dir"))
@@ -215,9 +219,17 @@ private:
   {
     const std::string &func_name = function_element["name"];
 
+    // Determine where to search for function calls:
+    // - For nested functions: search in parent function's body
+    // - For top-level functions: search in global AST body
+    const Json &search_context =
+      (parent_func != nullptr)
+        ? (*parent_func)["body"] // Search in parent function's body
+        : ast_["body"];          // Search in global body
+
     // Find all calls to this function in the AST
     std::vector<Json> function_calls =
-      find_function_calls(func_name, ast_["body"]);
+      find_function_calls(func_name, search_context);
 
     if (function_calls.empty())
       return; // No calls found, cannot infer
@@ -338,15 +350,56 @@ private:
     }
     else if (arg["_type"] == "Name")
     {
-      // Try to find the type of the variable
+      const std::string &var_name = arg["id"];
+
+      // Try to find the type of the variable in current scope
       Json var_node =
-        json_utils::find_var_decl(arg["id"], get_current_func_name(), ast_);
+        json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+      // Check if we found a node with annotation
+      bool has_annotation = !var_node.empty() &&
+                            var_node.contains("annotation") &&
+                            !var_node["annotation"].is_null();
+
+      // If not found or found without annotation, and we're in a nested function,
+      // try to find in parent function's parameters and body
+      if (!has_annotation && parent_func != nullptr)
+      {
+        // Check parent function's parameters
+        if (
+          (*parent_func).contains("args") &&
+          (*parent_func)["args"].contains("args"))
+        {
+          var_node =
+            find_annotated_assign(var_name, (*parent_func)["args"]["args"]);
+        }
+
+        // If still not found, check parent function's body for local variables
+        if (var_node.empty() && (*parent_func).contains("body"))
+        {
+          var_node = find_annotated_assign(var_name, (*parent_func)["body"]);
+        }
+      }
+
+      // Extract type from the found variable node
       if (
         !var_node.empty() && var_node.contains("annotation") &&
         !var_node["annotation"].is_null())
       {
+        // Handle arg nodes (function parameters)
+        if (var_node["_type"] == "arg")
+        {
+          // Parameters can have annotation as {"id": "int"} or
+          // {"value": {"id": "int"}} for generic types
+          if (var_node["annotation"].contains("id"))
+            return var_node["annotation"]["id"];
+          else if (
+            var_node["annotation"].contains("value") &&
+            var_node["annotation"]["value"].contains("id"))
+            return var_node["annotation"]["value"]["id"];
+        }
         // Handle generic type annotations like list[int] (Subscript nodes)
-        if (
+        else if (
           var_node["annotation"].contains("_type") &&
           var_node["annotation"]["_type"] == "Subscript" &&
           var_node["annotation"].contains("value") &&
@@ -582,6 +635,8 @@ private:
   void annotate_function(Json &function_element)
   {
     std::string saved_func_name_context = current_func_name_context_;
+    Json *saved_parent_func = parent_func; // Save previous parent
+
     const std::string &func_name =
       function_element["name"].template get<std::string>();
 
@@ -602,6 +657,7 @@ private:
       current_func_name_context_ = func_name;
     }
 
+    parent_func = current_func; // Current becomes parent
     current_func = &function_element;
 
     // Infer types for unannotated parameters based on function calls
@@ -629,6 +685,7 @@ private:
       // Update the end column offset after adding annotations
       update_end_col_offset(function_element);
       current_func = nullptr;
+      parent_func = saved_parent_func; // Restore previous parent
       current_func_name_context_ = saved_func_name_context;
       return; // Exit early for __init__
     }
@@ -666,6 +723,7 @@ private:
     update_end_col_offset(function_element);
 
     current_func = nullptr;
+    parent_func = saved_parent_func; // Restore previous parent
     current_func_name_context_ = saved_func_name_context;
   }
 
@@ -2266,6 +2324,8 @@ private:
   global_scope &gs_;
   std::shared_ptr<module_manager> module_manager_;
   Json *current_func;
+  Json
+    *parent_func; // Track parent function for nested function scope resolution
   int current_line_;
   std::string python_filename_;
   bool filter_global_elements_ = false;
