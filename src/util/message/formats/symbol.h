@@ -25,6 +25,6 @@ struct fmt::formatter<symbolt>
   {
     std::ostringstream oss;
     p.show(oss);
-    return format_to(ctx.out(), "{}", oss.str());
+    return fmt::format_to(ctx.out(), "{}", oss.str());
   }
 };

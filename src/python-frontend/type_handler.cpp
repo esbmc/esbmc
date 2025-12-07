@@ -302,6 +302,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return build_array(char_type(), type_size); // Array of characters
   }
 
+  // all(): Return True if all elements are truthy (returns bool)
+  if (ast_type == "all")
+    return bool_type();
+
+  // any(): Return True if any element is truthy (returns bool)
+  if (ast_type == "any")
+    return bool_type();
+
   // tuple — handle tuple type annotations
   // For generic "tuple" without element types, return empty type
   // so the actual type is inferred from the tuple value

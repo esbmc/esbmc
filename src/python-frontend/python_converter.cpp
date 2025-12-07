@@ -1383,6 +1383,9 @@ void python_converter::resolve_dict_subscript_types(
     {
       lhs = dict_handler_->handle_dict_subscript(
         dict_expr, left["slice"], rhs.type());
+      // Dereference the pointer to get the actual value
+      if (lhs.type().is_pointer())
+        lhs = dereference_exprt(lhs, lhs.type().subtype());
     }
   }
 
@@ -1396,6 +1399,9 @@ void python_converter::resolve_dict_subscript_types(
     {
       rhs = dict_handler_->handle_dict_subscript(
         dict_expr, right["slice"], lhs.type());
+      // Dereference the pointer to get the actual value
+      if (rhs.type().is_pointer())
+        rhs = dereference_exprt(rhs, rhs.type().subtype());
     }
   }
 
@@ -1413,6 +1419,9 @@ void python_converter::resolve_dict_subscript_types(
     {
       lhs = dict_handler_->handle_dict_subscript(
         lhs_dict, left["slice"], default_type);
+      // Dereference the pointer to get the actual value
+      if (lhs.type().is_pointer())
+        lhs = dereference_exprt(lhs, lhs.type().subtype());
     }
 
     exprt rhs_dict = get_expr(right["value"]);
@@ -1422,11 +1431,14 @@ void python_converter::resolve_dict_subscript_types(
     {
       rhs = dict_handler_->handle_dict_subscript(
         rhs_dict, right["slice"], default_type);
+      // Dereference the pointer to get the actual value
+      if (rhs.type().is_pointer())
+      {
+        rhs = dereference_exprt(rhs, rhs.type().subtype());
+      }
     }
   }
 }
-
-// (annotation type collection & inheritance helpers moved to python_typechecking)
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
@@ -1983,13 +1995,33 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   return nullptr;
 }
 
-symbolt *python_converter::find_symbol(const std::string &symbol_id) const
+symbolt *python_converter::find_symbol(const std::string &sym_id) const
 {
-  if (symbolt *symbol = symbol_table_.find_symbol(symbol_id))
+  if (symbolt *symbol = symbol_table_.find_symbol(sym_id))
     return symbol;
-  if (symbolt *symbol = find_symbol_in_global_scope(symbol_id))
+
+  symbol_id nested_sym_id = symbol_id::from_string(sym_id);
+  std::size_t pos = sym_id.rfind('@');
+  std::string obj = (pos == std::string::npos) ? "" : sym_id.substr(pos + 1);
+  nested_sym_id.set_object(obj);
+
+  for (int i = scope_stack_.size(); i >= 0; --i)
+  {
+    // Build id prefix from module + outer scopes
+    for (int j = 0; j < i; ++j)
+    {
+      std::string func = scope_stack_[j].substr(3); // drop "@F@"
+      nested_sym_id.set_function(func);
+      std::string candidate = nested_sym_id.to_string();
+
+      if (symbolt *symbol = symbol_table_.find_symbol(candidate))
+        return symbol;
+    }
+  }
+
+  if (symbolt *symbol = find_symbol_in_global_scope(sym_id))
     return symbol;
-  return find_imported_symbol(symbol_id);
+  return find_imported_symbol(sym_id);
 }
 
 symbolt *python_converter::find_symbol_in_global_scope(
@@ -3609,10 +3641,14 @@ exprt python_converter::get_rhs_with_dict_resolution(
     return get_expr(ast_node["value"]);
 
   // Check if we need special dict subscript handling for typed variables
+  // Including list type
+  typet list_type = type_handler_.get_list_type();
   if (
     !target_type.is_signedbv() && !target_type.is_unsignedbv() &&
-    !target_type.is_bool())
+    !target_type.is_bool() && target_type != list_type)
+  {
     return get_expr(ast_node["value"]);
+  }
 
   exprt dict_expr = get_expr(ast_node["value"]["value"]);
   if (
@@ -5599,18 +5635,29 @@ void python_converter::get_function_definition(
   // Setup function context
   const std::string caller_func_name = current_func_name_;
 
-  // Function location
   locationt location = get_location_from_decl(function_node);
 
   current_element_type = type.return_type();
-  current_func_name_ = function_node["name"].get<std::string>();
+  std::string func_name = function_node["name"].get<std::string>();
 
   // __init__() is renamed to Classname()
-  if (current_func_name_ == "__init__")
+  if (func_name == "__init__")
   {
-    current_func_name_ = current_class_name_;
+    func_name = current_class_name_;
     type.return_type() = typet("constructor");
   }
+
+  // If we are inside another function, create a nested name
+  if (!caller_func_name.empty())
+  {
+    current_func_name_ = caller_func_name + "@F@" + func_name;
+  }
+  else
+  {
+    current_func_name_ = func_name;
+  }
+
+  scope_stack_.push_back("@F@" + func_name);
 
   symbol_id id = create_symbol_id();
 
@@ -5651,6 +5698,8 @@ void python_converter::get_function_definition(
   validate_return_paths(function_node, type, function_body);
 
   added_symbol->value = function_body;
+
+  scope_stack_.pop_back();
 
   // Restore caller function name
   current_func_name_ = caller_func_name;
@@ -6701,6 +6750,7 @@ void python_converter::convert()
     const std::string &ast_output_dir =
       (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
+      "builtins",
       "range",
       "int",
       "consensus",

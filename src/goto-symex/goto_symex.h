@@ -1101,6 +1101,11 @@ protected:
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */
   std::map<unsigned, BigInt> unwind_set;
+  /** Unwind bounds by function name and per-function loop index (0-indexed),
+   *  (function name, loop index) -> max unwinds. */
+  std::map<std::pair<std::string, unsigned>, BigInt> unwind_func_set;
+  /** Mapping global loop ID -> (function name, per-function loop index). */
+  std::map<unsigned, std::pair<std::string, unsigned>> loop_id_to_func_index;
   /** Global maximum number of unwinds. */
   BigInt max_unwind;
   /** Whether constant propagation is to be enabled. */
