@@ -293,12 +293,8 @@ void add_cprover_library(contextt &context, const languaget *language)
     abort();
   }
 
-#ifdef ESBMC_BUNDLE_LIBC_32BIT
   clib = &clibs[config.ansi_c.cheri][!config.ansi_c.use_fixed_for_float]
                [config.ansi_c.word_size == 64];
-#else
-  clib = &clibs[config.ansi_c.cheri][!config.ansi_c.use_fixed_for_float][0];
-#endif
 
   if (clib->size == 0)
   {
