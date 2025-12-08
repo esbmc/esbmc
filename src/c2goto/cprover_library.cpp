@@ -57,12 +57,16 @@ static const struct buffer
     {
 #  ifdef ESBMC_BUNDLE_LIBC_32BIT
       {&clib32_buf[0], clib32_buf_size},
+#  else
+      {NULL, 0},
 #  endif
       {&clib64_buf[0], clib64_buf_size},
     },
     {
 #  ifdef ESBMC_BUNDLE_LIBC_32BIT
       {&clib32_fp_buf[0], clib32_fp_buf_size},
+#  else
+      {NULL, 0},
 #  endif
       {&clib64_fp_buf[0], clib64_fp_buf_size},
     },
