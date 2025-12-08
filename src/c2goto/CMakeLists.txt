@@ -56,7 +56,7 @@ endfunction()
 if (ESBMC_BUNDLE_LIBC)
 
   set(archs --64)
-  if(ENABLE_BUNDLE_LIBC_32BIT)    
+  if(ENABLE_BUNDLE_LIBC_32BIT)
     set(archs --32 --64)
   endif()
   
