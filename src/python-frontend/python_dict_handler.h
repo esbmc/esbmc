@@ -214,7 +214,34 @@ public:
    *
    * @return The struct_typet representing Python dictionaries.
    */
+
   struct_typet get_dict_struct_type();
+
+  /**
+   * @brief Handles dictionary get() method (e.g., `dict.get(key, default)`).
+   *
+   * Implements Python's dict.get() which returns the value for a key if it exists,
+   * or a default value if it doesn't (None if not specified).
+   *
+   * @param dict_expr The expression representing the dictionary.
+   * @param slice_node The JSON AST node for the key.
+   * @param default_value Optional default value expression (None if not provided).
+   * @param expected_type The expected type of the return value.
+   * @return An expression representing the retrieved value or default.
+   */
+  exprt handle_dict_get(
+    const exprt &dict_expr,
+    const nlohmann::json &slice_node,
+    const exprt &default_value,
+    const typet &expected_type = typet());
+
+  /**
+   * @brief Extracts the key expression from a subscript slice node.
+   *
+   * @param slice_node The JSON AST node representing the subscript slice.
+   * @return The expression representing the key.
+   */
+  exprt get_key_expr(const nlohmann::json &slice_node);
 
 private:
   /// Reference to the main Python converter
@@ -228,14 +255,6 @@ private:
 
   /// Counter for generating unique dictionary variable names
   static int dict_counter_;
-
-  /**
-   * @brief Extracts the key expression from a subscript slice node.
-   *
-   * @param slice_node The JSON AST node representing the subscript slice.
-   * @return The expression representing the key.
-   */
-  exprt get_key_expr(const nlohmann::json &slice_node);
 };
 
 #endif // PYTHON_DICT_HANDLER_H

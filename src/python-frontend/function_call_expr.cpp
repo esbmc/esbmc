@@ -1569,6 +1569,48 @@ exprt function_call_expr::handle_list_pop() const
   return deref_value;
 }
 
+exprt function_call_expr::handle_dict_get_method() const
+{
+  const auto &args = call_["args"];
+
+  if (args.empty() || args.size() > 2)
+    throw std::runtime_error("get() takes 1 or 2 arguments");
+
+  // Get the dictionary object
+  std::string dict_name = get_object_name();
+  symbol_id dict_symbol_id = converter_.create_symbol_id();
+  dict_symbol_id.set_object(dict_name);
+  const symbolt *dict_symbol =
+    converter_.find_symbol(dict_symbol_id.to_string());
+
+  if (!dict_symbol)
+    throw std::runtime_error("Dictionary variable not found: " + dict_name);
+
+  // Get the key
+  const nlohmann::json &key_node = args[0];
+
+  // Determine default value and expected type
+  exprt default_value;
+  typet expected_type;
+
+  if (args.size() == 2)
+  {
+    // Explicit default provided
+    default_value = converter_.get_expr(args[1]);
+    expected_type = default_value.type();
+  }
+  else
+  {
+    // No default - use int type with 0 to represent None
+    // This will work with ISNONE checks
+    expected_type = int_type();
+    default_value = gen_zero(expected_type);
+  }
+
+  return converter_.get_dict_handler()->handle_dict_get(
+    symbol_expr(*dict_symbol), key_node, default_value, expected_type);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1580,7 +1622,7 @@ bool function_call_expr::is_list_method_call() const
   return method_name == "append" || method_name == "pop" ||
          method_name == "insert" || method_name == "remove" ||
          method_name == "clear" || method_name == "extend" ||
-         method_name == "insert";
+         method_name == "insert" || method_name == "get";
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -1597,6 +1639,10 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_clear();
   if (method_name == "pop")
     return handle_list_pop();
+
+  // Add dict.get() support
+  if (method_name == "get")
+    return handle_dict_get_method();
 
   // Add other methods as needed
 

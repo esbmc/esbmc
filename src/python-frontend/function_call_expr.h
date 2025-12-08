@@ -227,6 +227,8 @@ private:
   exprt handle_list_clear() const;
   exprt handle_list_pop() const;
 
+  exprt handle_dict_get_method() const;
+
   /*
    * Check if the current function call is to a regular expression module function
    * Returns true if the function is match, search, or fullmatch from the re module

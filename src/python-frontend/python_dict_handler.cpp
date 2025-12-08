@@ -590,3 +590,162 @@ void python_dict_handler::handle_dict_delete(
 
   target_block.copy_to_operands(if_stmt);
 }
+
+exprt python_dict_handler::handle_dict_get(
+  const exprt &dict_expr,
+  const nlohmann::json &slice_node,
+  const exprt &default_value,
+  const typet &expected_type)
+{
+  locationt location = converter_.get_location_from_decl(slice_node);
+  typet list_type = type_handler_.get_list_type();
+
+  exprt key_expr = get_key_expr(slice_node);
+
+  // Get dict.keys and dict.values
+  member_exprt keys_member(dict_expr, "keys", list_type);
+  member_exprt values_member(dict_expr, "values", list_type);
+
+  // Check if key exists
+  nlohmann::json dummy_json;
+  python_list list_handler_check(converter_, dummy_json);
+  exprt key_exists = list_handler_check.contains(key_expr, keys_member);
+
+  // Determine the actual result type
+  typet result_type;
+  if (!expected_type.is_nil() && expected_type.id() != "empty")
+  {
+    result_type = expected_type;
+  }
+  else if (default_value.type().id() != "empty")
+  {
+    result_type = default_value.type();
+  }
+  else
+  {
+    // Default to the type stored in values (int in most cases)
+    result_type = int_type();
+  }
+
+  // Create a temporary to hold the result
+  symbolt &result_var = converter_.create_tmp_symbol(
+    slice_node, "$dict_get_result$", result_type, exprt());
+
+  code_declt result_decl(symbol_expr(result_var));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Create "key exists" branch: get the value
+  code_blockt exists_block;
+
+  // Find the index of the key
+  const symbolt *find_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_find_index");
+  if (!find_func)
+    throw std::runtime_error("__ESBMC_list_find_index not found");
+
+  symbolt &index_var = converter_.create_tmp_symbol(
+    slice_node, "$dict_get_idx$", size_type(), gen_zero(size_type()));
+
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  exists_block.copy_to_operands(index_decl);
+
+  python_list list_handler(converter_, slice_node);
+  list_elem_info key_info =
+    list_handler.get_list_element_info(slice_node, key_expr);
+
+  // Call find_index
+  code_function_callt find_call;
+  find_call.function() = symbol_expr(*find_func);
+  find_call.lhs() = symbol_expr(index_var);
+  find_call.arguments().push_back(keys_member);
+
+  exprt key_arg;
+  if (
+    key_info.elem_symbol->type.is_pointer() &&
+    key_info.elem_symbol->type.subtype() == char_type())
+    key_arg = symbol_expr(*key_info.elem_symbol);
+  else
+    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+
+  find_call.arguments().push_back(key_arg);
+  find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  find_call.arguments().push_back(key_info.elem_size);
+  find_call.type() = size_type();
+  find_call.location() = location;
+  exists_block.copy_to_operands(find_call);
+
+  // Get the value at the index
+  const symbolt *at_func = symbol_table_.find_symbol("c:@F@__ESBMC_list_at");
+  if (!at_func)
+    throw std::runtime_error("__ESBMC_list_at not found");
+
+  typet obj_ptr_type = pointer_typet(type_handler_.get_list_element_type());
+  symbolt &obj_var = converter_.create_tmp_symbol(
+    slice_node, "$dict_get_obj$", obj_ptr_type, exprt());
+
+  code_declt obj_decl(symbol_expr(obj_var));
+  obj_decl.location() = location;
+  exists_block.copy_to_operands(obj_decl);
+
+  code_function_callt at_call;
+  at_call.function() = symbol_expr(*at_func);
+  at_call.lhs() = symbol_expr(obj_var);
+  at_call.arguments().push_back(values_member);
+  at_call.arguments().push_back(symbol_expr(index_var));
+  at_call.type() = obj_ptr_type;
+  at_call.location() = location;
+  exists_block.copy_to_operands(at_call);
+
+  // Extract the value from PyObject
+  member_exprt obj_value(
+    dereference_exprt(
+      symbol_expr(obj_var), type_handler_.get_list_element_type()),
+    "value",
+    pointer_typet(empty_typet()));
+
+  // Cast and dereference based on result type
+  exprt extracted_value;
+  typecast_exprt value_as_type_ptr(obj_value, pointer_typet(result_type));
+  extracted_value = dereference_exprt(value_as_type_ptr, result_type);
+  extracted_value.type() = result_type;
+
+  // Assign to result
+  code_assignt exists_assign(symbol_expr(result_var), extracted_value);
+  exists_assign.location() = location;
+  exists_block.copy_to_operands(exists_assign);
+
+  // Create "key doesn't exist" branch: use default value
+  code_blockt not_exists_block;
+
+  // Ensure default value matches result type
+  exprt typed_default = default_value;
+  if (default_value.type() != result_type)
+  {
+    // Cast default to match result type if needed
+    if (default_value.type().is_nil() || default_value.type().id() == "empty")
+    {
+      typed_default = gen_zero(result_type);
+    }
+    else
+    {
+      typed_default = typecast_exprt(default_value, result_type);
+    }
+  }
+
+  code_assignt default_assign(symbol_expr(result_var), typed_default);
+  default_assign.location() = location;
+  not_exists_block.copy_to_operands(default_assign);
+
+  // Create if-then-else
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = key_exists;
+  if_stmt.then_case() = exists_block;
+  if_stmt.else_case() = not_exists_block;
+  if_stmt.location() = location;
+
+  converter_.add_instruction(if_stmt);
+
+  return symbol_expr(result_var);
+}
