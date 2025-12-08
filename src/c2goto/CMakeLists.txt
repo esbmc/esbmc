@@ -88,7 +88,7 @@ if (ESBMC_BUNDLE_LIBC)
   set (clib64f_config clib64_fp.c --64 --floatbv)
   set (inputs clib64_config clib64f_config)
   if(ENABLE_BUNDLE_LIBC_32BIT)    
-    set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)  
+    set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
     set (clib32f_config clib32_fp.c --32 --floatbv)
     set (inputs clib32_config
       clib64_config
