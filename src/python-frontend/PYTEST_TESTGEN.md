@@ -51,6 +51,9 @@ def test_check_sign(n):
 ```
 
 ### Running the Tests
+After the verification tool has generated the pytest test cases, you should remove the nondeterministic input lines
+from the original program, such as `check_sign(__VERIFIER_nondet_int())`. These calls are required only during the
+verification phase and are no longer needed (cause errors) when running the generated pytest tests.
 
 ```bash
 # Run the generated tests

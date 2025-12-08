@@ -1,3 +1,6 @@
+#ifndef CPROVER_GOTO_SYMEX_WITNESSES_H
+#define CPROVER_GOTO_SYMEX_WITNESSES_H
+
 #include <boost/property_tree/xml_parser.hpp>
 #include <util/namespace.h>
 #include <irep2/irep2.h>
@@ -239,19 +242,46 @@ void generate_testcase(
   smt_convt &smt_conv);
 
 /// This generates pytest test-cases for Python programs
-void generate_pytest_testcase(
-  const std::string &file_name,
-  const symex_target_equationt &target,
-  smt_convt &smt_conv,
-  const namespacet &ns);
+class pytest_generator
+{
+private:
+  std::vector<std::vector<std::string>> test_cases;
+  std::vector<std::string> param_names;
+  std::string function_name;
+  mutable std::mutex data_mutex;
 
-/// Collect test case data from counterexample (for coverage mode)
-void collect_pytest_test_data(
-  const symex_target_equationt &target,
-  smt_convt &smt_conv);
+  /// Helper: Clean up ESBMC internal variable names
+  std::string clean_variable_name(const std::string &name) const;
 
-/// Generate pytest file from collected test data (for coverage mode)
-void generate_pytest_from_collected_data(const std::string &file_name);
+  /// Helper: Extract function name from SSA steps
+  std::string extract_function_name(
+    const symex_target_equationt &target,
+    smt_convt &smt_conv) const;
 
-/// Clear collected pytest test data
-void clear_pytest_test_data();
+  /// Helper: Convert C-style float string to Python format
+  std::string convert_float_to_python(const std::string &c_float) const;
+
+public:
+  pytest_generator() = default;
+
+  /// Clear collected data (called at start of coverage run)
+  void clear();
+
+  /// Collect test data from a counterexample (called for each CEX in coverage mode)
+  void collect(const symex_target_equationt &target, smt_convt &smt_conv);
+
+  /// Generate pytest file from collected data (called at end of coverage mode)
+  void generate(const std::string &file_name) const;
+
+  /// Single-shot generation for non-coverage mode
+  void generate_single(
+    const std::string &file_name,
+    const symex_target_equationt &target,
+    smt_convt &smt_conv,
+    const namespacet &ns);
+
+  /// Check if any test cases have been collected
+  bool has_tests() const;
+};
+
+#endif

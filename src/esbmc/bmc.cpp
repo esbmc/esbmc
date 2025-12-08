@@ -38,7 +38,6 @@
 #include <util/time_stopping.h>
 #include <util/cache.h>
 #include <atomic>
-#include <goto-symex/witnesses.h>
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
@@ -176,7 +175,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
       module_name = module_name.substr(slash_pos + 1);
 
     std::string pytest_filename = "test_" + module_name + ".py";
-    generate_pytest_testcase(pytest_filename, eq, smt_conv, ns);
+    pytest_gen.generate_single(pytest_filename, eq, smt_conv, ns);
   }
 
   if (options.get_bool_option("generate-html-report"))
@@ -527,7 +526,8 @@ void bmct::report_multi_property_trace(
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
-  const std::unordered_multiset<std::string> &reached_mul_claims)
+  const std::unordered_multiset<std::string> &reached_mul_claims,
+  pytest_generator &pytest_gen)
 {
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -769,7 +769,7 @@ void report_coverage(
       module_name = module_name.substr(slash_pos + 1);
 
     std::string pytest_filename = "test_" + module_name + ".py";
-    generate_pytest_from_collected_data(pytest_filename);
+    pytest_gen.generate(pytest_filename);
   }
 }
 
@@ -1148,7 +1148,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 {
   // Clear collected pytest test data at the start of coverage run
   if (options.get_bool_option("generate-pytest-testcase"))
-    clear_pytest_test_data();
+    pytest_gen.clear();
 
   fine_timet symex_start = current_time();
   try
@@ -1583,7 +1583,7 @@ smt_convt::resultt bmct::multi_property_check(
 
       // Collect pytest test data if requested (for coverage mode)
       if (options.get_bool_option("generate-pytest-testcase"))
-        collect_pytest_test_data(local_eq, *solver_ptr);
+        pytest_gen.collect(local_eq, *solver_ptr);
 
       // Store claim signature
       if (is_assert_cov)
@@ -1689,7 +1689,7 @@ smt_convt::resultt bmct::multi_property_check(
   if (
     bs && !fc && !is && !options.get_bool_option("k-induction") &&
     !options.get_bool_option("incremental-bmc"))
-    report_coverage(options, reached_claims, reached_mul_claims);
+    report_coverage(options, reached_claims, reached_mul_claims, pytest_gen);
 
   return final_result;
 }
