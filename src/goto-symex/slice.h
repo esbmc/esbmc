@@ -82,6 +82,9 @@ public:
 class symex_slicet : public slicer
 {
 public:
+  // Add constant for nondet prefix
+  static constexpr const char *NONDET_PREFIX = "nondet$";
+
   explicit symex_slicet(const optionst &options)
     : slice_assumes(options.get_bool_option("slice-assumes")),
       slice_nondet(!options.get_bool_option("generate-testcase"))
@@ -120,7 +123,8 @@ public:
   std::unordered_set<std::string> depends;
 
   /**
- * Hold a map of array symbols and indexes. All other indexes can be cut */
+   * Hold a map of array symbols and indexes. All other indexes can be cut
+   */
   std::unordered_map<std::string, std::unordered_set<size_t>> indexes;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
@@ -142,7 +146,6 @@ public:
    *    * Note 2: Similar to ASSERTS, if 'slice-assumes' option is
    * is not enabled. Then only its symbols are added into the
    * #depends
-
    *
    * @param eq The target equation containing the SSA steps to perform program
    *           slicing on.
@@ -165,6 +168,12 @@ protected:
    */
   template <bool Add>
   bool get_symbols(const expr2tc &expr);
+
+  // Fast-path for checking if a simple symbol is in dependencies
+  bool symbol_in_depends(const expr2tc &expr) const;
+
+  // Helper to check if an index is valid
+  bool is_valid_index(const constant_int2t &index) const;
 
   /**
    * Remove unneeded assumes from the formula
