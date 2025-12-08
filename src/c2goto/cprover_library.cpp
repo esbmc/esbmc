@@ -53,18 +53,21 @@ static const struct buffer
   size_t size;
 } clibs[3][2][2] = {
 #ifdef ESBMC_BUNDLE_LIBC
-  {
-    {
-      {&clib32_buf[0], clib32_buf_size},
-      {&clib64_buf[0], clib64_buf_size},
-    },
-    {
-      {&clib32_fp_buf[0], clib32_fp_buf_size},
+  {{
+#ifdef ESBMC_BUNDLE_LIBC_32BIT
+     {&clib32_buf[0], clib32_buf_size},
+#endif
+     {&clib64_buf[0], clib64_buf_size},
+   },
+   {
+#ifdef ESBMC_BUNDLE_LIBC_32BIT
+     {&clib32_fp_buf[0], clib32_fp_buf_size},
+#endif     
       {&clib64_fp_buf[0], clib64_fp_buf_size},
     },
   },
   {
-#  ifdef ESBMC_CHERI_HYBRID_SYSROOT
+#ifdef ESBMC_CHERI_HYBRID_SYSROOT
     {
       {NULL, 0}, // {&clib32_cherih_buf[0], clib32_cherih_buf_size},
       {&clib64_cherih_buf[0], clib64_cherih_buf_size},
@@ -73,10 +76,10 @@ static const struct buffer
       {NULL, 0}, // {&clib32_fp_cherih_buf[0], clib32_fp_cherih_buf_size},
       {&clib64_fp_cherih_buf[0], clib64_fp_cherih_buf_size},
     },
-#  endif
+#endif
   },
   {
-#  ifdef ESBMC_CHERI_PURECAP_SYSROOT
+#ifdef ESBMC_CHERI_PURECAP_SYSROOT
     {
       {NULL, 0}, // {&clib32_cherip_buf[0], clib32_cherip_buf_size},
       {&clib64_cherip_buf[0], clib64_cherip_buf_size},
@@ -85,7 +88,7 @@ static const struct buffer
       {NULL, 0}, // {&clib32_fp_cherip_buf[0], clib32_fp_cherip_buf_size},
       {&clib64_fp_cherip_buf[0], clib64_fp_cherip_buf_size},
     },
-#  endif
+#endif
   },
 #endif
 };
@@ -273,6 +276,11 @@ void add_cprover_library(contextt &context, const languaget *language)
       "this version of ESBMC does not have a C library for 16 bit machines");
     return;
   case 32:
+    #ifndef ESBMC_BUNDLE_LIBC_32BIT
+    log_warning(
+      "this version of ESBMC does not have a C library for 32 bit machines");
+    return;
+    #endif
   case 64:
     break;
   default:
@@ -280,8 +288,13 @@ void add_cprover_library(contextt &context, const languaget *language)
     abort();
   }
 
+#ifdef ESBMC_BUNDLE_LIBC_32BIT
   clib = &clibs[config.ansi_c.cheri][!config.ansi_c.use_fixed_for_float]
                [config.ansi_c.word_size == 64];
+#else
+  clib = &clibs[config.ansi_c.cheri][!config.ansi_c.use_fixed_for_float]
+    [0];
+#endif
 
   if (clib->size == 0)
   {

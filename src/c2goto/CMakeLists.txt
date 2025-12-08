@@ -55,7 +55,11 @@ endfunction()
 
 if (ESBMC_BUNDLE_LIBC)
 
-  set(archs --32 --64)
+  set(archs --64)
+  if(ENABLE_BUNDLE_LIBC_32BIT)    
+    set(archs --32 --64)
+  endif()
+  
   set(floats "--fixedbv -D__ESBMC_FIXEDBV" --floatbv)
   # for some reason CMake does not differentiate between [""], "" and [] so we
   # have to 'represent' the empty string by a non-empty string in order to get
@@ -81,15 +85,17 @@ if (ESBMC_BUNDLE_LIBC)
 
   foreach_in_cross_product(clib_join_argv cherimodes floats archs)
 
-  set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
   set (clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
-  set (clib32f_config clib32_fp.c --32 --floatbv)
   set (clib64f_config clib64_fp.c --64 --floatbv)
-  set (inputs clib32_config
-              clib64_config
-              clib32f_config
-              clib64f_config
-      )
+  set (inputs clib64_config clib64f_config)
+  if(ENABLE_BUNDLE_LIBC_32BIT)    
+    set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)  
+    set (clib32f_config clib32_fp.c --32 --floatbv)
+    set (inputs clib32_config
+      clib64_config
+      clib32f_config
+      clib64f_config)
+  endif()
 
   if(ESBMC_CHERI_HYBRID_SYSROOT)
     set (clib32_cherih_config clib32_cherih.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")

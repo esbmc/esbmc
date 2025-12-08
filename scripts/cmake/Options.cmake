@@ -42,6 +42,7 @@ option(ENABLE_BITWUZLA "Use Bitwuzla solver (default: OFF)" OFF)
 # OTHERS
 #############################
 option(ESBMC_BUNDLE_LIBC "Use libc from c2goto (default: ON)" ON)
+option(ENABLE_BUNDLE_LIBC_32BIT "Use 32-bits libc from c2goto (default: ON)" ON)
 option(ENABLE_LIBM "Use libm from c2goto (default: ON)" ON)
 option(ENABLE_FUZZER "Add fuzzing targets (default: OFF)" OFF)
 option(ENABLE_CLANG_TIDY "Activate clang tidy analysis (default: OFF)" OFF)
