@@ -101,6 +101,7 @@ def is_standard_library_file(filename):
         '/Library/Frameworks/Python.framework',
         '/opt/homebrew/Cellar/python',  # Homebrew Python on macOS (Apple Silicon)
         '/usr/local/Cellar/python',     # Homebrew Python on macOS (Intel)
+        '/opt/conda/lib/python',       # Conda standard installation path
     ]
     # Check pyenv paths
     pyenv_root = os.environ.get('PYENV_ROOT', os.path.expanduser('~/.pyenv'))
@@ -108,6 +109,11 @@ def is_standard_library_file(filename):
         # Check if it's in the versions directory (standard library location)
         if '/versions/' in filename and '/lib/python' in filename:
             return True
+    # Check conda paths (including user installations)
+    if filename.startswith('/opt/conda/lib/python') or \
+       filename.startswith(os.path.expanduser('~/miniconda3/lib/python')) or \
+       filename.startswith(os.path.expanduser('~/anaconda3/lib/python')):
+        return True
     return any(filename.startswith(path) for path in stdlib_paths)
 
 
