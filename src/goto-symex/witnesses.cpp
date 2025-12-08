@@ -1522,7 +1522,8 @@ void pytest_generator::generate_single(
   std::string module_name = original_file;
   size_t dot_pos = module_name.rfind(".py");
   if (dot_pos != std::string::npos)
-    module_name = module_name.substr(0, dot_pos);
+    if (dot_pos < module_name.size())
+      module_name.resize(dot_pos);
 
   // Remove directory path if present
   size_t slash_pos = module_name.rfind("/");
