@@ -59,7 +59,6 @@ if (ESBMC_BUNDLE_LIBC)
   if(ENABLE_BUNDLE_LIBC_32BIT)
     set(archs --32 --64)
   endif()
-  
   set(floats "--fixedbv -D__ESBMC_FIXEDBV" --floatbv)
   # for some reason CMake does not differentiate between [""], "" and [] so we
   # have to 'represent' the empty string by a non-empty string in order to get
