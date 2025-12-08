@@ -167,7 +167,8 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     // Remove .py extension
     size_t dot_pos = module_name.rfind(".py");
     if (dot_pos != std::string::npos)
-      module_name = module_name.substr(0, dot_pos);
+      if (dot_pos < module_name.size())
+        module_name.resize(dot_pos);
 
     // Remove directory path
     size_t slash_pos = module_name.rfind("/");
