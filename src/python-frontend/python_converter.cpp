@@ -2751,21 +2751,6 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
 typet python_converter::get_dict_value_type_from_annotation(
   const nlohmann::json &annotation_node)
 {
-  // Check if it's a dict annotation: dict[K, V] or Dict[K, V]
-  if (
-    !annotation_node.contains("_type") ||
-    annotation_node["_type"] != "Subscript")
-    return empty_typet();
-
-  if (
-    !annotation_node.contains("value") ||
-    !annotation_node["value"].contains("id"))
-    return empty_typet();
-
-  std::string type_name = annotation_node["value"]["id"].get<std::string>();
-  if (type_name != "dict" && type_name != "Dict")
-    return empty_typet();
-
   // Get the slice which contains the key and value types
   if (!annotation_node.contains("slice"))
     return empty_typet();
