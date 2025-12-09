@@ -388,13 +388,13 @@ void violation_yaml_goto_trace(
       }
       break;
 
-    case goto_trace_stept::ASSUME:
+    case goto_trace_stept::BREANCHING:
       if (step.pc->is_goto())
       {
         waypoint wp;
         wp.type = waypoint::branching;
         wp.file = yml.verified_file;
-        wp.value = step.guard ? "true" : "false";
+        wp.value = !step.guard ? "true" : "false";
         wp.line = get_line_number(
           yml.verified_file,
           std::atoi(step.pc->location.get_line().c_str()),
@@ -652,6 +652,7 @@ void show_goto_trace(
 
     case goto_trace_stept::ASSUME:
     case goto_trace_stept::SKIP:
+    case goto_trace_stept::BREANCHING:
       // Something deliberately ignored
       break;
 
