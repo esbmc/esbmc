@@ -467,6 +467,12 @@ expr2tc add2t::do_simplify() const
       return sub.side_1;
   }
 
+  // x + ~x -> -1
+  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+    return constant_int2tc(type, BigInt(-1));
+  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+    return constant_int2tc(type, BigInt(-1));
+
   // x + (-y) -> x - y
   if (is_neg2t(side_2))
     return sub2tc(type, side_1, to_neg2t(side_2).value);
