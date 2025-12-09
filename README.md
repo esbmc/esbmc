@@ -10,7 +10,7 @@ ESBMC supports:
 
 - The Clang compiler as its C/C++/CHERI/CUDA frontend;
 - The Soot framework via Jimple as its Java/Kotlin frontend;
-- The [ast](https://docs.python.org/3/library/ast.html) and [ast2json](https://pypi.org/project/ast2json/) modules as its [Python frontend](./src/python-frontend/README.md); the first SMT-based bounded model checker for Python programs;
+- The CPython 3.10 parser as its [Python frontend](./src/python-frontend/README.md); the first SMT-based bounded model checker for Python programs;
 - Implements the Solidity grammar production rules as its Solidity frontend;
 - Supports IEEE floating-point arithmetic for various SMT solvers.
 
