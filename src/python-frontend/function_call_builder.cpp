@@ -78,23 +78,6 @@ symbol_id function_call_builder::build_function_id() const
     // Map Python loop invariant name to ESBMC internal name
     if (func_name == kLoopInvariant)
       func_name = kEsbmcLoopInvariant;
-
-    // Try to resolve as nested function first
-    if (!current_function_name.empty())
-    {
-      std::string nested_id = current_function_name + "@F@" + func_name;
-      symbol_id nested_sid(python_file, current_class_name, nested_id);
-
-      // Check if nested function exists in symbol table
-      const symbolt *nested_symbol =
-        converter_.symbol_table().find_symbol(nested_sid.to_string());
-
-      if (nested_symbol)
-      {
-        // Found nested function - return its ID directly
-        return nested_sid;
-      }
-    }
   }
   else if (func_type == "Attribute") // Handling obj_name.func_name() calls
   {
@@ -401,6 +384,34 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   function_id.set_function(func_name);
+
+  // Check if this is a nested function call
+  if (func_type == "Name" && !current_function_name.empty())
+  {
+    // Self-recursive call (e.g., bar() inside foo@F@bar)
+    if (current_function_name.ends_with("@F@" + func_name))
+    {
+      function_id.set_function(current_function_name);
+      return function_id;
+    }
+
+    // Walk nesting chain from deepest to shallowest
+    for (std::string ctx = current_function_name; !ctx.empty();)
+    {
+      std::string nested_id = ctx + "@F@" + func_name;
+      symbol_id sid(python_file, current_class_name, nested_id);
+
+      if (converter_.symbol_table().find_symbol(sid.to_string()))
+      {
+        function_id.set_function(nested_id);
+        return function_id;
+      }
+
+      size_t pos = ctx.rfind("@F@");
+      ctx = (pos != std::string::npos) ? ctx.substr(0, pos) : "";
+    }
+  }
+
   return function_id;
 }
 
