@@ -181,6 +181,7 @@ exprt python_dict_handler::create_dict_from_literal(
       converter_.add_instruction(ptr_assign);
 
       // Manually create type hash: use simple "dict_ptr" string
+      // This is a "synthetic type ID" not tied to the actual type
       const std::string ptr_type_name = "dict_ptr";
       constant_exprt type_hash(size_type());
       type_hash.set_value(integer2binary(
@@ -318,28 +319,25 @@ exprt python_dict_handler::handle_dict_subscript(
   // Check expected_type first, then fall back to checking obj_value type
   if (!expected_type.is_nil() && is_dict_type(expected_type))
   {
-    // obj_value is void* pointing to 8-byte storage that contains the dict pointer
-    typet uint64_t = unsignedbv_typet(64);
+    // Cast obj->value from void* to size_t* and dereference
+    typecast_exprt as_size_type_ptr(obj_value, pointer_typet(size_type()));
+    dereference_exprt ptr_as_size_type(as_size_type_ptr, size_type());
 
-    // Cast obj->value from void* to uint64_t* and dereference
-    typecast_exprt as_uint64_ptr(obj_value, pointer_typet(uint64_t));
-    dereference_exprt ptr_as_uint64(as_uint64_ptr, uint64_t);
+    // Store the size_type value in a temporary
+    symbolt &size_type_var = converter_.create_tmp_symbol(
+      slice_node, "$dict_ptr_size_type$", size_type(), exprt());
 
-    // Store the uint64 value in a temporary
-    symbolt &uint64_var = converter_.create_tmp_symbol(
-      slice_node, "$dict_ptr_uint64$", uint64_t, exprt());
+    code_declt size_type_decl(symbol_expr(size_type_var));
+    size_type_decl.location() = location;
+    converter_.add_instruction(size_type_decl);
 
-    code_declt uint64_decl(symbol_expr(uint64_var));
-    uint64_decl.location() = location;
-    converter_.add_instruction(uint64_decl);
+    code_assignt size_type_assign(symbol_expr(size_type_var), ptr_as_size_type);
+    size_type_assign.location() = location;
+    converter_.add_instruction(size_type_assign);
 
-    code_assignt uint64_assign(symbol_expr(uint64_var), ptr_as_uint64);
-    uint64_assign.location() = location;
-    converter_.add_instruction(uint64_assign);
-
-    // Cast the uint64 value to dict*
+    // Cast the size_type value to dict*
     typecast_exprt dict_ptr(
-      symbol_expr(uint64_var), pointer_typet(expected_type));
+      symbol_expr(size_type_var), pointer_typet(expected_type));
 
     // Store dict pointer
     symbolt &dict_ptr_var = converter_.create_tmp_symbol(
