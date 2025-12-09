@@ -493,7 +493,6 @@ void bmct::report_multi_property_trace(
       generate_testcase(
         "testcase-" + std::to_string(ce_counter) + ".xml", local_eq, *solver);
     }
-    // Note: pytest generation is handled in the main BMC path, not here
     if (options.get_bool_option("generate-html-report"))
       generate_html_report(std::to_string(ce_counter), ns, goto_trace, options);
 

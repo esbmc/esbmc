@@ -250,35 +250,34 @@ private:
   std::string function_name;
   mutable std::mutex data_mutex;
 
-  /// Helper: Clean up ESBMC internal variable names
+  /// Clean up ESBMC internal variable names
   std::string clean_variable_name(const std::string &name) const;
 
-  /// Helper: Extract function name from SSA steps
+  /// Extract function name from SSA steps
   std::string extract_function_name(
     const symex_target_equationt &target,
     smt_convt &smt_conv) const;
 
-  /// Helper: Convert C-style float string to Python format
+  /// Convert C-style float string to Python format
   std::string convert_float_to_python(const std::string &c_float) const;
 
-  /// Helper: Write pytest file header
-  void write_file_header(
-    std::ofstream &file,
-    const std::string &original_file) const;
+  /// Write pytest file header
+  void write_file_header(std::ofstream &file, const std::string &original_file)
+    const;
 
-  /// Helper: Write import statements
+  /// Write import statements
   void write_imports(std::ofstream &file, const std::string &module_name) const;
 
-  /// Helper: Build comma-separated parameter list string
+  /// Build comma-separated parameter list string
   static std::string build_param_list(const std::vector<std::string> &params);
 
-  /// Helper: Write test data in parametrize format
+  /// Write test data in parametrize format
   void write_test_data(
     std::ofstream &file,
     const std::vector<std::string> &param_names,
     const std::vector<std::vector<std::string>> &test_data) const;
 
-  /// Helper: Write test function definition
+  /// Write test function definition
   void write_test_function(
     std::ofstream &file,
     const std::string &func_name,
@@ -287,10 +286,10 @@ private:
 public:
   pytest_generator() = default;
 
-  /// Helper: Extract module name from input file path (removes .py extension and directory)
+  /// Extract module name from input file path and removes .py extension and directory
   static std::string extract_module_name(const std::string &input_file);
 
-  /// Helper: Generate pytest filename from module name
+  /// Generate pytest filename from module name
   static std::string generate_pytest_filename(const std::string &module_name);
 
   /// Clear collected data (called at start of coverage run)

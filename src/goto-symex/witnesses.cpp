@@ -1176,10 +1176,7 @@ void generate_testcase(
   test_case.close();
 }
 
-// ============================================================================
 // pytest_generator class implementation
-// ============================================================================
-
 std::string pytest_generator::extract_module_name(const std::string &input_file)
 {
   std::string module_name = input_file;
@@ -1235,7 +1232,7 @@ std::string pytest_generator::extract_function_name(
   const symex_target_equationt &target,
   smt_convt &smt_conv) const
 {
-  // Try to extract function name from SSA steps
+  // extract function name from SSA steps
   for (auto const &SSA_step : target.SSA_steps)
   {
     if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
@@ -1269,7 +1266,7 @@ std::string pytest_generator::extract_function_name(
 std::string
 pytest_generator::convert_float_to_python(const std::string &c_float) const
 {
-  // Convert C-style float representations to Python format
+  // Here we need to convert C-style float representations to Python format
   // C style: +NAN, -NAN, +INF, -INF, +INFINITY, -INFINITY
   // Python: float('nan'), float('inf'), float('-inf')
 
@@ -1471,8 +1468,9 @@ void pytest_generator::collect(
     std::vector<std::string> new_param_names;
     for (const auto &name : current_param_names)
     {
-      if (std::find(param_names.begin(), param_names.end(), name) ==
-          param_names.end())
+      if (
+        std::find(param_names.begin(), param_names.end(), name) ==
+        param_names.end())
       {
         new_param_names.push_back(name);
       }
