@@ -68,6 +68,148 @@ struct_typet python_dict_handler::get_dict_struct_type()
   return dict_struct;
 }
 
+size_t
+python_dict_handler::generate_nested_dict_type_hash(const typet &dict_type)
+{
+  // Use the type's pretty name which includes full type information
+  // e.g., "struct tag-dict_int_dict_int_int"
+  std::string type_identifier = dict_type.pretty_name().as_string();
+
+  // Fallback to ID string if pretty_name is empty
+  if (type_identifier.empty())
+    type_identifier = dict_type.id_string();
+
+  // Add a prefix to avoid collisions with other type hashes
+  type_identifier = "nested_dict:" + type_identifier;
+
+  return std::hash<std::string>{}(type_identifier);
+}
+
+exprt python_dict_handler::safe_cast_to_dict_pointer(
+  const nlohmann::json &node,
+  const exprt &obj_value,
+  const typet &target_ptr_type,
+  const locationt &location)
+{
+  // Step 1: Cast void* to pointer_type* and dereference to get pointer_type value
+  typecast_exprt as_ptr_type_ptr(obj_value, pointer_typet(pointer_type()));
+  dereference_exprt ptr_as_ptr_type(as_ptr_type_ptr, pointer_type());
+
+  // Step 2: Store pointer_type value in temporary to ensure proper evaluation order
+  symbolt &ptr_type_var = converter_.create_tmp_symbol(
+    node, "$dict_ptr_as_int$", pointer_type(), exprt());
+  code_declt ptr_type_decl(symbol_expr(ptr_type_var));
+  ptr_type_decl.location() = location;
+  converter_.add_instruction(ptr_type_decl);
+
+  code_assignt ptr_type_assign(symbol_expr(ptr_type_var), ptr_as_ptr_type);
+  ptr_type_assign.location() = location;
+  converter_.add_instruction(ptr_type_assign);
+
+  // Step 3: Cast pointer_type value to target pointer type
+  typecast_exprt dict_ptr(symbol_expr(ptr_type_var), target_ptr_type);
+
+  // Step 4: Store the typed pointer
+  symbolt &dict_ptr_var = converter_.create_tmp_symbol(
+    node, "$dict_ptr_typed$", target_ptr_type, exprt());
+  code_declt ptr_decl(symbol_expr(dict_ptr_var));
+  ptr_decl.location() = location;
+  converter_.add_instruction(ptr_decl);
+
+  code_assignt ptr_assign(symbol_expr(dict_ptr_var), dict_ptr);
+  ptr_assign.location() = location;
+  converter_.add_instruction(ptr_assign);
+
+  return symbol_expr(dict_ptr_var);
+}
+
+void python_dict_handler::store_nested_dict_value(
+  const nlohmann::json &element,
+  const symbolt &values_list,
+  const exprt &value_expr,
+  const locationt &location)
+{
+  // Get the list_push function
+  const symbolt *push_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
+
+  if (!push_func)
+  {
+    log_error("__ESBMC_list_push not found in symbol table");
+    throw std::runtime_error("Required list operation function not available");
+  }
+
+  // Create pointer to the dict value
+  typet ptr_type = pointer_typet(value_expr.type());
+  symbolt &ptr_var = converter_.create_tmp_symbol(
+    element, "$nested_dict_ptr$", ptr_type, exprt());
+  code_declt ptr_decl(symbol_expr(ptr_var));
+  ptr_decl.location() = location;
+  converter_.add_instruction(ptr_decl);
+
+  // Store the address of the dict
+  code_assignt ptr_assign(symbol_expr(ptr_var), address_of_exprt(value_expr));
+  ptr_assign.location() = location;
+  converter_.add_instruction(ptr_assign);
+
+  // Generate a proper type hash based on actual type information
+  size_t type_hash_value = generate_nested_dict_type_hash(value_expr.type());
+  constant_exprt type_hash(size_type());
+  type_hash.set_value(
+    integer2binary(type_hash_value, config.ansi_c.address_width));
+
+  // Pointer size for the storage
+  exprt ptr_size = from_integer(config.ansi_c.pointer_width() / 8, size_type());
+
+  // Call __ESBMC_list_push to store the pointer
+  code_function_callt push_call;
+  push_call.function() = symbol_expr(*push_func);
+  push_call.arguments().push_back(symbol_expr(values_list));
+  push_call.arguments().push_back(address_of_exprt(symbol_expr(ptr_var)));
+  push_call.arguments().push_back(type_hash);
+  push_call.arguments().push_back(ptr_size);
+  push_call.type() = bool_type();
+  push_call.location() = location;
+
+  converter_.add_instruction(push_call);
+}
+
+exprt python_dict_handler::retrieve_nested_dict_value(
+  const nlohmann::json &slice_node,
+  const exprt &obj_value,
+  const typet &expected_type,
+  const locationt &location)
+{
+  // Validate expected_type is actually a dict
+  if (expected_type.is_nil())
+  {
+    throw std::runtime_error(
+      "retrieve_nested_dict_value: expected_type is nil");
+  }
+
+  // Cast the stored pointer back to dict pointer type
+  pointer_typet dict_ptr_type(expected_type);
+  exprt dict_ptr_var =
+    safe_cast_to_dict_pointer(slice_node, obj_value, dict_ptr_type, location);
+
+  // Dereference to get the actual dict struct
+  dereference_exprt dict_struct(dict_ptr_var, expected_type);
+  dict_struct.type() = expected_type;
+
+  // Store in final temporary for return
+  symbolt &result_dict = converter_.create_tmp_symbol(
+    slice_node, "$dict_retrieved$", expected_type, exprt());
+  code_declt temp_decl(symbol_expr(result_dict));
+  temp_decl.location() = location;
+  converter_.add_instruction(temp_decl);
+
+  code_assignt result_assign(symbol_expr(result_dict), dict_struct);
+  result_assign.location() = location;
+  converter_.add_instruction(result_assign);
+
+  return symbol_expr(result_dict);
+}
+
 exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
 {
   if (!is_dict_literal(element))
@@ -155,55 +297,15 @@ exprt python_dict_handler::create_dict_from_literal(
 
     exprt value_expr = converter_.get_expr(values[i]);
 
-    // Special handling for nested dict values
+    // Check if this is a nested dict that needs special pointer storage
     if (value_expr.type().is_struct() && is_dict_type(value_expr.type()))
     {
-      // For nested dicts, store a pointer to the dict struct (8 bytes)
-      // Get the list_push function
-      const symbolt *push_func =
-        symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
-      if (!push_func)
-        throw std::runtime_error("__ESBMC_list_push not found");
-
-      // Create a pointer variable to hold the address
-      typet ptr_type = pointer_typet(value_expr.type());
-      symbolt &ptr_var = converter_.create_tmp_symbol(
-        element, "$nested_dict_ptr$", ptr_type, exprt());
-
-      code_declt ptr_decl(symbol_expr(ptr_var));
-      ptr_decl.location() = location;
-      converter_.add_instruction(ptr_decl);
-
-      // Assign the address
-      code_assignt ptr_assign(
-        symbol_expr(ptr_var), address_of_exprt(value_expr));
-      ptr_assign.location() = location;
-      converter_.add_instruction(ptr_assign);
-
-      // Manually create type hash: use simple "dict_ptr" string
-      // This is a "synthetic type ID" not tied to the actual type
-      const std::string ptr_type_name = "dict_ptr";
-      constant_exprt type_hash(size_type());
-      type_hash.set_value(integer2binary(
-        std::hash<std::string>{}(ptr_type_name), config.ansi_c.address_width));
-
-      // Use from_integer for pointer size
-      exprt ptr_size =
-        from_integer(config.ansi_c.pointer_width() / 8, size_type());
-
-      // Call list_push directly
-      code_function_callt push_call;
-      push_call.function() = symbol_expr(*push_func);
-      push_call.arguments().push_back(symbol_expr(values_list));
-      push_call.arguments().push_back(address_of_exprt(symbol_expr(ptr_var)));
-      push_call.arguments().push_back(type_hash);
-      push_call.arguments().push_back(ptr_size);
-      push_call.type() = bool_type();
-      push_call.location() = location;
-      converter_.add_instruction(push_call);
+      // Nested dict: store pointer to dict (reference semantics)
+      store_nested_dict_value(element, values_list, value_expr, location);
     }
     else
     {
+      // Regular value: store value directly (value semantics)
       exprt push_value =
         list_handler.build_push_list_call(values_list, element, value_expr);
       converter_.add_instruction(push_value);
@@ -316,58 +418,11 @@ exprt python_dict_handler::handle_dict_subscript(
     pointer_typet(empty_typet()));
 
   // Handle dict types
-  // Check expected_type first, then fall back to checking obj_value type
+  // Check expected_type first to see if we're retrieving a nested dict
   if (!expected_type.is_nil() && is_dict_type(expected_type))
   {
-    // Cast obj->value from void* to size_t* and dereference
-    typecast_exprt as_size_type_ptr(obj_value, pointer_typet(size_type()));
-    dereference_exprt ptr_as_size_type(as_size_type_ptr, size_type());
-
-    // Store the size_type value in a temporary
-    symbolt &size_type_var = converter_.create_tmp_symbol(
-      slice_node, "$dict_ptr_size_type$", size_type(), exprt());
-
-    code_declt size_type_decl(symbol_expr(size_type_var));
-    size_type_decl.location() = location;
-    converter_.add_instruction(size_type_decl);
-
-    code_assignt size_type_assign(symbol_expr(size_type_var), ptr_as_size_type);
-    size_type_assign.location() = location;
-    converter_.add_instruction(size_type_assign);
-
-    // Cast the size_type value to dict*
-    typecast_exprt dict_ptr(
-      symbol_expr(size_type_var), pointer_typet(expected_type));
-
-    // Store dict pointer
-    symbolt &dict_ptr_var = converter_.create_tmp_symbol(
-      slice_node, "$dict_ptr$", pointer_typet(expected_type), exprt());
-
-    code_declt ptr_decl(symbol_expr(dict_ptr_var));
-    ptr_decl.location() = location;
-    converter_.add_instruction(ptr_decl);
-
-    code_assignt ptr_assign(symbol_expr(dict_ptr_var), dict_ptr);
-    ptr_assign.location() = location;
-    converter_.add_instruction(ptr_assign);
-
-    // Dereference the dict pointer to get the dict struct
-    dereference_exprt dict_struct(symbol_expr(dict_ptr_var), expected_type);
-    dict_struct.type() = expected_type;
-
-    // Store the dict struct in the final variable
-    symbolt &temp_dict = converter_.create_tmp_symbol(
-      slice_node, "$dict_retrieved$", expected_type, exprt());
-
-    code_declt temp_decl(symbol_expr(temp_dict));
-    temp_decl.location() = location;
-    converter_.add_instruction(temp_decl);
-
-    code_assignt temp_assign(symbol_expr(temp_dict), dict_struct);
-    temp_assign.location() = location;
-    converter_.add_instruction(temp_assign);
-
-    return symbol_expr(temp_dict);
+    return retrieve_nested_dict_value(
+      slice_node, obj_value, expected_type, location);
   }
 
   // Handle list types
