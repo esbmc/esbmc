@@ -458,6 +458,15 @@ expr2tc add2t::do_simplify() const
       return sub.side_1;
   }
 
+  // x + (y - x) -> y
+  if (is_sub2t(side_2))
+  {
+    const sub2t &sub = to_sub2t(side_2);
+
+    if (sub.side_2 == side_1)
+      return sub.side_1;
+  }
+
   // x + (-y) -> x - y
   if (is_neg2t(side_2))
     return sub2tc(type, side_1, to_neg2t(side_2).value);
