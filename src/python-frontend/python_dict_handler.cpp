@@ -5,8 +5,10 @@
 #include <python-frontend/type_handler.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/context.h>
 #include <util/std_code.h>
+#include <functional>
 
 int python_dict_handler::dict_counter_ = 0;
 
@@ -71,16 +73,26 @@ exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
   if (!is_dict_literal(element))
     throw std::runtime_error("Expected Dict literal");
 
-  // Just return the type: actual initialization happens during assignment
-  // This prevents double-creation of the dictionary
+  // For nested dictionaries, we need to create a temporary variable
+  // because the dict needs to exist as a concrete symbol to be used as a value
+  locationt location = converter_.get_location_from_decl(element);
+  std::string dict_name = "$py_dict$" + std::to_string(dict_counter_++);
+
   struct_typet dict_type = get_dict_struct_type();
 
-  // Return a marker expression that tells the converter this is a dict literal
-  // The actual list creation will happen in the assignment handling
-  exprt dict_marker("dict_literal", dict_type);
-  dict_marker.set("json_ptr", reinterpret_cast<uintptr_t>(&element));
+  // Create a temporary symbol for this dict literal
+  symbolt &dict_sym =
+    converter_.create_tmp_symbol(element, dict_name, dict_type, exprt());
 
-  return dict_marker;
+  code_declt dict_decl(symbol_expr(dict_sym));
+  dict_decl.location() = location;
+  converter_.add_instruction(dict_decl);
+
+  // Initialize the dictionary with its literal values
+  create_dict_from_literal(element, symbol_expr(dict_sym));
+
+  // Return the symbol expression pointing to the initialized dictionary
+  return symbol_expr(dict_sym);
 }
 
 exprt python_dict_handler::create_dict_from_literal(
@@ -142,9 +154,60 @@ exprt python_dict_handler::create_dict_from_literal(
     converter_.add_instruction(push_key);
 
     exprt value_expr = converter_.get_expr(values[i]);
-    exprt push_value =
-      list_handler.build_push_list_call(values_list, element, value_expr);
-    converter_.add_instruction(push_value);
+
+    // Special handling for nested dict values
+    if (value_expr.type().is_struct() && is_dict_type(value_expr.type()))
+    {
+      // For nested dicts, store a pointer to the dict struct (8 bytes)
+      // Get the list_push function
+      const symbolt *push_func =
+        symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
+      if (!push_func)
+        throw std::runtime_error("__ESBMC_list_push not found");
+
+      // Create a pointer variable to hold the address
+      typet ptr_type = pointer_typet(value_expr.type());
+      symbolt &ptr_var = converter_.create_tmp_symbol(
+        element, "$nested_dict_ptr$", ptr_type, exprt());
+
+      code_declt ptr_decl(symbol_expr(ptr_var));
+      ptr_decl.location() = location;
+      converter_.add_instruction(ptr_decl);
+
+      // Assign the address
+      code_assignt ptr_assign(
+        symbol_expr(ptr_var), address_of_exprt(value_expr));
+      ptr_assign.location() = location;
+      converter_.add_instruction(ptr_assign);
+
+      // Manually create type hash: use simple "dict_ptr" string
+      const std::string ptr_type_name = "dict_ptr";
+      constant_exprt type_hash(size_type());
+      type_hash.set_value(integer2binary(
+        std::hash<std::string>{}(ptr_type_name), config.ansi_c.address_width));
+
+      // Use from_integer for pointer size
+      exprt ptr_size = from_integer(8, size_type());
+
+      // Call list_push directly
+      code_function_callt push_call;
+      push_call.function() = symbol_expr(*push_func);
+      push_call.arguments().push_back(symbol_expr(values_list));
+      push_call.arguments().push_back(address_of_exprt(symbol_expr(ptr_var)));
+      push_call.arguments().push_back(
+        type_hash);
+      push_call.arguments().push_back(
+        ptr_size);
+      push_call.type() = bool_type();
+      push_call.location() = location;
+      converter_.add_instruction(push_call);
+    }
+    else
+    {
+      exprt push_value =
+        list_handler.build_push_list_call(values_list, element, value_expr);
+      converter_.add_instruction(push_value);
+    }
   }
 
   // Assign keys and values to target dict struct members
@@ -251,6 +314,64 @@ exprt python_dict_handler::handle_dict_subscript(
       symbol_expr(obj_var), type_handler_.get_list_element_type()),
     "value",
     pointer_typet(empty_typet()));
+
+  // Handle dict types 
+  // Check expected_type first, then fall back to checking obj_value type
+  if (!expected_type.is_nil() && is_dict_type(expected_type))
+  {
+    // obj_value is void* pointing to 8-byte storage that contains the dict pointer
+    typet uint64_t = unsignedbv_typet(64);
+
+    // Cast obj->value from void* to uint64_t* and dereference
+    typecast_exprt as_uint64_ptr(obj_value, pointer_typet(uint64_t));
+    dereference_exprt ptr_as_uint64(as_uint64_ptr, uint64_t);
+
+    // Store the uint64 value in a temporary
+    symbolt &uint64_var = converter_.create_tmp_symbol(
+      slice_node, "$dict_ptr_uint64$", uint64_t, exprt());
+
+    code_declt uint64_decl(symbol_expr(uint64_var));
+    uint64_decl.location() = location;
+    converter_.add_instruction(uint64_decl);
+
+    code_assignt uint64_assign(symbol_expr(uint64_var), ptr_as_uint64);
+    uint64_assign.location() = location;
+    converter_.add_instruction(uint64_assign);
+
+    // Cast the uint64 value to dict*
+    typecast_exprt dict_ptr(
+      symbol_expr(uint64_var), pointer_typet(expected_type));
+
+    // Store dict pointer
+    symbolt &dict_ptr_var = converter_.create_tmp_symbol(
+      slice_node, "$dict_ptr$", pointer_typet(expected_type), exprt());
+
+    code_declt ptr_decl(symbol_expr(dict_ptr_var));
+    ptr_decl.location() = location;
+    converter_.add_instruction(ptr_decl);
+
+    code_assignt ptr_assign(symbol_expr(dict_ptr_var), dict_ptr);
+    ptr_assign.location() = location;
+    converter_.add_instruction(ptr_assign);
+
+    // Dereference the dict pointer to get the dict struct
+    dereference_exprt dict_struct(symbol_expr(dict_ptr_var), expected_type);
+    dict_struct.type() = expected_type;
+
+    // Store the dict struct in the final variable
+    symbolt &temp_dict = converter_.create_tmp_symbol(
+      slice_node, "$dict_retrieved$", expected_type, exprt());
+
+    code_declt temp_decl(symbol_expr(temp_dict));
+    temp_decl.location() = location;
+    converter_.add_instruction(temp_decl);
+
+    code_assignt temp_assign(symbol_expr(temp_dict), dict_struct);
+    temp_assign.location() = location;
+    converter_.add_instruction(temp_assign);
+
+    return symbol_expr(temp_dict);
+  }
 
   // Handle list types
   if (expected_type == list_type)
