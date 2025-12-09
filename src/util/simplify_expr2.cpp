@@ -1966,49 +1966,26 @@ expr2tc bitand2t::do_simplify() const
     const bitor2t &or1 = to_bitor2t(side_1);
     const bitor2t &or2 = to_bitor2t(side_2);
 
-    // (a | ~b) & (a | b) -> a
-    if (or1.side_1 == or2.side_1)
-    {
-      if (
-        is_bitnot2t(or1.side_2) && to_bitnot2t(or1.side_2).value == or2.side_2)
-        return or1.side_1;
-      if (
-        is_bitnot2t(or2.side_2) && to_bitnot2t(or2.side_2).value == or1.side_2)
-        return or1.side_1;
-    }
+    // Check if one expr is the bitwise not of another
+    auto is_complement = [](const expr2tc &a, const expr2tc &b) -> bool {
+      return (is_bitnot2t(a) && to_bitnot2t(a).value == b) ||
+             (is_bitnot2t(b) && to_bitnot2t(b).value == a);
+    };
 
-    // (a | ~b) & (b | a) -> a
-    if (or1.side_1 == or2.side_2)
-    {
-      if (
-        is_bitnot2t(or1.side_2) && to_bitnot2t(or1.side_2).value == or2.side_1)
-        return or1.side_1;
-      if (
-        is_bitnot2t(or2.side_1) && to_bitnot2t(or2.side_1).value == or1.side_2)
-        return or1.side_1;
-    }
+    // Check all four combinations: we're looking for a common operand 'a'
+    // and complementary operands 'b' and '~b'
 
-    // (~b | a) & (a | b) -> a
-    if (or1.side_2 == or2.side_1)
-    {
-      if (
-        is_bitnot2t(or1.side_1) && to_bitnot2t(or1.side_1).value == or2.side_2)
-        return or1.side_2;
-      if (
-        is_bitnot2t(or2.side_2) && to_bitnot2t(or2.side_2).value == or1.side_1)
-        return or1.side_2;
-    }
+    // Case 1: or1.side_1 is the common operand
+    if (or1.side_1 == or2.side_1 && is_complement(or1.side_2, or2.side_2))
+      return or1.side_1;
+    if (or1.side_1 == or2.side_2 && is_complement(or1.side_2, or2.side_1))
+      return or1.side_1;
 
-    // (~b | a) & (b | a) -> a
-    if (or1.side_2 == or2.side_2)
-    {
-      if (
-        is_bitnot2t(or1.side_1) && to_bitnot2t(or1.side_1).value == or2.side_1)
-        return or1.side_2;
-      if (
-        is_bitnot2t(or2.side_1) && to_bitnot2t(or2.side_1).value == or1.side_1)
-        return or1.side_2;
-    }
+    // Case 2: or1.side_2 is the common operand
+    if (or1.side_2 == or2.side_1 && is_complement(or1.side_1, or2.side_2))
+      return or1.side_2;
+    if (or1.side_2 == or2.side_2 && is_complement(or1.side_1, or2.side_1))
+      return or1.side_2;
   }
 
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
