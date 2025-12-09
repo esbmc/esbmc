@@ -162,20 +162,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   {
     // Generate pytest filename based on source file: test_<module>.py
     std::string input_file = options.get_option("input-file");
-    std::string module_name = input_file;
-
-    // Remove .py extension
-    size_t dot_pos = module_name.rfind(".py");
-    if (dot_pos != std::string::npos)
-      if (dot_pos < module_name.size())
-        module_name.resize(dot_pos);
-
-    // Remove directory path
-    size_t slash_pos = module_name.rfind("/");
-    if (slash_pos != std::string::npos)
-      module_name = module_name.substr(slash_pos + 1);
-
-    std::string pytest_filename = "test_" + module_name + ".py";
+    std::string module_name = pytest_generator::extract_module_name(input_file);
+    std::string pytest_filename =
+      pytest_generator::generate_pytest_filename(module_name);
     pytest_gen.generate_single(pytest_filename, eq, smt_conv, ns);
   }
 
@@ -757,20 +746,9 @@ void report_coverage(
   if (options.get_bool_option("generate-pytest-testcase"))
   {
     std::string input_file = options.get_option("input-file");
-    std::string module_name = input_file;
-
-    // Remove .py extension
-    size_t dot_pos = module_name.rfind(".py");
-    if (dot_pos != std::string::npos)
-      if (dot_pos < module_name.size())
-        module_name.resize(dot_pos);
-
-    // Remove directory path
-    size_t slash_pos = module_name.rfind("/");
-    if (slash_pos != std::string::npos)
-      module_name = module_name.substr(slash_pos + 1);
-
-    std::string pytest_filename = "test_" + module_name + ".py";
+    std::string module_name = pytest_generator::extract_module_name(input_file);
+    std::string pytest_filename =
+      pytest_generator::generate_pytest_filename(module_name);
     pytest_gen.generate(pytest_filename);
   }
 }

@@ -1180,6 +1180,29 @@ void generate_testcase(
 // pytest_generator class implementation
 // ============================================================================
 
+std::string pytest_generator::extract_module_name(const std::string &input_file)
+{
+  std::string module_name = input_file;
+
+  // Remove .py extension
+  size_t dot_pos = module_name.rfind(".py");
+  if (dot_pos != std::string::npos && dot_pos < module_name.size())
+    module_name.resize(dot_pos);
+
+  // Remove directory path
+  size_t slash_pos = module_name.rfind("/");
+  if (slash_pos != std::string::npos)
+    module_name = module_name.substr(slash_pos + 1);
+
+  return module_name;
+}
+
+std::string
+pytest_generator::generate_pytest_filename(const std::string &module_name)
+{
+  return "test_" + module_name + ".py";
+}
+
 std::string pytest_generator::clean_variable_name(const std::string &name) const
 {
   std::string var_name = name;
@@ -1351,42 +1374,62 @@ void pytest_generator::collect(
   {
     std::lock_guard<std::mutex> lock(data_mutex);
 
+    // Build a map from parameter name to value
+    std::map<std::string, std::string> param_map;
+    for (size_t i = 0; i < current_param_names.size(); ++i)
+      param_map[current_param_names[i]] = current_params[i];
+
+    // Check if we have new parameters not seen before
+    std::vector<std::string> new_param_names;
+    for (const auto &name : current_param_names)
+    {
+      if (std::find(param_names.begin(), param_names.end(), name) ==
+          param_names.end())
+      {
+        new_param_names.push_back(name);
+      }
+    }
+
+    // If we found new parameters, update existing test cases with default values
+    if (!new_param_names.empty())
+    {
+      for (const auto &new_name : new_param_names)
+      {
+        param_names.push_back(new_name);
+        // Add default value to all existing test cases
+        for (auto &test_case : test_cases)
+          test_case.push_back("0");
+      }
+    }
+
     // Initialize param names on first collection
     if (param_names.empty())
     {
       param_names = current_param_names;
-      test_cases.push_back(current_params);
     }
-    else
+
+    // Match parameters by name to handle condition-coverage mode where
+    // different branches may collect variables in different orders or subsets
+    std::vector<std::string> matched_params;
+    matched_params.resize(param_names.size());
+
+    // Match against canonical parameter list
+    for (size_t i = 0; i < param_names.size(); ++i)
     {
-      // Match parameters by name to handle condition-coverage mode where
-      // different branches may collect variables in different orders or subsets
-      std::vector<std::string> matched_params;
-      matched_params.resize(param_names.size());
-
-      // Build a map from parameter name to value
-      std::map<std::string, std::string> param_map;
-      for (size_t i = 0; i < current_param_names.size(); ++i)
-        param_map[current_param_names[i]] = current_params[i];
-
-      // Match against canonical parameter list
-      for (size_t i = 0; i < param_names.size(); ++i)
+      auto it = param_map.find(param_names[i]);
+      if (it != param_map.end())
       {
-        auto it = param_map.find(param_names[i]);
-        if (it != param_map.end())
-        {
-          matched_params[i] = it->second;
-        }
-        else
-        {
-          // Parameter not found in this counterexample - use default value
-          // This can happen in condition-coverage when a parameter isn't used in a branch
-          matched_params[i] = "0";
-        }
+        matched_params[i] = it->second;
       }
-
-      test_cases.push_back(matched_params);
+      else
+      {
+        // Parameter not found in this counterexample - use default value
+        // This can happen in condition-coverage when a parameter isn't used in a branch
+        matched_params[i] = "0";
+      }
     }
+
+    test_cases.push_back(matched_params);
 
     // Store function name if we found one
     if (!extracted_func_name.empty() && function_name.empty())
@@ -1406,16 +1449,7 @@ void pytest_generator::generate(const std::string &file_name) const
 
   // Extract module name from input file
   std::string input_file = config.options.get_option("input-file");
-  std::string module_name = input_file;
-
-  size_t dot_pos = module_name.rfind(".py");
-  if (dot_pos != std::string::npos)
-    if (dot_pos < module_name.size())
-      module_name.resize(dot_pos);
-
-  size_t slash_pos = module_name.rfind("/");
-  if (slash_pos != std::string::npos)
-    module_name = module_name.substr(slash_pos + 1);
+  std::string module_name = extract_module_name(input_file);
 
   // Generate pytest file
   std::ofstream pytest_file(file_name);
@@ -1515,20 +1549,9 @@ void pytest_generator::generate_single(
 {
   (void)ns; // Suppress unused parameter warning
 
-  // Extract original Python file name
+  // Extract original Python file name and module name
   std::string original_file = config.options.get_option("input-file");
-
-  // Extract module name (remove .py extension)
-  std::string module_name = original_file;
-  size_t dot_pos = module_name.rfind(".py");
-  if (dot_pos != std::string::npos)
-    if (dot_pos < module_name.size())
-      module_name.resize(dot_pos);
-
-  // Remove directory path if present
-  size_t slash_pos = module_name.rfind("/");
-  if (slash_pos != std::string::npos)
-    module_name = module_name.substr(slash_pos + 1);
+  std::string module_name = extract_module_name(original_file);
 
   // Track nondet symbols we've seen to avoid duplicates
   std::unordered_set<std::string> seen_nondets;

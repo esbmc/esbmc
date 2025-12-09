@@ -264,6 +264,12 @@ private:
 public:
   pytest_generator() = default;
 
+  /// Helper: Extract module name from input file path (removes .py extension and directory)
+  static std::string extract_module_name(const std::string &input_file);
+
+  /// Helper: Generate pytest filename from module name
+  static std::string generate_pytest_filename(const std::string &module_name);
+
   /// Clear collected data (called at start of coverage run)
   void clear();
 
