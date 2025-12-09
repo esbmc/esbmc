@@ -1,0 +1,1 @@
+../../esbmc-unix/cpp_stack_empty_bug/main.cpp

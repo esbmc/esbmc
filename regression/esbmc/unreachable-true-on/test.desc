@@ -1,0 +1,5 @@
+CORE
+main.c
+--enable-unreachability-intrinsic
+^VERIFICATION FAILED$
+\breachability: unreachable code reached\b

@@ -1,4 +1,4 @@
-// This example allows getting the value of "a" in "fun2()" only when compiled without an optimisation flag
+// This example allows getting the value of "a" in "fun2()" only when compiled without an optimization flag
 
 #include <stdio.h>
 

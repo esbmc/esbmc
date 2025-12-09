@@ -1,4 +1,4 @@
 CORE
 main.c
---smt-during-symex --smt-symex-assert --k-induction --add-symex-value-sets
+--smt-during-symex --smt-symex-assert --k-induction --add-symex-value-sets -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

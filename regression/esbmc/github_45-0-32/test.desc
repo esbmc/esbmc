@@ -1,0 +1,5 @@
+CORE
+gh-45-0.c
+--incremental-bmc --max-k-step 5 --32 -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$
+\barray size in bytes overflows address space size$

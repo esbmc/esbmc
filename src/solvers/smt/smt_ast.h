@@ -16,9 +16,9 @@ class smt_convt;
  *
  *  While an expression becomes an smt_ast, the inverse is not true, and a
  *  single expression may in fact become many smt_asts in various places. See
- *  smt_convt for more detail on how conversion occurs.
+ *  smt_convt for more details on how conversion occurs.
  *
- *  The function arguments, and the actual function application itself are all
+ *  The function arguments and the actual function application itself are all
  *  abstract and dealt with by the solver converter class. Only the sort needs
  *  to be available for us to make conversion decisions.
  *  @see smt_convt
@@ -51,19 +51,19 @@ public:
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
 
   /** Abstractly produce an assign. Defaults to being an equality, however
-   *  for some special cases up to the backend, there may be optimisations made
+   *  for some special cases up to the backend, there may be optimizations made
    *  for array or tuple assigns, and so forth.
    *  @param ctx SMT context to do the assignment in.
    *  @param sym Symbol to assign to
    *  @return AST representing the assigned symbol */
   virtual void assign(smt_convt *ctx, smt_astt sym) const;
 
-  /** Abstractly produce an "update", i.e. an array 'with' or tuple 'with'.
+  /** Abstractly produce an "update", i.e., an array 'with' or tuple 'with'.
    *  @param ctx SMT context to make this update in.
    *  @param value Value to insert into the updated field
    *  @param idx Array index or tuple field
    *  @param idx_expr If an array, expression representing the index
-   *  @return AST of this' type, representing the update */
+   *  @return AST of this type, representing the update */
   virtual smt_astt update(
     smt_convt *ctx,
     smt_astt value,
@@ -102,7 +102,7 @@ public:
 };
 
 #ifdef NDEBUG
-#define dynamic_cast static_cast
+#  define dynamic_cast static_cast
 #endif
 template <typename derived_class>
 const derived_class *to_solver_smt_ast(smt_astt s)
@@ -112,7 +112,7 @@ const derived_class *to_solver_smt_ast(smt_astt s)
   return r;
 }
 #ifdef dynamic_cast
-#undef dynamic_cast
+#  undef dynamic_cast
 #endif
 
 #endif /* SOLVERS_SMT_SMT_AST_H_ */

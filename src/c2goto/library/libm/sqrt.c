@@ -1,10 +1,9 @@
-#define __CRT__NO_INLINE /* Don't let mingw insert code */
 
 #ifdef __ESBMC_FIXEDBV
 
-#include <math.h>
+#  include <math.h>
 
-#undef sqrt
+#  undef sqrt
 
 /*Returns the square root of n. Note that the function */
 /*Babylonian method*/
@@ -18,7 +17,7 @@ __ESBMC_HIDE:;
   double y = 1;
   double e = 1;
   int i = 0;
-  while(i++ < 15) //Change this line to increase precision
+  while (i++ < 15) //Change this line to increase precision
   {
     x = (x + y) / 2.0;
     y = n / x;

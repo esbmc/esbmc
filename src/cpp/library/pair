@@ -1,7 +1,8 @@
 #ifndef __STL_PAIR
 #define __STL_PAIR
 #include <utility>
-namespace std {
+namespace std
+{
 /*
 template<class T1, class T2>
 struct pair {

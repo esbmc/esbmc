@@ -1,0 +1,4 @@
+KNOWNBUG
+memset-const.c
+
+^VERIFICATION FAILED$

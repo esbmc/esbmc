@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 3 --deadlock-check --context-bound 8
+--unwind 3 --deadlock-check --context-bound 8 -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

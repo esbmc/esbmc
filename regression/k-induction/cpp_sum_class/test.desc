@@ -1,4 +1,4 @@
 KNOWNBUG
 main.cpp
---k-induction -I ~/libraries
+--k-induction 
 ^VERIFICATION SUCCESSFUL$

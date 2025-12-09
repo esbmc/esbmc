@@ -4,7 +4,7 @@
 #include <irep2/irep2_type.h>
 
 /** Identifier for SMT sort kinds
- *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
+ *  Each different kind of sort (i.e., arrays, bv's, bools, etc) gets its own
  *  identifier. To be able to describe multiple kinds at the same time, they
  *  take binary values, so that they can be used as bits in an integer. */
 enum smt_sort_kind
@@ -28,7 +28,7 @@ enum smt_sort_kind
  *  representation of the sort. Then, this base class is used as a handle
  *  through the rest of the SMT conversion code.
  *
- *  Only a few piece of sort information are used to make conversion decisions,
+ *  Only a few pieces of sort information are used to make conversion decisions,
  *  and are thus actually stored in the sort object itself.
  *  @see smt_ast
  */
@@ -94,7 +94,7 @@ public:
 
   size_t get_data_width() const
   {
-    if(id == SMT_SORT_ARRAY)
+    if (id == SMT_SORT_ARRAY)
       return data_width * range_sort->data_width;
     return data_width;
   }
@@ -136,23 +136,23 @@ public:
 
 private:
   /** Data size of the sort.
-   * For bitvectors and floating-points this is the bit width,
-   * for arrays the range BV bit width,
+   * For bitvectors and floating-points, this is the bit width,
+   * for arrays, the range BV bit width,
    * For everything else, undefined */
   size_t data_width;
 
   /** Secondary width
-   * For floating-points this is the significand width,
+   * For floating-points, this is the significand width,
    * For everything else, undefined */
   size_t secondary_width;
 
   /** Range sort
-   * For arrays this is the type of the element
+   * For arrays, this is the type of the element
    * For everything else, undefined */
   smt_sortt range_sort;
 
   /** Type of the tuple
-   * For structs this is actual type (struct or array of structs) of a tuple
+   * For structs, this is the actual type (struct or array of structs) of a tuple
    * that's been flattened
    * For everything else, undefined
    */
@@ -211,7 +211,7 @@ public:
 };
 
 #ifdef NDEBUG
-#define dynamic_cast static_cast
+#  define dynamic_cast static_cast
 #endif
 template <typename T>
 const solver_smt_sort<T> *to_solver_smt_sort(smt_sortt s)
@@ -221,7 +221,7 @@ const solver_smt_sort<T> *to_solver_smt_sort(smt_sortt s)
   return r;
 }
 #ifdef dynamic_cast
-#undef dynamic_cast
+#  undef dynamic_cast
 #endif
 
 #endif /* SOLVERS_SMT_SMT_SORT_H_ */

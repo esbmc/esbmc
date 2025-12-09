@@ -1,64 +1,54 @@
 #include <langapi/language_util.h>
+#include <langapi/languages.h>
 #include <langapi/mode.h>
-#include <memory>
+#include <util/message.h>
 
-std::string
-from_expr(const namespacet &ns, const irep_idt &identifier, const exprt &expr)
+static language_idt language_id_from_mode(irep_idt mode)
 {
-  int mode;
+  return mode.empty() ? language_idt::C : language_id_by_name(id2string(mode));
+}
 
-  if(identifier == "")
-    mode = 0;
-  else
-  {
-    const symbolt *symbol = ns.lookup(identifier);
+std::unique_ptr<languaget> language_from_symbol(const symbolt &symbol)
+{
+  language_idt lang = language_id_from_mode(symbol.mode);
+  if (lang != language_idt::NONE)
+    return new_language(lang);
 
-    if(!symbol)
-      mode = 0;
-    else if(symbol->mode == "")
-      mode = 0;
-    else
-    {
-      mode = get_mode(id2string(symbol->mode));
-      if(mode < 0)
-        throw "symbol " + id2string(symbol->name) + " has unknown mode '" +
-          id2string(symbol->mode) + "'";
-    }
-  }
+  log_error("symbol '{}' has unknown mode '{}'", symbol.name, symbol.mode);
+  abort();
+}
 
-  std::unique_ptr<languaget> p(mode_table[mode].new_language());
+static languagest
+languages_from_symbol_id(const namespacet &ns, const irep_idt &id)
+{
+  language_idt lang = language_idt::C;
+  if (!id.empty())
+    if (const symbolt *s = ns.lookup(id))
+      lang = language_id_from_mode(s->mode);
+  return languagest(ns, lang);
+}
+
+std::string from_expr(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const exprt &expr,
+  presentationt target)
+{
+  languagest langs = languages_from_symbol_id(ns, identifier);
   std::string result;
-  p->from_expr(expr, result, ns);
+  langs.from_expr(expr, result, target);
   return result;
 }
 
-std::string
-from_type(const namespacet &ns, const irep_idt &identifier, const typet &type)
+std::string from_type(
+  const namespacet &ns,
+  const irep_idt &identifier,
+  const typet &type,
+  presentationt target)
 {
-  int mode;
-
-  if(identifier == "")
-    mode = 0;
-  else
-  {
-    const symbolt *symbol = ns.lookup(identifier);
-
-    if(!symbol)
-      mode = 0;
-    else if(symbol->mode == "")
-      mode = 0;
-    else
-    {
-      mode = get_mode(id2string(symbol->mode));
-      if(mode < 0)
-        throw "symbol " + id2string(symbol->name) + " has unknown mode '" +
-          id2string(symbol->mode) + "'";
-    }
-  }
-
-  std::unique_ptr<languaget> p(mode_table[mode].new_language());
+  languagest langs = languages_from_symbol_id(ns, identifier);
   std::string result;
-  p->from_type(type, result, ns);
+  langs.from_type(type, result, target);
   return result;
 }
 

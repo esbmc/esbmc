@@ -1,0 +1,4 @@
+CORE
+main.py
+--function search
+^ERROR\: All parameters in function \"search\" must be type annotated$

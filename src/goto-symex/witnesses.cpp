@@ -5,14 +5,18 @@
 #include <fstream>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
+#include <util/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 typedef boost::property_tree::ptree xmlnodet;
 
-short int nodet::_id = 0;
-short int edget::_id = 0;
+BigInt nodet::_id = 0;
+BigInt edget::_id = 0;
 
 void grapht::generate_graphml(optionst &options)
 {
@@ -20,15 +24,15 @@ void grapht::generate_graphml(optionst &options)
   create_graphml(graphml_node);
 
   xmlnodet graph_node;
-  if(this->witness_type == grapht::VIOLATION)
+  if (this->witness_type == grapht::VIOLATION)
     create_violation_graph_node(this->verified_file, options, graph_node);
   else
     create_correctness_graph_node(this->verified_file, options, graph_node);
 
   nodet *prev_node = nullptr;
-  for(auto &current_edge : this->edges)
+  for (auto &current_edge : this->edges)
   {
-    if(prev_node == nullptr || prev_node != current_edge.from_node)
+    if (prev_node == nullptr || prev_node != current_edge.from_node)
     {
       xmlnodet from_node_node;
       create_node_node(*current_edge.from_node, from_node_node);
@@ -44,22 +48,23 @@ void grapht::generate_graphml(optionst &options)
   }
   graphml_node.add_child("graphml.graph", graph_node);
 
-#if(BOOST_VERSION >= 105700)
+#if (BOOST_VERSION >= 105700)
   boost::property_tree::xml_writer_settings<std::string> settings(' ', 2);
 #else
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
-  boost::property_tree::write_xml(
-    options.get_option("witness-output"),
-    graphml_node,
-    std::locale(),
-    settings);
+
+  std::string witness_output = options.get_option("witness-output-graphml");
+  if (witness_output == "-")
+    boost::property_tree::write_xml(std::cout, graphml_node, settings);
+  else
+    boost::property_tree::write_xml(
+      witness_output, graphml_node, std::locale(), settings);
 }
 
-/* */
 void grapht::check_create_new_thread(BigInt thread_id, nodet *prev_node)
 {
-  if(
+  if (
     std::find(std::begin(this->threads), std::end(this->threads), thread_id) ==
     std::end(this->threads))
   {
@@ -73,7 +78,7 @@ void grapht::check_create_new_thread(BigInt thread_id, nodet *prev_node)
     prev_node = new_node;
   }
 }
-/* */
+
 void grapht::create_initial_edge()
 {
   nodet *first_node = new nodet();
@@ -87,29 +92,68 @@ void grapht::create_initial_edge()
   this->edges.push_back(first_edge);
 }
 
-/* */
-int generate_sha1_hash_for_file(const char *path, std::string &output)
+void yamlt::generate_yaml(optionst &options)
+{
+  YAML::Emitter yaml_emitter;
+  if (this->witness_type == yamlt::VIOLATION)
+    create_violation_yaml_emitter(this->verified_file, options, yaml_emitter);
+  else
+    create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
+
+  yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq;
+
+  if (!this->segments.empty())
+  {
+    for (auto &waypoint : this->segments)
+    {
+      yaml_emitter << YAML::BeginMap;
+      yaml_emitter << YAML::Key << "segment" << YAML::Value << YAML::BeginSeq;
+
+      create_waypoint(waypoint, yaml_emitter);
+
+      yaml_emitter << YAML::EndSeq;
+      yaml_emitter << YAML::EndMap;
+    }
+  }
+
+  yaml_emitter << YAML::EndSeq;
+
+  yaml_emitter << YAML::EndMap;
+  yaml_emitter << YAML::EndSeq;
+
+  const std::string witness_output = options.get_option("witness-output-yaml");
+  if (witness_output == "-")
+    std::cout << yaml_emitter.c_str() << std::endl;
+  else
+  {
+    std::ofstream fout(witness_output);
+    fout << yaml_emitter.c_str() << "\n";
+  }
+}
+
+int generate_sha256_hash_for_file(const char *path, std::string &output)
 {
   FILE *file = fopen(path, "rb");
-  if(!file)
+  if (!file)
     return -1;
 
-  const int bufSize = 32768;
+  const size_t bufSize = 32768;
   char *buffer = (char *)alloca(bufSize);
 
-  crypto_hash c;
-  int bytesRead = 0;
-  while((bytesRead = fread(buffer, 1, bufSize, file)))
-    c.ingest(buffer, bytesRead);
+  picosha2::hash256_one_by_one hasher;
+  hasher.init();
 
-  c.fin();
-  output = c.to_string();
+  size_t bytesRead = 0;
+  while ((bytesRead = fread(buffer, 1, bufSize, file)))
+    hasher.process(buffer, buffer + bytesRead);
+
+  hasher.finish();
+  output = picosha2::get_hash_hex_string(hasher);
 
   fclose(file);
   return 0;
 }
 
-/* */
 std::string read_file(const std::string &path)
 {
   std::ifstream t(path.c_str());
@@ -118,58 +162,105 @@ std::string read_file(const std::string &path)
   return str;
 }
 
-/* */
 std::string trim(const std::string &str)
 {
   const std::string whitespace_characters = " \t\r\n";
   size_t first_non_whitespace = str.find_first_not_of(whitespace_characters);
-  if(first_non_whitespace == std::string::npos)
+  if (first_non_whitespace == std::string::npos)
     return "";
   size_t last_non_whitespace = str.find_last_not_of(whitespace_characters);
   size_t length = last_non_whitespace - first_non_whitespace + 1;
   return str.substr(first_non_whitespace, length);
 }
 
-/* */
+void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
+{
+  waypoint << YAML::BeginMap;
+  waypoint << YAML::Key << "waypoint" << YAML::Value << YAML::BeginMap;
+
+  if (wp.type == waypoint::target)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "target";
+  else if (wp.type == waypoint::assumption)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "assumption";
+  else if (wp.type == waypoint::branching)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "branching";
+
+  waypoint << YAML::Key << "action" << YAML::Value << YAML::DoubleQuoted
+           << "follow";
+
+  if (wp.type == waypoint::assumption)
+  {
+    waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
+    waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
+             << wp.value;
+    waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+             << "c_expression";
+    waypoint << YAML::EndMap;
+  }
+  else if (wp.type == waypoint::branching)
+  {
+    waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
+    waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
+             << wp.value;
+    waypoint << YAML::EndMap;
+  }
+
+  // location
+  waypoint << YAML::Key << "location" << YAML::Value << YAML::BeginMap;
+  waypoint << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
+           << wp.file;
+  waypoint << YAML::Key << "line" << YAML::Value << integer2string(wp.line);
+  waypoint << YAML::Key << "column" << YAML::Value << integer2string(wp.column);
+  waypoint << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
+           << wp.function;
+  waypoint << YAML::EndMap;
+
+  waypoint << YAML::EndMap;
+  waypoint << YAML::EndMap;
+}
+
 void create_node_node(nodet &node, xmlnodet &nodenode)
 {
   nodenode.add("<xmlattr>.id", node.id);
-  if(node.violation)
+  if (node.violation)
   {
     xmlnodet data_violation;
     data_violation.add("<xmlattr>.key", "violation");
     data_violation.put_value("true");
     nodenode.add_child("data", data_violation);
   }
-  if(node.sink)
+  if (node.sink)
   {
     xmlnodet data_sink;
     data_sink.add("<xmlattr>.key", "sink");
     data_sink.put_value("true");
     nodenode.add_child("data", data_sink);
   }
-  if(node.entry)
+  if (node.entry)
   {
     xmlnodet data_entry;
     data_entry.add("<xmlattr>.key", "entry");
     data_entry.put_value("true");
     nodenode.add_child("data", data_entry);
   }
-  if(node.cycle_head)
+  if (node.cycle_head)
   {
     xmlnodet data_cycle_head;
     data_cycle_head.add("<xmlattr>.key", "cyclehead");
     data_cycle_head.put_value("true");
     nodenode.add_child("data", data_cycle_head);
   }
-  if(!node.invariant.empty())
+  if (!node.invariant.empty())
   {
     xmlnodet data_invariant;
     data_invariant.add("<xmlattr>.key", "invariant");
     data_invariant.put_value(node.invariant);
     nodenode.add_child("data", data_invariant);
   }
-  if(!node.invariant_scope.empty())
+  if (!node.invariant_scope.empty())
   {
     xmlnodet data_invariant;
     data_invariant.add("<xmlattr>.key", "invariant.scope");
@@ -178,76 +269,75 @@ void create_node_node(nodet &node, xmlnodet &nodenode)
   }
 }
 
-/* */
 void create_edge_node(edget &edge, xmlnodet &edgenode)
 {
   edgenode.add("<xmlattr>.id", edge.id);
   edgenode.add("<xmlattr>.source", edge.from_node->id);
   edgenode.add("<xmlattr>.target", edge.to_node->id);
-  if(edge.start_line != c_nonset)
+  if (edge.start_line != c_nonset)
   {
     xmlnodet data_lineNumberInOrigin;
     data_lineNumberInOrigin.add("<xmlattr>.key", "startline");
     data_lineNumberInOrigin.put_value(integer2string(edge.start_line));
     edgenode.add_child("data", data_lineNumberInOrigin);
   }
-  if(edge.end_line != c_nonset)
+  if (edge.end_line != c_nonset)
   {
     xmlnodet data_endLine;
     data_endLine.add("<xmlattr>.key", "endline");
     data_endLine.put_value(integer2string(edge.end_line));
     edgenode.add_child("data", data_endLine);
   }
-  if(edge.start_offset != c_nonset)
+  if (edge.start_offset != c_nonset)
   {
     xmlnodet data_startoffset;
     data_startoffset.add("<xmlattr>.key", "startoffset");
     data_startoffset.put_value(integer2string(edge.start_offset));
     edgenode.add_child("data", data_startoffset);
   }
-  if(edge.end_offset != c_nonset)
+  if (edge.end_offset != c_nonset)
   {
     xmlnodet data_endoffset;
     data_endoffset.add("<xmlattr>.key", "endoffset");
     data_endoffset.put_value(integer2string(edge.end_offset));
     edgenode.add_child("data", data_endoffset);
   }
-  if(!edge.return_from_function.empty())
+  if (!edge.return_from_function.empty())
   {
     xmlnodet data_returnFromFunction;
     data_returnFromFunction.add("<xmlattr>.key", "returnFromFunction");
     data_returnFromFunction.put_value(edge.return_from_function);
     edgenode.add_child("data", data_returnFromFunction);
   }
-  if(!edge.enter_function.empty())
+  if (!edge.enter_function.empty())
   {
     xmlnodet data_enterFunction;
     data_enterFunction.add("<xmlattr>.key", "enterFunction");
     data_enterFunction.put_value(edge.enter_function);
     edgenode.add_child("data", data_enterFunction);
   }
-  if(!edge.assumption.empty())
+  if (!edge.assumption.empty())
   {
     xmlnodet data_assumption;
     data_assumption.add("<xmlattr>.key", "assumption");
     data_assumption.put_value(edge.assumption);
     edgenode.add_child("data", data_assumption);
   }
-  if(!edge.assumption_scope.empty())
+  if (!edge.assumption_scope.empty())
   {
     xmlnodet data_assumptionScope;
     data_assumptionScope.add("<xmlattr>.key", "assumption.scope");
     data_assumptionScope.put_value(edge.assumption_scope);
     edgenode.add_child("data", data_assumptionScope);
   }
-  if(!edge.thread_id.empty())
+  if (!edge.thread_id.empty())
   {
     xmlnodet data_thread_id;
     data_thread_id.add("<xmlattr>.key", "threadId");
     data_thread_id.put_value(edge.thread_id);
     edgenode.add_child("data", data_thread_id);
   }
-  if(!edge.create_thread.empty())
+  if (!edge.create_thread.empty())
   {
     xmlnodet data_create_thread;
     data_create_thread.add("<xmlattr>.key", "createThread");
@@ -256,7 +346,6 @@ void create_edge_node(edget &edge, xmlnodet &edgenode)
   }
 }
 
-/* */
 void create_graphml(xmlnodet &graphml)
 {
   graphml.add(
@@ -520,7 +609,6 @@ void create_graphml(xmlnodet &graphml)
   graphml.add_child("graphml.key", witness_type_node);
 }
 
-/* */
 void _create_graph_node(
   std::string &verifiedfile,
   optionst &options,
@@ -532,16 +620,16 @@ void _create_graph_node(
   pProducer.add("<xmlattr>.key", "producer");
 
   std::string producer = options.get_option("witness-producer");
-  if(producer.empty())
+  if (producer.empty())
   {
     producer = "ESBMC " + std::string(ESBMC_VERSION);
-    if(options.get_bool_option("k-induction"))
+    if (options.get_bool_option("k-induction"))
       producer += " kind";
-    else if(options.get_bool_option("k-induction-parallel"))
+    else if (options.get_bool_option("k-induction-parallel"))
       producer += " kind";
-    else if(options.get_bool_option("falsification"))
+    else if (options.get_bool_option("falsification"))
       producer += " falsi";
-    else if(options.get_bool_option("incremental-bmc"))
+    else if (options.get_bool_option("incremental-bmc"))
       producer += " incr";
   }
 
@@ -562,17 +650,17 @@ void _create_graph_node(
   xmlnodet pProgramFile;
   pProgramFile.add("<xmlattr>.key", "programfile");
   std::string program_file = options.get_option("witness-programfile");
-  if(program_file.empty())
+  if (program_file.empty())
     pProgramFile.put_value(verifiedfile);
   else
     pProgramFile.put_value(program_file);
   graphnode.add_child("data", pProgramFile);
 
   std::string programFileHash;
-  if(program_file.empty())
-    generate_sha1_hash_for_file(verifiedfile.c_str(), programFileHash);
+  if (program_file.empty())
+    generate_sha256_hash_for_file(verifiedfile.c_str(), programFileHash);
   else
-    generate_sha1_hash_for_file(program_file.c_str(), programFileHash);
+    generate_sha256_hash_for_file(program_file.c_str(), programFileHash);
   xmlnodet pProgramHash;
   pProgramHash.add("<xmlattr>.key", "programhash");
   pProgramHash.put_value(programFileHash);
@@ -580,34 +668,135 @@ void _create_graph_node(
 
   xmlnodet pDataSpecification;
   pDataSpecification.add("<xmlattr>.key", "specification");
-  if(options.get_bool_option("overflow-check"))
+  if (options.get_bool_option("overflow-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
-  else if(options.get_bool_option("memory-leak-check"))
-    pDataSpecification.put_value(
-      "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
+  else if (options.get_bool_option("memory-leak-check"))
+  {
+    if (options.get_bool_option("no-reachable-memory-leak"))
+      pDataSpecification.put_value(
+        "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
+    else
+      pDataSpecification.put_value(
+        "CHECK( init(main()), LTL(G valid-memcleanup) )");
+  }
+  else if (options.get_bool_option("data-races-check"))
+    pDataSpecification.put_value("CHECK( init(main()), LTL(G ! data-race) )");
   else
     pDataSpecification.put_value(
       "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
   graphnode.add_child("data", pDataSpecification);
 
-  boost::posix_time::ptime creation_time =
-    boost::posix_time::microsec_clock::universal_time();
   xmlnodet p_creationTime;
   p_creationTime.add("<xmlattr>.key", "creationtime");
 
-  // Conversion to string using the ISO 8601.
-  // Source: https://www.boost.org/doc/libs/1_49_0/doc/html/date_time/posix_time.html
-  std::string tmp = boost::posix_time::to_iso_extended_string(creation_time);
-  // However, SV-COMP witness format slightly modifies the ISO 8601 format,
-  // where the seconds field is written as SS instead of SS.fffffffff
-  // Here we want to make the witness validators happy.
-  // source: https://github.com/sosy-lab/sv-witnesses
-  std::string new_creation_time = tmp.substr(0, tmp.find(".", 0));
-  p_creationTime.put_value(new_creation_time);
+  std::time_t t = std::time(nullptr);
+  std::tm local_tm = *std::localtime(&t);
+
+  char creation_time[64];
+  std::strftime(
+    creation_time, sizeof(creation_time), "%Y-%m-%dT%H:%M:%S%z", &local_tm);
+  std::string timestr(creation_time);
+
+  if (timestr.size() >= 5)
+    timestr.insert(timestr.size() - 2, ":");
+  p_creationTime.put_value(timestr);
   graphnode.add_child("data", p_creationTime);
 }
 
-/* */
+void _create_yaml_metadata_emitter(
+  const std::string &verifiedfile,
+  const optionst &options,
+  YAML::Emitter &metadata)
+{
+  metadata << YAML::BeginMap;
+  metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
+           << "2.0";
+
+  // Uuid
+  std::string uuid =
+    boost::uuids::to_string(boost::uuids::random_generator()());
+  metadata << YAML::Key << "uuid" << YAML::Value << YAML::DoubleQuoted << uuid;
+
+  // Creation_time ISO 8601
+  std::time_t t = std::time(nullptr);
+  std::tm local_tm = *std::localtime(&t);
+
+  char creation_time[64];
+  std::strftime(
+    creation_time, sizeof(creation_time), "%Y-%m-%dT%H:%M:%S%z", &local_tm);
+  std::string timestr(creation_time);
+
+  if (timestr.size() >= 5)
+    timestr.insert(timestr.size() - 2, ":");
+  metadata << YAML::Key << "creation_time" << YAML::Value << YAML::DoubleQuoted
+           << timestr;
+
+  // Producer
+  metadata << YAML::Key << "producer" << YAML::BeginMap;
+  std::string producer_str = options.get_option("witness-producer");
+  if (producer_str.empty())
+  {
+    producer_str = "ESBMC";
+    if (
+      options.get_bool_option("k-induction") ||
+      options.get_bool_option("k-induction-parallel"))
+      producer_str += " kind";
+    else if (options.get_bool_option("falsification"))
+      producer_str += " falsi";
+    else if (options.get_bool_option("incremental-bmc"))
+      producer_str += " incr";
+  }
+  metadata << YAML::Key << "name" << YAML::Value << YAML::DoubleQuoted
+           << producer_str;
+  metadata << YAML::Key << "version" << YAML::Value << YAML::DoubleQuoted
+           << ESBMC_VERSION;
+  metadata << YAML::EndMap;
+
+  // Task
+  metadata << YAML::Key << "task" << YAML::BeginMap;
+
+  // Input_files
+  metadata << YAML::Key << "input_files" << YAML::BeginSeq;
+  metadata << YAML::DoubleQuoted << verifiedfile;
+  metadata << YAML::EndSeq;
+
+  // Input_file_hashes
+  std::string file_hash;
+  // sha256
+  generate_sha256_hash_for_file(verifiedfile.c_str(), file_hash);
+  metadata << YAML::Key << "input_file_hashes" << YAML::BeginMap;
+  metadata << YAML::Key << YAML::DoubleQuoted << verifiedfile << YAML::Value
+           << YAML::DoubleQuoted << file_hash;
+  metadata << YAML::EndMap;
+
+  // Specification
+  std::string spec;
+  if (options.get_bool_option("overflow-check"))
+    spec = "G ! overflow";
+  else if (options.get_bool_option("memory-leak-check"))
+  {
+    if (options.get_bool_option("no-reachable-memory-leak"))
+      spec = "G valid-free|valid-deref|valid-memtrack";
+    else
+      spec = "G valid-memcleanup";
+  }
+  else if (options.get_bool_option("data-races-check"))
+    spec = "G ! data-race";
+  else
+    spec = "G ! call(reach_error())";
+
+  metadata << YAML::Key << "specification" << YAML::Value << YAML::DoubleQuoted
+           << spec;
+
+  metadata << YAML::Key << "data_model" << YAML::Value << YAML::DoubleQuoted
+           << (config.ansi_c.word_size == 32 ? "ILP32" : "LP64");
+  metadata << YAML::Key << "language" << YAML::Value << YAML::DoubleQuoted
+           << "C";
+
+  metadata << YAML::EndMap;
+  metadata << YAML::EndMap;
+}
+
 void create_violation_graph_node(
   std::string &verifiedfile,
   optionst &options,
@@ -620,7 +809,6 @@ void create_violation_graph_node(
   graphnode.add_child("data", pWitnessType);
 }
 
-/* */
 void create_correctness_graph_node(
   std::string &verifiedfile,
   optionst &options,
@@ -633,10 +821,37 @@ void create_correctness_graph_node(
   graphnode.add_child("data", pWitnessType);
 }
 
-const std::regex
+void create_correctness_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root)
+{
+  root << YAML::BeginSeq;
+  root << YAML::BeginMap;
+  root << YAML::Key << "entry_type" << YAML::Value << YAML::DoubleQuoted
+       << "invariant_set";
+
+  root << YAML::Key << "metadata";
+  _create_yaml_metadata_emitter(verifiedfile, options, root);
+}
+
+void create_violation_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root)
+{
+  root << YAML::BeginSeq;
+  root << YAML::BeginMap;
+  root << YAML::Key << "entry_type" << YAML::Value << YAML::DoubleQuoted
+       << "violation_sequence";
+
+  root << YAML::Key << "metadata";
+  _create_yaml_metadata_emitter(verifiedfile, options, root);
+}
+
+static const std::regex
   regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
 
-/* */
 void reformat_assignment_array(
   const namespacet &ns,
   const goto_trace_stept &step,
@@ -645,10 +860,10 @@ void reformat_assignment_array(
   std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
   BigInt pos = 0;
-  std::string lhs = from_expr(ns, "", step.lhs);
+  std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
   std::string assignment_array = "";
-  for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
-      it != end;)
+  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
+       it != end;)
   {
     std::string value = *it++;
     assignment_array += lhs + "[" + integer2string(pos) + "] = " + value + "; ";
@@ -658,10 +873,9 @@ void reformat_assignment_array(
   assignment = assignment_array;
 }
 
-const std::regex regex_structs(
+static const std::regex regex_structs(
   "[a-zA-Z0-9_]+ = \\{ ?(\\.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?),? ?)+\\};");
 
-/* */
 void reformat_assignment_structs(
   const namespacet &ns,
   const goto_trace_stept &step,
@@ -669,10 +883,10 @@ void reformat_assignment_structs(
 {
   std::regex re{R"((((.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?))+)))"};
   using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  std::string lhs = from_expr(ns, "", step.lhs);
+  std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
   std::string assignment_struct = "";
-  for(reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
-      it != end;)
+  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
+       it != end;)
   {
     std::string a = *it++;
     assignment_struct += lhs + a + "; ";
@@ -681,7 +895,6 @@ void reformat_assignment_structs(
   assignment = assignment_struct;
 }
 
-/* */
 void check_replace_invalid_assignment(std::string &assignment)
 {
   /* replace: SAME-OBJECT(&var1, &var2) into &var1 == &var2 (XXX check if should stay) */
@@ -689,7 +902,7 @@ void check_replace_invalid_assignment(std::string &assignment)
   //assignment = std::regex_replace(assignment, e ,"$1 == $3");
   std::smatch m;
   /* looking for undesired in the assignment */
-  if(
+  if (
     std::regex_search(assignment, m, std::regex("&dynamic_([0-9]+)_value")) ||
     std::regex_search(assignment, m, std::regex("dynamic_([0-9]+)_array")) ||
     std::regex_search(assignment, m, std::regex("anonymous at")) ||
@@ -705,36 +918,39 @@ void check_replace_invalid_assignment(std::string &assignment)
     assignment.clear();
 }
 
-/* */
-std::string
-get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
+std::string get_formated_assignment(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  bool yaml)
 {
   std::string assignment = "";
-  if(
+  if (
     !is_nil_expr(step.value) && is_constant_expr(step.value) &&
-    is_valid_witness_step(ns, step))
+    !is_constant_array2t(step.value) && !is_constant_struct2t(step.value) &&
+    !is_constant_union2t(step.value) && is_valid_witness_step(ns, step))
   {
-    assignment += from_expr(ns, "", step.lhs);
-    assignment += " = ";
-    assignment += from_expr(ns, "", step.value);
-    assignment += ";";
+    assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
+    assignment += " == ";
+    assignment += from_expr(ns, "", step.value, presentationt::WITNESS);
+    if (!yaml)
+      assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
-    if(std::regex_match(assignment, regex_array))
+    if (std::regex_match(assignment, regex_array))
       reformat_assignment_array(ns, step, assignment);
-    else if(std::regex_match(assignment, regex_structs))
+    else if (std::regex_match(assignment, regex_structs))
       reformat_assignment_structs(ns, step, assignment);
     check_replace_invalid_assignment(assignment);
   }
   return assignment;
 }
 
-/* */
 bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
 {
   languagest languages(ns, language_idt::C);
   std::string lhsexpr;
-  languages.from_expr(migrate_expr_back(step.lhs), lhsexpr);
+  languages.from_expr(
+    migrate_expr_back(step.lhs), lhsexpr, presentationt::WITNESS);
   std::string location = step.pc->location.to_string();
   return (
     (location.find("built-in") & location.find("library") &
@@ -742,19 +958,17 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
      lhsexpr.find("stderr") & lhsexpr.find("sys_")) == std::string::npos);
 }
 
-/* */
 bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp)
 {
   languagest languages(ns, language_idt::C);
   std::string value;
-  languages.from_expr(migrate_expr_back(exp), value);
+  languages.from_expr(migrate_expr_back(exp), value, presentationt::WITNESS);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &
           value.find("stderr") & value.find("sys_")) == std::string::npos;
 }
 
-/* */
 BigInt get_line_number(
   std::string &verified_file,
   BigInt relative_line_number,
@@ -762,7 +976,7 @@ BigInt get_line_number(
 {
   std::string program_file = options.get_option("witness-programfile");
   /* check if it is necessary to get the relative line */
-  if(program_file.empty() || verified_file == program_file)
+  if (program_file.empty() || verified_file == program_file)
   {
     return relative_line_number;
   }
@@ -773,9 +987,9 @@ BigInt get_line_number(
   BigInt line_count = 0;
 
   /* get the relative content */
-  if(stream_relative.is_open())
+  if (stream_relative.is_open())
   {
-    while(getline(stream_relative, line) && line_count < relative_line_number)
+    while (getline(stream_relative, line) && line_count < relative_line_number)
     {
       relative_content = line;
       ++line_count;
@@ -783,9 +997,9 @@ BigInt get_line_number(
   }
   /* file for the line in the programfile */
   line_count = 1;
-  if(stream_programfile.is_open())
+  if (stream_programfile.is_open())
   {
-    while(getline(stream_programfile, line) && line != relative_content)
+    while (getline(stream_programfile, line) && line != relative_content)
     {
       ++line_count;
     }
@@ -799,9 +1013,9 @@ std::string read_line(std::string file, BigInt line_number)
   std::string line_code = "";
   std::ifstream stream(file);
   BigInt line_count = 0;
-  if(stream.is_open())
+  if (stream.is_open())
   {
-    while(getline(stream, line) && line_count < line_number)
+    while (getline(stream, line) && line_count < line_number)
     {
       line_code = line;
       ++line_count;
@@ -810,7 +1024,7 @@ std::string read_line(std::string file, BigInt line_number)
   return line_code;
 }
 
-const std::regex regex_invariants(
+static const std::regex regex_invariants(
   "( "
   "+)?(__((VERIFIER|ESBMC))_)?(assume|assert)\\([a-zA-Z(-?(0-9))\\[\\]_>=+/"
   "*<~.&! \\(\\)]+\\);( +)?");
@@ -822,7 +1036,7 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
   std::string line_code = "";
 
   std::string program_file = options.get_option("witness-programfile");
-  if(program_file.empty() || verified_file == program_file)
+  if (program_file.empty() || verified_file == program_file)
   {
     line_code = read_line(verified_file, line_number);
   }
@@ -832,12 +1046,12 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
       get_line_number(verified_file, line_number, options);
     line_code = read_line(program_file, program_file_line_number);
   }
-  if(std::regex_match(line_code, regex_invariants))
+  if (std::regex_match(line_code, regex_invariants))
   {
     std::regex re("(\\([a-zA-Z(-?(0-9))\\[\\]_>=+/*<~.&! \\(\\)]+\\))");
     using reg_itr = std::regex_token_iterator<std::string::iterator>;
-    for(reg_itr it{line_code.begin(), line_code.end(), re, 1}, end{};
-        it != end;)
+    for (reg_itr it{line_code.begin(), line_code.end(), re, 1}, end{};
+         it != end;)
     {
       invariant = *it++;
       break;
@@ -853,16 +1067,16 @@ void generate_testcase_metadata()
   metadata.put("test-metadata.sourcecodelang", "C");
 
   std::string producer = config.options.get_option("witness-producer");
-  if(producer.empty())
+  if (producer.empty())
   {
     producer = "ESBMC " + std::string(ESBMC_VERSION);
-    if(config.options.get_bool_option("k-induction"))
+    if (config.options.get_bool_option("k-induction"))
       producer += " kind";
-    else if(config.options.get_bool_option("k-induction-parallel"))
+    else if (config.options.get_bool_option("k-induction-parallel"))
       producer += " kind";
-    else if(config.options.get_bool_option("falsification"))
+    else if (config.options.get_bool_option("falsification"))
       producer += " falsi";
-    else if(config.options.get_bool_option("incremental-bmc"))
+    else if (config.options.get_bool_option("incremental-bmc"))
       producer += " incr";
   }
 
@@ -873,7 +1087,7 @@ void generate_testcase_metadata()
   metadata.put(
     "test-metadata.programfile", config.options.get_option("input-file"));
   std::string programFileHash;
-  generate_sha1_hash_for_file(
+  generate_sha256_hash_for_file(
     config.options.get_option("input-file").c_str(), programFileHash);
   metadata.put("test-metadata.programhash", programFileHash);
   metadata.put("test-metadata.entryfunction", "main");
@@ -899,13 +1113,11 @@ void generate_testcase_metadata()
 #include <goto-symex/slice.h>
 void generate_testcase(
   const std::string &file_name,
-  const std::shared_ptr<symex_target_equationt> &target,
-  std::shared_ptr<smt_convt> &smt_conv)
+  const symex_target_equationt &target,
+  smt_convt &smt_conv)
 {
-  /*
-     * Unfortunately, TestCov rely on checking for '<!DOCTYPE test' and as Boost
-     * Property Tree is not a proper XML generator... it does not support this
-     */
+  /* Unfortunately, TestCov rely on checking for '<!DOCTYPE test' and as Boost
+   * Property Tree is not a proper XML generator... it does not support this */
 
   std::ofstream test_case(file_name);
   test_case << R"(<?xml version="1.0" encoding="UTF-8" standalone="no"?>)"
@@ -920,52 +1132,42 @@ void generate_testcase(
   std::unordered_set<std::string> nondet;
 
   auto generate_input = [&test_case, &smt_conv, &nondet](const expr2tc &expr) {
-    if(!expr || !is_symbol2t(expr))
+    if (!expr || !is_symbol2t(expr))
       return;
     const symbol2t &sym = to_symbol2t(expr);
-    if(
+    if (
       config.options.get_bool_option("generate-testcase") &&
       has_prefix(sym.thename.as_string(), "nondet$") &&
       !nondet.count(sym.thename.as_string()))
     {
       nondet.insert(sym.thename.as_string());
-      auto new_rhs = smt_conv->get(expr);
+      auto new_rhs = smt_conv.get(expr);
 
       // I don't think there is anything beyond constant int Test-Comp
-      if(is_constant_int2t(new_rhs))
+      if (is_constant_int2t(new_rhs))
         test_case << fmt::format(
           "<input>{}</input>\n", to_constant_int2t(new_rhs).value);
-      else if(is_constant_floatbv2t(new_rhs))
+      else if (is_constant_floatbv2t(new_rhs))
         test_case << fmt::format(
           "<input>{}</input>\n",
           to_constant_floatbv2t(new_rhs).value.to_ansi_c_string());
-      else if(is_constant_bool2t(new_rhs))
+      else if (is_constant_bool2t(new_rhs))
         test_case << fmt::format(
           "<input>{}</input>\n", to_constant_bool2t(new_rhs).value ? "1" : "0");
-
-      else
-      {
-        log_error(
-          "Could not convert the symbol into test "
-          "input");
-        new_rhs->dump();
-        abort();
-      }
     }
   };
-  for(auto const &SSA_step : target->SSA_steps)
+  for (auto const &SSA_step : target.SSA_steps)
   {
-    if(!smt_conv->l_get(SSA_step.guard_ast).is_true())
+    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
       continue;
 
-    if(SSA_step.is_assignment())
+    if (SSA_step.is_assignment())
     {
-      /*
-         * AFAIK there are two ways to arrive here with a nondet symbol
-         *
-         * 1. As a plain symbol `int a = __VERIFIER_nondet_int();`
-         * 2. As a with operation `arr[4] == __VERIFIER_nondet_int();`
-         */
+      /* AFAIK there are two ways to arrive here with a nondet symbol
+       *
+       * 1. As a plain symbol `int a = __VERIFIER_nondet_int();`
+       * 2. As a with operation `arr[4] == __VERIFIER_nondet_int();`
+       */
       SSA_step.dump();
       generate_input(symex_slicet::get_nondet_symbol(SSA_step.rhs));
     }

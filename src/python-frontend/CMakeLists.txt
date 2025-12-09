@@ -1,0 +1,45 @@
+# `mangle` function is defined in src/scripts/cmake/Utils.cmake
+  mangle(${CMAKE_CURRENT_BINARY_DIR}/pythonastgen.c  # an C file output containing python code
+         ${CMAKE_CURRENT_SOURCE_DIR} # the input directory folder where python files are located
+         RECURSIVE 1
+         WILDCARD *.py
+         SINGLE
+         PREFIX esbmc_pythonastgen_
+         MACRO ESBMC_FLAIL
+         ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/pythonastgen.h
+         LIST_DIRECTORIES FALSE
+  )
+
+add_library(pythonfrontend STATIC
+            python_language.cpp
+            python_converter.cpp
+            python_class.cpp
+            python_class_builder.cpp
+            python_dict_handler.cpp
+            python_list.cpp
+            python_math.cpp
+            python_set.cpp
+            python_typechecking.cpp
+            pythonastgen.c
+            module_manager.cpp
+            module_locator.cpp
+            symbol_id.cpp
+            type_handler.cpp
+            function_call_expr.cpp
+            numpy_call_expr.cpp
+            function_call_builder.cpp
+            string_builder.cpp
+            string_handler.cpp
+            char_utils.cpp
+            parse_float.cpp
+            tuple_handler.cpp
+            convert_float_literal.cpp)
+
+target_include_directories(pythonfrontend
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE ${CMAKE_BINARY_DIR}/src/python-frontend
+    PUBLIC ${CMAKE_SOURCE_DIR}/src
+    PUBLIC ${Boost_INCLUDE_DIRS}
+)
+
+target_link_libraries(pythonfrontend fmt::fmt nlohmann_json::nlohmann_json bigint)

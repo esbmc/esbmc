@@ -1,8 +1,3 @@
-#define __CRT__NO_INLINE /* Don't let mingw insert code */
-
-#ifdef _MSVC
-#define _USE_MATH_DEFINES
-#endif
 
 #include <math.h>
 
@@ -22,19 +17,19 @@ static double _atan(double f, int n)
 
   double g, q, r;
 
-  if(f > (2 - sqrt(3)))
+  if (f > (2 - sqrt(3)))
   {
     f = ((((sqrt(3) - 1) * f - 0.5) - 0.5) + f) / (sqrt(3) + f);
     n++;
   }
-  if(f > root_eps || f < -root_eps)
+  if (f > root_eps || f < -root_eps)
   {
     g = f * f;
     q = (((g + q3) * g + q2) * g + q1) * g + q0;
     r = (((p3 * g + p2) * g + p1) * g + p0) * g / q;
     f = f + f * r;
   }
-  if(n > 1)
+  if (n > 1)
     f = -f;
   return (f + a[n]);
 }
@@ -45,11 +40,20 @@ __ESBMC_HIDE:;
   double a;
 
   a = x < 0.0 ? -x : x;
-  if(a > 1.0)
+  if (a > 1.0)
     a = _atan(1.0 / a, 2);
   else
     a = _atan(a, 0);
   return (x < 0.0 ? -a : a);
+}
+
+// This function is used by the Python frontend
+// The inverse of atan, so that if y = atan(x) then x = arctan(y).
+// Reference: https://numpy.org/doc/stable/reference/generated/numpy.arctan.html
+double arctan(double x)
+{
+__ESBMC_HIDE:;
+  return atan(x);
 }
 
 double atan2(double v, double u)
@@ -59,18 +63,18 @@ __ESBMC_HIDE:;
 
   av = v < 0.0 ? -v : v;
   au = u < 0.0 ? -u : u;
-  if(u != 0.0)
+  if (u != 0.0)
   {
-    if(av > au)
+    if (av > au)
     {
-      if((f = au / av) == 0.0)
+      if ((f = au / av) == 0.0)
         f = M_PI_2;
       else
         f = _atan(f, 2);
     }
     else
     {
-      if((f = av / au) == 0.0)
+      if ((f = av / au) == 0.0)
         f = 0.0;
       else
         f = _atan(f, 0);
@@ -78,14 +82,14 @@ __ESBMC_HIDE:;
   }
   else
   {
-    if(v != 0)
+    if (v != 0)
       f = M_PI_2;
     else
     {
       f = 0.0;
     }
   }
-  if(u < 0.0)
+  if (u < 0.0)
     f = M_PI - f;
   return (v < 0.0 ? -f : f);
 }

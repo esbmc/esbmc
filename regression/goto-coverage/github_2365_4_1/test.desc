@@ -1,0 +1,9 @@
+CORE
+main.c
+--condition-coverage-claims
+^Reached Conditions:  6$
+^Short Circuited Conditions:  6$
+^Total Conditions:  12$
+^Condition Properties - SATISFIED:  4$
+^Condition Properties - UNSATISFIED:  2$
+^VERIFICATION FAILED$

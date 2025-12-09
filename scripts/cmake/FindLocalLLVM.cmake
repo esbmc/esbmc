@@ -1,7 +1,19 @@
 # Module to find LLVM and checks it's version
 
-if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL "")))
+if(DOWNLOAD_DEPENDENCIES AND ("${LLVM_DIR}" STREQUAL ""))
+  if(ESBMC_CHERI)
+    download_zip_and_extract(LLVM ${ESBMC_CHERI_LLVM_URL})
+    set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_CHERI_LLVM_NAME})
+    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_CHERI_LLVM_NAME})  
+  else()
+    download_zip_and_extract(LLVM ${ESBMC_LLVM_URL})
+    set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})
+    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})   
+  endif() 
+endif()
 
+if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL "")))
+  message("Looking for LLVM in: ${LLVM_DIR}")
   find_package(LLVM REQUIRED CONFIG
     PATHS ${LLVM_DIR}
     NO_DEFAULT_PATH
@@ -11,9 +23,34 @@ if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL 
     PATHS ${Clang_DIR}
     NO_DEFAULT_PATH
   )
-else()
+else()  
   find_package(LLVM REQUIRED CONFIG)
   find_package(Clang REQUIRED CONFIG)
+endif()
+
+if (LLVM_PACKAGE_BUGREPORT STREQUAL https://github.com/CTSRD-CHERI/llvm-project/issues)
+  set(ESBMC_CHERI_CLANG ON)
+  message(STATUS "Clang is CHERI-enabled, enabling CHERI support.")
+elseif(EXISTS "${CLANG_INSTALL_PREFIX}/include/llvm/Support/Morello.h")
+  set(ESBMC_CHERI_CLANG ON)
+  set(ESBMC_CHERI_CLANG_MORELLO ON)
+  message(STATUS "Clang is CHERI-enabled, enabling CHERI support for Morello.")
+else()
+  unset(ESBMC_CHERI_CLANG)
+  message(STATUS "Clang is not CHERI-enabled, disabling CHERI support.")
+endif()
+
+if (ESBMC_CHERI AND NOT ESBMC_CHERI_CLANG)
+  message(FATAL_ERROR "ESBMC_CHERI enabled, but Clang is does not support CHERI")
+elseif (DEFINED ESBMC_CHERI AND NOT ESBMC_CHERI AND ESBMC_CHERI_CLANG)
+  message(WARNING "ESBMC_CHERI disabled, but Clang may generate CHERI-related ASTs. This build configuration is not supported! You're on your own.")
+  unset(ESBMC_CHERI_CLANG)
+  unset(ESBMC_CHERI_CLANG_MORELLO)
+endif()
+
+if (${LLVM_VERSION_MAJOR} GREATER ${MAX_SUPPORTED_LLVM_VERSION_MAJOR})
+  message(WARNING "LLVM version ${LLVM_VERSION_MAJOR} is greater than maximum "
+                  "supported (${MAX_SUPPORTED_LLVM_VERSION_MAJOR})")
 endif()
 
 if (${LLVM_VERSION_MAJOR} LESS 11)
@@ -21,7 +58,6 @@ if (${LLVM_VERSION_MAJOR} LESS 11)
 else()
   message(STATUS "LLVM version: ${LLVM_VERSION}")
 endif()
-# BUG: For some reason, ESBMC is not linking with Systems LLVM [fb: is this still the case?]
 
 message(STATUS "Clang found in: ${CLANG_INSTALL_PREFIX}")
 if (CLANG_LINK_CLANG_DYLIB AND NOT BUILD_STATIC)
@@ -57,10 +93,12 @@ if (TRY_CLANG_RUNS EQUAL 0)
   string(STRIP "${CLANG_RESOURCE_DIR}" CLANG_RESOURCE_DIR)
   # see clang-toolings's injectResourceDir():
   # <https://clang.llvm.org/doxygen/Tooling_8cpp_source.html#l00462>
-  if ("${CLANG_RESOURCE_DIR}" STREQUAL "")
+  if (NOT ("${CLANG_RESOURCE_DIR}" STREQUAL ""))
+    set(CLANG_RESOURCE_DIR "${CLANG_INSTALL_PREFIX}/bin/${CLANG_RESOURCE_DIR}")
+  elseif (${LLVM_VERSION_MAJOR} LESS 16)
     set(CLANG_RESOURCE_DIR "${CLANG_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}/clang/${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
   else()
-    set(CLANG_RESOURCE_DIR "${CLANG_INSTALL_PREFIX}/bin/${CLANG_RESOURCE_DIR}")
+    set(CLANG_RESOURCE_DIR "${CLANG_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}/clang/${LLVM_VERSION_MAJOR}")
   endif()
   message(STATUS "Clang resource dir: ${CLANG_RESOURCE_DIR}")
   set(ESBMC_CLANG_HEADER_DIR "${CLANG_RESOURCE_DIR}/include")

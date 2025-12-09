@@ -1,4 +1,0 @@
-CORE
-mul.solast
---function testInheritance --contract mul.sol
-^VERIFICATION SUCCESSFUL$

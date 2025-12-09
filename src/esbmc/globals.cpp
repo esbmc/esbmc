@@ -11,11 +11,7 @@ const mode_table_et mode_table[] = {
 #ifdef ENABLE_JIMPLE_FRONTEND
   LANGAPI_MODE_JIMPLE,
 #endif
-#ifdef ENABLE_OLD_FRONTEND
-  LANGAPI_MODE_C,
-  LANGAPI_MODE_CPP,
+#ifdef ENABLE_PYTHON_FRONTEND
+  LANGAPI_MODE_PYTHON,
 #endif
   LANGAPI_MODE_END};
-
-extern "C" const uint8_t buildidstring_buf[];
-extern "C" const uint8_t *const esbmc_version_string = buildidstring_buf;

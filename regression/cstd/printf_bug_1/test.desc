@@ -1,0 +1,5 @@
+KNOWNBUG
+main.c
+--overflow-check --32
+^VERIFICATION FAILED$
+\bdereference failure: NULL pointer\b

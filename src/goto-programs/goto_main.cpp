@@ -24,7 +24,7 @@ void goto_convert(contextt &context, optionst &options, goto_programt &dest)
 {
   // find main symbol
   const symbolt *s = context.find_symbol("__ESBMC_main");
-  if(s == nullptr)
+  if (s == nullptr)
     throw "failed to find main symbol";
 
   log_status("goto_convert : start converting symbol table to goto functions ");

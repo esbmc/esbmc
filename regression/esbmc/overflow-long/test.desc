@@ -1,0 +1,4 @@
+CORE
+ovfl3.c
+--overflow-check
+^VERIFICATION SUCCESSFUL$

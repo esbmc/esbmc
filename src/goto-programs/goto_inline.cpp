@@ -1,6 +1,6 @@
 #include <cassert>
 #include <goto-programs/goto_inline.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <langapi/language_util.h>
 #include <util/base_type.h>
 #include <util/cprover_prefix.h>
@@ -21,10 +21,10 @@ void goto_inlinet::parameter_assignments(
   const code_typet::argumentst &argument_types = code_type.arguments();
 
   // iterates over the types of the arguments
-  for(const auto &argument_type : argument_types)
+  for (const auto &argument_type : argument_types)
   {
     // if you run out of actual arguments there was a mismatch
-    if(it1 == arguments.end())
+    if (it1 == arguments.end())
     {
       log_error("function call: not enough arguments");
       abort();
@@ -38,7 +38,7 @@ void goto_inlinet::parameter_assignments(
     const irep_idt &identifier = argument.cmt_identifier();
 
     // Don't assign arguments if they have no name, see regression spec21
-    if(identifier == "")
+    if (identifier == "")
       continue;
 
     {
@@ -51,7 +51,7 @@ void goto_inlinet::parameter_assignments(
     }
 
     // nil means "don't assign"
-    if(it1->is_nil())
+    if (it1->is_nil())
     {
     }
     else
@@ -62,20 +62,20 @@ void goto_inlinet::parameter_assignments(
       // it should be the same exact type
       type2tc arg_type_2 = migrate_type(arg_type);
       type2tc actual_type_2 = migrate_type(actual.type());
-      if(!base_type_eq(arg_type_2, actual_type_2, ns))
+      if (!base_type_eq(arg_type_2, actual_type_2, ns))
       {
         const typet &f_argtype = ns.follow(arg_type);
         const typet &f_acttype = ns.follow(actual.type());
 
         // we are willing to do some conversion
-        if(
+        if (
           (f_argtype.id() == "pointer" && f_acttype.id() == "pointer") ||
           (f_argtype.is_array() && f_acttype.id() == "pointer" &&
            f_argtype.subtype() == f_acttype.subtype()))
         {
           actual.make_typecast(arg_type);
         }
-        else if(
+        else if (
           (f_argtype.id() == "signedbv" || f_argtype.id() == "unsignedbv" ||
            f_argtype.is_bool()) &&
           (f_acttype.id() == "signedbv" || f_acttype.id() == "unsignedbv" ||
@@ -109,7 +109,7 @@ void goto_inlinet::parameter_assignments(
     it1++;
   }
 
-  if(it1 != arguments.end())
+  if (it1 != arguments.end())
   {
     // too many arguments -- we just ignore that, no harm done
   }
@@ -120,13 +120,13 @@ void goto_inlinet::replace_return(
   const exprt &lhs,
   const exprt &constrain [[maybe_unused]] /* ndebug */)
 {
-  for(goto_programt::instructionst::iterator it = dest.instructions.begin();
-      it != dest.instructions.end();
-      it++)
+  for (goto_programt::instructionst::iterator it = dest.instructions.begin();
+       it != dest.instructions.end();
+       it++)
   {
-    if(it->is_return())
+    if (it->is_return())
     {
-      if(lhs.is_not_nil())
+      if (lhs.is_not_nil())
       {
         goto_programt tmp;
         goto_programt::targett assignment = tmp.add_instruction(ASSIGN);
@@ -136,19 +136,19 @@ void goto_inlinet::replace_return(
 
         // this may happen if the declared return type at the call site
         // differs from the defined return type
-        if(code_assign.lhs().type() != code_assign.rhs().type())
+        if (code_assign.lhs().type() != code_assign.rhs().type())
           code_assign.rhs().make_typecast(code_assign.lhs().type());
 
         migrate_expr(code_assign, assignment->code);
         assignment->location = it->location;
         assignment->function = it->location.get_function();
 
-        assert(constrain.is_nil()); // bp_constrain gumpf reomved
+        assert(constrain.is_nil()); // bp_constrain gumpf removed
 
         dest.insert_swap(it, *assignment);
         it++;
       }
-      else if(!is_nil_expr(it->code))
+      else if (!is_nil_expr(it->code))
       {
         // Encode evaluation of return expr, so that returns with pointer
         // derefs in them still get dereferenced, even when the result is
@@ -181,7 +181,7 @@ void goto_inlinet::expand_function_call(
   bool full)
 {
   // look it up
-  if(function.id() != "symbol")
+  if (function.id() != "symbol")
   {
     log_error(
       "function_call expects symbol as function operand, but got `{}'",
@@ -192,9 +192,9 @@ void goto_inlinet::expand_function_call(
   const irep_idt &identifier = function.identifier();
 
   // see if we are already expanding it
-  if(recursion_set.find(identifier) != recursion_set.end())
+  if (recursion_set.find(identifier) != recursion_set.end())
   {
-    if(!full)
+    if (!full)
     {
       target++;
       return; // simply ignore, we don't do full inlining, it's ok
@@ -211,7 +211,7 @@ void goto_inlinet::expand_function_call(
   goto_functionst::function_mapt::iterator m_it =
     goto_functions.function_map.find(identifier);
 
-  if(m_it == goto_functions.function_map.end())
+  if (m_it == goto_functions.function_map.end())
   {
     std::ostringstream str;
     str << "failed to find function `" << identifier << "'\n";
@@ -223,19 +223,19 @@ void goto_inlinet::expand_function_call(
   goto_functiont &f = m_it->second;
 
   // see if we need to inline this
-  if(!full)
+  if (!full)
   {
-    if(!f.body_available || (f.body.instructions.size() > smallfunc_limit))
+    if (!f.body_available || (f.body.instructions.size() > smallfunc_limit))
     {
       target++;
       return;
     }
   }
 
-  if(f.body_available)
+  if (f.body_available)
   {
     inlined_funcs.insert(identifier.as_string());
-    for(const auto &inlined_func : f.inlined_funcs)
+    for (const auto &inlined_func : f.inlined_funcs)
     {
       inlined_funcs.insert(inlined_func);
     }
@@ -256,13 +256,13 @@ void goto_inlinet::expand_function_call(
       tmp2.instructions.front().location, f.type, arguments, tmp);
     tmp.destructive_append(tmp2);
 
-    if(f.body.hide)
+    if (f.body.hide)
     {
       const locationt &new_location = function.find_location();
 
-      Forall_goto_program_instructions(it, tmp)
+      Forall_goto_program_instructions (it, tmp)
       {
-        if(new_location.is_not_nil())
+        if (new_location.is_not_nil())
         {
           // can't just copy, e.g., due to comments field
           it->location.id(""); // not NIL
@@ -291,7 +291,7 @@ void goto_inlinet::expand_function_call(
   }
   else
   {
-    if(no_body_set.insert(identifier).second)
+    if (no_body_set.insert(identifier).second)
     {
       std::ostringstream str;
       str << "no body for function `" << identifier << "'\n";
@@ -303,7 +303,7 @@ void goto_inlinet::expand_function_call(
 
     // evaluate function arguments -- they might have
     // pointer dereferencing or the like
-    forall_expr(it, arguments)
+    forall_expr (it, arguments)
     {
       goto_programt::targett t = tmp.add_instruction();
       t->make_other();
@@ -315,7 +315,7 @@ void goto_inlinet::expand_function_call(
     }
 
     // return value
-    if(lhs.is_not_nil())
+    if (lhs.is_not_nil())
     {
       exprt rhs = exprt("sideeffect", lhs.type());
       rhs.statement("nondet");
@@ -353,20 +353,20 @@ void goto_inlinet::goto_inline_rec(goto_programt &dest, bool full)
 {
   bool changed = false;
 
-  for(goto_programt::instructionst::iterator it = dest.instructions.begin();
-      it != dest.instructions.end();) // no it++
+  for (goto_programt::instructionst::iterator it = dest.instructions.begin();
+       it != dest.instructions.end();) // no it++
   {
     bool expanded = inline_instruction(dest, full, it);
 
-    if(expanded)
+    if (expanded)
       changed = true;
     else
       it++;
   }
 
-  if(changed)
+  if (changed)
   {
-    remove_skip(dest);
+    remove_no_op(dest);
     dest.update();
   }
 }
@@ -378,16 +378,16 @@ bool goto_inlinet::inline_instruction(
 {
   bool expanded = false;
 
-  if(it->is_function_call())
+  if (it->is_function_call())
   {
     const code_function_call2t &call = to_code_function_call2t(it->code);
 
-    if(is_symbol2t(call.function))
+    if (is_symbol2t(call.function))
     {
       exprt tmp_lhs = migrate_expr_back(call.ret);
       exprt tmp_func = migrate_expr_back(call.function);
       exprt::operandst args;
-      for(const auto &operand : call.operands)
+      for (const auto &operand : call.operands)
         args.push_back(migrate_expr_back(operand));
 
       expand_function_call(
@@ -402,7 +402,7 @@ bool goto_inlinet::inline_instruction(
       expanded = true;
     }
   }
-  else if(it->is_other())
+  else if (it->is_other())
   {
     // jmorse, removed bp constrain situation.
   }
@@ -423,7 +423,7 @@ void goto_inline(
     goto_functionst::function_mapt::const_iterator it =
       goto_functions.function_map.find("__ESBMC_main");
 
-    if(it == goto_functions.function_map.end())
+    if (it == goto_functions.function_map.end())
     {
       dest.clear();
       return;
@@ -434,8 +434,8 @@ void goto_inline(
   goto_inline.goto_inline(dest);
 
   // clean up
-  for(auto &it : goto_functions.function_map)
-    if(it.first != "__ESBMC_main")
+  for (auto &it : goto_functions.function_map)
+    if (it.first != "__ESBMC_main")
     {
       it.second.body_available = false;
       it.second.body.clear();
@@ -453,14 +453,14 @@ void goto_inline(
   goto_functionst::function_mapt::iterator it =
     goto_functions.function_map.find("__ESBMC_main");
 
-  if(it == goto_functions.function_map.end())
+  if (it == goto_functions.function_map.end())
     return;
 
   goto_inline.goto_inline(it->second.body);
 
   // clean up
-  for(auto &it : goto_functions.function_map)
-    if(it.first != "main")
+  for (auto &it : goto_functions.function_map)
+    if (it.first != "main")
     {
       it.second.body_available = false;
       it.second.body.clear();
@@ -477,10 +477,10 @@ void goto_partial_inline(
 
   goto_inline.smallfunc_limit = _smallfunc_limit;
 
-  for(auto &it : goto_functions.function_map)
+  for (auto &it : goto_functions.function_map)
   {
     goto_inline.inlined_funcs.clear();
-    if(it.second.body_available)
+    if (it.second.body_available)
       goto_inline.goto_inline_rec(it.second.body, false);
     it.second.inlined_funcs = goto_inline.inlined_funcs;
   }

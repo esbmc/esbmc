@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--incremental-bmc --force-malloc-success -D__ESBMC
+^VERIFICATION SUCCESSFUL$

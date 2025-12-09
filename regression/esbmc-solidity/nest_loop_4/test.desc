@@ -1,0 +1,4 @@
+THOROUGH
+contract.solast
+--sol contract.sol --contract Base --unwind 20 --no-unwinding-assertions --no-standard-checks
+^VERIFICATION SUCCESSFUL$

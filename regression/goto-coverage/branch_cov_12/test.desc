@@ -1,0 +1,7 @@
+CORE
+main.c
+--branch-coverage-claims --unwind 2
+^Branches : 8
+^Reached : 8
+^Branch Coverage: 100
+^VERIFICATION FAILED$

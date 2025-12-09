@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc
+--incremental-bmc -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

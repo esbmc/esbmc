@@ -5,13 +5,14 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <optional>
 #include <boost/program_options.hpp>
 
 /* WORKAROUND: On *BSD macOS the include of some system headers
  * makes the definition of isset as a macro, which conflicts with
  * the member */
 #ifdef isset
-#undef isset
+#  undef isset
 #endif
 struct opt_templ
 {
@@ -44,6 +45,10 @@ public:
   ~cmdlinet();
   typedef std::map<std::string, std::list<std::string>> options_mapt;
   options_mapt options_map;
+
+private:
+  std::optional<std::string> get_config_file_location() const;
+  std::string expand_user(std::string const path) const;
 };
 
 #endif

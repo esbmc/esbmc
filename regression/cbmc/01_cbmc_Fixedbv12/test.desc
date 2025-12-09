@@ -1,4 +1,4 @@
 CORE
 main.c
---fixedbv --no-slice --32
+--fixedbv --no-slice --32 -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

@@ -5,6 +5,8 @@
 #include <goto-symex/goto_trace.h>
 #include <string>
 #include <regex>
+#include <big-int/bigint.hh>
+#include <yaml-cpp/yaml.h>
 
 typedef boost::property_tree::ptree xmlnodet;
 
@@ -13,7 +15,7 @@ typedef boost::property_tree::ptree xmlnodet;
 class nodet
 {
 private:
-  static short int _id;
+  static BigInt _id;
 
 public:
   std::string id;
@@ -25,15 +27,15 @@ public:
   std::string invariant_scope;
   nodet(void)
   {
-    id = "N" + std::to_string(_id);
-    _id++;
+    id = "N" + integer2string(_id);
+    _id += 1;
   }
 };
 
 class edget
 {
 private:
-  static short int _id;
+  static BigInt _id;
 
 public:
   std::string id;
@@ -54,18 +56,39 @@ public:
   nodet *to_node;
   edget(void)
   {
-    id = "E" + std::to_string(_id);
-    _id++;
+    id = "E" + integer2string(_id);
+    _id += 1;
     from_node = NULL;
     to_node = NULL;
   }
   edget(nodet *from_node, nodet *to_node)
   {
-    id = "E" + std::to_string(_id);
-    _id++;
+    id = "E" + integer2string(_id);
+    _id += 1;
     this->from_node = from_node;
     this->to_node = to_node;
   }
+};
+
+class waypoint
+{
+public:
+  enum Type
+  {
+    assumption,
+    target,
+    function_enter,
+    function_return,
+    branching
+  };
+
+  Type type;
+  std::string file;
+  std::string value;
+  std::string format;
+  BigInt line = c_nonset;
+  BigInt column = c_nonset;
+  std::string function;
 };
 
 class grapht
@@ -90,6 +113,25 @@ public:
   }
   void generate_graphml(optionst &options);
   void check_create_new_thread(BigInt thread_id, nodet *prev_node);
+};
+
+class yamlt
+{
+public:
+  enum typet
+  {
+    VIOLATION,
+    CORRECTNESS
+  };
+  typet witness_type;
+  std::string verified_file;
+  std::vector<waypoint> segments;
+
+  yamlt(typet t)
+  {
+    witness_type = t;
+  }
+  void generate_yaml(optionst &options);
 };
 
 /**
@@ -119,6 +161,18 @@ void create_correctness_graph_node(
   optionst &options,
   xmlnodet &graphnode);
 
+void create_correctness_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root);
+
+void create_violation_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root);
+
+void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint);
+
 /**
  * Create a edge node.
  *
@@ -145,8 +199,10 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step);
  * will return the lhs and rhs formated in a way expected
  * by the assumption field.
  */
-std::string
-get_formated_assignment(const namespacet &ns, const goto_trace_stept &step);
+std::string get_formated_assignment(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  bool yaml);
 
 /**
  *
@@ -166,7 +222,7 @@ BigInt get_line_number(
 /**
  *
  */
-int generate_sha1_hash_for_file(const char *path, std::string &output);
+int generate_sha256_hash_for_file(const char *path, std::string &output);
 
 /**
  *
@@ -179,5 +235,5 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options);
 void generate_testcase_metadata();
 void generate_testcase(
   const std::string &file_name,
-  const std::shared_ptr<symex_target_equationt> &target,
-  std::shared_ptr<smt_convt> &smt_conv);
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);

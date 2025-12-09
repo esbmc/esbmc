@@ -28,7 +28,7 @@ protected:
 
   char next()
   {
-    if(eol())
+    if (eol())
       throw eol_exception();
     return format[format_pos++];
   }

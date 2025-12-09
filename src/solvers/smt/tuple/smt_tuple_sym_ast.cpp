@@ -69,13 +69,13 @@ tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   tuple_sym_smt_astt false_val = to_tuple_sym_ast(falseop);
 
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
-  symbol2tc result(sort->get_tuple_type(), name);
+  expr2tc result = symbol2tc(sort->get_tuple_type(), name);
   smt_astt result_sym = ctx->convert_ast(result);
 
   const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
 
   // Iterate through each field and encode an ite.
-  for(unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < data.members.size(); i++)
   {
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
@@ -103,7 +103,7 @@ smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   eqs.reserve(data.members.size());
 
   // Iterate through each field and encode an equality.
-  for(unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < data.members.size(); i++)
   {
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
@@ -111,7 +111,7 @@ smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   }
 
   // Create an ast representing the fact that all the members are equal.
-  return ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs);
+  return ctx->make_n_ary_and(eqs);
 }
 
 smt_astt tuple_sym_smt_ast::update(
@@ -133,9 +133,9 @@ smt_astt tuple_sym_smt_ast::update(
   tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, sort, name);
 
   // Iterate over all members, deciding what to do with them.
-  for(unsigned int j = 0; j < data.members.size(); j++)
+  for (unsigned int j = 0; j < data.members.size(); j++)
   {
-    if(j == idx)
+    if (j == idx)
     {
       // This is the updated field -- generate the name of its variable with
       // tuple project and assign it in.
@@ -153,7 +153,7 @@ smt_astt tuple_sym_smt_ast::update(
     }
   }
 
-  ctx->assert_ast(ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs));
+  ctx->assert_ast(ctx->make_n_ary_and(eqs));
   return result;
 }
 
@@ -182,12 +182,12 @@ smt_astt tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   const type2tc &restype = data.members[idx];
   smt_sortt s = ctx->convert_sort(restype);
 
-  if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))
+  if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))
   {
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.
     sym_name = sym_name + ".";
-    if(is_tuple_array_ast_type(restype))
+    if (is_tuple_array_ast_type(restype))
       return new array_sym_smt_ast(ctx, s, sym_name);
 
     return new tuple_sym_smt_ast(ctx, s, sym_name);

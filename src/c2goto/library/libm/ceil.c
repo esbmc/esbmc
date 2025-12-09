@@ -1,9 +1,4 @@
-#define __CRT__NO_INLINE /* Don't let mingw insert code */
 
-#ifdef _MSVC
-#define _USE_MATH_DEFINES
-#define _CRT_FUNCTIONS_REQUIRED 0
-#endif
 #include <math.h>
 #include <fenv.h>
 
@@ -30,3 +25,15 @@ ceil_def(double, ceil, rint);
 ceil_def(long double, ceill, rintl);
 
 #undef ceil_def
+
+// This function is used by the Python frontend
+void __ceil_array(const double *v, double *out, int size)
+{
+__ESBMC_HIDE:;
+  int i = 0;
+  while (i < size)
+  {
+    out[i] = ceil(v[i]);
+    ++i;
+  }
+}

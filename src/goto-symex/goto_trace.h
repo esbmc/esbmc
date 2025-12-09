@@ -8,7 +8,9 @@
 #include <map>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
+#include <util/cmdline.h>
 #include <vector>
+#include <string_view>
 
 class goto_trace_stept
 {
@@ -113,12 +115,26 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
+bool input_file_check(const locationt &l);
+
+void show_simplified_location(std::ostream &out, const locationt &location);
+
 void violation_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
+void violation_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
+
 void correctness_graphml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
+
+void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace);
@@ -135,5 +151,16 @@ void counterexample_value(
   const namespacet &ns,
   const expr2tc &identifier,
   const expr2tc &value);
+
+void generate_html_report(
+  const std::string_view uuid,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const optionst &options);
+
+void generate_json_report(
+  const std::string_view uuid,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
 
 #endif

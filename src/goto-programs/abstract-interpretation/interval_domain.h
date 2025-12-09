@@ -11,10 +11,9 @@
 #include <util/ieee_float.h>
 #include <irep2/irep2_utils.h>
 #include <util/mp_arith.h>
+#include <util/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
-typedef interval_templatet<BigInt> integer_intervalt;
-using real_intervalt =
-  interval_templatet<boost::multiprecision::cpp_bin_float_100>;
+#include <variant>
 
 /**
  * @brief Trivial, conjunctive interval domain for both float
@@ -24,6 +23,20 @@ using real_intervalt =
 class interval_domaint : public ai_domain_baset
 {
 public:
+  using integer_intervalt = interval_templatet<BigInt>;
+  using real_intervalt =
+    interval_templatet<boost::multiprecision::cpp_bin_float_100>;
+
+  using interval = std::variant<
+    std::shared_ptr<integer_intervalt>,
+    std::shared_ptr<real_intervalt>,
+    std::shared_ptr<wrapped_interval>>;
+
+  // Map of variables into intervals.
+  // If a key does not exist then imply the TOP interval.
+  // If a key exists then the shared_ptr must point to a valid place
+  using interval_map = std::unordered_map<irep_idt, interval, irep_id_hash>;
+
   interval_domaint() : bottom(true)
   {
   }
@@ -45,7 +58,7 @@ public:
   static bool
     enable_interval_arithmetic; /// Enable simplification for arithmetic operators
   static bool
-    enable_interval_bitwise_arithmetic; /// Enable simplfication for bitwise opeations
+    enable_interval_bitwise_arithmetic; /// Enable simplification for bitwise operations
   static bool
     enable_modular_intervals; /// Make a modular operation after every assignment
   static bool
@@ -56,34 +69,22 @@ public:
     enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
   static bool
     enable_real_intervals; /// Enabled wrapped intervals (disables Integers)
-
+  static bool enable_assume_asserts; /// Asserts are propagates as assumptions
+  static bool
+    enable_eval_assumptions; /// Try to evaluate in a guard in a TVT to accelerate bottoms
+  static bool enable_ibex_contractor; /// Use ibex contractor
   // Widening options
   static unsigned
-    fixpoint_limit; /// Sets a limit for number of iteartions before widening
+    fixpoint_limit; /// Sets a limit for number of iterations before widening
   static bool
     widening_under_approximate_bound; /// Whether to considers overflows for Integers
   static bool
     widening_extrapolate; /// Extrapolate bound to infinity based on previous iteration
   static bool widening_narrowing; /// Interpolate bound back after fixpoint
 
-  typedef std::unordered_map<irep_idt, integer_intervalt, irep_id_hash>
-    int_mapt;
-
-  typedef std::unordered_map<irep_idt, real_intervalt, irep_id_hash> real_mapt;
-  typedef std::unordered_map<irep_idt, wrapped_interval, irep_id_hash>
-    wrap_mapt;
-
-  typedef std::unordered_map<irep_idt, unsigned, irep_id_hash> fixpoint_counter;
-
-  int_mapt get_int_map() const
-  {
-    return int_map;
-  }
-
-  wrap_mapt get_wrap_map() const
-  {
-    return wrap_map;
-  }
+  /// Eval whether a boolean expression is always true, always false, or either (for the current state)
+  static tvt
+  eval_boolean_expression(const expr2tc &cond, const interval_domaint &id);
 
 protected:
   /**
@@ -100,23 +101,22 @@ protected:
   * @return True if the join increases the set represented by *this, False if
   *   there is no change.
   */
-  bool join(const interval_domaint &b);
+  bool join(const interval_domaint &b, const goto_programt::const_targett &to);
 
 public:
   bool merge(
     const interval_domaint &b,
     goto_programt::const_targett,
-    goto_programt::const_targett)
+    goto_programt::const_targett to)
   {
-    return join(b);
+    const bool result = join(b, to);
+    copied = false;
+    return result;
   }
 
   void clear_state()
   {
-    int_map.clear();
-    real_map.clear();
-    wrap_map.clear();
-    fixpoint_map.clear();
+    intervals = get_empty();
   }
 
   // no states
@@ -145,7 +145,7 @@ public:
 
   bool is_top() const override final
   {
-    return !bottom && int_map.empty() && real_map.empty();
+    return !bottom && intervals->empty();
   }
 
   /**
@@ -192,18 +192,28 @@ public:
   virtual bool
   ai_simplify(expr2tc &condition, const namespacet &ns) const override;
 
+  std::shared_ptr<interval_map> intervals;
+  bool copied = false;
+
+  static std::shared_ptr<interval_map> get_empty()
+  {
+    static std::shared_ptr<interval_map> map = std::make_shared<interval_map>();
+    return map;
+  }
+  void copy_if_needed()
+  {
+    if (copied)
+      return;
+    std::shared_ptr<interval_map> cpy = std::make_shared<interval_map>();
+    *cpy = *intervals;
+    intervals = cpy;
+    copied = true;
+  }
+
 protected:
   // Abstract state information
   /// Is this state a bottom. I.e., there is a contradiction between an assignment and an assume
   bool bottom;
-  /// Map for all integers intervals
-  int_mapt int_map;
-  /// Map for all real intervals
-  real_mapt real_map;
-  /// Map for all wrap intervals
-  wrap_mapt wrap_map;
-  /// Map for all fixpoint counters
-  fixpoint_counter fixpoint_map;
 
   /**
    * @brief Recursively explores an Expression until it reaches a symbol. If the
@@ -243,7 +253,7 @@ protected:
    *
    * @param assignment
    */
-  void assign(const expr2tc &assignment);
+  void assign(const expr2tc &assignment, const bool recursive = false);
 
   /**
    * @brief Applies LHS <= RHS and RHS <= LHS from assignment instructions
@@ -255,12 +265,31 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  void apply_assignment(const expr2tc &lhs, const expr2tc &rhs);
+  void apply_assignment(const expr2tc &lhs, const expr2tc &rhs, bool recursive);
 
   /**
    * @brief Applies Extrapolation widening algorithm
    *
    * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after the computation):
+   * The objective of the extrapolation is to accelerate the convergence at the cost of precision
+   *
+   * Example:
+   * int i = 0;
+   * while(i < 10)
+   *  i++;  <--- what is the interval for i before the increment?
+   *
+   * Computing the interval of sum would need 11 iterations to arrive to [0,9],
+   * it 1 = [0,0]
+   * it 2 = [0,1]
+   * it 3 = [0,2]
+   * ...
+   * it 10 = [0,9]
+   * it 11 = [0,9] fixpoint
+   *
+   * By extrapolating, we can arrive at [0, +inf] in two iterations.
+   * it 1 = [0,0]
+   * it 2 = [0,1] => [0, inf]
+   * it 3 = [0,inf] fixpoint
    *
    * Widening((a0,b0), (a1,b1)) = (a1 < a0 ? -infinity : a0, b1 > b0 ? infinity : b0 )
    * @tparam Interval interval template specialization (Integers, Reals)
@@ -268,14 +297,27 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  Interval extrapolate_intervals(const Interval &before, const Interval &after);
+  Interval
+  extrapolate_intervals(const Interval &before, const Interval &after) const;
 
   /**
    * @brief Applies Interpolation narrowing algorithm
+   * 
    *
    * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after the computation):
+   * The objective of the interpolation is to bring back some of the precision lost from an extrapolation.
    *
-   * Narrowing((a0,b0), (a1,b1)) = (a1 > a0 ? a0 : a1, b1 < b0 ? b0 : b1 )
+   * Example:
+   * int i = 0;
+   * while(i < 10)
+   *  i++;  <--- what is the interval for i before the increment?
+   * 
+   * Coming back from an extrapolation [0, +inf] (which is a fixpoint)
+   * we can narrow the interval by checking the interval post the loop condition (i < 10)
+   * it 4 = narrowing([0, inf], [0, 9]) => [0,9]
+   * it 5 = [0,9]  
+   *
+   * Narrowing((a0,b0), (a1,b1)) = (a0 == -inf ? a1 : a0, b0 = +inf ? b1 : b0)
    * @tparam Interval interval template specialization (Integers, Reals)
    * @param lhs
    * @param rhs
@@ -295,6 +337,16 @@ protected:
   void apply_assume_less(const expr2tc &lhs, const expr2tc &rhs);
 
   /**
+   * @brief Applies symbol = truth
+   *
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param symbol
+   * @param negation
+   */
+  template <class Interval>
+  void apply_assume_symbol_truth(const symbol2t &sym, bool is_false);
+
+  /**
    * @brief Generates interval with [min, max] using symbol type
    *
    * @tparam Interval interval template specialization (Integers, Reals)
@@ -304,6 +356,7 @@ protected:
   template <class Interval>
   Interval generate_modular_interval(const symbol2t sym) const;
 
+public:
   /**
    * @brief Get the interval for expression
    *
@@ -326,6 +379,15 @@ protected:
   template <class Interval>
   Interval get_interval_from_symbol(const symbol2t &sym) const;
 
+  template <size_t Index, class Interval>
+  Interval get_interval_from_variant(const symbol2t &sym) const;
+
+  template <class Interval>
+  bool join_intervals(
+    const std::shared_ptr<Interval> &after,
+    std::shared_ptr<Interval> &dst,
+    bool can_extrapolate) const;
+
   /**
    * @brief Get the interval from constant expression
    *
@@ -339,16 +401,6 @@ protected:
   template <class Interval>
   Interval get_top_interval_from_expr(const expr2tc &sym) const;
 
-  /**
-   * @brief Sets new interval for symbol
-   *
-   * @tparam Interval interval template specialization (Integers, Reals)
-   * @param sym
-   * @param value
-   */
-  template <class Interval>
-  void update_symbol_interval(const symbol2t &sym, const Interval value);
-
   template <class Interval>
   bool is_mapped(const symbol2t &sym) const;
 
@@ -361,8 +413,25 @@ protected:
     const type2tc &type,
     bool upper) const;
 
+protected:
   template <class IntervalMap>
-  bool join(IntervalMap &new_map, const IntervalMap &previous_map);
+  bool join(
+    IntervalMap &new_map,
+    const IntervalMap &previous_map,
+    const bool is_guard_instruction = true);
+
+  /**
+   * @brief Sets new interval for symbol
+   *
+   * @tparam Interval interval template specialization (Integers, Reals)
+   * @param sym
+   * @param value
+   */
+  template <class Interval>
+  void update_symbol_interval(const symbol2t &sym, const Interval &value);
+
+  template <size_t Index, class Interval>
+  void update_symbol_from_variant(const symbol2t &sym, const Interval &value);
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H

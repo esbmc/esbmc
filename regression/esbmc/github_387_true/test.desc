@@ -1,4 +1,4 @@
 CORE
 main.c
---no-slice --memory-leak-check --z3 --force-malloc-success
+--no-slice --memory-leak-check --z3 --force-malloc-success -Wno-error=implicit-function-declaration -Wno-error=implicit-int
 ^VERIFICATION SUCCESSFUL$

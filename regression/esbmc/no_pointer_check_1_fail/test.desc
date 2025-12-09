@@ -1,4 +1,4 @@
 CORE
 main.c
---no-pointer-relation-check --force-malloc-success
+--no-pointer-relation-check --force-malloc-success -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

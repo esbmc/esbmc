@@ -1,0 +1,4 @@
+THOROUGH
+gh-1289.c
+--overflow
+^VERIFICATION SUCCESSFUL$

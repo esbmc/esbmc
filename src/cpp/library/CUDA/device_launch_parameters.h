@@ -1,25 +1,25 @@
 #if !defined(__DEVICE_LAUNCH_PARAMETERS_H__)
-#define __DEVICE_LAUNCH_PARAMETERS_H__
+#  define __DEVICE_LAUNCH_PARAMETERS_H__
 
-#include <stddef.h>
-#include <stdlib.h>
-#include "vector_types.h"
+#  include <stddef.h>
+#  include <stdlib.h>
+#  include "vector_types.h"
 
-#include <pthread.h>
+#  include <pthread.h>
 
-unsigned int __ESBMC_get_thread_id(void);
+pthread_t __ESBMC_get_thread_id(void);
 
-#if !defined(__STORAGE__)
+#  if !defined(__STORAGE__)
 
-#define __STORAGE__ extern const
+#    define __STORAGE__ extern const
 
-#endif /* __STORAGE__ */
+#  endif /* __STORAGE__ */
 
-#ifdef __cplusplus
+#  ifdef __cplusplus
 
 extern "C"
 {
-#endif
+#  endif
 
   /*__device_builtin__ __STORAGE__ */ dim3 blockDim;
 
@@ -27,32 +27,32 @@ extern "C"
 
   __device_builtin__ __STORAGE__ int warpSize = 32;
 
-  /*
-uint3 __device_builtin__ __STORAGE__ threadIdx;
-uint3 __device_builtin__ __STORAGE__ blockIdx;
-*/
-
   uint3 indexOfThread[1024];
   uint3 indexOfBlock[1024];
 
   uint3 getThreadIdx(unsigned int id);
   uint3 getBlockIdx(unsigned int id);
 
+  uint3 getThreadIdx_table(unsigned int id);
+  uint3 getBlockIdx_table(unsigned int id);
+
   void assignIndexes()
   {
     __ESBMC_atomic_begin();
     int i;
+
     //for(i = 0; i < GPU_threads; i++)
-    for(i = 0; i < 2; i++)
-      indexOfBlock[i] = getBlockIdx(i);
+    for (i = 0; i < 2; i++)
+      indexOfBlock[i] = getBlockIdx_table(i);
     //for(i = 0; i < GPU_threads; i++)
-    for(i = 0; i < 2; i++)
-      indexOfThread[i] = getThreadIdx(i);
+    for (i = 0; i < 2; i++)
+      indexOfThread[i] = getThreadIdx_table(i);
+
     __ESBMC_atomic_end();
   }
 
-#define threadIdx indexOfThread[__ESBMC_get_thread_id() - 1]
-#define blockIdx indexOfBlock[__ESBMC_get_thread_id() - 1]
+#  define threadIdx indexOfThread[__ESBMC_get_thread_id() - 1]
+#  define blockIdx indexOfBlock[__ESBMC_get_thread_id() - 1]
 
   uint3 getThreadIdx(unsigned int id)
   {
@@ -93,54 +93,56 @@ uint3 __device_builtin__ __STORAGE__ blockIdx;
     __ESBMC_atomic_end();
     return block_index;
   }
-  extern "C++"
+
+  /**
+   * Apply a lookup table to drastically reduce validation time 
+   * while retaining the same behavior
+   */
+  uint3 getThreadIdx_table(unsigned int id)
   {
-    dim3 cudaGet_blockDim();
-    dim3 cudaGet_gridDim();
+    __ESBMC_atomic_begin();
+
+    unsigned int lookup3Dx[2][2][2] = {{{0, 0}, {0, 0}}, {{0, 1}, {0, 1}}};
+    unsigned int lookup3Dz[2][2][2] = {{{0, 0}, {0, 0}}, {{1, 0}, {1, 0}}};
+
+    unsigned int gridDim_index = (unsigned int)(gridDim.x - 1);
+    unsigned int blockDim_index = (unsigned int)(blockDim.x - 1);
+
+    uint3 thread_index;
+
+    thread_index.z =
+      (unsigned int)(lookup3Dz[id][gridDim_index][blockDim_index]);
+    thread_index.y = (unsigned int)0;
+    thread_index.x =
+      (unsigned int)(lookup3Dx[id][gridDim_index][blockDim_index]);
+
+    __ESBMC_atomic_end();
+    return thread_index;
   }
-  /*
-#define blockDim cudaGet_blockDim()
-#define gridDim cudaGet_gridDim();
-*/
 
-#undef __STORAGE__
+  uint3 getBlockIdx_table(unsigned int id)
+  {
+    __ESBMC_atomic_begin();
 
-#ifdef __cplusplus
+    unsigned int lookup3D[2][2][2] = {{{0, 0}, {0, 0}}, {{1, 0}, {1, 0}}};
+
+    unsigned int gridDim_index = (unsigned int)(gridDim.x - 1);
+    unsigned int blockDim_index = (unsigned int)(blockDim.x - 1);
+
+    uint3 block_index;
+
+    block_index.z = (unsigned int)0;
+    block_index.y = (unsigned int)0;
+    block_index.x = (unsigned int)(lookup3D[id][gridDim_index][blockDim_index]);
+
+    __ESBMC_atomic_end();
+    return block_index;
+  }
+
+#  undef __STORAGE__
+
+#  ifdef __cplusplus
 }
-
-#endif
-
-#if 0
-
-#if !defined(__cudaGet_threadIdx)
-
-#define __cudaGet_threadIdx() threadIdx
-
-#endif /* __cudaGet_threadIdx */
-
-#if !defined(__cudaGet_blockIdx)
-
-#define __cudaGet_blockIdx() blockIdx
-
-#endif /* __cudaGet_blockIdx */
-
-#if !defined(__cudaGet_blockDim)
-
-#define __cudaGet_blockDim() blockDim
-
-#endif /* __cudaGet_blockDim */
-
-#if !defined(__cudaGet_gridDim)
-
-#define __cudaGet_gridDim() gridDim
-
-#endif /* __cudaGet_gridDim */
-
-#if !defined(__cudaGet_warpSize)
-
-#define __cudaGet_warpSize() warpSize
-
-#endif /* __cudaGet_warpSize */
-#endif
+#  endif
 
 #endif /* !__DEVICE_LAUNCH_PARAMETERS_H__ */

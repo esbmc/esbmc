@@ -1,0 +1,4 @@
+KNOWNBUG
+main.cpp
+bell.cpp elevator.cpp light.cpp scheduler.cpp clock.cpp elevatorButton.cpp floor.cpp person.cpp building.cpp door.cpp floorButton.cpp --unwind 10 --no-unwinding-assertions  --depth 1000 --no-bounds-check --ir --timeout 900
+^VERIFICATION FAILED$

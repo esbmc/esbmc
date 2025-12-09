@@ -1,14 +1,10 @@
-#define __CRT__NO_INLINE /* Don't let mingw insert code */
 
-#ifdef _MSVC
-#define _USE_MATH_DEFINES
-#endif
 #include <math.h>
 
 double sin(double x)
 {
 __ESBMC_HIDE:;
-  return cos(x - M_PI_2);
+  return cos(M_PI_2 - x);
 }
 
 double __sin(double x)

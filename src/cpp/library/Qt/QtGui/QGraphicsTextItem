@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QGraphicsTextItem {
+class QGraphicsTextItem
+{
 public:
-	QGraphicsTextItem();
-	~QGraphicsTextItem();
+  QGraphicsTextItem();
+  ~QGraphicsTextItem();
 };

@@ -1,0 +1,9 @@
+CORE
+main.c
+--condition-coverage --no-cov-asserts
+^Reached Conditions:  2
+^Short Circuited Conditions:  4
+^Total Conditions:  6
+^Condition Properties - SATISFIED:  1
+^Condition Properties - UNSATISFIED:  1
+^VERIFICATION FAILED$

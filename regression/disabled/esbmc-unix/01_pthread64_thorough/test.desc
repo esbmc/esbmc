@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--incremental-bmc
+^VERIFICATION FAILED$

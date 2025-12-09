@@ -32,10 +32,10 @@ smt_astt bitblast_convt::mk_func_app(
   unsigned int i;
 
   assert(numargs < 4 && "Too many arguments to bitblast_convt::mk_func_app");
-  for(i = 0; i < numargs; i++)
+  for (i = 0; i < numargs; i++)
     args[i] = bitblast_ast_downcast(_args[i]);
 
-  switch(f)
+  switch (f)
   {
   case SMT_FUNC_EQ:
   {
@@ -72,7 +72,7 @@ smt_astt bitblast_convt::mk_func_app(
   }
   case SMT_FUNC_ITE:
   {
-    if(ressort->id == SMT_SORT_ARRAY)
+    if (ressort->id == SMT_SORT_ARRAY)
     {
       return _args[1]->ite(this, _args[0], _args[2]);
     }
@@ -80,7 +80,7 @@ smt_astt bitblast_convt::mk_func_app(
     {
       assert(args[1]->bv.size() == args[2]->bv.size());
       result = new_ast(ressort);
-      for(unsigned int i = 0; i < args[1]->bv.size(); i++)
+      for (unsigned int i = 0; i < args[1]->bv.size(); i++)
         result->bv.push_back(
           sat_api->lselect(args[0]->bv[0], args[1]->bv[i], args[2]->bv[i]));
     }
@@ -174,7 +174,7 @@ smt_astt bitblast_convt::mk_func_app(
     result = new_ast(ressort);
     const bitblast_smt_sort *sort0 = bitblast_sort_downcast(args[0]->sort);
     const bitblast_smt_sort *sort1 = bitblast_sort_downcast(args[1]->sort);
-    if(sort0->sign || sort1->sign)
+    if (sort0->sign || sort1->sign)
     {
       signed_multiplier(args[0]->bv, args[1]->bv, result->bv);
     }
@@ -290,7 +290,7 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
   int thebool;
 
   va_start(ap, k);
-  switch(k)
+  switch (k)
   {
   case SMT_SORT_INT:
     log_error("Can't make Int sorts in bitblaster");
@@ -338,7 +338,7 @@ bitblast_convt::mk_smt_bvint(const BigInt &intval, bool sign, unsigned int w)
   bitblast_smt_ast *a = new_ast(s);
   a->bv.resize(w);
   int u = intval.to_int64();
-  for(unsigned int i = 0; i < w; i++)
+  for (unsigned int i = 0; i < w; i++)
   {
     int mask = (1ULL << i);
     bool val = u & mask;
@@ -364,7 +364,7 @@ smt_astt bitblast_convt::mk_smt_symbol(const std::string &name, smt_sortt sort)
   bitblast_smt_ast *a = new_ast(sort);
   smt_astt result = a;
   const bitblast_smt_sort *s = bitblast_sort_downcast(sort);
-  switch(sort->id)
+  switch (sort->id)
   {
   case SMT_SORT_BOOL:
   {
@@ -375,7 +375,7 @@ smt_astt bitblast_convt::mk_smt_symbol(const std::string &name, smt_sortt sort)
   case SMT_SORT_BV:
   {
     // Bunch of fresh variables
-    for(unsigned int i = 0; i < s->data_width; i++)
+    for (unsigned int i = 0; i < s->data_width; i++)
       a->bv.push_back(sat_api->new_variable());
     break;
   }
@@ -401,7 +401,7 @@ smt_ast *bitblast_convt::mk_extract(
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(src);
   bitblast_smt_ast *result = new_ast(s);
-  for(unsigned int i = low; i <= high; i++)
+  for (unsigned int i = low; i <= high; i++)
     result->bv.push_back(mast->bv[i]);
 
   return result;
@@ -413,7 +413,7 @@ bitblast_convt::mk_ast_equality(smt_astt _a, smt_astt _b, smt_sortt ressort)
   const bitblast_smt_ast *a = bitblast_ast_downcast(_a);
   const bitblast_smt_ast *b = bitblast_ast_downcast(_b);
 
-  switch(a->sort->id)
+  switch (a->sort->id)
   {
   case SMT_SORT_BOOL:
   {
@@ -444,9 +444,9 @@ bitblast_convt::mk_ast_equality(smt_astt _a, smt_astt _b, smt_sortt ressort)
 expr2tc bitblast_convt::get_bool(smt_astt a)
 {
   tvt t = l_get(a);
-  if(t.is_true())
+  if (t.is_true())
     return gen_true_expr();
-  else if(t.is_false())
+  else if (t.is_false())
     return gen_false_expr();
   else
     return expr2tc();
@@ -465,15 +465,15 @@ expr2tc bitblast_convt::get_bv(const type2tc &t, smt_astt a)
   assert(sz <= 64 && "Your integers are larger than a uint64_t");
   assert(mast->bv.size() == sz);
   uint64_t accuml = 0;
-  for(unsigned int i = 0; i < sz; i++)
+  for (unsigned int i = 0; i < sz; i++)
   {
     uint64_t mask = 1 << i;
     tvt t = sat_api->l_get(mast->bv[i]);
-    if(t.is_true())
+    if (t.is_true())
     {
       accuml |= mask;
     }
-    else if(t.is_false())
+    else if (t.is_false())
     {
       ; // It's zero
     }
@@ -493,28 +493,28 @@ bool bitblast_convt::process_clause(const bvt &bv, bvt &dest)
   dest.clear();
 
   // empty clause! this is UNSAT
-  if(bv.empty())
+  if (bv.empty())
     return false;
 
   std::set<literalt> s;
 
   dest.reserve(bv.size());
 
-  for(bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
+  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
   {
     literalt l = *it;
 
-    if(l.is_true())
+    if (l.is_true())
       return true; // clause satisfied
 
-    if(l.is_false())
+    if (l.is_false())
       continue;
 
     // prevent duplicate literals
-    if(s.insert(l).second)
+    if (s.insert(l).second)
       dest.push_back(l);
 
-    if(s.find(sat_api->lnot(l)) != s.end())
+    if (s.find(sat_api->lnot(l)) != s.end())
       return true; // clause satisfied
   }
 
@@ -527,9 +527,9 @@ void bitblast_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
 
   dest.reserve(bv.size());
 
-  for(bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
+  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
   {
-    if(s.insert(*it).second)
+    if (s.insert(*it).second)
       dest.push_back(*it);
   }
 }
@@ -546,7 +546,7 @@ void bitblast_convt::full_adder(
 
   carry_out = carry_in;
 
-  for(unsigned int i = 0; i < op0.size(); i++)
+  for (unsigned int i = 0; i < op0.size(); i++)
   {
     output.push_back(sat_api->lxor(sat_api->lxor(op0[i], op1[i]), carry_out));
     carry_out = carry(op0[i], op1[i], carry_out);
@@ -579,20 +579,20 @@ void bitblast_convt::unsigned_multiplier(
 {
   output.resize(op0.size());
 
-  for(unsigned int i = 0; i < op0.size(); i++)
+  for (unsigned int i = 0; i < op0.size(); i++)
     output[i] = const_literal(false);
 
-  for(unsigned int i = 0; i < op0.size(); i++)
+  for (unsigned int i = 0; i < op0.size(); i++)
   {
-    if(op0[i] != const_literal(false))
+    if (op0[i] != const_literal(false))
     {
       bvt tmpop;
       tmpop.reserve(op0.size());
 
-      for(unsigned int idx = 0; idx < i; idx++)
+      for (unsigned int idx = 0; idx < i; idx++)
         tmpop.push_back(const_literal(false));
 
-      for(unsigned int idx = i; idx < op0.size(); idx++)
+      for (unsigned int idx = i; idx < op0.size(); idx++)
         tmpop.push_back(sat_api->land(op1[idx - i], op0[i]));
 
       bvt tmpadd;
@@ -631,7 +631,7 @@ void bitblast_convt::cond_negate(const bvt &vals, bvt &out, literalt cond)
 
   out.resize(vals.size());
 
-  for(unsigned int i = 0; i < vals.size(); i++)
+  for (unsigned int i = 0; i < vals.size(); i++)
     out[i] = sat_api->lselect(cond, inv[i], vals[i]);
 
   return;
@@ -656,7 +656,7 @@ void bitblast_convt::incrementer(
 {
   carryout = carryin;
 
-  for(unsigned int i = 0; i < inp.size(); i++)
+  for (unsigned int i = 0; i < inp.size(); i++)
   {
     literalt new_carry = sat_api->land(carryout, inp[i]);
     oup[i] = sat_api->lxor(inp[i], carryout);
@@ -687,10 +687,10 @@ void bitblast_convt::signed_divider(
   negate(op0, neg0);
   negate(op1, neg1);
 
-  for(unsigned int i = 0; i < op0.size(); i++)
+  for (unsigned int i = 0; i < op0.size(); i++)
     _op0[i] = sat_api->lselect(sign0, neg0[i], op0[i]);
 
-  for(unsigned int i = 0; i < op1.size(); i++)
+  for (unsigned int i = 0; i < op1.size(); i++)
     _op1[i] = sat_api->lselect(sign1, neg1[i], op1[i]);
 
   unsigned_divider(_op0, _op1, res, rem);
@@ -702,10 +702,10 @@ void bitblast_convt::signed_divider(
 
   literalt result_sign = sat_api->lxor(sign0, sign1);
 
-  for(unsigned int i = 0; i < res.size(); i++)
+  for (unsigned int i = 0; i < res.size(); i++)
     res[i] = sat_api->lselect(result_sign, neg_res[i], res[i]);
 
-  for(unsigned int i = 0; i < rem.size(); i++)
+  for (unsigned int i = 0; i < rem.size(); i++)
     rem[i] = sat_api->lselect(result_sign, neg_rem[i], rem[i]);
 
   return;
@@ -724,7 +724,7 @@ void bitblast_convt::unsigned_divider(
 
   literalt is_not_zero = lor(op1);
 
-  for(unsigned int i = 0; i < width; i++)
+  for (unsigned int i = 0; i < width; i++)
   {
     res[i] = sat_api->new_variable();
     rem[i] = sat_api->new_variable();
@@ -761,32 +761,32 @@ void bitblast_convt::unsigned_multiplier_no_overflow(
   assert(op0.size() == op1.size());
   bvt _op0 = op0, _op1 = op1;
 
-  if(is_constant(_op1))
+  if (is_constant(_op1))
     std::swap(_op0, _op1);
 
   res.resize(op0.size());
 
-  for(unsigned int i = 0; i < res.size(); i++)
+  for (unsigned int i = 0; i < res.size(); i++)
     res[i] = const_literal(false);
 
-  for(unsigned int sum = 0; sum < op0.size(); sum++)
+  for (unsigned int sum = 0; sum < op0.size(); sum++)
   {
-    if(op0[sum] != const_literal(false))
+    if (op0[sum] != const_literal(false))
     {
       bvt tmpop;
 
       tmpop.reserve(res.size());
 
-      for(unsigned int idx = 0; idx < sum; idx++)
+      for (unsigned int idx = 0; idx < sum; idx++)
         tmpop.push_back(const_literal(false));
 
-      for(unsigned int idx = sum; idx < res.size(); idx++)
+      for (unsigned int idx = sum; idx < res.size(); idx++)
         tmpop.push_back(sat_api->land(op1[idx - sum], op0[sum]));
 
       bvt copy = res;
       adder_no_overflow(copy, tmpop, res);
 
-      for(unsigned int idx = op1.size() - sum; idx < op1.size(); idx++)
+      for (unsigned int idx = op1.size() - sum; idx < op1.size(); idx++)
       {
         literalt tmp = sat_api->land(op1[idx], op0[sum]);
         tmp.invert();
@@ -806,10 +806,10 @@ void bitblast_convt::adder_no_overflow(
   assert(op0.size() == op1.size());
   unsigned int width = op0.size();
   bvt tmp_op1 = op1;
-  if(subtract)
+  if (subtract)
     negate(op1, tmp_op1);
 
-  if(is_signed)
+  if (is_signed)
   {
     literalt old_sign = op0[width - 1];
     literalt sign_the_same =
@@ -825,7 +825,7 @@ void bitblast_convt::adder_no_overflow(
   {
     literalt carry_out;
     full_adder(op0, tmp_op1, res, const_literal(subtract), carry_out);
-    if(subtract)
+    if (subtract)
     {
       sat_api->assert_lit(carry_out);
     }
@@ -844,7 +844,7 @@ void bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res)
   res.resize(op0.size());
 
   literalt carry_out = const_literal(false);
-  for(unsigned int i = 0; i < op0.size(); i++)
+  for (unsigned int i = 0; i < op0.size(); i++)
   {
     literalt op0_bit = op0[i];
 
@@ -858,8 +858,8 @@ void bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res)
 
 bool bitblast_convt::is_constant(const bvt &bv)
 {
-  for(unsigned int i = 0; i < bv.size(); i++)
-    if(!bv[i].is_constant())
+  for (unsigned int i = 0; i < bv.size(); i++)
+    if (!bv[i].is_constant())
       return false;
   return true;
 }
@@ -868,7 +868,7 @@ literalt bitblast_convt::carry_out(const bvt &a, const bvt &b, literalt c)
 {
   literalt carry_out = c;
 
-  for(unsigned int i = 0; i < a.size(); i++)
+  for (unsigned int i = 0; i < a.size(); i++)
     carry_out = carry(a[i], b[i], carry_out);
 
   return carry_out;
@@ -880,7 +880,7 @@ literalt bitblast_convt::equal(const bvt &op0, const bvt &op1)
   bvt tmp;
   tmp.reserve(op0.size());
 
-  for(unsigned int i = 0; i < op0.size(); i++)
+  for (unsigned int i = 0; i < op0.size(); i++)
     tmp.push_back(sat_api->lequal(op0[i], op1[i]));
 
   literalt res = land(tmp);
@@ -901,12 +901,12 @@ literalt bitblast_convt::lt_or_le(
   literalt carry = carry_out(bv0, inv_op1, const_literal(true));
 
   literalt result;
-  if(is_signed)
+  if (is_signed)
     result = sat_api->lxor(sat_api->lequal(top0, top1), carry);
   else
     result = sat_api->lnot(carry);
 
-  if(or_equal)
+  if (or_equal)
     result = sat_api->lor(result, equal(bv0, bv1));
 
   return result;
@@ -914,7 +914,7 @@ literalt bitblast_convt::lt_or_le(
 
 void bitblast_convt::invert(bvt &bv)
 {
-  for(unsigned int i = 0; i < bv.size(); i++)
+  for (unsigned int i = 0; i < bv.size(); i++)
     bv[i] = sat_api->lnot(bv[i]);
 }
 
@@ -928,14 +928,14 @@ void bitblast_convt::barrel_shift(
   out = op;
 
   // FIXME: clip this on oversized shifts?
-  for(unsigned int pos = 0; pos < dist.size(); pos++)
+  for (unsigned int pos = 0; pos < dist.size(); pos++)
   {
-    if(dist[pos] != const_literal(false))
+    if (dist[pos] != const_literal(false))
     {
       bvt tmp;
       shift(out, s, d, tmp);
 
-      for(unsigned int i = 0; i < op.size(); i++)
+      for (unsigned int i = 0; i < op.size(); i++)
         out[i] = sat_api->lselect(dist[pos], tmp[i], out[i]);
     }
 
@@ -951,11 +951,11 @@ void bitblast_convt::shift(
 {
   out.resize(inp.size());
 
-  for(unsigned int i = 0; i < inp.size(); i++)
+  for (unsigned int i = 0; i < inp.size(); i++)
   {
     literalt l;
 
-    switch(s)
+    switch (s)
     {
     case LEFT:
       l = ((d <= i) ? inp[i - d] : const_literal(false));
@@ -980,7 +980,7 @@ void bitblast_convt::bvand(const bvt &bv0, const bvt &bv1, bvt &output)
   output.clear();
   output.reserve(bv0.size());
 
-  for(unsigned int i = 0; i < bv0.size(); i++)
+  for (unsigned int i = 0; i < bv0.size(); i++)
     output.push_back(sat_api->land(bv0[i], bv1[i]));
 
   return;
@@ -992,7 +992,7 @@ void bitblast_convt::bvor(const bvt &bv0, const bvt &bv1, bvt &output)
   output.clear();
   output.reserve(bv0.size());
 
-  for(unsigned int i = 0; i < bv0.size(); i++)
+  for (unsigned int i = 0; i < bv0.size(); i++)
     output.push_back(sat_api->lor(bv0[i], bv1[i]));
 
   return;
@@ -1003,7 +1003,7 @@ void bitblast_convt::bvxor(const bvt &bv0, const bvt &bv1, bvt &output)
   output.clear();
   output.reserve(bv0.size());
 
-  for(unsigned int i = 0; i < bv0.size(); i++)
+  for (unsigned int i = 0; i < bv0.size(); i++)
     output.push_back(sat_api->lxor(bv0[i], bv1[i]));
 
   return;
@@ -1014,7 +1014,7 @@ void bitblast_convt::bvnot(const bvt &bv0, bvt &output)
   output.clear();
   output.reserve(bv0.size());
 
-  for(unsigned int i = 0; i < bv0.size(); i++)
+  for (unsigned int i = 0; i < bv0.size(); i++)
     output.push_back(sat_api->lnot(bv0[i]));
 
   return;
@@ -1022,23 +1022,23 @@ void bitblast_convt::bvnot(const bvt &bv0, bvt &output)
 
 literalt bitblast_convt::land(const bvt &bv)
 {
-  if(bv.size() == 0)
+  if (bv.size() == 0)
     return const_literal(true);
-  else if(bv.size() == 1)
+  else if (bv.size() == 1)
     return bv[0];
-  else if(bv.size() == 2)
+  else if (bv.size() == 2)
     return sat_api->land(bv[0], bv[1]);
 
   unsigned int trues = 0;
-  for(unsigned int i = 0; i < bv.size(); i++)
+  for (unsigned int i = 0; i < bv.size(); i++)
   {
-    if(bv[i] == const_literal(false))
+    if (bv[i] == const_literal(false))
       return const_literal(false);
-    else if(bv[i] == const_literal(true))
+    else if (bv[i] == const_literal(true))
       trues++;
   }
 
-  if(trues == bv.size())
+  if (trues == bv.size())
     return const_literal(true);
 
   bvt new_bv;
@@ -1047,7 +1047,7 @@ literalt bitblast_convt::land(const bvt &bv)
 
   literalt lit = sat_api->new_variable();
 
-  for(unsigned int i = 0; i < new_bv.size(); i++)
+  for (unsigned int i = 0; i < new_bv.size(); i++)
   {
     bvt lits;
     lits.reserve(2);
@@ -1059,7 +1059,7 @@ literalt bitblast_convt::land(const bvt &bv)
   bvt lits;
   lits.reserve(new_bv.size() + 1);
 
-  for(unsigned int i = 0; i < new_bv.size(); i++)
+  for (unsigned int i = 0; i < new_bv.size(); i++)
     lits.push_back(neg(new_bv[i]));
 
   lits.push_back(pos(lit));
@@ -1070,22 +1070,22 @@ literalt bitblast_convt::land(const bvt &bv)
 
 literalt bitblast_convt::lor(const bvt &bv)
 {
-  if(bv.size() == 0)
+  if (bv.size() == 0)
     return const_literal(false);
-  else if(bv.size() == 1)
+  else if (bv.size() == 1)
     return bv[0];
-  else if(bv.size() == 2)
+  else if (bv.size() == 2)
     return sat_api->lor(bv[0], bv[1]);
 
-  for(unsigned int i = 0; i < bv.size(); i++)
-    if(bv[i] == const_literal(true))
+  for (unsigned int i = 0; i < bv.size(); i++)
+    if (bv[i] == const_literal(true))
       return const_literal(true);
 
   bvt new_bv;
   eliminate_duplicates(bv, new_bv);
 
   literalt literal = sat_api->new_variable();
-  for(unsigned int i = 0; i < new_bv.size(); i++)
+  for (unsigned int i = 0; i < new_bv.size(); i++)
   {
     bvt lits;
     lits.reserve(2);
@@ -1097,7 +1097,7 @@ literalt bitblast_convt::lor(const bvt &bv)
   bvt lits;
   lits.reserve(new_bv.size() + 1);
 
-  for(unsigned int i = 0; i < new_bv.size(); i++)
+  for (unsigned int i = 0; i < new_bv.size(); i++)
     lits.push_back(pos(new_bv[i]));
 
   lits.push_back(neg(literal));

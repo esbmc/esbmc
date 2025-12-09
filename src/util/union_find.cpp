@@ -9,12 +9,12 @@ void unsigned_union_find::make_union(unsigned j, unsigned k)
   j = find(j);
   k = find(k);
 
-  if(j == k)
+  if (j == k)
     return; // already in same set
 
   // weight it
 
-  if(nodes[j].count < nodes[k].count) // j is the smaller set
+  if (nodes[j].count < nodes[k].count) // j is the smaller set
   {
     nodes[k].count += nodes[j].count; // so k becomes parent to j
     nodes[j].root = false;
@@ -35,12 +35,12 @@ void unsigned_union_find::isolate(unsigned a)
   check_index(a);
 
   // is a itself a root?
-  if(is_root(a))
+  if (is_root(a))
   {
     unsigned c = nodes[a].count;
 
     // already isolated?
-    if(c == 1)
+    if (c == 1)
       return;
 
     assert(c >= 2);
@@ -89,11 +89,11 @@ void unsigned_union_find::re_root(unsigned old_root, unsigned new_root)
 
   // the order here is important!
 
-  for(unsigned i = 0; i < size(); i++)
-    if(i != new_root && i != old_root && !is_root(i))
+  for (unsigned i = 0; i < size(); i++)
+    if (i != new_root && i != old_root && !is_root(i))
     {
       unsigned r = find(i);
-      if(r == old_root || r == new_root)
+      if (r == old_root || r == new_root)
         nodes[i].parent = new_root;
     }
 }
@@ -106,8 +106,8 @@ unsigned unsigned_union_find::get_other(unsigned a)
   assert(nodes[a].count >= 2);
 
   // find a different member of the same set
-  for(unsigned i = 0; i < size(); i++)
-    if(find(i) == a && i != a)
+  for (unsigned i = 0; i < size(); i++)
+    if (find(i) == a && i != a)
       return i;
 
   assert(false);
@@ -122,12 +122,12 @@ void unsigned_union_find::intersection(const unsigned_union_find &other)
 
   // should be n log n
 
-  for(unsigned i = 0; i < size(); i++)
-    if(!is_root(i))
+  for (unsigned i = 0; i < size(); i++)
+    if (!is_root(i))
     {
       unsigned j = find(i);
 
-      if(other.same_set(i, j))
+      if (other.same_set(i, j))
         new_sets.make_union(i, j);
     }
 
@@ -136,9 +136,9 @@ void unsigned_union_find::intersection(const unsigned_union_find &other)
 
 unsigned unsigned_union_find::find(unsigned a) const
 {
-  if(a >= size())
+  if (a >= size())
     return a;
-  while(!nodes[a].root)
+  while (!nodes[a].root)
     a = nodes[a].parent;
   return a;
 }

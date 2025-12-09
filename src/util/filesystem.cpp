@@ -1,5 +1,6 @@
 #include <util/filesystem.h>
 #include <boost/filesystem.hpp>
+#include <fstream>
 
 using namespace file_operations;
 
@@ -16,7 +17,7 @@ tmp_path::tmp_path(tmp_path &&o) : tmp_path(std::move(o._path), o._keep)
 
 tmp_path::~tmp_path()
 {
-  if(_keep)
+  if (_keep)
     return;
   uintmax_t removed [[maybe_unused]] = boost::filesystem::remove_all(_path);
   assert(removed >= 1 && "expected to remove temp path");
@@ -52,9 +53,9 @@ tmp_file::tmp_file(FILE *f, tmp_path path) : tmp_path(std::move(path)), _file(f)
 
 tmp_file::~tmp_file()
 {
-  if(_keep)
+  if (_keep)
     return;
-  if(fclose(_file))
+  if (fclose(_file))
     fprintf(
       stderr, "ERROR: temp-file %s: %s\n", path().c_str(), strerror(errno));
 }
@@ -74,10 +75,10 @@ template <typename F>
 static inline std::string with_unique_tmp_path(F &&f, const std::string &format)
 {
   using namespace boost::filesystem;
-  for(path pattern = temp_directory_path() / format;;)
+  for (path pattern = temp_directory_path() / format;;)
   {
     path p = unique_path(pattern);
-    if(f(p))
+    if (f(p))
       return p.string();
   }
 }
@@ -117,16 +118,28 @@ file_operations::get_unique_tmp_path(const std::string &format)
   do
   {
     path = boost::filesystem::unique_path(pattern);
-  } while(
+  } while (
     boost::filesystem::exists(path)); // TODO: This may cause infinite loop
 
   // If path folders doesn't exist, create then
   boost::filesystem::create_directories(path);
-  if(!boost::filesystem::is_directory(path))
+  if (!boost::filesystem::is_directory(path))
   {
     assert(!"Can't create temporary directory");
     abort();
   }
 
   return path.string();
+}
+
+void file_operations::create_path_and_write(
+  const std::string &path,
+  const char *s,
+  size_t n)
+{
+  boost::filesystem::path p(path);
+  if (!boost::filesystem::exists(p.parent_path()))
+    boost::filesystem::create_directories(p.parent_path());
+
+  std::ofstream(path).write(s, n);
 }

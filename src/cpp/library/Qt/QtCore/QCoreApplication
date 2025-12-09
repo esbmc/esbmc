@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QCoreApplication {
+class QCoreApplication
+{
 public:
-	QCoreApplication();
-	~QCoreApplication();
+  QCoreApplication();
+  ~QCoreApplication();
 };

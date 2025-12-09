@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QSequentialAnimationGroup {
+class QSequentialAnimationGroup
+{
 public:
-	QSequentialAnimationGroup();
-	~QSequentialAnimationGroup();
+  QSequentialAnimationGroup();
+  ~QSequentialAnimationGroup();
 };

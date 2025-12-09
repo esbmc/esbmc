@@ -36,19 +36,20 @@ public:
     const irep_idt &identifier,
     xmlt &dest) const;
 
-protected:
-  bool check_type(const typet &type);
   void get_globals(std::list<value_sett::entryt> &dest);
-  void add_vars(const goto_functionst &goto_functions);
-  void add_vars(const goto_programt &goto_programa);
-
-  void get_entries(const symbolt &symbol, std::list<value_sett::entryt> &dest);
 
   void get_entries_rec(
     const std::string &identifier,
     const std::string &suffix,
     const typet &type,
     std::list<value_sett::entryt> &dest);
+
+protected:
+  bool check_type(const typet &type);
+  void add_vars(const goto_functionst &goto_functions);
+  void add_vars(const goto_programt &goto_programa);
+
+  void get_entries(const symbolt &symbol, std::list<value_sett::entryt> &dest);
 
 public:
   // interface value_sets

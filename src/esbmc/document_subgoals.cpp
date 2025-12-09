@@ -1,4 +1,4 @@
-#include <clang-c-frontend/expr2c.h>
+#include <util/c_expr2string.h>
 #include <esbmc/document_subgoals.h>
 #include <fstream>
 #include <util/i2string.h>
@@ -15,25 +15,25 @@ void strip_space(std::list<linet> &lines)
 {
   unsigned strip = 50;
 
-  for(std::list<linet>::const_iterator it = lines.begin(); it != lines.end();
-      it++)
+  for (std::list<linet>::const_iterator it = lines.begin(); it != lines.end();
+       it++)
   {
-    for(unsigned j = 0; j < strip && j < it->text.size(); j++)
-      if(it->text[j] != ' ')
+    for (unsigned j = 0; j < strip && j < it->text.size(); j++)
+      if (it->text[j] != ' ')
       {
         strip = j;
         break;
       }
   }
 
-  if(strip != 0)
+  if (strip != 0)
   {
-    for(auto &line : lines)
+    for (auto &line : lines)
     {
-      if(line.text.size() >= strip)
+      if (line.text.size() >= strip)
         line.text = std::string(line.text, strip, std::string::npos);
 
-      if(line.text.size() >= MAXWIDTH)
+      if (line.text.size() >= MAXWIDTH)
         line.text = std::string(line.text, 0, MAXWIDTH);
     }
   }
@@ -43,12 +43,12 @@ std::string escape_latex(const std::string &s, bool alltt)
 {
   std::string dest;
 
-  for(char i : s)
+  for (char i : s)
   {
-    if(i == '\\' || i == '{' || i == '}')
+    if (i == '\\' || i == '{' || i == '}')
       dest += "\\";
 
-    if(
+    if (
       !alltt && (i == '_' || i == '$' || i == '~' || i == '^' || i == '%' ||
                  i == '#' || i == '&'))
       dest += "\\";
@@ -94,8 +94,8 @@ std::string emphasize(const std::string &s)
 
 bool is_empty_str(const std::string &s)
 {
-  for(char i : s)
-    if(isgraph(i))
+  for (char i : s)
+    if (isgraph(i))
       return false;
 
   return true;
@@ -108,24 +108,24 @@ void get_code(const irept &location, std::string &dest)
   const irep_idt &file = location.file();
   const irep_idt &line = location.line();
 
-  if(file == "" || line == "")
+  if (file == "" || line == "")
     return;
 
   std::ifstream in(file.c_str());
 
-  if(!in)
+  if (!in)
     return;
 
   int line_int = atoi(line.c_str());
 
   int line_start = line_int - 3, line_end = line_int + 3;
 
-  if(line_start <= 1)
+  if (line_start <= 1)
     line_start = 1;
 
   // skip line_start-1 lines
 
-  for(int l = 0; l < line_start - 1; l++)
+  for (int l = 0; l < line_start - 1; l++)
   {
     std::string tmp;
     std::getline(in, tmp);
@@ -135,14 +135,14 @@ void get_code(const irept &location, std::string &dest)
 
   std::list<linet> lines;
 
-  for(int l = line_start; l <= line_end && in; l++)
+  for (int l = line_start; l <= line_end && in; l++)
   {
     lines.emplace_back();
 
     std::string &line = lines.back().text;
     std::getline(in, line);
 
-    if(!line.empty() && line[line.size() - 1] == '\r')
+    if (!line.empty() && line[line.size() - 1] == '\r')
       line.resize(line.size() - 1);
 
     lines.back().line_number = l;
@@ -150,19 +150,19 @@ void get_code(const irept &location, std::string &dest)
 
   // remove empty lines at the end and at the beginning
 
-  for(std::list<linet>::iterator it = lines.begin(); it != lines.end();)
+  for (std::list<linet>::iterator it = lines.begin(); it != lines.end();)
   {
-    if(is_empty_str(it->text))
+    if (is_empty_str(it->text))
       it = lines.erase(it);
     else
       break;
   }
 
-  for(std::list<linet>::iterator it = lines.end(); it != lines.begin();)
+  for (std::list<linet>::iterator it = lines.end(); it != lines.begin();)
   {
     it--;
 
-    if(is_empty_str(it->text))
+    if (is_empty_str(it->text))
       it = lines.erase(it);
     else
       break;
@@ -173,16 +173,16 @@ void get_code(const irept &location, std::string &dest)
 
   // build dest
 
-  for(auto &line : lines)
+  for (auto &line : lines)
   {
     std::string line_no = i2string(line.line_number);
 
-    while(line_no.size() < 4)
+    while (line_no.size() < 4)
       line_no = " " + line_no;
 
     std::string tmp = line_no + "  " + escape_latex(line.text, true);
 
-    if(line.line_number == line_int)
+    if (line.line_number == line_int)
       tmp = emphasize(tmp);
 
     dest += tmp + "\n";
@@ -201,8 +201,8 @@ void document_subgoals(
   typedef std::map<irept, doc_claimt> claim_sett;
   claim_sett claim_set;
 
-  for(const auto &SSA_step : equation.SSA_steps)
-    if(SSA_step.is_assert())
+  for (const auto &SSA_step : equation.SSA_steps)
+    if (SSA_step.is_assert())
     {
       locationt new_location;
 
@@ -213,8 +213,8 @@ void document_subgoals(
       claim_set[new_location].comment_set.insert(SSA_step.comment);
     }
 
-  for(claim_sett::const_iterator it = claim_set.begin(); it != claim_set.end();
-      it++)
+  for (claim_sett::const_iterator it = claim_set.begin(); it != claim_set.end();
+       it++)
   {
     std::string code;
     const irept &location = it->first;
@@ -228,7 +228,7 @@ void document_subgoals(
 
     out << "\n";
 
-    for(const auto &s_it : it->second.comment_set)
+    for (const auto &s_it : it->second.comment_set)
       out << "\\claim{" << escape_latex(s_it, false) << "}"
           << "\n";
 

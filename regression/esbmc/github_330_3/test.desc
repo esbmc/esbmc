@@ -1,4 +1,4 @@
 CORE
 main.c
---memory-leak-check
+--memory-leak-check -Wno-error=implicit-int
 ^VERIFICATION FAILED$

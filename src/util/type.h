@@ -68,6 +68,16 @@ public:
     return (const typet &)find(name);
   }
 
+  bool can_carry_provenance() const
+  {
+    return get_bool(f_can_carry_provenance);
+  }
+
+  void can_carry_provenance(bool yes)
+  {
+    set(f_can_carry_provenance, yes);
+  }
+
   static irep_idt t_integer;
   static irep_idt t_signedbv;
   static irep_idt t_unsignedbv;
@@ -89,8 +99,10 @@ public:
   static irep_idt t_pointer;
   static irep_idt t_reference;
   static irep_idt t_bv;
-  static irep_idt t_string;
   static irep_idt t_vector;
+
+  static irep_idt t_intcap;
+  static irep_idt t_uintcap;
 
   static irep_idt a_identifier;
   static irep_idt a_name;
@@ -107,27 +119,28 @@ protected:
   static irep_idt f_subtype;
   static irep_idt f_subtypes;
   static irep_idt f_location;
+  static irep_idt f_can_carry_provenance;
 };
 
 typedef std::list<typet> type_listt;
 
 #define forall_type_list(it, type)                                             \
-  for(type_listt::const_iterator it = (type).begin(); it != (type).end(); it++)
+  for (type_listt::const_iterator it = (type).begin(); it != (type).end(); it++)
 
 #define Forall_type_list(it, type)                                             \
-  for(type_listt::iterator it = (type).begin(); it != (type).end(); it++)
+  for (type_listt::iterator it = (type).begin(); it != (type).end(); it++)
 
 #define forall_subtypes(it, type)                                              \
-  if((type).has_subtypes())                                                    \
-    for(typet::subtypest::const_iterator it = (type).subtypes().begin();       \
-        it != (type).subtypes().end();                                         \
-        it++)
+  if ((type).has_subtypes())                                                   \
+    for (typet::subtypest::const_iterator it = (type).subtypes().begin();      \
+         it != (type).subtypes().end();                                        \
+         it++)
 
 #define Forall_subtypes(it, type)                                              \
-  if((type).has_subtypes())                                                    \
-    for(typet::subtypest::iterator it = (type).subtypes().begin();             \
-        it != (type).subtypes().end();                                         \
-        it++)
+  if ((type).has_subtypes())                                                   \
+    for (typet::subtypest::iterator it = (type).subtypes().begin();            \
+         it != (type).subtypes().end();                                        \
+         it++)
 
 /*
 
@@ -174,4 +187,5 @@ bool is_number(const typet &type);
  * @return false
  */
 bool is_array_like(const typet &type);
+
 #endif

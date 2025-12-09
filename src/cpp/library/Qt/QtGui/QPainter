@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QPainter {
+class QPainter
+{
 public:
-	QPainter();
-	~QPainter();
+  QPainter();
+  ~QPainter();
 };

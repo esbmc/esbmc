@@ -8,7 +8,7 @@ void value_set_domaint::transform(
   locationt from_l,
   locationt to_l)
 {
-  switch(from_l->type)
+  switch (from_l->type)
   {
   case GOTO:
     // ignore for now

@@ -15,28 +15,17 @@ class CTestGeneration(unittest.TestCase):
         self.assertLess(actual, maximum)
 
 
-class XMLTestGeneration(unittest.TestCase):
-    """This will parse a directory containing XML tests and will check for a min/max"""
-
-    def test_quantity(self):
-        minimum = 100
-        maximum = 1000
-        actual = len(get_test_objects("./esbmc-cpp/cpp"))
-        self.assertGreater(actual, minimum)
-        self.assertLess(actual, maximum)
-
-
 class ParseTest(unittest.TestCase):
     """Base Parse Test"""
 
     def setUp(self):
-        self.test_case: BaseTest = None
-        self.test_parsed: BaseTest = None
+        self.test_case: TestCase = None
+        self.test_parsed: TestCase = None
 
-    def _read_file_checks(self, test_obj: BaseTest):
+    def _read_file_checks(self, test_obj: TestCase):
         pass
 
-    def _argument_list_checks(self, test_obj: BaseTest):
+    def _argument_list_checks(self, test_obj: TestCase):
         pass
 
     def test_case_generation(self):
@@ -49,39 +38,39 @@ class CTest1(ParseTest):
     """This testcase have an argument list"""
 
     def setUp(self):
-        self.test_case: CTestCase = CTestCase(
+        self.test_case: TestCase = TestCase(
             "./esbmc-unix/00_bbuf_02", "00_bbuf_02")
-        self.test_parsed: CTestCase = TestParser.from_file(
+        self.test_parsed: TestCase = TestCase(
             "./esbmc-unix/00_bbuf_02", "00_bbuf_02")
 
     def _read_file_checks(self, test_obj):
-        self.assertEqual(test_obj.test_mode, "CORE")
+        self.assertEqual(test_obj.test_mode, "THOROUGH")
         self.assertEqual(test_obj.test_file, "main.c")
         self.assertEqual(test_obj.test_args,
-                         "--unwind 1 --context-bound 2 --schedule --depth 300")
+                         "--unwind 1 --context-bound 2 --schedule --depth 300 -Wno-error=implicit-function-declaration")
         self.assertEqual(test_obj.test_regex, ["^VERIFICATION FAILED$"])
 
     def _argument_list_checks(self, test_obj):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         self.assertEqual(argument_list[0], "__test__")
-        self.assertEqual(argument_list[1], "./esbmc-unix/00_bbuf_02/main.c")
-        self.assertEqual(argument_list[2], "--unwind")
+        self.assertEqual(argument_list[-1], "./esbmc-unix/00_bbuf_02/main.c")
+        self.assertEqual(argument_list[1], "--unwind")
 
 
 class CTest2(ParseTest):
     """This testcase doesn't have an argument list"""
 
     def setUp(self):
-        self.test_case: CTestCase = CTestCase("./llvm/arr", "arr")
-        self.test_parsed: CTestCase = TestParser.from_file("./llvm/arr", "arr")
+        self.test_case: TestCase = TestCase("./llvm/arr", "arr")
+        self.test_parsed: TestCase = TestCase("./llvm/arr", "arr")
 
-    def _read_file_checks(self, test_obj: BaseTest):
+    def _read_file_checks(self, test_obj: TestCase):
         self.assertEqual(self.test_case.test_mode, "CORE")
         self.assertEqual(self.test_case.test_file, "main.c")
         self.assertEqual(self.test_case.test_args, "")
         self.assertEqual(self.test_case.test_regex, ["^VERIFICATION FAILED$"])
 
-    def _argument_list_checks(self, test_obj: BaseTest):
+    def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         # Argument list should be the tool + program file
         self.assertEqual(len(argument_list), 2, str(argument_list))
@@ -91,23 +80,23 @@ class CTest3(ParseTest):
     """Added testcase with testfile different of main file"""
 
     def setUp(self):
-        self.test_case: CTestCase = CTestCase(
+        self.test_case: TestCase = TestCase(
             "./esbmc-unix/00_account_02", "00_account_02")
-        self.test_parsed: CTestCase = TestParser.from_file(
+        self.test_parsed: TestCase = TestCase(
             "./esbmc-unix/00_account_02", "00_account_02")
 
-    def _read_file_checks(self, test_obj: BaseTest):
-        self.assertEqual(self.test_case.test_mode, "CORE")
+    def _read_file_checks(self, test_obj: TestCase):
+        self.assertEqual(self.test_case.test_mode, "THOROUGH")
         self.assertEqual(self.test_case.test_file, "test.c")
         self.assertEqual(self.test_case.test_args,
                          "account.c --no-slice --context-bound 1 --depth 150")
         self.assertEqual(self.test_case.test_regex, ["^VERIFICATION FAILED$"])
 
-    def _argument_list_checks(self, test_obj: BaseTest):
+    def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list("__test__")
-        expected = ['__test__', './esbmc-unix/00_account_02/test.c',
+        expected = ['__test__',
                     './esbmc-unix/00_account_02/account.c',
-                    '--no-slice', '--context-bound', '1', '--depth', '150']
+                    '--no-slice', '--context-bound', '1', '--depth', '150', './esbmc-unix/00_account_02/test.c']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -115,69 +104,46 @@ class CTest4(ParseTest):
     """Added testcase with multiple white spaces in description"""
 
     def setUp(self):
-        self.test_case: CTestCase = CTestCase(
+        self.test_case: TestCase = TestCase(
             "./nonz3/29_exStbHwAcc", "29_exStbHwAcc")
-        self.test_parsed: CTestCase = TestParser.from_file(
+        self.test_parsed: TestCase = TestCase(
             "./nonz3/29_exStbHwAcc", "29_exStbHwAcc")
 
-    def _read_file_checks(self, test_obj: BaseTest):
-        self.assertEqual(self.test_case.test_mode, "CORE")
+    def _read_file_checks(self, test_obj: TestCase):
+        self.assertEqual(self.test_case.test_mode, "KNOWNBUG")
         self.assertEqual(self.test_case.test_file, "main.c")
         self.assertEqual(self.test_case.test_args,
                          "--overflow-check  --unwind 3 --32")
         self.assertEqual(self.test_case.test_regex, ["^VERIFICATION FAILED$"])
 
-    def _argument_list_checks(self, test_obj: BaseTest):
+    def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list("__test__")
-        expected = ['__test__', './nonz3/29_exStbHwAcc/main.c',
-                    '--overflow-check', '--unwind', '3', '--32']
+        expected = ['__test__',
+                    '--overflow-check', '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
 class ToolTest1(CTest4):
     """Added testcase with multiple white spaces in description"""
 
-    def _argument_list_checks(self, test_obj: BaseTest):
+    def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list(
             "__tool_contains_spaces__ --param 1 __test__")
         expected = ['__tool_contains_spaces__ --param 1 __test__',
-                    './nonz3/29_exStbHwAcc/main.c', '--overflow-check',
-                    '--unwind', '3', '--32']
+                    '--overflow-check',
+                    '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c',]
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
 class ToolTest2(CTest4):
     """Added testcase with multiple white spaces in description"""
 
-    def _argument_list_checks(self, test_obj: BaseTest):
+    def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list(
             '__tool_contains_no_spaces__', '--param', '1', '__test__')
         expected = ['__tool_contains_no_spaces__', '--param', '1', '__test__',
-                    './nonz3/29_exStbHwAcc/main.c', '--overflow-check',
-                    '--unwind', '3', '--32']
-        self.assertEqual(argument_list, expected, str(argument_list))
-
-
-class XMLTest1(ParseTest):
-    """Added testcase with multiple white spaces in description"""
-
-    def setUp(self):
-        self.test_case: XMLTestCase = XMLTestCase(
-            "./esbmc-cpp/cpp/ch1_0", "ch1_0")
-        self.test_parsed: XMLTestCase = TestParser.from_file(
-            "./esbmc-cpp/cpp/ch1_0", "ch1_0")
-
-    def _read_file_checks(self, test_obj: BaseTest):
-        self.assertEqual(self.test_case.test_mode, "CORE")
-        self.assertEqual(self.test_case.test_file, "main.cpp")
-        self.assertEqual(self.test_case.test_args,
-                         "--unwind 10 --no-unwinding-assertions -I /__w/esbmc/esbmc/src/cpp/library/ --memlimit 14000000 --timeout 900")
-        self.assertEqual(self.test_case.test_regex, ["^VERIFICATION FAILED$"])
-
-    def _argument_list_checks(self, test_obj: BaseTest):
-        argument_list = self.test_case.generate_run_argument_list("__test__")
-        expected = ['__test__', './esbmc-cpp/cpp/ch1_0/main.cpp', '--unwind',
-                    '10', '--no-unwinding-assertions', '-I', '/__w/esbmc/esbmc/src/cpp/library/']
+                    '--overflow-check',
+                    '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 

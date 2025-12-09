@@ -48,7 +48,7 @@ void transfer(Account *src, Account *dst, double money) {
         dst->amount +=money;
         pthread_mutex_unlock(dst->lock);
     }
-    //printf("Transfered $%0.2f from %c to %c\n", money, src->name, dst->name);
+    //printf("Transferred $%0.2f from %c to %c\n", money, src->name, dst->name);
 
     pthread_mutex_unlock(src->lock);
 }

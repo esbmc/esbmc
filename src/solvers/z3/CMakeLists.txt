@@ -2,12 +2,15 @@ set(Z3_MIN_VERSION "4.8.9")
 
 if(DEFINED Z3_DIR)
     set(ENABLE_Z3 ON)
-endif()
-
-if(EXISTS $ENV{HOME}/z3)
+elseif(EXISTS $ENV{HOME}/z3)
     set(ENABLE_Z3 ON)
+else()
+    if(ENABLE_Z3 AND DOWNLOAD_DEPENDENCIES)
+        message("Downloading Z3")
+        download_zip_and_extract(Z3 ${ESBMC_Z3_URL})
+        set(Z3_DIR ${CMAKE_BINARY_DIR}/Z3/${ESBMC_Z3_NAME})
+    endif()
 endif()
-
 
 if(ENABLE_Z3)
     find_library(Z3_LIB z3 libz3 HINTS ${Z3_DIR} $ENV{HOME}/z3 PATH_SUFFIXES lib bin)

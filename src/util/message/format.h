@@ -12,10 +12,10 @@ Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
 CC_DIAGNOSTIC_PUSH()
 // Clang has no support for nonnull-compare warning
 #ifdef __GNUC__
-#ifndef __clang__ // For some reason clang also defines GNUC :)
-#pragma GCC diagnostic ignored "-Wnonnull-compare"
-#endif
-#pragma GCC diagnostic ignored "-Waddress"
+#  ifndef __clang__ // For some reason clang also defines GNUC :)
+#    pragma GCC diagnostic ignored "-Wnonnull-compare"
+#  endif
+#  pragma GCC diagnostic ignored "-Waddress"
 #endif
 
 #include <fmt/format.h>

@@ -3,6 +3,6 @@
 // accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 #ifndef WORKAROUND_DWA2002126_HPP
-# define WORKAROUND_DWA2002126_HPP
+#define WORKAROUND_DWA2002126_HPP
 
 #endif // WORKAROUND_DWA2002126_HPP

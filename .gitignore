@@ -9,9 +9,23 @@ out
 CMakeSettings.json
 build
 
+# eclipse
+.cproject
+.project
+.settings/
+
 # others
 __pycache__
 .DS_Store
 tags
 .cache
 release
+.gdbinit
+compile_commands.json
+
+# custom init scripts
+init.sh
+src/CMakeCache.txt
+src/CMakeFiles/
+src/CPackConfig.cmake
+src/CPackSourceConfig.cmake

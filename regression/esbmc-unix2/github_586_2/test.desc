@@ -1,0 +1,4 @@
+CORE
+main.c
+ -Wno-error=implicit-int -Wno-error=incompatible-function-pointer-types
+^VERIFICATION SUCCESSFUL$

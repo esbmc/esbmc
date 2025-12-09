@@ -1,0 +1,4 @@
+CORE
+gh-1622.c
+--force-malloc-success -Wno-error=implicit-function-declaration
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+CORE
+gh-45-0.c
+--incremental-bmc --max-k-step 5 --64 -Wno-error=implicit-function-declaration
+^VERIFICATION UNKNOWN$

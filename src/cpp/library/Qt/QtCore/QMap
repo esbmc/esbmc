@@ -6,9 +6,13 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-class QMap{
+class QMap
+{
 public:
-	QMap(){}
-	~QMap(){}
+  QMap()
+  {
+  }
+  ~QMap()
+  {
+  }
 };
-

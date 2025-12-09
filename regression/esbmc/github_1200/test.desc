@@ -1,0 +1,4 @@
+CORE
+gh-1200.c
+--unwind 1 --k-induction --overflow
+^VERIFICATION FAILED$

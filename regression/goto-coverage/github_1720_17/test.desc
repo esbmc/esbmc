@@ -1,0 +1,8 @@
+CORE
+main.c
+--condition-coverage --no-cov-asserts --no-simplify
+^Reached Conditions:  8
+^Short Circuited Conditions:  0
+^Total Conditions:  8
+^Condition Coverage: 50%
+^VERIFICATION FAILED$

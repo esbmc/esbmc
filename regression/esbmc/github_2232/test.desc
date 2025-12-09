@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow --memory-leak-check --unwind 1 --no-unwinding-assertion --gcse
+^VERIFICATION SUCCESSFUL$

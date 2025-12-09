@@ -1,8 +1,4 @@
-#define __CRT__NO_INLINE /* Don't let mingw insert code */
 
-#ifdef _MSVC
-#define _USE_MATH_DEFINES
-#endif
 #include <math.h>
 
 double cos(double x)
@@ -16,7 +12,7 @@ __ESBMC_HIDE:;
   x = fmod(x + M_PI, M_PI * 2) - M_PI; // restrict x so that -M_PI < x < M_PI
   double xsqr = x * x;
   double ab = 1;
-  while((ab > 1e-16) && (p < 15))
+  while ((ab > 1e-16) && (p < 15))
   {
     p++;
     t = (-t * xsqr) / (((p << 1) - 1) * (p << 1));

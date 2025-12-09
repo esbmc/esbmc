@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--force-malloc-success --data-races-check --context-bound 2
+^VERIFICATION FAILED$

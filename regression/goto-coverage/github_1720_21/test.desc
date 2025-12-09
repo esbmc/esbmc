@@ -1,0 +1,7 @@
+CORE
+main.c
+ --condition-coverage-claims --no-cov-asserts
+^Reached Conditions:  2
+^Short Circuited Conditions:  2
+^Total Conditions:  4
+^VERIFICATION FAILED$

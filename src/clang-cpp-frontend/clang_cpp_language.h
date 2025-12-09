@@ -19,12 +19,18 @@ public:
   }
 
   // conversion from expression into string
-  bool from_expr(const exprt &expr, std::string &code, const namespacet &ns)
-    override;
+  bool from_expr(
+    const exprt &expr,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) override;
 
   // conversion from type into string
-  bool from_type(const typet &type, std::string &code, const namespacet &ns)
-    override;
+  bool from_type(
+    const typet &type,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) override;
 
   languaget *new_language() const override
   {
@@ -33,8 +39,8 @@ public:
 
 protected:
   std::string internal_additions() override;
-  void force_file_type() override;
-  std::list<std::string> standards{"98", "03", "11", "14", "17"};
+  void force_file_type(std::vector<std::string> &compiler_args) override;
+  void build_include_args(std::vector<std::string> &compiler_args) override;
 };
 
 languaget *new_clang_cpp_language();

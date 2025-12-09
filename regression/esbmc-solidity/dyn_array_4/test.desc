@@ -1,0 +1,4 @@
+THOROUGH
+contract.solast
+--sol contract.sol --incremental-bmc --contract test --function testArray --no-standard-checks
+^VERIFICATION FAILED$

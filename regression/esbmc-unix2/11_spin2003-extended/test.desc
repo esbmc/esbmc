@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 3
+--unwind 3 -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types
 ^VERIFICATION SUCCESSFUL$

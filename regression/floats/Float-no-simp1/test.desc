@@ -1,4 +1,4 @@
 CORE
 main.c
---floatbv --no-simplify
+--floatbv --no-simplify -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

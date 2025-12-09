@@ -1,0 +1,4 @@
+CORE
+main.c
+--multi-property --multi-fail-fast 2
+^VERIFICATION FAILED$

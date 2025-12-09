@@ -1,8 +1,6 @@
 char *strerror(int errnum)
 {
-  if(errnum < 0)
-    errnum = -errnum;
-
+__ESBMC_HIDE:;
   char *sys_errlist[] = {
     /*  0                 */ "No error",
     /*  1 EPERM           */ "Operation not permitted",
@@ -102,8 +100,20 @@ char *strerror(int errnum)
 
   int sys_nerr = sizeof(sys_errlist) / sizeof(sys_errlist[0]);
 
-  if(errnum >= sys_nerr)
+  if (errnum < 0 || errnum >= sys_nerr)
     return "Unknown error";
 
   return sys_errlist[errnum];
+}
+
+void error(int status, int errnum, const char *format, ...)
+{
+__ESBMC_HIDE:;
+  // Print error message (modeled as no-op for verification)
+  // If status is non-zero, the function would normally exit
+  if (status != 0)
+  {
+    // Terminate execution path for verification
+    __ESBMC_assume(0);
+  }
 }

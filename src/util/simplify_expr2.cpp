@@ -11,7 +11,7 @@
 static expr2tc try_simplification(const expr2tc &expr)
 {
   expr2tc to_simplify = expr->do_simplify();
-  if(is_nil_expr(to_simplify))
+  if (is_nil_expr(to_simplify))
     to_simplify = expr;
   return to_simplify;
 }
@@ -19,16 +19,16 @@ static expr2tc try_simplification(const expr2tc &expr)
 static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
 {
   // If the expr is already nil, do nothing
-  if(is_nil_expr(expr))
+  if (is_nil_expr(expr))
     return expr2tc();
 
   // Don't type cast from constant to pointer
   // TODO: check if this is right
-  if(is_pointer_type(type) && is_number_type(expr))
+  if (is_pointer_type(type) && is_number_type(expr))
     return try_simplification(expr);
 
   // No need to typecast
-  if(expr->type == type)
+  if (expr->type == type)
     return expr;
 
   // Create a typecast of the result
@@ -91,7 +91,7 @@ static void fetch_ops_from_this_type(
   expr2t::expr_ids id,
   const expr2tc &expr)
 {
-  if(expr->expr_id == id)
+  if (expr->expr_id == id)
   {
     expr->foreach_operand(
       [&ops, id](const expr2tc &e) { fetch_ops_from_this_type(ops, id, e); });
@@ -119,7 +119,7 @@ static bool rebalance_associative_tree(
   // try to simplify all of their contents, then try to reconfigure into another
   // set of operations.
   // There's great scope for making this /much/ more efficient via passing modes
-  // and vectors downwards, but lets not prematurely optimise. All this is
+  // and vectors downwards, but lets not prematurely optimize. All this is
   // faster than stringly stuff.
 
   // Extract immediate operands
@@ -130,24 +130,24 @@ static bool rebalance_associative_tree(
   // Are there enough constant values in there?
   unsigned int const_values = 0;
   unsigned int orig_size = ops.size();
-  for(std::list<expr2tc>::const_iterator it = ops.begin(); it != ops.end();
-      it++)
-    if(is_constant_expr(*it))
+  for (std::list<expr2tc>::const_iterator it = ops.begin(); it != ops.end();
+       it++)
+    if (is_constant_expr(*it))
       const_values++;
 
   // Nothing for us to simplify.
-  if(const_values <= 1)
+  if (const_values <= 1)
     return false;
 
   // Otherwise, we can go through simplifying operands.
   expr2tc accuml;
-  for(std::list<expr2tc>::iterator it = ops.begin(); it != ops.end(); it++)
+  for (std::list<expr2tc>::iterator it = ops.begin(); it != ops.end(); it++)
   {
-    if(!is_constant_expr(*it))
+    if (!is_constant_expr(*it))
       continue;
 
     // We have a constant; do we have another constant to simplify with?
-    if(is_nil_expr(accuml))
+    if (is_nil_expr(accuml))
     {
       // Juggle iterators, our iterator becomes invalid when we erase it.
       std::list<expr2tc>::iterator back = it;
@@ -161,11 +161,11 @@ static bool rebalance_associative_tree(
     // Now attempt to simplify that. Create a new associative object and
     // give it a shot.
     expr2tc tmp = op_wrapper(accuml, *it);
-    if(is_nil_expr(tmp))
+    if (is_nil_expr(tmp))
       continue; // Creating wrapper rejected it.
 
     tmp = tmp->simplify();
-    if(is_nil_expr(tmp))
+    if (is_nil_expr(tmp))
       // For whatever reason we're unable to simplify these two constants.
       continue;
 
@@ -180,12 +180,12 @@ static bool rebalance_associative_tree(
   // So, we've attempted to remove some things. There are three cases.
   // First, nothing was pulled out of the list. Shouldn't happen, but just
   // in case...
-  if(ops.size() == orig_size)
+  if (ops.size() == orig_size)
     return false;
 
   // If only one constant value was removed from the list, then we attempted to
   // simplify two constants and it failed. No simplification.
-  if(ops.size() == orig_size - 1)
+  if (ops.size() == orig_size - 1)
     return false;
 
   // Finally; we've succeeded and simplified something. Push the simplified
@@ -200,18 +200,18 @@ expr2tc attempt_associative_simplify(
     &op_wrapper)
 {
   std::list<expr2tc> operands;
-  if(rebalance_associative_tree(expr, operands, op_wrapper))
+  if (rebalance_associative_tree(expr, operands, op_wrapper))
   {
     // Horray, we simplified. Recreate.
     assert(operands.size() >= 2);
     std::list<expr2tc>::const_iterator it = operands.begin();
     expr2tc accuml = *it;
     it++;
-    for(; it != operands.end(); it++)
+    for (; it != operands.end(); it++)
     {
       expr2tc tmp;
       accuml = op_wrapper(accuml, *it);
-      if(is_nil_expr(accuml))
+      if (is_nil_expr(accuml))
         return expr2tc(); // wrapper rejected new obj :O
     }
 
@@ -227,8 +227,9 @@ static expr2tc simplify_arith_2ops(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if(!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
+  if (!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
+
 
   if(!is_constant_expr(side_1) && !is_constant_expr(side_2))
     return expr2tc();
@@ -237,7 +238,7 @@ static expr2tc simplify_arith_2ops(
   assert(!is_floatbv_type(type));
 
   expr2tc simpl_res;
-  if(is_vector_type(type))
+  if (is_vector_type(type))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
@@ -262,7 +263,7 @@ static expr2tc simplify_arith_2ops(
       TFunctor<BigInt>::simplify(side_1, side_2, is_constant, get_value);
 
     // Fix rounding when an overflow occurs
-    if(!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+    if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
       migrate_expr(
         from_integer(
           to_constant_int2t(simpl_res).value,
@@ -308,7 +309,7 @@ struct Addtor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Is a vector operation ? Apply the op
-    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
         return add2tc(t, e1, e2);
@@ -316,24 +317,24 @@ struct Addtor
       return distribute_vector_operation(op, op1, op2);
     }
 
-    if(is_constant(op1))
+    if (is_constant(op1))
     {
       // Found a zero? Simplify to op2
       expr2tc c1 = op1;
-      if(get_value(c1) == 0)
+      if (get_value(c1) == 0)
         return op2;
     }
 
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       // Found a zero? Simplify to op1
       expr2tc c2 = op2;
-      if(get_value(c2) == 0)
+      if (get_value(c2) == 0)
         return op1;
     }
 
     // Two constants? Simplify to result of the addition
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       get_value(c1) += get_value(c2);
@@ -350,24 +351,24 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
   const type2tc &b = f->type;
   bool p1 = is_pointer_type(a);
   bool p2 = is_pointer_type(b);
-  if(p1 && p2)
-    return get_int_type(config.ansi_c.pointer_width);
-  if(p1)
+  if (p1 && p2)
+    return get_int_type(config.ansi_c.address_width);
+  if (p1)
     return a;
-  if(p2)
+  if (p2)
     return b;
   unsigned w1 = a->get_width();
   unsigned w2 = b->get_width();
   bool u1 = a->type_id == type2t::unsignedbv_id;
   bool u2 = b->type_id == type2t::unsignedbv_id;
-  if(u1 == u2 && w1 == w2) /* no type-cast required */
+  if (u1 == u2 && w1 == w2) /* no type-cast required */
     return a;
-  if(u1 == u2 ? w1 > w2 : w1 >= w2 && u1) /* common type is that of e */
+  if (u1 == u2 ? w1 > w2 : w1 >= w2 && u1) /* common type is that of e */
   {
     f = typecast2tc(a, f);
     return a;
   }
-  if(u1 == u2 || (w1 <= w2 && u2)) /* common type is that of f */
+  if (u1 == u2 || (w1 <= w2 && u2)) /* common type is that of f */
   {
     e = typecast2tc(b, e);
     return b;
@@ -381,13 +382,36 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
 
 expr2tc add2t::do_simplify() const
 {
+  // x + (-x) = 0
+  if (is_neg2t(side_2) && to_neg2t(side_2).value == side_1)
+    return gen_zero(type);
+  if (is_neg2t(side_1) && to_neg2t(side_1).value == side_2)
+    return gen_zero(type);
+
+  // Recognize (base - X) + X = base pattern
+  if (is_sub2t(side_1))
+  {
+    const sub2t &sub = to_sub2t(side_1);
+
+    if (sub.side_2 == side_2)
+      return sub.side_1;
+  }
+
+  // x + (-y) -> x - y
+  if (is_neg2t(side_2))
+    return sub2tc(type, side_1, to_neg2t(side_2).value);
+
+  // (-x) + y -> y - x
+  if (is_neg2t(side_1))
+    return sub2tc(type, side_2, to_neg2t(side_1).value);
+
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
-  if(!is_nil_expr(res))
+  if (!is_nil_expr(res))
     return res;
 
   // Attempt associative simplification
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
-    [this](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
+    [](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
     expr2tc a = arg1, b = arg2;
     type2tc t = common_arith_op2_type(a, b);
     return add2tc(t, a, b);
@@ -406,7 +430,7 @@ struct Subtor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Is a vector operation ? Apply the op
-    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
         return sub2tc(t, e1, e2);
@@ -414,28 +438,28 @@ struct Subtor
       return distribute_vector_operation(op, op1, op2);
     }
 
-    if(is_constant(op1))
+    if (is_constant(op1))
     {
       // Found a zero? Simplify to -op2
       expr2tc c1 = op1;
-      if(get_value(c1) == 0)
+      if (get_value(c1) == 0)
       {
-        neg2tc c(op2->type, op2);
+        expr2tc c = neg2tc(op2->type, op2);
         ::simplify(c);
         return c;
       }
     }
 
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       // Found a zero? Simplify to op1
       expr2tc c2 = op2;
-      if(get_value(c2) == 0)
+      if (get_value(c2) == 0)
         return op1;
     }
 
     // Two constants? Simplify to result of the subtraction
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       get_value(c1) -= get_value(c2);
@@ -446,8 +470,52 @@ struct Subtor
   }
 };
 
+/**
+ * Check if value fits in given bit width without overflow
+ */
+static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed)
+{
+  if (is_signed)
+  {
+    BigInt min_val = -(BigInt::power2(width - 1));
+    BigInt max_val = BigInt::power2(width - 1) - 1;
+    return value >= min_val && value <= max_val;
+  }
+  else
+  {
+    if (value < 0)
+      return false;
+    BigInt max_val = BigInt::power2(width) - 1;
+    return value <= max_val;
+  }
+}
+
 expr2tc sub2t::do_simplify() const
 {
+  // x - x = 0 (self-subtraction)
+  if (side_1 == side_2)
+    return gen_zero(side_1->type);
+
+  // Recognize (base + X) - X = base pattern
+  if (is_add2t(side_1))
+  {
+    const add2t &add = to_add2t(side_1);
+
+    if (add.side_2 == side_2)
+      return add.side_1;
+  }
+
+  // x - (-y) -> x + y
+  if (is_neg2t(side_2))
+    return add2tc(type, side_1, to_neg2t(side_2).value);
+
+  // (-x) - y -> -(x + y)
+  if (is_neg2t(side_1))
+  {
+    expr2tc sum = add2tc(type, to_neg2t(side_1).value, side_2);
+    return neg2tc(type, sum);
+  }
+
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }
 
@@ -461,7 +529,7 @@ struct Multor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Is a vector operation ? Apply the op
-    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
         return mul2tc(t, e1, e2);
@@ -469,37 +537,37 @@ struct Multor
       return distribute_vector_operation(op, op1, op2);
     }
 
-    if(is_constant(op1))
+    if (is_constant(op1))
     {
       expr2tc c1 = op1;
 
       // Found a zero? Simplify to zero
-      if(get_value(c1) == 0)
+      if (get_value(c1) == 0)
         return op1;
 
       // Found an one? Simplify to op2
-      if(get_value(c1) == 1)
+      if (get_value(c1) == 1)
         return op2;
     }
 
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       expr2tc c2 = op2;
 
       // Found a zero? Simplify to zero
-      if(get_value(c2) == 0)
+      if (get_value(c2) == 0)
         return op2;
 
       // Found an one? Simplify to op1
-      if(get_value(c2) == 1)
+      if (get_value(c2) == 1)
         return op1;
     }
 
     // Two constants? Simplify to result of the multiplication
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
-      if constexpr(std::is_same<constant_type, bool>::value)
+      if constexpr (std::is_same<constant_type, bool>::value)
         get_value(c1) &= get_value(c2);
       else
         get_value(c1) *= get_value(c2);
@@ -512,11 +580,19 @@ struct Multor
 
 expr2tc mul2t::do_simplify() const
 {
+  // x * (-1) = -x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value == -1)
+    return neg2tc(type, side_1);
+  if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value == -1)
+    return neg2tc(type, side_2);
+
   return simplify_arith_2ops<Multor, mul2t>(type, side_1, side_2);
 }
 
-template <class constant_type>
-struct Divtor
+namespace
+{
+template <bool Div, typename constant_type>
+struct DivModtor
 {
   static expr2tc simplify(
     const expr2tc &op1,
@@ -525,45 +601,70 @@ struct Divtor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Is a vector operation ? Apply the op
-    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
-        return div2tc(t, e1, e2);
+        if constexpr (Div)
+          return div2tc(t, e1, e2);
+        else
+          return modulus2tc(t, e1, e2);
       };
       return distribute_vector_operation(op, op1, op2);
     }
 
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       expr2tc c2 = op2;
 
       // Denominator is zero? Don't simplify
-      if(get_value(c2) == 0)
+      if (get_value(c2) == 0)
         return expr2tc();
 
       // Denominator is one? Simplify to numerator's constant
-      if(get_value(c2) == 1)
-        return op1;
+      if (get_value(c2) == 1)
+      {
+        if constexpr (Div)
+          return op1;
+        else
+          return gen_zero(op1->type);
+      }
     }
 
     // Two constants? Simplify to result of the division
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1;
 
       // Numerator is zero? Simplify to zero, as we know
       // that op2 is not zero
-      if(get_value(c1) == 0)
+      if (get_value(c1) == 0)
         return op1;
 
       expr2tc c2 = op2;
-      get_value(c1) /= get_value(c2);
+      if constexpr (Div)
+        get_value(c1) /= get_value(c2);
+      else
+        get_value(c1) %= get_value(c2);
       return c1;
     }
 
     return expr2tc();
   }
 };
+
+template <class constant_type>
+struct Divtor : DivModtor<true, constant_type>
+{
+  using DivModtor<true, constant_type>::simplify;
+};
+
+template <class constant_type>
+struct Modtor : DivModtor<false, constant_type>
+{
+  using DivModtor<false, constant_type>::simplify;
+};
+
+} // namespace
 
 expr2tc div2t::do_simplify() const
 {
@@ -572,8 +673,9 @@ expr2tc div2t::do_simplify() const
 
 expr2tc modulus2t::do_simplify() const
 {
-  if(!is_number_type(type) && !is_vector_type(type))
-    return expr2tc();
+  // x % x = 0
+  if (side_1 == side_2)
+    return gen_zero(type);
 
   if(!is_constant_expr(side_1) && !is_constant_expr(side_2))
     return expr2tc();
@@ -608,34 +710,34 @@ expr2tc modulus2t::do_simplify() const
     }
   }
 
-  return expr2tc();
+  return simplify_arith_2ops<Modtor, modulus2t>(type, side_1, side_2);
 }
 
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
 {
-  if(!is_number_type(type) && !is_vector_type(type))
+  if (!is_number_type(type) && !is_vector_type(type))
     return expr2tc();
 
   if(!is_constant_expr(value))
     return expr2tc();
 
   expr2tc simpl_res;
-  if(is_bv_type(value))
+  if (is_bv_type(value))
   {
     std::function<constant_int2t &(expr2tc &)> to_constant =
       (constant_int2t & (*)(expr2tc &)) to_constant_int2t;
 
     simpl_res = TFunctor<constant_int2t>::simplify(value, to_constant);
   }
-  else if(is_fixedbv_type(value))
+  else if (is_fixedbv_type(value))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
 
     simpl_res = TFunctor<constant_fixedbv2t>::simplify(value, to_constant);
   }
-  else if(is_floatbv_type(value))
+  else if (is_floatbv_type(value))
   {
     std::function<constant_floatbv2t &(expr2tc &)> to_constant =
       (constant_floatbv2t & (*)(expr2tc &)) to_constant_floatbv2t;
@@ -663,17 +765,33 @@ struct Negator
 
 expr2tc neg2t::do_simplify() const
 {
-  if(is_constant_vector2t(value))
+  if (is_constant_vector2t(value))
   {
-    constant_vector2tc vector(value);
-    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    std::vector<expr2tc> members = to_constant_vector2t(value).datatype_members;
+    for (size_t i = 0; i < members.size(); i++)
     {
-      auto &op = vector->datatype_members[i];
-      neg2tc neg(op->type, op);
-      vector->datatype_members[i] = neg;
+      auto &op = members[i];
+      members[i] = neg2tc(op->type, op);
     }
-    return vector;
+    return constant_vector2tc(value->type, std::move(members));
   }
+  if (is_unsignedbv_type(value))
+  {
+    // Get bit-width of the unsigned type
+    const unsigned int width = value->type->get_width();
+
+    // Compute modulus: 2^width
+    const BigInt modulus = BigInt(1) << width;
+    const expr2tc modulus_expr = constant_int2tc(value->type, modulus);
+
+    // Perform modular negation: (modulus - x) % modulus
+    const expr2tc negated_value = sub2tc(value->type, modulus_expr, value);
+    expr2tc wrap = modulus2tc(value->type, negated_value, modulus_expr);
+    wrap->simplify();
+
+    return wrap;
+  }
+
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
 
@@ -686,7 +804,7 @@ struct abstor
   {
     expr2tc c = number;
 
-    if(!to_constant(c).value.is_negative())
+    if (!to_constant(c).value.is_negative())
       return number;
 
     to_constant(c).value = -to_constant(c).value;
@@ -701,7 +819,7 @@ expr2tc abs2t::do_simplify() const
 
 expr2tc with2t::do_simplify() const
 {
-  if(is_constant_struct2t(source_value))
+  if (is_constant_struct2t(source_value))
   {
     const constant_struct2t &c_struct = to_constant_struct2t(source_value);
     const constant_string2t &memb = to_constant_string2t(update_field);
@@ -710,11 +828,11 @@ expr2tc with2t::do_simplify() const
     assert(no < c_struct.datatype_members.size());
 
     // Clone constant struct, update its field according to this "with".
-    constant_struct2tc s = c_struct;
-    s->datatype_members[no] = update_value;
-    return expr2tc(s);
+    constant_struct2t copy = c_struct;
+    copy.datatype_members[no] = update_value;
+    return constant_struct2tc(std::move(copy));
   }
-  if(is_constant_union2t(source_value))
+  if (is_constant_union2t(source_value))
   {
     const constant_union2t &c_union = to_constant_union2t(source_value);
     const union_type2t &thetype = to_union_type(c_union.type);
@@ -726,47 +844,47 @@ expr2tc with2t::do_simplify() const
     // If the update value type matches the current lump of data's type, we can
     // just replace it with the new value. As far as I can tell, constant unions
     // only ever contain one member, and it's the member most recently written.
-    if(thetype.members[no] != update_value->type)
+    if (thetype.members[no] != update_value->type)
       return expr2tc();
 
     std::vector<expr2tc> newmembers = {update_value};
     return constant_union2tc(type, thetype.member_names[no], newmembers);
   }
-  else if(is_constant_array2t(source_value) && is_constant_int2t(update_field))
+  else if (is_constant_array2t(source_value) && is_constant_int2t(update_field))
   {
     const constant_array2t &array = to_constant_array2t(source_value);
     const constant_int2t &index = to_constant_int2t(update_field);
 
     // Index may be out of bounds. That's an error in the program, but not in
     // the model we're generating, so permit it. Can't simplify it though.
-    if(index.value.is_negative())
+    if (index.value.is_negative())
       return expr2tc();
 
-    if(index.value >= array.datatype_members.size())
+    if (index.value >= array.datatype_members.size())
       return expr2tc();
 
-    constant_array2tc arr = array;
-    arr->datatype_members[index.as_ulong()] = update_value;
-    return arr;
+    constant_array2t arr = array; // copy
+    arr.datatype_members[index.as_ulong()] = update_value;
+    return constant_array2tc(std::move(arr));
   }
-  else if(is_constant_vector2t(source_value))
+  else if (is_constant_vector2t(source_value))
   {
     const constant_vector2t &vec = to_constant_vector2t(source_value);
     const constant_int2t &index = to_constant_int2t(update_field);
 
     // Index may be out of bounds. That's an error in the program, but not in
     // the model we're generating, so permit it. Can't simplify it though.
-    if(index.value.is_negative())
+    if (index.value.is_negative())
       return expr2tc();
 
-    if(index.value >= vec.datatype_members.size())
+    if (index.value >= vec.datatype_members.size())
       return expr2tc();
 
-    constant_vector2tc vec2 = vec;
-    vec2->datatype_members[index.as_ulong()] = update_value;
-    return vec2;
+    constant_vector2t vec2 = vec; // copy
+    vec2.datatype_members[index.as_ulong()] = update_value;
+    return constant_vector2tc(std::move(vec2));
   }
-  else if(is_constant_array_of2t(source_value))
+  else if (is_constant_array_of2t(source_value))
   {
     const constant_array_of2t &array = to_constant_array_of2t(source_value);
 
@@ -777,12 +895,12 @@ expr2tc with2t::do_simplify() const
     // aray_of and not have it const propagatated away.
     const constant_array_of2t &thearray = to_constant_array_of2t(source_value);
     const array_type2t &arr_type = to_array_type(thearray.type);
-    if(arr_type.size_is_infinite)
+    if (arr_type.size_is_infinite)
       return expr2tc();
 
     // We can eliminate this operation if the operand to this with is the same
     // as the initializer.
-    if(update_value == array.initializer)
+    if (update_value == array.initializer)
       return source_value;
 
     return expr2tc();
@@ -795,7 +913,7 @@ expr2tc with2t::do_simplify() const
 
 expr2tc member2t::do_simplify() const
 {
-  if(is_constant_struct2t(source_value) || is_constant_union2t(source_value))
+  if (is_constant_struct2t(source_value) || is_constant_union2t(source_value))
   {
     unsigned no =
       static_cast<const struct_union_data &>(*source_value->type.get())
@@ -803,12 +921,12 @@ expr2tc member2t::do_simplify() const
 
     // Clone constant struct, update its field according to this "with".
     expr2tc s;
-    if(is_constant_struct2t(source_value))
+    if (is_constant_struct2t(source_value))
     {
       s = to_constant_struct2t(source_value).datatype_members[no];
       assert(
         is_pointer_type(type) ||
-        base_type_eq(type, s->type, namespacet(contextt())));
+        base_type_eq(type, s->type, *migrate_namespace_lookup));
     }
     else
     {
@@ -816,7 +934,7 @@ expr2tc member2t::do_simplify() const
       // array, but possibly fewer. This is legal C. So bounds check first that
       // we can actually perform this member operation.
       const constant_union2t &uni = to_constant_union2t(source_value);
-      if(uni.datatype_members.size() <= no)
+      if (uni.datatype_members.size() <= no)
         return expr2tc();
 
       s = uni.datatype_members[no];
@@ -824,16 +942,84 @@ expr2tc member2t::do_simplify() const
       /* If the type we just selected isn't compatible, it means that whatever
        * field is in the constant union /isn't/ the field we're selecting from
        * it. So don't simplify it, because we can't. */
-      // This can be the default, because base_type will not print anything
 
-      if(
+      if (
         !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, namespacet(contextt())))
+        !base_type_eq(type, s->type, *migrate_namespace_lookup))
         return expr2tc();
     }
 
     return s;
   }
+  else if (is_with2t(source_value))
+  {
+    auto current_source = source_value;
+
+    // Traverse through nested 'with' expressions
+    while (is_with2t(current_source))
+    {
+      const auto &with = to_with2t(current_source);
+
+      // Check if the member matches the update field
+      if (
+        is_constant_string2t(with.update_field) &&
+        member == to_constant_string2t(with.update_field).value)
+        return with.update_value;
+
+      // Move to the next source value in the chain
+      current_source = with.source_value;
+    }
+
+    // If no match is found, return an empty expression
+    return expr2tc();
+  }
+
+  return expr2tc();
+}
+
+static expr2tc simplify_object(const expr2tc &expr)
+{
+  if (is_add2t(expr) || is_sub2t(expr))
+  {
+    if (is_pointer_type(expr->type))
+    {
+      expr2tc left_op =
+        is_add2t(expr) ? to_add2t(expr).side_1 : to_sub2t(expr).side_1;
+      expr2tc right_op =
+        is_add2t(expr) ? to_add2t(expr).side_2 : to_sub2t(expr).side_2;
+
+      // Look for pointer operands - prioritize left side, then right side
+      if (is_pointer_type(left_op->type))
+      {
+        expr2tc simplified = simplify_object(left_op);
+        return is_nil_expr(simplified) ? left_op : simplified;
+      }
+      else if (is_pointer_type(right_op->type))
+      {
+        expr2tc simplified = simplify_object(right_op);
+        return is_nil_expr(simplified) ? right_op : simplified;
+      }
+    }
+  }
+  else if (is_typecast2t(expr))
+  {
+    const typecast2t &cast_expr = to_typecast2t(expr);
+    if (is_pointer_type(cast_expr.from->type))
+    {
+      expr2tc simplified = simplify_object(cast_expr.from);
+      return is_nil_expr(simplified) ? cast_expr.from : simplified;
+    }
+  }
+
+  return expr2tc();
+}
+
+expr2tc pointer_object2t::do_simplify() const
+{
+  expr2tc simplified_obj = simplify_object(ptr_obj);
+
+  if (!is_nil_expr(simplified_obj))
+    return pointer_object2tc(type, simplified_obj);
 
   return expr2tc();
 }
@@ -843,48 +1029,85 @@ expr2tc pointer_offset2t::do_simplify() const
   // XXX - this could be better. But the current implementation catches most
   // cases that ESBMC produces internally.
 
-  if(is_address_of2t(ptr_obj))
+  if (is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL")
+  {
+    if (is_pointer_type(ptr_obj->type))
+    {
+      const pointer_type2t &ptr_type = to_pointer_type(ptr_obj->type);
+      // Allow NULL simplification for pointer types to primitives
+      if (!is_symbol_type(ptr_type.subtype))
+        return gen_zero(type);
+    }
+  }
+
+  if (is_address_of2t(ptr_obj))
   {
     const address_of2t &addrof = to_address_of2t(ptr_obj);
-    if(is_symbol2t(addrof.ptr_obj) || is_constant_string2t(addrof.ptr_obj))
+    if (is_symbol2t(addrof.ptr_obj) || is_constant_string2t(addrof.ptr_obj))
       return gen_zero(type);
 
-    if(is_index2t(addrof.ptr_obj))
+    if (is_index2t(addrof.ptr_obj))
     {
       const index2t &index = to_index2t(addrof.ptr_obj);
-      if(is_constant_int2t(index.index))
+
+      // check if index is constant, looking through typecasts
+      expr2tc index_value = index.index;
+
+      // Look through typecast to find the underlying constant
+      if (is_typecast2t(index_value))
+        index_value = to_typecast2t(index_value).from;
+
+      if (is_constant_int2t(index_value))
       {
         expr2tc offs =
           try_simplification(compute_pointer_offset(addrof.ptr_obj));
-        if(is_constant_int2t(offs))
+        if (is_constant_int2t(offs))
           return offs;
       }
     }
+
+    if (is_member2t(addrof.ptr_obj))
+    {
+      const member2t &member = to_member2t(addrof.ptr_obj);
+
+      // First, try to use our existing compute_pointer_offset function
+      // This should handle most struct member cases
+      expr2tc offs = try_simplification(compute_pointer_offset(addrof.ptr_obj));
+      if (is_constant_int2t(offs))
+        return offs;
+
+      // Handle union members - all have offset 0 relative to union base
+      if (is_union_type(member.source_value->type))
+        return pointer_offset2tc(type, member.source_value);
+
+      if (is_struct_type(member.source_value->type))
+      {
+        const struct_union_data &struct_data =
+          static_cast<const struct_union_data &>(
+            *member.source_value->type.get());
+        unsigned member_no = struct_data.get_component_number(member.member);
+        if (member_no == 0)
+          return gen_zero(type);
+      }
+    }
   }
-  else if(is_typecast2t(ptr_obj))
+  else if (is_typecast2t(ptr_obj))
   {
     const typecast2t &cast = to_typecast2t(ptr_obj);
     expr2tc new_ptr_offs = pointer_offset2tc(type, cast.from);
     expr2tc reduced = new_ptr_offs->simplify();
 
-    // No good simplification -> return nothing
-    if(is_nil_expr(reduced))
+    // If we got a good simplification, return it
+    if (!is_nil_expr(reduced))
       return reduced;
-
-    // If it simplified to zero, that's fine, return that.
-    if(is_constant_int2t(reduced) && to_constant_int2t(reduced).value.is_zero())
-      return reduced;
-
-    // If it didn't reduce to zero, give up. Not sure why this is the case,
-    // but it's what the old irep code does.
   }
-  else if(is_add2t(ptr_obj))
+  else if (is_add2t(ptr_obj))
   {
     const add2t &add = to_add2t(ptr_obj);
 
     // So, one of these should be a ptr type, or there isn't any point in this
     // being a pointer_offset irep.
-    if(!is_pointer_type(add.side_1) && !is_pointer_type(add.side_2))
+    if (!is_pointer_type(add.side_1) && !is_pointer_type(add.side_2))
       return expr2tc();
 
     // Can't have pointer-on-pointer arith.
@@ -897,31 +1120,96 @@ expr2tc pointer_offset2t::do_simplify() const
     // Can't do any kind of simplification if the ptr op has a symbolic type.
     // Let the SMT layer handle this. In the future, can we pass around a
     // namespace?
-    if(is_symbol_type(to_pointer_type(ptr_op->type).subtype))
+    if (is_symbol_type(to_pointer_type(ptr_op->type).subtype))
       return expr2tc();
 
     // Turn the pointer one into pointer_offset.
     expr2tc new_ptr_op = pointer_offset2tc(type, ptr_op);
     // And multiply the non pointer one by the type size.
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
-    BigInt thesize = type_byte_size(ptr_subtype);
-    constant_int2tc type_size(type, thesize);
+    expr2tc type_size =
+      type_byte_size_expr(ptr_subtype, migrate_namespace_lookup);
 
-    // SV-Comp workaround
-    if(non_ptr_op->type->get_width() != type->get_width())
+    if (non_ptr_op->type != type)
       non_ptr_op = typecast2tc(type, non_ptr_op);
 
-    mul2tc new_non_ptr_op(type, non_ptr_op, type_size);
+    expr2tc new_non_ptr_op = mul2tc(type, non_ptr_op, type_size);
 
     expr2tc new_add = add2tc(type, new_ptr_op, new_non_ptr_op);
 
     // So, this add is a valid simplification. We may be able to simplify
     // further though.
     expr2tc tmp = new_add->simplify();
-    if(is_nil_expr(tmp))
+    if (is_nil_expr(tmp))
       return new_add;
 
     return tmp;
+  }
+  else if (is_sub2t(ptr_obj))
+  {
+    const sub2t &sub = to_sub2t(ptr_obj);
+
+    // Handle ptr - offset
+    if (is_pointer_type(sub.side_1) && !is_pointer_type(sub.side_2))
+    {
+      expr2tc ptr_op = sub.side_1;
+      expr2tc offset_op = sub.side_2;
+
+      if (is_symbol_type(to_pointer_type(ptr_op->type).subtype))
+        return expr2tc();
+
+      expr2tc ptr_offset = pointer_offset2tc(type, ptr_op);
+      type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
+      expr2tc type_size =
+        type_byte_size_expr(ptr_subtype, migrate_namespace_lookup);
+
+      if (offset_op->type != type)
+        offset_op = typecast2tc(type, offset_op);
+
+      expr2tc scaled_offset = mul2tc(type, offset_op, type_size);
+      expr2tc result = sub2tc(type, ptr_offset, scaled_offset);
+
+      expr2tc simplified = result->simplify();
+      return is_nil_expr(simplified) ? result : simplified;
+    }
+  }
+
+  return expr2tc();
+}
+
+static bool index_values_equal(const expr2tc &idx1, const expr2tc &idx2)
+{
+  // For constant integers, compare values regardless of signedness
+  if (is_constant_int2t(idx1) && is_constant_int2t(idx2))
+  {
+    const BigInt &val1 = to_constant_int2t(idx1).value;
+    const BigInt &val2 = to_constant_int2t(idx2).value;
+    return val1 == val2;
+  }
+
+  return false;
+}
+
+static expr2tc
+resolve_with_chain_lookup(const expr2tc &source, const expr2tc &lookup_index)
+{
+  expr2tc current = source;
+
+  // Collect all WITH operations in reverse order (most recent first)
+  std::vector<std::pair<expr2tc, expr2tc>> updates; // field, value pairs
+
+  while (is_with2t(current))
+  {
+    const with2t &with_op = to_with2t(current);
+    updates.push_back({with_op.update_field, with_op.update_value});
+    current = with_op.source_value;
+  }
+
+  // Look for the most recent update to the requested index using value comparison
+  for (const auto &update : updates)
+  {
+    if (index_values_equal(update.first, lookup_index))
+      return update.second;
   }
 
   return expr2tc();
@@ -932,33 +1220,30 @@ expr2tc index2t::do_simplify() const
   expr2tc new_index = try_simplification(index);
   expr2tc src = try_simplification(source_value);
 
-  if(is_with2t(src))
+  if (is_with2t(src))
   {
-    // Index is the same as an update to the thing we're indexing; we can
-    // just take the update value from the "with" below.
-    if(new_index == to_with2t(src).update_field)
-      return to_with2t(src).update_value;
-
-    return expr2tc();
+    expr2tc resolved = resolve_with_chain_lookup(src, new_index);
+    if (!is_nil_expr(resolved))
+      return resolved;
   }
 
-  if(is_constant_array2t(src) && is_constant_int2t(new_index))
+  if (is_constant_array2t(src) && is_constant_int2t(new_index))
   {
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
     // model. We don't have to think about this now though.
     const constant_int2t &idx = to_constant_int2t(new_index);
-    if(idx.value.is_negative())
+    if (idx.value.is_negative())
       return expr2tc();
 
     const constant_array2t &arr = to_constant_array2t(src);
     unsigned long the_idx = idx.as_ulong();
-    if(the_idx >= arr.datatype_members.size())
+    if (the_idx >= arr.datatype_members.size())
       return expr2tc();
 
     return arr.datatype_members[the_idx];
   }
-  else if(is_constant_vector2t(source_value) && is_constant_int2t(index))
+  else if (is_constant_vector2t(source_value) && is_constant_int2t(index))
   {
     const constant_vector2t &arr = to_constant_vector2t(source_value);
     const constant_int2t &idx = to_constant_int2t(index);
@@ -966,38 +1251,39 @@ expr2tc index2t::do_simplify() const
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
     // model. We don't have to think about this now though.
-    if(idx.value.is_negative())
+    if (idx.value.is_negative())
       return expr2tc();
 
-    if(idx.value >= arr.datatype_members.size())
+    if (idx.value >= arr.datatype_members.size())
       return expr2tc();
 
     return arr.datatype_members[idx.as_ulong()];
   }
 
-  if(is_constant_string2t(src) && is_constant_int2t(new_index))
+  if (is_constant_string2t(src) && is_constant_int2t(new_index))
   {
     // Same index situation
     const constant_int2t &idx = to_constant_int2t(new_index);
-    if(idx.value.is_negative())
+    if (idx.value.is_negative())
       return expr2tc();
 
     const constant_string2t &str = to_constant_string2t(src);
     unsigned long the_idx = idx.as_ulong();
-    if(the_idx > str.value.as_string().size()) // allow reading null term.
+    if (the_idx >= str.array_size()) // allow reading null term.
       return expr2tc();
 
     // String constants had better be some kind of integer type
     assert(is_bv_type(type));
-    unsigned long val = str.value.as_string().c_str()[the_idx];
-    return constant_int2tc(type, BigInt(val));
+    expr2tc c = str.at(the_idx);
+    assert(c);
+    return c;
   }
 
   // Only thing this index can evaluate to is the default value of this array
-  if(is_constant_array_of2t(src))
+  if (is_constant_array_of2t(src))
     return to_constant_array_of2t(src).initializer;
 
-  if(src != source_value || new_index != index)
+  if (src != source_value || new_index != index)
     return index2tc(type, src, new_index);
 
   return expr2tc();
@@ -1009,10 +1295,88 @@ expr2tc not2t::do_simplify() const
     // These negate.
     return to_not2t(value).value;
 
+    // De Morgan's laws for logical operations
+  // !(x && y) = !x || !y
+  if (is_and2t(value))
+  {
+    const and2t &and_expr = to_and2t(value);
+    return or2tc(not2tc(and_expr.side_1), not2tc(and_expr.side_2));
+  }
+
+  // !(x || y) = !x && !y
+  if (is_or2t(value))
+  {
+    const or2t &or_expr = to_or2t(value);
+    return and2tc(not2tc(or_expr.side_1), not2tc(or_expr.side_2));
+  }
+
+  // Comparison negations - only for non-floating point types
+  // !(x == y) = x != y
+  if (is_equality2t(value))
+  {
+    const equality2t &eq = to_equality2t(value);
+    if (is_floatbv_type(eq.side_1) || is_floatbv_type(eq.side_2))
+      return expr2tc();
+    else
+      return notequal2tc(eq.side_1, eq.side_2);
+  }
+
+  // !(x != y) = x == y
+  if (is_notequal2t(value))
+  {
+    const notequal2t &neq = to_notequal2t(value);
+    if (is_floatbv_type(neq.side_1) || is_floatbv_type(neq.side_2))
+      return expr2tc();
+    else
+      return equality2tc(neq.side_1, neq.side_2);
+  }
+
+  // !(x < y) = x >= y
+  if (is_lessthan2t(value))
+  {
+    const lessthan2t &lt = to_lessthan2t(value);
+    if (is_floatbv_type(lt.side_1) || is_floatbv_type(lt.side_2))
+      return expr2tc();
+    else
+      return greaterthanequal2tc(lt.side_1, lt.side_2);
+  }
+
+  // !(x <= y) = x > y
+  if (is_lessthanequal2t(value))
+  {
+    const lessthanequal2t &lte = to_lessthanequal2t(value);
+    if (is_floatbv_type(lte.side_1) || is_floatbv_type(lte.side_2))
+      return expr2tc();
+    else
+      return greaterthan2tc(lte.side_1, lte.side_2);
+  }
+
+  // !(x > y) = x <= y
+  if (is_greaterthan2t(value))
+  {
+    const greaterthan2t &gt = to_greaterthan2t(value);
+    if (is_floatbv_type(gt.side_1) || is_floatbv_type(gt.side_2))
+      return expr2tc();
+    else
+      return lessthanequal2tc(gt.side_1, gt.side_2);
+  }
+
+  // !(x >= y) = x < y
+  if (is_greaterthanequal2t(value))
+  {
+    const greaterthanequal2t &gte = to_greaterthanequal2t(value);
+    if (is_floatbv_type(gte.side_1) || is_floatbv_type(gte.side_2))
+      return expr2tc();
+    else
+      return lessthan2tc(gte.side_1, gte.side_2);
+  }
+
+
   if(!is_constant_bool2t(value))
     return expr2tc();
 
-  return expr2tc(new constant_bool2t(!to_constant_bool2t(value).value));
+  const constant_bool2t &val = to_constant_bool2t(value);
+  return constant_bool2tc(!val.value);
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -1021,7 +1385,7 @@ static expr2tc simplify_logic_2ops(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if(!is_number_type(type))
+  if (!is_number_type(type))
     return expr2tc();
 
   if(!is_constant_expr(side_1) && !is_constant_expr(side_2))
@@ -1093,20 +1457,20 @@ struct Andtor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Two constants? Simplify to result of the and
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(!(get_value(c1) == 0) && !(get_value(c2) == 0));
     }
 
-    if(is_constant(op1))
+    if (is_constant(op1))
     {
       // False? never true
       expr2tc c1 = op1;
       return (get_value(c1) == 0) ? gen_false_expr() : op2;
     }
 
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       // False? never true
       expr2tc c2 = op2;
@@ -1117,8 +1481,88 @@ struct Andtor
   }
 };
 
+template <typename OpType, typename OpConstructor>
+expr2tc simplify_associative_binary_op(
+  const type2tc &result_type,
+  const expr2tc &side_1,
+  const expr2tc &side_2,
+  bool (*is_op_type)(const expr2tc &),
+  const OpType &(*to_op_type)(const expr2tc &),
+  OpConstructor op_constructor)
+{
+  if (is_op_type(side_1) && is_op_type(side_2))
+  {
+    const OpType &op1 = to_op_type(side_1);
+    const OpType &op2 = to_op_type(side_2);
+
+    // Check all four possible combinations for common factors
+    if (op1.side_1 == op2.side_1)
+    {
+      expr2tc combined = op_constructor(op1.side_2, op2.side_2);
+      return typecast_check_return(
+        result_type, op_constructor(op1.side_1, combined));
+    }
+    if (op1.side_1 == op2.side_2)
+    {
+      expr2tc combined = op_constructor(op1.side_2, op2.side_1);
+      return typecast_check_return(
+        result_type, op_constructor(op1.side_1, combined));
+    }
+    if (op1.side_2 == op2.side_1)
+    {
+      expr2tc combined = op_constructor(op1.side_1, op2.side_2);
+      return typecast_check_return(
+        result_type, op_constructor(op1.side_2, combined));
+    }
+    if (op1.side_2 == op2.side_2)
+    {
+      expr2tc combined = op_constructor(op1.side_1, op2.side_1);
+      return typecast_check_return(
+        result_type, op_constructor(op1.side_2, combined));
+    }
+  }
+  return expr2tc(); // Return empty expr2tc to indicate no simplification was performed
+}
+
 expr2tc and2t::do_simplify() const
 {
+  if (side_1 == side_2)
+    return side_1; // x && x = x
+
+  // x && !x = false
+  if (is_not2t(side_1) && to_not2t(side_1).value == side_2)
+    return gen_false_expr();
+  if (is_not2t(side_2) && to_not2t(side_2).value == side_1)
+    return gen_false_expr();
+
+  // Absorption: x && (x || y) = x
+  if (is_or2t(side_2))
+  {
+    const or2t &or_expr = to_or2t(side_2);
+    if (or_expr.side_1 == side_1 || or_expr.side_2 == side_1)
+      return side_1;
+  }
+  if (is_or2t(side_1))
+  {
+    const or2t &or_expr = to_or2t(side_1);
+    if (or_expr.side_1 == side_2 || or_expr.side_2 == side_2)
+      return side_2;
+  }
+
+  // Try associative simplification: (x && a) && (x && b) = x && (a && b)
+  expr2tc simplified = simplify_associative_binary_op<and2t>(
+    type,
+    side_1,
+    side_2,
+    is_and2t,
+    to_and2t,
+    [](const expr2tc &left, const expr2tc &right) {
+      return and2tc(left, right);
+    });
+
+  if (!is_nil_expr(simplified))
+    return simplified;
+
   return simplify_logic_2ops<Andtor, and2t>(type, side_1, side_2);
 }
 
@@ -1132,20 +1576,20 @@ struct Ortor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Two constants? Simplify to result of the or
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(!(get_value(c1) == 0) || !(get_value(c2) == 0));
     }
 
-    if(is_constant(op1))
+    if (is_constant(op1))
     {
       // True? return true
       expr2tc c1 = op1;
       return (!(get_value(c1) == 0)) ? gen_true_expr() : op2;
     }
 
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       // True? return true
       expr2tc c2 = op2;
@@ -1158,20 +1602,51 @@ struct Ortor
 
 expr2tc or2t::do_simplify() const
 {
+  if (side_1 == side_2)
+    return side_1; // x || x = x
+
   // Special case: if one side is a not of the other, and they're otherwise
   // identical, simplify to true
-  if(is_not2t(side_1))
+  if (is_not2t(side_1))
   {
     const not2t &ref = to_not2t(side_1);
-    if(ref.value == side_2)
+    if (ref.value == side_2)
       return gen_true_expr();
   }
-  else if(is_not2t(side_2))
+  else if (is_not2t(side_2))
   {
     const not2t &ref = to_not2t(side_2);
-    if(ref.value == side_1)
+    if (ref.value == side_1)
       return gen_true_expr();
   }
+
+  // Absorption: x || (x && y) = x
+  if (is_and2t(side_2))
+  {
+    const and2t &and_expr = to_and2t(side_2);
+    if (and_expr.side_1 == side_1 || and_expr.side_2 == side_1)
+      return side_1;
+  }
+  if (is_and2t(side_1))
+  {
+    const and2t &and_expr = to_and2t(side_1);
+    if (and_expr.side_1 == side_2 || and_expr.side_2 == side_2)
+      return side_2;
+  }
+
+  // Try associative simplification: (x || a) || (x || b) = x || (a || b)
+  expr2tc simplified = simplify_associative_binary_op<or2t>(
+    type,
+    side_1,
+    side_2,
+    is_or2t,
+    to_or2t,
+    [](const expr2tc &left, const expr2tc &right) {
+      return or2tc(left, right);
+    });
+
+  if (!is_nil_expr(simplified))
+    return simplified;
 
   // Otherwise, default
   return simplify_logic_2ops<Ortor, or2t>(type, side_1, side_2);
@@ -1186,24 +1661,24 @@ struct Xortor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
-    if(is_constant(op1))
+    if (is_constant(op1))
     {
       expr2tc c1 = op1;
       // False? Simplify to op2
-      if(get_value(c1) == 0)
+      if (get_value(c1) == 0)
         return op2;
     }
 
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       expr2tc c2 = op2;
       // False? Simplify to op1
-      if(get_value(c2) == 0)
+      if (get_value(c2) == 0)
         return op1;
     }
 
     // Two constants? Simplify to result of the xor
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(!(get_value(c1) == 0) ^ !(get_value(c2) == 0));
@@ -1228,19 +1703,19 @@ struct Impliestor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // False => * evaluate to true, always
-    if(is_constant(op1))
+    if (is_constant(op1))
     {
       expr2tc c1 = op1;
-      if(get_value(c1) == 0)
+      if (get_value(c1) == 0)
         return gen_true_expr();
     }
 
     // Otherwise, the only other thing that will make this expr always true is
     // if side 2 is true.
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       expr2tc c2 = op2;
-      if(!(get_value(c2) == 0))
+      if (!(get_value(c2) == 0))
         return gen_true_expr();
     }
 
@@ -1283,7 +1758,7 @@ static expr2tc do_bit_munge_operation(
     /* For &, |, ^, ~, << our low bits are determined only by the corresponding
      * low bits of the arguments, however for >> this is not necessarily true!
      */
-    if constexpr(
+    if constexpr (
       std::is_same_v<constructor, lshr2t> ||
       std::is_same_v<constructor, ashr2t>)
     {
@@ -1299,14 +1774,14 @@ static expr2tc do_bit_munge_operation(
      * not representable. */
 
     /* Evaluating shifts with the shift amount >= 64 on (u)int64_t is undefined
-     * behaviour in C++, we should avoid doing that during simplification. */
+     * behavior in C++, we should avoid doing that during simplification. */
     can_eval &= !is_shift || br < 64;
-    if(can_eval)
+    if (can_eval)
     {
       uint64_t res = opfunc(l, r);
 
       uint64_t trunc_mask = 0;
-      if(type->get_width() < 64)
+      if (type->get_width() < 64)
       {
         // truncate the result to the type's width
         trunc_mask = ~(uint64_t)0 << type->get_width();
@@ -1314,10 +1789,10 @@ static expr2tc do_bit_munge_operation(
       }
 
       BigInt z;
-      if(is_signedbv_type(type))
+      if (is_signedbv_type(type))
       {
         // if res's sign-bit is set, sign-extend it
-        if(res >> (type->get_width() - 1))
+        if (res >> (type->get_width() - 1))
           res |= trunc_mask;
         z = BigInt((int64_t)res);
       }
@@ -1333,10 +1808,68 @@ static expr2tc do_bit_munge_operation(
 
 expr2tc bitand2t::do_simplify() const
 {
+  if (side_1 == side_2)
+    return side_1; // x & x = x
+
+  // x & ~x = 0
+  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+    return gen_zero(type);
+  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+    return gen_zero(type);
+
+  // 0 & x = 0, -1 & x = x
+  if (is_constant_int2t(side_1))
+  {
+    const BigInt &val = to_constant_int2t(side_1).value;
+    if (val.is_zero())
+      return side_1; // 0 & x = 0
+    if (val == BigInt(-1))
+      return side_2; // -1 & x = x (all bits set)
+  }
+
+  // x & 0 = 0, x & -1 = x
+  if (is_constant_int2t(side_2))
+  {
+    const BigInt &val = to_constant_int2t(side_2).value;
+    if (val.is_zero())
+      return side_2; // x & 0 = 0
+    if (val == BigInt(-1))
+      return side_1; // x & -1 = x (all bits set)
+  }
+
+  // Check for identity and zero patterns
+  if (is_constant_int2t(side_1))
+  {
+    const BigInt &val = to_constant_int2t(side_1).value;
+    if (val.is_zero())
+      return side_1; // 0 & x = 0
+  }
+
+  if (is_constant_int2t(side_2))
+  {
+    const BigInt &val = to_constant_int2t(side_2).value;
+    if (val.is_zero())
+      return side_2; // x & 0 = 0
+  }
+
+  // Absorption: x & (x | y) = x
+  if (is_bitor2t(side_2))
+  {
+    const bitor2t &bor = to_bitor2t(side_2);
+    if (bor.side_1 == side_1 || bor.side_2 == side_1)
+      return side_1;
+  }
+  if (is_bitor2t(side_1))
+  {
+    const bitor2t &bor = to_bitor2t(side_1);
+    if (bor.side_1 == side_2 || bor.side_2 == side_2)
+      return side_2;
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
 
   // Is a vector operation ? Apply the op
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return bitand2tc(t, e1, e2);
@@ -1349,10 +1882,53 @@ expr2tc bitand2t::do_simplify() const
 
 expr2tc bitor2t::do_simplify() const
 {
+  if (side_1 == side_2)
+    return side_1; // x | x = x
+
+  // x | ~x = -1 (all bits set)
+  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+    return constant_int2tc(type, -1);
+  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+    return constant_int2tc(type, -1);
+
+  // 0 | x = x, -1 | x = -1
+  if (is_constant_int2t(side_1))
+  {
+    const BigInt &val = to_constant_int2t(side_1).value;
+    if (val.is_zero())
+      return side_2; // 0 | x = x
+    if (val == BigInt(-1))
+      return side_1; // -1 | x = -1
+  }
+
+  // x | 0 = x, x | -1 = -1
+  if (is_constant_int2t(side_2))
+  {
+    const BigInt &val = to_constant_int2t(side_2).value;
+    if (val.is_zero())
+      return side_1; // x | 0 = x
+    if (val == BigInt(-1))
+      return side_2; // x | -1 = -1
+  }
+
+  // Absorption: x | (x & y) = x
+  if (is_bitand2t(side_2))
+  {
+    const bitand2t &band = to_bitand2t(side_2);
+    if (band.side_1 == side_1 || band.side_2 == side_1)
+      return side_1;
+  }
+  if (is_bitand2t(side_1))
+  {
+    const bitand2t &band = to_bitand2t(side_1);
+    if (band.side_1 == side_2 || band.side_2 == side_2)
+      return side_2;
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return bitor2tc(t, e1, e2);
@@ -1365,10 +1941,21 @@ expr2tc bitor2t::do_simplify() const
 
 expr2tc bitxor2t::do_simplify() const
 {
+  // x ^ x = 0
+  if (side_1 == side_2)
+    return gen_zero(type);
+
+  // x ^ 0 = x
+  if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
+    return side_2;
+  // 0 ^ x = x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
+    return side_1;
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return bitxor2tc(t, e1, e2);
@@ -1384,7 +1971,7 @@ expr2tc bitnand2t::do_simplify() const
   auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 & op2); };
 
   // Is a vector operation ? Apply the op
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return bitnand2tc(t, e1, e2);
@@ -1400,7 +1987,7 @@ expr2tc bitnor2t::do_simplify() const
   auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 | op2); };
 
   // Is a vector operation ? Apply the op
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return bitnor2tc(t, e1, e2);
@@ -1416,7 +2003,7 @@ expr2tc bitnxor2t::do_simplify() const
   auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return bitnxor2tc(t, e1, e2);
@@ -1429,18 +2016,41 @@ expr2tc bitnxor2t::do_simplify() const
 
 expr2tc bitnot2t::do_simplify() const
 {
+  // ~(~x) = x (double complement)
+  if (is_bitnot2t(value))
+    return to_bitnot2t(value).value;
+
+  // De Morgan's law: ~(x & y) = (~x) | (~y)
+  if (is_bitand2t(value))
+  {
+    const bitand2t &band = to_bitand2t(value);
+    return bitor2tc(
+      type,
+      bitnot2tc(band.side_1->type, band.side_1),
+      bitnot2tc(band.side_2->type, band.side_2));
+  }
+
+  // De Morgan's law: ~(x | y) = (~x) & (~y)
+  if (is_bitor2t(value))
+  {
+    const bitor2t &bor = to_bitor2t(value);
+    return bitand2tc(
+      type,
+      bitnot2tc(bor.side_1->type, bor.side_1),
+      bitnot2tc(bor.side_2->type, bor.side_2));
+  }
+
   auto op = [](uint64_t op1, uint64_t) { return ~(op1); };
 
-  if(is_constant_vector2t(value))
+  if (is_constant_vector2t(value))
   {
-    constant_vector2tc vector(value);
-    for(size_t i = 0; i < vector->datatype_members.size(); i++)
+    constant_vector2t vector = to_constant_vector2t(value); // copy
+    for (size_t i = 0; i < vector.datatype_members.size(); i++)
     {
-      auto &op = vector->datatype_members[i];
-      bitnot2tc neg(op->type, op);
-      vector->datatype_members[i] = neg;
+      auto &op = vector.datatype_members[i];
+      vector.datatype_members[i] = bitnot2tc(op->type, op);
     }
-    return vector;
+    return constant_vector2tc(std::move(vector));
   }
 
   return do_bit_munge_operation<bitnot2t>(op, type, value, value);
@@ -1448,9 +2058,13 @@ expr2tc bitnot2t::do_simplify() const
 
 expr2tc shl2t::do_simplify() const
 {
+  // x << 0 = x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
+    return side_1;
+
   auto op = [](uint64_t op1, uint64_t op2) { return op1 << op2; };
 
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return shl2tc(t, e1, e2);
@@ -1465,7 +2079,7 @@ expr2tc lshr2t::do_simplify() const
 {
   auto op = [](uint64_t op1, uint64_t op2) { return op1 >> op2; };
 
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return lshr2tc(t, e1, e2);
@@ -1478,13 +2092,17 @@ expr2tc lshr2t::do_simplify() const
 
 expr2tc ashr2t::do_simplify() const
 {
+  // x >> 0 = x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
+    return side_1;
+
   auto op = [](uint64_t op1, uint64_t op2) {
     /* simulating the arithmetic right shift in C++ requires LHS to be signed */
     return (int64_t)op1 >> op2;
   };
 
   // Is a vector operation ? Apply the op
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return ashr2tc(t, e1, e2);
@@ -1498,14 +2116,16 @@ expr2tc ashr2t::do_simplify() const
 expr2tc bitcast2t::do_simplify() const
 {
   // Follow approach of old irep, i.e., copy it
-  if(type == from->type)
+  if (type == from->type)
   {
-    // Typecast to same type means this can be eliminated entirely
+    // Bitcast to same type means this can be eliminated entirely
     return from;
   }
 
   // This should be fine, just use typecast
-  if(!is_floatbv_type(type) && !is_floatbv_type(from->type))
+  if (
+    !is_floatbv_type(type) && !is_floatbv_type(from->type) &&
+    !is_fixedbv_type(type) && !is_fixedbv_type(from->type))
     return typecast2tc(type, from)->do_simplify();
 
   return expr2tc();
@@ -1514,7 +2134,7 @@ expr2tc bitcast2t::do_simplify() const
 expr2tc typecast2t::do_simplify() const
 {
   // Follow approach of old irep, i.e., copy it
-  if(type == from->type)
+  if (type == from->type)
   {
     // Typecast to same type means this can be eliminated entirely
     return from;
@@ -1522,16 +2142,16 @@ expr2tc typecast2t::do_simplify() const
 
   auto simp = try_simplification(from);
 
-  if(is_constant_expr(simp))
+  if (is_constant_expr(simp))
   {
     // Casts from constant operands can be done here.
-    if(is_bool_type(simp) && is_number_type(type))
+    if (is_bool_type(simp) && is_number_type(type))
     {
       // bool to int
-      if(is_bv_type(type))
+      if (is_bv_type(type))
         return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
 
-      if(is_fixedbv_type(type))
+      if (is_fixedbv_type(type))
       {
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
@@ -1539,9 +2159,9 @@ expr2tc typecast2t::do_simplify() const
         return constant_fixedbv2tc(fbv);
       }
 
-      if(is_floatbv_type(simp))
+      if (is_floatbv_type(simp))
       {
-        if(!is_constant_int2t(rounding_mode))
+        if (!is_constant_int2t(rounding_mode))
           return expr2tc();
 
         ieee_floatt fpbv;
@@ -1555,25 +2175,25 @@ expr2tc typecast2t::do_simplify() const
         return constant_floatbv2tc(fpbv);
       }
     }
-    else if(is_bv_type(simp) && is_number_type(type))
+    else if (is_bv_type(simp) && is_number_type(type))
     {
       // int to int/float/double
       const constant_int2t &theint = to_constant_int2t(simp);
 
-      if(is_bv_type(type))
+      if (is_bv_type(type))
       {
         // If we are typecasting from integer to a smaller integer,
         // this will return the number with the smaller size
         exprt number = from_integer(theint.value, migrate_type_back(type));
 
         BigInt new_number;
-        if(to_integer(number, new_number))
+        if (to_integer(number, new_number))
           return expr2tc();
 
         return constant_int2tc(type, new_number);
       }
 
-      if(is_fixedbv_type(type))
+      if (is_fixedbv_type(type))
       {
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
@@ -1581,15 +2201,15 @@ expr2tc typecast2t::do_simplify() const
         return constant_fixedbv2tc(fbv);
       }
 
-      if(is_bool_type(type))
+      if (is_bool_type(type))
       {
         const constant_int2t &theint = to_constant_int2t(simp);
         return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
       }
 
-      if(is_floatbv_type(type))
+      if (is_floatbv_type(type))
       {
-        if(!is_constant_int2t(rounding_mode))
+        if (!is_constant_int2t(rounding_mode))
           return expr2tc();
 
         ieee_floatt fpbv;
@@ -1603,30 +2223,30 @@ expr2tc typecast2t::do_simplify() const
         return constant_floatbv2tc(fpbv);
       }
     }
-    else if(is_fixedbv_type(simp) && is_number_type(type))
+    else if (is_fixedbv_type(simp) && is_number_type(type))
     {
       // float/double to int/float/double
       fixedbvt fbv(to_constant_fixedbv2t(simp).value);
 
-      if(is_bv_type(type))
+      if (is_bv_type(type))
         return constant_int2tc(type, fbv.to_integer());
 
-      if(is_fixedbv_type(type))
+      if (is_fixedbv_type(type))
       {
         fbv.round(to_fixedbv_type(migrate_type_back(type)));
         return constant_fixedbv2tc(fbv);
       }
 
-      if(is_bool_type(type))
+      if (is_bool_type(type))
       {
         const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
         return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
       }
     }
-    else if(is_floatbv_type(simp) && is_number_type(type))
+    else if (is_floatbv_type(simp) && is_number_type(type))
     {
       // float/double to int/float/double
-      if(!is_constant_int2t(rounding_mode))
+      if (!is_constant_int2t(rounding_mode))
         return expr2tc();
 
       ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
@@ -1634,20 +2254,20 @@ expr2tc typecast2t::do_simplify() const
       BigInt rm_value = to_constant_int2t(rounding_mode).value;
       fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
-      if(is_bv_type(type))
+      if (is_bv_type(type))
         return constant_int2tc(type, fpbv.to_integer());
 
-      if(is_floatbv_type(type))
+      if (is_floatbv_type(type))
       {
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
         return constant_floatbv2tc(fpbv);
       }
 
-      if(is_bool_type(type))
+      if (is_bool_type(type))
         return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
     }
   }
-  else if(is_bool_type(type))
+  else if (is_bool_type(type))
   {
     // Bool type -> turn into equality with zero
     exprt zero = gen_zero(migrate_type_back(simp->type));
@@ -1657,7 +2277,7 @@ expr2tc typecast2t::do_simplify() const
 
     return not2tc(equality2tc(simp, zero2));
   }
-  else if(is_pointer_type(type) && is_pointer_type(simp))
+  else if (is_pointer_type(type) && is_pointer_type(simp))
   {
     // Casting from one pointer to another is meaningless... except when there's
     // pointer arithmetic about to be applied to it. So, only remove typecasts
@@ -1665,17 +2285,17 @@ expr2tc typecast2t::do_simplify() const
     const pointer_type2t &ptr_to = to_pointer_type(type);
     const pointer_type2t &ptr_from = to_pointer_type(simp->type);
 
-    if(
+    if (
       is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype) ||
       is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
       return expr2tc(); // Not worth thinking about
 
-    if(
+    if (
       is_array_type(ptr_to.subtype) &&
       is_symbol_type(get_array_subtype(ptr_to.subtype)))
       return expr2tc(); // Not worth thinking about
 
-    if(
+    if (
       is_array_type(ptr_from.subtype) &&
       is_symbol_type(get_array_subtype(ptr_from.subtype)))
       return expr2tc(); // Not worth thinking about
@@ -1687,23 +2307,27 @@ expr2tc typecast2t::do_simplify() const
       unsigned int from_width =
         (is_empty_type(ptr_from.subtype)) ? 8 : ptr_from.subtype->get_width();
 
-      if(to_width == from_width)
+      if (to_width == from_width)
         return simp;
-
-      return expr2tc();
     }
-    catch(const array_type2t::dyn_sized_array_excp &e)
+    catch (const array_type2t::dyn_sized_array_excp &e)
     {
       // Something crazy, and probably C++ based, occurred. Don't attempt to
       // simplify.
-      return expr2tc();
     }
+    catch (const type2t::symbolic_type_excp &e)
+    {
+      /* might happen if there is a symbolic type in a ptr's subtype; these
+       * have not been squashed by thrash_type_symbols() */
+    }
+
+    return expr2tc();
   }
-  else if(is_typecast2t(simp) && type == simp->type)
+  else if (is_typecast2t(simp) && type == simp->type)
   {
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
-    return expr2tc(new typecast2t(type, to_typecast2t(simp).from));
+    return typecast2tc(type, to_typecast2t(simp).from);
   }
 
   return expr2tc();
@@ -1711,7 +2335,7 @@ expr2tc typecast2t::do_simplify() const
 
 expr2tc nearbyint2t::do_simplify() const
 {
-  if(!is_number_type(type))
+  if (!is_number_type(type))
     return expr2tc();
 
   if(!is_constant_floatbv2t(from))
@@ -1730,13 +2354,13 @@ expr2tc address_of2t::do_simplify() const
   // sake.
   // Only attempt to simplify indexes. Whatever we're taking the address of,
   // we can't simplify away the symbol.
-  if(is_index2t(ptr_obj))
+  if (is_index2t(ptr_obj))
   {
     const index2t &idx = to_index2t(ptr_obj);
     const pointer_type2t &ptr_type = to_pointer_type(type);
 
     // Don't simplify &a[0]
-    if(
+    if (
       is_constant_int2t(idx.index) &&
       to_constant_int2t(idx.index).value.is_zero())
       return expr2tc();
@@ -1758,11 +2382,55 @@ static expr2tc simplify_relations(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if(!is_number_type(type))
+  if (!is_number_type(type))
     return expr2tc();
 
-  if(!is_constant(side_1) || !is_constant(side_2))
-    return expr2tc();
+  if (!is_constant(side_1) || !is_constant(side_2))
+    {
+    if (
+      is_add2t(side_1) && is_add2t(side_2) &&
+      is_pointer_type(side_1) && is_pointer_type(side_2))
+    {
+      // Simplification of pointer comparison:
+      // address = pointer + offset
+      // When the pointer objects are the same, comparing the addresses is equivalent
+      // to comparing the offsets.
+      // (&x + 1 == &x + 2) => (1 == 2) => false
+      add2t lhs = to_add2t(side_1);
+      add2t rhs = to_add2t(side_2);
+
+      if (
+        lhs.side_1 == rhs.side_1 && is_constant(lhs.side_2) &&
+        is_constant(rhs.side_2))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_2));
+        return typecast_check_return(type, new_op);
+      }
+      else if (
+        lhs.side_2 == rhs.side_2 && is_constant(lhs.side_1) &&
+        is_constant(rhs.side_1))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_1));
+        return typecast_check_return(type, new_op);
+      }
+      else if (
+        lhs.side_1 == rhs.side_2 && is_constant(lhs.side_2) &&
+        is_constant(rhs.side_1))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_1));
+        return typecast_check_return(type, new_op);
+      }
+      else if (
+        lhs.side_2 == rhs.side_1 && is_constant(lhs.side_1) &&
+        is_constant(rhs.side_2))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_2));
+        return typecast_check_return(type, new_op);
+      }
+
+      return expr2tc();
+    }
+    }
 
   expr2tc simpl_res;
 
@@ -1806,10 +2474,10 @@ static expr2tc simplify_relations(
   {
     std::function<bool(const expr2tc &)> is_constant =
       [&](const expr2tc &t) -> bool {
-      if(is_pointer_type(t) && is_symbol2t(t))
+      if (is_pointer_type(t) && is_symbol2t(t))
       {
         symbol2t s = to_symbol2t(t);
-        if(s.thename == "NULL")
+        if (s.thename == "NULL")
           return true;
       }
       return false;
@@ -1833,7 +2501,7 @@ static expr2tc simplify_floatbv_relations(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if(!is_number_type(type))
+  if (!is_number_type(type))
     return expr2tc();
 
   if(!(is_constant_expr(side_1) || is_constant_expr(side_2) ||
@@ -1841,7 +2509,7 @@ static expr2tc simplify_floatbv_relations(
     return expr2tc();
 
   expr2tc simpl_res;
-  if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
+  if(is_floatbv_type(side_1) || is_floatbv_type(side_2) || (side_1 == side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -1869,16 +2537,16 @@ struct IEEE_equalitytor
     std::function<constant_type(expr2tc &)> get_value)
   {
     // Two constants? Simplify to result of the comparison
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(get_value(c1) == get_value(c2));
     }
 
-    if(op1 == op2)
+    if (op1 == op2)
     {
       // x == x is the same as saying !isnan(x)
-      expr2tc is_nan(new isnan2t(op1));
+      expr2tc is_nan = isnan2tc(op1);
       expr2tc is_not_nan = not2tc(is_nan);
       return try_simplification(is_not_nan);
     }
@@ -1897,7 +2565,7 @@ struct Equalitytor
     std::function<constant_type(expr2tc &)> get_value)
   {
     // Is a vector operation ? Apply the op
-    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [](type2tc, expr2tc e1, expr2tc e2) {
         return equality2tc(e1, e2);
@@ -1905,7 +2573,7 @@ struct Equalitytor
       return distribute_vector_operation(op, op1, op2);
     }
 
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(get_value(c1) == get_value(c2));
@@ -1917,10 +2585,90 @@ struct Equalitytor
 
 expr2tc equality2t::do_simplify() const
 {
+  // Self-comparison: x == x is always true (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
   // If we're dealing with floatbvs, call IEEE_equalitytor instead
-  if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
+  if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
     return simplify_floatbv_relations<IEEE_equalitytor, equality2t>(
       type, side_1, side_2);
+
+  // (x + c1) == c2 -> x == (c2 - c1)
+  if (is_add2t(side_1) && is_constant_int2t(side_2))
+  {
+    const add2t &add_expr = to_add2t(side_1);
+
+    if (is_constant_int2t(add_expr.side_2))
+    {
+      const BigInt &c1 = to_constant_int2t(add_expr.side_2).value;
+      const BigInt &c2 = to_constant_int2t(side_2).value;
+      BigInt diff = c2 - c1;
+
+      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      {
+        expr2tc new_const = constant_int2tc(side_2->type, diff);
+        return equality2tc(add_expr.side_1, new_const);
+      }
+    }
+
+    if (is_constant_int2t(add_expr.side_1))
+    {
+      const BigInt &c1 = to_constant_int2t(add_expr.side_1).value;
+      const BigInt &c2 = to_constant_int2t(side_2).value;
+      BigInt diff = c2 - c1;
+
+      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      {
+        expr2tc new_const = constant_int2tc(side_2->type, diff);
+        return equality2tc(add_expr.side_2, new_const);
+      }
+    }
+  }
+
+  // (x - c1) == c2 -> x == (c2 + c1)
+  if (is_sub2t(side_1) && is_constant_int2t(side_2))
+  {
+    const sub2t &sub_expr = to_sub2t(side_1);
+
+    if (is_constant_int2t(sub_expr.side_2))
+    {
+      const BigInt &c1 = to_constant_int2t(sub_expr.side_2).value;
+      const BigInt &c2 = to_constant_int2t(side_2).value;
+      BigInt sum = c2 + c1;
+
+      if (fits_in_width(sum, type->get_width(), is_signedbv_type(type)))
+      {
+        expr2tc new_const = constant_int2tc(side_2->type, sum);
+        return equality2tc(sub_expr.side_1, new_const);
+      }
+    }
+  }
+
+  // (x * c) == 0 -> x == 0 (when c != 0)
+  if (is_mul2t(side_1) && is_constant_int2t(side_2))
+  {
+    const mul2t &mul_expr = to_mul2t(side_1);
+    const BigInt &c2 = to_constant_int2t(side_2).value;
+
+    if (c2 == 0)
+    {
+      // Check if either operand is a non-zero constant
+      if (is_constant_int2t(mul_expr.side_2))
+      {
+        const BigInt &c1 = to_constant_int2t(mul_expr.side_2).value;
+        if (c1 != 0)
+          return equality2tc(mul_expr.side_1, side_2);
+      }
+
+      if (is_constant_int2t(mul_expr.side_1))
+      {
+        const BigInt &c1 = to_constant_int2t(mul_expr.side_1).value;
+        if (c1 != 0)
+          return equality2tc(mul_expr.side_2, side_2);
+      }
+    }
+  }
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
@@ -1935,16 +2683,16 @@ struct IEEE_notequalitytor
     std::function<constant_type(expr2tc &)> get_value)
   {
     // Two constants? Simplify to result of the comparison
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(get_value(c1) != get_value(c2));
     }
 
-    if(op1 == op2)
+    if (op1 == op2)
     {
       // x != x is the same as saying isnan(x)
-      expr2tc is_nan(new isnan2t(op1));
+      expr2tc is_nan = isnan2tc(op1);
       return try_simplification(is_nan);
     }
 
@@ -1961,7 +2709,7 @@ struct Notequaltor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type(expr2tc &)> get_value)
   {
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(get_value(c1) != get_value(c2));
@@ -1973,8 +2721,12 @@ struct Notequaltor
 
 expr2tc notequal2t::do_simplify() const
 {
+  // Self-comparison: x != x is always false (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
   // If we're dealing with floatbvs, call IEEE_notequalitytor instead
-  if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
+  if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
     return simplify_floatbv_relations<IEEE_notequalitytor, equality2t>(
       type, side_1, side_2);
 
@@ -1991,14 +2743,14 @@ struct Lessthantor
     std::function<constant_type(expr2tc &)> get_value)
   {
     // op1 < zero and op2 is unsigned: always true
-    if(is_constant(op1))
+    if (is_constant(op1))
     {
       expr2tc c1 = op1;
-      if((get_value(c1) < 0) && is_unsignedbv_type(op2))
+      if ((get_value(c1) < 0) && is_unsignedbv_type(op2))
         return gen_true_expr();
     }
 
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(get_value(c1) < get_value(c2));
@@ -2010,6 +2762,16 @@ struct Lessthantor
 
 expr2tc lessthan2t::do_simplify() const
 {
+  // Self-comparison: x < x is always false (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
+  // unsigned < 0 is always false
+  if (
+    is_unsignedbv_type(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value.is_zero())
+    return gen_false_expr();
+
   return simplify_relations<Lessthantor, lessthan2t>(type, side_1, side_2);
 }
 
@@ -2023,14 +2785,14 @@ struct Greaterthantor
     std::function<constant_type(expr2tc &)> get_value)
   {
     // op2 < zero and op1 is unsigned: always true
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       expr2tc c2 = op2;
-      if((get_value(c2) < 0) && is_unsignedbv_type(op1))
+      if ((get_value(c2) < 0) && is_unsignedbv_type(op1))
         return gen_true_expr();
     }
 
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(get_value(c1) > get_value(c2));
@@ -2042,6 +2804,10 @@ struct Greaterthantor
 
 expr2tc greaterthan2t::do_simplify() const
 {
+  // Self-comparison: x > x is always false (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
   return simplify_relations<Greaterthantor, greaterthan2t>(
     type, side_1, side_2);
 }
@@ -2056,14 +2822,14 @@ struct Lessthanequaltor
     std::function<constant_type(expr2tc &)> get_value)
   {
     // op1 <= zero and op2 is unsigned: always true
-    if(is_constant(op1))
+    if (is_constant(op1))
     {
       expr2tc c1 = op1;
-      if((get_value(c1) <= 0) && is_unsignedbv_type(op2))
+      if ((get_value(c1) <= 0) && is_unsignedbv_type(op2))
         return gen_true_expr();
     }
 
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(get_value(c1) <= get_value(c2));
@@ -2075,6 +2841,10 @@ struct Lessthanequaltor
 
 expr2tc lessthanequal2t::do_simplify() const
 {
+  // Self-comparison: x <= x is always true (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
   return simplify_relations<Lessthanequaltor, lessthanequal2t>(
     type, side_1, side_2);
 }
@@ -2089,14 +2859,14 @@ struct Greaterthanequaltor
     std::function<constant_type(expr2tc &)> get_value)
   {
     // op2 <= zero and op1 is unsigned: always true
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       expr2tc c2 = op2;
-      if((get_value(c2) <= 0) && is_unsignedbv_type(op1))
+      if ((get_value(c2) <= 0) && is_unsignedbv_type(op1))
         return gen_true_expr();
     }
 
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       expr2tc c1 = op1, c2 = op2;
       return constant_bool2tc(get_value(c1) >= get_value(c2));
@@ -2108,13 +2878,57 @@ struct Greaterthanequaltor
 
 expr2tc greaterthanequal2t::do_simplify() const
 {
+  // Self-comparison: x >= x is always true (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
+  // unsigned >= 0 = true
+  if (
+    is_unsignedbv_type(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value.is_zero())
+    return gen_true_expr();
+
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
     type, side_1, side_2);
 }
 
+// Check if two conditions are equivalent (accounting for casts)
+static bool conditions_equivalent(const expr2tc &a, const expr2tc &b)
+{
+  if (a == b)
+    return true;
+
+  // Strip typecast from a
+  expr2tc a_stripped = a;
+  while (is_typecast2t(a_stripped))
+    a_stripped = to_typecast2t(a_stripped).from;
+
+  // Strip typecast from b
+  expr2tc b_stripped = b;
+  while (is_typecast2t(b_stripped))
+    b_stripped = to_typecast2t(b_stripped).from;
+
+  // Also handle (x != 0) <-> x pattern
+  if (is_notequal2t(a_stripped))
+  {
+    const notequal2t &ne = to_notequal2t(a_stripped);
+    if (is_constant_int2t(ne.side_2) && to_constant_int2t(ne.side_2).value == 0)
+      a_stripped = ne.side_1;
+  }
+
+  if (is_notequal2t(b_stripped))
+  {
+    const notequal2t &ne = to_notequal2t(b_stripped);
+    if (is_constant_int2t(ne.side_2) && to_constant_int2t(ne.side_2).value == 0)
+      b_stripped = ne.side_1;
+  }
+
+  return a_stripped == b_stripped;
+}
+
 expr2tc if2t::do_simplify() const
 {
-  if(is_bool_type(type))
+  if (is_bool_type(type))
   {
     // We can only do these simplification if the expecting results is boolean
     // A bug was introduced in 2835092f that applied these simplifications to
@@ -2127,32 +2941,32 @@ expr2tc if2t::do_simplify() const
     // c:@t2&1#4 == (unsigned int)guard?0!0&0#3
 
     expr2tc simp;
-    if(is_true(true_value) && is_false(false_value))
+    if (is_true(true_value) && is_false(false_value))
     {
       // a?1:0 <-> a
       simp = cond;
     }
-    else if(is_false(true_value) && is_true(false_value))
+    else if (is_false(true_value) && is_true(false_value))
     {
       // a?0:1 <-> !a
       simp = not2tc(cond);
     }
-    else if(is_false(false_value))
+    else if (is_false(false_value))
     {
       // a?b:0 <-> a AND b
       simp = and2tc(cond, true_value);
     }
-    else if(is_true(false_value))
+    else if (is_true(false_value))
     {
       // a?b:1 <-> !a OR b
       simp = or2tc(not2tc(cond), true_value);
     }
-    else if(is_true(true_value))
+    else if (is_true(true_value))
     {
       // a?1:b <-> a||(!a && b) <-> a OR b
       simp = or2tc(cond, false_value);
     }
-    else if(is_false(true_value))
+    else if (is_false(true_value))
     {
       // a?0:b <-> !a && b
       simp = and2tc(not2tc(cond), false_value);
@@ -2164,30 +2978,62 @@ expr2tc if2t::do_simplify() const
     return simp;
   }
 
-  if(true_value == false_value)
+  if (true_value == false_value)
     return typecast_check_return(type, true_value);
 
   expr2tc simp_cond = cond;
   ::simplify(simp_cond);
 
-  if(is_constant_expr(simp_cond))
+  if (is_constant_expr(simp_cond))
   {
-    if(is_true(simp_cond))
+    if (is_true(simp_cond))
       return typecast_check_return(type, true_value);
 
-    if(is_false(simp_cond))
+    if (is_false(simp_cond))
       return typecast_check_return(type, false_value);
   }
 
-  if(
+  if (
     is_constant_number(true_value) && is_true(true_value) &&
     (gen_one(true_value->type) == true_value) && is_false(false_value))
     return typecast_check_return(type, cond);
 
-  if(
+  if (
     is_constant_number(false_value) && is_false(true_value) &&
     (gen_one(false_value->type) == false_value) && is_true(false_value))
     return typecast_check_return(type, not2tc(cond));
+
+  // (c ? x : (c ? y : z)) == (c ? x : z)
+  if (is_if2t(false_value))
+  {
+    const if2t &inner_if = to_if2t(false_value);
+    if (inner_if.cond == cond)
+      return if2tc(type, cond, true_value, inner_if.false_value);
+  }
+
+  // (c ? x : (!c ? y : z)) == (c ? x : y)
+  if (is_if2t(false_value))
+  {
+    const if2t &inner_if = to_if2t(false_value);
+    if (is_not2t(inner_if.cond))
+    {
+      const not2t &inner_neg = to_not2t(inner_if.cond);
+      if (conditions_equivalent(inner_neg.value, cond))
+        return if2tc(type, cond, true_value, inner_if.true_value);
+    }
+  }
+
+  // (!c ? x : (c ? y : z)) == (c ? y : x)
+  if (is_not2t(cond))
+  {
+    const not2t &neg = to_not2t(cond);
+    if (is_if2t(false_value))
+    {
+      const if2t &inner_if = to_if2t(false_value);
+      if (conditions_equivalent(inner_if.cond, neg.value))
+        return if2tc(type, inner_if.cond, inner_if.true_value, true_value);
+    }
+  }
 
   return expr2tc();
 }
@@ -2202,89 +3048,254 @@ expr2tc overflow2t::do_simplify() const
   return expr2tc();
 }
 
-// Heavily inspired by cbmc's simplify_exprt::objects_equal_address_of
+static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
+
+static expr2tc handle_symmetric_cases(const expr2tc &a, const expr2tc &b)
+{
+  // Array element vs base symbol
+  if (is_index2t(a) && is_symbol2t(b))
+    return obj_equals_addr_of(to_index2t(a).source_value, b);
+  if (is_symbol2t(a) && is_index2t(b))
+    return obj_equals_addr_of(to_index2t(b).source_value, a);
+
+  // Struct member vs base symbol
+  if (is_member2t(a) && is_symbol2t(b))
+    return obj_equals_addr_of(to_member2t(a).source_value, b);
+  if (is_symbol2t(a) && is_member2t(b))
+    return obj_equals_addr_of(to_member2t(b).source_value, a);
+
+  // Array element vs struct member
+  if (is_index2t(a) && is_member2t(b))
+    return obj_equals_addr_of(
+      to_index2t(a).source_value, to_member2t(b).source_value);
+  if (is_member2t(a) && is_index2t(b))
+    return obj_equals_addr_of(
+      to_member2t(a).source_value, to_index2t(b).source_value);
+
+  return expr2tc(); // no match
+}
+
 static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 {
-  if(is_symbol2t(a) && is_symbol2t(b))
+  if (is_symbol2t(a) && is_symbol2t(b))
   {
-    if(a == b)
+    if (a == b)
       return gen_true_expr();
+    else
+      // In symbolic execution, different symbols could potentially
+      // have the same value, so let the SMT solver decide
+      return expr2tc();
   }
-  else if(is_index2t(a) && is_index2t(b))
+  else if (is_index2t(a) && is_index2t(b))
   {
+    // For array elements, check if they belong to the same base array
+    // In ESBMC's semantics, different elements of the same array
+    // are considered part of the same object
     return obj_equals_addr_of(
       to_index2t(a).source_value, to_index2t(b).source_value);
   }
-  else if(is_member2t(a) && is_member2t(b))
+  else if (is_member2t(a) && is_member2t(b))
   {
+    // For struct members, check if they belong to the same base struct
+    // In ESBMC's semantics, different members of the same struct
+    // are considered part of the same object
     return obj_equals_addr_of(
       to_member2t(a).source_value, to_member2t(b).source_value);
   }
-  else if(is_constant_string2t(a) && is_constant_string2t(b))
+  else if (is_constant_string2t(a) && is_constant_string2t(b))
   {
     bool val = (to_constant_string2t(a).value == to_constant_string2t(b).value);
-    if(val)
+    if (val)
       return gen_true_expr();
 
     return gen_false_expr();
   }
 
+  expr2tc res = handle_symmetric_cases(a, b);
+  if (!is_nil_expr(res))
+    return res;
+
+  // We can't determine if they are the same object
   return expr2tc();
+}
+
+static bool is_null_pointer(const expr2tc &expr)
+{
+  // Check for explicit NULL symbol
+  if (is_symbol2t(expr) && to_symbol2t(expr).get_symbol_name() == "NULL")
+    return true;
+
+  return false;
 }
 
 expr2tc same_object2t::do_simplify() const
 {
-  if(is_address_of2t(side_1) && is_address_of2t(side_2))
+  expr2tc op1 = side_1;
+  expr2tc op2 = side_2;
+
+  // Look through typecast expressions to find the actual operands
+  while (is_typecast2t(op1))
+    op1 = to_typecast2t(op1).from;
+  while (is_typecast2t(op2))
+    op2 = to_typecast2t(op2).from;
+
+  // Handle NULL pointer comparisons first
+  bool op1_is_null = is_null_pointer(op1);
+  bool op2_is_null = is_null_pointer(op2);
+
+  if (op1_is_null && op2_is_null)
+    return gen_true_expr(); // Both NULL
+
+  // Handle address-of expressions
+  if (is_address_of2t(op1) && is_address_of2t(op2))
     return obj_equals_addr_of(
-      to_address_of2t(side_1).ptr_obj, to_address_of2t(side_2).ptr_obj);
+      to_address_of2t(op1).ptr_obj, to_address_of2t(op2).ptr_obj);
 
-  if(
-    is_symbol2t(side_1) && is_symbol2t(side_2) &&
-    to_symbol2t(side_1).get_symbol_name() == "NULL" &&
-    to_symbol2t(side_1).get_symbol_name() == "NULL")
-    return gen_true_expr();
+  // Handle direct pointer comparisons (symbols that represent pointers)
+  if (is_symbol2t(op1) && is_symbol2t(op2))
+  {
+    if (op1 == op2)
+      return gen_true_expr();
+    else
+      // In symbolic execution, different symbols could potentially
+      // have the same value, so let the SMT solver decide
+      return expr2tc();
+  }
 
+  // Handle mixed cases where one is address_of and other is symbol
+  if (is_address_of2t(op1) && is_symbol2t(op2))
+  {
+    // This would be comparing &x with some pointer variable p
+    // They can only be the same if p points to x, but we can't determine
+    // that statically in general case
+    return expr2tc();
+  }
+
+  if (is_symbol2t(op1) && is_address_of2t(op2))
+  {
+    // Same as above, reversed
+    return expr2tc();
+  }
+
+  // If we can't simplify, return empty expression
   return expr2tc();
 }
 
 expr2tc concat2t::do_simplify() const
 {
-  if(!is_constant_int2t(side_1) || !is_constant_int2t(side_2))
+  // First, try existing constant folding
+  if (is_constant_int2t(side_1) && is_constant_int2t(side_2))
+  {
+    const BigInt &value1 = to_constant_int2t(side_1).value;
+    const BigInt &value2 = to_constant_int2t(side_2).value;
+
+    assert(!value1.is_negative());
+    assert(!value2.is_negative());
+
+    BigInt accuml = value1;
+    accuml *= BigInt::power2(side_2->type->get_width());
+    accuml += value2;
+
+    return constant_int2tc(type, accuml);
+  }
+
+  // Detect pattern: nested CONCATs of byte_extracts
+  std::function<void(const expr2tc &, std::vector<expr2tc> &)> collect_leaves;
+  collect_leaves = [&](const expr2tc &e, std::vector<expr2tc> &leaves) {
+    if (is_concat2t(e))
+    {
+      const concat2t &c = to_concat2t(e);
+      collect_leaves(c.side_1, leaves);
+      collect_leaves(c.side_2, leaves);
+    }
+    else
+    {
+      leaves.push_back(e);
+    }
+  };
+
+  std::vector<expr2tc> leaves;
+  collect_leaves(expr2tc(this->clone()), leaves);
+
+  // Quick exit if not enough leaves or not all byte extracts
+  if (leaves.size() < 2)
     return expr2tc();
 
-  const BigInt &value1 = to_constant_int2t(side_1).value;
-  const BigInt &value2 = to_constant_int2t(side_2).value;
+  for (const auto &leaf : leaves)
+  {
+    if (!is_byte_extract2t(leaf) || leaf->type->get_width() != 8)
+      return expr2tc();
+  }
 
-  // k; Take the values, and concatenate. Side 1 has higher end bits.
-  BigInt accuml = value1;
-  accuml *= (1ULL << side_2->type->get_width());
-  accuml += value2;
+  // Verify all from same source with contiguous offsets
+  const byte_extract2t &first_be = to_byte_extract2t(leaves[0]);
+  expr2tc source = first_be.source_value;
+  bool big_endian = first_be.big_endian;
 
-  return constant_int2tc(type, accuml);
+  // Only optimize complete reconstructions where widths match
+  if (
+    leaves.size() * 8 != type->get_width() ||
+    source->type->get_width() != type->get_width() || big_endian)
+    return expr2tc();
+
+  std::vector<BigInt> offsets;
+  for (const auto &leaf : leaves)
+  {
+    const byte_extract2t &be = to_byte_extract2t(leaf);
+
+    if (
+      be.source_value != source || be.big_endian != big_endian ||
+      !is_constant_int2t(be.source_offset))
+      return expr2tc();
+
+    offsets.push_back(to_constant_int2t(be.source_offset).value);
+  }
+
+  // Check for contiguous sequence: [n-1, n-2, ..., 1, 0]
+  for (size_t i = 0; i < offsets.size(); i++)
+  {
+    BigInt expected = BigInt(offsets.size() - 1 - i);
+    if (offsets[i] != expected)
+      return expr2tc();
+  }
+
+  if (source->type == type)
+  {
+    // Types match exactly - return as-is
+    return source;
+  }
+  else
+  {
+    // Same width, different types - use bitcast for bit reinterpretation
+    expr2tc result = bitcast2tc(type, source);
+    return result;
+  }
 }
 
 expr2tc extract2t::do_simplify() const
 {
   assert(is_bv_type(type));
 
-  if(!is_constant_int2t(from))
+  if (!is_constant_int2t(from))
     return expr2tc();
 
   // If you're hitting this, a non-bitfield related piece of code is now
   // generating extracts, and you have to consider performing extracts on
   // negative numbers.
   assert(is_unsignedbv_type(from->type));
-  const constant_int2t &cint = to_constant_int2t(from);
-  const BigInt &theint = cint.value;
-  assert(theint.is_positive());
+  const BigInt &theint = to_constant_int2t(from).value;
+  assert(!theint.is_negative());
+  if (!theint.is_uint64())
+    return expr2tc();
 
   // Take the value, mask and shift.
   uint64_t theval = theint.to_uint64();
   theval >>= lower;
-  theval &= (2 << upper) - 1;
-  bool isneg = (1 << (upper)) & theval;
+  if (upper + 1 < 64)
+    theval &= ~(~0ULL << (upper + 1));
+  bool isneg = (theval >> upper) & 1;
 
-  if(is_signedbv_type(type) && isneg)
+  if (is_signedbv_type(type) && isneg)
   {
     // Type punning.
     union
@@ -2304,7 +3315,7 @@ expr2tc extract2t::do_simplify() const
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
 {
-  if(!is_number_type(type))
+  if (!is_number_type(type))
     return expr2tc();
 
   if(!is_constant_expr(value))
@@ -2312,14 +3323,14 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
 
   expr2tc simpl_res = expr2tc();
 
-  if(is_fixedbv_type(value))
+  if (is_fixedbv_type(value))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
 
     simpl_res = TFunctor<constant_fixedbv2t>::simplify(value, to_constant);
   }
-  else if(is_floatbv_type(value))
+  else if (is_floatbv_type(value))
   {
     std::function<constant_floatbv2t &(expr2tc &)> to_constant =
       (constant_floatbv2t & (*)(expr2tc &)) to_constant_floatbv2t;
@@ -2419,7 +3430,7 @@ expr2tc signbit2t::do_simplify() const
 
 expr2tc popcount2t::do_simplify() const
 {
-  if(!is_constant_int2t(operand))
+  if (!is_constant_int2t(operand))
     return expr2tc();
 
   std::string bin = integer2string(to_constant_int2t(operand).value, 2);
@@ -2428,7 +3439,7 @@ expr2tc popcount2t::do_simplify() const
 
 expr2tc bswap2t::do_simplify() const
 {
-  if(!is_constant_int2t(value))
+  if (!is_constant_int2t(value))
     return expr2tc();
 
   const std::size_t bits_per_byte = 8;
@@ -2437,12 +3448,12 @@ expr2tc bswap2t::do_simplify() const
 
   std::vector<BigInt> bytes;
   // take apart
-  for(std::size_t bit = 0; bit < width; bit += bits_per_byte)
+  for (std::size_t bit = 0; bit < width; bit += bits_per_byte)
     bytes.push_back((v >> bit) % power(2, bits_per_byte));
 
   // put back together, but backwards
   BigInt new_value = 0;
-  for(std::size_t bit = 0; bit < width; bit += bits_per_byte)
+  for (std::size_t bit = 0; bit < width; bit += bits_per_byte)
   {
     assert(!bytes.empty());
     new_value += bytes.back() << bit;
@@ -2463,7 +3474,7 @@ static expr2tc simplify_floatbv_2ops(
     is_vector_type(type) ? is_floatbv_type(to_vector_type(type).subtype)
                          : is_floatbv_type(type));
 
-  if(!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
+  if (!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
 
   // Try to handle NaN
@@ -2482,7 +3493,7 @@ static expr2tc simplify_floatbv_2ops(
 
   expr2tc simpl_res = expr2tc();
 
-  if(is_vector_type(type))
+  if (is_vector_type(type))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -2525,7 +3536,7 @@ struct IEEE_addtor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Is a vector operation ? Apply the op
-    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
         return ieee_add2tc(t, e1, e2, rm);
@@ -2534,7 +3545,7 @@ struct IEEE_addtor
     }
 
     // Two constants? Simplify to result of the addition
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
@@ -2571,7 +3582,7 @@ struct IEEE_subtor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Is a vector operation ? Apply the op
-    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
         return ieee_sub2tc(t, e1, e2, rm);
@@ -2579,7 +3590,7 @@ struct IEEE_subtor
       return distribute_vector_operation(op, op1, op2);
     }
     // Two constants? Simplify to result of the subtraction
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
@@ -2616,7 +3627,7 @@ struct IEEE_multor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Is a vector operation ? Apply the op
-    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
         return ieee_mul2tc(t, e1, e2, rm);
@@ -2625,7 +3636,7 @@ struct IEEE_multor
     }
 
     // Two constants? Simplify to result of the multiplication
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
@@ -2661,7 +3672,7 @@ struct IEEE_divtor
     const std::function<bool(const expr2tc &)> &is_constant,
     std::function<constant_type &(expr2tc &)> get_value)
   {
-    if(is_constant_vector2t(op1) || is_constant_vector2t(op2))
+    if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
       auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
         return ieee_div2tc(t, e1, e2, rm);
@@ -2669,7 +3680,7 @@ struct IEEE_divtor
       return distribute_vector_operation(op, op1, op2);
     }
     // Two constants? Simplify to result of the division
-    if(is_constant(op1) && is_constant(op2))
+    if (is_constant(op1) && is_constant(op2))
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
@@ -2685,7 +3696,7 @@ struct IEEE_divtor
       return c1;
     }
 
-    if(is_constant(op2))
+    if (is_constant(op2))
     {
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(
@@ -2695,7 +3706,7 @@ struct IEEE_divtor
       get_value(c2).rounding_mode = mode;
 
       // Denominator is one? Exact for all rounding modes.
-      if(get_value(c2) == 1)
+      if (get_value(c2) == 1)
         return op1;
     }
 
@@ -2713,7 +3724,7 @@ expr2tc ieee_fma2t::do_simplify() const
 {
   assert(is_floatbv_type(type));
 
-  if(!is_number_type(type) && !is_pointer_type(type))
+  if (!is_number_type(type) && !is_pointer_type(type))
     return expr2tc();
 
   if(
@@ -2726,7 +3737,7 @@ expr2tc ieee_fma2t::do_simplify() const
   ieee_floatt n3 = to_constant_floatbv2t(value_3).value;
 
   // If x or y are NaN, NaN is returned
-  if(n1.is_NaN() || n2.is_NaN())
+  if (n1.is_NaN() || n2.is_NaN())
   {
     n1.make_NaN();
     return constant_floatbv2tc(n1);
@@ -2738,7 +3749,7 @@ expr2tc ieee_fma2t::do_simplify() const
 
   // If x is zero and y is infinite or if x is infinite and y is zero,
   // and z is a NaN, then NaN is returned and FE_INVALID may be raised
-  if((n1.is_zero() && n2.is_infinity()) || (n2.is_zero() && n1.is_infinity()))
+  if ((n1.is_zero() && n2.is_infinity()) || (n2.is_zero() && n1.is_infinity()))
   {
     n1.make_NaN();
     return constant_floatbv2tc(n1);
@@ -2746,7 +3757,7 @@ expr2tc ieee_fma2t::do_simplify() const
 
   // If z is NaN, and x*y aren't 0*Inf or Inf*0, then NaN is returned
   // (without FE_INVALID)
-  if(n3.is_NaN())
+  if (n3.is_NaN())
   {
     n1.make_NaN();
     return constant_floatbv2tc(n1);
@@ -2755,7 +3766,8 @@ expr2tc ieee_fma2t::do_simplify() const
   // If x*y is an exact infinity and z is an infinity with the opposite sign,
   // NaN is returned and FE_INVALID is raised
   n1 *= n2;
-  if((n1.is_infinity() && n3.is_infinity()) && (n1.get_sign() != n3.get_sign()))
+  if (
+    (n1.is_infinity() && n3.is_infinity()) && (n1.get_sign() != n3.get_sign()))
   {
     n1.make_NaN();
     return constant_floatbv2tc(n1);
@@ -2766,7 +3778,7 @@ expr2tc ieee_fma2t::do_simplify() const
 
 expr2tc ieee_sqrt2t::do_simplify() const
 {
-  if(!is_number_type(type))
+  if (!is_number_type(type))
     return expr2tc();
 
   if(!is_constant_floatbv2t(value))
@@ -2779,7 +3791,7 @@ expr2tc ieee_sqrt2t::do_simplify() const
     return constant_floatbv2tc(n);
   }
 
-  if(n.is_NaN() || n.is_zero() || n.is_infinity())
+  if (n.is_NaN() || n.is_zero() || n.is_infinity())
     return typecast_check_return(type, value);
 
   return expr2tc();
@@ -2800,24 +3812,24 @@ expr2tc byte_extract2t::do_simplify() const
   expr2tc src = try_simplification(source_value);
   expr2tc off = try_simplification(source_offset);
 
-  if(is_array_type(src))
+  if (is_array_type(src))
   {
     const array_type2t &at = to_array_type(src->type);
-    if(is_bv_type(at.subtype) && at.subtype->get_width() == type->get_width())
+    if (is_bv_type(at.subtype) && at.subtype->get_width() == type->get_width())
       return try_simplification(
         bitcast2tc(type, index2tc(at.subtype, src, off)));
   }
 
-  if(is_constant_int2t(off) && type == get_uint8_type())
+  if (is_constant_int2t(off) && type == get_uint8_type())
   {
     const BigInt &off_value = to_constant_int2t(off).value;
-    if(src->type == type && off_value.is_zero())
+    if (src->type == type && off_value.is_zero())
       return src;
 
-    if(off_value.is_uint64() && is_constant_expr(src))
+    if (off_value.is_uint64() && is_constant_expr(src))
     {
       uint64_t off64 = off_value.to_uint64();
-      if(is_constant_int2t(src) && off64 * 8 >= off64)
+      if (is_constant_int2t(src) && off64 * 8 >= off64)
       {
         off64 *= 8;
         const BigInt &src_value = to_constant_int2t(src).value;
@@ -2825,18 +3837,18 @@ expr2tc byte_extract2t::do_simplify() const
         unsigned width = src->type->get_width();
         /* width bits in ss...ss|...|ssssssss|xxxxxxxx|xxxxxxxx|...|xxxxxxxx|
          * at most 64 bits x; s = neg ? 1 : 0; off64 is in bits */
-        if(
+        if (
           (neg ? src_value.is_int64() : src_value.is_uint64()) &&
           off64 + 8 <= width)
         {
           /* We assume two's complement, as does do_bit_munge_operation() */
 
           /* constant repetition of sign bit? */
-          if(big_endian ? off64 + 64 + 8 <= width : off64 >= 64)
+          if (big_endian ? off64 + 64 + 8 <= width : off64 >= 64)
             return constant_int2tc(type, BigInt(neg ? 0xff : 0x00));
           /* now we know that we are extracting part of |xxxxxxxx|...|xxxxxxxx| */
           uint64_t x = neg ? src_value.to_int64() : src_value.to_uint64();
-          if(big_endian)
+          if (big_endian)
           {
             /* off64 + 64 + 8 > width and off64 + 8 <= width
              * i.e. width-off64-8 in [0,64) */
@@ -2849,7 +3861,7 @@ expr2tc byte_extract2t::do_simplify() const
     }
   }
 
-  if(src != source_value || off != source_offset)
+  if (src != source_value || off != source_offset)
     return byte_extract2tc(type, src, off, big_endian);
 
   return {};
@@ -2860,12 +3872,12 @@ expr2tc byte_update2t::do_simplify() const
   expr2tc simplied_source = try_simplification(source_value);
   expr2tc simplied_offset = try_simplification(source_offset);
   expr2tc simplied_value = try_simplification(update_value);
-  if(
+  if (
     !is_constant_int2t(simplied_source) ||
     !is_constant_int2t(simplied_offset) || !is_constant_int2t(simplied_value))
   {
     // Were we able to simplify the sides?
-    if(
+    if (
       (source_value != simplied_source) || (source_offset != simplied_offset) ||
       (update_value != simplied_value))
     {
@@ -2885,13 +3897,14 @@ expr2tc byte_update2t::do_simplify() const
 
   // Overflow? The backend will handle that
   int src_offset = to_constant_int2t(simplied_offset).value.to_int64();
-  if(src_offset * 8 + value.length() > src_value.length() || src_offset * 8 < 0)
+  if (
+    src_offset * 8 + value.length() > src_value.length() || src_offset * 8 < 0)
     return expr2tc();
 
   // Reverse both the source value and the value that will be updated if we are
   // assuming little endian, because in string the pos 0 is the leftmost element
   // while in bvs, pos 0 is the rightmost bit
-  if(!big_endian)
+  if (!big_endian)
   {
     std::reverse(src_value.begin(), src_value.end());
     std::reverse(value.begin(), value.end());
@@ -2900,7 +3913,7 @@ expr2tc byte_update2t::do_simplify() const
   src_value.replace(src_offset * 8, value.length(), value);
 
   // Reverse back
-  if(!big_endian)
+  if (!big_endian)
     std::reverse(src_value.begin(), src_value.end());
 
   return typecast_check_return(

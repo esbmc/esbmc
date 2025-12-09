@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QBasicTimer {
+class QBasicTimer
+{
 public:
-	QBasicTimer();
-	~QBasicTimer();
+  QBasicTimer();
+  ~QBasicTimer();
 };

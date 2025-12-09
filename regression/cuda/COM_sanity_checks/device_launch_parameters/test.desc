@@ -1,0 +1,5 @@
+CORE
+main.cu
+ --timeout 900
+
+^VERIFICATION SUCCESSFUL$

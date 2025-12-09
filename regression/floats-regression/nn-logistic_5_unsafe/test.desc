@@ -1,0 +1,4 @@
+THOROUGH
+logistic_5_unsafe.c-amalgamation.c
+-I .
+^VERIFICATION FAILED$

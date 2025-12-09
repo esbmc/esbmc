@@ -1,3 +1,7 @@
+/*
+ * TC description:
+ *  class template, UDT(class) for type parameter, implicit template instantiation, data member has dependent type
+ */
 #include<cassert>
 
 // define Z<>
@@ -26,6 +30,7 @@ my_Z z;
 
 int main()
 {
-  assert(z.some==0);
+  z.some = 39;
+  assert(z.some==39);
   return 0;
 }

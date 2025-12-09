@@ -24,7 +24,7 @@ public:
   /** Extract an element from the model of an array, at an explicit index.
    *  @param array AST representing the array we are extracting from
    *  @param index The index of the element we wish to expect
-   *  @param subtype The type of the element we are extracting, i.e. array range
+   *  @param subtype The type of the element we are extracting, i.e., array range
    *  @return Expression representation of the element */
   virtual expr2tc
   get_array_elem(smt_astt a, uint64_t idx, const type2tc &subtype) = 0;
@@ -35,7 +35,7 @@ public:
    *  the array for as many elements as necessary; subclassing class should
    *  override if it has a more efficient method.
    *  Nondeterministically sized memory with an initializer is very rare;
-   *  the only real users of this are fixed sized (but large) static arrays
+   *  the only real users of this are fixed-sized (but large) static arrays
    *  that are zero initialized, or some infinite-domain modelling arrays
    *  used in ESBMC.
    *  @param init_val The value to initialize each element with.

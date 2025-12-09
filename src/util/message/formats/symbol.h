@@ -2,7 +2,7 @@
 // WHAT THIS FILE IS ABOUT!!!
 
 #ifndef ESBMC_FORMATS_START_ASSERTION
-#error Do not include this header directly, use <util/message/format.h>
+#  error Do not include this header directly, use <util/message/format.h>
 #endif
 
 // symbol Specialization
@@ -14,17 +14,17 @@ struct fmt::formatter<symbolt>
   constexpr auto parse(format_parse_context &ctx)
   {
     auto it = ctx.begin(), end = ctx.end();
-    if(it != end && *it != '}')
+    if (it != end && *it != '}')
       throw format_error("invalid format");
     return it;
   }
 
   // This will teach fmt how to convert irep_idt into a str.
   template <typename FormatContext>
-  auto format(const symbolt &p, FormatContext &ctx)
+  auto format(const symbolt &p, FormatContext &ctx) const
   {
     std::ostringstream oss;
     p.show(oss);
-    return format_to(ctx.out(), "{}", oss.str());
+    return fmt::format_to(ctx.out(), "{}", oss.str());
   }
 };

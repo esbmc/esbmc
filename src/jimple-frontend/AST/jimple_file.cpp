@@ -28,7 +28,7 @@ std::string jimple_file::to_string() const
       << this->modifiers.to_string();
 
   oss << "\n\n";
-  for(auto &x : body)
+  for (auto &x : body)
   {
     oss << x->to_string();
     oss << "\n\n";
@@ -46,12 +46,12 @@ void jimple_file::from_json(const json &j)
   j.at("object").get_to(t);
   this->mode = from_string(t);
 
-  if(j.contains("implements"))
+  if (j.contains("implements"))
     j.at("implements").get_to(this->implements);
   else
     this->implements = "(No implements)";
 
-  if(j.contains("extends"))
+  if (j.contains("extends"))
     j.at("extends").get_to(this->extends);
   else
     this->implements = "(No extends)";
@@ -59,18 +59,18 @@ void jimple_file::from_json(const json &j)
   modifiers = j.at("modifiers").get<jimple_modifiers>();
 
   auto filebody = j.at("content");
-  for(auto &x : filebody)
+  for (auto &x : filebody)
   {
     // TODO: Here is where to add support for signatures
     auto content_type = x.at("object").get<std::string>();
     std::shared_ptr<jimple_class_member> to_add;
-    if(content_type == "Method")
+    if (content_type == "Method")
     {
       jimple_method m;
       x.get_to(m);
       to_add = std::make_shared<jimple_method>(m);
     }
-    else if(content_type == "Field")
+    else if (content_type == "Field")
     {
       jimple_class_field m;
       x.get_to(m);
@@ -121,7 +121,7 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   name = this->class_name;
 
   // Check if class already exists
-  if(ctx.find_symbol(id) != nullptr)
+  if (ctx.find_symbol(id) != nullptr)
     throw "Duplicated class name";
 
   struct_typet t;
@@ -139,9 +139,9 @@ exprt jimple_file::to_exprt(contextt &ctx) const
 
   // Add class/interface members
   auto total_size = 0;
-  for(auto const &field : body)
+  for (auto const &field : body)
   {
-    if(std::dynamic_pointer_cast<jimple_class_field>(field))
+    if (std::dynamic_pointer_cast<jimple_class_field>(field))
     {
       struct_typet::componentt comp;
       exprt &tmp = comp;
@@ -159,9 +159,9 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   added_symbol->type = t;
 
   // Add the methods and definitions
-  for(auto const &field : body)
+  for (auto const &field : body)
   {
-    if(!std::dynamic_pointer_cast<jimple_class_field>(field))
+    if (!std::dynamic_pointer_cast<jimple_class_field>(field))
     {
       field->to_exprt(ctx, name, name);
     }

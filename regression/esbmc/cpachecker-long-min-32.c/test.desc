@@ -1,0 +1,5 @@
+CORE
+long-min.c
+--32
+^VERIFICATION FAILED$
+x = -2147483648

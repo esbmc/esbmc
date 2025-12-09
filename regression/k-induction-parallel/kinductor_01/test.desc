@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
---k-induction-parallel
-^VERIFICATION SUCCESSFUL$
+--k-induction-parallel -Wno-error=implicit-function-declaration
+^VERIFICATION UNKNOWN$

@@ -215,7 +215,7 @@ public:
    *  Explores a new thread interleaving and returns its trace.
    *  @return A symex_resultt recording the trace that we just generated.
    */
-  std::shared_ptr<goto_symext::symex_resultt> get_next_formula();
+  goto_symext::symex_resultt get_next_formula();
 
   /**
    *  Run threads in --schedule manner.
@@ -223,7 +223,7 @@ public:
    *  trace.
    *  @return Symex result representing all interleavings
    */
-  std::shared_ptr<goto_symext::symex_resultt> generate_schedule_formula();
+  goto_symext::symex_resultt generate_schedule_formula();
 
   /**
    *  Reset ex_state stack to unexplored state.
@@ -318,6 +318,8 @@ public:
   const namespacet &ns;
   /** Options that are enabled */
   optionst &options;
+  /** __ESBMC_main thread has ended */
+  bool main_thread_ended;
 
 protected:
   /** Stack of execution states representing current interleaving.
@@ -355,6 +357,8 @@ protected:
   bool interactive_ileaves;
   /** Are we using the --schedule scheduling method? */
   bool schedule;
+  /** Are we using the --smt-during-symex method? */
+  bool smt_during_symex;
 
   /* Map to store the expression and thread ID,
    * which that expression belongs to. */

@@ -1,56 +1,57 @@
-/*******************************************************************
- Module:
 
- Author: Felipe Rodrigues
+#pragma once
 
- Date: September 2012
+#include <cstddef>
+#include <exception>
 
- \*******************************************************************/
+/* These are not in the 'std' namespace */
 
-#ifndef STL_NEW
-#define STL_NEW
-
-#include "definitions.h"
-#include "exception"
-
-typedef void (*new_handler)();
-
-struct nothrow_t {
-};
-
-extern const nothrow_t nothrow;
-
-namespace std {
-/**
- *source: https://en.cppreference.com/w/cpp/memory/new/bad_alloc
- **/
-struct bad_alloc: public exception {
-public:
-  bad_alloc() throw() {}
-  bad_alloc( const bad_alloc& other ) throw();
-  bad_alloc& operator=( const bad_alloc& other ) throw();
-  virtual const char* what() const throw() {
-		return "std::bad_alloc";
-	}
-};
+/* placement-new */
+void *operator new(size_t count, void *ptr)
+{
+  return ptr;
 }
 
-new_handler set_new_handler(new_handler new_p) throw ();
-void* operator new(size_t size) throw (std::bad_alloc);
-void* operator new(size_t size,
-		const nothrow_t& nothrow_constant) throw ();
-void* operator new(size_t size, void* ptr) throw ();
-void* operator new[](size_t size) throw (std::bad_alloc);
-void* operator new[](size_t size,
-		const nothrow_t& nothrow_constant) throw ();
-void* operator new[](size_t size, void* ptr) throw ();
-void operator delete(void* ptr) throw ();
-void operator delete(void* ptr, const nothrow_t& nothrow_constant) throw ();
-void operator delete(void* ptr, void* voidptr2) throw ();
-void operator delete[](void* ptr) throw ();
-void operator delete[](void* ptr,
-		const nothrow_t& nothrow_constant) throw ();
-void operator delete[](void* ptr, void* voidptr2) throw ();
+/* placement-new */
+void *operator new[](size_t count, void *ptr)
+{
+  return ptr;
+}
 
+namespace std
+{
+class bad_alloc : public exception
+{
+public:
+  virtual const char *what() const throw()
+  {
+    return "std::bad_alloc";
+  }
+};
 
+typedef void (*new_handler)();
+static new_handler current_handler = 0;
+
+// TODO: add handler to new model
+inline new_handler set_new_handler(new_handler handler) /* noexcept */
+{
+  new_handler old = current_handler;
+  current_handler = handler;
+  return old;
+}
+
+#if __cplusplus >= 201703L
+enum class align_val_t : size_t
+{
+  align_1 = 1,
+  align_2 = 2,
+  align_4 = 4,
+  align_8 = 8,
+  align_16 = 16,
+  align_32 = 32,
+  align_64 = 64,
+  align_128 = 128,
+};
 #endif
+
+} // namespace std

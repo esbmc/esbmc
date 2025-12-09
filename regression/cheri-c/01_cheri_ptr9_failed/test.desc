@@ -1,0 +1,4 @@
+CORE
+main.c
+--cheri hybrid
+^VERIFICATION FAILED$

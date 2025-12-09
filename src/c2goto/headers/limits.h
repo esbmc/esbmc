@@ -1,3 +1,10 @@
+
+#ifdef __clang__
+
+#include_next <limits.h>
+
+#else
+
 #ifndef _LIMITS_H___
 #define _LIMITS_H___
 
@@ -34,5 +41,7 @@
 #define LLONG_MIN (-LLONG_MAX - 1LL)
 
 #define ULLONG_MAX (LLONG_MAX * 2ULL + 1ULL)
+
+#endif
 
 #endif

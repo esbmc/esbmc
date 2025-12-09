@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--k-induction --interval-analysis
+^VERIFICATION SUCCESSFUL$

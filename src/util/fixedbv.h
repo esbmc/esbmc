@@ -23,14 +23,15 @@ public:
   }
 
   fixedbv_spect(const fixedbv_typet &type);
-  fixedbv_spect(const fixedbv_type2tc &type);
+  fixedbv_spect(const fixedbv_type2t &type);
 
   inline unsigned get_fraction_bits() const
   {
     return width - integer_bits;
   }
 
-  const fixedbv_type2tc get_type() const;
+  /* that's a fixedbv_type2t */
+  type2tc get_type() const;
 };
 
 class fixedbvt
@@ -99,6 +100,7 @@ public:
   void negate();
 
   fixedbvt &operator/=(const fixedbvt &other);
+  fixedbvt &operator%=(const fixedbvt &other);
   fixedbvt &operator*=(const fixedbvt &other);
   fixedbvt &operator+=(const fixedbvt &other);
   fixedbvt &operator-=(const fixedbvt &other);

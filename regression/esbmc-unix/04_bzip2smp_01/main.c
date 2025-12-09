@@ -19,7 +19,7 @@
 # 71 "bzip2smp.comb.c"
 #include <errno.h>
 # 72 "bzip2smp.comb.c"
-
+#include <assert.h>
 
 
 extern int verbosityLevel;

@@ -30,6 +30,7 @@ exprt gen_or(const exprt &op1, const exprt &op2);
 exprt gen_or(const exprt &op1, const exprt &op2, const exprt &op3);
 exprt gen_implies(const exprt &op1, const exprt &op2);
 exprt gen_address_of(const exprt &op);
+exprt gen_boolean(bool value);
 
 exprt boolean_negate(const exprt &);
 

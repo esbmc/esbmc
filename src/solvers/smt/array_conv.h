@@ -7,14 +7,14 @@
 // implementation, largely derived from the CBMC implementation, with some
 // adjustments. It then, however, became necessary for struct arrays, because
 // while we can work around structs not being available in SMT, we need this
-// kind of array implementation to handle arrays of arbitary types.
+// kind of array implementation to handle arrays of arbitrary types.
 //
 // Even more complexity turns up with the "smt-during-symex" facility, in that
 // one must be able to perform a series of array operations and flush them into
 // the SMT solver in a way that is compatible with pushing/popping of
 // constraints.
 //
-// As a result, this particular class is due some serious maintenence.
+// As a result, this particular class is due for some serious maintenance.
 
 #include <set>
 #include <solvers/smt/smt_conv.h>
@@ -22,12 +22,12 @@
 
 static inline bool is_unbounded_array(const smt_sort *s)
 {
-  if(s->id != SMT_SORT_ARRAY)
+  if (s->id != SMT_SORT_ARRAY)
     return false;
 
-  // This is either really large, or unbounded thus leading to a
+  // This is either really large, or unbounded, thus leading to a
   // config.ansi_c.int_width sized domain. Either way, not a normal one.
-  if(s->get_domain_width() > 10)
+  if (s->get_domain_width() > 10)
     return true;
 
   return false;
@@ -73,8 +73,8 @@ public:
 
   void dump() const override
   {
-    log_debug("name: {}", symname);
-    for(auto const &e : array_fields)
+    log_status("name: {}", symname);
+    for (auto const &e : array_fields)
       e->dump();
   }
 
@@ -88,7 +88,7 @@ public:
 };
 
 #ifdef NDEBUG
-#define array_downcast(x) static_cast<const array_ast *>(x)
+#  define array_downcast(x) static_cast<const array_ast *>(x)
 #else
 static inline const array_ast *array_downcast(const smt_ast *x)
 {
@@ -253,7 +253,7 @@ public:
   // Members
 
   // Array tracking: each new root array (from fresh_array) gets its own
-  // ID number which is stored. Then, whenever any operation occurs on it,
+  // ID number, which is stored. Then, whenever any operation occurs on it,
   // we add the index to the set contained in the following object. This
   // obtains all the tracking data required for CBMC-like array
   // bitblasting.
@@ -279,7 +279,7 @@ public:
   // Self explanatory. Contains bitwidth of subtypes
   std::vector<smt_sortt> array_subtypes;
 
-  // Array /value/ tracking. For each array (outer vector) we have an inner
+  // Array /value/ tracking. For each array (outer vector), we have an inner
   // vector, each element of which corresponds to each 'with' operation
   // on an array. Within that is a list of indexes and free value'd
   // elements: whenever we select an element from an array, we return a
@@ -335,7 +335,7 @@ public:
 
   // Update records: For each array, for each 'with' operation, we record
   // the index used and the AST representation of the value assigned. We
-  // also store the ID number of the source array, because due to phi's
+  // also store the ID number of the source array, because due to phi's,
   // we may branch arrays before joining.
   // We also record ite's here, because they're effectively an array update.
   // The is_ite boolean indicates whether the following union is a with or

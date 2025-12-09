@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^TypeError: returns\_y\(\) missing 1 required positional argument: \'x\'$

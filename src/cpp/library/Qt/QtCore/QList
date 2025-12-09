@@ -6,15 +6,21 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-#include"../../cstddef"
+#include "../../cstddef"
 
-template<class T> class QList
+template <class T>
+class QList
 {
 public:
-	QList (){}
-	~QList (){}
-	void push_back( char* value ){
-		__ESBMC_assert(value != NULL, "Invalid string");
-	}
-	int indexOf ( const T & value, int from = 0 ) const;
+  QList()
+  {
+  }
+  ~QList()
+  {
+  }
+  void push_back(char *value)
+  {
+    __ESBMC_assert(value != NULL, "Invalid string");
+  }
+  int indexOf(const T &value, int from = 0) const;
 };

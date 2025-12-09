@@ -1,0 +1,5 @@
+CORE
+main.c
+--unknown-method-args-check
+
+^VERIFICATION FAILED$

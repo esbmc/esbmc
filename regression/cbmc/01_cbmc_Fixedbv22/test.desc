@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---fixedbv --no-slice --z3 --ir --no-simplify
+--fixedbv --no-slice --z3 --ir --no-simplify -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

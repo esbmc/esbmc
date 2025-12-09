@@ -2,8 +2,10 @@
 # This is required by MSVC
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-	message(AUTHOR_WARNING "GCC-9 throws a Segmentation fault. We should report this or try newer versions")
-	return()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.0.0")
+		message(AUTHOR_WARNING "GCC-9 throws a Segmentation fault. Skipping precompiled headers.")
+		return()
+	endif()
 endif()
 
 if(${CMAKE_VERSION} VERSION_LESS "3.16.0")

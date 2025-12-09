@@ -101,14 +101,18 @@ public:
 
   smt_astt overflow_arith(const expr2tc &expr) override;
 
-  void dump_smt() override;
+  std::string dump_smt() override;
   void print_model() override;
+
+  smt_astt mk_quantifier(
+    bool is_forall,
+    std::vector<smt_astt> lhs,
+    smt_astt rhs) override;
 
   // Members
   Btor *btor;
 
-  typedef std::unordered_map<std::string, smt_astt> symtable_type;
-  symtable_type symtable;
+  symtabt symtable;
 };
 
 #endif /* _ESBMC_SOLVERS_BOOLECTOR_BOOLECTOR_CONV_H_ */

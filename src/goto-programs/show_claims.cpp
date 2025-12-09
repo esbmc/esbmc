@@ -11,9 +11,9 @@ void show_claims(
   const goto_programt &goto_program,
   unsigned &count)
 {
-  for(const auto &instruction : goto_program.instructions)
+  for (const auto &instruction : goto_program.instructions)
   {
-    if(instruction.is_assert())
+    if (instruction.is_assert())
     {
       count++;
 
@@ -40,6 +40,6 @@ void show_claims(const namespacet &ns, const goto_functionst &goto_functions)
 {
   unsigned count = 0;
 
-  for(const auto &it : goto_functions.function_map)
+  for (const auto &it : goto_functions.function_map)
     show_claims(ns, it.first, it.second.body, count);
 }

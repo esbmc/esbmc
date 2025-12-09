@@ -19,7 +19,7 @@ public:
     goto_functiont &_goto_function)
     : goto_loopst(_function_name, _goto_functions, _goto_function)
   {
-    if(function_loops.size())
+    if (function_loops.size())
       goto_k_induction();
   }
 

@@ -143,7 +143,7 @@ public:
   /** Reset record of what context switches were taken from this ex_state */
   void resetDFS_traversed()
   {
-    for(unsigned int i = 0; i < threads_state.size(); i++)
+    for (unsigned int i = 0; i < threads_state.size(); i++)
       DFS_traversed.at(i) = false;
   }
 
@@ -156,7 +156,7 @@ public:
   /** Set internal thread startup data */
   void set_thread_start_data(unsigned int tid, const expr2tc &argdata)
   {
-    if(tid >= thread_start_data.size())
+    if (tid >= thread_start_data.size())
     {
       log_error("Setting thread data for nonexistant thread {}", tid);
       abort();
@@ -168,7 +168,7 @@ public:
   /** Fetch internal thread startup data */
   const expr2tc &get_thread_start_data(unsigned int tid) const
   {
-    if(tid >= thread_start_data.size())
+    if (tid >= thread_start_data.size())
     {
       log_error("Setting thread data for nonexistant thread {}", tid);
       abort();
@@ -398,10 +398,10 @@ public:
    *  accessed by the last transition of thread j and the last transition of
    *  thread l.
    *  @param j Most recently executed thread id
-   *  @param l Other thread id to check dependancy with
-   *  @return True if scheduling dependancy exists between threads j and l
+   *  @param l Other thread id to check dependency with
+   *  @return True if scheduling dependency exists between threads j and l
    */
-  bool check_mpor_dependancy(unsigned int j, unsigned int l) const;
+  bool check_mpor_dependency(unsigned int j, unsigned int l) const;
 
   /**
    *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
@@ -413,6 +413,14 @@ public:
    *  and is read-only. */
   bool is_transition_blocked_by_mpor() const
   {
+    /** Tong: according to Mpor rules, it schedule the transitions in increasing order of thread ids,
+     *  and for two independent transitions t1, t2 and tid(t1) < tid (t2), we only allow t2 schedule before t1 when:
+     *  there is a dependency chain ftom t2 to t1, or there exists a transition t3, where tid(t3) < tid(t1), and t2 <x t3 <x t1 along computation x,
+     *  and there is a dependency chain from t2 to t3.
+     *  Based on these, we do not rule out the main thread because there is no tid(t) < 0 and thread 0 should always be scheduled.
+     */
+    if (active_thread == 0)
+      return false;
     return mpor_says_no;
   }
 
@@ -482,6 +490,11 @@ public:
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
 
+  /** Analyze the shared varables in a function call, this is because an argumemt
+   *  may be renamed to constant bool in symex_function_call_code(), while we need
+   *  to get the information for context switch.*/
+  void analyze_args(const expr2tc &expr) override;
+
 public:
   /** Pointer to reachability_treet that owns this ex_state */
   reachability_treet *owning_rt;
@@ -549,7 +562,7 @@ public:
   bool mon_thread_warning;
   /** Minimum number of threads to exist to consider a context switch.
    *  In certain special cases, such as LTL checking, various pieces of
-   *  code and information are bunged into seperate threads which aren't
+   *  code and information are bunged into separate threads which aren't
    *  necessarily scheduled. In these cases we don't want to consider
    *  cswitches, because even though they're not taken, they'll heavily
    *  inflate memory size.
@@ -569,8 +582,8 @@ protected:
    *  data that could have storage in C. */
   std::vector<std::set<expr2tc>> thread_last_writes;
   /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
-   *  to dependancy_chain[i][j] here. */
-  std::vector<std::vector<int>> dependancy_chain;
+   *  to dependency_chain[i][j] here. */
+  std::vector<std::vector<int>> dependency_chain;
   /** MPOR scheduling outcome. If we've just taken a transition that MPOR
    *  rejects, this becomes true. For various reasons, we can't tell whether or
    *  not MPOR rejects a transition in advance. */

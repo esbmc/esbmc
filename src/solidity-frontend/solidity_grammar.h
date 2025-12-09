@@ -12,8 +12,14 @@ namespace SolidityGrammar
 // rule contract-body-element
 enum ContractBodyElementT
 {
-  StateVarDecl = 0, // rule state-variable-declaration
-  FunctionDef,      // rule function-definition
+  VarDecl = 0, // rule variable-declaration
+  FunctionDef, // rule function-definition
+  StructDef,   // rule struct-definition
+  EnumDef,     // rule enum-definition
+  ErrorDef,    // rule error-definition
+  EventDef,    // rule event-definition
+  UsingForDef, // rule using-for-directive
+  ModifierDef, // rule modifier-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -40,8 +46,42 @@ enum TypeNameT
   // dynamic array type
   DynArrayTypeName,
 
+  // Multi-Dimensional Arrays
+  NestedArrayTypeName,
+
+  // Address type
+  AddressTypeName,
+  AddressPayableTypeName,
+
   // contract type
   ContractTypeName,
+
+  // typecast
+  TypeConversionName,
+
+  // the type() keyword
+  TypeProperty,
+
+  // enum
+  EnumTypeName,
+
+  // struct
+  StructTypeName,
+
+  // tuple
+  TupleTypeName,
+
+  // mapping
+  MappingTypeName,
+
+  // built-in member
+  BuiltinTypeName,
+
+  // error
+  ErrorTypeName,
+
+  // user-defined
+  UserDefinedTypeName,
 
   TypeNameTError
 };
@@ -86,6 +126,7 @@ enum ElementaryTypeNameT
   UINT256,
 
   INT_LITERAL,
+  RA_LITERAL,
   // rule signed-integer-type
   INT8,
   INT16,
@@ -123,12 +164,49 @@ enum ElementaryTypeNameT
   // rule bool
   BOOL,
 
-  // TODO: rule address
-  // TODO: rule address payable
+  // rule address
+  ADDRESS,
+  ADDRESS_PAYABLE,
+
   // rule string
   STRING,
   STRING_LITERAL,
-  // TODO: rule bytes
+
+  // rule bytes
+  BYTES,
+  BYTES1,
+  BYTES2,
+  BYTES3,
+  BYTES4,
+  BYTES5,
+  BYTES6,
+  BYTES7,
+  BYTES8,
+  BYTES9,
+  BYTES10,
+  BYTES11,
+  BYTES12,
+  BYTES13,
+  BYTES14,
+  BYTES15,
+  BYTES16,
+  BYTES17,
+  BYTES18,
+  BYTES19,
+  BYTES20,
+  BYTES21,
+  BYTES22,
+  BYTES23,
+  BYTES24,
+  BYTES25,
+  BYTES26,
+  BYTES27,
+  BYTES28,
+  BYTES29,
+  BYTES30,
+  BYTES31,
+  BYTES32,
+
   // TODO: rule signed-integer-type
   // TODO: rule e
   // TODO: fixed-bytes
@@ -142,12 +220,14 @@ unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 
 unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 unsigned int int_type_name_to_size(ElementaryTypeNameT);
+unsigned int bytesn_type_name_to_size(ElementaryTypeNameT);
 
 // rule parameter-list
 enum ParameterListT
 {
   EMPTY = 0, // In Solidity, "void" means an empty parameter list
-  NONEMPTY,
+  ONE_PARAM,
+  MORE_THAN_ONE_PARAM,
   ParameterListTError
 };
 ParameterListT get_parameter_list_t(const nlohmann::json &type_name);
@@ -157,7 +237,10 @@ const char *parameter_list_to_str(ParameterListT type);
 enum BlockT
 {
   Statement = 0,
-  UncheckedBlock,
+  BlockForStatement,
+  BlockIfStatement,
+  BlockWhileStatement,
+  BlockExpressionStatement,
   BlockTError
 };
 BlockT get_block_t(const nlohmann::json &block);
@@ -173,7 +256,13 @@ enum StatementT
   ForStatement,          // rule for-statement
   IfStatement,           // rule if-statement
   WhileStatement,
-  StatementTError
+  StatementTError,
+  ContinueStatement,    // rule continue
+  BreakStatement,       // rule break
+  RevertStatement,      // rule revert
+  EmitStatement,        // rule emit
+  PlaceholderStatement, //rule placeholder
+  TryStatement          // rule try
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);
@@ -182,6 +271,7 @@ const char *statement_to_str(StatementT type);
 //  - Skipped since it just contains 1 type: "expression + ;"
 
 // rule expression
+// these are used to identify the type of the expression
 enum ExpressionT
 {
   // BinaryOperator
@@ -219,6 +309,7 @@ enum ExpressionT
   BO_AndAssign, // &=
   BO_XorAssign, // ^=
   BO_OrAssign,  // |=
+  BO_Pow,       // **
 
   // UnaryOperator
   UnaryOperatorClass,
@@ -230,7 +321,7 @@ enum ExpressionT
   UO_Not,     // ~
   UO_LNot,    // !
 
-  //TenaryOperator
+  //ternaryOperator
   ConditionalOperatorClass, // ?...:...
 
   // rule identifier
@@ -238,12 +329,34 @@ enum ExpressionT
 
   // rule literal
   Literal,
+  LiteralWithRational,
+
+  // unit literal
+  LiteralWithWei,
+  LiteralWithGwei,
+  LiteralWithSzabo,
+  LiteralWithFinney,
+  LiteralWithEther,
+
+  LiteralWithSeconds,
+  LiteralWithMinutes,
+  LiteralWithHours,
+  LiteralWithDays,
+  LiteralWithWeeks,
+  LiteralWithYears,
+  LiteralWithUnknownUnit,
 
   // rule Tuple
   Tuple,
 
+  // rule Mapping
+  Mapping,
+
   // FunctionCall
   CallExprClass,
+
+  // FunctionCallOptions
+  CallOptionsExprClass,
 
   // auxiliary type for implicit casting in Solidity, e.g. function return value
   // Solidity does NOT provide such information.
@@ -254,15 +367,47 @@ enum ExpressionT
   // Solidity does NOT provide such rule
   IndexAccess,
 
-  // Create a temporary object by keywords 'ew'
+  // Create a temporary object by keywords 'new'
   // equivalent to clang::Stmt::CXXTemporaryObjectExprClass
   // i.e. Base x = new Base(args);
   NewExpression,
 
+  // Create a temporary object by keywords 'new' with options
+  // i.e. Base x = new Base{value: args}();
+  NewCallExpression,
+
   // Call member functions
   // equivalent toclang::Stmt::CXXMemberCallExprClass
   // i.e. x.caller();
-  MemberCallClass,
+  ContractMemberCall,
+
+  // Members of Address Types
+  // see https://docs.soliditylang.org/en/v0.8.23/units-and-global-variables.html#members-of-address-types
+  AddressMemberCall,
+
+  // library function call
+  LibraryMemberCall,
+
+  // Type Converion
+  TypeConversionExpression,
+
+  // Type Property
+  TypePropertyExpression,
+
+  // Struct Member Access
+  StructMemberCall,
+
+  // Enum Member Access
+  EnumMemberCall,
+
+  // Built-in Member Access
+  BuiltinMemberCall,
+
+  // Contract Type Member Access
+  TypeMemberCall,
+
+  // Null Expression
+  NullExpr,
 
   ExpressionTError
 };
@@ -271,16 +416,8 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr);
 ExpressionT
 get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre = true);
 const char *expression_to_str(ExpressionT type);
-
-// rule variable-declaration-statement
-enum VarDeclStmtT
-{
-  VariableDecl,      // rule variable-declaration
-  VariableDeclTuple, // rule variable-declaration-tuple
-  VarDeclStmtTError
-};
-VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt);
-const char *var_decl_statement_to_str(VarDeclStmtT type);
+bool is_address_member_call(const nlohmann::json &expr);
+bool is_sol_library_function(const int ref_id);
 
 // auxiliary type to convert function call
 // No corresponding Solidity rules

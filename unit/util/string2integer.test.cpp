@@ -28,7 +28,7 @@ TEST_CASE(
   REQUIRE(string2integer("c0fefe") == 0);
 }
 
-/* TODO: Is this the behaviour for string2integer?
+/* TODO: Is this the behavior for string2integer?
 TEST_CASE(
   "optionally converting string out of range to integer should return 0",
   "[core][util][string2int]")

@@ -6,11 +6,14 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-class QApplication{
+class QApplication
+{
 public:
-	QApplication( int & argc, char ** argv ){
-		__ESBMC_assert(argc > 0, "invalid parameter");
-	}
-	int exec(){}
+  QApplication(int &argc, char **argv)
+  {
+    __ESBMC_assert(argc > 0, "invalid parameter");
+  }
+  int exec()
+  {
+  }
 };
-

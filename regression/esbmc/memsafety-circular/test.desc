@@ -1,0 +1,4 @@
+CORE
+memsafety-circular.c
+--force-malloc-success --memory-leak-check --no-reachable-memory-leak -Wno-error=implicit-function-declaration
+^VERIFICATION SUCCESSFUL$

@@ -2,8 +2,7 @@
 #include <pthread.h>
 #include <stddef.h>
 
-void *malloc(size_t size);
-void free(void *ptr);
+#define CLEANUP_STACK_CHUNK_SIZE 1024
 
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
@@ -26,7 +25,8 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_cond_lock_field(a) ((a).__lock)
 #define __ESBMC_cond_futex_field(a) ((a).__futex)
 #define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
-#define __ESBMC_rwlock_field(a) ((a).__lock)
+#define __ESBMC_rwlock_readers(a) ((a)->__readers)
+#define __ESBMC_rwlock_writer(a) ((a)->__writer)
 
 /* Global tracking data. Should all initialize to 0 / false */
 __attribute__((annotate("__ESBMC_inf_size")))
@@ -45,88 +45,105 @@ void(
   __attribute__((annotate("__ESBMC_inf_size"))) *
   __ESBMC_thread_key_destructors[1])(void *);
 
-/* TODO: these should be 'static', right? */
-pthread_key_t __ESBMC_next_thread_key = 0;
+static pthread_key_t __ESBMC_next_thread_key = 0;
 
-unsigned int __ESBMC_num_total_threads = 0;
-unsigned int __ESBMC_num_threads_running = 0;
-unsigned int __ESBMC_blocked_threads_count = 0;
+unsigned short int __ESBMC_num_total_threads = 0;
+unsigned short int __ESBMC_num_threads_running = 0;
+unsigned short int __ESBMC_blocked_threads_count = 0;
 
 pthread_t __ESBMC_get_thread_id(void);
 
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
 
-/************************** Linked List Implementation **************************/
+static _Bool pthread_cleanup_enabled = 0;
+
+typedef struct
+{
+  void *arg;
+  void *function;
+} cleanup_entry_t;
+
+cleanup_entry_t __esbmc_cleanup_stack[1]
+  __attribute__((annotate("__ESBMC_inf_size")));
+size_t __esbmc_cleanup_level[1] __attribute__((annotate("__ESBMC_inf_size")));
+
+size_t __esbmc_get_cleanup_level(void)
+{
+  pthread_t tid = __ESBMC_get_thread_id();
+  return __esbmc_cleanup_level[tid];
+}
+
+void __esbmc_set_cleanup_level(int level)
+{
+  pthread_t tid = __ESBMC_get_thread_id();
+  __esbmc_cleanup_level[tid] = level;
+}
+
+/************************** Infinite Array Implementation **************************/
+
+/* These internal functions insert_key_value(), search_key() and delete_key()
+ * need to be called in an atomic context. */
 
 typedef struct thread_key
 {
   pthread_t thread;
   pthread_key_t key;
   const void *value;
-  struct thread_key *next;
 } __ESBMC_thread_key;
 
-static __ESBMC_thread_key *head = NULL;
+__attribute__((annotate(
+  "__ESBMC_inf_size"))) static __ESBMC_thread_key __ESBMC_pthread_thread_key[1];
 
-int insert_key_value(pthread_key_t key, const void *value)
+static int insert_key_value(pthread_key_t key, const void *value)
 {
-  __ESBMC_thread_key *l =
-    (__ESBMC_thread_key *)malloc(sizeof(__ESBMC_thread_key));
-  if(l == NULL)
-    return -1;
-  l->thread = __ESBMC_get_thread_id();
-  l->key = key;
-  l->value = value;
-  l->next = (head == NULL) ? NULL : head;
-  head = l;
+__ESBMC_HIDE:;
+  pthread_t thread = __ESBMC_get_thread_id();
+  __ESBMC_pthread_thread_key[thread].thread = thread;
+  __ESBMC_pthread_thread_key[thread].key = key;
+  __ESBMC_pthread_thread_key[thread].value = value;
   return 0;
 }
 
-__ESBMC_thread_key *search_key(pthread_key_t key)
+static __ESBMC_thread_key *search_key(pthread_key_t key)
 {
 __ESBMC_HIDE:;
-  __ESBMC_atomic_begin();
-  __ESBMC_thread_key *l = head;
-  while(l != NULL && l->thread != __ESBMC_get_thread_id())
-    l = l->next;
-  return ((l == NULL) ? 0 : l);
-  __ESBMC_atomic_end();
-}
-
-int delete_key(__ESBMC_thread_key *l)
-{
-__ESBMC_HIDE:;
-  __ESBMC_atomic_begin();
-  __ESBMC_thread_key *tmp;
-  if(head == NULL)
-    return -1;
-  tmp = head;
-  if(head != l)
+  pthread_t thread = __ESBMC_get_thread_id();
+  if (
+    __ESBMC_pthread_thread_key[thread].thread == thread &&
+    __ESBMC_pthread_thread_key[thread].key == key)
   {
-    while(tmp->next != NULL && tmp->next != l)
-      tmp = tmp->next;
-    tmp->next = l->next;
+    return &__ESBMC_pthread_thread_key[thread];
   }
-  else if(l->next != NULL)
-    head = l->next;
-  free(l);
-  return 0;
-  __ESBMC_atomic_end();
+  return NULL;
+}
+
+static int delete_key(__ESBMC_thread_key *l)
+{
+__ESBMC_HIDE:;
+  pthread_t thread = __ESBMC_get_thread_id();
+  if (&__ESBMC_pthread_thread_key[thread] == l)
+  {
+    __ESBMC_pthread_thread_key[thread].thread = 0; // Mark as empty
+    return 0;
+  }
+  return -1;
 }
 
 /************************** Thread creation and exit **************************/
 
-void pthread_start_main_hook(void)
+void __ESBMC_pthread_start_main_hook(void)
 {
+__ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_num_total_threads++;
   __ESBMC_num_threads_running++;
   __ESBMC_atomic_end();
 }
 
-void pthread_end_main_hook(void)
+void __ESBMC_pthread_end_main_hook(void)
 {
+__ESBMC_HIDE:;
   // We want to be able to access this internal accounting data atomically,
   // but that'll never be permitted by POR, which will see the access and try
   // to generate context switches as a result. So, end the main thread in an
@@ -146,12 +163,12 @@ __ESBMC_HIDE:;
   // The order of destructor calls is unspecified if more than one destructor
   // exists for a thread when it exits.
   // source: https://linux.die.net/man/3/pthread_key_create
-  for(unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
+  for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
     __ESBMC_thread_key *l = search_key(i);
-    if(__ESBMC_thread_key_destructors[i] && l->value)
+    if (__ESBMC_thread_key_destructors[i] && l->value)
     {
-      __ESBMC_thread_key_destructors[i](&l->value);
+      __ESBMC_thread_key_destructors[i]((void *)l->value);
       delete_key(l);
     }
   }
@@ -169,8 +186,8 @@ __ESBMC_HIDE:;
 
   __ESBMC_atomic_begin();
   threadid = __ESBMC_get_thread_id();
-  __ESBMC_pthread_end_values[(int)threadid] = exit_val;
-  __ESBMC_pthread_thread_ended[(int)threadid] = 1;
+  __ESBMC_pthread_end_values[threadid] = exit_val;
+  __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -179,6 +196,9 @@ __ESBMC_HIDE:;
   pthread_exec_key_destructors();
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end(); // Never reached; doesn't matter.
+
+  // Ensure that we cut all subsequent execution paths.
+  __ESBMC_assume(0);
   return;
 }
 
@@ -208,25 +228,39 @@ __ESBMC_HIDE:;
   return 0; // We never fail
 }
 
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void pthread_exit(void *retval)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+
+  // Run key destructors first
   pthread_exec_key_destructors();
+
+  // Run cleanup handlers
+  while (pthread_cleanup_enabled && __esbmc_get_cleanup_level() > 0)
+    pthread_cleanup_pop(1); // 1 means execute the handler
+
   pthread_t threadid = __ESBMC_get_thread_id();
-  __ESBMC_pthread_end_values[(int)threadid] = retval;
-  __ESBMC_pthread_thread_ended[(int)threadid] = 1;
+  __ESBMC_pthread_end_values[threadid] = retval;
+  __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
-  __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
+
+  // Ensure that there is no subsequent execution path
+  __ESBMC_assume(0);
 }
+#pragma clang diagnostic pop
 
 pthread_t pthread_self(void)
 {
+__ESBMC_HIDE:;
   return __ESBMC_get_thread_id();
 }
 
@@ -239,7 +273,7 @@ __ESBMC_HIDE:;
   // waiting for its completion. That fact can be used for deadlock detection
   // elsewhere.
   _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
-  if(!ended)
+  if (!ended)
   {
     __ESBMC_blocked_threads_count++;
     // If there are now no more threads unblocked, croak.
@@ -249,7 +283,7 @@ __ESBMC_HIDE:;
   }
 
   // Fetch exit code
-  if(retval != NULL)
+  if (retval != NULL)
     *retval = __ESBMC_pthread_end_values[(int)thread];
 
   // In all circumstances, allow a switch away from this thread to permit
@@ -274,7 +308,7 @@ __ESBMC_HIDE:;
   __ESBMC_assume(ended);
 
   // Fetch exit code
-  if(retval != NULL)
+  if (retval != NULL)
     *retval = __ESBMC_pthread_end_values[(int)thread];
 
   __ESBMC_atomic_end();
@@ -299,10 +333,11 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_initializer(pthread_mutex_t *mutex)
 {
+__ESBMC_HIDE:;
   // check whether this mutex has been initialized via
   // PTHREAD_MUTEX_INITIALIZER
   __ESBMC_atomic_begin();
-  if(__ESBMC_mutex_lock_field(*mutex) == 0)
+  if (__ESBMC_mutex_lock_field(*mutex) == 0)
     pthread_mutex_init(mutex, NULL);
   __ESBMC_atomic_end();
   return 0;
@@ -333,7 +368,9 @@ __ESBMC_HIDE:;
 int pthread_mutex_unlock_noassert(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -359,7 +396,7 @@ __ESBMC_HIDE:;
 
   unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
 
-  if(unlocked)
+  if (unlocked)
   {
     __ESBMC_mutex_lock_field(*mutex) = 1;
   }
@@ -399,7 +436,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
   int res = EBUSY;
-  if(__ESBMC_mutex_lock_field(*mutex) != 0)
+  if (__ESBMC_mutex_lock_field(*mutex) != 0)
     goto PTHREAD_MUTEX_TRYLOCK_END;
 
   pthread_mutex_lock(mutex);
@@ -453,17 +490,37 @@ int pthread_rwlock_init(
   const pthread_rwlockattr_t *attr)
 {
 __ESBMC_HIDE:;
-  __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_atomic_begin();
+  __ESBMC_rwlock_readers(lock) = 0;
+  __ESBMC_rwlock_writer(lock) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *lock)
 {
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_assume(!__ESBMC_rwlock_writer(lock));
+  __ESBMC_rwlock_readers(lock)++;
+  __ESBMC_atomic_end();
   return 0;
 }
 
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 {
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  if (__ESBMC_rwlock_writer(lock) != 0)
+  {
+    __ESBMC_atomic_end();
+    return EBUSY;
+  }
+  else
+    __ESBMC_rwlock_readers(lock)++;
+  __ESBMC_atomic_end();
+
   return 0;
 }
 
@@ -471,23 +528,25 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-
-  int res = 1;
-  if(__ESBMC_rwlock_field(*lock))
-    goto PTHREAD_RWLOCK_TRYWRLOCK_END;
-
-  __ESBMC_rwlock_field(*lock) = 1;
-  res = 0;
-
-PTHREAD_RWLOCK_TRYWRLOCK_END:
+  if (__ESBMC_rwlock_writer(lock) != 0 || __ESBMC_rwlock_readers(lock) != 0)
+  {
+    __ESBMC_atomic_end();
+    return EBUSY;
+  }
+  __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
-  return res;
+  return 0;
 }
 
 int pthread_rwlock_unlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
-  __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_atomic_begin();
+  if (__ESBMC_rwlock_writer(lock))
+    __ESBMC_rwlock_writer(lock) = 0;
+  else if (__ESBMC_rwlock_readers(lock) > 0)
+    __ESBMC_rwlock_readers(lock)--;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -495,10 +554,11 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_assume(!__ESBMC_rwlock_field(*lock));
-  __ESBMC_rwlock_field(*lock) = 1;
+  __ESBMC_assume(
+    !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)));
+  __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
-  return 0; // we never fail
+  return 0;
 }
 
 /************************ condvar mainpulation routines ***********************/
@@ -530,14 +590,18 @@ __ESBMC_HIDE:;
 int pthread_cond_destroy(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
 extern int pthread_cond_signal(pthread_cond_t *__cond)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
@@ -547,7 +611,7 @@ do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  if(assrt)
+  if (assrt)
     __ESBMC_assert(
       __ESBMC_mutex_lock_field(*mutex),
       "caller must hold pthread mutex lock in pthread_cond_wait");
@@ -561,7 +625,7 @@ __ESBMC_HIDE:;
   // this helps detect.
   __ESBMC_blocked_threads_count++;
   // No more threads to run -> croak.
-  if(assrt)
+  if (assrt)
     __ESBMC_assert(
       __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
       "Deadlocked state in pthread_mutex_lock");
@@ -642,9 +706,9 @@ __ESBMC_HIDE:;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
   // check whether we have failed to insert the key into our list.
-  if(result < 0)
+  if (result < 0)
   {
-    if(nondet_bool())
+    if (nondet_bool())
     {
       // Insufficient memory exists to create the key.
       result = ENOMEM;
@@ -673,7 +737,7 @@ __ESBMC_HIDE:;
   // If no thread-specific data value is associated with key,
   // then the value NULL shall be returned.
   void *result = NULL;
-  if(key <= __ESBMC_next_thread_key)
+  if (key <= __ESBMC_next_thread_key)
   {
     // Return the thread-specific data value associated
     // with the given key.
@@ -695,13 +759,13 @@ __ESBMC_HIDE:;
   int result;
   __ESBMC_atomic_begin();
   result = insert_key_value(key, value);
-  if(result < 0)
+  if (result < 0)
   {
     // Insufficient memory exists to associate
     // the value with the key.
     result = ENOMEM;
   }
-  else if(value == NULL)
+  else if (value == NULL)
   {
     // The key value is invalid.
     result = EINVAL;
@@ -739,15 +803,97 @@ __ESBMC_HIDE:;
   int result = 0;
   // This assert also checks whether this thread is not a joinable thread.
   __ESBMC_assert(
-    !__ESBMC_pthread_thread_detach[(int)threadid],
+    !__ESBMC_pthread_thread_detach[threadid],
     "Attempting to detach an already detached thread results in unspecified "
     "behavior");
-  if(
-    __ESBMC_pthread_thread_ended[(int)threadid] ||
-    (int)threadid > __ESBMC_num_total_threads)
+  if (
+    __ESBMC_pthread_thread_ended[threadid] ||
+    threadid > __ESBMC_num_total_threads)
     result = ESRCH; // No thread with the ID thread could be found.
   else
-    __ESBMC_pthread_thread_detach[(int)threadid] = 1;
+    __ESBMC_pthread_thread_detach[threadid] = 1;
   __ESBMC_atomic_end();
   return result; // no error occurred
+}
+
+/**
+ * Push a cleanup handler onto the current thread's cleanup stack.
+ *
+ * This function registers a cleanup handler function along with its argument
+ * to be called later if pthread_cleanup_pop is invoked with execute != 0.
+ *
+ * The cleanup handlers are stored in a large symbolic array divided into
+ * chunks of size CLEANUP_STACK_CHUNK_SIZE per thread to avoid overlap between threads.
+ * 
+ * @param function Pointer to the cleanup function to be called.
+ * @param arg      Argument to pass to the cleanup function.
+ */
+void pthread_cleanup_push(void (*function)(void *), void *arg)
+{
+  // Enable calling pthread_cleanup_pop from pthread_exit
+  pthread_cleanup_enabled = 1;
+
+  // Get the current thread ID
+  pthread_t tid = __ESBMC_get_thread_id();
+
+  // Get the current cleanup stack level for this thread
+  size_t cleanup_level = __esbmc_get_cleanup_level();
+
+  // Calculate the index for the cleanup entry in the symbolic infinite array.
+  // Each thread gets a separate chunk of CLEANUP_STACK_CHUNK_SIZE slots to avoid interference.
+  // Within the chunk, cleanup_level indexes the next free slot.
+  size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
+
+  // Store the cleanup function pointer and its argument at the calculated index
+  __esbmc_cleanup_stack[index].function = (void *)function;
+  __esbmc_cleanup_stack[index].arg = arg;
+
+  // Increase the cleanup stack level for the thread
+  __esbmc_set_cleanup_level(cleanup_level + 1);
+}
+
+/**
+ * Pop a cleanup handler from the current thread's cleanup stack and optionally execute it.
+ *
+ * This function removes the most recently pushed cleanup handler.
+ * If execute is non-zero, it calls the cleanup function with the stored argument.
+ *
+ * @param execute If non-zero, execute the popped cleanup handler.
+ */
+void pthread_cleanup_pop(int execute)
+{
+  // This checks for API contract violation (undefined behavior)
+  __ESBMC_assert(pthread_cleanup_enabled, "API contract: push/pop must match");
+
+  // Get the current thread ID
+  pthread_t tid = __ESBMC_get_thread_id();
+
+  // Get the current cleanup stack level
+  size_t cleanup_level = __esbmc_get_cleanup_level();
+
+  // Assume the cleanup level is positive (there is a cleanup handler to pop)
+  __ESBMC_assume(cleanup_level > 0);
+
+  // Decrement the cleanup level to point to the handler being popped
+  cleanup_level--;
+
+  // Update the cleanup level
+  __esbmc_set_cleanup_level(cleanup_level);
+
+  if (execute)
+  {
+    // Calculate the index in the infinite symbolic cleanup stack for this thread and level
+    size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
+
+    // Retrieve the stored cleanup function and argument
+    void (*function)(void *) =
+      (void (*)(void *))__esbmc_cleanup_stack[index].function;
+    void *arg = __esbmc_cleanup_stack[index].arg;
+
+    // Assume the function pointer is not NULL before calling
+    __ESBMC_assume(function != NULL);
+
+    // Call the cleanup function with the provided argument
+    function(arg);
+  }
 }

@@ -16,7 +16,9 @@ class B {
   public: ~B() { throw E("Exception in ~B()"); }
 };
 
-int main() try {
+int main()
+{
+try {
   cout << "In main" << endl;
   static A cow;
   B bull;
@@ -24,4 +26,5 @@ int main() try {
 catch (E& e) {
   assert(0);
   cout << e.error << endl;
+}
 }

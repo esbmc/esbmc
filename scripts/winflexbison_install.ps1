@@ -17,4 +17,5 @@ while (-not $success -and $tries -lt $maxTries) {
 
 if (-not $success) {
     Write-Host "Installation failed after $maxTries attempts."
+    exit 1
  }

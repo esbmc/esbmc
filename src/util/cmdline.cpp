@@ -1,9 +1,24 @@
+#include <boost/program_options/parsers.hpp>
 #include <cassert>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <optional>
 #include <sstream>
 
+#include <stdexcept>
+#include <string>
 #include <util/cmdline.h>
 #include <util/message.h>
+#include <util/config_file.h>
+
+#ifdef WIN32
+#  define HOME_ENV_NAME "USERPROFILE"
+#  define DEFAULT_CONFIG_PATH "%userprofile%\\esbmc.toml"
+#else
+#  define HOME_ENV_NAME "HOME"
+#  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
+#endif
 
 /* Parses 's' according to a simple interpretation of shell rules, taking only
  * whitespace and the characters ', " and \ into account. */
@@ -12,15 +27,15 @@ simple_shell_unescape(const char *s, const char *var)
 {
   static const char WHITE[] = " \t\r\n\f\v";
 
-  if(!s)
+  if (!s)
     return {};
   std::vector<std::string> split;
-  while(*s)
+  while (*s)
   {
     /* skip white-space */
-    while(*s && strchr(WHITE, *s))
+    while (*s && strchr(WHITE, *s))
       s++;
-    if(!*s)
+    if (!*s)
       break;
     std::string arg;
     enum : char
@@ -30,16 +45,16 @@ simple_shell_unescape(const char *s, const char *var)
       SQUOT = '\'',
       ESC = '\\',
     } mode = NONE;
-    while(*s)
+    while (*s)
     {
-      switch(mode)
+      switch (mode)
       {
       case NONE:
         /* white-space delimits strings */
-        if(strchr(WHITE, *s))
+        if (strchr(WHITE, *s))
           goto done;
         /* special chars in this mode */
-        switch(*s)
+        switch (*s)
         {
         case '\'':
           mode = SQUOT;
@@ -53,7 +68,7 @@ simple_shell_unescape(const char *s, const char *var)
           /* skip first backslash */
           mode = ESC;
           s++;
-          if(!*s)
+          if (!*s)
             goto done;
           mode = NONE;
           break;
@@ -61,7 +76,7 @@ simple_shell_unescape(const char *s, const char *var)
         break;
       case SQUOT:
         /* the only special char in single-quote mode is ' */
-        switch(*s)
+        switch (*s)
         {
         case '\'':
           mode = NONE;
@@ -71,7 +86,7 @@ simple_shell_unescape(const char *s, const char *var)
         break;
       case DQUOT:
         /* special chars in double-quote mode */
-        switch(*s)
+        switch (*s)
         {
         case '"':
           mode = NONE;
@@ -79,10 +94,10 @@ simple_shell_unescape(const char *s, const char *var)
           continue;
         case '\\':
           mode = ESC;
-          if(!s[1])
+          if (!s[1])
             goto done;
           mode = DQUOT;
-          if(strchr("\\\"", s[1]))
+          if (strchr("\\\"", s[1]))
             s++;
           break;
         }
@@ -94,12 +109,12 @@ simple_shell_unescape(const char *s, const char *var)
       arg.push_back(*s++);
     }
   done:
-    if(mode)
+    if (mode)
     {
       log_warning(
         "cannot parse environment variable {}: unfinished {}, ignoring...",
         var,
-        mode);
+        fmt::underlying(mode));
       return {};
     }
     split.emplace_back(std::move(arg));
@@ -134,15 +149,52 @@ const std::list<std::string> &cmdlinet::get_values(const char *option) const
 const char *cmdlinet::getval(const char *option) const
 {
   cmdlinet::options_mapt::const_iterator value = options_map.find(option);
-  if(value == options_map.end())
-  {
+  if (value == options_map.end())
     return (const char *)nullptr;
-  }
-  if(value->second.empty())
-  {
+  if (value->second.empty())
     return (const char *)nullptr;
-  }
   return value->second.front().c_str();
+}
+
+std::string cmdlinet::expand_user(std::string const path) const
+{
+  std::string result = std::string(path);
+
+  // Case ~
+  const std::optional<std::string> home_path = std::getenv(HOME_ENV_NAME);
+  if (!result.empty() && result[0] == '~' && home_path)
+    result.replace(0, 1, home_path.value());
+
+  return std::filesystem::absolute(result).string();
+}
+
+// Returns the config file path if it is located, if config files should not be
+// loaded returns a std::nullopt. If a wrong file location is specified, then an
+// empty string is returned
+std::optional<std::string> cmdlinet::get_config_file_location() const
+{
+  const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
+  if (envloc)
+  {
+    // Disabled Case: Check if empty string, in which case we don't return anything.
+    const std::string envloc_str = std::string(envloc);
+    if (envloc_str.empty())
+      return std::nullopt;
+
+    // Load the config file
+    const std::string config_path = this->expand_user(envloc_str);
+    if (std::filesystem::exists(config_path))
+      return config_path;
+
+    // Wrong file returned.
+    return "";
+  }
+  // Load default config file if it exists.
+  const std::string config_path = this->expand_user(DEFAULT_CONFIG_PATH);
+  if (std::filesystem::exists(config_path))
+    return config_path;
+
+  return std::nullopt;
 }
 
 bool cmdlinet::parse(
@@ -152,15 +204,15 @@ bool cmdlinet::parse(
 {
   clear();
   unsigned int i = 0;
-  for(; opts[i].groupname != "end"; i++)
+  for (; opts[i].groupname != "end"; i++)
   {
     boost::program_options::options_description op_desc(opts[i].groupname);
     std::vector<opt_templ> groupoptions = opts[i].options;
-    for(std::vector<opt_templ>::iterator it = groupoptions.begin();
-        it != groupoptions.end();
-        ++it)
+    for (std::vector<opt_templ>::iterator it = groupoptions.begin();
+         it != groupoptions.end();
+         ++it)
     {
-      if(!it->type_default_value)
+      if (!it->type_default_value)
       {
         op_desc.add_options()(it->optstring, it->description);
       }
@@ -174,11 +226,11 @@ bool cmdlinet::parse(
   }
   std::vector<opt_templ> hidden_group_options = opts[i + 1].options;
   boost::program_options::options_description hidden_cmdline_options;
-  for(std::vector<opt_templ>::iterator it = hidden_group_options.begin();
-      it != hidden_group_options.end() && it->optstring[0] != '\0';
-      ++it)
+  for (std::vector<opt_templ>::iterator it = hidden_group_options.begin();
+       it != hidden_group_options.end() && it->optstring[0] != '\0';
+       ++it)
   {
-    if(!it->type_default_value)
+    if (!it->type_default_value)
     {
       hidden_cmdline_options.add_options()(it->optstring, "");
     }
@@ -195,12 +247,43 @@ bool cmdlinet::parse(
   p.add("input-file", -1);
   try
   {
+    // Load env
     boost::program_options::store(
       boost::program_options::command_line_parser(
         simple_shell_unescape(getenv("ESBMC_OPTS"), "ESBMC_OPTS"))
         .options(all_cmdline_options)
         .run(),
       vm);
+
+    // Config file: Check if config file should be loaded, and get location.
+    std::optional<std::string> config_path = this->get_config_file_location();
+
+    // Load config file
+    if (config_path)
+    {
+      // Check if config path provided is invalid.
+      if (config_path->compare("") == 0)
+      {
+        const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
+        log_error("Config: File not found: {}", envloc);
+        return true;
+      }
+
+      // Read config file.
+      std::ifstream file(config_path.value());
+      // File path provided is invalid.
+      if (!file)
+      {
+        log_error("Error while reading config file: {}", config_path.value());
+        return true;
+      }
+
+      // Load config file
+      boost::program_options::store(
+        parse_toml_file(file, all_cmdline_options), vm);
+    }
+
+    // Load commandline parameters
     boost::program_options::store(
       boost::program_options::command_line_parser(argc, argv)
         .options(all_cmdline_options)
@@ -208,32 +291,32 @@ bool cmdlinet::parse(
         .run(),
       vm);
   }
-  catch(std::exception &e)
+  catch (std::exception &e)
   {
-    log_error("ESBMC error: {}", e.what());
+    log_error("{}", e.what());
     return true;
   }
 
-  if(vm.count("input-file"))
+  if (vm.count("input-file"))
     args = vm["input-file"].as<std::vector<std::string>>();
 
-  for(auto &it : vm)
+  for (auto &it : vm)
   {
     std::list<std::string> res;
     std::string option_name = it.first;
     const boost::any &value = vm[option_name].value();
-    if(const int *v = boost::any_cast<int>(&value))
+    if (const int *v = boost::any_cast<int>(&value))
     {
       res.emplace_front(std::to_string(*v));
     }
-    else if(const std::string *v = boost::any_cast<std::string>(&value))
+    else if (const std::string *v = boost::any_cast<std::string>(&value))
     {
       res.emplace_front(*v);
     }
-    else if(
+    else if (
       const std::vector<int> *v = boost::any_cast<std::vector<int>>(&value))
     {
-      for(auto iter = v->begin(); iter != v->end(); ++iter)
+      for (auto iter = v->begin(); iter != v->end(); ++iter)
       {
         res.emplace_front(std::to_string(*iter));
       }
@@ -246,19 +329,19 @@ bool cmdlinet::parse(
     }
     std::pair<options_mapt::iterator, bool> result =
       options_map.insert(options_mapt::value_type(option_name, res));
-    if(!result.second)
+    if (!result.second)
       result.first->second = res;
   }
-  for(std::vector<opt_templ>::iterator it = hidden_group_options.begin();
-      it != hidden_group_options.end() && it->optstring[0] != '\0';
-      ++it)
+  for (std::vector<opt_templ>::iterator it = hidden_group_options.begin();
+       it != hidden_group_options.end() && it->optstring[0] != '\0';
+       ++it)
   {
-    if(it->description[0] != '\0' && vm.count(it->description))
+    if (it->description[0] != '\0' && vm.count(it->description))
     {
       std::list<std::string> value = get_values(it->description);
       std::pair<options_mapt::iterator, bool> result =
         options_map.insert(options_mapt::value_type(it->optstring, value));
-      if(!result.second)
+      if (!result.second)
         result.first->second = value;
     }
   }

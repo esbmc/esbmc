@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 contract.solast
---function getResult --contract contract.sol
+--function getResult --sol contract.sol --no-standard-checks --k-induction --bound
 ^VERIFICATION SUCCESSFUL$

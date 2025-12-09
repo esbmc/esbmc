@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--context-bound 2
+^VERIFICATION FAILED$

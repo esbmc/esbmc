@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
-GradeBook.cpp --unwind 10 --no-unwinding-assertions -I ~/libraries/ --memlimit 14000000 --timeout 900
+GradeBook.cpp --unwind 10 --no-unwinding-assertions --timeout 900
 ^VERIFICATION SUCCESSFUL$

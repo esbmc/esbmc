@@ -12,7 +12,7 @@ std::array<unsigned int, 5> to_array(const crypto_hash &h)
   std::copy(h.hash, h.hash + 5, result.begin());
   return result;
 }
-struct_type2tc testing_struct2t()
+type2tc testing_struct2t()
 {
   std::vector<type2tc> struct_members{
     get_uint_type(config.ansi_c.word_size),
@@ -32,7 +32,7 @@ expr2tc gen_testing_overlap(unsigned v)
   return constant_int2tc(testing_overlap2t(), BigInt(v));
 }
 
-constant_struct2tc gen_testing_struct(unsigned int a, unsigned int b)
+expr2tc gen_testing_struct(unsigned int a, unsigned int b)
 {
   std::vector<expr2tc> members{gen_ulong(a), gen_ulong(b)};
   return constant_struct2tc(testing_struct2t(), members);
@@ -88,7 +88,7 @@ SCENARIO("irep2 hashing", "[core][irep2]")
 
     THEN("Expressions and hashes should be equal to itself")
     {
-      for(auto &e : expressions)
+      for (auto &e : expressions)
       {
         test_constructed_equally(e.first, e.first);
         test_constructed_equally(e.second, e.second);
@@ -96,7 +96,7 @@ SCENARIO("irep2 hashing", "[core][irep2]")
     }
     THEN("Expressions and hashes between pairs should be equal")
     {
-      for(auto &e : expressions)
+      for (auto &e : expressions)
         test_constructed_equally(e.first, e.second);
     }
   }
@@ -110,7 +110,7 @@ SCENARIO("irep2 hashing", "[core][irep2]")
       {gen_testing_struct(1, 2), gen_testing_struct(1, 1)}};
     THEN("Expressions and hashes between pairs should not be equal")
     {
-      for(auto &e : expressions)
+      for (auto &e : expressions)
         test_constructed_differently(e.first, e.second);
     }
   }

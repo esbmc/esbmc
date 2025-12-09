@@ -10,6 +10,9 @@
 #include "../QtCore/QObject"
 #include "../QtCore/QRect"
 
-class QLayout{
-	QLayout (){}
+class QLayout
+{
+  QLayout()
+  {
+  }
 };

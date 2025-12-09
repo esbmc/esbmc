@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <mutex>
 
 #define USE_DSTRING
 #define SHARING
@@ -17,18 +18,20 @@ typedef dstring irep_namet;
 typedef dstring_hash irep_id_hash;
 
 #define forall_irep(it, irep)                                                  \
-  for(irept::subt::const_iterator it = (irep).begin(); it != (irep).end(); it++)
+  for (irept::subt::const_iterator it = (irep).begin(); it != (irep).end();    \
+       it++)
 
 #define Forall_irep(it, irep)                                                  \
-  for(irept::subt::iterator it = (irep).begin(); it != (irep).end(); it++)
+  for (irept::subt::iterator it = (irep).begin(); it != (irep).end(); it++)
 
 #define forall_named_irep(it, irep)                                            \
-  for(irept::named_subt::const_iterator it = (irep).begin();                   \
-      it != (irep).end();                                                      \
-      it++)
+  for (irept::named_subt::const_iterator it = (irep).begin();                  \
+       it != (irep).end();                                                     \
+       it++)
 
 #define Forall_named_irep(it, irep)                                            \
-  for(irept::named_subt::iterator it = (irep).begin(); it != (irep).end(); it++)
+  for (irept::named_subt::iterator it = (irep).begin(); it != (irep).end();    \
+       it++)
 
 class typet;
 
@@ -59,24 +62,39 @@ public:
   {
   }
 
-  inline irept(const irept &irep) : data(irep.data)
+  inline irept(const irept &irep)
   {
-    if(data != nullptr)
+    // We only need to lock the source's data to safely read the pointer
+    // and increment its reference count.
+    dt *source_data = nullptr;
+    if (irep.data)
     {
-      assert(data->ref_count != 0);
-      data->ref_count++;
+      std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
+      source_data = irep.data;
+      if (source_data)
+        source_data->ref_count++;
     }
+    data = source_data;
   }
 
   inline irept &operator=(const irept &irep)
   {
-    dt *tmp;
-    assert(&irep != this); // check if we assign to ourselves
-    tmp = data;
-    data = irep.data;
-    if(data != nullptr)
-      data->ref_count++;
-    remove_ref(tmp);
+    if (this == &irep)
+      return *this;
+
+    dt *new_data = nullptr;
+    if (irep.data)
+    {
+      std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
+      new_data = irep.data;
+      if (new_data)
+        new_data->ref_count++;
+    }
+
+    dt *old_data = data;
+    data = new_data;
+    remove_ref(old_data);
+
     return *this;
   }
 
@@ -565,6 +583,11 @@ public:
     return get_bool(a_is_macro);
   }
 
+  inline bool is_thread_local() const
+  {
+    return get_bool(a_is_thread_local);
+  }
+
   inline bool is_type() const
   {
     return get_bool(a_is_type);
@@ -900,6 +923,11 @@ public:
     set(a_is_macro, val);
   }
 
+  inline void is_thread_local(bool val)
+  {
+    set(a_is_thread_local, val);
+  }
+
   inline void is_type(bool val)
   {
     set(a_is_type, val);
@@ -1094,6 +1122,10 @@ public:
   {
     return id() == id_code;
   }
+  inline bool is_function_call() const
+  {
+    return is_code() && statement() == "function_call";
+  }
   inline bool is_constant() const
   {
     return id() == id_constant;
@@ -1253,7 +1285,7 @@ public:
   static const irep_idt a_hex_or_oct, a_hide, a_implicit, a_incomplete;
   static const irep_idt a_initialization, a_inlined, a_invalid_object;
   static const irep_idt a_is_parameter, a_is_expression;
-  static const irep_idt a_is_extern, a_is_macro;
+  static const irep_idt a_is_extern, a_is_macro, a_is_thread_local;
   static const irep_idt a_is_type, a_cmt_lvalue;
   static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
@@ -1283,6 +1315,7 @@ public:
   public:
 #ifdef SHARING
     unsigned ref_count;
+    mutable std::mutex dt_mutex;
 #endif
 
     dstring data;
@@ -1309,6 +1342,14 @@ public:
 
 #ifdef SHARING
     dt() : ref_count(1)
+    {
+    }
+    dt(const irept::dt &other)
+      : ref_count(1),
+        data(other.data),
+        named_sub(other.named_sub),
+        comments(other.comments),
+        sub(other.sub)
     {
     }
 #else

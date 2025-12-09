@@ -1,4 +1,4 @@
 KNOWNBUG
 main.c
-
+--unwind 50
 ^VERIFICATION SUCCESSFUL$

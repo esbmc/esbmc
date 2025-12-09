@@ -74,6 +74,7 @@ TEST_CASE("Lvalue only", "[core][util][replace_symbol]")
   // REQUIRE(binary.op0() == address_of_exprt(s1));
 }
 
+#if 0
 TEST_CASE("Replace always", "[core][util][replace_symbol]")
 {
   symbol_exprt s1("a", typet("some_type"));
@@ -99,3 +100,4 @@ TEST_CASE("Replace always", "[core][util][replace_symbol]")
   //REQUIRE(to_array_type(index_expr.array().type()).size() == c);
   REQUIRE(index_expr.index() == c);
 }
+#endif

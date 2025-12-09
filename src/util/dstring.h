@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <util/string_container.h>
+#include <util/prefix.h>
 
 class dstring final
 {
@@ -35,6 +36,16 @@ public:
   /// source object \p other, this is effectively just a copy constructor.
   constexpr dstring(dstring &&other) : no(other.no)
   {
+  }
+
+  friend bool has_prefix(const dstring &s, std::string_view prefix)
+  {
+    return has_prefix(std::string_view(s.as_string()), prefix);
+  }
+
+  friend bool has_suffix(const dstring &s, std::string_view suffix)
+  {
+    return has_suffix(std::string_view(s.as_string()), suffix);
   }
 
   inline bool empty() const
@@ -115,14 +126,14 @@ public:
 
   int compare(const dstring &b) const
   {
-    if(no == b.no)
+    if (no == b.no)
       return 0; // equal
     return as_string().compare(b.as_string());
   }
 
   int compare_uppercase(const dstring &b) const
   {
-    if(no == b.no)
+    if (no == b.no)
       return 0; // equal
     return std::equal(
       as_string().begin(),

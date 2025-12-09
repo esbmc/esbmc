@@ -1,38 +1,31 @@
 #if !defined(CURAND_KERNEL_H_)
-#define CURAND_KERNEL_H_
+#  define CURAND_KERNEL_H_
 
-//#include "curand.h"
-#include "curand_precalc.h"
-#include <math.h>
-#include <curand.h>
+#  include "curand_precalc.h"
+#  include <cmath>
+#  include <curand.h>
 
-#define MAX_XOR_N (5)
-#define SKIPAHEAD_BLOCKSIZE (4)
-#define SKIPAHEAD_MASK ((1 << SKIPAHEAD_BLOCKSIZE) - 1)
-#define CURAND_2POW32_INV (2.3283064e-10f)
-#define CURAND_2POW32_INV_DOUBLE (2.3283064365386963e-10)
-#define CURAND_2POW53_INV_DOUBLE (1.1102230246251565e-16)
-#define CURAND_2POW32_INV_2PI (2.3283064e-10f * 6.2831855f)
-#define CURAND_2POW53_INV_2PI_DOUBLE                                           \
-  (1.1102230246251565e-16 * 6.2831853071795860)
-#define CURAND_SQRT2 (-1.4142135f)
-#define CURAND_SQRT2_DOUBLE (-1.4142135623730951)
-
-//Insert of curand.h
-//typedef unsigned long long curandDirectionVectors64_t[64];
-//typedef unsigned int curandDirectionVectors32_t[32];
-
-//defines of curand_precalc.h
-#define PRECALC_NUM_MATRICES (8)
-#define PRECALC_BLOCK_SIZE (2)
-#define PRECALC_BLOCK_MASK ((1 << PRECALC_BLOCK_SIZE) - 1)
-#define XORWOW_SEQUENCE_SPACING (67)
+#  define MAX_XOR_N (5)
+#  define SKIPAHEAD_BLOCKSIZE (4)
+#  define SKIPAHEAD_MASK ((1 << SKIPAHEAD_BLOCKSIZE) - 1)
+#  define CURAND_2POW32_INV (2.3283064e-10f)
+#  define CURAND_2POW32_INV_DOUBLE (2.3283064365386963e-10)
+#  define CURAND_2POW53_INV_DOUBLE (1.1102230246251565e-16)
+#  define CURAND_2POW32_INV_2PI (2.3283064e-10f * 6.2831855f)
+#  define CURAND_2POW53_INV_2PI_DOUBLE                                         \
+    (1.1102230246251565e-16 * 6.2831853071795860)
+#  define CURAND_SQRT2 (-1.4142135f)
+#  define CURAND_SQRT2_DOUBLE (-1.4142135623730951)
+#  define PRECALC_NUM_MATRICES (8)
+#  define PRECALC_BLOCK_SIZE (2)
+#  define PRECALC_BLOCK_MASK ((1 << PRECALC_BLOCK_SIZE) - 1)
+#  define XORWOW_SEQUENCE_SPACING (67)
 
 static unsigned int precalc_xorwow_matrix[8][2] = {{850664906UL, 4258393217UL}};
 
-#if !defined(QUALIFIERS)
-#define QUALIFIERS static inline __device__
-#endif
+#  if !defined(QUALIFIERS)
+#    define QUALIFIERS static inline __device__
+#  endif
 
 /* Test RNG */
 /* This generator uses the formula:
@@ -168,17 +161,17 @@ typedef struct curandStateXORWOW curandState;
   unsigned int *result,
   int n)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     result[i] = 0;
   }
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
-    for(int j = 0; j < 32; j++)
+    for (int j = 0; j < 32; j++)
     {
-      if(vector[i] & (1 << j))
+      if (vector[i] & (1 << j))
       {
-        for(int k = 0; k < n; k++)
+        for (int k = 0; k < n; k++)
         {
           result[k] ^= matrix[n * (i * 32 + j) + k];
         }
@@ -191,12 +184,12 @@ typedef struct curandStateXORWOW curandState;
 /*QUALIFIERS*/ void __curand_matidentity(unsigned int *matrix, int n)
 {
   int r;
-  for(int i = 0; i < n * 32; i++)
+  for (int i = 0; i < n * 32; i++)
   {
-    for(int j = 0; j < n; j++)
+    for (int j = 0; j < n; j++)
     {
       r = i & 31;
-      if(i / 32 == j)
+      if (i / 32 == j)
       {
         matrix[i * n + j] = (1 << r);
       }
@@ -214,10 +207,10 @@ typedef struct curandStateXORWOW curandState;
 __curand_matmat(unsigned int *matrixA, unsigned int *matrixB, int n)
 {
   unsigned int result[MAX_XOR_N];
-  for(int i = 0; i < n * 32; i++)
+  for (int i = 0; i < n * 32; i++)
   {
     __curand_matvec(matrixA + i * n, matrixB, result, n);
-    for(int j = 0; j < n; j++)
+    for (int j = 0; j < n; j++)
     {
       matrixA[i * n + j] = result[j];
     }
@@ -228,7 +221,7 @@ __curand_matmat(unsigned int *matrixA, unsigned int *matrixB, int n)
 /*QUALIFIERS*/ void
 __curand_veccopy(unsigned int *vector, unsigned int *vectorA, int n)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     vector[i] = vectorA[i];
   }
@@ -238,7 +231,7 @@ __curand_veccopy(unsigned int *vector, unsigned int *vectorA, int n)
 /*QUALIFIERS*/ void
 __curand_matcopy(unsigned int *matrix, unsigned int *matrixA, int n)
 {
-  for(int i = 0; i < n * n * 32; i++)
+  for (int i = 0; i < n * n * 32; i++)
   {
     matrix[i] = matrixA[i];
   }
@@ -255,9 +248,9 @@ __curand_matcopy(unsigned int *matrix, unsigned int *matrixA, int n)
   unsigned int matrixS[MAX_XOR_N * MAX_XOR_N * 32];
   __curand_matidentity(matrix, n);
   __curand_matcopy(matrixR, matrixA, n);
-  while(p)
+  while (p)
   {
-    if(p & 1)
+    if (p & 1)
     {
       __curand_matmat(matrix, matrixR, n);
     }
@@ -297,11 +290,11 @@ __curand_hilouint32AsDouble(unsigned int hi, unsigned int lo)
 /* Convert unsigned int to float, as efficiently as possible */
 /*QUALIFIERS*/ float __curand_uint32_as_float(unsigned int x)
 {
-#if __CUDA_ARCH__ > 0
+#  if __CUDA_ARCH__ > 0
   return __int_as_float(x);
-#elif !defined(__CUDA_ARCH__)
+#  elif !defined(__CUDA_ARCH__)
   return __curand_uint32AsFloat(x);
-#endif
+#  endif
 }
 
 /*
@@ -352,16 +345,16 @@ __curand_generate_skipahead_matrix_xor(unsigned int matrix[])
   // Generate matrix that advances one step
   // matrix has n * n * 32 32-bit elements
   // solve for matrix by stepping single bit states
-  for(int i = 0; i < 32 * n; i++)
+  for (int i = 0; i < 32 * n; i++)
   {
     state.d = 0;
-    for(int j = 0; j < n; j++)
+    for (int j = 0; j < n; j++)
     {
       state.v[j] = 0;
     }
     state.v[i / 32] = (1 << (i & 31));
     curand(&state);
-    for(int j = 0; j < n; j++)
+    for (int j = 0; j < n; j++)
     {
       matrix[i * n + j] = state.v[j];
     }
@@ -381,56 +374,56 @@ _skipahead_scratch(unsigned long long x, T *state, unsigned int *scratch)
   // unsigned int result[n];
   unsigned int *result = scratch + (n * n * 32) + (n * n * 32) + n;
   unsigned long long p = x;
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     vector[i] = state->v[i];
   }
   int matrix_num = 0;
-  while(p && matrix_num < PRECALC_NUM_MATRICES - 1)
+  while (p && matrix_num < PRECALC_NUM_MATRICES - 1)
   {
-    for(unsigned int t = 0; t < (p & PRECALC_BLOCK_MASK); t++)
+    for (unsigned int t = 0; t < (p & PRECALC_BLOCK_MASK); t++)
     {
-#ifdef __CUDA_ARCH__
+#  ifdef __CUDA_ARCH__
       __curand_matvec(
         vector, precalc_xorwow_offset_matrix[matrix_num], result, n);
-#else
+#  else
 //            __curand_matvec(vector, precalc_xorwow_offset_matrix_host[matrix_num], result, n);
-#endif
+#  endif
       __curand_veccopy(vector, result, n);
     }
     p >>= PRECALC_BLOCK_SIZE;
     matrix_num++;
   }
-  if(p)
+  if (p)
   {
-#ifdef __CUDA_ARCH__
+#  ifdef __CUDA_ARCH__
     __curand_matcopy(
       matrix, precalc_xorwow_offset_matrix[PRECALC_NUM_MATRICES - 1], n);
     __curand_matcopy(
       matrixA, precalc_xorwow_offset_matrix[PRECALC_NUM_MATRICES - 1], n);
-#else
+#  else
 //        __curand_matcopy(matrix, precalc_xorwow_offset_matrix_host[PRECALC_NUM_MATRICES - 1], n);
 //        __curand_matcopy(matrixA, precalc_xorwow_offset_matrix_host[PRECALC_NUM_MATRICES - 1], n);
-#endif
+#  endif
   }
-  while(p)
+  while (p)
   {
-    for(unsigned int t = 0; t < (p & SKIPAHEAD_MASK); t++)
+    for (unsigned int t = 0; t < (p & SKIPAHEAD_MASK); t++)
     {
       __curand_matvec(vector, matrixA, result, n);
       __curand_veccopy(vector, result, n);
     }
     p >>= SKIPAHEAD_BLOCKSIZE;
-    if(p)
+    if (p)
     {
-      for(int i = 0; i < SKIPAHEAD_BLOCKSIZE; i++)
+      for (int i = 0; i < SKIPAHEAD_BLOCKSIZE; i++)
       {
         __curand_matmat(matrix, matrixA, n);
         __curand_matcopy(matrixA, matrix, n);
       }
     }
   }
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     state->v[i] = vector[i];
   }
@@ -452,55 +445,55 @@ template <typename T, int n>
   // unsigned int result[n];
   unsigned int *result = scratch + (n * n * 32) + (n * n * 32) + n;
   unsigned long long p = x;
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     vector[i] = state->v[i];
   }
   int matrix_num = 0;
-  while(p && matrix_num < PRECALC_NUM_MATRICES - 1)
+  while (p && matrix_num < PRECALC_NUM_MATRICES - 1)
   {
-    for(unsigned int t = 0; t < (p & PRECALC_BLOCK_MASK); t++)
+    for (unsigned int t = 0; t < (p & PRECALC_BLOCK_MASK); t++)
     {
-#ifdef __CUDA_ARCH__
+#  ifdef __CUDA_ARCH__
       __curand_matvec(vector, precalc_xorwow_matrix[matrix_num], result, n);
-#else
+#  else
 //            __curand_matvec(vector, precalc_xorwow_matrix_host[matrix_num], result, n);
-#endif
+#  endif
       __curand_veccopy(vector, result, n);
     }
     p >>= PRECALC_BLOCK_SIZE;
     matrix_num++;
   }
-  if(p)
+  if (p)
   {
-#ifdef __CUDA_ARCH__
+#  ifdef __CUDA_ARCH__
     __curand_matcopy(
       matrix, precalc_xorwow_matrix[PRECALC_NUM_MATRICES - 1], n);
     __curand_matcopy(
       matrixA, precalc_xorwow_matrix[PRECALC_NUM_MATRICES - 1], n);
-#else
+#  else
 //        __curand_matcopy(matrix, precalc_xorwow_matrix_host[PRECALC_NUM_MATRICES - 1], n);
 //        __curand_matcopy(matrixA, precalc_xorwow_matrix_host[PRECALC_NUM_MATRICES - 1], n);
-#endif
+#  endif
   }
-  while(p)
+  while (p)
   {
-    for(unsigned int t = 0; t < (p & SKIPAHEAD_MASK); t++)
+    for (unsigned int t = 0; t < (p & SKIPAHEAD_MASK); t++)
     {
       __curand_matvec(vector, matrixA, result, n);
       __curand_veccopy(vector, result, n);
     }
     p >>= SKIPAHEAD_BLOCKSIZE;
-    if(p)
+    if (p)
     {
-      for(int i = 0; i < SKIPAHEAD_BLOCKSIZE; i++)
+      for (int i = 0; i < SKIPAHEAD_BLOCKSIZE; i++)
       {
         __curand_matmat(matrix, matrixA, n);
         __curand_matcopy(matrixA, matrix, n);
       }
     }
   }
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     state->v[i] = vector[i];
   }
@@ -643,9 +636,9 @@ template <typename T>
   state->i += n;
   /* Convert state->i to gray code */
   i_gray = state->i ^ (state->i >> 1);
-  for(unsigned int k = 0; k < 32; k++)
+  for (unsigned int k = 0; k < 32; k++)
   {
-    if(i_gray & (1 << k))
+    if (i_gray & (1 << k))
     {
       state->x ^= state->direction_vectors[k];
     }
@@ -670,9 +663,9 @@ template <typename T>
   state->i += n;
   /* Convert state->i to gray code */
   i_gray = state->i ^ (state->i >> 1);
-  for(unsigned k = 0; k < 64; k++)
+  for (unsigned k = 0; k < 64; k++)
   {
-    if(i_gray & (1ULL << k))
+    if (i_gray & (1ULL << k))
     {
       state->x ^= state->direction_vectors[k];
     }
@@ -741,20 +734,20 @@ template <typename T>
 template <typename XT>
 /*QUALIFIERS*/ int __curand_find_trailing_zero(XT x)
 {
-#if __CUDA_ARCH__ > 0
+#  if __CUDA_ARCH__ > 0
   unsigned long long z = x;
   int y = __ffsll(~z) | 0x40;
   return (y - 1) & 0x3F;
-#else
+#  else
   unsigned long long z = x;
   int i = 1;
-  while(z & 1)
+  while (z & 1)
   {
     i++;
     z >>= 1;
   }
   return i - 1;
-#endif
+#  endif
 }
 /**
  * \brief Initialize Sobol64 state.
@@ -778,7 +771,7 @@ template <typename XT>
   curandStateSobol64_t *state)
 {
   state->i = 0;
-  for(int i = 0; i < 64; i++)
+  for (int i = 0; i < 64; i++)
   {
     state->direction_vectors[i] = direction_vectors[i];
   }
@@ -819,7 +812,7 @@ template <typename PT>
   curandStateScrambledSobol64_t *state)
 {
   state->i = 0;
-  for(int i = 0; i < 64; i++)
+  for (int i = 0; i < 64; i++)
   {
     state->direction_vectors[i] = direction_vectors[i];
   }

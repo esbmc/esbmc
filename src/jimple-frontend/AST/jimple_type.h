@@ -30,7 +30,7 @@ protected:
   {
     typet base = get_base_type(ctx);
     typet ptr_type = pointer_typet(base);
-    for(int i = 1; i < dimensions; i++)
+    for (int i = 1; i < dimensions; i++)
       ptr_type = pointer_typet(ptr_type);
 
     return ptr_type;

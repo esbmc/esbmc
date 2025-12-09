@@ -1,4 +1,4 @@
 CORE
 main.c
---64 --stack-limit 96
+--64 --stack-limit 96 -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

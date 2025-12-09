@@ -14,6 +14,10 @@
 #define USECVC
 #endif
 
+#if @ESBMC_ENABLE_cvc5@
+#define USECVC5
+#endif
+
 #if @ESBMC_ENABLE_mathsat@
 #define MATHSAT
 #endif
@@ -24,4 +28,8 @@
 
 #if @ESBMC_ENABLE_bitwuzla@
 #define BITWUZLA
+#endif
+
+#if @ESBMC_ENABLE_smtlib@
+#define SMTLIB
 #endif

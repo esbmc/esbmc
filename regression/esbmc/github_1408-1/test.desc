@@ -1,0 +1,4 @@
+CORE
+gh-1408-1.c
+--unwind 3 --no-pointer-check --no-bound --no-div-by-zero-check --no-slice -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$

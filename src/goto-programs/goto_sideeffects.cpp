@@ -14,6 +14,11 @@ void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
 
+  // declare this symbol first
+  code_declt decl(symbol_expr(new_symbol));
+  decl.location() = location;
+  convert_decl(decl, dest);
+
   code_assignt assignment;
   assignment.lhs() = symbol_expr(new_symbol);
   assignment.rhs() = expr;
@@ -26,11 +31,11 @@ void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
 
 bool goto_convertt::has_sideeffect(const exprt &expr)
 {
-  forall_operands(it, expr)
-    if(has_sideeffect(*it))
+  forall_operands (it, expr)
+    if (has_sideeffect(*it))
       return true;
 
-  if(expr.id() == "sideeffect")
+  if (expr.id() == "sideeffect")
     return true;
 
   return false;
@@ -41,12 +46,12 @@ void goto_convertt::remove_sideeffects(
   goto_programt &dest,
   bool result_is_used)
 {
-  if(!has_sideeffect(expr))
+  if (!has_sideeffect(expr))
     return;
 
-  if(expr.is_and() || expr.is_or())
+  if (expr.is_and() || expr.is_or())
   {
-    if(!expr.is_boolean())
+    if (!expr.is_boolean())
     {
       log_error(
         "{} must be Boolean, but got {}", expr.id_string(), expr.pretty());
@@ -55,51 +60,67 @@ void goto_convertt::remove_sideeffects(
 
     exprt tmp;
 
-    if(expr.is_and())
+    if (expr.is_and())
       tmp = true_exprt();
     else
       // ID_or
       tmp = false_exprt();
 
+    // Make sure we do not lose the location in tmp
+    tmp.location() = expr.location();
+
     exprt::operandst &ops = expr.operands();
 
     // start with last one
-    for(exprt::operandst::reverse_iterator it = ops.rbegin(); it != ops.rend();
-        ++it)
+    for (exprt::operandst::reverse_iterator it = ops.rbegin(); it != ops.rend();
+         ++it)
     {
       exprt &op = *it;
 
-      if(!op.is_boolean())
+      // This is a hack for now. We need to solve this properly by
+      // correctly tracking all locations through all GOTO transformations
+      op.location() = expr.location();
+
+      if (!op.is_boolean())
       {
         log_error("{} takes boolean operands only", expr.id().as_string());
         abort();
       }
 
-      if(expr.is_and())
+      if (expr.is_and())
       {
-        if_exprt if_e(op, tmp, false_exprt());
+        // We need to record the location of the newly generated expression
+        exprt false_expr = false_exprt();
+        false_expr.location() = op.location();
+        if_exprt if_e(op, tmp, false_expr);
+        if_e.location() = op.location();
         tmp.swap(if_e);
       }
       else // ID_or
       {
-        if_exprt if_e(op, true_exprt(), tmp);
+        // We need to record the location of the newly generated expression
+        exprt true_expr = true_exprt();
+        true_expr.location() = op.location();
+        if_exprt if_e(op, true_expr, tmp);
+        if_e.location() = op.location();
         tmp.swap(if_e);
       }
     }
 
     expr.swap(tmp);
+    expr.location() = tmp.location();
 
     remove_sideeffects(expr, dest, result_is_used);
     return;
   }
 
-  if(expr.id() == "if")
+  if (expr.id() == "if")
   {
     // first clean condition
     remove_sideeffects(expr.op0(), dest);
 
     // possibly done now
-    if(
+    if (
       !has_sideeffect(to_if_expr(expr).true_case()) &&
       !has_sideeffect(to_if_expr(expr).false_case()))
       return;
@@ -107,10 +128,10 @@ void goto_convertt::remove_sideeffects(
     // copy expression
     if_exprt if_expr = to_if_expr(expr);
 
-    if(!if_expr.cond().is_boolean())
+    if (!if_expr.cond().is_boolean())
       throw "first argument of `if' must be boolean, but got ";
 
-    const locationt location = expr.location();
+    const locationt location = expr.op0().location();
 
     goto_programt tmp_true;
     remove_sideeffects(if_expr.true_case(), tmp_true, result_is_used);
@@ -118,9 +139,14 @@ void goto_convertt::remove_sideeffects(
     goto_programt tmp_false;
     remove_sideeffects(if_expr.false_case(), tmp_false, result_is_used);
 
-    if(result_is_used)
+    if (result_is_used)
     {
       symbolt &new_symbol = new_tmp_symbol(expr.type());
+
+      // declare this symbol first
+      code_declt decl(symbol_expr(new_symbol));
+      decl.location() = location;
+      convert_decl(decl, dest);
 
       code_assignt assignment_true;
       assignment_true.lhs() = symbol_expr(new_symbol);
@@ -140,13 +166,13 @@ void goto_convertt::remove_sideeffects(
     else
     {
       // preserve the expressions for possible later checks
-      if(if_expr.true_case().is_not_nil())
+      if (if_expr.true_case().is_not_nil())
       {
         code_expressiont code_expression(if_expr.true_case());
         convert(code_expression, tmp_true);
       }
 
-      if(if_expr.false_case().is_not_nil())
+      if (if_expr.false_case().is_not_nil())
       {
         code_expressiont code_expression(if_expr.false_case());
         convert(code_expression, tmp_false);
@@ -161,18 +187,18 @@ void goto_convertt::remove_sideeffects(
     return;
   }
 
-  if(expr.id() == "comma")
+  if (expr.id() == "comma")
   {
-    if(result_is_used)
+    if (result_is_used)
     {
       exprt result;
 
-      Forall_operands(it, expr)
+      Forall_operands (it, expr)
       {
         bool last = (it == --expr.operands().end());
 
         // special treatment for last one
-        if(last)
+        if (last)
         {
           result.swap(*it);
           remove_sideeffects(result, dest, true);
@@ -182,7 +208,7 @@ void goto_convertt::remove_sideeffects(
           remove_sideeffects(*it, dest, false);
 
           // remember these for later checks
-          if(it->is_not_nil())
+          if (it->is_not_nil())
             convert(code_expressiont(*it), dest);
         }
       }
@@ -191,12 +217,12 @@ void goto_convertt::remove_sideeffects(
     }
     else // result not used
     {
-      Forall_operands(it, expr)
+      Forall_operands (it, expr)
       {
         remove_sideeffects(*it, dest, false);
 
         // remember as expression statement for later checks
-        if(it->is_not_nil())
+        if (it->is_not_nil())
           convert(code_expressiont(*it), dest);
       }
 
@@ -206,42 +232,42 @@ void goto_convertt::remove_sideeffects(
     return;
   }
 
-  if(expr.id() == "typecast")
+  if (expr.id() == "typecast")
   {
-    if(expr.operands().size() != 1)
+    if (expr.operands().size() != 1)
       throw "typecast takes one argument";
 
     // preserve 'result_is_used'
     remove_sideeffects(expr.op0(), dest, result_is_used);
 
-    if(expr.op0().is_nil())
+    if (expr.op0().is_nil())
       expr.make_nil();
 
     return;
   }
 
-  if(expr.id() == "sideeffect")
+  if (expr.id() == "sideeffect")
   {
     // some of the side-effects need special treatment!
     const irep_idt statement = expr.statement();
-    if(statement == "gcc_conditional_expression")
+    if (statement == "gcc_conditional_expression")
     {
       remove_gcc_conditional_expression(expr, dest);
       return;
     }
 
-    if(statement == "statement_expression")
+    if (statement == "statement_expression")
     {
       remove_statement_expression(expr, dest, result_is_used);
       return;
     }
 
-    if(statement == "assign")
+    if (statement == "assign")
     {
       // we do a special treatment for x=f(...)
       assert(expr.operands().size() == 2);
 
-      if(
+      if (
         expr.op1().id() == "sideeffect" &&
         to_side_effect_expr(expr.op1()).get_statement() == "function_call")
       {
@@ -255,7 +281,7 @@ void goto_convertt::remove_sideeffects(
         assignment.location() = expr.location();
         convert_assign(assignment, dest);
 
-        if(result_is_used)
+        if (result_is_used)
           expr.swap(lhs);
         else
           expr.make_nil();
@@ -265,16 +291,16 @@ void goto_convertt::remove_sideeffects(
   }
 
   // TODO: evaluation order
-  Forall_operands(it, expr)
+  Forall_operands (it, expr)
     remove_sideeffects(*it, dest);
 
-  if(expr.id() == "sideeffect")
+  if (expr.id() == "sideeffect")
   {
     const irep_idt &statement = expr.statement();
 
-    if(statement == "function_call") // might do anything
+    if (statement == "function_call")
       remove_function_call(expr, dest, result_is_used);
-    else if(
+    else if (
       statement == "assign" || statement == "assign+" ||
       statement == "assign-" || statement == "assign*" ||
       statement == "assign_div" || statement == "assign_bitor" ||
@@ -282,34 +308,31 @@ void goto_convertt::remove_sideeffects(
       statement == "assign_lshr" || statement == "assign_ashr" ||
       statement == "assign_shl" || statement == "assign_mod")
       remove_assignment(expr, dest, result_is_used);
-    else if(statement == "postincrement" || statement == "postdecrement")
+    else if (statement == "postincrement" || statement == "postdecrement")
       remove_post(expr, dest, result_is_used);
-    else if(statement == "preincrement" || statement == "predecrement")
+    else if (statement == "preincrement" || statement == "predecrement")
       remove_pre(expr, dest, result_is_used);
-    else if(statement == "cpp_new" || statement == "cpp_new[]")
+    else if (statement == "cpp_new" || statement == "cpp_new[]")
       remove_cpp_new(expr, dest, result_is_used);
-    else if(statement == "cpp_delete" || statement == "cpp_delete[]")
+    else if (statement == "cpp_delete" || statement == "cpp_delete[]")
       remove_cpp_delete(expr, dest);
-    else if(statement == "temporary_object")
+    else if (statement == "temporary_object")
       remove_temporary_object(expr, dest);
-    else if(statement == "nondet")
+    else if (statement == "nondet")
     {
       // these are fine
     }
-    else if(statement == "skip")
+    else if (statement == "skip")
     {
       expr.make_nil();
     }
-    else if(statement == "cpp-throw")
+    else if (statement == "cpp-throw")
     {
-      goto_programt::targett t = dest.add_instruction(THROW);
-      codet tmp("cpp-throw");
-      tmp.operands().swap(expr.operands());
-      tmp.location() = expr.location();
-      tmp.set("exception_list", expr.find("exception_list"));
-      migrate_expr(tmp, t->code);
-      t->location = expr.location();
-
+      codet c("cpp-throw");
+      c.operands() = expr.operands();
+      c.location() = expr.location();
+      c.set("exception_list", expr.find("exception_list"));
+      convert_throw(c, dest);
       // the result can't be used, these are void
       expr.make_nil();
     }
@@ -328,13 +351,13 @@ void goto_convertt::remove_assignment(
 {
   const irep_idt &statement = expr.statement();
 
-  if(statement == "assign")
+  if (statement == "assign")
   {
     exprt tmp = expr;
     tmp.id("code");
     convert_assign(to_code_assign(to_code(tmp)), dest);
   }
-  else if(
+  else if (
     statement == "assign+" || statement == "assign-" ||
     statement == "assign*" || statement == "assign_div" ||
     statement == "assign_mod" || statement == "assign_shl" ||
@@ -342,20 +365,18 @@ void goto_convertt::remove_assignment(
     statement == "assign_bitand" || statement == "assign_bitxor" ||
     statement == "assign_bitor")
   {
-    if(expr.operands().size() != 2)
+    if (expr.operands().size() != 2)
     {
-      std::ostringstream str;
-      str << statement << " takes two arguments\n";
-      str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error(
+        "{} takes two arguments\nLocation: {}", statement, expr.location());
       abort();
     }
 
     exprt rhs;
 
-    if(statement == "assign+")
+    if (statement == "assign+")
     {
-      if(expr_has_floatbv(expr))
+      if (expr_has_floatbv(expr))
       {
         rhs.id("ieee_add");
       }
@@ -364,9 +385,9 @@ void goto_convertt::remove_assignment(
         rhs.id("+");
       }
     }
-    else if(statement == "assign-")
+    else if (statement == "assign-")
     {
-      if(expr_has_floatbv(expr))
+      if (expr_has_floatbv(expr))
       {
         rhs.id("ieee_sub");
       }
@@ -375,9 +396,9 @@ void goto_convertt::remove_assignment(
         rhs.id("-");
       }
     }
-    else if(statement == "assign*")
+    else if (statement == "assign*")
     {
-      if(expr_has_floatbv(expr))
+      if (expr_has_floatbv(expr))
       {
         rhs.id("ieee_mul");
       }
@@ -386,9 +407,9 @@ void goto_convertt::remove_assignment(
         rhs.id("*");
       }
     }
-    else if(statement == "assign_div")
+    else if (statement == "assign_div")
     {
-      if(expr_has_floatbv(expr))
+      if (expr_has_floatbv(expr))
       {
         rhs.id("ieee_div");
       }
@@ -397,31 +418,31 @@ void goto_convertt::remove_assignment(
         rhs.id("/");
       }
     }
-    else if(statement == "assign_mod")
+    else if (statement == "assign_mod")
     {
       rhs.id("mod");
     }
-    else if(statement == "assign_shl")
+    else if (statement == "assign_shl")
     {
       rhs.id("shl");
     }
-    else if(statement == "assign_ashr")
+    else if (statement == "assign_ashr")
     {
       rhs.id("ashr");
     }
-    else if(statement == "assign_lshr")
+    else if (statement == "assign_lshr")
     {
       rhs.id("lshr");
     }
-    else if(statement == "assign_bitand")
+    else if (statement == "assign_bitand")
     {
       rhs.id("bitand");
     }
-    else if(statement == "assign_bitxor")
+    else if (statement == "assign_bitxor")
     {
       rhs.id("bitxor");
     }
-    else if(statement == "assign_bitor")
+    else if (statement == "assign_bitor")
     {
       rhs.id("bitor");
     }
@@ -437,7 +458,7 @@ void goto_convertt::remove_assignment(
     rhs.copy_to_operands(expr.op0(), expr.op1());
     rhs.type() = expr.op0().type();
 
-    if(rhs.op0().type().is_bool())
+    if (rhs.op0().type().is_bool())
     {
       rhs.op0().make_typecast(int_type());
       rhs.op1().make_typecast(int_type());
@@ -454,7 +475,7 @@ void goto_convertt::remove_assignment(
   }
 
   // revert assignment in the expression to its LHS
-  if(result_is_used)
+  if (result_is_used)
   {
     exprt lhs;
     lhs.swap(expr.op0());
@@ -473,7 +494,7 @@ void goto_convertt::remove_pre(
 
   assert(statement == "preincrement" || statement == "predecrement");
 
-  if(expr.operands().size() != 1)
+  if (expr.operands().size() != 1)
   {
     std::ostringstream str;
     str << statement << " takes one argument\n";
@@ -485,16 +506,16 @@ void goto_convertt::remove_pre(
   exprt rhs;
   rhs.location() = expr.location();
 
-  if(statement == "preincrement")
+  if (statement == "preincrement")
   {
-    if(expr.type().is_floatbv())
+    if (expr.type().is_floatbv())
       rhs.id("ieee_add");
     else
       rhs.id("+");
   }
   else
   {
-    if(expr.type().is_floatbv())
+    if (expr.type().is_floatbv())
       rhs.id("ieee_sub");
     else
       rhs.id("-");
@@ -502,14 +523,14 @@ void goto_convertt::remove_pre(
 
   const typet &op_type = ns.follow(expr.op0().type());
 
-  if(op_type.is_bool())
+  if (op_type.is_bool())
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
   }
-  else if(op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
+  else if (op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
@@ -520,16 +541,16 @@ void goto_convertt::remove_pre(
   {
     typet constant_type;
 
-    if(op_type.is_pointer())
+    if (op_type.is_pointer())
       constant_type = index_type();
-    else if(is_number(op_type))
+    else if (is_number(op_type))
       constant_type = op_type;
     else
     {
-      std::ostringstream str;
-      str << "no constant one of type " + op_type.to_string() << "\n";
-      str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error(
+        "no constant one of type {}\nLocation: {}",
+        op_type.to_string(),
+        expr.location());
       abort();
     }
 
@@ -545,7 +566,7 @@ void goto_convertt::remove_pre(
 
   convert(assignment, dest);
 
-  if(result_is_used)
+  if (result_is_used)
   {
     // revert to argument of pre-inc/pre-dec
     exprt tmp = expr.op0();
@@ -564,7 +585,7 @@ void goto_convertt::remove_post(
 
   assert(statement == "postincrement" || statement == "postdecrement");
 
-  if(expr.operands().size() != 1)
+  if (expr.operands().size() != 1)
   {
     std::ostringstream str;
     str << statement << " takes one argument";
@@ -576,16 +597,16 @@ void goto_convertt::remove_post(
   exprt rhs;
   rhs.location() = expr.location();
 
-  if(statement == "postincrement")
+  if (statement == "postincrement")
   {
-    if(expr.type().is_floatbv())
+    if (expr.type().is_floatbv())
       rhs.id("ieee_add");
     else
       rhs.id("+");
   }
   else
   {
-    if(expr.type().is_floatbv())
+    if (expr.type().is_floatbv())
       rhs.id("ieee_sub");
     else
       rhs.id("-");
@@ -593,14 +614,14 @@ void goto_convertt::remove_post(
 
   const typet &op_type = ns.follow(expr.op0().type());
 
-  if(op_type.is_bool())
+  if (op_type.is_bool())
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
   }
-  else if(op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
+  else if (op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
@@ -611,16 +632,16 @@ void goto_convertt::remove_post(
   {
     typet constant_type;
 
-    if(op_type.is_pointer())
+    if (op_type.is_pointer())
       constant_type = index_type();
-    else if(is_number(op_type))
+    else if (is_number(op_type))
       constant_type = op_type;
     else
     {
-      std::ostringstream str;
-      str << "no constant one of type " + op_type.to_string();
-      str << "Location: " << expr.location();
-      log_error(str.str());
+      log_error(
+        "no constant one of type {}\nLocation: {}",
+        op_type.to_string(),
+        expr.location());
       abort();
     }
 
@@ -639,7 +660,7 @@ void goto_convertt::remove_post(
 
   // fix up the expression, if needed
 
-  if(result_is_used)
+  if (result_is_used)
   {
     exprt tmp = expr.op0();
     make_temp_symbol(tmp, dest);
@@ -651,12 +672,34 @@ void goto_convertt::remove_post(
   dest.destructive_append(tmp);
 }
 
+// The below code introduces some special treatment for function calls.
+// For example, the following code:
+//    ...
+//    a = b + foo();
+//    ...
+// is transformed to:
+//    ...
+//    <type> return_value$_foo;
+//    return_value$_foo = foo();
+//    a = b + return_value$_foo;
+//    ...
+//  However, if the return value of function "foo()" is never
+//  used in the program, or the return type <type> of "foo()"
+//  is void, the same code is transformed to:
+//    ...
+//    foo();
+//    a = b;
+//    ...
 void goto_convertt::remove_function_call(
   exprt &expr,
   goto_programt &dest,
   bool result_is_used)
 {
-  if(!result_is_used)
+  // If the result of the function call is never used
+  // or the return type of the invoked function is "void",
+  // we can just call the above function without any
+  // further modifications.
+  if (!result_is_used || expr.type().id() == "empty")
   {
     assert(expr.operands().size() == 2);
     code_function_callt call;
@@ -677,13 +720,13 @@ void goto_convertt::remove_function_call(
 
   // get name of function, if available
 
-  if(expr.id() != "sideeffect" || expr.statement() != "function_call")
+  if (expr.id() != "sideeffect" || expr.statement() != "function_call")
     throw "expected function call";
 
-  if(expr.operands().empty())
+  if (expr.operands().empty())
     throw "function_call expects at least one operand";
 
-  if(expr.op0().is_symbol())
+  if (expr.op0().is_symbol())
   {
     const irep_idt &identifier = expr.op0().identifier();
     const symbolt *symbol = ns.lookup(identifier);
@@ -703,24 +746,60 @@ void goto_convertt::remove_function_call(
   new_name(new_symbol);
 
   {
+    // temporary declaration:
+    // T return_value$_BLAH$1;
+    // where T denotes the type of the return value from the function,
+    // BLAH denotes the name of the function
     code_declt decl(symbol_expr(new_symbol));
     decl.location() = new_symbol.location;
     convert_decl(decl, dest);
   }
 
+  // up to this point, we've got the declaration for the temporary return value
+  // The next step is to flatten the side effect of this function call
   code_function_callt call;
   call.lhs() = symbol_expr(new_symbol);
   call.function() = expr.op0();
   call.arguments() = expr.op1().operands();
   call.location() = new_symbol.location;
 
-  codet assignment("assign");
-  assignment.reserve_operands(2);
-  assignment.copy_to_operands(symbol_expr(new_symbol));
-  assignment.move_to_operands(call);
-
   goto_programt tmp_program;
-  convert(assignment, tmp_program);
+  const typet &ftype = call.function().type();
+  if (ftype.return_type().id() == "constructor")
+  {
+    // for constructor, we need to add the implicit `this` as the first argument,
+    // so convert to:
+    // BLAH(&return_value$_BLAH$1, ...)
+    side_effect_expr_function_callt ctor_call;
+    ctor_call.function() = call.function();
+    exprt::operandst &args = ctor_call.arguments();
+    address_of_exprt tmp_result = address_of_exprt(call.lhs());
+    // first push the implicit `this` arg
+    args.push_back(tmp_result);
+    // then append the remaining operands
+    args.insert(args.end(), call.arguments().begin(), call.arguments().end());
+    ctor_call.location() = call.location();
+    // now convert this expr to code
+    codet ctor_call_code("expression");
+    ctor_call_code.location() = call.location();
+    ctor_call_code.move_to_operands(ctor_call);
+
+    convert(ctor_call_code, tmp_program);
+  }
+  else
+  {
+    // otherwise just convert to something like:
+    // return_value$_BLAH$1 = BLAH(...),
+    // where BLAH denotes the function name
+    codet assignment("assign");
+    assignment.reserve_operands(2);
+    assignment.copy_to_operands(symbol_expr(new_symbol));
+    assignment.move_to_operands(call);
+    assignment.location() = new_symbol.location;
+
+    convert(assignment, tmp_program);
+  }
+
   dest.destructive_append(tmp_program);
 
   expr = symbol_expr(new_symbol);
@@ -728,10 +807,10 @@ void goto_convertt::remove_function_call(
 
 void goto_convertt::replace_new_object(const exprt &object, exprt &dest)
 {
-  if(dest.id() == "new_object")
+  if (dest.id() == "new_object")
     dest = object;
   else
-    Forall_operands(it, dest)
+    Forall_operands (it, dest)
       replace_new_object(object, *it);
 }
 
@@ -760,7 +839,7 @@ void goto_convertt::remove_cpp_new(
 
   call = code_assignt(symbol_expr(new_symbol), expr);
 
-  if(result_is_used) // e.g. used to construct an assignment 'code_assignt'
+  if (result_is_used) // e.g. used to construct an assignment 'code_assignt'
     expr = symbol_expr(new_symbol);
   else
     expr.make_nil();
@@ -784,26 +863,32 @@ void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
 
 void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 {
-  if(expr.operands().size() != 1 && expr.operands().size() != 0)
+  if (expr.operands().size() != 1 && expr.operands().size() != 0)
     throw "temporary_object takes 0 or 1 operands";
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
 
   new_symbol.mode = expr.mode();
 
-  if(expr.operands().size() == 1)
+  // declare this symbol first
+  code_declt decl(symbol_expr(new_symbol));
+  decl.location() = expr.location();
+  convert_decl(decl, dest);
+
+  if (expr.operands().size() == 1)
   {
     codet assignment("assign");
     assignment.reserve_operands(2);
     assignment.copy_to_operands(symbol_expr(new_symbol));
     assignment.move_to_operands(expr.op0());
+    assignment.location() = expr.location();
 
     goto_programt tmp_program;
     convert(assignment, tmp_program);
     dest.destructive_append(tmp_program);
   }
 
-  if(expr.initializer().is_not_nil())
+  if (expr.initializer().is_not_nil())
   {
     assert(expr.operands().empty());
     exprt initializer = static_cast<const exprt &>(expr.initializer());
@@ -822,15 +907,15 @@ void goto_convertt::remove_statement_expression(
   goto_programt &dest,
   bool result_is_used)
 {
-  if(expr.operands().size() != 1)
+  if (expr.operands().size() != 1)
     throw "statement_expression takes 1 operand";
 
-  if(!expr.op0().is_code())
+  if (!expr.op0().is_code())
     throw "statement_expression takes code as operand";
 
   codet &code = to_code(expr.op0());
 
-  if(!result_is_used)
+  if (!result_is_used)
   {
     convert(code, dest);
     expr.make_nil();
@@ -838,10 +923,10 @@ void goto_convertt::remove_statement_expression(
   }
 
   // get last statement from block
-  if(code.get_statement() != "block")
+  if (code.get_statement() != "block")
     throw "statement_expression expects block";
 
-  if(code.operands().empty())
+  if (code.operands().empty())
     throw "statement_expression expects non-empty block";
 
   exprt &last = code.operands().back();
@@ -849,17 +934,22 @@ void goto_convertt::remove_statement_expression(
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
 
+  // declare this symbol first
+  code_declt decl(symbol_expr(new_symbol));
+  decl.location() = location;
+  convert_decl(decl, dest);
+
   symbol_exprt tmp_symbol_expr(new_symbol.id, new_symbol.type);
   tmp_symbol_expr.location() = location;
 
-  if(last.statement() == "expression")
+  if (last.statement() == "expression")
   {
     // we turn this into an assignment
     exprt e = to_code_expression(to_code(last)).expression();
     last = code_assignt(tmp_symbol_expr, e);
     last.location() = location;
   }
-  else if(last.statement() == "assign")
+  else if (last.statement() == "assign")
   {
     exprt e = to_code_assign(to_code(last)).lhs();
     code_assignt assignment(tmp_symbol_expr, e);
@@ -882,7 +972,7 @@ void goto_convertt::remove_gcc_conditional_expression(
   exprt &expr,
   goto_programt &dest)
 {
-  if(expr.operands().size() != 2)
+  if (expr.operands().size() != 2)
     throw "conditional_expression takes two operands";
 
   // first remove side-effects from condition
@@ -896,9 +986,9 @@ void goto_convertt::remove_gcc_conditional_expression(
   if_expr.type() = expr.type();
   if_expr.location() = expr.location();
 
-  if(!if_expr.op0().type().is_bool())
+  if (!if_expr.op0().type().is_bool())
     if_expr.op0().make_typecast(bool_typet());
-  if(if_expr.true_case().type() != expr.type())
+  if (if_expr.true_case().type() != expr.type())
     if_expr.true_case().make_typecast(expr.type());
 
   expr.swap(if_expr);

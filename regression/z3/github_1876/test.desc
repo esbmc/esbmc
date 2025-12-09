@@ -1,0 +1,4 @@
+THOROUGH
+gh-1876.cpp
+--unwind 1 --smt-model --no-unwinding-assertions --timeout 900 --z3
+^VERIFICATION FAILED$

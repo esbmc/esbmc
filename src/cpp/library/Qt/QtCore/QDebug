@@ -6,7 +6,12 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-class QDebug{
-	QDebug(){}
-	~QDebug(){}
+class QDebug
+{
+  QDebug()
+  {
+  }
+  ~QDebug()
+  {
+  }
 };

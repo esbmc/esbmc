@@ -1,0 +1,4 @@
+CORE
+main.c
+--interval-analysis --no-pointer-check --interval-analysis-ibex-contractor --k-induction --unlimited-k-step
+^VERIFICATION SUCCESSFUL$

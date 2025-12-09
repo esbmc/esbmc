@@ -12,38 +12,39 @@
 #include <util/std_code.h>
 
 #define forall_goto_program_instructions(it, program)                          \
-  for(goto_programt::instructionst::const_iterator it =                        \
-        (program).instructions.begin();                                        \
-      it != (program).instructions.end();                                      \
-      it++)
+  for (goto_programt::instructionst::const_iterator it =                       \
+         (program).instructions.begin();                                       \
+       it != (program).instructions.end();                                     \
+       it++)
 
 #define Forall_goto_program_instructions(it, program)                          \
-  for(goto_programt::instructionst::iterator it =                              \
-        (program).instructions.begin();                                        \
-      it != (program).instructions.end();                                      \
-      it++)
+  for (goto_programt::instructionst::iterator it =                             \
+         (program).instructions.begin();                                       \
+       it != (program).instructions.end();                                     \
+       it++)
 
 typedef enum
 {
   NO_INSTRUCTION_TYPE = 0,
-  GOTO = 1,           // branch, possibly guarded
-  ASSUME = 2,         // non-failing guarded self loop
-  ASSERT = 3,         // assertions
-  OTHER = 4,          // anything else
-  SKIP = 5,           // just advance the PC
-  LOCATION = 8,       // semantically like SKIP
-  END_FUNCTION = 9,   // exit point of a function
-  ATOMIC_BEGIN = 10,  // marks a block without interleavings
-  ATOMIC_END = 11,    // end of a block without interleavings
-  RETURN = 12,        // return from a function
-  ASSIGN = 13,        // assignment lhs:=rhs
-  DECL = 14,          // declare a local variable
-  DEAD = 15,          // marks the end-of-live of a local variable
-  FUNCTION_CALL = 16, // call a function
-  THROW = 17,         // throw an exception
-  CATCH = 18,         // catch an exception
-  THROW_DECL = 19,    // list of throws that a function can throw
-  THROW_DECL_END = 20 // end of throw declaration
+  GOTO = 1,            // branch, possibly guarded
+  ASSUME = 2,          // non-failing guarded self loop
+  ASSERT = 3,          // assertions
+  OTHER = 4,           // anything else
+  SKIP = 5,            // just advance the PC
+  LOCATION = 8,        // semantically like SKIP
+  END_FUNCTION = 9,    // exit point of a function
+  ATOMIC_BEGIN = 10,   // marks a block without interleavings
+  ATOMIC_END = 11,     // end of a block without interleavings
+  RETURN = 12,         // return from a function
+  ASSIGN = 13,         // assignment lhs:=rhs
+  DECL = 14,           // declare a local variable
+  DEAD = 15,           // marks the end-of-live of a local variable
+  FUNCTION_CALL = 16,  // call a function
+  THROW = 17,          // throw an exception
+  CATCH = 18,          // catch an exception
+  THROW_DECL = 19,     // list of throws that a function can throw
+  THROW_DECL_END = 20, // end of throw declaration
+  LOOP_INVARIANT = 21  // loop invariant
 } goto_program_instruction_typet;
 
 std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
@@ -87,6 +88,8 @@ public:
   class instructiont
   {
   public:
+    mutable std::mutex clear_claims_mutex;
+
     expr2tc code;
 
     //! function this belongs to
@@ -100,6 +103,9 @@ public:
 
     //! guard for gotos, assume, assert
     expr2tc guard;
+
+    //! loop invariant for loop_invariant instruction
+    std::list<expr2tc> loop_invariants;
 
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;
@@ -152,6 +158,7 @@ public:
       targets.clear();
       guard = gen_true_expr();
       code = expr2tc();
+      loop_invariants.clear();
       inductive_step_instruction = false;
       inductive_assertion = false;
     }
@@ -317,6 +324,11 @@ public:
       return type == ASSERT;
     }
 
+    inline bool is_loop_invariant() const
+    {
+      return type == LOOP_INVARIANT;
+    }
+
     inline bool is_atomic_begin() const
     {
       return type == ATOMIC_BEGIN;
@@ -356,19 +368,85 @@ public:
       guard = gen_true_expr();
     }
 
+    instructiont(const instructiont &other)
+      : code(other.code),
+        function(other.function),
+        location(other.location),
+        type(other.type),
+        guard(other.guard),
+        targets(other.targets),
+        labels(other.labels),
+        inductive_step_instruction(other.inductive_step_instruction),
+        inductive_assertion(other.inductive_assertion),
+        location_number(other.location_number),
+        loop_number(other.loop_number),
+        target_number(other.target_number),
+        scope_id(other.scope_id),
+        parent_scope_id(other.parent_scope_id)
+    {
+      // instruction_mutex is not copied
+    }
+
+    instructiont &operator=(const instructiont &other)
+    {
+      instructiont(other).swap(*this);
+      return *this;
+    }
+
+    instructiont(instructiont &&other)
+      : code(std::move(other.code)),
+        function(std::move(other.function)),
+        location(std::move(other.location)),
+        type(other.type),
+        guard(std::move(other.guard)),
+        targets(std::move(other.targets)),
+        labels(std::move(other.labels)),
+        inductive_step_instruction(other.inductive_step_instruction),
+        inductive_assertion(other.inductive_assertion),
+        location_number(other.location_number),
+        loop_number(other.loop_number),
+        target_number(other.target_number),
+        scope_id(other.scope_id),
+        parent_scope_id(other.parent_scope_id)
+    {
+    }
+
+    instructiont &operator=(instructiont &&other)
+    {
+      swap(other);
+      return *this;
+    }
+
     //! swap two instructions
     void swap(instructiont &instruction)
     {
+      if (this == &instruction)
+        return;
+
       instruction.code.swap(code);
       instruction.location.swap(location);
       std::swap(instruction.type, type);
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
+      instruction.loop_invariants.swap(loop_invariants);
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(instruction.loop_number, loop_number);
+      std::swap(target_number, instruction.target_number);
+      std::swap(scope_id, instruction.scope_id);
+      std::swap(parent_scope_id, instruction.parent_scope_id);
+    }
+
+    void add_loop_invariant(const expr2tc &invariant)
+    {
+      assert(is_loop_invariant());
+      loop_invariants.push_back(invariant);
+    }
+    std::list<expr2tc> get_loop_invariants() const
+    {
+      return loop_invariants;
     }
 
     //! A globally unique number to identify a program location.
@@ -383,14 +461,21 @@ public:
     //! This is -1 if it's not a target.
     unsigned target_number;
 
+    //! Id of the scope within which a variable is declared (i.e., DECL).
+    //! It does not have a lot of meaning for other types of instructions.
+    unsigned int scope_id = 0;
+
+    //! Id of the parent scope for the current "scope_id".
+    unsigned int parent_scope_id = 0;
+
     //! Returns true if the instruction is a backwards branch.
     bool is_backwards_goto() const
     {
-      if(!is_goto())
+      if (!is_goto())
         return false;
 
-      for(auto target : targets)
-        if(target->location_number <= location_number)
+      for (auto target : targets)
+        if (target->location_number <= location_number)
           return true;
 
       return false;
@@ -398,10 +483,10 @@ public:
 
     bool operator<(const class instructiont i1) const
     {
-      if(function < i1.function)
+      if (function < i1.function)
         return true;
 
-      if(location_number < i1.location_number)
+      if (location_number < i1.location_number)
         return true;
 
       return false;
@@ -426,8 +511,6 @@ public:
   //! The list of instructions in the goto program
   instructionst instructions;
 
-  void get_successors(targett target, targetst &successors);
-
   void get_successors(const_targett target, const_targetst &successors) const;
 
   /// Insertion that preserves jumps to "target".
@@ -451,7 +534,7 @@ public:
   void insert_swap(targett target, goto_programt &p)
   {
     assert(target != instructions.end());
-    if(p.instructions.empty())
+    if (p.instructions.empty())
       return;
     insert_swap(target, p.instructions.front());
     auto next = std::next(target);
@@ -522,9 +605,9 @@ public:
   /// named functions.
   void update_instructions_function(const irep_idt &function_id)
   {
-    for(auto &instruction : instructions)
+    for (auto &instruction : instructions)
     {
-      if(instruction.function.empty())
+      if (instruction.function.empty())
       {
         instruction.function = function_id;
       }
@@ -537,7 +620,7 @@ public:
   //! Compute location numbers
   void compute_location_numbers(unsigned &nr)
   {
-    for(auto &instruction : instructions)
+    for (auto &instruction : instructions)
       instruction.location_number = nr++;
   }
 
@@ -581,43 +664,9 @@ public:
   //! Copy a full goto program, preserving targets
   void copy_from(const goto_programt &src);
 
-  //! Does the goto program have an assertion?
-  bool has_assertion() const;
-
   typedef std::set<irep_idt> decl_identifierst;
   /// get the variables in decl statements
   void get_decl_identifiers(decl_identifierst &decl_identifiers) const;
-
-  // Template for extracting instructions /from/ a goto program, to a type
-  // abstract something else.
-  template <
-    typename OutList,
-    typename ListAppender,
-    typename OutElem,
-    typename SetAttrObj,
-    typename SetAttrNil>
-  void extract_instructions(
-    OutList &list,
-    ListAppender listappend,
-    SetAttrObj setattrobj,
-    SetAttrNil setattrnil) const;
-
-  // Template for extracting instructions /from/ a type abstract something,
-  // to a goto program.
-  template <
-    typename InList,
-    typename InElem,
-    typename FetchElem,
-    typename ElemToInsn,
-    typename GetAttr,
-    typename IsAttrNil>
-  void inject_instructions(
-    InList list,
-    unsigned int len,
-    FetchElem fetchelem,
-    ElemToInsn elemtoinsn,
-    GetAttr getattr,
-    IsAttrNil isattrnil);
 };
 
 bool operator<(

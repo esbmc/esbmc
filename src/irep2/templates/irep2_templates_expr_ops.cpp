@@ -1,5 +1,7 @@
 #include <irep2/irep2_templates_expr.h>
 
+expr_typedefs2(exists, logic_2ops);
+expr_typedefs2(forall, logic_2ops);
 expr_typedefs1(not, bool_1op);
 expr_typedefs2(and, logic_2ops);
 expr_typedefs2(or, logic_2ops);
@@ -30,9 +32,13 @@ expr_typedefs2(shl, bit_2ops);
 expr_typedefs2(ashr, bit_2ops);
 expr_typedefs1(pointer_offset, pointer_ops);
 expr_typedefs1(pointer_object, pointer_ops);
+expr_typedefs1(pointer_capability, pointer_ops);
 expr_typedefs1(address_of, pointer_ops);
 expr_typedefs1(overflow, overflow_ops);
 expr_typedefs1(valid_object, object_ops);
+expr_typedefs1(races_check, object_ops);
+expr_typedefs1(isinstance, logic_2ops);
+expr_typedefs1(isnone, logic_2ops);
 expr_typedefs1(dynamic_size, object_ops);
 expr_typedefs1(deallocated_obj, object_ops);
 expr_typedefs1(invalid_pointer, invalid_pointer_ops);
@@ -44,4 +50,6 @@ expr_typedefs1(popcount, overflow_ops);
 expr_typedefs1(bswap, arith_1op);
 expr_typedefs2(concat, bit_2ops);
 expr_typedefs1(isnan, bool_1op);
+expr_typedefs1(capability_base, object_ops);
+expr_typedefs1(capability_top, object_ops);
 expr_typedefs1(overflow_neg, overflow_ops);

@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --unwind 2 --no-unwinding-assertions --z3 --ir --no-standard-checks
+^VERIFICATION SUCCESSFUL$

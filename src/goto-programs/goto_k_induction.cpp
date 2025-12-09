@@ -1,5 +1,5 @@
 #include <goto-programs/goto_k_induction.h>
-#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_no_op.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
@@ -7,8 +7,8 @@
 
 void goto_k_induction(goto_functionst &goto_functions)
 {
-  Forall_goto_functions(it, goto_functions)
-    if(it->second.body_available)
+  Forall_goto_functions (it, goto_functions)
+    if (it->second.body_available)
       goto_k_inductiont(it->first, goto_functions, it->second);
 
   goto_functions.update();
@@ -16,8 +16,8 @@ void goto_k_induction(goto_functionst &goto_functions)
 
 void goto_termination(goto_functionst &goto_functions)
 {
-  Forall_goto_functions(it, goto_functions)
-    if(it->second.body_available)
+  Forall_goto_functions (it, goto_functions)
+    if (it->second.body_available)
       goto_k_inductiont(it->first, goto_functions, it->second);
   goto_functions.update();
 
@@ -25,21 +25,24 @@ void goto_termination(goto_functionst &goto_functions)
 
   // Search for __ESBMC_main
   auto it = function->second.body.instructions.begin();
-  while(it != function->second.body.instructions.end())
+  while (it != function->second.body.instructions.end())
   {
-    if(it->is_function_call())
+    if (it->is_function_call())
     {
       auto const &call = to_code_function_call2t(it->code);
-      if(to_symbol2t(call.function).thename.as_string() == "c:@F@main")
+      if (to_symbol2t(call.function).thename.as_string() == "c:@F@main")
         break;
     }
     it++;
   }
   assert(it != function->second.body.instructions.end());
 
-  // Create an assert(0)
+  // Create assert(0) as termination marker.
+  // This assertion fails when reached, allowing reachability analysis
+  // to detect program termination vs. infinite execution
   goto_programt dest;
   goto_programt::targett t = dest.add_instruction(ASSERT);
+  // Always false - assertion always fails when reached
   t->guard = gen_false_expr();
   t->inductive_step_instruction = true;
   t->inductive_assertion = false;
@@ -53,11 +56,15 @@ void goto_termination(goto_functionst &goto_functions)
 void goto_k_inductiont::goto_k_induction()
 {
   // Full unwind the program
-  for(auto &function_loop : function_loops)
+  for (auto &function_loop : function_loops)
   {
-    if(function_loop.get_modified_loop_vars().empty())
+    if (function_loop.get_modified_loop_vars().empty())
       continue;
 
+    if (
+      config.options.get_bool_option("add-symex-value-sets") &&
+      function_loop.contains_only_pointers())
+      continue;
     // Start the loop conversion
     convert_finite_loop(function_loop);
   }
@@ -100,14 +107,14 @@ bool goto_k_inductiont::get_entry_cond_rec(
   auto const &exit_number = loop_exit->location_number;
 
   // We jumped outside the loop, don't collect this constraint
-  if(entry_number > exit_number)
+  if (entry_number > exit_number)
     return true;
 
   goto_programt::targett tmp_head = loop_head;
-  for(; tmp_head != loop_exit; tmp_head++)
+  for (; tmp_head != loop_exit; tmp_head++)
   {
     auto it = marked_branch.find(tmp_head->location_number);
-    if(it != marked_branch.end())
+    if (it != marked_branch.end())
       return it->second;
 
     /* TODO: disable this for now, it will be used for termination evaluation
@@ -123,13 +130,13 @@ bool goto_k_inductiont::get_entry_cond_rec(
         return true;
     */
 
-    if(tmp_head->is_goto() && !tmp_head->is_backwards_goto())
+    if (tmp_head->is_goto() && !tmp_head->is_backwards_goto())
     {
       expr2tc g = tmp_head->guard;
       simplify(g);
 
       // If the guard is false, we can skip it right away
-      if(is_false(g))
+      if (is_false(g))
         continue;
 
       // We need to walk the branches and collect constraints that force
@@ -141,7 +148,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       // Walk the true branch
       bool true_branch = true;
       guardst true_branch_guard;
-      if(!is_false(g))
+      if (!is_false(g))
       {
         true_branch_guard[branch_number].add(g);
         true_branch = get_entry_cond_rec(
@@ -151,7 +158,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       // Walk the false branch
       bool false_branch = true;
       guardst false_branch_guard;
-      if(!is_true(g))
+      if (!is_true(g))
       {
         goto_programt::targett new_tmp_head = tmp_head;
         make_not(g);
@@ -166,18 +173,18 @@ bool goto_k_inductiont::get_entry_cond_rec(
 
       // If both side reach the end of the loop or if both side don't reach it
       // we can ignore them
-      if(!(false_branch ^ true_branch))
+      if (!(false_branch ^ true_branch))
         return false_branch && true_branch;
 
       // At least only one of the branches reach the end of the loop, so
       // collect the guards
-      if(!true_branch)
+      if (!true_branch)
       {
         guards.insert(true_branch_guard.begin(), true_branch_guard.end());
         return false;
       }
 
-      if(!false_branch)
+      if (!false_branch)
       {
         guards.insert(false_branch_guard.begin(), false_branch_guard.end());
         return false;
@@ -192,45 +199,75 @@ void goto_k_inductiont::make_nondet_assign(
   goto_programt::targett &loop_head,
   const loopst &loop)
 {
+  // Track the original loop head
+  auto const original_loop_head = loop_head;
+
+  // Check if the loop_head is an assertion, and track it
+  const bool is_assert = loop_head->is_assert();
+
+  // If it's an assertion, adjust loop_head to insert assignments before it
+  if ((is_assert) && loop_head != goto_function.body.instructions.begin())
+  {
+    --loop_head;
+    // We add instructions before a GOTO instruction
+    // So we ensure we have one here
+    assert(loop_head->is_goto());
+  }
+
+  // Get the list of variables modified inside the loop
   auto const &loop_vars = loop.get_modified_loop_vars();
 
   goto_programt dest;
-  for(auto const &lhs : loop_vars)
+  for (auto const &lhs : loop_vars)
   {
     // do not assign nondeterministic value to pointers if we assume
     // objects extracted from the value set analysis
-    if(
-      !config.options.get_bool_option("no-pointer-check") &&
+    if (
       config.options.get_bool_option("add-symex-value-sets") &&
       is_pointer_type(lhs))
       continue;
+
+    // Generate a nondeterministic value for the loop variable
     expr2tc rhs = gen_nondet(lhs->type);
 
+    // Create an assignment instruction for the nondeterministic value
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->inductive_step_instruction = true;
     t->code = code_assign2tc(lhs, rhs);
+    // Keep the same location as the loop head
     t->location = loop_head->location;
   }
 
+  // Insert the generated assignments before the loop head in the program
   goto_function.body.insert_swap(loop_head, dest);
 
   // Get original head again
   // Since we are using insert_swap to keep the targets, the
   // original loop head as shifted to after the assume cond
-  while((++loop_head)->inductive_step_instruction)
-    ;
+  if (is_assert)
+  {
+    // Restore the original loop head if it was an assertion
+    loop_head = original_loop_head;
+    assert(loop_head->is_assert());
+  }
+  else
+  {
+    // Move past the inserted instructions during the inductive step
+    while ((++loop_head)->inductive_step_instruction)
+      ;
+  }
 }
 
 static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
 {
   bool res = false;
   expr->foreach_operand([&vars, &res](const expr2tc &e) {
-    if(!is_nil_expr(e))
+    if (!is_nil_expr(e))
       res = contains_rec(e, vars) || res;
     return res;
   });
 
-  if(!is_symbol2t(expr))
+  if (!is_symbol2t(expr))
     return res;
 
   return (vars.find(expr) != vars.end()) || res;
@@ -241,18 +278,18 @@ void goto_k_inductiont::remove_unrelated_loop_cond(
   loopst &loop)
 {
   auto const &loop_vars = loop.get_modified_loop_vars();
-  if(!loop_vars.size())
+  if (!loop_vars.size())
   {
     guards.clear();
     return;
   }
 
   guardst::iterator g = guards.begin();
-  while(g != guards.end())
+  while (g != guards.end())
   {
     expr2tc g_expr = g->second.as_expr();
 
-    if(!contains_rec(g_expr, loop_vars))
+    if (!contains_rec(g_expr, loop_vars))
       g = guards.erase(g);
     else
       ++g;
@@ -265,18 +302,18 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   const guardst &guards)
 {
   goto_programt::targett tmp_head = loop_head;
-  for(; tmp_head != loop_exit; tmp_head++)
+  for (; tmp_head != loop_exit; tmp_head++)
   {
     auto const g = guards.find(tmp_head->location_number);
-    if(g == guards.end())
+    if (g == guards.end())
       continue;
 
     expr2tc loop_cond = g->second.as_expr();
 
-    if(is_nil_expr(loop_cond))
+    if (is_nil_expr(loop_cond))
       return;
 
-    if(is_true(loop_cond) || is_false(loop_cond))
+    if (is_true(loop_cond) || is_false(loop_cond))
       return;
 
     goto_programt dest;
@@ -298,7 +335,7 @@ void goto_k_inductiont::adjust_loop_head_and_exit(
 
   // Zero means that the instruction was added during
   // the k-induction transformation
-  if(_loop_exit->location_number == 0)
+  if (_loop_exit->location_number == 0)
   {
     // Clear the target
     loop_head->targets.clear();

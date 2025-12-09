@@ -10,9 +10,16 @@
 #include "../QtCore/QString"
 #include "QWidget"
 
-class QTextEdit{
+class QTextEdit
+{
 public:
-	QTextEdit ( QWidget * parent = 0 ){}
-	QTextEdit ( const QString & text, QWidget * parent = 0 ){}
-	~QTextEdit (){}
+  QTextEdit(QWidget *parent = 0)
+  {
+  }
+  QTextEdit(const QString &text, QWidget *parent = 0)
+  {
+  }
+  ~QTextEdit()
+  {
+  }
 };

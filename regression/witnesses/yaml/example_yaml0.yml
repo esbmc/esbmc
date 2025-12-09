@@ -1,0 +1,16 @@
+- entry_type: "invariant_set"
+  metadata:
+    format_version: "2.0"
+    uuid: "3fe43e5d-0738-4c6c-9477-3df86914ca19"
+    creation_time: "2025-08-04T20:45:12+08:00"
+    producer:
+      name: "ESBMC kind"
+      version: "7.10.0"
+    task:
+      input_files:
+        - "main3.c"
+      input_file_hashes:
+        "main3.c": "db7aabe7f6febb2c6f2b96f9fc660c9d297bac6ad022fd9ce8f94a3b4a49b13f"
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"

@@ -1,7 +1,7 @@
-//  (C) Copyright John Maddock 2001 - 2003. 
-//  (C) Copyright Jens Maurer 2001 - 2003. 
-//  Use, modification and distribution are subject to the 
-//  Boost Software License, Version 1.0. (See accompanying file 
+//  (C) Copyright John Maddock 2001 - 2003.
+//  (C) Copyright Jens Maurer 2001 - 2003.
+//  Use, modification and distribution are subject to the
+//  Boost Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
 //  See http://www.boost.org for most recent version.
@@ -12,30 +12,31 @@
 
 // make sure we have __GLIBC_PREREQ if available at all
 #ifdef __cplusplus
-#include <cstdlib>
+#  include <cstdlib>
 #else
-#include <stdlib.h>
+#  include <stdlib.h>
 #endif
 
 //
 // <stdint.h> added to glibc 2.1.1
 // We can only test for 2.1 though:
 //
-#if defined(__GLIBC__) && ((__GLIBC__ > 2) || ((__GLIBC__ == 2) && (__GLIBC_MINOR__ >= 1)))
-   // <stdint.h> defines int64_t unconditionally, but <sys/types.h> defines
-   // int64_t only if __GNUC__.  Thus, assume a fully usable <stdint.h>
-   // only when using GCC.
+#if defined(__GLIBC__) &&                                                      \
+  ((__GLIBC__ > 2) || ((__GLIBC__ == 2) && (__GLIBC_MINOR__ >= 1)))
+// <stdint.h> defines int64_t unconditionally, but <sys/types.h> defines
+// int64_t only if __GNUC__.  Thus, assume a fully usable <stdint.h>
+// only when using GCC.
 #  if defined __GNUC__
 #    define BOOST_HAS_STDINT_H
 #  endif
 #endif
 
 #if defined(__LIBCOMO__)
-   //
-   // como on linux doesn't have std:: c functions:
-   // NOTE: versions of libcomo prior to beta28 have octal version numbering,
-   // e.g. version 25 is 21 (dec)
-   //
+//
+// como on linux doesn't have std:: c functions:
+// NOTE: versions of libcomo prior to beta28 have octal version numbering,
+// e.g. version 25 is 21 (dec)
+//
 #  if __LIBCOMO_VERSION__ <= 20
 #    define BOOST_NO_STDC_NAMESPACE
 #  endif
@@ -61,8 +62,9 @@
 #if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
 // __GLIBC_PREREQ is available since 2.1.2
 
-   // swprintf is available since glibc 2.2.0
-#  if !__GLIBC_PREREQ(2,2) || (!defined(__USE_ISOC99) && !defined(__USE_UNIX98))
+// swprintf is available since glibc 2.2.0
+#  if !__GLIBC_PREREQ(2, 2) ||                                                 \
+    (!defined(__USE_ISOC99) && !defined(__USE_UNIX98))
 #    define BOOST_NO_SWPRINTF
 #  endif
 #else
@@ -81,23 +83,21 @@
 // use GNU specific extensions:
 //
 #  ifndef __extension__
-#     define __extension__
+#    define __extension__
 #  endif
 #  ifndef __const__
-#     define __const__ const
+#    define __const__ const
 #  endif
 #  ifndef __volatile__
-#     define __volatile__ volatile
+#    define __volatile__ volatile
 #  endif
 #  ifndef __signed__
-#     define __signed__ signed
+#    define __signed__ signed
 #  endif
 #  ifndef __typeof__
-#     define __typeof__ typeof
+#    define __typeof__ typeof
 #  endif
 #  ifndef __inline__
-#     define __inline__ inline
+#    define __inline__ inline
 #  endif
 #endif
-
-

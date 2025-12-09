@@ -1,0 +1,10 @@
+CORE
+main.c
+ --condition-coverage-rm
+^Reached Conditions:  2
+^Short Circuited Conditions:  0
+^Total Conditions:  2
+^Condition Properties - SATISFIED:  2
+^Condition Properties - UNSATISFIED:  0
+^Condition Coverage: 100%
+^VERIFICATION FAILED$

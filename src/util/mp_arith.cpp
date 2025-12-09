@@ -10,13 +10,13 @@ BigInt operator>>(const BigInt &a, const BigInt &b)
 {
   BigInt power = ::power(2, b);
 
-  if(a >= 0)
+  if (a >= 0)
     return a / power;
 
   // arithmetic shift right isn't division for negative numbers!
   // http://en.wikipedia.org/wiki/Arithmetic_shift
 
-  if((a % power) == 0)
+  if ((a % power) == 0)
     return a / power;
 
   return a / power - 1;
@@ -38,8 +38,8 @@ std::ostream &operator<<(std::ostream &out, const BigInt &n)
 /// \return BigInt
 const BigInt string2integer(const std::string &n, unsigned base)
 {
-  for(std::size_t i = 0; i < n.size(); i++)
-    if(!(isalnum(n[i]) || (n[i] == '-' && i == 0)))
+  for (std::size_t i = 0; i < n.size(); i++)
+    if (!(isalnum(n[i]) || (n[i] == '-' && i == 0)))
       return 0;
 
   return BigInt(n.c_str(), base);
@@ -50,12 +50,12 @@ const std::string integer2binary(const BigInt &n, std::size_t width)
 {
   BigInt a(n);
 
-  if(width == 0)
+  if (width == 0)
     return "";
 
   bool neg = a.is_negative();
 
-  if(neg)
+  if (neg)
   {
     a.negate();
     a = a - 1;
@@ -67,17 +67,17 @@ const std::string integer2binary(const BigInt &n, std::size_t width)
 
   std::string result(s);
 
-  if(result.size() < width)
+  if (result.size() < width)
   {
     std::string fill;
     fill.resize(width - result.size(), '0');
     result = fill + result;
   }
-  else if(result.size() > width)
+  else if (result.size() > width)
     result = result.substr(result.size() - width, width);
 
-  if(neg)
-    for(std::size_t i = 0; i < result.size(); i++)
+  if (neg)
+    for (std::size_t i = 0; i < result.size(); i++)
       result[i] = (result[i] == '0') ? '1' : '0';
 
   return result;
@@ -99,26 +99,28 @@ const std::string integer2string(const BigInt &n, unsigned base)
 /// \return BigInt
 const BigInt binary2integer(const std::string &n, bool is_signed)
 {
-  if(n.empty())
+  assert(std::all_of(
+    n.begin(), n.end(), [](char c) { return c == '0' || c == '1'; }));
+  if (n.empty())
     return 0;
 
-  if(n.size() <= (sizeof(unsigned long) * 8))
+  if (n.size() <= (sizeof(unsigned long) * 8))
   {
     // this is a tuned implementation for short integers
 
     unsigned long mask = 1;
     mask = mask << (n.size() - 1);
     BigInt top_bit = (n[0] == '1') ? mask : 0;
-    if(is_signed)
+    if (is_signed)
       top_bit.negate();
     mask >>= 1;
     unsigned long other_bits = 0;
 
-    for(std::string::const_iterator it = ++n.begin(); it != n.end(); ++it)
+    for (std::string::const_iterator it = ++n.begin(); it != n.end(); ++it)
     {
-      if(*it == '1')
+      if (*it == '1')
         other_bits += mask;
-      else if(*it != '0')
+      else if (*it != '0')
         return 0;
 
       mask >>= 1;
@@ -127,10 +129,10 @@ const BigInt binary2integer(const std::string &n, bool is_signed)
     return top_bit + other_bits;
   }
 
-  if(n.find_first_not_of("01") != std::string::npos)
+  if (n.find_first_not_of("01") != std::string::npos)
     return 0;
 
-  if(is_signed && n[0] == '1')
+  if (is_signed && n[0] == '1')
   {
     BigInt result(n.c_str() + 1, 2);
     result -= BigInt(1) << (n.size() - 1);

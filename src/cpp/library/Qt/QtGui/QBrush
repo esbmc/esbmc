@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QBrush {
+class QBrush
+{
 public:
-	QBrush();
-	~QBrush();
+  QBrush();
+  ~QBrush();
 };

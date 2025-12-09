@@ -1,0 +1,4 @@
+CORE
+align.c
+--func f -Wno-error=implicit-function-declaration
+^VERIFICATION SUCCESSFUL$

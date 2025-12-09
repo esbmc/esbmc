@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --data-races-check
 ^VERIFICATION FAILED$

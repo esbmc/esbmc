@@ -1,4 +1,4 @@
 CORE
 main.c
---compact-trace --memory-leak-check
+--compact-trace --memory-leak-check --no-reachable-memory-leak --no-abnormal-memory-leak
 ^VERIFICATION FAILED$

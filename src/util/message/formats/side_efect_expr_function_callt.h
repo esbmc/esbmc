@@ -2,7 +2,7 @@
 // WHAT THIS FILE IS ABOUT!!!
 
 #ifndef ESBMC_FORMATS_START_ASSERTION
-#error Do not include this header directly, use <util/message/format.h>
+#  error Do not include this header directly, use <util/message/format.h>
 #endif
 
 // side_effect_expr_function_callt Specialization
@@ -14,15 +14,16 @@ struct fmt::formatter<side_effect_expr_function_callt>
   constexpr auto parse(format_parse_context &ctx)
   {
     auto it = ctx.begin(), end = ctx.end();
-    if(it != end && *it != '}')
+    if (it != end && *it != '}')
       throw format_error("invalid format");
     return it;
   }
 
   // This will teach fmt how to convert side_effect_expr_function_callt into a str.
   template <typename FormatContext>
-  auto format(const side_effect_expr_function_callt &p, FormatContext &ctx)
+  auto
+  format(const side_effect_expr_function_callt &p, FormatContext &ctx) const
   {
-    return format_to(ctx.out(), "{}", p.pretty(0));
+    return fmt::format_to(ctx.out(), "{}", p.pretty(0));
   }
 };

@@ -8,10 +8,14 @@ Author: Felipe Rodrigues
 
 #include "../QtCore/QObject"
 
-class QGraphicsScene{
+class QGraphicsScene
+{
 public:
-	QGraphicsScene ( QObject * parent = 0 ){}
-	void	addItem ( QGraphicsPixmapItem * item ){
-	__ESBMC_assert(item != NULL, "invalid parameter");
-	}
+  QGraphicsScene(QObject *parent = 0)
+  {
+  }
+  void addItem(QGraphicsPixmapItem *item)
+  {
+    __ESBMC_assert(item != NULL, "invalid parameter");
+  }
 };

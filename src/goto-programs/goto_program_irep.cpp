@@ -5,20 +5,20 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
 {
   irep.code(migrate_expr_back(instruction.code));
 
-  if(instruction.function != "")
+  if (instruction.function != "")
     irep.function(instruction.function);
 
-  if(instruction.location.is_not_nil())
+  if (instruction.location.is_not_nil())
     irep.location(instruction.location);
 
   irep.type_id((long)instruction.type);
 
   irep.guard(migrate_expr_back(instruction.guard));
 
-  if(!instruction.targets.empty())
+  if (!instruction.targets.empty())
   {
     irept tgts;
-    for(auto const &it : instruction.targets)
+    for (auto const &it : instruction.targets)
     {
       irept t(i2string(it->location_number));
       tgts.move_to_sub(t);
@@ -27,12 +27,12 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
     irep.targets(tgts);
   }
 
-  if(!instruction.labels.empty())
+  if (!instruction.labels.empty())
   {
     irept lbls;
     irept::subt &subs = lbls.get_sub();
     subs.reserve(instruction.labels.size());
-    for(auto const &it : instruction.labels)
+    for (auto const &it : instruction.labels)
       subs.emplace_back(it);
 
     irep.labels(lbls);
@@ -52,7 +52,7 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
 
   const irept &lbls = irep.labels_irep();
   const irept::subt &lsubs = lbls.get_sub();
-  for(auto const &it : lsubs)
+  for (auto const &it : lsubs)
     instruction.labels.push_back(it.id());
 }
 
@@ -60,7 +60,7 @@ void convert(const goto_programt &program, irept &irep)
 {
   irep.id("goto-program");
   irep.get_sub().reserve(program.instructions.size());
-  for(auto const &it : program.instructions)
+  for (auto const &it : program.instructions)
   {
     irep.get_sub().emplace_back();
     convert(it, irep.get_sub().back());
@@ -79,7 +79,7 @@ void convert(const irept &irep, goto_programt &program)
 
   // convert instructions back
   const irept::subt &subs = irep.get_sub();
-  for(auto const &it : subs)
+  for (auto const &it : subs)
   {
     program.instructions.emplace_back();
     convert(it, program.instructions.back());
@@ -87,7 +87,7 @@ void convert(const irept &irep, goto_programt &program)
     number_targets_list.emplace_back();
     const irept &targets = it.targets();
     const irept::subt &tsubs = targets.get_sub();
-    for(auto const &tit : tsubs)
+    for (auto const &tit : tsubs)
       number_targets_list.back().push_back(atoi(tit.id_string().c_str()));
   }
 
@@ -95,27 +95,28 @@ void convert(const irept &irep, goto_programt &program)
 
   // resolve targets
   std::list<std::list<unsigned>>::iterator nit = number_targets_list.begin();
-  for(goto_programt::instructionst::iterator lit = program.instructions.begin();
-      lit != program.instructions.end() && nit != number_targets_list.end();
-      lit++, nit++)
+  for (goto_programt::instructionst::iterator lit =
+         program.instructions.begin();
+       lit != program.instructions.end() && nit != number_targets_list.end();
+       lit++, nit++)
   {
-    for(unsigned int &tit : *nit)
+    for (unsigned int &tit : *nit)
     {
       goto_programt::targett fit = program.instructions.begin();
-      for(; fit != program.instructions.end(); fit++)
+      for (; fit != program.instructions.end(); fit++)
       {
-        if(fit->location_number == tit)
+        if (fit->location_number == tit)
         {
           lit->targets.push_back(fit);
           break;
         }
       }
 
-      if(fit == program.instructions.end())
+      if (fit == program.instructions.end())
       {
         log_error(
-          "Warning: could not resolve target link "
-          "during irep->goto_program translation.");
+          "could not resolve target link during irep->goto_program "
+          "translation.");
         abort();
       }
     }

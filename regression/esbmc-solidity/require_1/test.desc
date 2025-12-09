@@ -1,0 +1,4 @@
+THOROUGH
+contract.solast
+--sol contract.sol --contract Robot --unwind 15
+^VERIFICATION FAILED$

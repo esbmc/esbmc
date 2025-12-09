@@ -2,7 +2,7 @@
 // WHAT THIS FILE IS ABOUT!!!
 
 #ifndef ESBMC_FORMATS_START_ASSERTION
-#error Do not include this header directly, use <util/message/format.h>
+#  error Do not include this header directly, use <util/message/format.h>
 #endif
 
 // BigInt Specialization
@@ -17,19 +17,19 @@ struct fmt::formatter<BigInt>
   constexpr auto parse(format_parse_context &ctx)
   {
     auto it = ctx.begin(), end = ctx.end();
-    if(it != end && (*it == 'd'))
+    if (it != end && (*it == 'd'))
       presentation = *it++;
-    if(it != end && *it != '}')
+    if (it != end && *it != '}')
       throw format_error("invalid format");
     return it;
   }
 
   // This will teach fmt how to convert BigInt into a str.
   template <typename FormatContext>
-  auto format(const BigInt &p, FormatContext &ctx)
+  auto format(const BigInt &p, FormatContext &ctx) const
   {
     int base;
-    switch(presentation)
+    switch (presentation)
     {
     case 'd':
       base = 10;
@@ -40,6 +40,6 @@ struct fmt::formatter<BigInt>
     char tmp[128];
     char *number;
     number = p.as_string(tmp, 128, base);
-    return format_to(ctx.out(), "{}", number);
+    return fmt::format_to(ctx.out(), "{}", number);
   }
 };

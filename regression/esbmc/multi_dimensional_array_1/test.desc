@@ -1,4 +1,5 @@
 CORE
 main.c
 --k-induction
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
+\barray size in bytes overflows address space size$

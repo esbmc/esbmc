@@ -27,9 +27,9 @@ void minisat_convt::convert(const bvt &bv, Minisat::vec<Lit> &dest)
 {
   dest.capacity(bv.size());
 
-  for(unsigned int i = 0; i < bv.size(); i++)
+  for (unsigned int i = 0; i < bv.size(); i++)
   {
-    if(!bv[i].is_false())
+    if (!bv[i].is_false())
       dest.push(Minisat::mkLit(bv[i].var_no(), bv[i].sign()));
   }
   return;
@@ -38,7 +38,7 @@ void minisat_convt::convert(const bvt &bv, Minisat::vec<Lit> &dest)
 void minisat_convt::setto(literalt a, bool val)
 {
   bvt b;
-  if(val)
+  if (val)
     b.push_back(a);
   else
     b.push_back(cnf_convt::lnot(a));
@@ -53,10 +53,10 @@ void minisat_convt::lcnf(const bvt &bv)
 {
   bvt new_bv;
 
-  if(process_clause(bv, new_bv))
+  if (process_clause(bv, new_bv))
     return;
 
-  if(new_bv.empty())
+  if (new_bv.empty())
     return;
 
   Minisat::vec<Lit> c;
@@ -86,12 +86,12 @@ smt_convt::resultt minisat_convt::dec_solve()
 {
   pre_solve();
 
-  if(false_asserted)
+  if (false_asserted)
     // Then the formula can never be satisfied.
     return smt_convt::P_UNSATISFIABLE;
 
   bool res = solver.solve();
-  if(res)
+  if (res)
     return smt_convt::P_SATISFIABLE;
   else
     return smt_convt::P_UNSATISFIABLE;
@@ -99,11 +99,11 @@ smt_convt::resultt minisat_convt::dec_solve()
 
 void minisat_convt::dump_bv(const bvt &bv) const
 {
-  for(unsigned int i = 0; i < bv.size(); i++)
+  for (unsigned int i = 0; i < bv.size(); i++)
   {
-    if(bv[i] == const_literal(false))
+    if (bv[i] == const_literal(false))
       std::cerr << "0";
-    else if(bv[i] == const_literal(true))
+    else if (bv[i] == const_literal(true))
       std::cerr << "1";
     else
       std::cerr << "?";
@@ -120,16 +120,16 @@ const std::string minisat_convt::solver_text()
 
 tvt minisat_convt::l_get(const literalt &l)
 {
-  if(l == const_literal(true))
+  if (l == const_literal(true))
     return tvt(tvt::TV_TRUE);
-  else if(l == const_literal(false))
+  else if (l == const_literal(false))
     return tvt(tvt::TV_FALSE);
 
   Minisat::lbool val = solver.modelValue(Minisat::mkLit(l.var_no(), l.sign()));
   int v = Minisat::toInt(val);
-  if(v == 0)
+  if (v == 0)
     return tvt(tvt::TV_TRUE);
-  else if(v == 1)
+  else if (v == 1)
     return tvt(tvt::TV_FALSE);
   else
     return tvt(tvt::TV_UNKNOWN);
@@ -137,10 +137,10 @@ tvt minisat_convt::l_get(const literalt &l)
 
 void minisat_convt::assert_lit(const literalt &l)
 {
-  if(l.is_true())
+  if (l.is_true())
     return;
 
-  if(l.is_false())
+  if (l.is_false())
   {
     false_asserted = true;
     return;

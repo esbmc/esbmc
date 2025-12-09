@@ -1,0 +1,26 @@
+# ESBMC CUDA Operational Model (COM) based on CUDA v8.0
+
+[CUDA](https://developer.nvidia.com/cuda-zone) (Compute Unified Device Architecture) is a parallel computing platform and application programming interface (API) model created by NVIDIA.
+
+On WSL2 Ubuntu, the usual path for CUDA API is `/usr/local/cuda`.
+
+## We created operational models from the NVIDIA CUDA API as follows (It has been cut and simplified)
+
+`builtin_types.h` 
+`cuda_device_runtime_api.h` 
+`curand_kernel.h` 
+`curand_precalc.h` 
+`device_launch_parameters.h` 
+`driver_types.h` 
+`math_functions.h` 
+`sm_atomic_functions.h` 
+`vector_types.h`
+
+## In particular, we created pre- and post-conditions and code that simulate the original behavior of the NVIDIA CUDA API.
+
+`cuda_runtime_api.h` 
+`cuda.h`
+
+## ESBMC Original (POSIX is used to simulate the parallel operation of the CUDA kernels)
+
+`call_kernel.h`

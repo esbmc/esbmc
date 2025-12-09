@@ -11,7 +11,7 @@ class clang_cpp_convertert : public clang_c_convertert
 public:
   clang_cpp_convertert(
     contextt &_context,
-    std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
+    std::unique_ptr<clang::ASTUnit> &_AST,
     irep_idt _mode);
   virtual ~clang_cpp_convertert() = default;
 
@@ -22,6 +22,11 @@ protected:
   this_mapt this_map;
 
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
+
+  void get_decl_name(
+    const clang::NamedDecl &nd,
+    std::string &name,
+    std::string &id) override;
 
   /**
    *  Get reference to a declared variable or function, e.g:
@@ -34,7 +39,7 @@ protected:
 
   bool get_type(const clang::Type &the_type, typet &new_type) override;
 
-  bool get_function(const clang::FunctionDecl &fd, exprt &new_expr) override;
+  bool get_method(const clang::CXXMethodDecl &md, exprt &new_expr);
 
   /**
    *  Get reference for constructor callsite
@@ -42,6 +47,43 @@ protected:
   bool get_constructor_call(
     const clang::CXXConstructExpr &constructor_call,
     exprt &new_expr);
+
+#if CLANG_VERSION_MAJOR <= 15
+#  define CAPTURE_VARIABLE_TYPE clang::VarDecl
+#else
+#  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
+#endif
+  /*
+   *  Map captured variables and this to the non-static members storing their 
+   *  values or references.
+   *  Arguments:
+   *   is_lambda_operator: the lambda operator is being converted
+   *   captures: populated with the mapping from captured variables to the
+   *             corresponding fields.
+   *   thisCapture:	the field declaration for the This capture.
+   */
+  typedef llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *>
+    field_mapt;
+  typedef std::
+    unordered_map<std::size_t, std::pair<field_mapt, clang::FieldDecl *>>
+      cap_mapt;
+  cap_mapt cap_map;
+
+  bool is_lambda() const
+  {
+    if (!current_functionDecl)
+      return false;
+
+    if (
+      const auto *methodDecl =
+        llvm::dyn_cast<clang::CXXMethodDecl>(current_functionDecl))
+    {
+      const auto *parent = methodDecl->getParent();
+      if (parent && parent->isLambda())
+        return true;
+    }
+    return false;
+  }
 
   bool get_function_body(
     const clang::FunctionDecl &fd,
@@ -56,28 +98,13 @@ protected:
     const clang::FunctionDecl &fd,
     code_typet::argumentst &params) override;
 
-  bool name_param_and_continue(
+  void name_param_and_continue(
     const clang::ParmVarDecl &pd,
     std::string &id,
     std::string &name,
     exprt &param) override;
 
-  /*
-   * This function assigns a name and an id to the unnamed const ref
-   * in an implicit defaulted copy constructor added by the compiler.
-   *
-   * Params:
-   *  pd: the clang AST node for the function parameter we are currently dealing with
-   *  id: id for this function parameter
-   *  name: name for this function parameter
-   *  param: ESBMC's IR representing the function parameter
-   */
-  void get_cpyctor_name(
-    const clang::CXXConstructorDecl *cxxctor,
-    std::string &id,
-    std::string &name,
-    exprt &param);
-  std::string cpyctor_constref_suffix = "ref";
+  std::string constref_suffix = "ref";
 
   /**
    *  Add implicit `this' when parsing C++ class member functions, e.g:
@@ -100,7 +127,7 @@ protected:
 
   bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &rd,
-    struct_typet &type) override;
+    typet &type) override;
 
   /*
    * Deal with ClassTemplateDecl or FunctionTemplateDecl or
@@ -110,7 +137,7 @@ protected:
   */
   template <typename TemplateDecl>
   bool get_template_decl(
-    const TemplateDecl *D,
+    const TemplateDecl &D,
     bool DumpExplicitInst,
     exprt &new_expr);
 
@@ -133,7 +160,7 @@ protected:
    *  comp: the `component` representing the field
    */
   bool annotate_class_field(
-    const clang::FieldDecl *field,
+    const clang::FieldDecl &field,
     const struct_union_typet &type,
     struct_typet::componentt &comp);
 
@@ -143,13 +170,13 @@ protected:
    *    * access: public
    */
   bool annotate_class_field_access(
-    const clang::FieldDecl *field,
+    const clang::FieldDecl &field,
     struct_typet::componentt &comp);
 
   /*
    * Get access from any clang Decl (field, method .etc)
    */
-  bool get_access_from_decl(const clang::Decl *decl, std::string &access);
+  bool get_access_from_decl(const clang::Decl &decl, std::string &access);
 
   /*
    * Get the symbol from the context for a C++ function
@@ -176,10 +203,8 @@ protected:
    *  new_expr: the `component` in class/struct/union symbol type
    *  fd: clang AST node representing the function declaration we are dealing with
    */
-  bool annotate_class_method(
-    const clang::CXXMethodDecl *cxxmdd,
-    exprt &new_expr,
-    const clang::FunctionDecl &fd);
+  bool
+  annotate_class_method(const clang::CXXMethodDecl &cxxmdd, exprt &new_expr);
   /*
    * Flag copy constructor.
    *
@@ -187,7 +212,9 @@ protected:
    *  cxxmdd: clang AST node representing the constructor we are dealing with
    *  rtn_type: the corresponding return type node
    */
-  void annotate_cpyctor(const clang::CXXMethodDecl *cxxmdd, typet &rtn_type);
+  void annotate_implicit_copy_move_ctor_union(
+    const clang::CXXMethodDecl &cxxmdd,
+    typet &ctor_return_type);
   /*
    * Flag return type in ctor or dtor, e.g.
    * A default copy constructor would have the return type below:
@@ -199,10 +226,10 @@ protected:
    *  rtn_type: the corresponding return type node
    */
   void annotate_ctor_dtor_rtn_type(
-    const clang::CXXMethodDecl *cxxmdd,
+    const clang::CXXMethodDecl &cxxmdd,
     typet &rtn_type);
-  bool is_cpyctor(const clang::DeclContext *dcxt);
-  bool is_defaulted_ctor(const clang::DeclContext *dcxt);
+  bool is_copy_or_move_ctor(const clang::DeclContext &dcxt);
+  bool is_defaulted_ctor(const clang::CXXMethodDecl &md);
 
   /*
    * When getting a function call to ctor, we might call the base ctor from a derived class ctor
@@ -230,7 +257,7 @@ protected:
   /*
    * Methods to pull bases in
    */
-  using base_map = std::map<std::string, const clang::CXXRecordDecl *>;
+  using base_map = std::map<std::string, const clang::CXXRecordDecl &>;
   /*
    * Recursively get the bases for this derived class.
    *
@@ -238,7 +265,7 @@ protected:
    *  - cxxrd: clang AST representing the class/struct we are currently dealing with
    *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
    */
-  void get_base_map(const clang::CXXRecordDecl *cxxrd, base_map &map);
+  bool get_base_map(const clang::CXXRecordDecl &cxxrd, base_map &map);
   /*
    * Check whether we've already got this component in a class type
    * Avoid copying duplicate component from a base class type to the derived class type.
@@ -282,7 +309,7 @@ protected:
   std::string thunk_prefix = "thunk::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;
-  using overriden_map = std::map<std::string, const clang::CXXMethodDecl *>;
+  using overriden_map = std::map<std::string, const clang::CXXMethodDecl &>;
   /*
    * traverse methods to:
    *  1. convert virtual methods and add them to class' type
@@ -300,7 +327,7 @@ protected:
    *  instantiated from the vtable type symbols)
    */
   bool get_struct_class_virtual_methods(
-    const clang::CXXRecordDecl *cxxrd,
+    const clang::CXXRecordDecl &cxxrd,
     struct_typet &type);
   /*
    * additional annotations for virtual or overriding methods
@@ -311,7 +338,7 @@ protected:
    *    this `component` represents the type of the virtual method
    */
   bool annotate_virtual_overriding_methods(
-    const clang::CXXMethodDecl *md,
+    const clang::CXXMethodDecl &md,
     struct_typet::componentt &comp);
   /*
    * Check the existence of virtual table type symbol.
@@ -353,7 +380,7 @@ protected:
    *  - map: key: a map that takes method id as key and pointer to the overriden method AST
    */
   void
-  get_overriden_methods(const clang::CXXMethodDecl *md, overriden_map &map);
+  get_overriden_methods(const clang::CXXMethodDecl &md, overriden_map &map);
   /*
    * add a thunk function for each overriding method
    *
@@ -363,7 +390,7 @@ protected:
    *  - type: ESBMC IR representing the derived class' type
    */
   void add_thunk_method(
-    const clang::CXXMethodDecl *md,
+    const clang::CXXMethodDecl &md,
     const struct_typet::componentt &component,
     struct_typet &type);
   /*
@@ -435,7 +462,7 @@ protected:
    *  - vft_value_map: representing the vtable value maps for this class/struct we are currently dealing with
    */
   void setup_vtable_struct_variables(
-    const clang::CXXRecordDecl *cxxrd,
+    const clang::CXXRecordDecl &cxxrd,
     const struct_typet &type);
   /*
    * This function builds the vtable value map -
@@ -470,7 +497,7 @@ protected:
    *  - vtable_value_map: representing the vtable value maps for this class/struct we are currently dealing with
    */
   void add_vtable_variable_symbols(
-    const clang::CXXRecordDecl *cxxrd,
+    const clang::CXXRecordDecl &cxxrd,
     const struct_typet &struct_type,
     const switch_table &vtable_value_map);
 
@@ -517,6 +544,28 @@ protected:
     const exprt &vtable_ptr_deref);
 
   bool is_aggregate_type(const clang::QualType &q_type) override;
+  /*
+   * check if a method is Copy assignment Operator or 
+   * Move assignment Operator
+   * Arguments:
+   *  md: clang AST representing a C++ method
+   */
+  bool is_CopyOrMoveOperator(const clang::CXXMethodDecl &md);
+  /*
+   * check if a method is constructor or destructor
+   * Arguments:
+   *  md: clang AST representing a C++ method
+   */
+  bool is_ConstructorOrDestructor(const clang::CXXMethodDecl &md);
+  /*
+   * Check if expr is a temporary object
+   * if not, convert expr to a temporary object
+   * Arguments:
+   *  expr: ESBMC IR to represent Function call
+   */
+  void make_temporary(exprt &expr);
+
+  bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

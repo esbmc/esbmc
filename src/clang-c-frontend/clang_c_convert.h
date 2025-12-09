@@ -40,6 +40,8 @@ class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
 class MemberExpr;
+class EnumConstantDecl;
+class APValue;
 } // namespace clang
 
 std::string
@@ -50,7 +52,7 @@ class clang_c_convertert
 public:
   clang_c_convertert(
     contextt &_context,
-    std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
+    std::unique_ptr<clang::ASTUnit> &_AST,
     irep_idt _mode);
   virtual ~clang_c_convertert() = default;
 
@@ -75,7 +77,7 @@ protected:
   clang::ASTContext *ASTContext;
   contextt &context;
   namespacet ns;
-  std::vector<std::unique_ptr<clang::ASTUnit>> &ASTs;
+  std::unique_ptr<clang::ASTUnit> &AST;
   irep_idt mode;
   symbol_generator anon_symbol;
 
@@ -134,7 +136,7 @@ protected:
    *  name: name for this function parameter
    *  param: ESBMC's IR representing the function parameter
    */
-  virtual bool name_param_and_continue(
+  virtual void name_param_and_continue(
     const clang::ParmVarDecl &pd,
     std::string &id,
     std::string &name,
@@ -166,7 +168,7 @@ protected:
    */
   virtual bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &recordd,
-    struct_typet &type);
+    typet &type);
 
   virtual bool get_type(const clang::QualType &type, typet &new_type);
 
@@ -176,7 +178,14 @@ protected:
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
+  bool get_bitfield_type(
+    const clang::FieldDecl &,
+    const typet &orig_type,
+    typet &new_type);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
+
+  bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 
   virtual bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);
 
@@ -192,6 +201,8 @@ protected:
 
   bool get_atomic_expr(const clang::AtomicExpr &atm, exprt &new_expr);
 
+  virtual bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr);
+
   bool get_cast_expr(const clang::CastExpr &cast, exprt &new_expr);
 
   void get_default_symbol(
@@ -202,8 +213,8 @@ protected:
     irep_idt unique_name,
     locationt location);
 
-  void
-  get_decl_name(const clang::NamedDecl &vd, std::string &id, std::string &name);
+  virtual void
+  get_decl_name(const clang::NamedDecl &vd, std::string &name, std::string &id);
 
   void
   get_start_location_from_stmt(const clang::Stmt &stmt, locationt &location);
@@ -226,8 +237,6 @@ protected:
   std::string get_modulename_from_path(std::string path);
 
   void convert_expression_to_code(exprt &expr);
-
-  symbolt *move_symbol_to_context(symbolt &symbol);
 
   bool convert_character_literal(
     const clang::CharacterLiteral &char_literal,
@@ -269,13 +278,6 @@ protected:
   bool is_field_global_storage(const clang::FieldDecl *field);
 
   /*
-   * check if a method is constructor or destructor
-   * Arguments:
-   *  fd: clang AST representing a C++ method
-   */
-  bool is_ConstructorOrDestructor(const clang::FunctionDecl &fd);
-
-  /*
    * Function to check whether a member function call refers to
    * a virtual/overriding method.
    *
@@ -315,6 +317,28 @@ protected:
   virtual bool is_fd_virtual_or_overriding(const clang::FunctionDecl &fd);
 
   virtual bool is_aggregate_type(const clang::QualType &q_type);
+
+  bool get_APValue_expr(const clang::APValue &value, exprt &new_expr);
+
+  /*
+   * Function to check whether a MemberExpr references to a static variable
+   */
+  bool is_member_decl_static(const clang::MemberExpr &member);
+
+  /**
+   * Rewrites references to builtin functions to their ESBMC counterparts.
+   * Clang provides builtins for e.g. malloc, memcpy, etc. Instead of re-implementing
+   * these functions in ESBMC, we rewrite references to e.g. `__builtin_memcpy` to
+   * just `memcpy`.
+   *
+   * @param d declaration to rewrite (if it refers to a builtin function)
+   * @param name name of the declaration
+   * @param id id of the declaration
+   */
+  void rewrite_builtin_ref(
+    const clang::Decl &d,
+    std::string &name,
+    std::string &id) const;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

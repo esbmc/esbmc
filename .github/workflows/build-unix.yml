@@ -1,0 +1,51 @@
+
+on:
+  workflow_call:
+    inputs:
+      operating-system:
+        description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+        required: true
+        type: string
+      build-flags:
+        description: "Flags to be passed to build.sh script"
+        required: true
+        type: string
+      testing:
+        description: "Whether to run tests (regression) for this build"
+        required: true
+        type: boolean
+
+jobs:
+  build:
+    name: Build ESBMC (${{ inputs.operating-system }})
+    runs-on: ${{ inputs.operating-system }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build ESBMC
+      run: ./scripts/build.sh ${{ inputs.build-flags }}
+    - uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
+        path: ./release
+    
+    - name: Check Python regression tests
+      if: ${{ inputs.testing == true }}
+      run: |
+        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
+        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+        chmod +x scripts/check_python_tests.sh
+        ./scripts/check_python_tests.sh
+
+    - name: Run tests
+      if: ${{ inputs.testing == true }}
+      run: |
+        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
+        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+        cd build/
+        # On macOS, only run Python tests; on other systems, run all tests
+        if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
+          ctest -j4 --output-on-failure --progress -L python
+        else
+          ctest -j4 --output-on-failure --progress .
+        fi

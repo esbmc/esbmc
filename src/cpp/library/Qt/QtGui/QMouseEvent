@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QMouseEvent {
+class QMouseEvent
+{
 public:
-	QMouseEvent();
-	~QMouseEvent();
+  QMouseEvent();
+  ~QMouseEvent();
 };

@@ -1,4 +1,4 @@
 CORE
 main.c
---function foo
+--function foo -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

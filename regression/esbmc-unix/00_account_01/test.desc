@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 test.c
 account.c --no-slice --context-bound 1 --depth 150
 ^VERIFICATION FAILED$

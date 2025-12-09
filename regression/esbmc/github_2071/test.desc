@@ -1,0 +1,5 @@
+CORE
+main.c 
+--k-induction --base-k-step 12
+^VERIFICATION FAILED$
+

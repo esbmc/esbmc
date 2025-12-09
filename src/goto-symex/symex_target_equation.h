@@ -20,7 +20,7 @@ class symex_target_equationt : public symex_targett
 public:
   class SSA_stept;
 
-  symex_target_equationt(const namespacet &_ns) : ns(_ns)
+  symex_target_equationt(const namespacet &_ns) : ns(_ns), output_count(0)
   {
     debug_print = config.options.get_bool_option("symex-ssa-trace");
     ssa_trace = config.options.get_bool_option("ssa-trace");
@@ -77,6 +77,10 @@ public:
     smt_astt &assumpt_ast,
     smt_convt::ast_vec &assertions,
     SSA_stept &s);
+
+  void reconstruct_symbolic_expression(expr2tc &expr, bool keep_local_variables)
+    const override;
+  void replace_rec(const SSA_stept &step, expr2tc &e, bool keep_local) const;
 
   class SSA_stept
   {
@@ -156,8 +160,8 @@ public:
   unsigned count_ignored_SSA_steps() const
   {
     unsigned i = 0;
-    for(const auto &SSA_step : SSA_steps)
-      if(SSA_step.ignore)
+    for (const auto &SSA_step : SSA_steps)
+      if (SSA_step.ignore)
         i++;
     return i;
   }
@@ -168,7 +172,7 @@ public:
   SSA_stepst::iterator get_SSA_step(unsigned s)
   {
     SSA_stepst::iterator it = SSA_steps.begin();
-    for(; s != 0; s--)
+    for (; s != 0; s--)
     {
       assert(it != SSA_steps.end());
       it++;
@@ -184,6 +188,7 @@ public:
   void clear()
   {
     SSA_steps.clear();
+    output_count = 0;
   }
 
   unsigned int clear_assertions();
@@ -204,6 +209,7 @@ protected:
   bool debug_print;
   bool ssa_trace;
   bool ssa_smt_trace;
+  unsigned output_count;
 
 private:
   void debug_print_step(const SSA_stept &step) const;

@@ -23,7 +23,7 @@ int smtlib_send_start_code = 0;
 lparen        \(
 rparen        \)
 numeral       (0|[1-9][0-9]*)
-decimal       {numeral}.0*{numeral}
+decimal       {numeral}\.0*{numeral}
 hexnum        #x[a-fA-F0-9]+
 binnum        #b[01]+
 stringlit     \"((.|\\\\|\\\")*)\"

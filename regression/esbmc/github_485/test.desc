@@ -1,4 +1,4 @@
 CORE
 main.c
---overflow-check --symbol-table-too
+--overflow-check --symbol-table-too -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

@@ -25,18 +25,18 @@ void xmlt::output(std::ostream &out, unsigned indent) const
 
   out << '<' << name;
 
-  for(const auto &attribute : attributes)
+  for (const auto &attribute : attributes)
     out << ' ' << attribute.first << '=' << '"' << attribute.second << '"';
 
   out << '>';
 
-  if(elements.empty())
+  if (elements.empty())
     out << data;
   else
   {
     out << "\n";
 
-    for(const auto &element : elements)
+    for (const auto &element : elements)
       element.output(out, indent + 2);
 
     do_indent(out, indent);
@@ -49,9 +49,9 @@ std::string xmlt::escape(const std::string &s)
 {
   std::string result;
 
-  for(char ch : s)
+  for (char ch : s)
   {
-    switch(ch)
+    switch (ch)
     {
     case '&':
       result += "&amp;";
@@ -66,7 +66,7 @@ std::string xmlt::escape(const std::string &s)
       break;
 
     default:
-      if(ch < ' ')
+      if (ch < ' ')
         result += "&#" + i2string((unsigned char)ch) + ";";
       else
         result += ch;
@@ -80,9 +80,9 @@ std::string xmlt::escape_attribute(const std::string &s)
 {
   std::string result;
 
-  for(char ch : s)
+  for (char ch : s)
   {
-    switch(ch)
+    switch (ch)
     {
     case '&':
       result += "&amp;";
@@ -110,15 +110,15 @@ std::string xmlt::escape_attribute(const std::string &s)
 
 void xmlt::do_indent(std::ostream &out, unsigned indent)
 {
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
 }
 
 xmlt::elementst::const_iterator xmlt::find(const std::string &name) const
 {
-  for(elementst::const_iterator it = elements.begin(); it != elements.end();
-      it++)
-    if(it->name == name)
+  for (elementst::const_iterator it = elements.begin(); it != elements.end();
+       it++)
+    if (it->name == name)
       return it;
 
   return elements.end();
@@ -126,8 +126,8 @@ xmlt::elementst::const_iterator xmlt::find(const std::string &name) const
 
 xmlt::elementst::iterator xmlt::find(const std::string &name)
 {
-  for(elementst::iterator it = elements.begin(); it != elements.end(); it++)
-    if(it->name == name)
+  for (elementst::iterator it = elements.begin(); it != elements.end(); it++)
+    if (it->name == name)
       return it;
 
   return elements.end();
@@ -140,7 +140,7 @@ void xmlt::set_attribute(const std::string &attribute, unsigned value)
 
 void xmlt::set_attribute(const std::string &attribute, const std::string &value)
 {
-  if(
+  if (
     (value[0] == '\"' && value[value.size() - 1] == '\"') ||
     (value[0] == '\'' && value[value.size() - 1] == '\''))
   {
@@ -158,23 +158,23 @@ std::string xmlt::unescape(const std::string &str)
 
   result.reserve(str.size());
 
-  for(std::string::const_iterator it = str.begin(); it != str.end(); it++)
+  for (std::string::const_iterator it = str.begin(); it != str.end(); it++)
   {
-    if(*it == '&')
+    if (*it == '&')
     {
       std::string tmp;
       it++;
 
-      while(it != str.end() && *it != ';')
+      while (it != str.end() && *it != ';')
         tmp += *it++;
 
-      if(tmp == "gt")
+      if (tmp == "gt")
         result += '>';
-      else if(tmp == "lt")
+      else if (tmp == "lt")
         result += '<';
-      else if(tmp == "amp")
+      else if (tmp == "amp")
         result += '&';
-      else if(tmp[0] == '#' && tmp[1] != 'x')
+      else if (tmp[0] == '#' && tmp[1] != 'x')
       {
         char c = atoi(tmp.substr(1, tmp.size() - 1).c_str());
         result += c;

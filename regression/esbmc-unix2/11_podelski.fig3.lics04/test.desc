@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 podelski.fig3.lics04.c
 --unwind 1 --no-unwinding-assertions --data-races-check
 ^VERIFICATION FAILED$

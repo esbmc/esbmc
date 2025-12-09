@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 16
+--unwind 16 -Wno-error=implicit-int
 ^VERIFICATION SUCCESSFUL$

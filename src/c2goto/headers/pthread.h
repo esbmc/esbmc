@@ -17,11 +17,16 @@
    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
    02111-1307 USA.  */
 
-#ifndef _PTHREAD_H
-#define _PTHREAD_H	1
+#pragma once
+
+#include <__esbmc/stddefs.h>
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <sched.h>
+
+__ESBMC_C_CPP_BEGIN
 
 #ifndef _MSVC
 #define NULL 0
@@ -83,9 +88,9 @@ typedef int pthread_once_t;
 
 //#if defined __USE_UNIX98 || defined __USE_XOPEN2K
 //jmorse - we always want this, regardless of feature flags.
-typedef struct
-{
-  int __lock;
+typedef struct {
+  int __readers;
+  int __writer;
 } pthread_rwlock_t;
 
 /* Read-write lock initializer. */
@@ -116,14 +121,14 @@ typedef union
 } pthread_barrierattr_t;
 #endif
 
+struct sched_param
+{
+   int __sched_priority;
+};
 
 #if __WORDSIZE == 32
 /* Extra attributes for the cleanup functions.  */
 # define __cleanup_fct_attribute __attribute__ ((__regparm__ (1)))
-#endif
-
-#ifdef __cplusplus
-extern "C" {
 #endif
 
 /* Detach state.  */
@@ -291,6 +296,10 @@ extern pthread_t pthread_self (void) __attribute__ ((__const__));
 /* Compare two thread identifiers.  */
 extern int pthread_equal (pthread_t __thread1, pthread_t __thread2);
 
+/* push and pop thread cancellation clean-up handlers */
+void pthread_cleanup_push(void (*routine)(void *),
+                          void *arg);
+void pthread_cleanup_pop(int execute);
 
 /* Thread attribute handling.  */
 
@@ -795,8 +804,4 @@ __NTH (pthread_equal (pthread_t __thread1, pthread_t __thread2))
 }
 #endif
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif	/* pthread.h */
+__ESBMC_C_CPP_END

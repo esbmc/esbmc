@@ -36,10 +36,10 @@ public:
 
   virtual bool read(char &ch)
   {
-    if(!read2(ch))
+    if (!read2(ch))
       return false;
 
-    if(ch == '\n')
+    if (ch == '\n')
       last_line = "";
     else
       last_line += ch;
@@ -54,13 +54,13 @@ public:
 
   virtual bool peek(char &ch)
   {
-    if(!char_buffer.empty())
+    if (!char_buffer.empty())
     {
       ch = char_buffer.front();
       return true;
     }
 
-    if(!in->read(&ch, 1))
+    if (!in->read(&ch, 1))
       return false;
 
     char_buffer.push_back(ch);
@@ -80,17 +80,17 @@ public:
 
     l.set_line(line_no);
 
-    if(filename != "")
+    if (filename != "")
       l.set_file(filename);
 
-    if(function != "")
+    if (function != "")
       l.set_function(function);
   }
 
 private:
   virtual bool read2(char &ch)
   {
-    if(!char_buffer.empty())
+    if (!char_buffer.empty())
     {
       ch = char_buffer.front();
       char_buffer.pop_front();
@@ -109,25 +109,25 @@ exprt &_newstack(parsert &parser, unsigned &x);
 #define YY_INPUT(buf, result, max_size)                                        \
   do                                                                           \
   {                                                                            \
-    for(result = 0; result < max_size;)                                        \
+    for (result = 0; result < max_size;)                                       \
     {                                                                          \
       char ch;                                                                 \
-      if(!PARSER.read(ch))                                                     \
+      if (!PARSER.read(ch))                                                    \
       {                                                                        \
-        if(result == 0)                                                        \
+        if (result == 0)                                                       \
           result = YY_NULL;                                                    \
         break;                                                                 \
       }                                                                        \
                                                                                \
-      if(ch != '\r')                                                           \
+      if (ch != '\r')                                                          \
       {                                                                        \
         buf[result++] = ch;                                                    \
-        if(ch == '\n')                                                         \
+        if (ch == '\n')                                                        \
         {                                                                      \
           ++PARSER.line_no;                                                    \
           break;                                                               \
         }                                                                      \
       }                                                                        \
     }                                                                          \
-  } while(0)
+  } while (0)
 #endif

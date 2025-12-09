@@ -10,6 +10,14 @@ const loopst::loop_varst &loopst::get_unmodified_loop_vars() const
   return unmodified_loop_vars;
 }
 
+bool loopst::contains_only_pointers() const
+{
+  for (const auto &it : modified_loop_vars)
+    if (!is_pointer_type(it))
+      return false;
+  return true;
+}
+
 const goto_programt::targett loopst::get_original_loop_exit() const
 {
   return original_loop_exit;
@@ -47,9 +55,9 @@ void loopst::output_to(std::ostream &oss) const
   oss << size;
   oss << ") { ";
 
-  for(goto_programt::instructionst::iterator l_it = get_original_loop_head();
-      l_it != get_original_loop_exit();
-      ++l_it)
+  for (goto_programt::instructionst::iterator l_it = get_original_loop_head();
+       l_it != get_original_loop_exit();
+       ++l_it)
     oss << (*l_it).location_number << ", ";
   oss << get_original_loop_exit()->location_number;
 
@@ -61,7 +69,7 @@ void loopst::output_loop_vars_to(std::ostream &oss) const
 {
   oss << "Loop variables:\n";
   unsigned int i = 0;
-  for(auto var : modified_loop_vars)
+  for (auto var : modified_loop_vars)
     oss << ++i << ". \t" << to_symbol2t(var).thename << '\n';
   oss << '\n';
 }

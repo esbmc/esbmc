@@ -1,0 +1,4 @@
+CORE
+main.c
+--unsigned-overflow-check --z3
+^VERIFICATION FAILED$

@@ -1,0 +1,10 @@
+CORE
+main.c
+--condition-coverage --verbosity coverage:10
+^Reached Conditions:  10
+^Short Circuited Conditions:  0
+^Total Conditions:  10
+^Condition Properties - SATISFIED:  6
+^Condition Properties - UNSATISFIED:  4
+^Condition Coverage: 60%
+^VERIFICATION FAILED$

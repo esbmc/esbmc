@@ -53,7 +53,8 @@ public:
     typedef std::map<unsigned, irept> irepts_on_readt;
     irepts_on_readt ireps_on_read;
 
-    typedef std::vector<irept> irepts_on_writet;
+    typedef std::unordered_map<irept, unsigned, irep_full_hash, irep_full_eq>
+      irepts_on_writet;
     irepts_on_writet ireps_on_write;
 
     typedef std::vector<bool> string_mapt;

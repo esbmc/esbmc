@@ -1,0 +1,4 @@
+CORE
+gh-169.c
+--no-bounds-check --no-pointer-check --no-div-by-zero-check --incremental-bmc --max-k-step 10 -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=int-conversion
+^VERIFICATION UNKNOWN$

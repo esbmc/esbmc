@@ -1,10 +1,9 @@
-#ifndef CPROVER_ANSI_C_CPROVER_LIBRARY_H
-#define CPROVER_ANSI_C_CPROVER_LIBRARY_H
+#pragma once
 
-#include <util/context.h>
-#include <util/message.h>
+#include <string>
 
 class languaget;
+class contextt;
 
 /* Returns the path the headers of the internal libc have been extracted to
  * or NULL if no library is configured (either via config.ansi_c.lib or during
@@ -21,6 +20,4 @@ void add_bundled_library_sources(
 
 void add_cprover_library(
   contextt &context,
-  const languaget *c_language = nullptr);
-
-#endif
+  const languaget *language = nullptr);

@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QParallelAnimationGroup {
+class QParallelAnimationGroup
+{
 public:
-	QParallelAnimationGroup();
-	~QParallelAnimationGroup();
+  QParallelAnimationGroup();
+  ~QParallelAnimationGroup();
 };

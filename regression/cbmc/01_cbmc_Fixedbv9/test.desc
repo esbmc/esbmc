@@ -1,4 +1,4 @@
 CORE
 main.c
---fixedbv
+--fixedbv -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

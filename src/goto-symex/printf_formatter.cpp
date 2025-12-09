@@ -3,14 +3,15 @@
 #include <util/c_types.h>
 #include <irep2/irep2_utils.h>
 #include <util/format_constant.h>
+#include <util/type_byte_size.h>
 
 const expr2tc
 printf_formattert::make_type(const expr2tc &src, const type2tc &dest)
 {
-  if(src->type == dest)
+  if (src->type == dest)
     return src;
 
-  typecast2tc tmp(dest, src);
+  expr2tc tmp = typecast2tc(dest, src);
   simplify(tmp);
   return tmp;
 }
@@ -30,11 +31,11 @@ void printf_formattert::print(std::ostream &out)
 
   try
   {
-    while(!eol())
+    while (!eol())
       process_char(out);
   }
 
-  catch(eol_exception)
+  catch (eol_exception)
   {
   }
 }
@@ -57,25 +58,25 @@ void printf_formattert::process_format(std::ostream &out)
 
   char ch = next();
 
-  if(ch == '0') // leading zeros
+  if (ch == '0') // leading zeros
   {
     format_constant.zero_padding = true;
     ch = next();
   }
 
-  while(isdigit(ch)) // width
+  while (isdigit(ch)) // width
   {
     format_constant.min_width *= 10;
     format_constant.min_width += ch - '0';
     ch = next();
   }
 
-  if(ch == '.') // precision
+  if (ch == '.') // precision
   {
     format_constant.precision = 0;
     ch = next();
 
-    while(isdigit(ch))
+    while (isdigit(ch))
     {
       format_constant.precision *= 10;
       format_constant.precision += ch - '0';
@@ -83,7 +84,7 @@ void printf_formattert::process_format(std::ostream &out)
     }
   }
 
-  switch(ch)
+  switch (ch)
   {
   case '%':
     out << ch;
@@ -92,7 +93,7 @@ void printf_formattert::process_format(std::ostream &out)
   case 'e':
   case 'E':
     format_constant.style = format_spect::stylet::SCIENTIFIC;
-    if(next_operand == operands.end())
+    if (next_operand == operands.end())
       break;
     out << format_constant(make_type(*(next_operand++), double_type2()));
     break;
@@ -100,7 +101,7 @@ void printf_formattert::process_format(std::ostream &out)
   case 'f':
   case 'F':
     format_constant.style = format_spect::stylet::DECIMAL;
-    if(next_operand == operands.end())
+    if (next_operand == operands.end())
       break;
     out << format_constant(make_type(*(next_operand++), double_type2()));
     break;
@@ -108,52 +109,57 @@ void printf_formattert::process_format(std::ostream &out)
   case 'g':
   case 'G':
     format_constant.style = format_spect::stylet::AUTOMATIC;
-    if(format_constant.precision == 0)
+    if (format_constant.precision == 0)
       format_constant.precision = 1;
-    if(next_operand == operands.end())
+    if (next_operand == operands.end())
       break;
     out << format_constant(make_type(*(next_operand++), double_type2()));
     break;
 
   case 's':
   {
-    if(next_operand == operands.end())
+    if (next_operand == operands.end())
       break;
 
-    // this is the address of a string
+    // 1. address_of2t -> constant_string2t
+    // 2. address_of2t -> index2taddress_of2t -> constant_string2t
     const expr2tc &op = *(next_operand++);
-    if(is_address_of2t(op) && is_string_type(to_address_of2t(op).ptr_obj))
-      out << format_constant(to_address_of2t(op).ptr_obj);
+    const expr2tc symbol2 = get_base_object(op);
+    exprt char_array = migrate_expr_back(symbol2);
+
+    // string
+    if (char_array.id() == "string-constant")
+      out << char_array.value().as_string();
   }
   break;
 
   case 'i':
   case 'd':
-    if(next_operand == operands.end())
+    if (next_operand == operands.end())
       break;
     out << format_constant(make_type(*(next_operand++), int_type2()));
     break;
 
   case 'D':
-    if(next_operand == operands.end())
+    if (next_operand == operands.end())
       break;
     out << format_constant(make_type(*(next_operand++), long_int_type2()));
     break;
 
   case 'u':
-    if(next_operand == operands.end())
+    if (next_operand == operands.end())
       break;
     out << format_constant(make_type(*(next_operand++), uint_type2()));
     break;
 
   case 'U':
-    if(next_operand == operands.end())
+    if (next_operand == operands.end())
       break;
     out << format_constant(make_type(*(next_operand++), long_uint_type2()));
     break;
 
   case 'c':
-    if(next_operand == operands.end())
+    if (next_operand == operands.end())
       break;
     out << format_constant(make_type(*(next_operand++), char_type2()));
     break;
@@ -167,7 +173,7 @@ void printf_formattert::process_char(std::ostream &out)
 {
   char ch = next();
 
-  if(ch == '%')
+  if (ch == '%')
     process_format(out);
   else
     out << ch;

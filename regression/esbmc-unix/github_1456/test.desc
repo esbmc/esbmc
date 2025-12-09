@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--data-races-check
+^VERIFICATION SUCCESSFUL$

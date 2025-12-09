@@ -3,17 +3,17 @@
 
 void MetaChar(std::string &out, char c, bool inString)
 {
-  switch(c)
+  switch (c)
   {
   case '\'':
-    if(inString)
+    if (inString)
       out += "'";
     else
       out += "\\'";
     break;
 
   case '"':
-    if(inString)
+    if (inString)
       out += "\\\"";
     else
       out += "\"";
@@ -57,7 +57,7 @@ void MetaChar(std::string &out, char c, bool inString)
 
   default:
     // Show low and high ascii as octal
-    if((c < ' ') || (c >= 127))
+    if ((c < ' ') || (c >= 127))
     {
       char octbuf[8];
       sprintf(octbuf, "%03o", (unsigned char)c);
@@ -72,6 +72,6 @@ void MetaChar(std::string &out, char c, bool inString)
 
 void MetaString(std::string &out, const std::string &in)
 {
-  for(char i : in)
+  for (char i : in)
     MetaChar(out, i, true);
 }
