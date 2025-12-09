@@ -187,17 +187,16 @@ exprt python_dict_handler::create_dict_from_literal(
         std::hash<std::string>{}(ptr_type_name), config.ansi_c.address_width));
 
       // Use from_integer for pointer size
-      exprt ptr_size = from_integer(8, size_type());
+      exprt ptr_size =
+        from_integer(config.ansi_c.pointer_width() / 8, size_type());
 
       // Call list_push directly
       code_function_callt push_call;
       push_call.function() = symbol_expr(*push_func);
       push_call.arguments().push_back(symbol_expr(values_list));
       push_call.arguments().push_back(address_of_exprt(symbol_expr(ptr_var)));
-      push_call.arguments().push_back(
-        type_hash);
-      push_call.arguments().push_back(
-        ptr_size);
+      push_call.arguments().push_back(type_hash);
+      push_call.arguments().push_back(ptr_size);
       push_call.type() = bool_type();
       push_call.location() = location;
       converter_.add_instruction(push_call);
@@ -315,7 +314,7 @@ exprt python_dict_handler::handle_dict_subscript(
     "value",
     pointer_typet(empty_typet()));
 
-  // Handle dict types 
+  // Handle dict types
   // Check expected_type first, then fall back to checking obj_value type
   if (!expected_type.is_nil() && is_dict_type(expected_type))
   {
