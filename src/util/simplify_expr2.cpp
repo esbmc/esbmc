@@ -1960,6 +1960,57 @@ expr2tc bitand2t::do_simplify() const
       return side_2;
   }
 
+  // (a | ~b) & (a | b) -> a
+  if (is_bitor2t(side_1) && is_bitor2t(side_2))
+  {
+    const bitor2t &or1 = to_bitor2t(side_1);
+    const bitor2t &or2 = to_bitor2t(side_2);
+
+    // (a | ~b) & (a | b) -> a
+    if (or1.side_1 == or2.side_1)
+    {
+      if (
+        is_bitnot2t(or1.side_2) && to_bitnot2t(or1.side_2).value == or2.side_2)
+        return or1.side_1;
+      if (
+        is_bitnot2t(or2.side_2) && to_bitnot2t(or2.side_2).value == or1.side_2)
+        return or1.side_1;
+    }
+
+    // (a | ~b) & (b | a) -> a
+    if (or1.side_1 == or2.side_2)
+    {
+      if (
+        is_bitnot2t(or1.side_2) && to_bitnot2t(or1.side_2).value == or2.side_1)
+        return or1.side_1;
+      if (
+        is_bitnot2t(or2.side_1) && to_bitnot2t(or2.side_1).value == or1.side_2)
+        return or1.side_1;
+    }
+
+    // (~b | a) & (a | b) -> a
+    if (or1.side_2 == or2.side_1)
+    {
+      if (
+        is_bitnot2t(or1.side_1) && to_bitnot2t(or1.side_1).value == or2.side_2)
+        return or1.side_2;
+      if (
+        is_bitnot2t(or2.side_2) && to_bitnot2t(or2.side_2).value == or1.side_1)
+        return or1.side_2;
+    }
+
+    // (~b | a) & (b | a) -> a
+    if (or1.side_2 == or2.side_2)
+    {
+      if (
+        is_bitnot2t(or1.side_1) && to_bitnot2t(or1.side_1).value == or2.side_1)
+        return or1.side_2;
+      if (
+        is_bitnot2t(or2.side_1) && to_bitnot2t(or2.side_1).value == or1.side_1)
+        return or1.side_2;
+    }
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
 
   // Is a vector operation ? Apply the op
