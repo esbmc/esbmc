@@ -47,12 +47,12 @@ expr2tc expr2t::simplify() const
     // Corner case! Don't even try to simplify address of's operands, might end up
     // taking the address of some /completely/ arbitary pice of data, by
     // simplifiying an index to its data, discarding the symbol.
-    if(expr_id == address_of_id) // unlikely
+    if (expr_id == address_of_id) // unlikely
       return expr2tc();
 
     // And overflows too. We don't wish an add to distribute itself, for example,
     // when we're trying to work out whether or not it's going to overflow.
-    if(expr_id == overflow_id)
+    if (expr_id == overflow_id)
       return expr2tc();
 
     // Try simplifying all the sub-operands.
@@ -65,16 +65,16 @@ expr2tc expr2t::simplify() const
     expr2tc simplified = typecast_check_return(type, new_us->do_simplify());
 
     // If we could simplify it, just return
-    if(!is_nil_expr(simplified))
+    if (!is_nil_expr(simplified))
       return simplified;
 
     // Otherwise, check if we at least simplified the operand
-    if(changed)
+    if (changed)
       return new_us;
 
     // Give up
   }
-  catch(const array_type2t::dyn_sized_array_excp &e)
+  catch (const array_type2t::dyn_sized_array_excp &e)
   {
     // Pretty much anything in any expression could be fouled up by there
     // being a dynamically sized array somewhere in there. In this circumstance,
@@ -83,8 +83,6 @@ expr2tc expr2t::simplify() const
   }
   return expr2tc();
 }
-
-
 
 static void fetch_ops_from_this_type(
   std::list<expr2tc> &ops,
@@ -230,8 +228,7 @@ static expr2tc simplify_arith_2ops(
   if (!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
 
-
-  if(!is_constant_expr(side_1) && !is_constant_expr(side_2))
+  if (!is_constant_expr(side_1) && !is_constant_expr(side_2))
     return expr2tc();
 
   // This should be handled by ieee_*
@@ -250,7 +247,7 @@ static expr2tc simplify_arith_2ops(
     simpl_res =
       TFunctor<BigInt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if(is_bv_type(side_1) || is_bv_type(side_2))
+  else if (is_bv_type(side_1) || is_bv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
@@ -270,7 +267,7 @@ static expr2tc simplify_arith_2ops(
           migrate_type_back(simpl_res->type)),
         simpl_res);
   }
-  else if(is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
+  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -281,7 +278,7 @@ static expr2tc simplify_arith_2ops(
     simpl_res =
       TFunctor<fixedbvt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if(is_bool_type(side_1) || is_bool_type(side_2))
+  else if (is_bool_type(side_1) || is_bool_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_bool2t;
@@ -677,11 +674,11 @@ expr2tc modulus2t::do_simplify() const
   if (side_1 == side_2)
     return gen_zero(type);
 
-  if(!is_constant_expr(side_1) && !is_constant_expr(side_2))
+  if (!is_constant_expr(side_1) && !is_constant_expr(side_2))
     return expr2tc();
 
   // Is a vector operation ? Apply the op
-  if(is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
     auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
       return modulus2tc(t, e1, e2);
@@ -689,16 +686,16 @@ expr2tc modulus2t::do_simplify() const
     return distribute_vector_operation(op, side_1, side_2);
   }
 
-  if(is_bv_type(type))
+  if (is_bv_type(type))
   {
-    if(is_constant_int2t(side_2))
+    if (is_constant_int2t(side_2))
     {
       // Denominator is one? Simplify to zero
-      if(to_constant_int2t(side_2).value == 1)
+      if (to_constant_int2t(side_2).value == 1)
         return constant_int2tc(type, BigInt(0));
     }
 
-    if(is_constant_int2t(side_1) && is_constant_int2t(side_2))
+    if (is_constant_int2t(side_1) && is_constant_int2t(side_2))
     {
       const constant_int2t &numerator = to_constant_int2t(side_1);
       const constant_int2t &denominator = to_constant_int2t(side_2);
@@ -719,7 +716,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
   if (!is_number_type(type) && !is_vector_type(type))
     return expr2tc();
 
-  if(!is_constant_expr(value))
+  if (!is_constant_expr(value))
     return expr2tc();
 
   expr2tc simpl_res;
@@ -1291,11 +1288,11 @@ expr2tc index2t::do_simplify() const
 
 expr2tc not2t::do_simplify() const
 {
-  if(is_not2t(value))
+  if (is_not2t(value))
     // These negate.
     return to_not2t(value).value;
 
-    // De Morgan's laws for logical operations
+  // De Morgan's laws for logical operations
   // !(x && y) = !x || !y
   if (is_and2t(value))
   {
@@ -1371,8 +1368,7 @@ expr2tc not2t::do_simplify() const
       return lessthan2tc(gte.side_1, gte.side_2);
   }
 
-
-  if(!is_constant_bool2t(value))
+  if (!is_constant_bool2t(value))
     return expr2tc();
 
   const constant_bool2t &val = to_constant_bool2t(value);
@@ -1388,12 +1384,12 @@ static expr2tc simplify_logic_2ops(
   if (!is_number_type(type))
     return expr2tc();
 
-  if(!is_constant_expr(side_1) && !is_constant_expr(side_2))
+  if (!is_constant_expr(side_1) && !is_constant_expr(side_2))
     return expr2tc();
 
   expr2tc simpl_res;
 
-  if(is_bv_type(side_1) || is_bv_type(side_2))
+  if (is_bv_type(side_1) || is_bv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
@@ -1405,7 +1401,7 @@ static expr2tc simplify_logic_2ops(
     simpl_res =
       TFunctor<BigInt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if(is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
+  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -1416,7 +1412,7 @@ static expr2tc simplify_logic_2ops(
     simpl_res =
       TFunctor<fixedbvt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
+  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -1429,7 +1425,7 @@ static expr2tc simplify_logic_2ops(
     simpl_res =
       TFunctor<ieee_floatt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if(is_bool_type(side_1) || is_bool_type(side_2))
+  else if (is_bool_type(side_1) || is_bool_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_bool2t;
@@ -1737,7 +1733,7 @@ static expr2tc do_bit_munge_operation(
 {
   /* Only support constant folding for integer and's. If you're a float,
    * pointer, or whatever, you're on your own. */
-  if(
+  if (
     is_constant_int2t(side_1) && is_constant_int2t(side_2) &&
     type->get_width() <= 64)
   {
@@ -2338,11 +2334,11 @@ expr2tc nearbyint2t::do_simplify() const
   if (!is_number_type(type))
     return expr2tc();
 
-  if(!is_constant_floatbv2t(from))
+  if (!is_constant_floatbv2t(from))
     return expr2tc();
 
   ieee_floatt n = to_constant_floatbv2t(from).value;
-  if(n.is_NaN() || n.is_zero() || n.is_infinity())
+  if (n.is_NaN() || n.is_zero() || n.is_infinity())
     return typecast_check_return(type, from);
 
   return expr2tc();
@@ -2386,10 +2382,10 @@ static expr2tc simplify_relations(
     return expr2tc();
 
   if (!is_constant(side_1) || !is_constant(side_2))
-    {
+  {
     if (
-      is_add2t(side_1) && is_add2t(side_2) &&
-      is_pointer_type(side_1) && is_pointer_type(side_2))
+      is_add2t(side_1) && is_add2t(side_2) && is_pointer_type(side_1) &&
+      is_pointer_type(side_2))
     {
       // Simplification of pointer comparison:
       // address = pointer + offset
@@ -2430,11 +2426,11 @@ static expr2tc simplify_relations(
 
       return expr2tc();
     }
-    }
+  }
 
   expr2tc simpl_res;
 
-  if(is_bv_type(side_1) || is_bv_type(side_2))
+  if (is_bv_type(side_1) || is_bv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
@@ -2446,7 +2442,7 @@ static expr2tc simplify_relations(
     simpl_res =
       TFunctor<BigInt &>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if(is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
+  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -2457,7 +2453,7 @@ static expr2tc simplify_relations(
     simpl_res =
       TFunctor<fixedbvt &>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
+  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -2470,7 +2466,7 @@ static expr2tc simplify_relations(
     simpl_res =
       TFunctor<ieee_floatt &>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if(is_pointer_type(side_1) || is_pointer_type(side_2))
+  else if (is_pointer_type(side_1) || is_pointer_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       [&](const expr2tc &t) -> bool {
@@ -2504,12 +2500,12 @@ static expr2tc simplify_floatbv_relations(
   if (!is_number_type(type))
     return expr2tc();
 
-  if(!(is_constant_expr(side_1) || is_constant_expr(side_2) ||
-       (side_1 == side_2)))
+  if (!(is_constant_expr(side_1) || is_constant_expr(side_2) ||
+        (side_1 == side_2)))
     return expr2tc();
 
   expr2tc simpl_res;
-  if(is_floatbv_type(side_1) || is_floatbv_type(side_2) || (side_1 == side_2))
+  if (is_floatbv_type(side_1) || is_floatbv_type(side_2) || (side_1 == side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -3318,7 +3314,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
   if (!is_number_type(type))
     return expr2tc();
 
-  if(!is_constant_expr(value))
+  if (!is_constant_expr(value))
     return expr2tc();
 
   expr2tc simpl_res = expr2tc();
@@ -3478,15 +3474,15 @@ static expr2tc simplify_floatbv_2ops(
     return expr2tc();
 
   // Try to handle NaN
-  if(is_constant_floatbv2t(side_1))
-    if(to_constant_floatbv2t(side_1).value.is_NaN())
+  if (is_constant_floatbv2t(side_1))
+    if (to_constant_floatbv2t(side_1).value.is_NaN())
       return side_1;
 
-  if(is_constant_floatbv2t(side_2))
-    if(to_constant_floatbv2t(side_2).value.is_NaN())
+  if (is_constant_floatbv2t(side_2))
+    if (to_constant_floatbv2t(side_2).value.is_NaN())
       return side_2;
 
-  if(
+  if (
     !is_constant_expr(side_1) || !is_constant_expr(side_2) ||
     !is_constant_int2t(rounding_mode))
     return expr2tc();
@@ -3506,7 +3502,7 @@ static expr2tc simplify_floatbv_2ops(
     simpl_res = TFunctor<ieee_floatt>::simplify(
       side_1, side_2, rounding_mode, is_constant, get_value);
   }
-  else if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
+  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -3727,7 +3723,7 @@ expr2tc ieee_fma2t::do_simplify() const
   if (!is_number_type(type) && !is_pointer_type(type))
     return expr2tc();
 
-  if(
+  if (
     !is_constant_expr(value_1) || !is_constant_expr(value_2) ||
     !is_constant_expr(value_3) || !is_constant_int2t(rounding_mode))
     return expr2tc();
@@ -3781,11 +3777,11 @@ expr2tc ieee_sqrt2t::do_simplify() const
   if (!is_number_type(type))
     return expr2tc();
 
-  if(!is_constant_floatbv2t(value))
+  if (!is_constant_floatbv2t(value))
     return expr2tc();
 
   ieee_floatt n = to_constant_floatbv2t(value).value;
-  if(n < 0)
+  if (n < 0)
   {
     n.make_NaN();
     return constant_floatbv2tc(n);
