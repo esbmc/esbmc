@@ -151,6 +151,46 @@ codet python_converter::convert_expression_to_code(exprt &expr)
   return code;
 }
 
+void python_converter::append_statement(exprt &block, exprt stmt)
+{
+  if (!block.is_code())
+    throw std::runtime_error("append_statement target must be code expression");
+
+  if (stmt.is_nil())
+  {
+    log_error(
+      "append_statement received nil statement in function '{}'",
+      current_func_name_);
+    throw std::runtime_error(
+      "append_statement received nil statement for block '" +
+      current_func_name_ + "'");
+  }
+
+  codet stmt_code = convert_expression_to_code(stmt);
+  codet &block_code = to_code(block);
+  block_code.copy_to_operands(stmt_code);
+}
+
+void python_converter::move_statement(exprt &block, exprt stmt)
+{
+  if (!block.is_code())
+    throw std::runtime_error("move_statement target must be code expression");
+
+  if (stmt.is_nil())
+  {
+    log_error(
+      "move_statement received nil statement in function '{}'",
+      current_func_name_);
+    throw std::runtime_error(
+      "move_statement received nil statement for block '" + current_func_name_ +
+      "'");
+  }
+
+  codet stmt_code = convert_expression_to_code(stmt);
+  codet &block_code = to_code(block);
+  block_code.move_to_operands(stmt_code);
+}
+
 symbolt python_converter::create_symbol(
   const std::string &module,
   const std::string &name,
@@ -1707,7 +1747,7 @@ exprt python_converter::handle_list_operations(
     // Declare the temporary
     code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
     tmp_var_decl.location() = location;
-    current_block->copy_to_operands(tmp_var_decl);
+    append_statement(*current_block, tmp_var_decl);
 
     // Build function call statement from side effect expression
     side_effect_expr_function_callt &side_effect =
@@ -1720,7 +1760,7 @@ exprt python_converter::handle_list_operations(
     call.type() = list_type;
     call.location() = location;
 
-    current_block->copy_to_operands(call);
+    append_statement(*current_block, call);
 
     // Replace expr with the temp variable
     expr = symbol_expr(tmp_var_symbol);
@@ -2823,7 +2863,7 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
     return_stmt.return_value() = body_expr;
     return_stmt.location() = location;
 
-    lambda_block.copy_to_operands(return_stmt);
+    append_statement(lambda_block, return_stmt);
     added_symbol->value = lambda_block;
   }
 
@@ -3494,6 +3534,13 @@ void python_converter::handle_assignment_type_adjustments(
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
+  // Check if the variable has type annotations (either from current AST node
+  // or from previous declaration). When is-instance-check is enabled, we
+  // preserve the original type to allow runtime type checking.
+  const bool has_type_annotations =
+    has_annotation || (type_assertions_enabled() && lhs_symbol &&
+                       !lhs_symbol->python_annotation_types.empty());
+
   // Handle lambda assignments
   if (
     ast_node.contains("value") && ast_node["value"].contains("_type") &&
@@ -3587,13 +3634,16 @@ void python_converter::handle_assignment_type_adjustments(
       lhs.type() = rhs.type();
     }
     else if (
-      !has_annotation && !rhs.type().is_empty() && lhs.type() != rhs.type() &&
-      !rhs.type().is_code() &&
+      !has_type_annotations && !rhs.type().is_empty() &&
+      lhs.type() != rhs.type() && !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
     {
       // Default case: allow Python's dynamic typing by updating the variable
       // type to match the assigned value. Type annotations are enforced via
       // runtime assertions rather than static typing.
+      // Note: When is-instance-check is enabled and the variable has type
+      // annotations, we preserve the original type to allow the runtime
+      // type assertion to detect the type mismatch.
       lhs_symbol->type = rhs.type();
       lhs.type() = rhs.type();
     }
@@ -3614,6 +3664,10 @@ exprt python_converter::get_return_from_func(const char *func_symbol_id)
        it != operands.rend();
        ++it)
   {
+    // Only process code expressions, skip non-code operands
+    if (!it->is_code())
+      continue;
+
     const codet &c = to_code(*it);
     if (c.statement() == "return")
     {
@@ -3669,7 +3723,7 @@ void python_converter::handle_array_unpacking(
 
     code_assignt assign(symbol_expr(*var_symbol), subscript);
     assign.location() = get_location_from_decl(ast_node);
-    target_block.copy_to_operands(assign);
+    append_statement(target_block, assign);
   }
 }
 
@@ -3728,7 +3782,7 @@ void python_converter::handle_list_literal_unpacking(
 
     code_assignt assign(symbol_expr(*var_symbol), elem_expr);
     assign.location() = get_location_from_decl(ast_node);
-    target_block.copy_to_operands(assign);
+    append_statement(target_block, assign);
   }
 }
 
@@ -4061,17 +4115,17 @@ void python_converter::handle_function_call_rhs(
 
     code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
     tmp_var_decl.location() = get_location_from_decl(ast_node);
-    target_block.copy_to_operands(tmp_var_decl);
+    append_statement(target_block, tmp_var_decl);
 
     rhs.op0() = symbol_expr(tmp_var_symbol);
-    target_block.copy_to_operands(rhs);
+    append_statement(target_block, rhs);
 
     code_assignt code_assign(lhs, symbol_expr(tmp_var_symbol));
     code_assign.location() = location;
     rhs = code_assign;
   }
 
-  target_block.copy_to_operands(rhs);
+  append_statement(target_block, rhs);
 }
 
 exprt python_converter::handle_string_literal_rhs(
@@ -4239,7 +4293,7 @@ void python_converter::get_var_assign(
       {
         code_declt decl(symbol_expr(*lhs_symbol));
         decl.location() = location_begin;
-        target_block.copy_to_operands(decl);
+        append_statement(target_block, decl);
       }
     }
 
@@ -4253,15 +4307,17 @@ void python_converter::get_var_assign(
     {
       auto &tc = get_typechecker();
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
-      if (
-        !annotation_types.empty() &&
-        !tc.should_skip_type_assertion(annotated_type))
+      if (!annotation_types.empty())
       {
+        // Use the annotated type for skip check
         annotated_type = annotation_types.front();
-        can_emit_annotation_check = true;
-        annotation_location = location_begin;
-        annotated_name = name;
-        annotation_candidates = annotation_types;
+        if (!tc.should_skip_type_assertion(annotated_type))
+        {
+          can_emit_annotation_check = true;
+          annotation_location = location_begin;
+          annotated_name = name;
+          annotation_candidates = annotation_types;
+        }
       }
     }
 
@@ -4333,15 +4389,18 @@ void python_converter::get_var_assign(
     {
       auto &tc = get_typechecker();
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
-      if (
-        !annotation_types.empty() &&
-        !tc.should_skip_type_assertion(lhs_symbol->type))
+      if (!annotation_types.empty())
       {
+        // Use the annotated type (from original declaration) for skip check,
+        // not the current symbol type which may have changed due to dynamic typing
         annotated_type = annotation_types.front();
-        can_emit_annotation_check = true;
-        annotation_location = location_begin;
-        annotated_name = name;
-        annotation_candidates = annotation_types;
+        if (!tc.should_skip_type_assertion(annotated_type))
+        {
+          can_emit_annotation_check = true;
+          annotation_location = location_begin;
+          annotated_name = name;
+          annotation_candidates = annotation_types;
+        }
       }
     }
   }
@@ -4386,8 +4445,8 @@ void python_converter::get_var_assign(
       code_declt decl(symbol_expr(*lhs_symbol));
       decl.location() = location_begin;
 
-      target_block.copy_to_operands(code_expr);
-      target_block.copy_to_operands(decl);
+      append_statement(target_block, code_expr);
+      append_statement(target_block, decl);
       current_lhs = nullptr;
       return;
     }
@@ -4422,7 +4481,7 @@ void python_converter::get_var_assign(
           ctor_assert.location().comment(
             "Constructor '" + ctor_name +
             "' is incompatible with annotated type '" + expected_base + "'");
-          target_block.copy_to_operands(ctor_assert);
+          append_statement(target_block, ctor_assert);
         }
       }
 
@@ -4444,6 +4503,50 @@ void python_converter::get_var_assign(
           target_block);
       current_lhs = nullptr;
       return;
+    }
+
+    // When type annotations are enabled and types are incompatible,
+    // emit a failing assertion instead of attempting the invalid assignment.
+    // This catches type annotation violations at verification time.
+    // Must be checked BEFORE adjust_statement_types which may modify types.
+    //
+    // Check if the variable has type annotations (even if can_emit_annotation_check
+    // is false due to should_skip_type_assertion returning true for the annotated
+    // type itself - we still want to catch obvious type mismatches).
+    bool has_cached_annotations =
+      lhs_symbol && !lhs_symbol->python_annotation_types.empty();
+
+    if (type_assertions_enabled() && has_cached_annotations)
+    {
+      // Specifically detect numeric-to-string or string-to-numeric mismatches
+      bool lhs_is_numeric = lhs.type().is_signedbv() ||
+                            lhs.type().is_unsignedbv() ||
+                            lhs.type().is_floatbv() || lhs.type().is_fixedbv();
+      bool rhs_is_numeric = rhs.type().is_signedbv() ||
+                            rhs.type().is_unsignedbv() ||
+                            rhs.type().is_floatbv() || rhs.type().is_fixedbv();
+      bool lhs_is_string = lhs.type().is_array() || lhs.type().is_pointer();
+      bool rhs_is_string = rhs.type().is_array() || rhs.type().is_pointer();
+
+      bool type_mismatch =
+        (lhs_is_numeric && rhs_is_string) || (lhs_is_string && rhs_is_numeric);
+
+      if (type_mismatch && !lhs.type().is_empty() && !rhs.type().is_empty())
+      {
+        // Emit assertion that will fail (type mismatch detected)
+        code_assertt type_assert(gen_boolean(false));
+        type_assert.location() = location_begin;
+        std::string var_name = lhs_symbol->name.empty()
+                                 ? lhs_symbol->id.as_string()
+                                 : lhs_symbol->name.as_string();
+        type_assert.location().comment(
+          "Type annotation violation: cannot assign value of incompatible "
+          "type to '" +
+          var_name + "'");
+        append_statement(target_block, type_assert);
+        current_lhs = nullptr;
+        return;
+      }
     }
 
     adjust_statement_types(lhs, rhs);
@@ -4468,7 +4571,7 @@ void python_converter::get_var_assign(
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
       decl.location() = location_begin;
-      target_block.copy_to_operands(decl);
+      append_statement(target_block, decl);
       if (type_assertions_enabled() && can_emit_annotation_check)
         get_typechecker().emit_type_annotation_assertion(
           lhs,
@@ -4483,7 +4586,7 @@ void python_converter::get_var_assign(
 
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
-    target_block.copy_to_operands(code_assign);
+    append_statement(target_block, code_assign);
     if (type_assertions_enabled() && can_emit_annotation_check)
       get_typechecker().emit_type_annotation_assertion(
         lhs,
@@ -4500,7 +4603,7 @@ void python_converter::get_var_assign(
 
     code_declt decl(symbol_expr(*lhs_symbol));
     decl.location() = location_begin;
-    target_block.copy_to_operands(decl);
+    append_statement(target_block, decl);
   }
 
   current_lhs = nullptr;
@@ -4687,7 +4790,7 @@ void python_converter::get_compound_assign(
 
     code_assignt code_assign(lhs, concatenated);
     code_assign.location() = loc;
-    target_block.copy_to_operands(code_assign);
+    append_statement(target_block, code_assign);
 
     // Reset RHS flag
     is_converting_rhs = false;
@@ -4701,7 +4804,7 @@ void python_converter::get_compound_assign(
 
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = loc;
-  target_block.copy_to_operands(code_assign);
+  append_statement(target_block, code_assign);
 }
 
 typet resolve_ternary_type(
@@ -4804,8 +4907,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       // Add both declaration and function call to current_block
       if (current_block)
       {
-        current_block->copy_to_operands(temp_decl);
-        current_block->copy_to_operands(func_call);
+        append_statement(*current_block, temp_decl);
+        append_statement(*current_block, func_call);
       }
 
       // Build the final condition expression
@@ -5723,7 +5826,53 @@ void python_converter::validate_return_paths(
     "Missing return statement detected in function '" + current_func_name_ +
     "'");
 
-  function_body.copy_to_operands(missing_return_assert);
+  append_statement(function_body, missing_return_assert);
+}
+
+void python_converter::validate_block_structure(
+  const exprt &block,
+  const std::string &context) const
+{
+  if (!block.is_code())
+    return;
+
+  const codet &code_block = to_code(block);
+  for (const auto &operand : code_block.operands())
+  {
+    if (operand.is_nil())
+    {
+      std::ostringstream oss;
+      oss << "Internal error: nil statement emitted in function '" << context
+          << "'";
+      const std::string loc_str = operand.location().as_string();
+      if (!loc_str.empty())
+        oss << " at " << loc_str;
+      log_error("nil statement in '{}':\n{}", context, operand.pretty());
+      oss << "\nExpr: " << operand.pretty();
+      throw std::runtime_error(oss.str());
+    }
+
+    if (!operand.is_code())
+    {
+      std::ostringstream oss;
+      oss << "Internal error: non-code statement (id=" << operand.id_string()
+          << ") emitted in function '" << context << "'";
+      const std::string loc_str = operand.location().as_string();
+      if (!loc_str.empty())
+        oss << " at " << loc_str;
+      log_error(
+        "non-code statement (id={}) in '{}':\n{}",
+        operand.id_string(),
+        context,
+        operand.pretty());
+      log_error("current block:\n{}", block.pretty());
+      oss << "\nExpr: " << operand.pretty();
+      throw std::runtime_error(oss.str());
+    }
+
+    if (operand.is_code() && to_code(operand).get_statement() == "block")
+      validate_block_structure(operand, context);
+  }
 }
 
 void python_converter::get_function_definition(
@@ -5863,6 +6012,13 @@ void python_converter::get_function_definition(
 
   // Process function body
   exprt function_body = get_block(function_node["body"]);
+  if (!function_body.is_code())
+  {
+    std::ostringstream oss;
+    oss << "Internal error: function body for '" << current_func_name_
+        << "' is not a code block (id=" << function_body.id_string() << ")";
+    throw std::runtime_error(oss.str());
+  }
 
   // Inject runtime checks for annotated parameters
   if (type_assertions_enabled())
@@ -5872,15 +6028,20 @@ void python_converter::get_function_definition(
   // Add ESBMC_Hide label for models/imports
   if (is_loading_models || is_importing_module)
   {
+    codet &function_body_code = to_code(function_body);
+
     code_labelt esbmc_hide;
     esbmc_hide.set_label("__ESBMC_HIDE");
     esbmc_hide.code() = code_skipt();
-    function_body.operands().insert(
-      function_body.operands().begin(), esbmc_hide);
+    function_body_code.operands().insert(
+      function_body_code.operands().begin(), esbmc_hide);
   }
 
   // Validate return paths
   validate_return_paths(function_node, type, function_body);
+
+  // Ensure the function body contains only code statements
+  validate_block_structure(function_body, current_func_name_);
 
   added_symbol->value = function_body;
 
@@ -6034,7 +6195,7 @@ void python_converter::get_return_statements(
     locationt location = get_location_from_decl(ast_node);
     code_returnt return_code;
     return_code.location() = location;
-    target_block.copy_to_operands(return_code);
+    append_statement(target_block, return_code);
     return;
   }
 
@@ -6083,7 +6244,7 @@ void python_converter::get_return_statements(
     // Create declaration for temporary variable
     code_declt temp_decl(temp_var_expr);
     temp_decl.location() = location;
-    target_block.copy_to_operands(temp_decl);
+    append_statement(target_block, temp_decl);
 
     // Set the LHS of the function call to our temporary variable
     if (!return_type.is_empty())
@@ -6101,13 +6262,13 @@ void python_converter::get_return_statements(
     }
 
     // Add the function call statement to the block
-    target_block.copy_to_operands(return_value);
+    append_statement(target_block, return_value);
 
     // Return the temporary variable
     code_returnt return_code;
     return_code.return_value() = temp_var_expr;
     return_code.location() = location;
-    target_block.copy_to_operands(return_code);
+    append_statement(target_block, return_code);
   }
   else
   {
@@ -6152,7 +6313,7 @@ void python_converter::get_return_statements(
     code_returnt return_code;
     return_code.return_value() = return_value;
     return_code.location() = location;
-    target_block.copy_to_operands(return_code);
+    append_statement(target_block, return_code);
   }
 }
 
@@ -6212,13 +6373,13 @@ void python_converter::handle_list_assertion(
       create_tmp_symbol(element, "$list_assert_temp$", test.type(), exprt());
     code_declt list_decl(symbol_expr(list_temp));
     list_decl.location() = location;
-    block.move_to_operands(list_decl);
+    move_statement(block, list_decl);
 
     // Execute function call
     code_function_callt &func_call =
       static_cast<code_function_callt &>(const_cast<exprt &>(test));
     func_call.lhs() = symbol_expr(list_temp);
-    block.move_to_operands(func_call);
+    move_statement(block, func_call);
 
     list_expr = symbol_expr(list_temp);
   }
@@ -6233,7 +6394,7 @@ void python_converter::handle_list_assertion(
     element, "$list_size_result$", size_type(), gen_zero(size_type()));
   code_declt size_decl(symbol_expr(size_result));
   size_decl.location() = location;
-  block.move_to_operands(size_decl);
+  move_statement(block, size_decl);
 
   // Call list_size(list)
   code_function_callt size_func_call;
@@ -6245,7 +6406,7 @@ void python_converter::handle_list_assertion(
   size_func_call.lhs() = symbol_expr(size_result);
   size_func_call.type() = size_type();
   size_func_call.location() = location;
-  block.move_to_operands(size_func_call);
+  move_statement(block, size_func_call);
 
   // Assert size > 0
   exprt assertion(">", bool_type());
@@ -6255,7 +6416,7 @@ void python_converter::handle_list_assertion(
   assert_code.assertion() = assertion;
   assert_code.location() = location;
   attach_assert_message(assert_code);
-  block.move_to_operands(assert_code);
+  move_statement(block, assert_code);
 }
 
 void python_converter::handle_function_call_assertion(
@@ -6275,14 +6436,14 @@ void python_converter::handle_function_call_assertion(
     // Function returns None: execute call and assert False
     exprt func_call_copy = func_call_expr;
     codet code_stmt = convert_expression_to_code(func_call_copy);
-    block.move_to_operands(code_stmt);
+    move_statement(block, code_stmt);
 
     code_assertt assert_code;
     assert_code.assertion() = false_exprt();
     assert_code.location() = location;
     assert_code.location().comment("Assertion on None-returning function");
     attach_assert_message(assert_code);
-    block.move_to_operands(assert_code);
+    move_statement(block, assert_code);
     return;
   }
 
@@ -6294,7 +6455,7 @@ void python_converter::handle_function_call_assertion(
   // Create function call statement
   code_function_callt function_call =
     create_function_call_statement(func_call_expr, temp_var_expr, location);
-  block.move_to_operands(function_call);
+  move_statement(block, function_call);
 
   // Create assertion based on negation
   exprt assertion_expr;
@@ -6313,7 +6474,7 @@ void python_converter::handle_function_call_assertion(
   assert_code.assertion() = assertion_expr;
   assert_code.location() = location;
   attach_assert_message(assert_code);
-  block.move_to_operands(assert_code);
+  move_statement(block, assert_code);
 }
 
 exprt python_converter::get_block(const nlohmann::json &ast_block)
@@ -6338,7 +6499,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::WHILE_STATEMENT:
     {
       exprt cond = get_conditional_stm(element);
-      block.copy_to_operands(cond);
+      append_statement(block, cond);
       break;
     }
     case StatementType::FOR_STATEMENT:
@@ -6374,7 +6535,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         test.location() = get_location_from_decl(element);
         codet code_expr("expression");
         code_expr.operands().push_back(test);
-        block.move_to_operands(code_expr);
+        move_statement(block, code_expr);
         break;
       }
 
@@ -6446,19 +6607,29 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         assert_code.assertion() = test;
         assert_code.location() = get_location_from_decl(element);
         attach_assert_message(assert_code);
-        block.move_to_operands(assert_code);
+        move_statement(block, assert_code);
       }
       break;
     }
     case StatementType::EXPR:
     {
+      // Skip docstring-like expressions (string literals used as statements)
+      if (
+        element.contains("value") && element["value"].contains("_type") &&
+        element["value"]["_type"] == "Constant" &&
+        element["value"].contains("value") &&
+        element["value"]["value"].is_string())
+      {
+        break;
+      }
+
       // Function calls are handled here
       exprt empty;
       exprt expr = get_expr(element["value"]);
       if (expr != empty)
       {
         codet code_stmt = convert_expression_to_code(expr);
-        block.move_to_operands(code_stmt);
+        move_statement(block, code_stmt);
       }
 
       break;
@@ -6471,13 +6642,13 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::BREAK:
     {
       code_breakt break_expr;
-      block.move_to_operands(break_expr);
+      move_statement(block, break_expr);
       break;
     }
     case StatementType::CONTINUE:
     {
       code_continuet continue_expr;
-      block.move_to_operands(continue_expr);
+      move_statement(block, continue_expr);
       break;
     }
     case StatementType::GLOBAL:
@@ -6500,7 +6671,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       for (const auto &op : handler.operands())
         new_expr.copy_to_operands(op);
 
-      block.move_to_operands(new_expr);
+      move_statement(block, new_expr);
       break;
     }
     case StatementType::EXCEPTHANDLER:
@@ -6548,14 +6719,15 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         catch_block.type() = exception_type;
         exprt sym = symbol_expr(*exception_symbol);
         code_declt decl(sym);
-        exprt decl_code = convert_expression_to_code(decl);
-        decl_code.location() = exception_symbol->location;
+        decl.location() = exception_symbol->location;
 
-        codet::operandst &ops = catch_block.operands();
-        ops.insert(ops.begin(), decl_code);
+        codet &catch_block_code = to_code(catch_block);
+        codet decl_code = convert_expression_to_code(decl);
+        catch_block_code.operands().insert(
+          catch_block_code.operands().begin(), decl_code);
       }
 
-      block.move_to_operands(catch_block);
+      move_statement(block, catch_block);
       break;
     }
     case StatementType::RAISE:
@@ -6603,7 +6775,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
       codet code_expr("expression");
       code_expr.operands().push_back(side);
-      block.move_to_operands(code_expr);
+      move_statement(block, code_expr);
       break;
     }
     case StatementType::DELETE:
@@ -6651,7 +6823,7 @@ exprt python_converter::get_static_array(
   code_declt decl(expr);
   decl.operands().push_back(list);
   assert(current_block);
-  current_block->copy_to_operands(decl);
+  append_statement(*current_block, decl);
 
   return expr;
 }
@@ -6757,6 +6929,7 @@ static void add_global_static_variable(
   symbol.value.zero_initializer(true);
 
   symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
+  (void)added_symbol;
   assert(added_symbol);
 }
 
@@ -6783,7 +6956,7 @@ void python_converter::load_c_intrisics(code_blockt &block)
   symbol_exprt rounding_symbol("c:@__ESBMC_rounding_mode", int_type());
   code_assignt rounding_assign(rounding_symbol, gen_zero(int_type()));
   rounding_assign.location() = location;
-  block.copy_to_operands(rounding_assign);
+  append_statement(block, rounding_assign);
 
   // TODO: Consider initializing other intrinsic variables if needed:
   // - __ESBMC_alloc
@@ -6905,13 +7078,12 @@ void python_converter::process_module_imports(
       current_python_file = nested_python_file;
 
       create_builtin_symbols();
-      exprt imported_code = with_ast(&nested_module_json, [&]() {
-        return get_block(nested_module_json["body"]);
-      });
-      convert_expression_to_code(imported_code);
+      exprt imported_code_expr = with_ast(
+        &nested_module_json,
+        [&]() { return get_block(nested_module_json["body"]); });
 
       // Accumulate this module's code
-      accumulated_code.copy_to_operands(imported_code);
+      append_statement(accumulated_code, imported_code_expr);
 
       current_python_file = saved_file;
     }
@@ -6970,13 +7142,11 @@ void python_converter::convert()
           current_python_file = imported_modules[filename];
       }
 
-      exprt model_code =
+      exprt model_code_expr =
         with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
 
-      convert_expression_to_code(model_code);
-
       // Accumulate model code
-      models_block.copy_to_operands(model_code);
+      append_statement(models_block, model_code_expr);
       current_python_file = main_python_file;
     }
     is_loading_models = false;
@@ -7015,7 +7185,7 @@ void python_converter::convert()
     code_blockt block;
 
     // Add intrinsic assignments first
-    block.copy_to_operands(intrinsic_block);
+    append_statement(block, intrinsic_block);
 
     // Convert classes referenced by the function
     for (const auto &clazz : global_scope_.classes())
@@ -7073,18 +7243,15 @@ void python_converter::convert()
       call.arguments().push_back(arg_value);
     }
 
-    convert_expression_to_code(call);
-    convert_expression_to_code(block);
-
     // Prepare user code: class definitions + function call
     code_blockt user_code_body;
-    user_code_body.copy_to_operands(block);
-    user_code_body.copy_to_operands(call);
+    append_statement(user_code_body, block);
+    append_statement(user_code_body, call);
     user_code.swap(user_code_body);
 
     // Add models to init code
     if (!models_block.operands().empty())
-      init_code.copy_to_operands(models_block);
+      append_statement(init_code, models_block);
   }
   else
   {
@@ -7132,14 +7299,12 @@ void python_converter::convert()
           imported_module_json, const_cast<global_scope &>(global_scope_));
         imported_annotator.add_type_annotation();
 
-        exprt imported_code = with_ast(&imported_module_json, [&]() {
-          return get_block(imported_module_json["body"]);
-        });
-
-        convert_expression_to_code(imported_code);
+        exprt imported_code_expr = with_ast(
+          &imported_module_json,
+          [&]() { return get_block(imported_module_json["body"]); });
 
         // Accumulate imported code instead of overwriting
-        all_imports_block.copy_to_operands(imported_code);
+        append_statement(all_imports_block, imported_code_expr);
 
         imported_module_json.clear();
       }
@@ -7154,10 +7319,10 @@ void python_converter::convert()
 
     // Prepare initialization code: models + intrinsics + imports
     if (!models_block.operands().empty())
-      init_code.copy_to_operands(models_block);
-    init_code.copy_to_operands(intrinsic_block);
+      append_statement(init_code, models_block);
+    append_statement(init_code, intrinsic_block);
     if (!all_imports_block.operands().empty())
-      init_code.copy_to_operands(all_imports_block);
+      append_statement(init_code, all_imports_block);
   }
 
   /*
@@ -7201,8 +7366,8 @@ void python_converter::convert()
     esbmc_hide.code() = code_skipt();
 
     code_blockt init_body;
-    init_body.copy_to_operands(esbmc_hide);
-    init_body.copy_to_operands(init_code);
+    append_statement(init_body, esbmc_hide);
+    append_statement(init_body, init_code);
     init_symbol.value.swap(init_body);
 
     if (symbol_table_.move(init_symbol))
@@ -7247,14 +7412,16 @@ void python_converter::convert()
   code_blockt main_body;
 
   // 1. Initialize static lifetime variables
-  symbol_table_.foreach_operand_in_order([&main_body](const symbolt &s) {
-    if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+  symbol_table_.foreach_operand_in_order(
+    [this, &main_body](const symbolt &s)
     {
-      code_assignt assign(symbol_expr(s), s.value);
-      assign.location() = s.location;
-      main_body.copy_to_operands(assign);
-    }
-  });
+      if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+      {
+        code_assignt assign(symbol_expr(s), s.value);
+        assign.location() = s.location;
+        append_statement(main_body, assign);
+      }
+    });
 
   // 2. Call python_init for initialization
   if (!init_code.operands().empty())
@@ -7264,7 +7431,7 @@ void python_converter::convert()
     {
       code_function_callt init_call;
       init_call.function() = symbol_expr(*init_sym);
-      main_body.copy_to_operands(init_call);
+      append_statement(main_body, init_call);
     }
   }
 
@@ -7277,7 +7444,7 @@ void python_converter::convert()
 
   code_function_callt user_main_call;
   user_main_call.function() = symbol_expr(*user_main_sym);
-  main_body.copy_to_operands(user_main_call);
+  append_statement(main_body, user_main_call);
 
   main_symbol.value.swap(main_body);
 
@@ -7409,7 +7576,7 @@ exprt python_converter::handle_set_operations(
 
     code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
     tmp_var_decl.location() = location;
-    current_block->copy_to_operands(tmp_var_decl);
+    append_statement(*current_block, tmp_var_decl);
 
     side_effect_expr_function_callt &side_effect =
       to_side_effect_expr_function_call(expr);
@@ -7421,7 +7588,7 @@ exprt python_converter::handle_set_operations(
     call.type() = list_type;
     call.location() = location;
 
-    current_block->copy_to_operands(call);
+    append_statement(*current_block, call);
     expr = symbol_expr(tmp_var_symbol);
     return true;
   };

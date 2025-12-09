@@ -1100,6 +1100,16 @@ void value_sett::assign(
       auto *rhs_data = static_cast<const struct_union_data *>(rhs->type.get());
       const std::vector<type2tc> &members = rhs_data->members;
       const std::vector<irep_idt> &member_names = rhs_data->member_names;
+      const bool rhs_is_unknown = is_unknown2t(rhs);
+      const bool rhs_is_invalid = is_invalid2t(rhs);
+      const bool is_compatible =
+        base_type_eq(rhs->type, lhs_type, ns) ||
+        is_subclass_of(lhs_type, rhs->type, ns);
+
+      // Ignore assignments between incompatible struct/union types instead of
+      // asserting; these can show up after typecasts during reference building.
+      if (!rhs_is_unknown && !rhs_is_invalid && !is_compatible)
+        return;
 
       for (size_t i = 0; i < members.size(); i++)
       {
@@ -1113,24 +1123,14 @@ void value_sett::assign(
         expr2tc lhs_member = member2tc(subtype, lhs, name);
 
         expr2tc rhs_member;
-        if (is_unknown2t(rhs))
-        {
+        if (rhs_is_unknown)
           rhs_member = unknown2tc(subtype);
-        }
-        else if (is_invalid2t(rhs))
-        {
+        else if (rhs_is_invalid)
           rhs_member = invalid2tc(subtype);
-        }
         else
-        {
-          assert(
-            base_type_eq(rhs->type, lhs_type, ns) ||
-            is_subclass_of(lhs_type, rhs->type, ns));
-          expr2tc rhs_member = make_member(rhs, name);
+          rhs_member = make_member(rhs, name);
 
-          // XXX -- shouldn't this be one level of indentation up?
-          assign(lhs_member, rhs_member, add_to_sets);
-        }
+        assign(lhs_member, rhs_member, add_to_sets);
       }
     }
     else
@@ -1159,38 +1159,38 @@ void value_sett::assign(
       // Assign an unknown subtype value to the array's (unknown) index.
       expr2tc unknown_field = unknown2tc(arr_type.subtype);
       assign(lhs_index, unknown_field, add_to_sets);
+      return;
+    }
+
+    if (!base_type_eq(rhs->type, lhs_type, ns))
+      return;
+
+    if (is_constant_array_of2t(rhs))
+    {
+      assign(lhs_index, to_constant_array_of2t(rhs).initializer, add_to_sets);
+    }
+    else if (is_constant_array2t(rhs) || is_constant_expr(rhs))
+    {
+      rhs->foreach_operand(
+        [this, &add_to_sets, &lhs_index](const expr2tc &e) {
+          assign(lhs_index, e, add_to_sets);
+          add_to_sets = true;
+        });
+    }
+    else if (is_with2t(rhs))
+    {
+      const with2t &with = to_with2t(rhs);
+
+      expr2tc unknown = unknown2tc(index_type2());
+      expr2tc idx = index2tc(arr_type.subtype, with.source_value, unknown);
+
+      assign(lhs_index, idx, add_to_sets);
+      assign(lhs_index, with.update_value, true);
     }
     else
     {
-      assert(base_type_eq(rhs->type, lhs_type, ns));
-
-      if (is_constant_array_of2t(rhs))
-      {
-        assign(lhs_index, to_constant_array_of2t(rhs).initializer, add_to_sets);
-      }
-      else if (is_constant_array2t(rhs) || is_constant_expr(rhs))
-      {
-        rhs->foreach_operand(
-          [this, &add_to_sets, &lhs_index](const expr2tc &e) {
-            assign(lhs_index, e, add_to_sets);
-            add_to_sets = true;
-          });
-      }
-      else if (is_with2t(rhs))
-      {
-        const with2t &with = to_with2t(rhs);
-
-        expr2tc unknown = unknown2tc(index_type2());
-        expr2tc idx = index2tc(arr_type.subtype, with.source_value, unknown);
-
-        assign(lhs_index, idx, add_to_sets);
-        assign(lhs_index, with.update_value, true);
-      }
-      else
-      {
-        expr2tc rhs_idx = index2tc(arr_type.subtype, rhs, unknown);
-        assign(lhs_index, rhs_idx, true);
-      }
+      expr2tc rhs_idx = index2tc(arr_type.subtype, rhs, unknown);
+      assign(lhs_index, rhs_idx, true);
     }
     return;
   }

@@ -113,8 +113,11 @@ public:
 
   void add_instruction(const exprt &expr)
   {
-    if (current_block)
-      current_block->copy_to_operands(expr);
+    if (!current_block)
+      return;
+
+    exprt stmt = expr;
+    append_statement(*current_block, stmt);
   }
 
   void update_symbol(const exprt &expr) const;
@@ -236,6 +239,8 @@ private:
   exprt get_lambda_expr(const nlohmann::json &element);
 
   codet convert_expression_to_code(exprt &expr);
+  void append_statement(exprt &block, exprt stmt);
+  void move_statement(exprt &block, exprt stmt);
 
   std::string remove_quotes_from_type_string(const std::string &type_string);
 
@@ -339,6 +344,8 @@ private:
     const nlohmann::json &function_node,
     const code_typet &type,
     exprt &function_body);
+
+  void validate_block_structure(const exprt &block, const std::string &context) const;
 
   exprt compare_constants_internal(
     const std::string &op,

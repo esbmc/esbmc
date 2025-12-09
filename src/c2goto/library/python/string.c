@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <limits.h>
+#include <stddef.h>
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
@@ -13,7 +14,9 @@ _Bool __python_str_isalpha(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s || !*s)
+  {
     return 0;
+  }
 
   while (*s)
   {
@@ -21,19 +24,21 @@ __ESBMC_HIDE:;
 
     if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
     {
-      s++;
+      s = s + 1;
       continue;
     }
 
     if (c <= 0x7F)
+    {
       return 0;
+    }
 
     if (c >= 0xC2 && c <= 0xDF)
     {
       unsigned char next = (unsigned char)*(s + 1);
       if (next >= 0x80 && next <= 0xBF)
       {
-        s += 2;
+        s = s + 2;
         continue;
       }
     }
@@ -55,13 +60,17 @@ _Bool __python_str_isdigit(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s || !*s)
+  {
     return 0;
+  }
 
   while (*s)
   {
     if (!isdigit((unsigned char)*s))
+    {
       return 0;
-    s++;
+    }
+    s = s + 1;
   }
   return 1;
 }
@@ -71,7 +80,9 @@ _Bool __python_str_isspace(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s || !*s)
+  {
     return 0;
+  }
 
   while (*s)
   {
@@ -79,9 +90,11 @@ __ESBMC_HIDE:;
 
     if (!(c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
           c == '\r'))
+    {
       return 0;
+    }
 
-    s++;
+    s = s + 1;
   }
 
   return 1;
@@ -92,15 +105,62 @@ const char *__python_str_lstrip(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s)
+  {
     return s;
+  }
 
   while (*s && (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' ||
                 *s == '\f' || *s == '\r'))
   {
-    s++;
+    s = s + 1;
   }
 
   return s;
+}
+
+// Python string strip: removes leading and trailing whitespace characters
+const char *__python_str_strip(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+  {
+    return s;
+  }
+
+  while (*s && (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' ||
+                *s == '\f' || *s == '\r'))
+  {
+    s = s + 1;
+  }
+
+  const char *start = s;
+  const char *end = start;
+
+  while (*end)
+  {
+    end = end + 1;
+  }
+
+  while (end > start &&
+         (*(end - 1) == ' ' || *(end - 1) == '\t' || *(end - 1) == '\n' ||
+          *(end - 1) == '\v' || *(end - 1) == '\f' || *(end - 1) == '\r'))
+  {
+    end = end - 1;
+  }
+
+  size_t len = (size_t)(end - start);
+  char *buffer = __ESBMC_alloca(len + 1);
+
+  size_t i = 0;
+  while (i < len)
+  {
+    buffer[i] = start[i];
+    i = i + 1;
+  }
+
+  buffer[len] = '\0';
+
+  return buffer;
 }
 
 // Python character islower - checks if a single character is lowercase
@@ -115,7 +175,9 @@ _Bool __python_str_islower(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s || !*s)
+  {
     return 0;
+  }
 
   _Bool has_cased = 0;
 
@@ -124,10 +186,14 @@ __ESBMC_HIDE:;
     unsigned char c = (unsigned char)*s;
 
     if (c >= 'A' && c <= 'Z')
+    {
       return 0;
+    }
 
     if (c >= 'a' && c <= 'z')
+    {
       has_cased = 1;
+    }
 
     if (c >= 0xC2 && c <= 0xDF)
     {
@@ -135,12 +201,12 @@ __ESBMC_HIDE:;
       if (next >= 0x80 && next <= 0xBF)
       {
         has_cased = 1;
-        s += 2;
+        s = s + 2;
         continue;
       }
     }
 
-    s++;
+    s = s + 1;
   }
 
   return has_cased;
@@ -151,7 +217,9 @@ int __python_char_lower(int c)
 {
 __ESBMC_HIDE:;
   if (c >= 'A' && c <= 'Z')
+  {
     return c + ('a' - 'A');
+  }
   return c;
 }
 
@@ -160,7 +228,9 @@ char *__python_str_lower(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s)
+  {
     return (char *)s;
+  }
 
   char *buffer = __ESBMC_alloca(256);
 
@@ -168,10 +238,14 @@ __ESBMC_HIDE:;
   while (i < 255 && s[i])
   {
     if (s[i] >= 'A' && s[i] <= 'Z')
+    {
       buffer[i] = s[i] + ('a' - 'A');
+    }
     else
+    {
       buffer[i] = s[i];
-    i++;
+    }
+    i = i + 1;
   }
 
   if (s[i] != '\0')
@@ -210,7 +284,9 @@ int __python_int(const char *s, int base)
 {
 __ESBMC_HIDE:;
   if (!s)
+  {
     return 0;
+  }
 
   if (base != 0 && (base < 2 || base > 36))
   {
@@ -220,7 +296,9 @@ __ESBMC_HIDE:;
 
   while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' || *s == '\f' ||
          *s == '\r')
-    s++;
+  {
+    s = s + 1;
+  }
 
   if (!*s)
   {
@@ -232,11 +310,11 @@ __ESBMC_HIDE:;
   if (*s == '-')
   {
     sign = -1;
-    s++;
+    s = s + 1;
   }
   else if (*s == '+')
   {
-    s++;
+    s = s + 1;
   }
 
   if (base == 0)
@@ -246,17 +324,17 @@ __ESBMC_HIDE:;
       if (*(s + 1) == 'x' || *(s + 1) == 'X')
       {
         base = 16;
-        s += 2;
+        s = s + 2;
       }
       else if (*(s + 1) == 'b' || *(s + 1) == 'B')
       {
         base = 2;
-        s += 2;
+        s = s + 2;
       }
       else if (*(s + 1) == 'o' || *(s + 1) == 'O')
       {
         base = 8;
-        s += 2;
+        s = s + 2;
       }
       else
       {
@@ -270,15 +348,15 @@ __ESBMC_HIDE:;
   }
   else if (base == 16 && *s == '0' && (*(s + 1) == 'x' || *(s + 1) == 'X'))
   {
-    s += 2;
+    s = s + 2;
   }
   else if (base == 2 && *s == '0' && (*(s + 1) == 'b' || *(s + 1) == 'B'))
   {
-    s += 2;
+    s = s + 2;
   }
   else if (base == 8 && *s == '0' && (*(s + 1) == 'o' || *(s + 1) == 'O'))
   {
-    s += 2;
+    s = s + 2;
   }
 
   if (!*s)
@@ -310,7 +388,7 @@ __ESBMC_HIDE:;
     else if (
       c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r')
     {
-      s++;
+      s = s + 1;
       continue;
     }
     else
@@ -339,12 +417,14 @@ __ESBMC_HIDE:;
     }
 
     result = result * base + digit_value;
-    s++;
+    s = s + 1;
   }
 
   while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' || *s == '\f' ||
          *s == '\r')
-    s++;
+  {
+    s = s + 1;
+  }
 
   if (*s != '\0')
   {
@@ -416,12 +496,18 @@ char *__python_str_concat(const char *s1, const char *s2)
 {
 __ESBMC_HIDE:;
   if (!s1 && !s2)
+  {
     return (char *)0;
+  }
 
   if (!s1)
+  {
     s1 = "";
+  }
   if (!s2)
+  {
     s2 = "";
+  }
 
   char *buffer = __ESBMC_alloca(512);
 
@@ -432,8 +518,8 @@ __ESBMC_HIDE:;
   while (pos < 511 && s1[i])
   {
     buffer[pos] = s1[i];
-    pos++;
-    i++;
+    pos = pos + 1;
+    i = i + 1;
   }
 
   if (s1[i] != '\0')
@@ -448,8 +534,8 @@ __ESBMC_HIDE:;
   while (pos < 511 && s2[i])
   {
     buffer[pos] = s2[i];
-    pos++;
-    i++;
+    pos = pos + 1;
+    i = i + 1;
   }
 
   if (s2[i] != '\0')
