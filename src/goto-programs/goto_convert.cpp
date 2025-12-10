@@ -735,7 +735,8 @@ void goto_convertt::convert_assign(
     Forall_operands (it, rhs)
       remove_sideeffects(*it, dest);
 
-    do_function_call(lhs, rhs.op0(), rhs.op1().operands(), dest);
+    do_function_call(
+      lhs, rhs.op0(), rhs.op1().operands(), rhs.location(), dest);
   }
   else if (
     rhs.id() == "sideeffect" &&
