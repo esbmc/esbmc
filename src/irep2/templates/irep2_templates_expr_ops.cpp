@@ -38,6 +38,7 @@ expr_typedefs1(overflow, overflow_ops);
 expr_typedefs1(valid_object, object_ops);
 expr_typedefs1(races_check, object_ops);
 expr_typedefs1(isinstance, logic_2ops);
+expr_typedefs1(hasattr, logic_2ops);
 expr_typedefs1(isnone, logic_2ops);
 expr_typedefs1(dynamic_size, object_ops);
 expr_typedefs1(deallocated_obj, object_ops);

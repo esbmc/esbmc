@@ -253,6 +253,8 @@ std::string exists2t::field_names[esbmct::num_type_fields] =
   {"symbol", "predicate", "", "", ""};
 std::string isinstance2t::field_names[esbmct::num_type_fields] =
   {"value", "type", "", "", ""};
+std::string hasattr2t::field_names[esbmct::num_type_fields] =
+  {"value", "attr", "", "", ""};
 std::string isnone2t::field_names[esbmct::num_type_fields] =
   {"lhs", "rhs", "", "", ""};
 
