@@ -67,7 +67,7 @@ ESBMC has been used in a broad range of cutting-edge applications across multipl
 * **[Verifying Components of Arm® Confidential Computing Architecture](https://link.springer.com/chapter/10.1007/978-3-031-74776-2_18)** (SAS 2024)
 >ESBMC is used to verify the Realm Management Monitor (RMM) firmware in Arm's Confidential Computing Architecture, detecting 23 new vulnerabilities that other tools missed.
 
-* **[LLM-Generated Invariants for Bounded Model Checking Without Loop Unrolling](https://doi.org/10.1109/ASE56229.2024.00142)** (ASE 2024)
+* **[LLM-Generated Invariants for Bounded Model Checking Without Loop Unrolling](https://doi.org/10.1145/3691620.3695512)** (ASE 2024)
 >Integration of large language models with ESBMC to automatically generate loop invariants, eliminating the need for manual loop unrolling.
 
 * **[ESBMC-Solidity: Verifying Blockchain Smart Contracts](https://dl.acm.org/doi/10.1145/3510454.3516855)** (ICSE 2022)
@@ -76,7 +76,7 @@ ESBMC has been used in a broad range of cutting-edge applications across multipl
 * **[ESBMC-CHERI: Hardware-Assisted Memory Safety Verification](https://dl.acm.org/doi/10.1145/3533767.3543289)** (ISSTA 2022)
 >The first bounded model checker for CHERI-enabled platforms, verifying C programs with hardware-level memory protection capabilities.
 
-* **[ESBMC-Jimple: Verifying Kotlin Programs](https://dl.acm.org/doi/10.1145/3533767.3534374)** (ISSTA 2022)
+* **[ESBMC-Jimple: Verifying Kotlin Programs](https://doi.org/10.1145/3533767.3543294)** (ISSTA 2022)
 >ESBMC is extended to verify Android/Kotlin applications through the Jimple intermediate representation.
 
 * **[Arduino Integration for Embedded Systems](https://doi.org/10.1109/SBESC60926.2023.10324055)** (SBESC 2023)
