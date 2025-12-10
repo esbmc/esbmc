@@ -458,15 +458,6 @@ expr2tc add2t::do_simplify() const
       return sub.side_1;
   }
 
-  // x + (y - x) -> y
-  if (is_sub2t(side_2))
-  {
-    const sub2t &sub = to_sub2t(side_2);
-
-    if (sub.side_2 == side_1)
-      return sub.side_1;
-  }
-
   // x + ~x -> -1
   if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
     return constant_int2tc(type, BigInt(-1));
