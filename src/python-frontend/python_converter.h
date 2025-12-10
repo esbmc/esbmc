@@ -142,6 +142,12 @@ public:
     const locationt &location,
     const typet &type) const;
 
+  symbolt &create_tmp_symbol(
+    const std::string &var_name,
+    const typet &symbol_type,
+    const exprt &symbol_value,
+    const locationt &location);
+
   exprt make_char_array_expr(
     const std::vector<unsigned char> &string_literal,
     const typet &t);

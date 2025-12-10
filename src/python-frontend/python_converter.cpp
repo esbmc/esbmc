@@ -18,6 +18,7 @@
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/encoding.h>
+#include <util/irep.h>
 #include <util/expr_util.h>
 #include <util/message.h>
 #include <util/python_types.h>
@@ -2756,13 +2757,30 @@ symbolt &python_converter::create_tmp_symbol(
   const exprt &symbol_value)
 {
   locationt location = get_location_from_decl(element);
-  std::string path = location.file().as_string();
-  std::string name_prefix =
-    path + ":" + location.get_line().as_string() + var_name;
+  return create_tmp_symbol(var_name, symbol_type, symbol_value, location);
+}
+
+symbolt &python_converter::create_tmp_symbol(
+  const std::string &var_name,
+  const typet &symbol_type,
+  const exprt &symbol_value,
+  const locationt &location)
+{
+  std::string path = id2string(location.get_file());
+  std::string line = id2string(location.get_line());
+  if (path.empty())
+    path = current_python_file;
+  if (line.empty())
+    line = "0";
+
+  std::string name_prefix = path + ":" + line + var_name;
+
   symbolt &cl =
     sym_generator_.new_symbol(symbol_table_, symbol_type, name_prefix);
   cl.mode = "Python";
-  std::string module_name = location.get_file().as_string();
+  std::string module_name = id2string(location.get_file());
+  if (module_name.empty())
+    module_name = current_python_file;
   cl.module = module_name;
   cl.location = location;
   cl.static_lifetime = false;

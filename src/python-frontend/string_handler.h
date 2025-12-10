@@ -18,7 +18,7 @@ class string_builder;
 
 /**
  * @brief Handles all string-related operations for Python-to-C conversion
- * 
+ *
  * This class extracts string manipulation functionality from python_converter
  * to improve modularity and maintainability. It handles:
  * - String size calculations
@@ -253,7 +253,7 @@ public:
   exprt handle_string_lstrip(const exprt &str_expr, const locationt &location);
 
   /**
-   * @brief Handle str.strip() method (leading/trailing whitespace)
+   * @brief Handle str.strip() method
    * @param str_expr String expression
    * @param location Source location
    * @return Pointer to stripped string

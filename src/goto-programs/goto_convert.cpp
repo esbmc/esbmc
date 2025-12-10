@@ -402,16 +402,6 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
   // Convert each expression
   for (auto const &it : code.operands())
   {
-    if (!it.is_code())
-    {
-      log_error(
-        "goto_convert: non-code operand encountered in block at {}:\n{}",
-        it.location().as_string(),
-        it.pretty());
-      log_error("parent block contents:\n{}", code.pretty());
-      throw std::runtime_error("goto_convert received non-code operand");
-    }
-
     const codet &code_it = to_code(it);
     convert(code_it, dest);
   }
