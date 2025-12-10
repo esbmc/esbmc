@@ -470,7 +470,7 @@ private:
         "default ({}:{})",
         python_filename_,
         current_line_);
-      return "list[int]"; // Default fallback
+      return "list"; // Default fallback
     }
 
     // Get the type of the first element
