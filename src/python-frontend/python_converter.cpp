@@ -771,14 +771,60 @@ exprt python_converter::handle_single_char_comparison(
   exprt &lhs,
   exprt &rhs)
 {
-  exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, false);
-  exprt rhs_char_value = python_char_utils::get_char_value_as_int(rhs, false);
+  // Dereference pointer to character if needed
+  auto maybe_dereference = [](const exprt &expr) -> exprt {
+    if (
+      expr.type().is_pointer() && (expr.type().subtype().is_signedbv() ||
+                                   expr.type().subtype().is_unsignedbv()))
+    {
+      exprt deref("dereference", expr.type().subtype());
+      deref.copy_to_operands(expr);
+      return deref;
+    }
+    return expr;
+  };
 
-  if (lhs_char_value.is_nil() || rhs_char_value.is_nil())
-    return nil_exprt();
+  // Create comparison expression with location info
+  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt {
+    exprt comp_expr(get_op(op, bool_type()), bool_type());
+    comp_expr.copy_to_operands(left, right);
 
-  return create_char_comparison_expr(
-    op, lhs_char_value, rhs_char_value, lhs, rhs);
+    if (!lhs.location().is_nil())
+      comp_expr.location() = lhs.location();
+    else if (!rhs.location().is_nil())
+      comp_expr.location() = rhs.location();
+
+    return comp_expr;
+  };
+
+  exprt lhs_to_check = maybe_dereference(lhs);
+  exprt rhs_to_check = maybe_dereference(rhs);
+
+  // Try to get character values from the (potentially dereferenced) expressions
+  exprt lhs_char_value =
+    python_char_utils::get_char_value_as_int(lhs_to_check, false);
+  exprt rhs_char_value =
+    python_char_utils::get_char_value_as_int(rhs_to_check, false);
+
+  // If both are valid character values, do the comparison
+  if (!lhs_char_value.is_nil() && !rhs_char_value.is_nil())
+    return create_char_comparison_expr(
+      op, lhs_char_value, rhs_char_value, lhs, rhs);
+
+  // Handle mixed cases: dereferenced pointer with valid character value
+  if (lhs_to_check.id() == "dereference" && !rhs_char_value.is_nil())
+  {
+    exprt lhs_as_int = typecast_exprt(lhs_to_check, rhs_char_value.type());
+    return create_comparison(lhs_as_int, rhs_char_value);
+  }
+
+  if (!lhs_char_value.is_nil() && rhs_to_check.id() == "dereference")
+  {
+    exprt rhs_as_int = typecast_exprt(rhs_to_check, lhs_char_value.type());
+    return create_comparison(lhs_char_value, rhs_as_int);
+  }
+
+  return nil_exprt();
 }
 
 exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
