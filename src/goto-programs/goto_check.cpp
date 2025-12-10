@@ -712,6 +712,28 @@ bool goto_checkt::python_should_skip_type_assertion(
     const std::string &tag = struct_type.tag().as_string();
     if (tag.rfind("tag-Optional_", 0) == 0)
       return true;
+    // Skip dict type (__python_dict__)
+    if (tag.find("__python_dict__") != std::string::npos)
+      return true;
+  }
+
+  // Skip list type (pointer to __ESBMC_PyListObj)
+  if (annotated_type.id() == "pointer")
+  {
+    typet subtype = ns.follow(annotated_type.subtype());
+    if (subtype.id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(subtype);
+      const std::string &tag = struct_type.tag().as_string();
+      if (tag.find("__ESBMC_PyListObj") != std::string::npos)
+        return true;
+    }
+    else if (subtype.id() == "symbol")
+    {
+      const std::string &sym_id = subtype.identifier().as_string();
+      if (sym_id.find("__ESBMC_PyListObj") != std::string::npos)
+        return true;
+    }
   }
 
   return false;

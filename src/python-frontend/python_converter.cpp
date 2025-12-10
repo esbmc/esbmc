@@ -4269,10 +4269,6 @@ void python_converter::get_var_assign(
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
-  const int node_lineno =
-    (ast_node.contains("lineno") && ast_node["lineno"].is_number_integer())
-      ? ast_node["lineno"].get<int>()
-      : -1;
 
   // Handle forward references
   if (
@@ -4449,14 +4445,6 @@ void python_converter::get_var_assign(
       auto &tc = get_typechecker();
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
 
-      // DEBUG: Log annotation lookup - use log_warning to ensure visibility
-      log_warning(
-        "DEBUG Assign: symbol={}, annotation_types.size={}, "
-        "python_annotation_types.size={}",
-        lhs_symbol->id.as_string(),
-        annotation_types.size(),
-        lhs_symbol->python_annotation_types.size());
-
       if (!annotation_types.empty())
       {
         // Ensure the symbol has the annotation types from cache
@@ -4468,11 +4456,6 @@ void python_converter::get_var_assign(
         // Use the annotated type (from original declaration) for skip check,
         // not the current symbol type which may have changed due to dynamic typing
         annotated_type = annotation_types.front();
-
-        // DEBUG: Log annotated type
-        log_warning(
-          "DEBUG Assign: annotated_type.id={}",
-          annotated_type.id().as_string());
 
         if (!tc.should_skip_type_assertion(annotated_type))
         {
@@ -4713,13 +4696,6 @@ void python_converter::get_var_assign(
       !lhs_symbol->python_annotation_types.empty() &&
       !base_type_eq(lhs.type(), rhs.type(), ns))
     {
-      log_warning(
-        "[AssignMismatch] func={} line={} var={} lhs.type={} rhs.type={}",
-        current_func_name_,
-        node_lineno,
-        target_name,
-        lhs.type().id().as_string(),
-        rhs.type().id().as_string());
       code_assertt type_assert(gen_boolean(false));
       type_assert.location() = location_begin;
       std::string var_name = lhs_symbol->name.empty()
