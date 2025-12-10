@@ -394,6 +394,12 @@ expr2tc add2t::do_simplify() const
       return sub.side_1;
   }
 
+  // x + ~x -> -1
+  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+    return constant_int2tc(type, BigInt(-1));
+  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+    return constant_int2tc(type, BigInt(-1));
+
   // x + (-y) -> x - y
   if (is_neg2t(side_2))
     return sub2tc(type, side_1, to_neg2t(side_2).value);
@@ -1862,6 +1868,34 @@ expr2tc bitand2t::do_simplify() const
       return side_2;
   }
 
+  // (a | ~b) & (a | b) -> a
+  if (is_bitor2t(side_1) && is_bitor2t(side_2))
+  {
+    const bitor2t &or1 = to_bitor2t(side_1);
+    const bitor2t &or2 = to_bitor2t(side_2);
+
+    // Check if one expr is the bitwise not of another
+    auto is_complement = [](const expr2tc &a, const expr2tc &b) -> bool {
+      return (is_bitnot2t(a) && to_bitnot2t(a).value == b) ||
+             (is_bitnot2t(b) && to_bitnot2t(b).value == a);
+    };
+
+    // Check all four combinations: we're looking for a common operand 'a'
+    // and complementary operands 'b' and '~b'
+
+    // Case 1: or1.side_1 is the common operand
+    if (or1.side_1 == or2.side_1 && is_complement(or1.side_2, or2.side_2))
+      return or1.side_1;
+    if (or1.side_1 == or2.side_2 && is_complement(or1.side_2, or2.side_1))
+      return or1.side_1;
+
+    // Case 2: or1.side_2 is the common operand
+    if (or1.side_2 == or2.side_1 && is_complement(or1.side_1, or2.side_2))
+      return or1.side_2;
+    if (or1.side_2 == or2.side_2 && is_complement(or1.side_1, or2.side_1))
+      return or1.side_2;
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
 
   // Is a vector operation ? Apply the op
@@ -1919,6 +1953,90 @@ expr2tc bitor2t::do_simplify() const
     const bitand2t &band = to_bitand2t(side_1);
     if (band.side_1 == side_2 || band.side_2 == side_2)
       return side_2;
+  }
+
+  // ~(a ^ b) | (a | b) --> -1
+  if (is_bitnot2t(side_1) && is_bitor2t(side_2))
+  {
+    const bitnot2t &not_expr = to_bitnot2t(side_1);
+
+    if (is_bitxor2t(not_expr.value))
+    {
+      const bitxor2t &xor_expr = to_bitxor2t(not_expr.value);
+      const bitor2t &or_expr = to_bitor2t(side_2);
+
+      // Check if XOR operands match OR operands (any order)
+      if (
+        (xor_expr.side_1 == or_expr.side_1 &&
+         xor_expr.side_2 == or_expr.side_2) ||
+        (xor_expr.side_1 == or_expr.side_2 &&
+         xor_expr.side_2 == or_expr.side_1))
+        return constant_int2tc(type, BigInt(-1));
+    }
+  }
+
+  // (a | b) | ~(a ^ b) --> -1
+  if (is_bitor2t(side_1) && is_bitnot2t(side_2))
+  {
+    const bitor2t &or_expr = to_bitor2t(side_1);
+    const bitnot2t &not_expr = to_bitnot2t(side_2);
+
+    if (is_bitxor2t(not_expr.value))
+    {
+      const bitxor2t &xor_expr = to_bitxor2t(not_expr.value);
+
+      // Check if OR operands match XOR operands (any order)
+      if (
+        (or_expr.side_1 == xor_expr.side_1 &&
+         or_expr.side_2 == xor_expr.side_2) ||
+        (or_expr.side_1 == xor_expr.side_2 &&
+         or_expr.side_2 == xor_expr.side_1))
+        return constant_int2tc(type, BigInt(-1));
+    }
+  }
+
+  // (a ^ b) | (a | b) --> a | b
+  if (is_bitxor2t(side_1) && is_bitor2t(side_2))
+  {
+    const bitxor2t &xor_expr = to_bitxor2t(side_1);
+    const bitor2t &or_expr = to_bitor2t(side_2);
+
+    // Check if XOR operands match OR operands (any order)
+    bool match =
+      (xor_expr.side_1 == or_expr.side_1 &&
+       xor_expr.side_2 == or_expr.side_2) ||
+      (xor_expr.side_1 == or_expr.side_2 && xor_expr.side_2 == or_expr.side_1);
+
+    if (match)
+    {
+      // Return a canonicalized version where operands are ordered consistently
+      if (or_expr.side_1.get() < or_expr.side_2.get())
+        return bitor2tc(type, or_expr.side_1, or_expr.side_2);
+      else
+        return bitor2tc(type, or_expr.side_2, or_expr.side_1);
+    }
+  }
+
+  // (a | b) | (a ^ b) --> a | b
+  if (is_bitor2t(side_1) && is_bitxor2t(side_2))
+  {
+    const bitor2t &or_expr = to_bitor2t(side_1);
+    const bitxor2t &xor_expr = to_bitxor2t(side_2);
+
+    // Check if OR operands match XOR operands (any order)
+    bool match =
+      (or_expr.side_1 == xor_expr.side_1 &&
+       or_expr.side_2 == xor_expr.side_2) ||
+      (or_expr.side_1 == xor_expr.side_2 && or_expr.side_2 == xor_expr.side_1);
+
+    if (match)
+    {
+      // Return a canonicalized version where operands are ordered consistently
+      if (or_expr.side_1.get() < or_expr.side_2.get())
+        return bitor2tc(type, or_expr.side_1, or_expr.side_2);
+      else
+        return bitor2tc(type, or_expr.side_2, or_expr.side_1);
+    }
   }
 
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
