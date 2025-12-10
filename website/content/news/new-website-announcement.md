@@ -14,7 +14,7 @@ tags:
 [ESBMC website](esbmc.github.io).
 
 ESBMC 🔍 is a mature, permissively licensed open-source SMT-based bounded model
-checker for C, C++, Rust, and Solidity programs, verifying both single and
+checker for C, C++, Python, Rust, and Solidity programs, verifying both single and
 multi-threaded software and detecting bugs such as division by zero, pointer
 safety, overflow, memory leaks, and more.
 
