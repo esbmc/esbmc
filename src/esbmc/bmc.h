@@ -5,7 +5,8 @@
 #include <goto-symex/slice.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
-#include "goto-symex/witnesses.h"
+#include <goto-symex/witnesses.h>
+#include <goto-symex/pytest.h>
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
