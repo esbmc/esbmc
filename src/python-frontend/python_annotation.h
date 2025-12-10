@@ -920,6 +920,33 @@ private:
         type = get_type_from_method(lhs);
     }
 
+    // If still unknown, try RHS or fallback to Any for arithmetic ops
+    if (type.empty())
+    {
+      const Json &rhs =
+        stmt.contains("value") ? stmt["value"]["right"] : stmt["right"];
+
+      if (rhs["_type"] == "Constant")
+        type = get_type_from_constant(rhs);
+      else if (rhs["_type"] == "Name")
+      {
+        Json right_op = find_annotated_assign(
+          rhs["id"], body.contains("body") ? body["body"] : ast_["body"]);
+        if (
+          right_op.contains("annotation") &&
+          right_op["annotation"].contains("id") &&
+          right_op["annotation"]["id"].is_string())
+          type = right_op["annotation"]["id"];
+      }
+
+      if (
+        type.empty() && stmt.contains("value") &&
+        stmt["value"].contains("op") && stmt["value"]["op"].contains("_type"))
+      {
+        type = "Any";
+      }
+    }
+
     return type;
   }
 
@@ -2056,7 +2083,6 @@ private:
 
         continue;
       }
-
       if (stmt_type == "FunctionDef")
       {
         // Only annotate nested functions, not the current function itself

@@ -1,4 +1,5 @@
-THOROUGH
+CORE
 main.py
---unwind 5
+--unwind 4
+
 ^VERIFICATION FAILED$
