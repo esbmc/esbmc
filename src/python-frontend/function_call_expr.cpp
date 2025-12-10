@@ -2381,6 +2381,47 @@ exprt function_call_expr::handle_general_function_call()
     {
       const typet &param_type = params[param_idx].type();
 
+      // Handle character-to-string-pointer conversion
+      if (
+        param_type.is_pointer() && param_type.subtype() == char_type() &&
+        (arg.type().is_signedbv() || arg.type().is_unsignedbv()) &&
+        arg.type() == char_type())
+      {
+        // Create a single-element array to hold the character
+        typet char_array_type =
+          array_typet(char_type(), from_integer(2, size_type()));
+
+        // Create a temporary variable to hold the array
+        symbolt &temp_symbol = converter_.create_tmp_symbol(
+          call_,
+          "$char_to_str$",
+          char_array_type,
+          exprt()); // No initial value here
+
+        // Declare the temporary in the current block
+        code_declt temp_decl(symbol_expr(temp_symbol));
+        temp_decl.location() = location;
+        converter_.current_block->copy_to_operands(temp_decl);
+
+        // Assign the character to the first element
+        exprt temp_array = symbol_expr(temp_symbol);
+        exprt first_element =
+          index_exprt(temp_array, from_integer(0, size_type()));
+        code_assignt assign_char(first_element, arg);
+        assign_char.location() = location;
+        converter_.current_block->copy_to_operands(assign_char);
+
+        // Assign null terminator to the second element
+        exprt second_element =
+          index_exprt(temp_array, from_integer(1, size_type()));
+        code_assignt assign_null(second_element, from_integer(0, char_type()));
+        assign_null.location() = location;
+        converter_.current_block->copy_to_operands(assign_null);
+
+        // Take address of the temporary variable
+        arg = address_of_exprt(symbol_expr(temp_symbol));
+      }
+
       // Check if parameter is an Optional type
       if (param_type.is_struct())
       {
