@@ -33,9 +33,8 @@ private:
   std::string escape_python_string(const std::string &str) const;
 
   /// Write pytest file header
-  void write_file_header(
-    std::ofstream &file,
-    const std::string &original_file) const;
+  void write_file_header(std::ofstream &file, const std::string &original_file)
+    const;
 
   /// Write import statements
   void write_imports(std::ofstream &file, const std::string &module_name) const;

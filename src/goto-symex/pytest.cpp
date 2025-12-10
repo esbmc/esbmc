@@ -130,8 +130,7 @@ pytest_generator::convert_float_to_python(const std::string &c_float) const
   return c_float;
 }
 
-std::string
-pytest_generator::escape_python_string(const std::string &str) const
+std::string pytest_generator::escape_python_string(const std::string &str) const
 {
   std::string result;
   result.reserve(str.size() + 10); // Reserve extra space for escapes
@@ -330,7 +329,8 @@ void pytest_generator::collect(
       seen_nondets.insert(sym.thename.as_string());
       found_nondets++;
 
-      log_status("[DEBUG] Found nondet: {} = {}", var_name, sym.thename.as_string());
+      log_status(
+        "[DEBUG] Found nondet: {} = {}", var_name, sym.thename.as_string());
 
       // Get concrete value
       auto concrete_value = smt_conv.get(nondet_expr);
@@ -362,8 +362,11 @@ void pytest_generator::collect(
     }
   }
 
-  log_status("[DEBUG] Checked {} assignments, found {} nondets, collected {} params",
-             checked_assignments, found_nondets, current_params.size());
+  log_status(
+    "[DEBUG] Checked {} assignments, found {} nondets, collected {} params",
+    checked_assignments,
+    found_nondets,
+    current_params.size());
 
   // Store collected data if we found any nondet values
   if (!current_params.empty())
@@ -379,8 +382,9 @@ void pytest_generator::collect(
     std::vector<std::string> new_param_names;
     for (const auto &name : current_param_names)
     {
-      if (std::find(param_names.begin(), param_names.end(), name) ==
-          param_names.end())
+      if (
+        std::find(param_names.begin(), param_names.end(), name) ==
+        param_names.end())
       {
         new_param_names.push_back(name);
       }
