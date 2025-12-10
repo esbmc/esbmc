@@ -2598,7 +2598,8 @@ exprt function_call_expr::handle_general_function_call()
   std::vector<bool> provided_params(total_params, false);
 
   // Mark positional arguments as provided
-  for (size_t i = 0; i < num_actual_args && (i + param_offset) < total_params; ++i)
+  for (size_t i = 0; i < num_actual_args && (i + param_offset) < total_params;
+       ++i)
   {
     provided_params[i + param_offset] = true;
   }
@@ -2647,8 +2648,8 @@ exprt function_call_expr::handle_general_function_call()
           {
             // Use existing string extraction utility
             std::string str_content =
-              converter_.get_string_handler().extract_string_from_array_operands(
-                default_val);
+              converter_.get_string_handler()
+                .extract_string_from_array_operands(default_val);
 
             // Create string_constantt with proper type
             if (!str_content.empty() || default_val.operands().empty())
@@ -2684,8 +2685,9 @@ exprt function_call_expr::handle_general_function_call()
           else
           {
             // For regular arrays, get base address
-            default_val = converter_.get_string_handler().get_array_base_address(
-              default_val);
+            default_val =
+              converter_.get_string_handler().get_array_base_address(
+                default_val);
           }
         }
 
