@@ -448,6 +448,19 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   // Case 5: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
+    bool lhs_has_annotations = false;
+    if (type_assertions_enabled() && lhs.is_symbol())
+    {
+      symbol_id sid = create_symbol_id();
+      sid.set_object(lhs.name().c_str());
+      const symbolt *sym = symbol_table_.find_symbol(sid.to_string());
+      lhs_has_annotations =
+        sym != nullptr && !sym->python_annotation_types.empty();
+    }
+
+    if (lhs_has_annotations)
+      return;
+
     try
     {
       const int lhs_width = type_handler_.get_type_width(lhs_type);
@@ -3559,6 +3572,11 @@ void python_converter::handle_assignment_type_adjustments(
     has_annotation || (type_assertions_enabled() && lhs_symbol &&
                        !lhs_symbol->python_annotation_types.empty());
 
+  // When runtime type assertions are enabled, keep the original type so that
+  // mismatches are caught later instead of silently updating the symbol type.
+  if (type_assertions_enabled() && has_type_annotations)
+    return;
+
   // Handle lambda assignments
   if (
     ast_node.contains("value") && ast_node["value"].contains("_type") &&
@@ -3634,11 +3652,22 @@ void python_converter::handle_assignment_type_adjustments(
       rhs = string_handler_.get_array_base_address(rhs);
     }
     // String and list type size adjustments
+    // Only adjust types when the variable doesn't have type annotations,
+    // or when the types are compatible (both strings/arrays).
     else if (
       lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
-      lhs_type == "list" || rhs.type().is_array() ||
-      rhs.type() == type_handler_.get_list_type())
+      lhs_type == "list" || rhs.type() == type_handler_.get_list_type())
     {
+      if (!rhs.type().is_empty())
+      {
+        lhs_symbol->type = rhs.type();
+        lhs.type() = rhs.type();
+      }
+    }
+    else if (rhs.type().is_array() && !has_type_annotations)
+    {
+      // Only allow array type propagation when there are no type annotations.
+      // This prevents int-annotated variables from being changed to string type.
       if (!rhs.type().is_empty())
       {
         lhs_symbol->type = rhs.type();
@@ -4206,6 +4235,14 @@ void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  std::string target_name = "unknown";
+  if (
+    ast_node.contains("targets") && !ast_node["targets"].empty() &&
+    ast_node["targets"][0].contains("id"))
+    target_name = ast_node["targets"][0]["id"].get<std::string>();
+  else if (ast_node.contains("target") && ast_node["target"].contains("id"))
+    target_name = ast_node["target"]["id"].get<std::string>();
+
   // Extract type information
   auto [lhs_type, element_type] = extract_type_info(ast_node);
 
@@ -4232,6 +4269,10 @@ void python_converter::get_var_assign(
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
+  const int node_lineno =
+    (ast_node.contains("lineno") && ast_node["lineno"].is_number_integer())
+      ? ast_node["lineno"].get<int>()
+      : -1;
 
   // Handle forward references
   if (
@@ -4407,11 +4448,32 @@ void python_converter::get_var_assign(
     {
       auto &tc = get_typechecker();
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
+
+      // DEBUG: Log annotation lookup - use log_warning to ensure visibility
+      log_warning(
+        "DEBUG Assign: symbol={}, annotation_types.size={}, "
+        "python_annotation_types.size={}",
+        lhs_symbol->id.as_string(),
+        annotation_types.size(),
+        lhs_symbol->python_annotation_types.size());
+
       if (!annotation_types.empty())
       {
+        // Ensure the symbol has the annotation types from cache
+        // This is important for reassignments where the original AnnAssign
+        // cached the types but the current Assign node doesn't have annotations
+        if (lhs_symbol->python_annotation_types.empty())
+          lhs_symbol->python_annotation_types = annotation_types;
+
         // Use the annotated type (from original declaration) for skip check,
         // not the current symbol type which may have changed due to dynamic typing
         annotated_type = annotation_types.front();
+
+        // DEBUG: Log annotated type
+        log_warning(
+          "DEBUG Assign: annotated_type.id={}",
+          annotated_type.id().as_string());
+
         if (!tc.should_skip_type_assertion(annotated_type))
         {
           can_emit_annotation_check = true;
@@ -4642,6 +4704,31 @@ void python_converter::get_var_assign(
           annotated_name,
           annotation_location,
           target_block);
+      current_lhs = nullptr;
+      return;
+    }
+
+    if (
+      type_assertions_enabled() && lhs_symbol &&
+      !lhs_symbol->python_annotation_types.empty() &&
+      !base_type_eq(lhs.type(), rhs.type(), ns))
+    {
+      log_warning(
+        "[AssignMismatch] func={} line={} var={} lhs.type={} rhs.type={}",
+        current_func_name_,
+        node_lineno,
+        target_name,
+        lhs.type().id().as_string(),
+        rhs.type().id().as_string());
+      code_assertt type_assert(gen_boolean(false));
+      type_assert.location() = location_begin;
+      std::string var_name = lhs_symbol->name.empty()
+                               ? lhs_symbol->id.as_string()
+                               : lhs_symbol->name.as_string();
+      type_assert.location().comment(
+        "Type annotation violation: assignment of incompatible type to '" +
+        var_name + "'");
+      append_statement(target_block, type_assert);
       current_lhs = nullptr;
       return;
     }
