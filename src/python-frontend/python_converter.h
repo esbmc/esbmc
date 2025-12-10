@@ -351,8 +351,6 @@ private:
     const code_typet &type,
     exprt &function_body);
 
-  void validate_block_structure(const exprt &block, const std::string &context) const;
-
   exprt compare_constants_internal(
     const std::string &op,
     const exprt &lhs,

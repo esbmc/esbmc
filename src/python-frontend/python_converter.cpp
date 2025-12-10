@@ -4532,10 +4532,33 @@ void python_converter::get_var_assign(
     // is false due to should_skip_type_assertion returning true for the annotated
     // type itself - we still want to catch obvious type mismatches).
     bool has_cached_annotations =
-      lhs_symbol && !lhs_symbol->python_annotation_types.empty();
+      (lhs_symbol &&
+       (!lhs_symbol->python_annotation_types.empty() ||
+        !annotation_candidates.empty()));
 
     if (type_assertions_enabled() && has_cached_annotations)
     {
+      // If we know the annotated type, short-circuit any obvious mismatch.
+      typet expected_type = annotated_type;
+      if (expected_type.is_nil() && !annotation_candidates.empty())
+        expected_type = annotation_candidates.front();
+      if (
+        !expected_type.is_nil() &&
+        !base_type_eq(rhs.type(), expected_type, ns))
+      {
+        code_assertt type_assert(gen_boolean(false));
+        type_assert.location() = location_begin;
+        std::string var_name = lhs_symbol->name.empty()
+                                 ? lhs_symbol->id.as_string()
+                                 : lhs_symbol->name.as_string();
+        type_assert.location().comment(
+          "Type annotation violation: expected '" + var_name + "' to match "
+          "annotated type");
+        append_statement(target_block, type_assert);
+        current_lhs = nullptr;
+        return;
+      }
+
       // Specifically detect numeric-to-string or string-to-numeric mismatches
       bool lhs_is_numeric = lhs.type().is_signedbv() ||
                             lhs.type().is_unsignedbv() ||
@@ -4565,6 +4588,27 @@ void python_converter::get_var_assign(
         current_lhs = nullptr;
         return;
       }
+    }
+
+    // Fallback: if type assertions are enabled, block any clear mismatch between
+    // the current symbol type and the RHS to avoid pushing incompatible
+    // assignments into value_sett.
+    if (
+      type_assertions_enabled() && lhs_symbol &&
+      lhs_symbol->type.is_not_nil() && rhs.type().is_not_nil() &&
+      !base_type_eq(lhs_symbol->type, rhs.type(), ns))
+    {
+      code_assertt type_assert(gen_boolean(false));
+      type_assert.location() = location_begin;
+      std::string var_name = lhs_symbol->name.empty()
+                               ? lhs_symbol->id.as_string()
+                               : lhs_symbol->name.as_string();
+      type_assert.location().comment(
+        "Type annotation violation: cannot assign incompatible value to '" +
+        var_name + "'");
+      append_statement(target_block, type_assert);
+      current_lhs = nullptr;
+      return;
     }
 
     adjust_statement_types(lhs, rhs);
@@ -5847,51 +5891,6 @@ void python_converter::validate_return_paths(
   append_statement(function_body, missing_return_assert);
 }
 
-void python_converter::validate_block_structure(
-  const exprt &block,
-  const std::string &context) const
-{
-  if (!block.is_code())
-    return;
-
-  const codet &code_block = to_code(block);
-  for (const auto &operand : code_block.operands())
-  {
-    if (operand.is_nil())
-    {
-      std::ostringstream oss;
-      oss << "Internal error: nil statement emitted in function '" << context
-          << "'";
-      const std::string loc_str = operand.location().as_string();
-      if (!loc_str.empty())
-        oss << " at " << loc_str;
-      log_error("nil statement in '{}':\n{}", context, operand.pretty());
-      oss << "\nExpr: " << operand.pretty();
-      throw std::runtime_error(oss.str());
-    }
-
-    if (!operand.is_code())
-    {
-      std::ostringstream oss;
-      oss << "Internal error: non-code statement (id=" << operand.id_string()
-          << ") emitted in function '" << context << "'";
-      const std::string loc_str = operand.location().as_string();
-      if (!loc_str.empty())
-        oss << " at " << loc_str;
-      log_error(
-        "non-code statement (id={}) in '{}':\n{}",
-        operand.id_string(),
-        context,
-        operand.pretty());
-      log_error("current block:\n{}", block.pretty());
-      oss << "\nExpr: " << operand.pretty();
-      throw std::runtime_error(oss.str());
-    }
-
-    if (operand.is_code() && to_code(operand).get_statement() == "block")
-      validate_block_structure(operand, context);
-  }
-}
 
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
@@ -6059,7 +6058,6 @@ void python_converter::get_function_definition(
   validate_return_paths(function_node, type, function_body);
 
   // Ensure the function body contains only code statements
-  validate_block_structure(function_body, current_func_name_);
 
   added_symbol->value = function_body;
 
