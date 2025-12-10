@@ -55,6 +55,7 @@ function(add_esbmc_regression_test folder modes test)
     # TODO: Testing Tool should have a command to dump the TAG of a test		   
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
+      TIMEOUT 350
       LABELS "regression;${folder}")
 endfunction()
 
