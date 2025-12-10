@@ -343,11 +343,27 @@ exprt function_call_expr::handle_isinstance() const
 exprt function_call_expr::handle_hasattr() const
 {
   const auto &args = call_["args"];
-  symbol_id sid = converter_.create_symbol_id();
-  sid.set_object(args[0]["id"]);
-  bool has_attr = converter_.is_instance_attribute(
-    sid.to_string(), args[1]["value"], sid.get_object(), "");
-  return gen_boolean(has_attr);
+  if (args.size() != 2)
+    throw std::runtime_error("hasattr() takes exactly 2 arguments");
+
+  const exprt &obj_expr = converter_.get_expr(args[0]);
+  const auto &attr_arg = args[1];
+
+  if (
+    attr_arg["_type"] != "Constant" || !attr_arg.contains("value") ||
+    !attr_arg["value"].is_string())
+    throw std::runtime_error(
+      "hasattr() expects attribute name as string literal");
+
+  std::string attr_name = attr_arg["value"].get<std::string>();
+  typet attr_type = array_typet(
+    unsigned_char_type(), from_integer(attr_name.size() + 1, size_type()));
+  string_constantt attr_expr(attr_name, attr_type, string_constantt::k_default);
+
+  exprt hasattr("hasattr", typet("bool"));
+  hasattr.copy_to_operands(obj_expr);
+  hasattr.move_to_operands(attr_expr);
+  return hasattr;
 }
 
 exprt function_call_expr::handle_divmod() const
