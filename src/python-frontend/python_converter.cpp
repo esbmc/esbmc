@@ -209,6 +209,12 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(get_op(op, bool_type()), bool_type());
   bool contains_non_boolean = false;
+
+  // Mark that we're processing operands in an expression context
+  // This ensures boolean-returning function calls are converted to side-effect expressions
+  bool old_is_converting_rhs = is_converting_rhs;
+  is_converting_rhs = true;
+
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
   {
@@ -216,6 +222,10 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     logical_expr.copy_to_operands(operand_expr);
     contains_non_boolean |= !operand_expr.is_boolean();
   }
+
+  // Restore the original flag state
+  is_converting_rhs = old_is_converting_rhs;
+
   // Shockingly enough, a BoolOp may not return a boolean.
   if (contains_non_boolean)
   {
@@ -2233,6 +2243,29 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
+
+  // Convert boolean-returning function calls to side-effect expressions when used
+  // in expression contexts (e.g., logical operations). This prevents GOTO generation
+  // failures where code statements appear in boolean expression operands.
+  if (
+    call_expr.is_code() && call_expr.statement() == "function_call" &&
+    is_converting_rhs)
+  {
+    const code_function_callt &code_call =
+      to_code_function_call(to_code(call_expr));
+    const typet &return_type = code_call.type();
+
+    if (return_type.is_bool())
+    {
+      side_effect_expr_function_callt side_effect_call;
+      side_effect_call.function() = code_call.function();
+      side_effect_call.arguments() = code_call.arguments();
+      side_effect_call.type() = return_type;
+      side_effect_call.location() = code_call.location();
+
+      call_expr = side_effect_call;
+    }
+  }
 
   auto handle_keywords = [&](exprt &call_expr) {
     if (!element.contains("keywords") || element["keywords"].empty())
