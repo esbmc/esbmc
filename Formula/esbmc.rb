@@ -38,6 +38,7 @@ class Esbmc < Formula
       -DENABLE_Z3=ON
       -DZ3_DIR=#{Formula["z3"].opt_lib}/cmake/z3
       -DBUILD_TESTING=OFF
+      -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
     ]
 
     system "cmake", "-S", ".", "-B", "build", "-G", "Ninja", *args
