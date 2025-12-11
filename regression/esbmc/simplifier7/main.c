@@ -23,5 +23,11 @@ int main()
   assert(((b | ~a) | (a ^ b)) == -1);
   assert(((b | ~a) | (b ^ a)) == -1);
 
+  // (~a & b) | ~(a | b) --> ~a
+  assert(((~a & b) | ~(a | b)) == ~a);
+  assert(((~a & b) | ~(b | a)) == ~a);
+  assert(((b & ~a) | ~(a | b)) == ~a);
+  assert(((b & ~a) | ~(b | a)) == ~a);
+
   return 0;
 }
