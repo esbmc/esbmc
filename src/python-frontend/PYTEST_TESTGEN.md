@@ -2,7 +2,7 @@
 
 ## Overview
 
-ESBMC now supports automatic generation of pytest test cases for Python programs. This feature automatically discover test inputs that achieve high code coverage.
+ESBMC now supports automatic generation of pytest test cases for Python programs. This feature automatically discovers test inputs that achieve high code coverage.
 
 ## Usage
 
