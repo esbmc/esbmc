@@ -2066,6 +2066,42 @@ expr2tc bitor2t::do_simplify() const
       return side_2; // return (a ^ b)
   }
 
+  // (~a ^ b) | (a & b) --> ~a ^ b
+  if (is_bitxor2t(side_1) && is_bitand2t(side_2))
+  {
+    const bitxor2t &bxor = to_bitxor2t(side_1);
+    const bitand2t &band = to_bitand2t(side_2);
+
+    // Extract the underlying value if expr is a bitnot
+    auto unwrap_if_not = [](const expr2tc &e) -> expr2tc {
+      if (is_bitnot2t(e))
+        return to_bitnot2t(e).value;
+      return expr2tc();
+    };
+
+    // Case 1: bxor.side_1 = ~a, bxor.side_2 = b
+    expr2tc unwrapped1 = unwrap_if_not(bxor.side_1);
+    if (!is_nil_expr(unwrapped1))
+    {
+      // Check if AND contains both unwrapped1 (a) and bxor.side_2 (b)
+      if (
+        (band.side_1 == unwrapped1 && band.side_2 == bxor.side_2) ||
+        (band.side_2 == unwrapped1 && band.side_1 == bxor.side_2))
+        return side_1; // return (~a ^ b)
+    }
+
+    // Case 2: bxor.side_2 = ~a, bxor.side_1 = b
+    expr2tc unwrapped2 = unwrap_if_not(bxor.side_2);
+    if (!is_nil_expr(unwrapped2))
+    {
+      // Check if AND contains both unwrapped2 (a) and bxor.side_1 (b)
+      if (
+        (band.side_1 == unwrapped2 && band.side_2 == bxor.side_1) ||
+        (band.side_2 == unwrapped2 && band.side_1 == bxor.side_1))
+        return side_1; // return (~a ^ b)
+    }
+  }
+
   // ~(a ^ b) | (a | b) --> -1
   if (is_bitnot2t(side_1) && is_bitor2t(side_2))
   {
