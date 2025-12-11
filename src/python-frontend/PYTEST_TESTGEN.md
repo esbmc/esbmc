@@ -76,7 +76,7 @@ verification phase and are no longer needed (cause errors) when running the gene
 # Run the generated tests
 pytest test_example.py
 
-# Run with coverage
+# Run with coverage (requires pytest-cov plugin; install via "pip3 install pytest-cov")
 pytest --cov=example --cov-branch
 ```
 
