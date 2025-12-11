@@ -23,7 +23,7 @@ class Esbmc < Formula
   def install
     python3 = Formula["python@3.12"].opt_bin/"python3.12"
     system python3, "-m", "pip", "install", "--break-system-packages", "--upgrade", "pip"
-    system python3, "-m", "pip", "install", "--break-system-packages", "ast2json", "mypy"
+    system python3, "-m", "pip", "install", "--break-system-packages", "meson", "ast2json", "mypy", "pyparsing", "toml", "tomli"
 
     args = %W[
       -DCMAKE_BUILD_TYPE=RelWithDebInfo
@@ -31,8 +31,8 @@ class Esbmc < Formula
       -DLLVM_DIR=#{Formula["llvm@16"].opt_lib}/cmake/llvm
       -DClang_DIR=#{Formula["llvm@16"].opt_lib}/cmake/clang
       -DC2GOTO_SYSROOT=#{MacOS.sdk_path}
-      -DENABLE_PYTHON=ON
       -DPython3_EXECUTABLE=#{python3}
+      -DENABLE_PYTHON_FRONTEND=ON
       -DENABLE_FUZZER=OFF
       -DENABLE_Z3=ON
       -DZ3_DIR=#{Formula["z3"].opt_lib}/cmake/z3
