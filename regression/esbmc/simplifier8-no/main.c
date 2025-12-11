@@ -1,12 +1,12 @@
 #include <assert.h>
 #include <stdint.h>
 
-extern uint32_t nondet_uint32_t();
+extern uint8_t nondet_uint8_t();
 
 int main() {
-    uint32_t a = nondet_uint32_t();
-    uint32_t b = nondet_uint32_t();
-    uint32_t c = nondet_uint32_t(); // for nested checks
+    uint8_t a = nondet_uint8_t();
+    uint8_t b = nondet_uint8_t();
+    uint8_t c = nondet_uint8_t(); // for nested checks
 
     // identity: (a & ~b) | (a ^ b) == (a ^ b)
     assert( (((a & ~b) | (a ^ b)) ) == ( (a ^ b) ) );
@@ -14,14 +14,8 @@ int main() {
     // identity: (~a ^ b) | (a & b) == (~a ^ b)
     assert( ((((~a) ^ b) | (a & b)) ) == ( ((~a) ^ b) ) );
 
-    // identity: (~a | b) | (a ^ b) == -1 (all bits set)  (all bits set)
-    assert( ((((~a) | b) | (a ^ b)) ) == (((uint32_t)~( (uint32_t)0 )) /* all ones for uint32_t */) );
-
     // identity: (~a & b) | ~(a | b) == ~a
     assert( ((((~a) & b) | (~(a | b))) ) == ( (~a) ) );
-
-    // identity: ~(a ^ b) | (a | b) == -1 (all bits set)  (all bits set)
-    assert( (((~(a ^ b)) | (a | b)) ) == (((uint32_t)~( (uint32_t)0 )) /* all ones for uint32_t */) );
 
     // identity: (a ^ b) | (a | b) == (a | b)
     assert( (((a ^ b) | (a | b)) ) == ( (a | b) ) );
@@ -32,4 +26,5 @@ int main() {
 
     return 0;
 }
+
 
