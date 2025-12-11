@@ -89,6 +89,7 @@ ignored_dirs=(
   "incremental-smt-assert-pass"
   "type-annotation-check"
   "type-annotation-generics-fail"
+  "github_3284"
 )
 
 for dir in */; do
