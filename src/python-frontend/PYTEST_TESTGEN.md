@@ -92,7 +92,29 @@ test_example.py ........                                                        
 
 ````
 # Run with coverage
-pytest test_case.py --cov=example
+$ pytest --cov=example --cov-branch
+````
+
+You should get the following output:
+
+````
+==================================================== test session starts ====================================================
+platform linux -- Python 3.10.12, pytest-8.4.1, pluggy-1.6.0
+rootdir: /home/lucas/examples
+plugins: anyio-4.9.0, hypothesis-6.135.26, cov-7.0.0
+collected 8 items
+
+test_example.py ........                                                                                              [100%]
+
+====================================================== tests coverage =======================================================
+_____________________________________ coverage: platform linux, python 3.10.12-final-0 ______________________________________
+
+Name         Stmts   Miss Branch BrPart  Cover
+----------------------------------------------
+example.py      10      0      8      0   100%
+----------------------------------------------
+TOTAL           10      0      8      0   100%
+===================================================== 8 passed in 0.17s =====================================================
 ````
 
 ## Supported Types
