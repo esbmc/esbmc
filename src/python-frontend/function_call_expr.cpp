@@ -261,7 +261,22 @@ exprt function_call_expr::build_nondet_call() const
     with_exprt result(nondet_array, last_index, null_char);
     result.type() = char_array_type;
 
-    return result;
+    // Materialize the WITH expression to a temporary variable to avoid
+    // taking address of a WITH expression directly
+    locationt loc = converter_.get_location_from_decl(call_);
+    symbolt &temp_symbol = converter_.create_tmp_symbol(
+      call_, "$nondet_str_temp$", char_array_type, result);
+
+    code_declt temp_decl(symbol_expr(temp_symbol));
+    temp_decl.location() = loc;
+    converter_.current_block->copy_to_operands(temp_decl);
+
+    // Return pointer to the array (address of first element)
+    exprt sym_expr = symbol_expr(temp_symbol);
+    exprt result_ptr =
+      address_of_exprt(index_exprt(sym_expr, from_integer(0, size_type())));
+
+    return result_ptr;
   }
 
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
