@@ -2038,87 +2038,61 @@ expr2tc bitor2t::do_simplify() const
       return side_2;
   }
 
+  // Helper lambdas used by multiple simplifications
+  auto is_complement = [](const expr2tc &a, const expr2tc &b) -> bool {
+    return (is_bitnot2t(a) && to_bitnot2t(a).value == b) ||
+           (is_bitnot2t(b) && to_bitnot2t(b).value == a);
+  };
+
+  auto unwrap_if_not = [](const expr2tc &e) -> expr2tc {
+    if (is_bitnot2t(e))
+      return to_bitnot2t(e).value;
+    return expr2tc();
+  };
+
   // (a & ~b) | (a ^ b) --> a ^ b
-  if (is_bitand2t(side_1) && is_bitxor2t(side_2))
+  // (a ^ b) | (a & ~b) --> a ^ b (symmetric case handled together)
+  if (
+    (is_bitand2t(side_1) && is_bitxor2t(side_2)) ||
+    (is_bitxor2t(side_1) && is_bitand2t(side_2)))
   {
-    const bitand2t &band = to_bitand2t(side_1);
-    const bitxor2t &bxor = to_bitxor2t(side_2);
+    const expr2tc &band_expr = is_bitand2t(side_1) ? side_1 : side_2;
+    const expr2tc &bxor_expr = is_bitxor2t(side_1) ? side_1 : side_2;
 
-    // Check if one expr is the bitwise not of another
-    auto is_complement = [](const expr2tc &a, const expr2tc &b) -> bool {
-      return (is_bitnot2t(a) && to_bitnot2t(a).value == b) ||
-             (is_bitnot2t(b) && to_bitnot2t(b).value == a);
-    };
+    const bitand2t &band = to_bitand2t(band_expr);
+    const bitxor2t &bxor = to_bitxor2t(bxor_expr);
 
-    // Check all combinations:
-    // (a & ~b) | (a ^ b) where band.side_1 = a, band.side_2 = ~b
+    // Check all combinations where one AND operand matches one XOR operand
+    // and the other AND operand is the complement of the other XOR operand
     if (band.side_1 == bxor.side_1 && is_complement(band.side_2, bxor.side_2))
-      return side_2; // return (a ^ b)
+      return bxor_expr;
 
     if (band.side_1 == bxor.side_2 && is_complement(band.side_2, bxor.side_1))
-      return side_2; // return (a ^ b)
+      return bxor_expr;
 
-    // (a & ~b) | (a ^ b) where band.side_2 = a, band.side_1 = ~b
     if (band.side_2 == bxor.side_1 && is_complement(band.side_1, bxor.side_2))
-      return side_2; // return (a ^ b)
+      return bxor_expr;
 
     if (band.side_2 == bxor.side_2 && is_complement(band.side_1, bxor.side_1))
-      return side_2; // return (a ^ b)
-  }
-
-  // (~a | b) | (a ^ b) --> -1
-  if (is_bitor2t(side_1) && is_bitxor2t(side_2))
-  {
-    const bitor2t &bor = to_bitor2t(side_1);
-    const bitxor2t &bxor = to_bitxor2t(side_2);
-
-    // Extract the underlying value if expr is a bitnot
-    auto unwrap_if_not = [](const expr2tc &e) -> expr2tc {
-      if (is_bitnot2t(e))
-        return to_bitnot2t(e).value;
-      return expr2tc();
-    };
-
-    // Case 1: bor.side_1 = ~a, bor.side_2 = b
-    expr2tc unwrapped1 = unwrap_if_not(bor.side_1);
-    if (!is_nil_expr(unwrapped1))
-    {
-      // Check if XOR contains both unwrapped1 (a) and bor.side_2 (b)
-      if (
-        (bxor.side_1 == unwrapped1 && bxor.side_2 == bor.side_2) ||
-        (bxor.side_2 == unwrapped1 && bxor.side_1 == bor.side_2))
-        return constant_int2tc(type, BigInt(-1));
-    }
-
-    // Case 2: bor.side_2 = ~a, bor.side_1 = b
-    expr2tc unwrapped2 = unwrap_if_not(bor.side_2);
-    if (!is_nil_expr(unwrapped2))
-    {
-      // Check if XOR contains both unwrapped2 (a) and bor.side_1 (b)
-      if (
-        (bxor.side_1 == unwrapped2 && bxor.side_2 == bor.side_1) ||
-        (bxor.side_2 == unwrapped2 && bxor.side_1 == bor.side_1))
-        return constant_int2tc(type, BigInt(-1));
-    }
+      return bxor_expr;
   }
 
   // (~a & b) | ~(a | b) --> ~a
-  if (is_bitand2t(side_1) && is_bitnot2t(side_2))
+  // ~(a | b) | (~a & b) --> ~a (symmetric case handled together)
+  if (
+    (is_bitand2t(side_1) && is_bitnot2t(side_2)) ||
+    (is_bitnot2t(side_1) && is_bitand2t(side_2)))
   {
-    const bitand2t &band = to_bitand2t(side_1);
-    const bitnot2t &bnot = to_bitnot2t(side_2);
+    const expr2tc &band_expr = is_bitand2t(side_1) ? side_1 : side_2;
+    const expr2tc &bnot_expr = is_bitnot2t(side_1) ? side_1 : side_2;
+
+    const bitand2t &band = to_bitand2t(band_expr);
+    const bitnot2t &bnot = to_bitnot2t(bnot_expr);
 
     // Check if the NOT operand is an OR
     if (is_bitor2t(bnot.value))
     {
       const bitor2t &bor = to_bitor2t(bnot.value);
-
-      // Extract the underlying value if expr is a bitnot
-      auto unwrap_if_not = [](const expr2tc &e) -> expr2tc {
-        if (is_bitnot2t(e))
-          return to_bitnot2t(e).value;
-        return expr2tc();
-      };
 
       // Case 1: band.side_1 = ~a, band.side_2 = b
       expr2tc unwrapped1 = unwrap_if_not(band.side_1);
@@ -2145,17 +2119,16 @@ expr2tc bitor2t::do_simplify() const
   }
 
   // (~a ^ b) | (a & b) --> ~a ^ b
-  if (is_bitxor2t(side_1) && is_bitand2t(side_2))
+  // (a & b) | (~a ^ b) --> ~a ^ b (symmetric case handled together)
+  if (
+    (is_bitxor2t(side_1) && is_bitand2t(side_2)) ||
+    (is_bitand2t(side_1) && is_bitxor2t(side_2)))
   {
-    const bitxor2t &bxor = to_bitxor2t(side_1);
-    const bitand2t &band = to_bitand2t(side_2);
+    const expr2tc &bxor_expr = is_bitxor2t(side_1) ? side_1 : side_2;
+    const expr2tc &band_expr = is_bitand2t(side_1) ? side_1 : side_2;
 
-    // Extract the underlying value if expr is a bitnot
-    auto unwrap_if_not = [](const expr2tc &e) -> expr2tc {
-      if (is_bitnot2t(e))
-        return to_bitnot2t(e).value;
-      return expr2tc();
-    };
+    const bitxor2t &bxor = to_bitxor2t(bxor_expr);
+    const bitand2t &band = to_bitand2t(band_expr);
 
     // Case 1: bxor.side_1 = ~a, bxor.side_2 = b
     expr2tc unwrapped1 = unwrap_if_not(bxor.side_1);
@@ -2165,7 +2138,7 @@ expr2tc bitor2t::do_simplify() const
       if (
         (band.side_1 == unwrapped1 && band.side_2 == bxor.side_2) ||
         (band.side_2 == unwrapped1 && band.side_1 == bxor.side_2))
-        return side_1; // return (~a ^ b)
+        return bxor_expr;
     }
 
     // Case 2: bxor.side_2 = ~a, bxor.side_1 = b
@@ -2176,83 +2149,27 @@ expr2tc bitor2t::do_simplify() const
       if (
         (band.side_1 == unwrapped2 && band.side_2 == bxor.side_1) ||
         (band.side_2 == unwrapped2 && band.side_1 == bxor.side_1))
-        return side_1; // return (~a ^ b)
-    }
-  }
-
-  // ~(a ^ b) | (a | b) --> -1
-  if (is_bitnot2t(side_1) && is_bitor2t(side_2))
-  {
-    const bitnot2t &not_expr = to_bitnot2t(side_1);
-
-    if (is_bitxor2t(not_expr.value))
-    {
-      const bitxor2t &xor_expr = to_bitxor2t(not_expr.value);
-      const bitor2t &or_expr = to_bitor2t(side_2);
-
-      // Check if XOR operands match OR operands (any order)
-      if (
-        (xor_expr.side_1 == or_expr.side_1 &&
-         xor_expr.side_2 == or_expr.side_2) ||
-        (xor_expr.side_1 == or_expr.side_2 &&
-         xor_expr.side_2 == or_expr.side_1))
-        return constant_int2tc(type, BigInt(-1));
-    }
-  }
-
-  // (a | b) | ~(a ^ b) --> -1
-  if (is_bitor2t(side_1) && is_bitnot2t(side_2))
-  {
-    const bitor2t &or_expr = to_bitor2t(side_1);
-    const bitnot2t &not_expr = to_bitnot2t(side_2);
-
-    if (is_bitxor2t(not_expr.value))
-    {
-      const bitxor2t &xor_expr = to_bitxor2t(not_expr.value);
-
-      // Check if OR operands match XOR operands (any order)
-      if (
-        (or_expr.side_1 == xor_expr.side_1 &&
-         or_expr.side_2 == xor_expr.side_2) ||
-        (or_expr.side_1 == xor_expr.side_2 &&
-         or_expr.side_2 == xor_expr.side_1))
-        return constant_int2tc(type, BigInt(-1));
+        return bxor_expr;
     }
   }
 
   // (a ^ b) | (a | b) --> a | b
-  if (is_bitxor2t(side_1) && is_bitor2t(side_2))
+  // (a | b) | (a ^ b) --> a | b (symmetric case handled together)
+  if (
+    (is_bitxor2t(side_1) && is_bitor2t(side_2)) ||
+    (is_bitor2t(side_1) && is_bitxor2t(side_2)))
   {
-    const bitxor2t &xor_expr = to_bitxor2t(side_1);
-    const bitor2t &or_expr = to_bitor2t(side_2);
+    const expr2tc &xor_expr_ptr = is_bitxor2t(side_1) ? side_1 : side_2;
+    const expr2tc &or_expr_ptr = is_bitor2t(side_1) ? side_1 : side_2;
+
+    const bitxor2t &xor_expr = to_bitxor2t(xor_expr_ptr);
+    const bitor2t &or_expr = to_bitor2t(or_expr_ptr);
 
     // Check if XOR operands match OR operands (any order)
     bool match =
       (xor_expr.side_1 == or_expr.side_1 &&
        xor_expr.side_2 == or_expr.side_2) ||
       (xor_expr.side_1 == or_expr.side_2 && xor_expr.side_2 == or_expr.side_1);
-
-    if (match)
-    {
-      // Return a canonicalized version where operands are ordered consistently
-      if (or_expr.side_1.get() < or_expr.side_2.get())
-        return bitor2tc(type, or_expr.side_1, or_expr.side_2);
-      else
-        return bitor2tc(type, or_expr.side_2, or_expr.side_1);
-    }
-  }
-
-  // (a | b) | (a ^ b) --> a | b
-  if (is_bitor2t(side_1) && is_bitxor2t(side_2))
-  {
-    const bitor2t &or_expr = to_bitor2t(side_1);
-    const bitxor2t &xor_expr = to_bitxor2t(side_2);
-
-    // Check if OR operands match XOR operands (any order)
-    bool match =
-      (or_expr.side_1 == xor_expr.side_1 &&
-       or_expr.side_2 == xor_expr.side_2) ||
-      (or_expr.side_1 == xor_expr.side_2 && or_expr.side_2 == xor_expr.side_1);
 
     if (match)
     {
