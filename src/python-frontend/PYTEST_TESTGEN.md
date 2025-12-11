@@ -26,7 +26,7 @@ def check_positive(n: int) -> int:
     return n * 2
 
 # Test generation mode: use nondet inputs
-check_sign(__VERIFIER_nondet_int())
+check_positive(__VERIFIER_nondet_int())
 ```
 
 ### Output Format
