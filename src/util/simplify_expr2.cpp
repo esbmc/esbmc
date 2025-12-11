@@ -2066,6 +2066,42 @@ expr2tc bitor2t::do_simplify() const
       return side_2; // return (a ^ b)
   }
 
+  // (~a | b) | (a ^ b) --> -1
+  if (is_bitor2t(side_1) && is_bitxor2t(side_2))
+  {
+    const bitor2t &bor = to_bitor2t(side_1);
+    const bitxor2t &bxor = to_bitxor2t(side_2);
+
+    // Extract the underlying value if expr is a bitnot
+    auto unwrap_if_not = [](const expr2tc &e) -> expr2tc {
+      if (is_bitnot2t(e))
+        return to_bitnot2t(e).value;
+      return expr2tc();
+    };
+
+    // Case 1: bor.side_1 = ~a, bor.side_2 = b
+    expr2tc unwrapped1 = unwrap_if_not(bor.side_1);
+    if (!is_nil_expr(unwrapped1))
+    {
+      // Check if XOR contains both unwrapped1 (a) and bor.side_2 (b)
+      if (
+        (bxor.side_1 == unwrapped1 && bxor.side_2 == bor.side_2) ||
+        (bxor.side_2 == unwrapped1 && bxor.side_1 == bor.side_2))
+        return constant_int2tc(type, BigInt(-1));
+    }
+
+    // Case 2: bor.side_2 = ~a, bor.side_1 = b
+    expr2tc unwrapped2 = unwrap_if_not(bor.side_2);
+    if (!is_nil_expr(unwrapped2))
+    {
+      // Check if XOR contains both unwrapped2 (a) and bor.side_1 (b)
+      if (
+        (bxor.side_1 == unwrapped2 && bxor.side_2 == bor.side_1) ||
+        (bxor.side_2 == unwrapped2 && bxor.side_1 == bor.side_1))
+        return constant_int2tc(type, BigInt(-1));
+    }
+  }
+
   // (~a ^ b) | (a & b) --> ~a ^ b
   if (is_bitxor2t(side_1) && is_bitand2t(side_2))
   {
