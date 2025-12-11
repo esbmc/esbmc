@@ -553,6 +553,15 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     return convert_ast(tmp);
   }
 
+  if (is_with2t(obj.ptr_obj))
+  {
+    // A 'with' expression represents an array/struct with an updated element.
+    // Take the address of the source value (the base array/struct).
+    const with2t &with_expr = to_with2t(obj.ptr_obj);
+    expr2tc tmp = address_of2tc(obj.type, with_expr.source_value);
+    return convert_ast(tmp);
+  }
+
   log_error("Unrecognized address_of operand:\n{}", *expr);
   abort();
 }

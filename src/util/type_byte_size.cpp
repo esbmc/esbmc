@@ -421,6 +421,13 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
     return bitsize(0);
   }
 
+  if (is_with2t(expr))
+  {
+    // A 'with' expression represents an array/struct with an updated element.
+    // The offset for the overall expression is the offset of the source value.
+    return pointer_offset_bits(to_with2t(expr).source_value);
+  }
+
   log_error("compute_pointer_offset, unexpected irep:\n{}", expr->pretty());
   abort();
 }
