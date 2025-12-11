@@ -2038,6 +2038,34 @@ expr2tc bitor2t::do_simplify() const
       return side_2;
   }
 
+  // (a & ~b) | (a ^ b) --> a ^ b
+  if (is_bitand2t(side_1) && is_bitxor2t(side_2))
+  {
+    const bitand2t &band = to_bitand2t(side_1);
+    const bitxor2t &bxor = to_bitxor2t(side_2);
+
+    // Check if one expr is the bitwise not of another
+    auto is_complement = [](const expr2tc &a, const expr2tc &b) -> bool {
+      return (is_bitnot2t(a) && to_bitnot2t(a).value == b) ||
+             (is_bitnot2t(b) && to_bitnot2t(b).value == a);
+    };
+
+    // Check all combinations:
+    // (a & ~b) | (a ^ b) where band.side_1 = a, band.side_2 = ~b
+    if (band.side_1 == bxor.side_1 && is_complement(band.side_2, bxor.side_2))
+      return side_2; // return (a ^ b)
+
+    if (band.side_1 == bxor.side_2 && is_complement(band.side_2, bxor.side_1))
+      return side_2; // return (a ^ b)
+
+    // (a & ~b) | (a ^ b) where band.side_2 = a, band.side_1 = ~b
+    if (band.side_2 == bxor.side_1 && is_complement(band.side_1, bxor.side_2))
+      return side_2; // return (a ^ b)
+
+    if (band.side_2 == bxor.side_2 && is_complement(band.side_1, bxor.side_1))
+      return side_2; // return (a ^ b)
+  }
+
   // ~(a ^ b) | (a | b) --> -1
   if (is_bitnot2t(side_1) && is_bitor2t(side_2))
   {
