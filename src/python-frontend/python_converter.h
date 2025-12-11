@@ -117,7 +117,7 @@ public:
       return;
 
     exprt stmt = expr;
-    append_statement(*current_block, stmt);
+    current_block->copy_to_operands(convert_expression_to_code(stmt));
   }
 
   void update_symbol(const exprt &expr) const;
@@ -245,8 +245,6 @@ private:
   exprt get_lambda_expr(const nlohmann::json &element);
 
   codet convert_expression_to_code(exprt &expr);
-  void append_statement(exprt &block, exprt stmt);
-  void move_statement(exprt &block, exprt stmt);
 
   std::string remove_quotes_from_type_string(const std::string &type_string);
 
