@@ -481,7 +481,7 @@ exprt string_handler::handle_string_operations(
   assert(lhs.type().is_array() || lhs.type().is_pointer());
   assert(rhs.type().is_array() || rhs.type().is_pointer());
 
-  if (op == "Eq" || op == "NotEq")
+  if (op == "Eq" || op == "NotEq" || type_utils::is_ordered_comparison(op))
     return handle_string_comparison(op, lhs, rhs, element);
   else if (op == "Add")
     return handle_string_concatenation(lhs, rhs, left, right);

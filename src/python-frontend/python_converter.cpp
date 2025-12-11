@@ -1770,7 +1770,9 @@ exprt python_converter::handle_relational_type_mismatches(
   {
     // Special handling. Reject cases where both operands are character arrays (like chr(65) == "A")
     // Todo: we should change the all expression to a correct format in future.
-    if (!(lhs.type().is_array() && rhs.type().is_array()))
+    bool both_arrays = lhs.type().is_array() && rhs.type().is_array();
+    
+    if (!both_arrays)
     {
       exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
       if (!char_comp_result.is_nil())
