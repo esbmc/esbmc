@@ -1765,12 +1765,17 @@ exprt python_converter::handle_relational_type_mismatches(
   exprt &rhs,
   const nlohmann::json &element)
 {
-  // Single character comparisons
-  if (type_utils::is_ordered_comparison(op))
+  // Single character comparisons (including equality/inequality)
+  if (type_utils::is_ordered_comparison(op) || op == "Eq" || op == "NotEq")
   {
-    exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
-    if (!char_comp_result.is_nil())
-      return char_comp_result;
+    // Special handling. Reject cases where both operands are character arrays (like chr(65) == "A")
+    // Todo: we should change the all expression to a correct format in future.
+    if (!(lhs.type().is_array() && rhs.type().is_array()))
+    {
+      exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
+      if (!char_comp_result.is_nil())
+        return char_comp_result;
+    }
   }
 
   // Float vs string comparisons
