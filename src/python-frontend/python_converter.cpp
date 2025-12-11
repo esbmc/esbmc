@@ -4537,9 +4537,8 @@ void python_converter::get_var_assign(
     // is false due to should_skip_type_assertion returning true for the annotated
     // type itself - we still want to catch obvious type mismatches).
     bool has_cached_annotations =
-      (lhs_symbol &&
-       (!lhs_symbol->python_annotation_types.empty() ||
-        !annotation_candidates.empty()));
+      (lhs_symbol && (!lhs_symbol->python_annotation_types.empty() ||
+                      !annotation_candidates.empty()));
 
     if (type_assertions_enabled() && has_cached_annotations)
     {
@@ -4548,8 +4547,7 @@ void python_converter::get_var_assign(
       if (expected_type.is_nil() && !annotation_candidates.empty())
         expected_type = annotation_candidates.front();
       if (
-        !expected_type.is_nil() &&
-        !base_type_eq(rhs.type(), expected_type, ns))
+        !expected_type.is_nil() && !base_type_eq(rhs.type(), expected_type, ns))
       {
         code_assertt type_assert(gen_boolean(false));
         type_assert.location() = location_begin;
@@ -4557,7 +4555,8 @@ void python_converter::get_var_assign(
                                  ? lhs_symbol->id.as_string()
                                  : lhs_symbol->name.as_string();
         type_assert.location().comment(
-          "Type annotation violation: expected '" + var_name + "' to match "
+          "Type annotation violation: expected '" + var_name +
+          "' to match "
           "annotated type");
         target_block.copy_to_operands(type_assert);
         current_lhs = nullptr;
@@ -5914,7 +5913,6 @@ void python_converter::validate_return_paths(
   function_body.copy_to_operands(missing_return_assert);
 }
 
-
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -7117,9 +7115,9 @@ void python_converter::process_module_imports(
       current_python_file = nested_python_file;
 
       create_builtin_symbols();
-      exprt imported_code_expr = with_ast(
-        &nested_module_json,
-        [&]() { return get_block(nested_module_json["body"]); });
+      exprt imported_code_expr = with_ast(&nested_module_json, [&]() {
+        return get_block(nested_module_json["body"]);
+      });
 
       // Accumulate this module's code
       accumulated_code.copy_to_operands(imported_code_expr);
@@ -7338,9 +7336,9 @@ void python_converter::convert()
           imported_module_json, const_cast<global_scope &>(global_scope_));
         imported_annotator.add_type_annotation();
 
-        exprt imported_code_expr = with_ast(
-          &imported_module_json,
-          [&]() { return get_block(imported_module_json["body"]); });
+        exprt imported_code_expr = with_ast(&imported_module_json, [&]() {
+          return get_block(imported_module_json["body"]);
+        });
 
         // Accumulate imported code instead of overwriting
         all_imports_block.copy_to_operands(imported_code_expr);
@@ -7451,16 +7449,14 @@ void python_converter::convert()
   code_blockt main_body;
 
   // 1. Initialize static lifetime variables
-  symbol_table_.foreach_operand_in_order(
-    [this, &main_body](const symbolt &s)
+  symbol_table_.foreach_operand_in_order([this, &main_body](const symbolt &s) {
+    if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
     {
-      if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
-      {
-        code_assignt assign(symbol_expr(s), s.value);
-        assign.location() = s.location;
-        main_body.copy_to_operands(assign);
-      }
-    });
+      code_assignt assign(symbol_expr(s), s.value);
+      assign.location() = s.location;
+      main_body.copy_to_operands(assign);
+    }
+  });
 
   // 2. Call python_init for initialization
   if (!init_code.operands().empty())

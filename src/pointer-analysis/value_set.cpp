@@ -1171,8 +1171,7 @@ void value_sett::assign(
       else if (is_constant_array2t(rhs) || is_constant_expr(rhs))
       {
         rhs->foreach_operand(
-          [this, &add_to_sets, &lhs_index](const expr2tc &e)
-          {
+          [this, &add_to_sets, &lhs_index](const expr2tc &e) {
             assign(lhs_index, e, add_to_sets);
             add_to_sets = true;
           });

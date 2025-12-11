@@ -313,8 +313,7 @@ void python_typechecking::emit_type_annotation_assertion(
   if (auto *dict_handler = converter_.get_dict_handler())
     dict_type = dict_handler->get_dict_struct_type();
 
-  auto is_list_or_dict = [&](const typet &t)
-  {
+  auto is_list_or_dict = [&](const typet &t) {
     if (t.is_nil())
       return false;
     if (!list_type.is_nil() && base_type_eq(t, list_type, ns))
