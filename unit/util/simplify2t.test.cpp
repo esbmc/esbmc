@@ -491,7 +491,7 @@ TEST_CASE(
 
 TEST_CASE("Equality simplification: x == x = true", "[relational][equality]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc expr = equality2tc(x, x);
 
   const expr2tc result = expr->simplify();
