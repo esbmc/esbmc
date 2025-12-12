@@ -3073,6 +3073,54 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       const typet &symbol_type =
         (symbol->type.is_pointer()) ? symbol->type.subtype() : symbol->type;
 
+      // Handle union types
+      if (symbol_type.is_array() && symbol_type.subtype() == char_type())
+      {
+        // For union types, we need to infer which concrete type to use.
+        // Strategy: Look for isinstance checks in the current scope to determine
+        // the expected type, or search for classes that have this attribute.
+
+        symbolt *target_class_symbol = nullptr;
+
+        // Search all class types in the symbol table to find one that has this attribute
+        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
+          if (target_class_symbol)
+            return; // Already found
+
+          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+          {
+            const struct_typet &struct_type = to_struct_type(s.type);
+            if (struct_type.has_component(attr_name))
+              target_class_symbol = const_cast<symbolt *>(&s);
+          }
+        });
+
+        if (!target_class_symbol)
+        {
+          throw std::runtime_error(
+            "Cannot access attribute '" + attr_name +
+            "' on union type: no class with this attribute found");
+        }
+
+        // Create a typecast from char* to target_class*
+        typet target_ptr_type = gen_pointer_type(target_class_symbol->type);
+        exprt casted_expr = typecast_exprt(expr, target_ptr_type);
+
+        // Dereference to get the object
+        exprt deref_expr("dereference", target_class_symbol->type);
+        deref_expr.copy_to_operands(casted_expr);
+
+        // Access the member on the object
+        const struct_typet &target_struct =
+          to_struct_type(target_class_symbol->type);
+        const typet &attr_type = target_struct.get_component(attr_name).type();
+        typet clean_type = clean_attribute_type(attr_type);
+
+        member_exprt member_expr(deref_expr, attr_name, clean_type);
+        expr = member_expr;
+        break;
+      }
+
       if (symbol_type.id() == "struct")
       {
         // Struct types store class name in "tag" field
