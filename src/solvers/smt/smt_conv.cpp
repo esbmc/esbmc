@@ -2393,10 +2393,60 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
   return output;
 }
 
+// Helper function to compare two index values for equality
+static bool index_values_equal(const expr2tc &idx1, const expr2tc &idx2)
+{
+  // For constant integers, compare values regardless of signedness
+  if (is_constant_int2t(idx1) && is_constant_int2t(idx2))
+  {
+    const BigInt &val1 = to_constant_int2t(idx1).value;
+    const BigInt &val2 = to_constant_int2t(idx2).value;
+    return val1 == val2;
+  }
+
+  return false;
+}
+
+// Helper function to resolve with2t chain and find matching index value
+static expr2tc resolve_with_chain_lookup(const expr2tc &source, const expr2tc &lookup_index)
+{
+  expr2tc current = source;
+
+  // Collect all WITH operations in reverse order (most recent first)
+  std::vector<std::pair<expr2tc, expr2tc>> updates; // field, value pairs
+
+  while (is_with2t(current))
+  {
+    const with2t &with_op = to_with2t(current);
+    updates.push_back({with_op.update_field, with_op.update_value});
+    current = with_op.source_value;
+  }
+
+  // Look for the most recent update to the requested index using value comparison
+  for (const auto &update : updates)
+  {
+    if (index_values_equal(update.first, lookup_index))
+      return update.second;
+  }
+
+  return expr2tc();
+}
+
 smt_astt smt_convt::convert_array_index(const expr2tc &expr)
 {
   const index2t &index = to_index2t(expr);
   expr2tc src_value = index.source_value;
+
+  // Check if source_value is a with2t expression and try to resolve the chain
+  if (is_with2t(src_value) && is_array_type(src_value->type))
+  {
+    expr2tc resolved = resolve_with_chain_lookup(src_value, index.index);
+    if (!is_nil_expr(resolved))
+    {
+      // Found a matching update in the with2t chain, convert the resolved value directly
+      return convert_ast(resolved);
+    }
+  }
 
   expr2tc newidx;
   if (is_index2t(index.source_value))
