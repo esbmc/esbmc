@@ -184,6 +184,27 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+int __python_str_find(const char *s1, const char *s2)
+{
+__ESBMC_HIDE:;
+  // str.find('') = 0
+  if (s2[0] == '\0')
+    return 0;
+
+  int len_s = strlen(s1);
+  int len_sub = strlen(s2);
+
+  int i = 0;
+  while (i <= len_s - len_sub)
+  {
+    if (strncmp(s1 + i, s2, len_sub) == 0)
+      return i;
+    i++;
+  }
+
+  return -1;
+}
+
 // Python int() builtin - converts string to integer
 int __python_int(const char *s, int base)
 {
