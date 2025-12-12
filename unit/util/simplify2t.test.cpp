@@ -455,7 +455,7 @@ TEST_CASE("Bitwise NOT simplification: ~(~x) = x", "[bitwise][not]")
 
 TEST_CASE("Shift left simplification: x << 0 = x", "[bitwise][shl]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
   const expr2tc expr = shl2tc(get_int_type(32), x, zero);
 
