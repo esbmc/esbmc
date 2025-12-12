@@ -113,11 +113,8 @@ public:
 
   void add_instruction(const exprt &expr)
   {
-    if (!current_block)
-      return;
-
-    exprt stmt = expr;
-    current_block->copy_to_operands(convert_expression_to_code(stmt));
+    if (current_block)
+      current_block->copy_to_operands(expr);
   }
 
   void update_symbol(const exprt &expr) const;
@@ -141,12 +138,6 @@ public:
     const std::string &id,
     const locationt &location,
     const typet &type) const;
-
-  symbolt &create_tmp_symbol(
-    const std::string &var_name,
-    const typet &symbol_type,
-    const exprt &symbol_value,
-    const locationt &location);
 
   exprt make_char_array_expr(
     const std::vector<unsigned char> &string_literal,

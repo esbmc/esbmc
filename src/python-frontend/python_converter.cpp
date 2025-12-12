@@ -18,7 +18,6 @@
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/encoding.h>
-#include <util/irep.h>
 #include <util/expr_util.h>
 #include <util/message.h>
 #include <util/python_types.h>
@@ -408,19 +407,6 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   // Case 5: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
-    bool lhs_has_annotations = false;
-    if (type_assertions_enabled() && lhs.is_symbol())
-    {
-      symbol_id sid = create_symbol_id();
-      sid.set_object(lhs.name().c_str());
-      const symbolt *sym = symbol_table_.find_symbol(sid.to_string());
-      lhs_has_annotations =
-        sym != nullptr && !sym->python_annotation_types.empty();
-    }
-
-    if (lhs_has_annotations)
-      return;
-
     try
     {
       const int lhs_width = type_handler_.get_type_width(lhs_type);
@@ -2730,30 +2716,13 @@ symbolt &python_converter::create_tmp_symbol(
   const exprt &symbol_value)
 {
   locationt location = get_location_from_decl(element);
-  return create_tmp_symbol(var_name, symbol_type, symbol_value, location);
-}
-
-symbolt &python_converter::create_tmp_symbol(
-  const std::string &var_name,
-  const typet &symbol_type,
-  const exprt &symbol_value,
-  const locationt &location)
-{
-  std::string path = id2string(location.get_file());
-  std::string line = id2string(location.get_line());
-  if (path.empty())
-    path = current_python_file;
-  if (line.empty())
-    line = "0";
-
-  std::string name_prefix = path + ":" + line + var_name;
-
+  std::string path = location.file().as_string();
+  std::string name_prefix =
+    path + ":" + location.get_line().as_string() + var_name;
   symbolt &cl =
     sym_generator_.new_symbol(symbol_table_, symbol_type, name_prefix);
   cl.mode = "Python";
-  std::string module_name = id2string(location.get_file());
-  if (module_name.empty())
-    module_name = current_python_file;
+  std::string module_name = location.get_file().as_string();
   cl.module = module_name;
   cl.location = location;
   cl.static_lifetime = false;
@@ -3525,18 +3494,6 @@ void python_converter::handle_assignment_type_adjustments(
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
-  // Check if the variable has type annotations (either from current AST node
-  // or from previous declaration). When is-instance-check is enabled, we
-  // preserve the original type to allow runtime type checking.
-  const bool has_type_annotations =
-    has_annotation || (type_assertions_enabled() && lhs_symbol &&
-                       !lhs_symbol->python_annotation_types.empty());
-
-  // When runtime type assertions are enabled, keep the original type so that
-  // mismatches are caught later instead of silently updating the symbol type.
-  if (type_assertions_enabled() && has_type_annotations)
-    return;
-
   // Handle lambda assignments
   if (
     ast_node.contains("value") && ast_node["value"].contains("_type") &&
@@ -3612,22 +3569,11 @@ void python_converter::handle_assignment_type_adjustments(
       rhs = string_handler_.get_array_base_address(rhs);
     }
     // String and list type size adjustments
-    // Only adjust types when the variable doesn't have type annotations,
-    // or when the types are compatible (both strings/arrays).
     else if (
       lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
-      lhs_type == "list" || rhs.type() == type_handler_.get_list_type())
+      lhs_type == "list" || rhs.type().is_array() ||
+      rhs.type() == type_handler_.get_list_type())
     {
-      if (!rhs.type().is_empty())
-      {
-        lhs_symbol->type = rhs.type();
-        lhs.type() = rhs.type();
-      }
-    }
-    else if (rhs.type().is_array() && !has_type_annotations)
-    {
-      // Only allow array type propagation when there are no type annotations.
-      // This prevents int-annotated variables from being changed to string type.
       if (!rhs.type().is_empty())
       {
         lhs_symbol->type = rhs.type();
@@ -3641,16 +3587,13 @@ void python_converter::handle_assignment_type_adjustments(
       lhs.type() = rhs.type();
     }
     else if (
-      !has_type_annotations && !rhs.type().is_empty() &&
-      lhs.type() != rhs.type() && !rhs.type().is_code() &&
+      !has_annotation && !rhs.type().is_empty() && lhs.type() != rhs.type() &&
+      !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
     {
       // Default case: allow Python's dynamic typing by updating the variable
       // type to match the assigned value. Type annotations are enforced via
       // runtime assertions rather than static typing.
-      // Note: When is-instance-check is enabled and the variable has type
-      // annotations, we preserve the original type to allow the runtime
-      // type assertion to detect the type mismatch.
       lhs_symbol->type = rhs.type();
       lhs.type() = rhs.type();
     }
@@ -3671,10 +3614,6 @@ exprt python_converter::get_return_from_func(const char *func_symbol_id)
        it != operands.rend();
        ++it)
   {
-    // Only process code expressions, skip non-code operands
-    if (!it->is_code())
-      continue;
-
     const codet &c = to_code(*it);
     if (c.statement() == "return")
     {
@@ -4195,14 +4134,6 @@ void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  std::string target_name = "unknown";
-  if (
-    ast_node.contains("targets") && !ast_node["targets"].empty() &&
-    ast_node["targets"][0].contains("id"))
-    target_name = ast_node["targets"][0]["id"].get<std::string>();
-  else if (ast_node.contains("target") && ast_node["target"].contains("id"))
-    target_name = ast_node["target"]["id"].get<std::string>();
-
   // Extract type information
   auto [lhs_type, element_type] = extract_type_info(ast_node);
 
@@ -4322,17 +4253,15 @@ void python_converter::get_var_assign(
     {
       auto &tc = get_typechecker();
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
-      if (!annotation_types.empty())
+      if (
+        !annotation_types.empty() &&
+        !tc.should_skip_type_assertion(annotated_type))
       {
-        // Use the annotated type for skip check
         annotated_type = annotation_types.front();
-        if (!tc.should_skip_type_assertion(annotated_type))
-        {
-          can_emit_annotation_check = true;
-          annotation_location = location_begin;
-          annotated_name = name;
-          annotation_candidates = annotation_types;
-        }
+        can_emit_annotation_check = true;
+        annotation_location = location_begin;
+        annotated_name = name;
+        annotation_candidates = annotation_types;
       }
     }
 
@@ -4404,26 +4333,15 @@ void python_converter::get_var_assign(
     {
       auto &tc = get_typechecker();
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
-
-      if (!annotation_types.empty())
+      if (
+        !annotation_types.empty() &&
+        !tc.should_skip_type_assertion(lhs_symbol->type))
       {
-        // Ensure the symbol has the annotation types from cache
-        // This is important for reassignments where the original AnnAssign
-        // cached the types but the current Assign node doesn't have annotations
-        if (lhs_symbol->python_annotation_types.empty())
-          lhs_symbol->python_annotation_types = annotation_types;
-
-        // Use the annotated type (from original declaration) for skip check,
-        // not the current symbol type which may have changed due to dynamic typing
         annotated_type = annotation_types.front();
-
-        if (!tc.should_skip_type_assertion(annotated_type))
-        {
-          can_emit_annotation_check = true;
-          annotation_location = location_begin;
-          annotated_name = name;
-          annotation_candidates = annotation_types;
-        }
+        can_emit_annotation_check = true;
+        annotation_location = location_begin;
+        annotated_name = name;
+        annotation_candidates = annotation_types;
       }
     }
   }
@@ -4528,93 +4446,6 @@ void python_converter::get_var_assign(
       return;
     }
 
-    // When type annotations are enabled and types are incompatible,
-    // emit a failing assertion instead of attempting the invalid assignment.
-    // This catches type annotation violations at verification time.
-    // Must be checked BEFORE adjust_statement_types which may modify types.
-    //
-    // Check if the variable has type annotations (even if can_emit_annotation_check
-    // is false due to should_skip_type_assertion returning true for the annotated
-    // type itself - we still want to catch obvious type mismatches).
-    bool has_cached_annotations =
-      (lhs_symbol && (!lhs_symbol->python_annotation_types.empty() ||
-                      !annotation_candidates.empty()));
-
-    if (type_assertions_enabled() && has_cached_annotations)
-    {
-      // If we know the annotated type, short-circuit any obvious mismatch.
-      typet expected_type = annotated_type;
-      if (expected_type.is_nil() && !annotation_candidates.empty())
-        expected_type = annotation_candidates.front();
-      if (
-        !expected_type.is_nil() && !base_type_eq(rhs.type(), expected_type, ns))
-      {
-        code_assertt type_assert(gen_boolean(false));
-        type_assert.location() = location_begin;
-        std::string var_name = lhs_symbol->name.empty()
-                                 ? lhs_symbol->id.as_string()
-                                 : lhs_symbol->name.as_string();
-        type_assert.location().comment(
-          "Type annotation violation: expected '" + var_name +
-          "' to match "
-          "annotated type");
-        target_block.copy_to_operands(type_assert);
-        current_lhs = nullptr;
-        return;
-      }
-
-      // Specifically detect numeric-to-string or string-to-numeric mismatches
-      bool lhs_is_numeric = lhs.type().is_signedbv() ||
-                            lhs.type().is_unsignedbv() ||
-                            lhs.type().is_floatbv() || lhs.type().is_fixedbv();
-      bool rhs_is_numeric = rhs.type().is_signedbv() ||
-                            rhs.type().is_unsignedbv() ||
-                            rhs.type().is_floatbv() || rhs.type().is_fixedbv();
-      bool lhs_is_string = lhs.type().is_array() || lhs.type().is_pointer();
-      bool rhs_is_string = rhs.type().is_array() || rhs.type().is_pointer();
-
-      bool type_mismatch =
-        (lhs_is_numeric && rhs_is_string) || (lhs_is_string && rhs_is_numeric);
-
-      if (type_mismatch && !lhs.type().is_empty() && !rhs.type().is_empty())
-      {
-        // Emit assertion that will fail (type mismatch detected)
-        code_assertt type_assert(gen_boolean(false));
-        type_assert.location() = location_begin;
-        std::string var_name = lhs_symbol->name.empty()
-                                 ? lhs_symbol->id.as_string()
-                                 : lhs_symbol->name.as_string();
-        type_assert.location().comment(
-          "Type annotation violation: cannot assign value of incompatible "
-          "type to '" +
-          var_name + "'");
-        target_block.copy_to_operands(type_assert);
-        current_lhs = nullptr;
-        return;
-      }
-    }
-
-    // Fallback: if type assertions are enabled, block any clear mismatch between
-    // the current symbol type and the RHS to avoid pushing incompatible
-    // assignments into value_sett.
-    if (
-      type_assertions_enabled() && lhs_symbol &&
-      lhs_symbol->type.is_not_nil() && rhs.type().is_not_nil() &&
-      !base_type_eq(lhs_symbol->type, rhs.type(), ns))
-    {
-      code_assertt type_assert(gen_boolean(false));
-      type_assert.location() = location_begin;
-      std::string var_name = lhs_symbol->name.empty()
-                               ? lhs_symbol->id.as_string()
-                               : lhs_symbol->name.as_string();
-      type_assert.location().comment(
-        "Type annotation violation: cannot assign incompatible value to '" +
-        var_name + "'");
-      target_block.copy_to_operands(type_assert);
-      current_lhs = nullptr;
-      return;
-    }
-
     adjust_statement_types(lhs, rhs);
 
     // Handle list type info propagation
@@ -4646,24 +4477,6 @@ void python_converter::get_var_assign(
           annotated_name,
           annotation_location,
           target_block);
-      current_lhs = nullptr;
-      return;
-    }
-
-    if (
-      type_assertions_enabled() && lhs_symbol &&
-      !lhs_symbol->python_annotation_types.empty() &&
-      !base_type_eq(lhs.type(), rhs.type(), ns))
-    {
-      code_assertt type_assert(gen_boolean(false));
-      type_assert.location() = location_begin;
-      std::string var_name = lhs_symbol->name.empty()
-                               ? lhs_symbol->id.as_string()
-                               : lhs_symbol->name.as_string();
-      type_assert.location().comment(
-        "Type annotation violation: assignment of incompatible type to '" +
-        var_name + "'");
-      target_block.copy_to_operands(type_assert);
       current_lhs = nullptr;
       return;
     }
@@ -6050,13 +5863,6 @@ void python_converter::get_function_definition(
 
   // Process function body
   exprt function_body = get_block(function_node["body"]);
-  if (!function_body.is_code())
-  {
-    std::ostringstream oss;
-    oss << "Internal error: function body for '" << current_func_name_
-        << "' is not a code block (id=" << function_body.id_string() << ")";
-    throw std::runtime_error(oss.str());
-  }
 
   // Inject runtime checks for annotated parameters
   if (type_assertions_enabled())
@@ -6066,19 +5872,15 @@ void python_converter::get_function_definition(
   // Add ESBMC_Hide label for models/imports
   if (is_loading_models || is_importing_module)
   {
-    codet &function_body_code = to_code(function_body);
-
     code_labelt esbmc_hide;
     esbmc_hide.set_label("__ESBMC_HIDE");
     esbmc_hide.code() = code_skipt();
-    function_body_code.operands().insert(
-      function_body_code.operands().begin(), esbmc_hide);
+    function_body.operands().insert(
+      function_body.operands().begin(), esbmc_hide);
   }
 
   // Validate return paths
   validate_return_paths(function_node, type, function_body);
-
-  // Ensure the function body contains only code statements
 
   added_symbol->value = function_body;
 
@@ -6650,16 +6452,6 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::EXPR:
     {
-      // Skip docstring-like expressions (string literals used as statements)
-      if (
-        element.contains("value") && element["value"].contains("_type") &&
-        element["value"]["_type"] == "Constant" &&
-        element["value"].contains("value") &&
-        element["value"]["value"].is_string())
-      {
-        break;
-      }
-
       // Function calls are handled here
       exprt empty;
       exprt expr = get_expr(element["value"]);
@@ -6756,12 +6548,11 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         catch_block.type() = exception_type;
         exprt sym = symbol_expr(*exception_symbol);
         code_declt decl(sym);
-        decl.location() = exception_symbol->location;
+        exprt decl_code = convert_expression_to_code(decl);
+        decl_code.location() = exception_symbol->location;
 
-        codet &catch_block_code = to_code(catch_block);
-        codet decl_code = convert_expression_to_code(decl);
-        catch_block_code.operands().insert(
-          catch_block_code.operands().begin(), decl_code);
+        codet::operandst &ops = catch_block.operands();
+        ops.insert(ops.begin(), decl_code);
       }
 
       block.move_to_operands(catch_block);
@@ -6966,7 +6757,6 @@ static void add_global_static_variable(
   symbol.value.zero_initializer(true);
 
   symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
-  (void)added_symbol;
   assert(added_symbol);
 }
 
@@ -7115,12 +6905,13 @@ void python_converter::process_module_imports(
       current_python_file = nested_python_file;
 
       create_builtin_symbols();
-      exprt imported_code_expr = with_ast(&nested_module_json, [&]() {
+      exprt imported_code = with_ast(&nested_module_json, [&]() {
         return get_block(nested_module_json["body"]);
       });
+      convert_expression_to_code(imported_code);
 
       // Accumulate this module's code
-      accumulated_code.copy_to_operands(imported_code_expr);
+      accumulated_code.copy_to_operands(imported_code);
 
       current_python_file = saved_file;
     }
@@ -7179,11 +6970,13 @@ void python_converter::convert()
           current_python_file = imported_modules[filename];
       }
 
-      exprt model_code_expr =
+      exprt model_code =
         with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
 
+      convert_expression_to_code(model_code);
+
       // Accumulate model code
-      models_block.copy_to_operands(model_code_expr);
+      models_block.copy_to_operands(model_code);
       current_python_file = main_python_file;
     }
     is_loading_models = false;
@@ -7280,6 +7073,9 @@ void python_converter::convert()
       call.arguments().push_back(arg_value);
     }
 
+    convert_expression_to_code(call);
+    convert_expression_to_code(block);
+
     // Prepare user code: class definitions + function call
     code_blockt user_code_body;
     user_code_body.copy_to_operands(block);
@@ -7336,12 +7132,14 @@ void python_converter::convert()
           imported_module_json, const_cast<global_scope &>(global_scope_));
         imported_annotator.add_type_annotation();
 
-        exprt imported_code_expr = with_ast(&imported_module_json, [&]() {
+        exprt imported_code = with_ast(&imported_module_json, [&]() {
           return get_block(imported_module_json["body"]);
         });
 
+        convert_expression_to_code(imported_code);
+
         // Accumulate imported code instead of overwriting
-        all_imports_block.copy_to_operands(imported_code_expr);
+        all_imports_block.copy_to_operands(imported_code);
 
         imported_module_json.clear();
       }
@@ -7449,7 +7247,7 @@ void python_converter::convert()
   code_blockt main_body;
 
   // 1. Initialize static lifetime variables
-  symbol_table_.foreach_operand_in_order([this, &main_body](const symbolt &s) {
+  symbol_table_.foreach_operand_in_order([&main_body](const symbolt &s) {
     if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
     {
       code_assignt assign(symbol_expr(s), s.value);

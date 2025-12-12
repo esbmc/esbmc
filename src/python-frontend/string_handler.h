@@ -18,7 +18,7 @@ class string_builder;
 
 /**
  * @brief Handles all string-related operations for Python-to-C conversion
- *
+ * 
  * This class extracts string manipulation functionality from python_converter
  * to improve modularity and maintainability. It handles:
  * - String size calculations

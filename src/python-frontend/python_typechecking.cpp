@@ -6,9 +6,6 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <unordered_set>
-#include <util/base_type.h>
-#include <langapi/language_util.h>
-#include <util/namespace.h>
 #include <util/std_types.h>
 
 python_typechecking::python_typechecking(python_converter &converter)
@@ -156,18 +153,6 @@ bool python_typechecking::should_skip_type_assertion(
       return true;
   }
 
-  const namespacet &ns = converter_.name_space();
-  const typet list_type = converter_.get_type_handler().get_list_type();
-  if (!list_type.is_nil() && base_type_eq(list_type, annotated_type, ns))
-    return true;
-
-  if (python_dict_handler *dict_handler = converter_.get_dict_handler())
-  {
-    typet dict_type = dict_handler->get_dict_struct_type();
-    if (!dict_type.is_nil() && base_type_eq(dict_type, annotated_type, ns))
-      return true;
-  }
-
   return false;
 }
 
@@ -229,20 +214,10 @@ bool python_typechecking::build_type_assertion(
   if (effective_types.empty() && !should_skip_type_assertion(annotated_type))
     effective_types.push_back(annotated_type);
 
-  const namespacet &ns = converter_.name_space();
-  const typet list_type = converter_.get_type_handler().get_list_type();
-  typet dict_type;
-  if (auto *dict_handler = converter_.get_dict_handler())
-    dict_type = dict_handler->get_dict_struct_type();
-
   std::vector<exprt> checks;
   for (const auto &type : effective_types)
   {
     if (type == none_type())
-      continue;
-    if (!list_type.is_nil() && base_type_eq(type, list_type, ns))
-      continue;
-    if (!dict_type.is_nil() && base_type_eq(type, dict_type, ns))
       continue;
 
     exprt isinstance_expr = build_isinstance_check(value_expr, type);
@@ -307,31 +282,6 @@ void python_typechecking::emit_type_annotation_assertion(
   const locationt &location,
   codet &target_block)
 {
-  const namespacet &ns = converter_.name_space();
-  const typet list_type = converter_.get_type_handler().get_list_type();
-  typet dict_type;
-  if (auto *dict_handler = converter_.get_dict_handler())
-    dict_type = dict_handler->get_dict_struct_type();
-
-  auto is_list_or_dict = [&](const typet &t) {
-    if (t.is_nil())
-      return false;
-    if (!list_type.is_nil() && base_type_eq(t, list_type, ns))
-      return true;
-    if (!dict_type.is_nil() && base_type_eq(t, dict_type, ns))
-      return true;
-    return false;
-  };
-
-  if (is_list_or_dict(annotated_type))
-    return;
-
-  for (const auto &t : allowed_types)
-  {
-    if (is_list_or_dict(t))
-      return;
-  }
-
   code_assertt type_assert;
   if (!build_type_assertion(
         value_expr,

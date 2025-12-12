@@ -941,23 +941,13 @@ exprt string_handler::handle_string_strip(
     str_ptr.copy_to_operands(str_expr);
   }
 
-  pointer_typet result_type = pointer_typet(char_type());
-  symbolt &strip_result = converter_.create_tmp_symbol(
-    "$strip_result$", result_type, exprt(), location);
-
-  code_declt result_decl(symbol_expr(strip_result));
-  result_decl.location() = location;
-  converter_.add_instruction(result_decl);
-
-  code_function_callt call;
+  side_effect_expr_function_callt call;
   call.function() = symbol_exprt(func_symbol_id, code_typet());
   call.arguments().push_back(str_ptr);
-  call.lhs() = symbol_expr(strip_result);
-  call.type() = result_type;
+  call.type() = pointer_typet(char_type());
   call.location() = location;
-  converter_.add_instruction(call);
 
-  return symbol_expr(strip_result);
+  return call;
 }
 
 exprt string_handler::handle_string_membership(

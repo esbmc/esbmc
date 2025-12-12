@@ -1422,7 +1422,7 @@ exprt function_call_expr::handle_list_insert() const
       call_, "insert_value", size_type(), gen_zero(size_type()));
     code_declt insert_value(symbol_expr(insert_value_symbol));
     insert_value.copy_to_operands(value_to_insert);
-    converter_.add_instruction(insert_value);
+    converter_.current_block->copy_to_operands(insert_value);
   }
 
   python_list list(converter_, nlohmann::json());
@@ -1647,7 +1647,7 @@ exprt function_call_expr::handle_list_append() const
       call_, "append_value", size_type(), gen_zero(size_type()));
     code_declt append_value(symbol_expr(append_value_symbol));
     append_value.copy_to_operands(value_to_append);
-    converter_.add_instruction(append_value);
+    converter_.current_block->copy_to_operands(append_value);
   }
 
   python_list list(converter_, nlohmann::json());
@@ -2254,7 +2254,7 @@ exprt function_call_expr::handle_general_function_call()
           assert_code.location().user_provided(true);
           assert_code.location().comment(
             "Unsupported function '" + func_name + "' is reached");
-          converter_.add_instruction(assert_code);
+          converter_.current_block->copy_to_operands(assert_code);
 
           return nondet_expr;
         }
