@@ -562,7 +562,7 @@ TEST_CASE(
   "Greater-than simplification: x > x = false",
   "[relational][greaterthan]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc expr = greaterthan2tc(x, x);
 
   const expr2tc result = expr->simplify();
