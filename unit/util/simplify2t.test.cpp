@@ -350,7 +350,7 @@ TEST_CASE("Logical OR simplification: x || true = true", "[logical][or]")
 
 TEST_CASE("Bitwise AND simplification: x & x = x", "[bitwise][and]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc expr = bitand2tc(get_int_type(32), x, x);
 
   const expr2tc result = expr->simplify();
@@ -359,7 +359,7 @@ TEST_CASE("Bitwise AND simplification: x & x = x", "[bitwise][and]")
 }
 TEST_CASE("Bitwise AND simplification: x & 0 = 0", "[bitwise][and]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
   const expr2tc expr = bitand2tc(get_int_type(32), x, zero);
 
@@ -386,7 +386,7 @@ TEST_CASE("Bitwise AND constant folding: 12 & 10 = 8", "[bitwise][and]")
 
 TEST_CASE("Bitwise OR simplification: x | x = x", "[bitwise][or]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc expr = bitor2tc(get_int_type(32), x, x);
 
   const expr2tc result = expr->simplify();
@@ -422,7 +422,7 @@ TEST_CASE("Bitwise OR constant folding: 12 | 10 = 14", "[bitwise][or]")
 
 TEST_CASE("Bitwise XOR simplification: x ^ x = 0", "[bitwise][xor]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc expr = bitxor2tc(get_int_type(32), x, x);
 
   const expr2tc result = expr->simplify();
@@ -480,7 +480,7 @@ TEST_CASE(
   "Arithmetic shift right simplification: x >> 0 = x",
   "[bitwise][ashr]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
   const expr2tc expr = ashr2tc(get_int_type(32), x, zero);
 
@@ -768,8 +768,7 @@ TEST_CASE("Division simplification: x / x = 1", "[arithmetic][div]")
   const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc div = div2tc(get_int_type(32), x, x);
   const expr2tc result = div->simplify();
-  // Note: This simplification might not be implemented due to division by zero concerns
-  // If not implemented, this test documents the current behavior
+  REQUIRE(is_nil_expr(result));
 }
 
 TEST_CASE("Negation constant folding: -5 = -5", "[arithmetic][neg]")
