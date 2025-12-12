@@ -396,7 +396,7 @@ TEST_CASE("Bitwise OR simplification: x | x = x", "[bitwise][or]")
 
 TEST_CASE("Bitwise OR simplification: x | 0 = x", "[bitwise][or]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
   const expr2tc expr = bitor2tc(get_int_type(32), x, zero);
 
