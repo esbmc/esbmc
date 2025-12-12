@@ -3017,6 +3017,26 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
+  // d + c == d + e -> c == e (cancel common addend)
+  if (is_add2t(side_1) && is_add2t(side_2))
+  {
+    const add2t &add1 = to_add2t(side_1);
+    const add2t &add2 = to_add2t(side_2);
+    // Check all four combinations for common operands
+    // Case 1: (d + c) == (d + e) -> c == e
+    if (add1.side_1 == add2.side_1)
+      return equality2tc(add1.side_2, add2.side_2);
+    // Case 2: (d + c) == (e + d) -> c == e
+    if (add1.side_1 == add2.side_2)
+      return equality2tc(add1.side_2, add2.side_1);
+    // Case 3: (c + d) == (d + e) -> c == e
+    if (add1.side_2 == add2.side_1)
+      return equality2tc(add1.side_1, add2.side_2);
+    // Case 4: (c + d) == (e + d) -> c == e
+    if (add1.side_2 == add2.side_2)
+      return equality2tc(add1.side_1, add2.side_1);
+  }
+
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
 
