@@ -444,7 +444,7 @@ TEST_CASE("Bitwise XOR simplification: x ^ 0 = x", "[bitwise][xor]")
 
 TEST_CASE("Bitwise NOT simplification: ~(~x) = x", "[bitwise][not]")
 {
-  const expr2tc x = symbol2tc(get_bool_type(), "x");
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc not_x = bitnot2tc(get_int_type(32), x);
   const expr2tc expr = bitnot2tc(get_int_type(32), not_x);
 
