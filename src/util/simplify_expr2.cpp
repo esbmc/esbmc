@@ -2206,6 +2206,31 @@ expr2tc bitor2t::do_simplify() const
     }
   }
 
+  // ~(a & b) | (a ^ b) --> ~(a & b)
+  if (
+    (is_bitnot2t(side_1) && is_bitxor2t(side_2)) ||
+    (is_bitxor2t(side_1) && is_bitnot2t(side_2)))
+  {
+    const expr2tc &bnot_expr = is_bitnot2t(side_1) ? side_1 : side_2;
+    const expr2tc &bxor_expr = is_bitxor2t(side_1) ? side_1 : side_2;
+
+    const bitnot2t &bnot = to_bitnot2t(bnot_expr);
+    const bitxor2t &bxor = to_bitxor2t(bxor_expr);
+
+    // Check if the NOT operand is an AND
+    if (is_bitand2t(bnot.value))
+    {
+      const bitand2t &band = to_bitand2t(bnot.value);
+
+      // Check if XOR operands match AND operands (any order)
+      bool match = (bxor.side_1 == band.side_1 && bxor.side_2 == band.side_2) ||
+                   (bxor.side_1 == band.side_2 && bxor.side_2 == band.side_1);
+
+      if (match)
+        return bnot_expr; // Return ~(a & b)
+    }
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
