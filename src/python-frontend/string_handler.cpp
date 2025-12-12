@@ -1215,6 +1215,34 @@ exprt string_handler::handle_string_lower(
   return lower_call;
 }
 
+exprt string_handler::handle_string_find(
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  exprt arg_copy = find_arg;
+  exprt arg_expr = ensure_null_terminated_string(arg_copy);
+  exprt arg_addr = get_array_base_address(arg_expr);
+
+  symbolt *find_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_find");
+  if (!find_str_symbol)
+    throw std::runtime_error("str_find function not found in symbol table");
+
+  side_effect_expr_function_callt find_call;
+  find_call.function() = symbol_expr(*find_str_symbol);
+  find_call.arguments().push_back(str_addr);
+  find_call.arguments().push_back(arg_addr);
+  find_call.location() = location;
+  find_call.type() = int_type();
+
+  return find_call;
+}
+
 exprt string_handler::handle_string_to_int(
   const exprt &string_obj,
   const exprt &base_arg,

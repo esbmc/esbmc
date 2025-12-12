@@ -281,6 +281,19 @@ public:
    */
   exprt handle_string_lower(const exprt &string_obj, const locationt &location);
 
+  /**
+   * @brief Handle str.find() method
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param location Source location
+   * @return returns the index of the first occurrence of the substring.
+   * If not found, it returns -1.
+   */
+  exprt handle_string_find(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
   // Utility methods
 
   /**
