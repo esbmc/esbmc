@@ -2181,6 +2181,56 @@ expr2tc bitor2t::do_simplify() const
     }
   }
 
+  // ~(a ^ b) | (a & b) --> ~(a ^ b)
+  if (
+    (is_bitnot2t(side_1) && is_bitand2t(side_2)) ||
+    (is_bitand2t(side_1) && is_bitnot2t(side_2)))
+  {
+    const expr2tc &bnot_expr = is_bitnot2t(side_1) ? side_1 : side_2;
+    const expr2tc &band_expr = is_bitand2t(side_1) ? side_1 : side_2;
+
+    const bitnot2t &bnot = to_bitnot2t(bnot_expr);
+    const bitand2t &band = to_bitand2t(band_expr);
+
+    // Check if the NOT operand is an XOR
+    if (is_bitxor2t(bnot.value))
+    {
+      const bitxor2t &bxor = to_bitxor2t(bnot.value);
+
+      // Check if AND operands match XOR operands (any order)
+      bool match = (bxor.side_1 == band.side_1 && bxor.side_2 == band.side_2) ||
+                   (bxor.side_1 == band.side_2 && bxor.side_2 == band.side_1);
+
+      if (match)
+        return bnot_expr; // Return ~(a ^ b)
+    }
+  }
+
+  // ~(a & b) | (a ^ b) --> ~(a & b)
+  if (
+    (is_bitnot2t(side_1) && is_bitxor2t(side_2)) ||
+    (is_bitxor2t(side_1) && is_bitnot2t(side_2)))
+  {
+    const expr2tc &bnot_expr = is_bitnot2t(side_1) ? side_1 : side_2;
+    const expr2tc &bxor_expr = is_bitxor2t(side_1) ? side_1 : side_2;
+
+    const bitnot2t &bnot = to_bitnot2t(bnot_expr);
+    const bitxor2t &bxor = to_bitxor2t(bxor_expr);
+
+    // Check if the NOT operand is an AND
+    if (is_bitand2t(bnot.value))
+    {
+      const bitand2t &band = to_bitand2t(bnot.value);
+
+      // Check if XOR operands match AND operands (any order)
+      bool match = (bxor.side_1 == band.side_1 && bxor.side_2 == band.side_2) ||
+                   (bxor.side_1 == band.side_2 && bxor.side_2 == band.side_1);
+
+      if (match)
+        return bnot_expr; // Return ~(a & b)
+    }
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
@@ -2965,6 +3015,26 @@ expr2tc equality2t::do_simplify() const
           return equality2tc(mul_expr.side_2, side_2);
       }
     }
+  }
+
+  // d + c == d + e -> c == e (cancel common addend)
+  if (is_add2t(side_1) && is_add2t(side_2))
+  {
+    const add2t &add1 = to_add2t(side_1);
+    const add2t &add2 = to_add2t(side_2);
+    // Check all four combinations for common operands
+    // Case 1: (d + c) == (d + e) -> c == e
+    if (add1.side_1 == add2.side_1)
+      return equality2tc(add1.side_2, add2.side_2);
+    // Case 2: (d + c) == (e + d) -> c == e
+    if (add1.side_1 == add2.side_2)
+      return equality2tc(add1.side_2, add2.side_1);
+    // Case 3: (c + d) == (d + e) -> c == e
+    if (add1.side_2 == add2.side_1)
+      return equality2tc(add1.side_1, add2.side_2);
+    // Case 4: (c + d) == (e + d) -> c == e
+    if (add1.side_2 == add2.side_2)
+      return equality2tc(add1.side_1, add2.side_1);
   }
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
