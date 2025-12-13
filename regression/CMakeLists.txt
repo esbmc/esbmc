@@ -267,6 +267,7 @@ else()
                     goto-transcoder
                     parallel-solving
                     loop-invariants
+                    function_contract
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
