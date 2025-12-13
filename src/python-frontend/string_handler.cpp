@@ -909,6 +909,47 @@ exprt string_handler::handle_string_lstrip(
   return call;
 }
 
+exprt string_handler::handle_string_strip(
+  const exprt &str_expr,
+  const locationt &location)
+{
+  std::string func_symbol_id = ensure_string_function_symbol(
+    "__python_str_strip",
+    pointer_typet(char_type()),
+    {pointer_typet(char_type())},
+    location);
+
+  exprt str_ptr = str_expr;
+
+  if (str_expr.is_constant() && str_expr.type().is_array())
+  {
+    str_ptr = exprt("index", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+    str_ptr.copy_to_operands(from_integer(0, int_type()));
+  }
+  else if (str_expr.type().is_array())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    exprt index_expr("index", char_type());
+    index_expr.copy_to_operands(str_expr);
+    index_expr.copy_to_operands(from_integer(0, int_type()));
+    str_ptr.copy_to_operands(index_expr);
+  }
+  else if (!str_expr.type().is_pointer())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+  }
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt(func_symbol_id, code_typet());
+  call.arguments().push_back(str_ptr);
+  call.type() = pointer_typet(char_type());
+  call.location() = location;
+
+  return call;
+}
+
 exprt string_handler::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
