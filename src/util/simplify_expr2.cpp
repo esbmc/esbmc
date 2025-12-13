@@ -3059,6 +3059,14 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
+  // (-x) == (-y) -> x == y
+  if (is_neg2t(side_1) && is_neg2t(side_2))
+  {
+    const neg2t &neg1 = to_neg2t(side_1);
+    const neg2t &neg2 = to_neg2t(side_2);
+    return equality2tc(neg1.value, neg2.value);
+  }
+
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
 
