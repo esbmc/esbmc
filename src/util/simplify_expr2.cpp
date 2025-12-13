@@ -3078,6 +3078,14 @@ expr2tc equality2t::do_simplify() const
     return equality2tc(neg1.value, neg2.value);
   }
 
+  // (~x) == (~y) -> x == y
+  if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
+  {
+    const bitnot2t &not1 = to_bitnot2t(side_1);
+    const bitnot2t &not2 = to_bitnot2t(side_2);
+    return equality2tc(not1.value, not2.value);
+  }
+
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
 
