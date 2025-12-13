@@ -3037,6 +3037,28 @@ expr2tc equality2t::do_simplify() const
       return equality2tc(add1.side_1, add2.side_1);
   }
 
+  // (x * c1) == (y * c1) -> x == y (when c1 != 0)
+  if (is_mul2t(side_1) && is_mul2t(side_2))
+  {
+    const mul2t &mul1 = to_mul2t(side_1);
+    const mul2t &mul2 = to_mul2t(side_2);
+
+    // Check if side_2 of both multiplications are the same constant
+    if (mul1.side_2 == mul2.side_2 && is_constant_int2t(mul1.side_2))
+    {
+      const BigInt &c = to_constant_int2t(mul1.side_2).value;
+      if (c != 0)
+        return equality2tc(mul1.side_1, mul2.side_1);
+    }
+    // Check if side_1 of both multiplications are the same constant
+    if (mul1.side_1 == mul2.side_1 && is_constant_int2t(mul1.side_1))
+    {
+      const BigInt &c = to_constant_int2t(mul1.side_1).value;
+      if (c != 0)
+        return equality2tc(mul1.side_2, mul2.side_2);
+    }
+  }
+
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
 
