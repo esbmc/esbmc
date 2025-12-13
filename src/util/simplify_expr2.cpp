@@ -3059,6 +3059,17 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
+  // (d - c) == (d - e) -> c == e (cancel common minuend)
+  if (is_sub2t(side_1) && is_sub2t(side_2))
+  {
+    const sub2t &sub1 = to_sub2t(side_1);
+    const sub2t &sub2 = to_sub2t(side_2);
+
+    // (d - c) == (d - e) -> c == e
+    if (sub1.side_1 == sub2.side_1)
+      return equality2tc(sub1.side_2, sub2.side_2);
+  }
+
   // (-x) == (-y) -> x == y
   if (is_neg2t(side_1) && is_neg2t(side_2))
   {
