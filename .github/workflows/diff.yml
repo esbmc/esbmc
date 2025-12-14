@@ -15,16 +15,10 @@ jobs:
   create-diff:
     runs-on: ubuntu-latest
     steps:
+      - name: Test
+        run: echo 'hello!'
       - uses: actions/download-artifact@v5
         with:
           artifact-ids: ${{ inputs.original_id }}
       - name: Display results
         run: ls -R
-
-
-
-
-
-
-
-  
