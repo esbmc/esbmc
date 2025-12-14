@@ -46,8 +46,8 @@ jobs:
 
       - name: Extract artifacts
         run: |
-          unzip old-artifact/output.zip -d old-extracted
-          unzip new-artifact/output.zip -d new-extracted
+          unzip old-artifact/output.zip -d old-extracted || true
+          unzip new-artifact/output.zip -d new-extracted || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
