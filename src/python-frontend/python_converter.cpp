@@ -84,7 +84,7 @@ static StatementType get_statement_type(const nlohmann::json &element)
   return (it != statement_map.end()) ? it->second : StatementType::UNKNOWN;
 }
 
-static std::string get_op(const std::string &op, const typet &type)
+static std::string map_operator(const std::string &op, const typet &type)
 {
   // Convert the operator to lowercase to allow case-insensitive comparison.
   std::string lower_op = op;
@@ -120,6 +120,12 @@ static std::string get_op(const std::string &op, const typet &type)
 
   log_warning("Unknown operator: {}", op);
   return {};
+}
+
+std::string
+python_converter::get_op(const std::string &op, const typet &type) const
+{
+  return map_operator(op, type);
 }
 
 static struct_typet::componentt build_component(
@@ -207,7 +213,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   std::string op(element["op"]["_type"].get<std::string>());
-  exprt logical_expr(get_op(op, bool_type()), bool_type());
+  exprt logical_expr(map_operator(op, bool_type()), bool_type());
   bool contains_non_boolean = false;
 
   // Mark that we're processing operands in an expression context
@@ -387,7 +393,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 
     // Update the division expression type and operator ID
     rhs.type() = float_type;
-    rhs.id(get_op("div", float_type));
+    rhs.id(map_operator("div", float_type));
   }
   // Case 4: Special case for IEEE division results - ensure LHS is float
   else if (rhs.id() == "ieee_div" && !lhs_type.is_floatbv())
@@ -756,87 +762,6 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
-exprt python_converter::create_char_comparison_expr(
-  const std::string &op,
-  const exprt &lhs_char_value,
-  const exprt &rhs_char_value,
-  const exprt &lhs_source,
-  const exprt &rhs_source) const
-{
-  // Create comparison expression with integer operands
-  exprt comp_expr(get_op(op, bool_type()), bool_type());
-  comp_expr.copy_to_operands(lhs_char_value, rhs_char_value);
-
-  // Preserve location from original operands
-  if (!lhs_source.location().is_nil())
-    comp_expr.location() = lhs_source.location();
-  else if (!rhs_source.location().is_nil())
-    comp_expr.location() = rhs_source.location();
-
-  return comp_expr;
-}
-
-exprt python_converter::handle_single_char_comparison(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs)
-{
-  // Dereference pointer to character if needed
-  auto maybe_dereference = [](const exprt &expr) -> exprt {
-    if (
-      expr.type().is_pointer() && (expr.type().subtype().is_signedbv() ||
-                                   expr.type().subtype().is_unsignedbv()))
-    {
-      exprt deref("dereference", expr.type().subtype());
-      deref.copy_to_operands(expr);
-      return deref;
-    }
-    return expr;
-  };
-
-  // Create comparison expression with location info
-  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt {
-    exprt comp_expr(get_op(op, bool_type()), bool_type());
-    comp_expr.copy_to_operands(left, right);
-
-    if (!lhs.location().is_nil())
-      comp_expr.location() = lhs.location();
-    else if (!rhs.location().is_nil())
-      comp_expr.location() = rhs.location();
-
-    return comp_expr;
-  };
-
-  exprt lhs_to_check = maybe_dereference(lhs);
-  exprt rhs_to_check = maybe_dereference(rhs);
-
-  // Try to get character values from the (potentially dereferenced) expressions
-  exprt lhs_char_value =
-    python_char_utils::get_char_value_as_int(lhs_to_check, false);
-  exprt rhs_char_value =
-    python_char_utils::get_char_value_as_int(rhs_to_check, false);
-
-  // If both are valid character values, do the comparison
-  if (!lhs_char_value.is_nil() && !rhs_char_value.is_nil())
-    return create_char_comparison_expr(
-      op, lhs_char_value, rhs_char_value, lhs, rhs);
-
-  // Handle mixed cases: dereferenced pointer with valid character value
-  if (lhs_to_check.id() == "dereference" && !rhs_char_value.is_nil())
-  {
-    exprt lhs_as_int = typecast_exprt(lhs_to_check, rhs_char_value.type());
-    return create_comparison(lhs_as_int, rhs_char_value);
-  }
-
-  if (!lhs_char_value.is_nil() && rhs_to_check.id() == "dereference")
-  {
-    exprt rhs_as_int = typecast_exprt(rhs_to_check, lhs_char_value.type());
-    return create_comparison(lhs_char_value, rhs_as_int);
-  }
-
-  return nil_exprt();
-}
-
 exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
 {
   if (!expr.type().is_struct())
@@ -884,115 +809,6 @@ exprt python_converter::handle_none_comparison(
   }
 
   return isnone_expr;
-}
-
-exprt python_converter::handle_str_join(const nlohmann::json &call_json)
-{
-  // Validate JSON structure: ensure we have the required keys
-  if (!call_json.contains("args") || call_json["args"].empty())
-    throw std::runtime_error("join() missing required argument: 'iterable'");
-
-  if (!call_json.contains("func"))
-    throw std::runtime_error("invalid join() call");
-
-  const auto &func = call_json["func"];
-
-  // Verify this is an Attribute call (method call syntax: obj.method())
-  // and has the value (the separator object)
-  if (
-    !func.contains("_type") || func["_type"] != "Attribute" ||
-    !func.contains("value"))
-    throw std::runtime_error("invalid join() call");
-
-  // Extract separator: for " ".join(l), func["value"] is the Constant " "
-  exprt separator = get_expr(func["value"]);
-  string_handler_.ensure_string_array(separator);
-
-  // Get the list argument (the iterable to join)
-  const nlohmann::json &list_arg = call_json["args"][0];
-
-  // Currently only support Name references (e.g., variable names)
-  // TODO: Support direct List literals such as " ".join(["a", "b"])
-  if (
-    list_arg.contains("_type") && list_arg["_type"] == "Name" &&
-    list_arg.contains("id"))
-  {
-    std::string var_name = list_arg["id"].get<std::string>();
-
-    // Look up the variable in the AST to get its initialization value
-    nlohmann::json var_decl =
-      json_utils::find_var_decl(var_name, current_func_name_, *ast_json);
-
-    if (var_decl.empty())
-      throw std::runtime_error(
-        "NameError: name '" + var_name + "' is not defined");
-
-    // Ensure the variable is a list with elements array
-    if (!var_decl.contains("value"))
-      throw std::runtime_error("join() requires a list");
-
-    const nlohmann::json &list_value = var_decl["value"];
-
-    if (
-      !list_value.contains("_type") || list_value["_type"] != "List" ||
-      !list_value.contains("elts"))
-      throw std::runtime_error("join() requires a list");
-
-    // Get the list elements from the AST
-    const auto &elements = list_value["elts"];
-
-    // Edge case: empty list returns empty string
-    if (elements.empty())
-    {
-      // Create a proper null-terminated empty string
-      typet empty_string_type = type_handler_.build_array(char_type(), 1);
-      exprt empty_str = gen_zero(empty_string_type);
-      // Explicitly set the first (and only) element to null terminator
-      empty_str.operands().at(0) = from_integer(0, char_type());
-      return empty_str;
-    }
-
-    // Convert JSON elements to ESBMC expressions
-    std::vector<exprt> elem_exprs;
-    for (const auto &elem : elements)
-    {
-      exprt elem_expr = get_expr(elem);
-      string_handler_.ensure_string_array(elem_expr);
-      elem_exprs.push_back(elem_expr);
-    }
-
-    // Edge case: single element returns the element itself (no separator)
-    if (elem_exprs.size() == 1)
-      return elem_exprs[0];
-
-    // Main algorithm: Build the joined string by extracting characters
-    // from all elements and separators, then constructing a single string.
-    // This avoids multiple concatenation operations which could cause
-    // null terminator issues.
-    string_builder &sb = get_string_builder();
-    std::vector<exprt> all_chars;
-
-    // Start with the first element
-    std::vector<exprt> first_chars = sb.extract_string_chars(elem_exprs[0]);
-    all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
-
-    // For each remaining element: add separator, then add element
-    for (size_t i = 1; i < elem_exprs.size(); ++i)
-    {
-      // Insert separator characters
-      std::vector<exprt> sep_chars = sb.extract_string_chars(separator);
-      all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
-
-      // Insert element characters
-      std::vector<exprt> elem_chars = sb.extract_string_chars(elem_exprs[i]);
-      all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
-    }
-
-    // Build final null-terminated string from all collected characters
-    return sb.build_null_terminated_string(all_chars);
-  }
-
-  throw std::runtime_error("join() argument must be a list of strings");
 }
 
 // Resolve symbol values to constants
@@ -1288,7 +1104,7 @@ exprt python_converter::handle_chained_comparisons_logic(
   for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
     std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-    exprt logical_expr(get_op(op, bool_type()), bool_type());
+    exprt logical_expr(map_operator(op, bool_type()), bool_type());
     exprt op1 = get_expr(element["comparators"][i]);
     exprt op2 = get_expr(element["comparators"][i + 1]);
 
@@ -1300,7 +1116,7 @@ exprt python_converter::handle_chained_comparisons_logic(
     if (op1_type == "str" && op2_type == "str")
     {
       handle_string_comparison(op, op1, op2, element);
-      exprt expr(get_op(op, bool_type()), bool_type());
+      exprt expr(map_operator(op, bool_type()), bool_type());
       expr.copy_to_operands(op1, op2);
       cond.move_to_operands(expr);
     }
@@ -1393,7 +1209,7 @@ exprt python_converter::handle_string_type_mismatch(
 
   if (!lhs_char_value.is_nil() && !rhs_char_value.is_nil())
   {
-    return create_char_comparison_expr(
+    return string_handler_.create_char_comparison_expr(
       op, lhs_char_value, rhs_char_value, lhs, rhs);
   }
 
@@ -1774,7 +1590,8 @@ exprt python_converter::handle_relational_type_mismatches(
 
     if (!both_arrays)
     {
-      exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
+      exprt char_comp_result =
+        string_handler_.handle_single_char_comparison(op, lhs, rhs);
       if (!char_comp_result.is_nil())
         return char_comp_result;
     }
@@ -1788,7 +1605,7 @@ exprt python_converter::handle_relational_type_mismatches(
 
   if ((lhs_is_float && rhs_is_str) || (lhs_is_str && rhs_is_float))
   {
-    exprt binary_expr(get_op(op, bool_type()), bool_type());
+    exprt binary_expr(map_operator(op, bool_type()), bool_type());
 
     locationt loc = get_location_from_decl(element);
     if (loc.is_nil() || loc.get_line().empty())
@@ -1917,7 +1734,7 @@ exprt python_converter::build_binary_expression(
     type = lhs.type();
 
   // Create expression
-  exprt bin_expr(get_op(op, type), type);
+  exprt bin_expr(map_operator(op, type), type);
 
   // Set location
   if (lhs.is_symbol())
@@ -1972,7 +1789,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   }
 
   exprt unary_expr(
-    get_op(element["op"]["_type"].get<std::string>(), type), type);
+    map_operator(element["op"]["_type"].get<std::string>(), type), type);
 
   // get subexpr
   exprt unary_sub = get_expr(element["operand"]);
@@ -2163,7 +1980,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       func.contains("value") && (func["value"]["_type"] == "Constant" ||
                                  func["value"]["_type"] == "Name"))
     {
-      return handle_str_join(element);
+      return string_handler_.handle_str_join(element);
     }
   }
 

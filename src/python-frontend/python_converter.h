@@ -47,6 +47,18 @@ public:
 
   void convert();
 
+  // Accessors for handlers
+  const std::string &get_current_func_name() const
+  {
+    return current_func_name_;
+  }
+  const nlohmann::json &get_ast_json() const
+  {
+    return *ast_json;
+  }
+  exprt get_expr(const nlohmann::json &element);
+  std::string get_op(const std::string &op, const typet &type) const;
+
   string_builder &get_string_builder();
 
   python_dict_handler *get_dict_handler()
@@ -144,8 +156,6 @@ public:
     const typet &t);
 
   exprt get_literal(const nlohmann::json &element);
-
-  exprt get_expr(const nlohmann::json &element);
 
   locationt get_location_from_decl(const nlohmann::json &element);
 

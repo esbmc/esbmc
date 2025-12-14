@@ -27,6 +27,8 @@ class string_builder;
  * - String comparison operations
  * - String method operations (startswith, endswith, isdigit, isalpha, etc.)
  * - String concatenation and membership testing
+ * - String joining operations (str.join)
+ * - Character-level comparisons
  */
 class string_handler
 {
@@ -157,6 +159,32 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Handle single character comparisons
+   * @param op Comparison operator
+   * @param lhs Left operand
+   * @param rhs Right operand
+   * @return Comparison expression or nil_exprt if not a char comparison
+   */
+  exprt
+  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
+
+  /**
+   * @brief Create a character comparison expression
+   * @param op Comparison operator
+   * @param lhs_char_value Left character value (as integer)
+   * @param rhs_char_value Right character value (as integer)
+   * @param lhs_source Original left source expression
+   * @param rhs_source Original right source expression
+   * @return Comparison expression with proper location info
+   */
+  exprt create_char_comparison_expr(
+    const std::string &op,
+    const exprt &lhs_char_value,
+    const exprt &rhs_char_value,
+    const exprt &lhs_source,
+    const exprt &rhs_source) const;
+
+  /**
    * @brief Handle string repetition
    * @param op multiply operator (Eq, Mult)
    * @param lhs Left operand
@@ -183,6 +211,19 @@ public:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+
+  // String joining operations
+
+  /**
+   * @brief Handle str.join() method
+   * @param call_json JSON node representing the join call
+   * @return Expression representing the joined string
+   * 
+   * Handles Python's str.join(iterable) method, e.g.:
+   * - " ".join(["a", "b", "c"]) -> "a b c"
+   * - "-".join(list_var) -> joined string
+   */
+  exprt handle_str_join(const nlohmann::json &call_json);
 
   // String method operations
 
