@@ -1225,93 +1225,6 @@ exprt python_converter::handle_string_type_mismatch(
   return nil_exprt(); // No action taken for other operators
 }
 
-void python_converter::resolve_dict_subscript_types(
-  const nlohmann::json &left,
-  const nlohmann::json &right,
-  exprt &lhs,
-  exprt &rhs)
-{
-  bool lhs_is_dict_subscript = type_utils::is_dict_subscript(left);
-  bool rhs_is_dict_subscript = type_utils::is_dict_subscript(right);
-
-  bool lhs_is_ptr = lhs.type().is_pointer();
-  bool rhs_is_ptr = rhs.type().is_pointer();
-
-  auto is_primitive_type = [](const typet &t) {
-    return t.is_signedbv() || t.is_unsignedbv() || t.is_bool() ||
-           t.is_floatbv();
-  };
-
-  bool lhs_is_primitive = is_primitive_type(lhs.type());
-  bool rhs_is_primitive = is_primitive_type(rhs.type());
-
-  // Case 1: LHS is dict subscript (returning pointer) and RHS is primitive
-  if (lhs_is_dict_subscript && lhs_is_ptr && rhs_is_primitive)
-  {
-    exprt dict_expr = get_expr(left["value"]);
-    if (
-      dict_expr.type().is_struct() &&
-      dict_handler_->is_dict_type(dict_expr.type()))
-    {
-      lhs = dict_handler_->handle_dict_subscript(
-        dict_expr, left["slice"], rhs.type());
-      // Dereference the pointer to get the actual value
-      if (lhs.type().is_pointer())
-        lhs = dereference_exprt(lhs, lhs.type().subtype());
-    }
-  }
-
-  // Case 2: RHS is dict subscript (returning pointer) and LHS is primitive
-  if (rhs_is_dict_subscript && rhs_is_ptr && lhs_is_primitive)
-  {
-    exprt dict_expr = get_expr(right["value"]);
-    if (
-      dict_expr.type().is_struct() &&
-      dict_handler_->is_dict_type(dict_expr.type()))
-    {
-      rhs = dict_handler_->handle_dict_subscript(
-        dict_expr, right["slice"], lhs.type());
-      // Dereference the pointer to get the actual value
-      if (rhs.type().is_pointer())
-        rhs = dereference_exprt(rhs, rhs.type().subtype());
-    }
-  }
-
-  // Case 3: Both sides are dict subscripts (returning pointers)
-  // Default to long_int_type for dict-to-dict comparisons
-  if (
-    lhs_is_dict_subscript && rhs_is_dict_subscript && lhs_is_ptr && rhs_is_ptr)
-  {
-    typet default_type = long_int_type();
-
-    exprt lhs_dict = get_expr(left["value"]);
-    if (
-      lhs_dict.type().is_struct() &&
-      dict_handler_->is_dict_type(lhs_dict.type()))
-    {
-      lhs = dict_handler_->handle_dict_subscript(
-        lhs_dict, left["slice"], default_type);
-      // Dereference the pointer to get the actual value
-      if (lhs.type().is_pointer())
-        lhs = dereference_exprt(lhs, lhs.type().subtype());
-    }
-
-    exprt rhs_dict = get_expr(right["value"]);
-    if (
-      rhs_dict.type().is_struct() &&
-      dict_handler_->is_dict_type(rhs_dict.type()))
-    {
-      rhs = dict_handler_->handle_dict_subscript(
-        rhs_dict, right["slice"], default_type);
-      // Dereference the pointer to get the actual value
-      if (rhs.type().is_pointer())
-      {
-        rhs = dereference_exprt(rhs, rhs.type().subtype());
-      }
-    }
-  }
-}
-
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   // Extract left and right operands from AST
@@ -1330,7 +1243,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt rhs = get_expr(right);
 
   // Resolve dictionary subscript types for proper comparison
-  resolve_dict_subscript_types(left, right, lhs, rhs);
+  dict_handler_->resolve_dict_subscript_types(left, right, lhs, rhs);
 
   // Extract operator
   std::string op;
@@ -2650,53 +2563,6 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
   return symbol_expr(*added_symbol);
 }
 
-// Extract value type from dict type annotation: dict[K, V] -> V
-typet python_converter::get_dict_value_type_from_annotation(
-  const nlohmann::json &annotation_node)
-{
-  // Get the slice which contains the key and value types
-  if (!annotation_node.contains("slice"))
-    return empty_typet();
-
-  const auto &slice = annotation_node["slice"];
-
-  // For dict[K, V], slice is a Tuple with two elements
-  if (
-    slice.contains("_type") && slice["_type"] == "Tuple" &&
-    slice.contains("elts") && slice["elts"].size() >= 2)
-  {
-    // Return the value type (second element of the tuple)
-    const auto &value_type_node = slice["elts"][1];
-    return get_type_from_annotation(value_type_node, annotation_node);
-  }
-
-  return empty_typet();
-}
-
-// Resolve expected type for a dict subscript using the dict variable's annotation
-typet python_converter::resolve_expected_type_for_dict_subscript(
-  const exprt &dict_expr)
-{
-  // Only works if dict_expr is a symbol (variable reference)
-  if (!dict_expr.is_symbol())
-    return empty_typet();
-
-  const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
-  if (!sym)
-    return empty_typet();
-
-  // Look up the variable's declaration in the AST to get its annotation
-  std::string var_name = sym->name.as_string();
-  nlohmann::json var_decl =
-    json_utils::find_var_decl(var_name, current_func_name_, *ast_json);
-
-  if (var_decl.empty() || !var_decl.contains("annotation"))
-    return empty_typet();
-
-  // Extract the value type from the dict annotation
-  return get_dict_value_type_from_annotation(var_decl["annotation"]);
-}
-
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -3070,7 +2936,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (array.type().is_struct() && dict_handler_->is_dict_type(array.type()))
     {
       // Try to resolve the expected return type from the dict's type annotation
-      typet expected_type = resolve_expected_type_for_dict_subscript(array);
+      typet expected_type =
+        dict_handler_->resolve_expected_type_for_dict_subscript(array);
 
       // Pass the expected type to the dict handler
       // If empty, the handler will use its default heuristics
