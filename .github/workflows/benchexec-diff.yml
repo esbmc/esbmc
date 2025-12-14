@@ -44,10 +44,23 @@ jobs:
             --name esbmc-result \
             --dir new-artifact
 
-      - name: Extract artifacts and run comparison
+      - name: Extract artifacts
         run: |
           # Adjust globbing if the directory names differ
           unzip old-artifact/output.zip -d old-extracted
           unzip new-artifact/output.zip -d new-extracted
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install benchexec (for table-generator)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --user 'benchexec[systemd]' coloredlogs
+          echo "$(python -m site --user-base)/bin" >> "$GITHUB_PATH"
+
+      - name: Run diff
           ./scripts/competitions/compare-runs.sh old-extracted new-extracted
 
