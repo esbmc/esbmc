@@ -15,7 +15,7 @@ new=$2
 out=diff-$1-$2
 
 res=()
-mkdir $out &&
+mkdir -p $out &&
     for c in no-overflow termination unreach-call valid-memcleanup valid-memsafety; do
 	table-generator -f html -d -o $out/$c {$old,$new}/esbmc.*.results.SV-COMP26_$c.xml.bz2
     done
