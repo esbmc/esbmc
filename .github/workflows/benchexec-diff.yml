@@ -1,3 +1,5 @@
+name: Generate benchexec diff
+
 on:
   workflow_dispatch:
     inputs:
