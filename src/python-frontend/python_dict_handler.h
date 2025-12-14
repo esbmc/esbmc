@@ -102,6 +102,7 @@ class symbolt;
  * - Dictionary mutation (assignment, deletion)
  * - Membership testing (`in` / `not in`)
  * - Nested dictionary support with proper reference semantics
+ * - Type resolution for dictionary subscripts
  */
 class python_dict_handler
 {
@@ -283,6 +284,50 @@ public:
    * @return The struct_typet representing Python dictionaries.
    */
   struct_typet get_dict_struct_type();
+
+  /**
+   * @brief Resolve dictionary subscript types for comparisons
+   *
+   * When comparing dict[key] with primitives, this method ensures both
+   * operands have compatible types by dereferencing dict subscripts.
+   *
+   * Handles three cases:
+   * 1. LHS is dict subscript, RHS is primitive
+   * 2. RHS is dict subscript, LHS is primitive  
+   * 3. Both are dict subscripts
+   *
+   * @param left Left JSON AST node
+   * @param right Right JSON AST node
+   * @param lhs Left operand expression (modified in place)
+   * @param rhs Right operand expression (modified in place)
+   */
+  void resolve_dict_subscript_types(
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    exprt &lhs,
+    exprt &rhs);
+
+  /**
+   * @brief Extract value type from dict type annotation
+   *
+   * For annotations like `dict[K, V]`, extracts the value type V.
+   *
+   * @param annotation_node The annotation AST node (Subscript with slice)
+   * @return The value type, or empty_typet if cannot be determined
+   */
+  typet
+  get_dict_value_type_from_annotation(const nlohmann::json &annotation_node);
+
+  /**
+   * @brief Resolve expected type for dict subscript using variable annotation
+   *
+   * Looks up the dict variable's annotation to determine what type
+   * the subscript operation should return.
+   *
+   * @param dict_expr The dictionary expression (must be a symbol)
+   * @return The expected value type from annotation, or empty_typet
+   */
+  typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
 
 private:
   /// Reference to the main Python converter
