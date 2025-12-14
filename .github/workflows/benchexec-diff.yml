@@ -4,11 +4,11 @@ on:
     inputs:
       original_id:
         description: 'Old run'
-        required: true
+        required: false
         default: '30'
       old_run_id:
         description: 'New run'
-        required: true
+        required: false
         default: ''
 
 jobs:
@@ -17,7 +17,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v5
         with:
-          artifact-ids: ${{ inputs.original_id }}
-          run-id: ${{ inputs.old_run_id }}
+          name: esbmc-result
+          run-id: 20194414372
+          repository: esbmc/esbmc
       - name: Display results
         run: ls -R
