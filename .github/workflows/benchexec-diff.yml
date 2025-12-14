@@ -22,3 +22,5 @@ jobs:
             --repo esbmc/esbmc \
             --name esbmc-result \
             --dir old-artifact
+      - name: Testing changes
+        run: ls -l
