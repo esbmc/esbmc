@@ -1,26 +1,46 @@
-name: Generate benchexec diff
 on:
   workflow_dispatch:
     inputs:
-      original_id:
-        description: 'Old run'
-        required: false
-        default: '30'
-      old_run_id:
-        description: 'New run'
-        required: false
-        default: ''
+      old_url:
+        description: 'Old run URL'
+        required: true
+      new_url:
+        description: 'New run URL'
+        required: true
+
 jobs:
-  fetch-old-artifact:
+  benchexec-diff:
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifact from previous run
+      - uses: actions/checkout@v4
+
+      - name: Extract run IDs from URLs
+        id: parse
+        run: |
+          old="${{ inputs.old_url }}"
+          new="${{ inputs.new_url }}"
+          old_id=${old#*/runs/}; old_id=${old_id%%/*}
+          new_id=${new#*/runs/}; new_id=${new_id%%/*}
+          echo "old_id=$old_id" >> "$GITHUB_OUTPUT"
+          echo "new_id=$new_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download old artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 20194414372 \
+          gh run download "${{ steps.parse.outputs.old_id }}" \
             --repo esbmc/esbmc \
             --name esbmc-result \
             --dir old-artifact
-      - name: Testing changes
-        run: ls -l
+
+      - name: Download new artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ steps.parse.outputs.new_id }}" \
+            --repo esbmc/esbmc \
+            --name esbmc-result \
+            --dir new-artifact
+      - name: List files
+        run: ls -lR
+
