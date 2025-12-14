@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^VERIFICATION FAILED$
+ERROR: Unsupported expression GeneratorExp at line 2

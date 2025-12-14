@@ -384,6 +384,34 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   function_id.set_function(func_name);
+
+  // Check if this is a nested function call
+  if (func_type == "Name" && !current_function_name.empty())
+  {
+    // Self-recursive call (e.g., bar() inside foo@F@bar)
+    if (current_function_name.ends_with("@F@" + func_name))
+    {
+      function_id.set_function(current_function_name);
+      return function_id;
+    }
+
+    // Walk nesting chain from deepest to shallowest
+    for (std::string ctx = current_function_name; !ctx.empty();)
+    {
+      std::string nested_id = ctx + "@F@" + func_name;
+      symbol_id sid(python_file, current_class_name, nested_id);
+
+      if (converter_.symbol_table().find_symbol(sid.to_string()))
+      {
+        function_id.set_function(nested_id);
+        return function_id;
+      }
+
+      size_t pos = ctx.rfind("@F@");
+      ctx = (pos != std::string::npos) ? ctx.substr(0, pos) : "";
+    }
+  }
+
   return function_id;
 }
 
@@ -550,6 +578,20 @@ exprt function_call_builder::build() const
       return converter_.get_string_handler().handle_string_lower(obj_expr, loc);
     }
 
+    if (method_name == "find")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() != 1)
+        throw std::runtime_error("find() requires exactly one argument");
+
+      exprt find_arg = converter_.get_expr(call_["args"][0]);
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_find(
+        obj_expr, find_arg, loc);
+    }
+
     if (method_name == "isalpha")
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
@@ -595,6 +637,17 @@ exprt function_call_builder::build() const
       locationt loc = converter_.get_location_from_decl(call_);
       return converter_.get_string_handler().handle_string_lstrip(
         obj_expr, loc);
+    }
+
+    if (method_name == "strip")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (!call_["args"].empty())
+        throw std::runtime_error("strip() with arguments not yet supported");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_strip(obj_expr, loc);
     }
   }
 

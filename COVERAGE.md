@@ -74,7 +74,7 @@ The **Branch Coverage: 100%** indicates all branches have been tested.
 
 ### Condition Coverage
 
-Condition coverage verifies that each boolean sub-expression in conditional statements evaluates to both true and false at least once. Unlike branch coverage which tests branches, condition coverage tests individual conditions within complex expressions.
+Condition coverage verifies that each boolean sub-expression in conditional statements evaluates to both true and false at least once. Unlike branch coverage, which tests branches, condition coverage tests individual conditions within complex expressions.
 
 **Example:**
 

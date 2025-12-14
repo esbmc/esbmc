@@ -4,13 +4,13 @@
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 [![GitHub All Releases](https://img.shields.io/github/downloads/esbmc/esbmc/total.svg)](https://github.com/esbmc/esbmc/releases)
 
-ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker that automatically detects or proves the absence of runtime errors in single- and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. 
+ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker that automatically detects or proves the absence of runtime errors in single- and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, Rust, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. 
 
 ESBMC supports: 
 
 - The Clang compiler as its C/C++/CHERI/CUDA frontend;
 - The Soot framework via Jimple as its Java/Kotlin frontend;
-- The [ast](https://docs.python.org/3/library/ast.html) and [ast2json](https://pypi.org/project/ast2json/) modules as its [Python frontend](./src/python-frontend/README.md); the first SMT-based bounded model checker for Python programs;
+- The CPython 3.10 parser as its [Python frontend](./src/python-frontend/README.md); the first SMT-based bounded model checker for Python programs;
 - Implements the Solidity grammar production rules as its Solidity frontend;
 - Supports IEEE floating-point arithmetic for various SMT solvers.
 
@@ -21,6 +21,18 @@ We provide some background material/publications to help you understand what ESB
 Our main website is [esbmc.org](http://esbmc.org). 
 
 ### How to build/install ESBMC
+
+#### Installing via PPA (Ubuntu - Recommended)
+
+The easiest way to install ESBMC on Ubuntu is through our official [PPA](https://launchpad.net/~esbmc/+archive/ubuntu/esbmc), which provides releases for automatic installation:
+
+````
+sudo add-apt-repository ppa:esbmc/esbmc
+sudo apt update
+sudo apt install esbmc
+````
+
+This method is recommended for general users and supports Ubuntu 22.04 (Jammy) and 24.04 (Noble).
 
 #### Ubuntu 24.04
 
@@ -55,7 +67,7 @@ sudo dnf install --best --allowerasing "@Development Tools" clang llvm llvm-deve
 git clone https://github.com/esbmc/esbmc.git
 cd esbmc
 mkdir build && cd build
-cmake .. -DENABLE_Z3=1 -DZ3_DIR=/usr/include/z3
+CXX=g++ CC=gcc cmake .. -DENABLE_Z3=1 -DBUILD_TESTING=On -DENABLE_REGRESSION=1 -DZ3_DIR=/usr/include/z3
 make -j4
 ```
 

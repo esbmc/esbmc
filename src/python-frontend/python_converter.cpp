@@ -209,6 +209,12 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(get_op(op, bool_type()), bool_type());
   bool contains_non_boolean = false;
+
+  // Mark that we're processing operands in an expression context
+  // This ensures boolean-returning function calls are converted to side-effect expressions
+  bool old_is_converting_rhs = is_converting_rhs;
+  is_converting_rhs = true;
+
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
   {
@@ -216,6 +222,10 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     logical_expr.copy_to_operands(operand_expr);
     contains_non_boolean |= !operand_expr.is_boolean();
   }
+
+  // Restore the original flag state
+  is_converting_rhs = old_is_converting_rhs;
+
   // Shockingly enough, a BoolOp may not return a boolean.
   if (contains_non_boolean)
   {
@@ -771,14 +781,60 @@ exprt python_converter::handle_single_char_comparison(
   exprt &lhs,
   exprt &rhs)
 {
-  exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, false);
-  exprt rhs_char_value = python_char_utils::get_char_value_as_int(rhs, false);
+  // Dereference pointer to character if needed
+  auto maybe_dereference = [](const exprt &expr) -> exprt {
+    if (
+      expr.type().is_pointer() && (expr.type().subtype().is_signedbv() ||
+                                   expr.type().subtype().is_unsignedbv()))
+    {
+      exprt deref("dereference", expr.type().subtype());
+      deref.copy_to_operands(expr);
+      return deref;
+    }
+    return expr;
+  };
 
-  if (lhs_char_value.is_nil() || rhs_char_value.is_nil())
-    return nil_exprt();
+  // Create comparison expression with location info
+  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt {
+    exprt comp_expr(get_op(op, bool_type()), bool_type());
+    comp_expr.copy_to_operands(left, right);
 
-  return create_char_comparison_expr(
-    op, lhs_char_value, rhs_char_value, lhs, rhs);
+    if (!lhs.location().is_nil())
+      comp_expr.location() = lhs.location();
+    else if (!rhs.location().is_nil())
+      comp_expr.location() = rhs.location();
+
+    return comp_expr;
+  };
+
+  exprt lhs_to_check = maybe_dereference(lhs);
+  exprt rhs_to_check = maybe_dereference(rhs);
+
+  // Try to get character values from the (potentially dereferenced) expressions
+  exprt lhs_char_value =
+    python_char_utils::get_char_value_as_int(lhs_to_check, false);
+  exprt rhs_char_value =
+    python_char_utils::get_char_value_as_int(rhs_to_check, false);
+
+  // If both are valid character values, do the comparison
+  if (!lhs_char_value.is_nil() && !rhs_char_value.is_nil())
+    return create_char_comparison_expr(
+      op, lhs_char_value, rhs_char_value, lhs, rhs);
+
+  // Handle mixed cases: dereferenced pointer with valid character value
+  if (lhs_to_check.id() == "dereference" && !rhs_char_value.is_nil())
+  {
+    exprt lhs_as_int = typecast_exprt(lhs_to_check, rhs_char_value.type());
+    return create_comparison(lhs_as_int, rhs_char_value);
+  }
+
+  if (!lhs_char_value.is_nil() && rhs_to_check.id() == "dereference")
+  {
+    exprt rhs_as_int = typecast_exprt(rhs_to_check, lhs_char_value.type());
+    return create_comparison(lhs_char_value, rhs_as_int);
+  }
+
+  return nil_exprt();
 }
 
 exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
@@ -1383,6 +1439,9 @@ void python_converter::resolve_dict_subscript_types(
     {
       lhs = dict_handler_->handle_dict_subscript(
         dict_expr, left["slice"], rhs.type());
+      // Dereference the pointer to get the actual value
+      if (lhs.type().is_pointer())
+        lhs = dereference_exprt(lhs, lhs.type().subtype());
     }
   }
 
@@ -1396,6 +1455,9 @@ void python_converter::resolve_dict_subscript_types(
     {
       rhs = dict_handler_->handle_dict_subscript(
         dict_expr, right["slice"], lhs.type());
+      // Dereference the pointer to get the actual value
+      if (rhs.type().is_pointer())
+        rhs = dereference_exprt(rhs, rhs.type().subtype());
     }
   }
 
@@ -1413,6 +1475,9 @@ void python_converter::resolve_dict_subscript_types(
     {
       lhs = dict_handler_->handle_dict_subscript(
         lhs_dict, left["slice"], default_type);
+      // Dereference the pointer to get the actual value
+      if (lhs.type().is_pointer())
+        lhs = dereference_exprt(lhs, lhs.type().subtype());
     }
 
     exprt rhs_dict = get_expr(right["value"]);
@@ -1422,11 +1487,14 @@ void python_converter::resolve_dict_subscript_types(
     {
       rhs = dict_handler_->handle_dict_subscript(
         rhs_dict, right["slice"], default_type);
+      // Dereference the pointer to get the actual value
+      if (rhs.type().is_pointer())
+      {
+        rhs = dereference_exprt(rhs, rhs.type().subtype());
+      }
     }
   }
 }
-
-// (annotation type collection & inheritance helpers moved to python_typechecking)
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
@@ -1697,12 +1765,19 @@ exprt python_converter::handle_relational_type_mismatches(
   exprt &rhs,
   const nlohmann::json &element)
 {
-  // Single character comparisons
-  if (type_utils::is_ordered_comparison(op))
+  // Single character comparisons (including equality/inequality)
+  if (type_utils::is_ordered_comparison(op) || op == "Eq" || op == "NotEq")
   {
-    exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
-    if (!char_comp_result.is_nil())
-      return char_comp_result;
+    // Special handling. Reject cases where both operands are character arrays (like chr(65) == "A")
+    // Todo: we should change the all expression to a correct format in future.
+    bool both_arrays = lhs.type().is_array() && rhs.type().is_array();
+
+    if (!both_arrays)
+    {
+      exprt char_comp_result = handle_single_char_comparison(op, lhs, rhs);
+      if (!char_comp_result.is_nil())
+        return char_comp_result;
+    }
   }
 
   // Float vs string comparisons
@@ -1983,13 +2058,33 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   return nullptr;
 }
 
-symbolt *python_converter::find_symbol(const std::string &symbol_id) const
+symbolt *python_converter::find_symbol(const std::string &sym_id) const
 {
-  if (symbolt *symbol = symbol_table_.find_symbol(symbol_id))
+  if (symbolt *symbol = symbol_table_.find_symbol(sym_id))
     return symbol;
-  if (symbolt *symbol = find_symbol_in_global_scope(symbol_id))
+
+  symbol_id nested_sym_id = symbol_id::from_string(sym_id);
+  std::size_t pos = sym_id.rfind('@');
+  std::string obj = (pos == std::string::npos) ? "" : sym_id.substr(pos + 1);
+  nested_sym_id.set_object(obj);
+
+  for (int i = scope_stack_.size(); i >= 0; --i)
+  {
+    // Build id prefix from module + outer scopes
+    for (int j = 0; j < i; ++j)
+    {
+      std::string func = scope_stack_[j].substr(3); // drop "@F@"
+      nested_sym_id.set_function(func);
+      std::string candidate = nested_sym_id.to_string();
+
+      if (symbolt *symbol = symbol_table_.find_symbol(candidate))
+        return symbol;
+    }
+  }
+
+  if (symbolt *symbol = find_symbol_in_global_scope(sym_id))
     return symbol;
-  return find_imported_symbol(symbol_id);
+  return find_imported_symbol(sym_id);
 }
 
 symbolt *python_converter::find_symbol_in_global_scope(
@@ -2155,6 +2250,29 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
+
+  // Convert boolean-returning function calls to side-effect expressions when used
+  // in expression contexts (e.g., logical operations). This prevents GOTO generation
+  // failures where code statements appear in boolean expression operands.
+  if (
+    call_expr.is_code() && call_expr.statement() == "function_call" &&
+    is_converting_rhs)
+  {
+    const code_function_callt &code_call =
+      to_code_function_call(to_code(call_expr));
+    const typet &return_type = code_call.type();
+
+    if (return_type.is_bool())
+    {
+      side_effect_expr_function_callt side_effect_call;
+      side_effect_call.function() = code_call.function();
+      side_effect_call.arguments() = code_call.arguments();
+      side_effect_call.type() = return_type;
+      side_effect_call.location() = code_call.location();
+
+      call_expr = side_effect_call;
+    }
+  }
 
   auto handle_keywords = [&](exprt &call_expr) {
     if (!element.contains("keywords") || element["keywords"].empty())
@@ -2715,6 +2833,53 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
   return symbol_expr(*added_symbol);
 }
 
+// Extract value type from dict type annotation: dict[K, V] -> V
+typet python_converter::get_dict_value_type_from_annotation(
+  const nlohmann::json &annotation_node)
+{
+  // Get the slice which contains the key and value types
+  if (!annotation_node.contains("slice"))
+    return empty_typet();
+
+  const auto &slice = annotation_node["slice"];
+
+  // For dict[K, V], slice is a Tuple with two elements
+  if (
+    slice.contains("_type") && slice["_type"] == "Tuple" &&
+    slice.contains("elts") && slice["elts"].size() >= 2)
+  {
+    // Return the value type (second element of the tuple)
+    const auto &value_type_node = slice["elts"][1];
+    return get_type_from_annotation(value_type_node, annotation_node);
+  }
+
+  return empty_typet();
+}
+
+// Resolve expected type for a dict subscript using the dict variable's annotation
+typet python_converter::resolve_expected_type_for_dict_subscript(
+  const exprt &dict_expr)
+{
+  // Only works if dict_expr is a symbol (variable reference)
+  if (!dict_expr.is_symbol())
+    return empty_typet();
+
+  const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
+  if (!sym)
+    return empty_typet();
+
+  // Look up the variable's declaration in the AST to get its annotation
+  std::string var_name = sym->name.as_string();
+  nlohmann::json var_decl =
+    json_utils::find_var_decl(var_name, current_func_name_, *ast_json);
+
+  if (var_decl.empty() || !var_decl.contains("annotation"))
+    return empty_typet();
+
+  // Extract the value type from the dict annotation
+  return get_dict_value_type_from_annotation(var_decl["annotation"]);
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -2908,6 +3073,54 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       const typet &symbol_type =
         (symbol->type.is_pointer()) ? symbol->type.subtype() : symbol->type;
 
+      // Handle union types
+      if (symbol_type.is_array() && symbol_type.subtype() == char_type())
+      {
+        // For union types, we need to infer which concrete type to use.
+        // Strategy: Look for isinstance checks in the current scope to determine
+        // the expected type, or search for classes that have this attribute.
+
+        symbolt *target_class_symbol = nullptr;
+
+        // Search all class types in the symbol table to find one that has this attribute
+        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
+          if (target_class_symbol)
+            return; // Already found
+
+          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+          {
+            const struct_typet &struct_type = to_struct_type(s.type);
+            if (struct_type.has_component(attr_name))
+              target_class_symbol = const_cast<symbolt *>(&s);
+          }
+        });
+
+        if (!target_class_symbol)
+        {
+          throw std::runtime_error(
+            "Cannot access attribute '" + attr_name +
+            "' on union type: no class with this attribute found");
+        }
+
+        // Create a typecast from char* to target_class*
+        typet target_ptr_type = gen_pointer_type(target_class_symbol->type);
+        exprt casted_expr = typecast_exprt(expr, target_ptr_type);
+
+        // Dereference to get the object
+        exprt deref_expr("dereference", target_class_symbol->type);
+        deref_expr.copy_to_operands(casted_expr);
+
+        // Access the member on the object
+        const struct_typet &target_struct =
+          to_struct_type(target_class_symbol->type);
+        const typet &attr_type = target_struct.get_component(attr_name).type();
+        typet clean_type = clean_attribute_type(attr_type);
+
+        member_exprt member_expr(deref_expr, attr_name, clean_type);
+        expr = member_expr;
+        break;
+      }
+
       if (symbol_type.id() == "struct")
       {
         // Struct types store class name in "tag" field
@@ -3036,11 +3249,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
-    // Handle dictionary subscript
-    if (array.type().is_struct())
+    // Handle dictionary subscript with type inference from annotations
+    if (array.type().is_struct() && dict_handler_->is_dict_type(array.type()))
     {
-      // This is a dictionary access
-      expr = dict_handler_->handle_dict_subscript(array, slice);
+      // Try to resolve the expected return type from the dict's type annotation
+      typet expected_type = resolve_expected_type_for_dict_subscript(array);
+
+      // Pass the expected type to the dict handler
+      // If empty, the handler will use its default heuristics
+      expr = dict_handler_->handle_dict_subscript(array, slice, expected_type);
       break;
     }
 
@@ -3609,10 +3826,14 @@ exprt python_converter::get_rhs_with_dict_resolution(
     return get_expr(ast_node["value"]);
 
   // Check if we need special dict subscript handling for typed variables
+  // Including list type
+  typet list_type = type_handler_.get_list_type();
   if (
     !target_type.is_signedbv() && !target_type.is_unsignedbv() &&
-    !target_type.is_bool())
+    !target_type.is_bool() && target_type != list_type)
+  {
     return get_expr(ast_node["value"]);
+  }
 
   exprt dict_expr = get_expr(ast_node["value"]["value"]);
   if (
@@ -5599,18 +5820,29 @@ void python_converter::get_function_definition(
   // Setup function context
   const std::string caller_func_name = current_func_name_;
 
-  // Function location
   locationt location = get_location_from_decl(function_node);
 
   current_element_type = type.return_type();
-  current_func_name_ = function_node["name"].get<std::string>();
+  std::string func_name = function_node["name"].get<std::string>();
 
   // __init__() is renamed to Classname()
-  if (current_func_name_ == "__init__")
+  if (func_name == "__init__")
   {
-    current_func_name_ = current_class_name_;
+    func_name = current_class_name_;
     type.return_type() = typet("constructor");
   }
+
+  // If we are inside another function, create a nested name
+  if (!caller_func_name.empty())
+  {
+    current_func_name_ = caller_func_name + "@F@" + func_name;
+  }
+  else
+  {
+    current_func_name_ = func_name;
+  }
+
+  scope_stack_.push_back("@F@" + func_name);
 
   symbol_id id = create_symbol_id();
 
@@ -5651,6 +5883,8 @@ void python_converter::get_function_definition(
   validate_return_paths(function_node, type, function_body);
 
   added_symbol->value = function_body;
+
+  scope_stack_.pop_back();
 
   // Restore caller function name
   current_func_name_ = caller_func_name;
@@ -6701,6 +6935,7 @@ void python_converter::convert()
     const std::string &ast_output_dir =
       (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
+      "builtins",
       "range",
       "int",
       "consensus",

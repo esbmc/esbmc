@@ -642,6 +642,9 @@ expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
   expr2tc byte_offset =
     pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
 
+  // simplify pointer offset expression
+  simplify(byte_offset);
+
   // Convert from bytes to bits for check_alignment
   return mul2tc(
     bitsize_type2(),
@@ -746,6 +749,8 @@ expr2tc dereferencet::build_reference_to(
 
     final_offset =
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
+    // simplify pointer offset expression
+    simplify(final_offset);
   }
 
   type2tc offset_type = bitsize_type2();

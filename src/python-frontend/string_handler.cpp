@@ -481,7 +481,7 @@ exprt string_handler::handle_string_operations(
   assert(lhs.type().is_array() || lhs.type().is_pointer());
   assert(rhs.type().is_array() || rhs.type().is_pointer());
 
-  if (op == "Eq" || op == "NotEq")
+  if (op == "Eq" || op == "NotEq" || type_utils::is_ordered_comparison(op))
     return handle_string_comparison(op, lhs, rhs, element);
   else if (op == "Add")
     return handle_string_concatenation(lhs, rhs, left, right);
@@ -909,6 +909,47 @@ exprt string_handler::handle_string_lstrip(
   return call;
 }
 
+exprt string_handler::handle_string_strip(
+  const exprt &str_expr,
+  const locationt &location)
+{
+  std::string func_symbol_id = ensure_string_function_symbol(
+    "__python_str_strip",
+    pointer_typet(char_type()),
+    {pointer_typet(char_type())},
+    location);
+
+  exprt str_ptr = str_expr;
+
+  if (str_expr.is_constant() && str_expr.type().is_array())
+  {
+    str_ptr = exprt("index", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+    str_ptr.copy_to_operands(from_integer(0, int_type()));
+  }
+  else if (str_expr.type().is_array())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    exprt index_expr("index", char_type());
+    index_expr.copy_to_operands(str_expr);
+    index_expr.copy_to_operands(from_integer(0, int_type()));
+    str_ptr.copy_to_operands(index_expr);
+  }
+  else if (!str_expr.type().is_pointer())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+  }
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt(func_symbol_id, code_typet());
+  call.arguments().push_back(str_ptr);
+  call.type() = pointer_typet(char_type());
+  call.location() = location;
+
+  return call;
+}
+
 exprt string_handler::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
@@ -1213,6 +1254,34 @@ exprt string_handler::handle_string_lower(
   lower_call.type() = pointer_typet(char_type());
 
   return lower_call;
+}
+
+exprt string_handler::handle_string_find(
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  exprt arg_copy = find_arg;
+  exprt arg_expr = ensure_null_terminated_string(arg_copy);
+  exprt arg_addr = get_array_base_address(arg_expr);
+
+  symbolt *find_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_find");
+  if (!find_str_symbol)
+    throw std::runtime_error("str_find function not found in symbol table");
+
+  side_effect_expr_function_callt find_call;
+  find_call.function() = symbol_expr(*find_str_symbol);
+  find_call.arguments().push_back(str_addr);
+  find_call.arguments().push_back(arg_addr);
+  find_call.location() = location;
+  find_call.type() = int_type();
+
+  return find_call;
 }
 
 exprt string_handler::handle_string_to_int(

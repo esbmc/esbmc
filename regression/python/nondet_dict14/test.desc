@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--unwind 9 --no-bounds-check --no-pointer-check --no-div-by-zero-check --no-align-check
+^VERIFICATION SUCCESSFUL$

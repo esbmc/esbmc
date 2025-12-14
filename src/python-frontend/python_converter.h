@@ -484,6 +484,20 @@ private:
   // =========================================================================
 
   /**
+   * Extract the value type from a dict type annotation.
+   * For dict[K, V], returns V.
+   * For dict[K, dict[K2, V2]], returns dict[K2, V2].
+   */
+  typet
+  get_dict_value_type_from_annotation(const nlohmann::json &annotation_node);
+
+  /**
+   * Resolve the expected return type for a dict subscript operation
+   * by examining the dict variable's type annotation.
+   */
+  typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
+
+  /**
    * @brief Handles dictionary subscript assignment (dict[key] = value).
    *
    * Detects and processes assignments where the target is a dictionary subscript
@@ -907,6 +921,7 @@ private:
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;
   bool is_right = false;
+  std::vector<std::string> scope_stack_;
 
   exprt extract_type_from_boolean_op(const exprt &bool_op);
 

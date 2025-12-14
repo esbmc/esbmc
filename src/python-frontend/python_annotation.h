@@ -94,7 +94,11 @@ class python_annotation
 {
 public:
   python_annotation(Json &ast, global_scope &gs)
-    : ast_(ast), gs_(gs), current_func(nullptr), current_line_(0)
+    : ast_(ast),
+      gs_(gs),
+      current_func(nullptr),
+      parent_func(nullptr),
+      current_line_(0)
   {
     python_filename_ = ast_["filename"].template get<std::string>();
     if (ast_.contains("ast_output_dir"))
@@ -162,6 +166,27 @@ private:
           continue; // Skip this recursive call
         }
 
+        // Handle function calls (including nested functions)
+        if (
+          return_val["_type"] == "Call" && return_val.contains("func") &&
+          return_val["func"]["_type"] == "Name")
+        {
+          const std::string &called_func = return_val["func"]["id"];
+
+          // Try to get the return type of the called function
+          try
+          {
+            std::string called_func_type =
+              get_function_return_type(called_func, ast_);
+            if (!called_func_type.empty() && called_func_type != "NoneType")
+              return called_func_type;
+          }
+          catch (std::runtime_error &)
+          {
+            // Function not found, continue with normal inference
+          }
+        }
+
         // Reuse get_argument_type to infer the return value type
         std::string inferred_type = get_argument_type(return_val);
         if (!inferred_type.empty())
@@ -194,9 +219,17 @@ private:
   {
     const std::string &func_name = function_element["name"];
 
+    // Determine where to search for function calls:
+    // - For nested functions: search in parent function's body
+    // - For top-level functions: search in global AST body
+    const Json &search_context =
+      (parent_func != nullptr)
+        ? (*parent_func)["body"] // Search in parent function's body
+        : ast_["body"];          // Search in global body
+
     // Find all calls to this function in the AST
     std::vector<Json> function_calls =
-      find_function_calls(func_name, ast_["body"]);
+      find_function_calls(func_name, search_context);
 
     if (function_calls.empty())
       return; // No calls found, cannot infer
@@ -317,34 +350,63 @@ private:
     }
     else if (arg["_type"] == "Name")
     {
-      // Try to find the type of the variable
+      const std::string &var_name = arg["id"];
+
+      // Try to find the type of the variable in current scope
       Json var_node =
-        json_utils::find_var_decl(arg["id"], get_current_func_name(), ast_);
+        json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+      // Check if we found a node with annotation
+      bool has_annotation = !var_node.empty() &&
+                            var_node.contains("annotation") &&
+                            !var_node["annotation"].is_null();
+
+      // If not found or found without annotation, and we're in a nested function,
+      // try to find in parent function's parameters and body
+      if (!has_annotation && parent_func != nullptr)
+      {
+        // Check parent function's parameters
+        if (
+          (*parent_func).contains("args") &&
+          (*parent_func)["args"].contains("args"))
+        {
+          var_node =
+            find_annotated_assign(var_name, (*parent_func)["args"]["args"]);
+        }
+
+        // If still not found, check parent function's body for local variables
+        if (var_node.empty() && (*parent_func).contains("body"))
+        {
+          var_node = find_annotated_assign(var_name, (*parent_func)["body"]);
+        }
+      }
+
+      // Extract type from the found variable node
       if (
         !var_node.empty() && var_node.contains("annotation") &&
         !var_node["annotation"].is_null())
       {
+        // Handle arg nodes (function parameters)
+        if (var_node["_type"] == "arg")
+        {
+          // Parameters can have annotation as {"id": "int"} or
+          // {"value": {"id": "int"}} for generic types
+          if (var_node["annotation"].contains("id"))
+            return var_node["annotation"]["id"];
+          else if (
+            var_node["annotation"].contains("value") &&
+            var_node["annotation"]["value"].contains("id"))
+            return var_node["annotation"]["value"]["id"];
+        }
         // Handle generic type annotations like list[int] (Subscript nodes)
-        if (
+        else if (
           var_node["annotation"].contains("_type") &&
           var_node["annotation"]["_type"] == "Subscript" &&
           var_node["annotation"].contains("value") &&
           var_node["annotation"]["value"].contains("id"))
         {
           std::string base_type = var_node["annotation"]["value"]["id"];
-
-          // Get the element type from slice
-          if (
-            var_node["annotation"].contains("slice") &&
-            var_node["annotation"]["slice"].contains("id"))
-          {
-            std::string element_type = var_node["annotation"]["slice"]["id"];
-            return base_type + "[" + element_type + "]";
-          }
-          else
-          {
-            return base_type; // Return base type if slice info unavailable
-          }
+          return base_type; // Return base type if slice info unavailable
         }
         // Handle simple type annotations like int, str (Name nodes)
         else if (var_node["annotation"].contains("id"))
@@ -370,6 +432,30 @@ private:
       return "set";
     else if (arg["_type"] == "Tuple")
       return "tuple";
+    else if (arg["_type"] == "Call")
+    {
+      // Handle function calls like abs(a - b), len(list), etc.
+      if (arg["func"]["_type"] == "Name")
+      {
+        const std::string &func_name = arg["func"]["id"];
+
+        // Check built-in functions first
+        auto it = builtin_functions.find(func_name);
+        if (it != builtin_functions.end())
+          return it->second;
+
+        // For user-defined functions, try to get return type
+        try
+        {
+          return get_function_return_type(func_name, ast_);
+        }
+        catch (std::runtime_error &)
+        {
+          // Function not found, return empty
+          return "";
+        }
+      }
+    }
 
     return ""; // Cannot determine type
   }
@@ -384,7 +470,7 @@ private:
         "default ({}:{})",
         python_filename_,
         current_line_);
-      return "list[int]"; // Default fallback
+      return "list"; // Default fallback
     }
 
     // Get the type of the first element
@@ -515,8 +601,7 @@ private:
         {
           try
           {
-            const auto &func_node =
-              json_utils::find_function(ast_["body"], func_name);
+            auto func_node = json_utils::find_function(ast_["body"], func_name);
             get_global_elements(func_node);
           }
           catch (std::runtime_error &)
@@ -549,6 +634,30 @@ private:
 
   void annotate_function(Json &function_element)
   {
+    std::string saved_func_name_context = current_func_name_context_;
+    Json *saved_parent_func = parent_func; // Save previous parent
+
+    const std::string &func_name =
+      function_element["name"].template get<std::string>();
+
+    // Build hierarchical path ONLY if we're not inside a class
+    if (!current_class_name_.empty())
+    {
+      // We're inside a class - do NOT accumulate hierarchical context
+      current_func_name_context_ = func_name;
+    }
+    else if (!saved_func_name_context.empty())
+    {
+      // Nested function outside a class - accumulate context
+      current_func_name_context_ = saved_func_name_context + "@F@" + func_name;
+    }
+    else
+    {
+      // Top-level function
+      current_func_name_context_ = func_name;
+    }
+
+    parent_func = current_func; // Current becomes parent
     current_func = &function_element;
 
     // Infer types for unannotated parameters based on function calls
@@ -557,19 +666,42 @@ private:
     // Add type annotations within the function
     add_annotation(function_element);
 
-    auto return_node = json_utils::find_return_node(function_element["body"]);
+    // Skip return type inference for __init__ (constructors always return None)
+    if (func_name == "__init__")
+    {
+      // Constructors return None by default - no need to infer
+      if (function_element["returns"].is_null())
+      {
+        function_element["returns"] = {
+          {"_type", "Constant"},
+          {"value", nullptr}, // None
+          {"lineno", function_element["lineno"]},
+          {"col_offset", function_element["col_offset"]},
+          {"end_lineno", function_element["lineno"]},
+          {"end_col_offset",
+           function_element["col_offset"].template get<int>() + 4}};
+      }
+
+      // Update the end column offset after adding annotations
+      update_end_col_offset(function_element);
+      current_func = nullptr;
+      parent_func = saved_parent_func; // Restore previous parent
+      current_func_name_context_ = saved_func_name_context;
+      return; // Exit early for __init__
+    }
 
     // Check if we should override the return annotation
     bool should_override =
       config.options.get_bool_option("override-return-annotation");
     bool has_no_annotation = function_element["returns"].is_null();
 
-    if (!return_node.empty() && (has_no_annotation || should_override))
+    if (has_no_annotation || should_override)
     {
-      std::string inferred_type;
-      if (
-        infer_type(return_node, function_element, inferred_type) ==
-        InferResult::OK)
+      std::string inferred_type =
+        infer_from_return_statements(function_element["body"], func_name);
+
+      // Only add annotation if we successfully inferred a type from return statements
+      if (!inferred_type.empty())
       {
         // Update the function node to include the return type annotation
         function_element["returns"] = {
@@ -583,16 +715,26 @@ private:
            function_element["col_offset"].template get<int>() +
              inferred_type.size()}};
       }
+      // If no return type could be inferred, leave returns as null
+      // (function has no explicit return statement)
     }
 
     // Update the end column offset after adding annotations
     update_end_col_offset(function_element);
 
     current_func = nullptr;
+    parent_func = saved_parent_func; // Restore previous parent
+    current_func_name_context_ = saved_func_name_context;
   }
 
   void annotate_class(Json &class_element)
   {
+    std::string saved_class_name = current_class_name_;
+    std::string saved_context = current_func_name_context_;
+    //    current_func_name_context_ = ""; // Reset for class methods
+
+    current_class_name_ = class_element["name"].template get<std::string>();
+
     for (Json &class_member : class_element["body"])
     {
       // Process methods in the class
@@ -626,14 +768,14 @@ private:
         }
       }
     }
+
+    current_class_name_ = saved_class_name;
+    current_func_name_context_ = saved_context;
   }
 
   std::string get_current_func_name()
   {
-    if (!current_func)
-      return std::string();
-
-    return (*current_func)["name"];
+    return current_func_name_context_;
   }
 
   std::string get_type_from_constant(const Json &element)
@@ -699,6 +841,18 @@ private:
           left_op["annotation"]["id"].is_string())
         {
           type = left_op["annotation"]["id"];
+        }
+        // As a fallback, check global scope for prior annotation
+        if (type.empty())
+        {
+          Json global_op = find_annotated_assign(lhs["id"], ast_["body"]);
+          if (
+            !global_op.empty() && global_op.contains("annotation") &&
+            global_op["annotation"].contains("id") &&
+            global_op["annotation"]["id"].is_string())
+          {
+            type = global_op["annotation"]["id"];
+          }
         }
       }
       else if (lhs["_type"] == "UnaryOp")
@@ -776,6 +930,33 @@ private:
         type = get_type_from_constant(lhs);
       else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Attribute")
         type = get_type_from_method(lhs);
+    }
+
+    // If still unknown, try RHS or fallback to Any for arithmetic ops
+    if (type.empty())
+    {
+      const Json &rhs =
+        stmt.contains("value") ? stmt["value"]["right"] : stmt["right"];
+
+      if (rhs["_type"] == "Constant")
+        type = get_type_from_constant(rhs);
+      else if (rhs["_type"] == "Name")
+      {
+        Json right_op = find_annotated_assign(
+          rhs["id"], body.contains("body") ? body["body"] : ast_["body"]);
+        if (
+          right_op.contains("annotation") &&
+          right_op["annotation"].contains("id") &&
+          right_op["annotation"]["id"].is_string())
+          type = right_op["annotation"]["id"];
+      }
+
+      if (
+        type.empty() && stmt.contains("value") &&
+        stmt["value"].contains("op") && stmt["value"]["op"].contains("_type"))
+      {
+        type = "Any";
+      }
     }
 
     return type;
@@ -2182,9 +2363,13 @@ private:
   global_scope &gs_;
   std::shared_ptr<module_manager> module_manager_;
   Json *current_func;
+  Json
+    *parent_func; // Track parent function for nested function scope resolution
   int current_line_;
   std::string python_filename_;
   bool filter_global_elements_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
+  std::string current_func_name_context_;
+  std::string current_class_name_;
 };

@@ -82,6 +82,18 @@ size_t __ESBMC_list_size(const PyListObject *l)
   return l ? l->size : 0;
 }
 
+static inline void *__ESBMC_copy_value(const void *value, size_t size)
+{
+  void *copied = __ESBMC_alloca(size);
+
+  if (size == 8)
+    *(uint64_t *)copied = *(const uint64_t *)value;
+  else
+    memcpy(copied, value, size);
+
+  return copied;
+}
+
 bool __ESBMC_list_push(
   PyListObject *l,
   const void *value,
@@ -89,12 +101,13 @@ bool __ESBMC_list_push(
   size_t type_size)
 {
   // TODO: __ESBMC_obj_cpy
-  void *copied_value = __ESBMC_alloca(type_size);
-  memcpy(copied_value, value, type_size);
+  void *copied_value = __ESBMC_copy_value(value, type_size);
 
-  l->items[l->size].value = copied_value;
-  l->items[l->size].type_id = type_id;
-  l->items[l->size].size = type_size;
+  // Use a pointer to avoid repeated indexing
+  PyObject *item = &l->items[l->size];
+  item->value = copied_value;
+  item->type_id = type_id;
+  item->size = type_size;
   l->size++;
 
   // TODO: Nondeterministic failure?
@@ -196,6 +209,18 @@ bool __ESBMC_list_insert(
   return true;
 }
 
+static inline bool
+__ESBMC_values_equal(const void *a, const void *b, size_t size)
+{
+  if (a == b)
+    return true;
+
+  if (size == 8)
+    return *(const uint64_t *)a == *(const uint64_t *)b;
+  else
+    return memcmp(a, b, size) == 0;
+}
+
 bool __ESBMC_list_contains(
   const PyListObject *l,
   const void *item,
@@ -215,7 +240,7 @@ bool __ESBMC_list_contains(
     {
       // Compare the actual data
       // TODO: Not sure if this works for recursive types
-      if (elem->value == item || memcmp(elem->value, item, item_size) == 0)
+      if (__ESBMC_values_equal(elem->value, item, item_size))
         return true;
     }
 
@@ -272,7 +297,7 @@ size_t __ESBMC_list_find_index(
 
     if (elem->type_id == item_type_id && elem->size == item_size)
     {
-      if (elem->value == item || memcmp(elem->value, item, item_size) == 0)
+      if (__ESBMC_values_equal(elem->value, item, item_size))
         return i;
     }
 

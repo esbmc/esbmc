@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--unwindsetname multi_loop:0:6,multi_loop:1:4 --z3
+^VERIFICATION SUCCESSFUL$

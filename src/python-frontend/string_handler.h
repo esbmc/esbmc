@@ -253,6 +253,14 @@ public:
   exprt handle_string_lstrip(const exprt &str_expr, const locationt &location);
 
   /**
+   * @brief Handle str.strip() method
+   * @param str_expr String expression
+   * @param location Source location
+   * @return Pointer to stripped string
+   */
+  exprt handle_string_strip(const exprt &str_expr, const locationt &location);
+
+  /**
    * @brief Handle 'in' operator for strings
    * @param lhs Substring to find
    * @param rhs String to search in
@@ -280,6 +288,19 @@ public:
    * @return Pointer to lowercase string
    */
   exprt handle_string_lower(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.find() method
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param location Source location
+   * @return returns the index of the first occurrence of the substring.
+   * If not found, it returns -1.
+   */
+  exprt handle_string_find(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
 
   // Utility methods
 

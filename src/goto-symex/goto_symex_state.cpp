@@ -192,6 +192,55 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
         return true;
     }
 
+    // Handle WITH chains for unions where all updates are constants
+    if (is_union_type(expr->type))
+    {
+      // For unions, we can only safely propagate if all updates in the chain
+      // are to the SAME field and are all constants.
+      // If different fields are updated, we must not propagate because
+      // union members alias each other in memory: writing to one field
+      // affects what you read from another field.
+
+      bool all_constant_updates = true;
+      bool all_same_field = true;
+      std::string first_field;
+      expr2tc current = expr;
+
+      while (is_with2t(current))
+      {
+        const with2t &w = to_with2t(current);
+
+        if (!is_constant_expr(w.update_value))
+        {
+          all_constant_updates = false;
+          break;
+        }
+
+        if (is_constant_string2t(w.update_field))
+        {
+          std::string field_name =
+            to_constant_string2t(w.update_field).value.as_string();
+
+          if (first_field.empty())
+            first_field = field_name;
+          else if (field_name != first_field)
+          {
+            // Different field accessed: cannot constant propagate
+            all_same_field = false;
+            break;
+          }
+        }
+
+        current = w.source_value;
+      }
+
+      // Only allow propagation if all updates are constants and to the same field
+      if (all_constant_updates && all_same_field)
+        return true;
+
+      return false;
+    }
+
     return false;
   }
 

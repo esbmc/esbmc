@@ -6,6 +6,7 @@
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
+#include <util/usr_utils.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>
@@ -60,6 +61,59 @@ goto_symext::goto_symext(
     idx = next;
   }
 
+  // Parse --unwindsetname option (name:loop_index:bound,...)
+  const std::string &func_set = options.get_option("unwindsetname");
+  if (!func_set.empty())
+  {
+    std::string::size_type start = 0;
+    while (start < func_set.length())
+    {
+      std::string::size_type comma = func_set.find(",", start);
+      std::string val = func_set.substr(
+        start, comma == std::string::npos ? std::string::npos : comma - start);
+
+      // Parse name:index:bound format
+      std::string::size_type first_colon = val.find(":");
+      std::string::size_type second_colon = first_colon != std::string::npos
+                                              ? val.find(":", first_colon + 1)
+                                              : std::string::npos;
+
+      if (first_colon != std::string::npos && second_colon != std::string::npos)
+      {
+        std::string user_name = val.substr(0, first_colon);
+        unsigned loop_index = atoi(
+          val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
+        BigInt bound(val.substr(second_colon + 1).c_str());
+
+        // Convert user syntax to internal USR format with trailing #
+        std::string usr_name = user_name_to_usr(user_name);
+
+        // Only add valid entries (must have function name)
+        if (!usr_name.empty())
+          unwind_func_set[std::make_pair(usr_name, loop_index)] = bound;
+      }
+
+      if (comma == std::string::npos)
+        break;
+      start = comma + 1;
+    }
+  }
+
+  // Build mapping: global_loop_id -> (function_name, per-function loop index)
+  for (const auto &func_pair : _goto_functions.function_map)
+  {
+    unsigned loop_index = 0;
+    for (const auto &instruction : func_pair.second.body.instructions)
+    {
+      if (instruction.is_backwards_goto())
+      {
+        loop_id_to_func_index[instruction.loop_number] =
+          std::make_pair(func_pair.first.as_string(), loop_index);
+        loop_index++;
+      }
+    }
+  }
+
   art1 = nullptr;
 
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
@@ -87,6 +141,8 @@ goto_symext::goto_symext(const goto_symext &sym)
 goto_symext &goto_symext::operator=(const goto_symext &sym)
 {
   unwind_set = sym.unwind_set;
+  unwind_func_set = sym.unwind_func_set;
+  loop_id_to_func_index = sym.loop_id_to_func_index;
   max_unwind = sym.max_unwind;
   constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;

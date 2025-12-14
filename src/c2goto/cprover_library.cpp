@@ -55,11 +55,19 @@ static const struct buffer
 #ifdef ESBMC_BUNDLE_LIBC
   {
     {
+#  ifdef ESBMC_BUNDLE_LIBC_32BIT
       {&clib32_buf[0], clib32_buf_size},
+#  else
+      {NULL, 0},
+#  endif
       {&clib64_buf[0], clib64_buf_size},
     },
     {
+#  ifdef ESBMC_BUNDLE_LIBC_32BIT
       {&clib32_fp_buf[0], clib32_fp_buf_size},
+#  else
+      {NULL, 0},
+#  endif
       {&clib64_fp_buf[0], clib64_fp_buf_size},
     },
   },
@@ -158,10 +166,12 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_isspace",
   "isspace",
   "__python_str_lstrip",
+  "__python_str_strip",
   "__python_char_islower",
   "__python_str_islower",
   "__python_char_lower",
   "__python_str_lower",
+  "__python_str_find",
   "__ESBMC_create_inf_obj",
   "__python_int",
   "__python_chr",
@@ -273,6 +283,11 @@ void add_cprover_library(contextt &context, const languaget *language)
       "this version of ESBMC does not have a C library for 16 bit machines");
     return;
   case 32:
+#ifndef ESBMC_BUNDLE_LIBC_32BIT
+    log_warning(
+      "this version of ESBMC does not have a C library for 32 bit machines");
+    return;
+#endif
   case 64:
     break;
   default:

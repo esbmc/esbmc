@@ -469,10 +469,12 @@ expr2tc goto_symext::symex_mem_inf(
   expr2tc sym = symbol2tc(new_type, symbol.id);
   expr2tc idx_val = gen_long(size_type2(), 0L);
   expr2tc idx = index2tc(subtype, sym, idx_val);
+  do_simplify(idx);
   rhs_type = migrate_type(symbol.type.subtype());
   rhs_ptr_obj = idx;
 
   expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
   guardt alloc_guard = cur_state->guard;
@@ -577,11 +579,13 @@ expr2tc goto_symext::symex_mem(
     expr2tc sym = symbol2tc(new_type, symbol.id);
     expr2tc idx_val = gen_long(size->type, 0L);
     expr2tc idx = index2tc(subtype, sym, idx_val);
+    do_simplify(idx);
     rhs_type = migrate_type(symbol.type.subtype());
     rhs_ptr_obj = idx;
   }
 
   expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
 
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
@@ -641,6 +645,10 @@ void goto_symext::track_new_pointer(
   const guardt &guard,
   const expr2tc &size)
 {
+  // Simplify ptr_obj before using it in any expressions
+  expr2tc simplified_ptr_obj = ptr_obj;
+  do_simplify(simplified_ptr_obj);
+
   // Also update all the accounting data.
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
@@ -2900,6 +2908,44 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       expr = gen_true_expr();
     else
       expr = gen_false_expr();
+  }
+  else if (is_hasattr2t(expr))
+  {
+    const hasattr2t &obj = to_hasattr2t(expr);
+    expr2tc value = obj.side_1;
+    expr2tc attr = obj.side_2;
+
+    // Only simplify when the attribute name is a constant string.
+    if (!is_constant_string2t(attr))
+      return;
+
+    const auto &attr_const = to_constant_string2t(attr);
+    std::string attr_name = attr_const.value.as_string();
+
+    cur_state->rename(value);
+    while (is_typecast2t(value))
+      value = to_typecast2t(value).from;
+    if (is_address_of2t(value))
+      value = to_address_of2t(value).ptr_obj;
+
+    type2tc obj_type = value->type;
+    if (is_pointer_type(obj_type))
+      obj_type = to_pointer_type(obj_type).subtype;
+
+    if (is_struct_type(obj_type))
+    {
+      const struct_type2t &st = to_struct_type(obj_type);
+      const auto &members = st.get_structure_member_names();
+      const bool has_member =
+        std::any_of(members.begin(), members.end(), [&](const irep_idt &memb) {
+          return memb.as_string() == attr_name;
+        });
+      expr = has_member ? gen_true_expr() : gen_false_expr();
+    }
+    else
+      expr = gen_false_expr();
+
+    return;
   }
   else if (is_isnone2t(expr))
   {

@@ -343,11 +343,27 @@ exprt function_call_expr::handle_isinstance() const
 exprt function_call_expr::handle_hasattr() const
 {
   const auto &args = call_["args"];
-  symbol_id sid = converter_.create_symbol_id();
-  sid.set_object(args[0]["id"]);
-  bool has_attr = converter_.is_instance_attribute(
-    sid.to_string(), args[1]["value"], sid.get_object(), "");
-  return gen_boolean(has_attr);
+  if (args.size() != 2)
+    throw std::runtime_error("hasattr() takes exactly 2 arguments");
+
+  const exprt &obj_expr = converter_.get_expr(args[0]);
+  const auto &attr_arg = args[1];
+
+  if (
+    attr_arg["_type"] != "Constant" || !attr_arg.contains("value") ||
+    !attr_arg["value"].is_string())
+    throw std::runtime_error(
+      "hasattr() expects attribute name as string literal");
+
+  std::string attr_name = attr_arg["value"].get<std::string>();
+  typet attr_type = array_typet(
+    unsigned_char_type(), from_integer(attr_name.size() + 1, size_type()));
+  string_constantt attr_expr(attr_name, attr_type, string_constantt::k_default);
+
+  exprt hasattr("hasattr", typet("bool"));
+  hasattr.copy_to_operands(obj_expr);
+  hasattr.move_to_operands(attr_expr);
+  return hasattr;
 }
 
 exprt function_call_expr::handle_divmod() const
@@ -2365,6 +2381,47 @@ exprt function_call_expr::handle_general_function_call()
     {
       const typet &param_type = params[param_idx].type();
 
+      // Handle character-to-string-pointer conversion
+      if (
+        param_type.is_pointer() && param_type.subtype() == char_type() &&
+        (arg.type().is_signedbv() || arg.type().is_unsignedbv()) &&
+        arg.type() == char_type())
+      {
+        // Create a single-element array to hold the character
+        typet char_array_type =
+          array_typet(char_type(), from_integer(2, size_type()));
+
+        // Create a temporary variable to hold the array
+        symbolt &temp_symbol = converter_.create_tmp_symbol(
+          call_,
+          "$char_to_str$",
+          char_array_type,
+          exprt()); // No initial value here
+
+        // Declare the temporary in the current block
+        code_declt temp_decl(symbol_expr(temp_symbol));
+        temp_decl.location() = location;
+        converter_.current_block->copy_to_operands(temp_decl);
+
+        // Assign the character to the first element
+        exprt temp_array = symbol_expr(temp_symbol);
+        exprt first_element =
+          index_exprt(temp_array, from_integer(0, size_type()));
+        code_assignt assign_char(first_element, arg);
+        assign_char.location() = location;
+        converter_.current_block->copy_to_operands(assign_char);
+
+        // Assign null terminator to the second element
+        exprt second_element =
+          index_exprt(temp_array, from_integer(1, size_type()));
+        code_assignt assign_null(second_element, from_integer(0, char_type()));
+        assign_null.location() = location;
+        converter_.current_block->copy_to_operands(assign_null);
+
+        // Take address of the temporary variable
+        arg = address_of_exprt(symbol_expr(temp_symbol));
+      }
+
       // Check if parameter is an Optional type
       if (param_type.is_struct())
       {
@@ -2536,37 +2593,113 @@ exprt function_call_expr::handle_general_function_call()
     }
   }
 
-  // First, check if all required (non-default) parameters are provided
-  if (!skip_validation)
+  // Check which parameters are already provided (by position or keyword)
+  // and fill missing parameters with default values
+  std::vector<bool> provided_params(total_params, false);
+
+  // Mark positional arguments as provided
+  for (size_t i = 0; i < num_actual_args && (i + param_offset) < total_params;
+       ++i)
   {
-    for (size_t param_idx = param_offset; param_idx < total_params; ++param_idx)
+    provided_params[i + param_offset] = true;
+  }
+
+  // Mark keyword arguments as provided
+  if (call_.contains("keywords") && call_["keywords"].is_array())
+  {
+    for (const auto &kw : call_["keywords"])
     {
-      const auto &param_info = params[param_idx];
-      size_t arg_position = param_idx - param_offset;
-
-      // Check if this parameter was provided (either positionally or by keyword)
-      bool provided = arg_position < num_actual_args;
-
-      // Check if provided as keyword argument
-      if (
-        !provided && call_.contains("keywords") && call_["keywords"].is_array())
+      if (kw.contains("arg") && !kw["arg"].is_null())
       {
-        std::string param_name = param_info.get_base_name().as_string();
-        for (const auto &kw : call_["keywords"])
+        std::string kw_name = kw["arg"].get<std::string>();
+        for (size_t i = 0; i < params.size(); ++i)
         {
-          if (
-            kw.contains("arg") && !kw["arg"].is_null() &&
-            kw["arg"].get<std::string>() == param_name)
+          if (params[i].get_base_name().as_string() == kw_name)
           {
-            provided = true;
+            provided_params[i] = true;
             break;
           }
         }
       }
+    }
+  }
 
-      // If not provided and has no default, it's an error
-      if (!provided && !param_info.has_default_value())
+  // Validate required parameters and fill missing parameters with default values
+  for (size_t param_idx = param_offset; param_idx < total_params; ++param_idx)
+  {
+    if (!provided_params[param_idx])
+    {
+      const auto &param_info = params[param_idx];
+
+      // Check if parameter has a default value
+      if (param_info.has_default_value())
       {
+        exprt default_val = param_info.default_value();
+
+        // Handle string default values: ensure they are properly initialized
+        // Check if default value is a string array type
+        if (
+          default_val.type().is_array() &&
+          default_val.type().subtype() == char_type())
+        {
+          // For constant string arrays, convert to string_constantt to ensure
+          // proper initialization
+          if (default_val.is_constant() || default_val.id() == "constant")
+          {
+            // Use existing string extraction utility
+            std::string str_content =
+              converter_.get_string_handler()
+                .extract_string_from_array_operands(default_val);
+
+            // Create string_constantt with proper type
+            if (!str_content.empty() || default_val.operands().empty())
+            {
+              typet string_type = default_val.type();
+              default_val = string_constantt(
+                str_content, string_type, string_constantt::k_default);
+            }
+          }
+        }
+
+        // Handle Optional types: wrap default in Optional if needed
+        if (param_info.type().is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(param_info.type());
+          std::string tag = struct_type.tag().as_string();
+
+          if (tag.starts_with("tag-Optional_"))
+            default_val =
+              converter_.wrap_in_optional(default_val, param_info.type());
+        }
+
+        // Convert array to pointer if parameter type is pointer
+        // This matches the behavior for positional arguments (line 2470-2480)
+        const typet &param_type = param_info.type();
+        if (default_val.type().is_array() && param_type.is_pointer())
+        {
+          // For string constants, use address_of
+          if (default_val.id() == "string-constant")
+          {
+            default_val = address_of_exprt(default_val);
+          }
+          else
+          {
+            // For regular arrays, get base address
+            default_val =
+              converter_.get_string_handler().get_array_base_address(
+                default_val);
+          }
+        }
+
+        // Ensure arguments vector is large enough
+        if (call.arguments().size() <= param_idx)
+          call.arguments().resize(param_idx + 1);
+
+        call.arguments()[param_idx] = default_val;
+      }
+      else if (!skip_validation)
+      {
+        // Parameter is missing and has no default value - this is an error
         std::string param_name = param_info.get_base_name().as_string();
         std::string func_name = function_id_.get_function();
 
@@ -2580,43 +2713,6 @@ exprt function_call_expr::handle_general_function_call()
         exception.location().user_provided(true);
 
         return exception;
-      }
-    }
-  }
-
-  // Add default arguments for missing optional parameters
-  // BUT: only do this if there are no keywords in the call.
-  // When keywords are present, handle_keywords() will properly fill in
-  // missing arguments with correct Optional wrapping.
-  bool has_keywords = call_.contains("keywords") &&
-                      call_["keywords"].is_array() &&
-                      !call_["keywords"].empty();
-
-  if (!has_keywords)
-  {
-    for (size_t param_idx = num_provided_args + param_offset;
-         param_idx < total_params;
-         ++param_idx)
-    {
-      const auto &param_info = params[param_idx];
-
-      // Check if parameter has a default value
-      if (param_info.has_default_value())
-      {
-        exprt default_val = param_info.default_value();
-
-        // Handle Optional types: wrap default in Optional if needed
-        if (param_info.type().is_struct())
-        {
-          const struct_typet &struct_type = to_struct_type(param_info.type());
-          std::string tag = struct_type.tag().as_string();
-
-          if (tag.starts_with("tag-Optional_"))
-            default_val =
-              converter_.wrap_in_optional(default_val, param_info.type());
-        }
-
-        call.arguments().push_back(default_val);
       }
     }
   }

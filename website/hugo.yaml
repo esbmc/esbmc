@@ -1,0 +1,69 @@
+# Hugo configuration file
+title: ESBMC
+
+# import hextra as module
+module:
+  imports:
+  - path: github.com/imfing/hextra
+
+markup:
+  # allow raw html
+  goldmark:
+    renderer:
+      unsafe: true
+
+  # # enable hextra syntax highlight
+  # highlight:
+  #   noClasses: false
+
+menu:
+  main:
+    - name: Docs
+      pageRef: /docs
+      weight: 1
+    - name: News
+      pageRef: /news
+      weight: 2
+    - name: About
+      pageRef: /about
+      weight: 3
+    - name: Contact ↗
+      url: "https://github.com/Yiannis128"
+      weight: 4
+    - name: Search
+      weight: 5
+      params:
+        type: search
+    - name: GitHub
+      weight: 6
+      url: "https://github.com/esbmc/esbmc"
+      params:
+        icon: github
+    - name: Discussions
+      weight: 7
+      url: "https://github.com/esbmc/esbmc/discussions"
+      params:
+        icon: chat
+
+params:
+  navbar:
+    displayTitle: false
+    displayLogo: true
+    logo:
+      path: images/logo-esbmc.png
+      dark: images/logo-esbmc.png
+      link: /
+      width: 120
+      height: 20
+
+  footer:
+    displayCopyright: true
+    displayPoweredBy: false
+
+  editURL:
+    enable: true
+    base: "https://github.com/esbmc/esbmc/edit/master/website"
+
+  blog:
+    list:
+      displayTags: true

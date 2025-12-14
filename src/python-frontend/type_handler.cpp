@@ -117,14 +117,65 @@ std::string type_handler::get_var_type(const std::string &var_name) const
     return std::string();
 
   const auto &annotation = ref["annotation"];
+
+  // Handle simple type annotations: int, str, list, etc.
   if (annotation.is_object() && annotation.contains("id"))
     return annotation["id"].get<std::string>();
 
+  // Handle subscripted types: List[str], Optional[int], etc.
   if (
     annotation.is_object() && annotation.contains("_type") &&
     annotation["_type"] == "Subscript" && annotation.contains("value") &&
     annotation["value"].is_object() && annotation["value"].contains("id"))
     return annotation["value"]["id"];
+
+  // Handle Union types (e.g., list[str] | None, str | int)
+  // Union is represented as BinOp with BitOr operator
+  if (
+    annotation.is_object() && annotation.contains("_type") &&
+    annotation["_type"] == "BinOp" && annotation.contains("op") &&
+    annotation["op"]["_type"] == "BitOr")
+  {
+    // For Union types, extract the non-None type
+    // Check left side first
+    if (annotation.contains("left"))
+    {
+      const auto &left = annotation["left"];
+
+      // Skip None type on the left
+      if (!(left.contains("_type") && left["_type"] == "Constant" &&
+            left.contains("value") && left["value"].is_null()))
+      {
+        // Recursively extract type from left side
+        if (left.contains("id"))
+          return left["id"].get<std::string>();
+
+        // Handle subscripted types on left: list[str] | None
+        if (
+          left["_type"] == "Subscript" && left.contains("value") &&
+          left["value"].contains("id"))
+          return left["value"]["id"].get<std::string>();
+      }
+    }
+
+    // If left was None, check right side
+    if (annotation.contains("right"))
+    {
+      const auto &right = annotation["right"];
+
+      if (!(right.contains("_type") && right["_type"] == "Constant" &&
+            right.contains("value") && right["value"].is_null()))
+      {
+        if (right.contains("id"))
+          return right["id"].get<std::string>();
+
+        if (
+          right["_type"] == "Subscript" && right.contains("value") &&
+          right["value"].contains("id"))
+          return right["value"]["id"].get<std::string>();
+      }
+    }
+  }
 
   return std::string();
 }
@@ -301,6 +352,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     }
     return build_array(char_type(), type_size); // Array of characters
   }
+
+  // all(): Return True if all elements are truthy (returns bool)
+  if (ast_type == "all")
+    return bool_type();
+
+  // any(): Return True if any element is truthy (returns bool)
+  if (ast_type == "any")
+    return bool_type();
 
   // tuple — handle tuple type annotations
   // For generic "tuple" without element types, return empty type
