@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-simplify --multi-property
+^Properties: 15 verified \✓ 6 passed, \✗ 9 failed$
