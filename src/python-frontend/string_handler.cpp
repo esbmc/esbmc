@@ -1,4 +1,5 @@
 #include <python-frontend/char_utils.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string_builder.h>
@@ -1445,4 +1446,196 @@ exprt string_handler::handle_chr_conversion(
   chr_call.type() = pointer_typet(char_type());
 
   return chr_call;
+}
+
+exprt string_handler::handle_str_join(const nlohmann::json &call_json)
+{
+  // Validate JSON structure: ensure we have the required keys
+  if (!call_json.contains("args") || call_json["args"].empty())
+    throw std::runtime_error("join() missing required argument: 'iterable'");
+
+  if (!call_json.contains("func"))
+    throw std::runtime_error("invalid join() call");
+
+  const auto &func = call_json["func"];
+
+  // Verify this is an Attribute call (method call syntax: obj.method())
+  // and has the value (the separator object)
+  if (
+    !func.contains("_type") || func["_type"] != "Attribute" ||
+    !func.contains("value"))
+    throw std::runtime_error("invalid join() call");
+
+  // Extract separator: for " ".join(l), func["value"] is the Constant " "
+  exprt separator = converter_.get_expr(func["value"]);
+  ensure_string_array(separator);
+
+  // Get the list argument (the iterable to join)
+  const nlohmann::json &list_arg = call_json["args"][0];
+
+  // Currently only support Name references (e.g., variable names)
+  // TODO: Support direct List literals such as " ".join(["a", "b"])
+  if (
+    list_arg.contains("_type") && list_arg["_type"] == "Name" &&
+    list_arg.contains("id"))
+  {
+    std::string var_name = list_arg["id"].get<std::string>();
+
+    // Look up the variable in the AST to get its initialization value
+    nlohmann::json var_decl = json_utils::find_var_decl(
+      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
+
+    if (var_decl.empty())
+      throw std::runtime_error(
+        "NameError: name '" + var_name + "' is not defined");
+
+    // Ensure the variable is a list with elements array
+    if (!var_decl.contains("value"))
+      throw std::runtime_error("join() requires a list");
+
+    const nlohmann::json &list_value = var_decl["value"];
+
+    if (
+      !list_value.contains("_type") || list_value["_type"] != "List" ||
+      !list_value.contains("elts"))
+      throw std::runtime_error("join() requires a list");
+
+    // Get the list elements from the AST
+    const auto &elements = list_value["elts"];
+
+    // Edge case: empty list returns empty string
+    if (elements.empty())
+    {
+      // Create a proper null-terminated empty string
+      typet empty_string_type = type_handler_.build_array(char_type(), 1);
+      exprt empty_str = gen_zero(empty_string_type);
+      // Explicitly set the first (and only) element to null terminator
+      empty_str.operands().at(0) = from_integer(0, char_type());
+      return empty_str;
+    }
+
+    // Convert JSON elements to ESBMC expressions
+    std::vector<exprt> elem_exprs;
+    for (const auto &elem : elements)
+    {
+      exprt elem_expr = converter_.get_expr(elem);
+      ensure_string_array(elem_expr);
+      elem_exprs.push_back(elem_expr);
+    }
+
+    // Edge case: single element returns the element itself (no separator)
+    if (elem_exprs.size() == 1)
+      return elem_exprs[0];
+
+    // Main algorithm: Build the joined string by extracting characters
+    // from all elements and separators, then constructing a single string.
+    // This avoids multiple concatenation operations which could cause
+    // null terminator issues.
+    std::vector<exprt> all_chars;
+
+    // Start with the first element
+    std::vector<exprt> first_chars =
+      string_builder_->extract_string_chars(elem_exprs[0]);
+    all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
+
+    // For each remaining element: add separator, then add element
+    for (size_t i = 1; i < elem_exprs.size(); ++i)
+    {
+      // Insert separator characters
+      std::vector<exprt> sep_chars =
+        string_builder_->extract_string_chars(separator);
+      all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+
+      // Insert element characters
+      std::vector<exprt> elem_chars =
+        string_builder_->extract_string_chars(elem_exprs[i]);
+      all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
+    }
+
+    // Build final null-terminated string from all collected characters
+    return string_builder_->build_null_terminated_string(all_chars);
+  }
+
+  throw std::runtime_error("join() argument must be a list of strings");
+}
+
+exprt string_handler::create_char_comparison_expr(
+  const std::string &op,
+  const exprt &lhs_char_value,
+  const exprt &rhs_char_value,
+  const exprt &lhs_source,
+  const exprt &rhs_source) const
+{
+  // Create comparison expression with integer operands
+  exprt comp_expr(converter_.get_op(op, bool_type()), bool_type());
+  comp_expr.copy_to_operands(lhs_char_value, rhs_char_value);
+
+  // Preserve location from original operands
+  if (!lhs_source.location().is_nil())
+    comp_expr.location() = lhs_source.location();
+  else if (!rhs_source.location().is_nil())
+    comp_expr.location() = rhs_source.location();
+
+  return comp_expr;
+}
+
+exprt string_handler::handle_single_char_comparison(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs)
+{
+  // Dereference pointer to character if needed
+  auto maybe_dereference = [](const exprt &expr) -> exprt {
+    if (
+      expr.type().is_pointer() && (expr.type().subtype().is_signedbv() ||
+                                   expr.type().subtype().is_unsignedbv()))
+    {
+      exprt deref("dereference", expr.type().subtype());
+      deref.copy_to_operands(expr);
+      return deref;
+    }
+    return expr;
+  };
+
+  // Create comparison expression with location info
+  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt {
+    exprt comp_expr(converter_.get_op(op, bool_type()), bool_type());
+    comp_expr.copy_to_operands(left, right);
+
+    if (!lhs.location().is_nil())
+      comp_expr.location() = lhs.location();
+    else if (!rhs.location().is_nil())
+      comp_expr.location() = rhs.location();
+
+    return comp_expr;
+  };
+
+  exprt lhs_to_check = maybe_dereference(lhs);
+  exprt rhs_to_check = maybe_dereference(rhs);
+
+  // Try to get character values from the (potentially dereferenced) expressions
+  exprt lhs_char_value =
+    python_char_utils::get_char_value_as_int(lhs_to_check, false);
+  exprt rhs_char_value =
+    python_char_utils::get_char_value_as_int(rhs_to_check, false);
+
+  // If both are valid character values, do the comparison
+  if (!lhs_char_value.is_nil() && !rhs_char_value.is_nil())
+    return create_char_comparison_expr(
+      op, lhs_char_value, rhs_char_value, lhs, rhs);
+
+  // Handle mixed cases: dereferenced pointer with valid character value
+  if (lhs_to_check.id() == "dereference" && !rhs_char_value.is_nil())
+  {
+    exprt lhs_as_int = typecast_exprt(lhs_to_check, rhs_char_value.type());
+    return create_comparison(lhs_as_int, rhs_char_value);
+  }
+
+  if (!lhs_char_value.is_nil() && rhs_to_check.id() == "dereference")
+  {
+    exprt rhs_as_int = typecast_exprt(rhs_to_check, lhs_char_value.type());
+    return create_comparison(lhs_char_value, rhs_as_int);
+  }
+
+  return nil_exprt();
 }
