@@ -14,8 +14,16 @@ jobs:
   benchexec-diff:
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install benchexec (for table-generator)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --user benchexec
+          echo "$(python -m site --user-base)/bin" >> "$GITHUB_PATH"
       - uses: actions/checkout@v4
-
       - name: Extract run IDs from URLs
         id: parse
         run: |
@@ -25,7 +33,6 @@ jobs:
           new_id=${new#*/runs/}; new_id=${new_id%%/*}
           echo "old_id=$old_id" >> "$GITHUB_OUTPUT"
           echo "new_id=$new_id" >> "$GITHUB_OUTPUT"
-
       - name: Download old artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -34,7 +41,6 @@ jobs:
             --repo esbmc/esbmc \
             --name esbmc-result \
             --dir old-artifact
-
       - name: Download new artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -43,23 +49,10 @@ jobs:
             --repo esbmc/esbmc \
             --name esbmc-result \
             --dir new-artifact
-
       - name: Extract artifacts
         run: |
           unzip old-artifact/output.zip -d old-extracted || true
           unzip new-artifact/output.zip -d new-extracted || true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install benchexec (for table-generator)
-        run: |
-          python -m pip install --upgrade pip
-          pip install --user 'benchexec[systemd]' coloredlogs
-          echo "$(python -m site --user-base)/bin" >> "$GITHUB_PATH"
-
       - name: Run diff
         run: ./scripts/competitions/compare-runs.sh old-extracted new-extracted
 
