@@ -6,6 +6,8 @@ if [ $# -ne 2 ]; then
     exit 1
 fi
 
+echo "Generating diff between runs"
+
 shopt -s failglob
 
 old=$1
