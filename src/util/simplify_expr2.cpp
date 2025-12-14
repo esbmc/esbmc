@@ -3037,6 +3037,33 @@ expr2tc equality2t::do_simplify() const
       return equality2tc(add1.side_1, add2.side_1);
   }
 
+  // (d - c) == (d - e) -> c == e (cancel common minuend)
+  if (is_sub2t(side_1) && is_sub2t(side_2))
+  {
+    const sub2t &sub1 = to_sub2t(side_1);
+    const sub2t &sub2 = to_sub2t(side_2);
+
+    // (d - c) == (d - e) -> c == e
+    if (sub1.side_1 == sub2.side_1)
+      return equality2tc(sub1.side_2, sub2.side_2);
+  }
+
+  // (-x) == (-y) -> x == y
+  if (is_neg2t(side_1) && is_neg2t(side_2))
+  {
+    const neg2t &neg1 = to_neg2t(side_1);
+    const neg2t &neg2 = to_neg2t(side_2);
+    return equality2tc(neg1.value, neg2.value);
+  }
+
+  // (~x) == (~y) -> x == y
+  if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
+  {
+    const bitnot2t &not1 = to_bitnot2t(side_1);
+    const bitnot2t &not2 = to_bitnot2t(side_2);
+    return equality2tc(not1.value, not2.value);
+  }
+
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
 
