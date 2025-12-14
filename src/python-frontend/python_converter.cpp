@@ -3865,6 +3865,25 @@ void python_converter::get_var_assign(
     sid.set_object(name);
     annotated_name = name;
 
+    // Check if this is a forward declaration with union type and no value
+    // e.g., dt: str | datetime (without assignment)
+    // These should be skipped; wait for the actual assignment
+    bool is_union_type = false;
+    if (
+      ast_node.contains("annotation") && !ast_node["annotation"].is_null() &&
+      ast_node["annotation"].contains("_type") &&
+      ast_node["annotation"]["_type"] == "BinOp")
+    {
+      is_union_type = true;
+    }
+
+    if (is_union_type && ast_node["value"].is_null())
+    {
+      // Skip this forward declaration; wait for the actual assignment
+      // that will give us the type information
+      return;
+    }
+
     // Infer type from function return if annotation is "Any"
     lhs_type = infer_type_from_any_annotation(ast_node, lhs_type);
 
