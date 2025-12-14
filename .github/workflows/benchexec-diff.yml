@@ -54,7 +54,7 @@ jobs:
           unzip old-artifact/output.zip -d old-extracted || true
           unzip new-artifact/output.zip -d new-extracted || true
       - name: Run diff
-        run: ./scripts/competitions/compare-runs.sh old-extracted/esbmc-outputo new-extracted/esbmc-output
+        run: ./scripts/competitions/compare-runs.sh old-extracted/esbmc-output new-extracted/esbmc-output
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
