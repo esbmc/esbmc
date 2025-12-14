@@ -1,0 +1,30 @@
+name: Generate benchexec diff
+on:
+  workflow_dispatch:
+    inputs:
+      original_id:
+        description: 'Timeout for each benchmarks (in seconds)'
+        required: true
+        default: '30'
+      new_id:
+        description: 'Command-line flags to pass via ESBMC_OPTS'
+        required: false
+        default: ''
+
+jobs:
+  create-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: ${{ inputs.original_id }}
+      - name: Display results
+        run: ls -R
+
+
+
+
+
+
+
+  
