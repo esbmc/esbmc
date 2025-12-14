@@ -47,7 +47,7 @@ jobs:
       - name: Extract artifacts and run comparison
         run: |
           # Adjust globbing if the directory names differ
-          unzip old-artifact/*/output.zip -d old-extracted
-          unzip new-artifact/*/output.zip -d new-extracted
+          unzip old-artifact/output.zip -d old-extracted
+          unzip new-artifact/output.zip -d new-extracted
           ./scripts/competitions/compare-runs.sh old-extracted new-extracted
 
