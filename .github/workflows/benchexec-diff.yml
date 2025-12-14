@@ -46,7 +46,6 @@ jobs:
 
       - name: Extract artifacts
         run: |
-          # Adjust globbing if the directory names differ
           unzip old-artifact/output.zip -d old-extracted
           unzip new-artifact/output.zip -d new-extracted
 
@@ -62,5 +61,5 @@ jobs:
           echo "$(python -m site --user-base)/bin" >> "$GITHUB_PATH"
 
       - name: Run diff
-          ./scripts/competitions/compare-runs.sh old-extracted new-extracted
+        run: ./scripts/competitions/compare-runs.sh old-extracted new-extracted
 
