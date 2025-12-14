@@ -17,6 +17,6 @@ jobs:
     steps:
       - uses: actions/download-artifact@v5
         with:
-          artifact_ids: ${{ inputs.original_id }}
+          artifact-ids: ${{ inputs.original_id }}
       - name: Display results
         run: ls -R
