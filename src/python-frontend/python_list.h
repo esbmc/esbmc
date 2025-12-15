@@ -96,6 +96,13 @@ public:
   static typet
   get_list_element_type(const std::string &list_id, size_t index = 0);
 
+  /**
+   * @brief Convert generator expressions and list comprehensions to lists
+   * @param element The GeneratorExp or ListComp AST node
+   * @return Expression representing the materialized list
+   */
+  exprt handle_comprehension(const nlohmann::json &element);
+
 private:
   friend class python_dict_handler;
 
