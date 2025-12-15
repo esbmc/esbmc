@@ -261,7 +261,7 @@ fi
 OS=`uname`
 
 # Create build directory
-mkdir build && cd build || exit $?
+mkdir -p build && cd build || exit $?
 
 case $OS in
   'Linux')
