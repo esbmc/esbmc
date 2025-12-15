@@ -311,6 +311,12 @@ private:
   bool
   has_unsupported_side_effects_internal(const exprt &lhs, const exprt &rhs);
 
+  /**
+   * Check if an expression contains any side effects (nondet, function calls, etc.)
+   * Recursively examines the entire expression tree.
+   */
+  bool contains_side_effects(const exprt &expr) const;
+
   TypeFlags infer_types_from_returns(const nlohmann::json &function_body);
 
   void process_function_arguments(

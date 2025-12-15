@@ -12,7 +12,8 @@ test_length_is_non_negative()
 def test_length_respects_upper_bound():
     s = nondet_str()
     # If max_str_length is N, usable chars are in [0, N-1)
-    assert len(s) < 16  # default max_len = 16 → max visible length = 15
+    # With --nondet-str-length 5 → max visible length = 4
+    assert len(s) < 5
 
 
 test_length_respects_upper_bound()

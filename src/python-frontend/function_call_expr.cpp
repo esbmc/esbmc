@@ -252,14 +252,23 @@ exprt function_call_expr::build_nondet_call() const
     typet char_array_type =
       array_typet(char_type(), from_integer(max_str_length, size_type()));
 
-    exprt nondet_array = exprt("sideeffect", char_array_type);
-    nondet_array.statement("nondet");
+    // Create a nondeterministic string by filling an array with independent nondet chars,
+    // with an explicit null terminator at the end.
+    // Each character position can be independently nondeterministic, which is essential
+    // for symbolic string handling - allowing the solver to explore different string
+    // content without geometric constraint.
+    exprt result = exprt("array", char_array_type);
 
-    exprt last_index = from_integer(max_str_length - 1, size_type());
-    exprt null_char = from_integer(0, char_type());
+    // Fill array positions 0 to max_str_length-2 with nondet char expressions
+    for (int i = 0; i < max_str_length - 1; ++i)
+    {
+      exprt nondet_char = exprt("sideeffect", char_type());
+      nondet_char.statement("nondet");
+      result.copy_to_operands(nondet_char);
+    }
 
-    with_exprt result(nondet_array, last_index, null_char);
-    result.type() = char_array_type;
+    // Explicitly set the last position to null terminator
+    result.copy_to_operands(gen_zero(char_type()));
 
     return result;
   }
@@ -1313,7 +1322,7 @@ std::string function_call_expr::get_object_name() const
   if (subelement["_type"] == "Attribute")
   {
     /* For attribute chains, use the class name resolved by build_function_id()
-     * 
+     *
      * When we have self.f.foo(), the function ID builder has already determined
      * that f's type is Foo and stored it in function_id_. We reuse that result
      * rather than re-extracting "f" which would be incorrect.

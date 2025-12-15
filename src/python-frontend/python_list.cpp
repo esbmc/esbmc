@@ -1249,6 +1249,17 @@ exprt python_list::list_repetition(
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(lhs).get_identifier().as_string());
       assert(size_var);
+
+      // If value is not cached (e.g., empty or not constant), we cannot statically determine size
+      if (size_var->value.is_nil() || !size_var->value.is_constant())
+      {
+        symbolt *list_symbol =
+          converter_.find_symbol(rhs.identifier().as_string());
+        assert(list_symbol);
+        list_elem = converter_.get_expr(right_node["elts"][0]);
+        return create_vla(list_value_, list_symbol, size_var, list_elem);
+      }
+
       list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
     }
     else if (lhs.is_constant())
@@ -1276,6 +1287,12 @@ exprt python_list::list_repetition(
       assert(list_symbol);
 
       if (size_var->value.is_code() || size_var->value.is_nil())
+      {
+        return create_vla(list_value_, list_symbol, size_var, list_elem);
+      }
+
+      // If value is not cached (e.g., empty or not constant), create a VLA
+      if (size_var->value.is_nil() || !size_var->value.is_constant())
       {
         return create_vla(list_value_, list_symbol, size_var, list_elem);
       }

@@ -519,18 +519,41 @@ std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
   exprt resolved_lhs = lhs;
   exprt resolved_rhs = rhs;
 
+  // Helper to check if a symbol's value contains side effects (nondet, function calls)
+  // If so, we should NOT resolve it to the cached value, as this would lose
+  // the symbolic semantics needed for proper verification.
+  auto value_contains_side_effects = [this](const symbolt *sym) -> bool
+  {
+    if (!sym || sym->value.is_nil())
+      return false;
+    return contains_side_effects(sym->value);
+  };
+
+  // Helper to check if the type is a string (char array)
+  // String comparisons should generally NOT be resolved to cached values
+  // because strings can be reassigned conditionally (e.g., if s == "": s = "foo")
+  // and we need to preserve the symbolic path semantics.
+  auto is_string_type = [](const typet &t) -> bool
+  { return t.is_array() && to_array_type(t).subtype() == char_type(); };
+
   // Only resolve constant arrays, not pointers
+  // But skip resolution for symbols whose values contain side effects
+  // Also skip resolution for string types to preserve symbolic path semantics
   if (lhs.is_symbol() && lhs.type().is_array())
   {
     const symbolt *sym = symbol_table_.find_symbol(lhs.identifier());
-    if (sym && sym->value.is_constant())
+    if (
+      sym && sym->value.is_constant() && !value_contains_side_effects(sym) &&
+      !is_string_type(lhs.type()))
       resolved_lhs = sym->value;
   }
 
   if (rhs.is_symbol() && rhs.type().is_array())
   {
     const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
-    if (sym && sym->value.is_constant())
+    if (
+      sym && sym->value.is_constant() && !value_contains_side_effects(sym) &&
+      !is_string_type(rhs.type()))
       resolved_rhs = sym->value;
   }
 
@@ -547,6 +570,26 @@ bool python_converter::has_unsupported_side_effects_internal(
   };
 
   return has_unsupported_side_effect(lhs) || has_unsupported_side_effect(rhs);
+}
+
+bool python_converter::contains_side_effects(const exprt &expr) const
+{
+  // Check if this expression is a side effect
+  if (expr.id() == "sideeffect")
+    return true;
+
+  // Check if this is a function call
+  if (expr.id() == "code" && expr.get("statement") == "function_call")
+    return true;
+
+  // Recursively check all operands
+  for (const auto &op : expr.operands())
+  {
+    if (contains_side_effects(op))
+      return true;
+  }
+
+  return false;
 }
 
 exprt python_converter::compare_constants_internal(
@@ -3223,7 +3266,9 @@ void python_converter::handle_assignment_type_adjustments(
       // Update symbol type from empty to concrete tuple type
       lhs_symbol->type = rhs.type();
       lhs.type() = rhs.type();
-      lhs_symbol->value = rhs;
+      // Avoid caching assignments with side effects
+      if (!contains_side_effects(rhs))
+        lhs_symbol->value = rhs;
     }
   }
   else if (lhs_symbol)
@@ -3269,8 +3314,33 @@ void python_converter::handle_assignment_type_adjustments(
     {
       if (!rhs.type().is_empty())
       {
-        lhs_symbol->type = rhs.type();
-        lhs.type() = rhs.type();
+        // For char arrays (strings), preserve the larger type to maintain
+        // symbolic semantics. This is critical for cases like:
+        //   foo = nondet_str()  # foo is char[5] with nondet content
+        //   if foo == "": foo = "foo"  # Don't shrink to char[4]
+        // If we shrink the type, the symbolic values are lost.
+        bool should_preserve_larger_type = false;
+        if (
+          lhs_symbol->type.is_array() && rhs.type().is_array() &&
+          to_array_type(lhs_symbol->type).subtype() == char_type() &&
+          to_array_type(rhs.type()).subtype() == char_type())
+        {
+          const exprt &lhs_size = to_array_type(lhs_symbol->type).size();
+          const exprt &rhs_size = to_array_type(rhs.type()).size();
+          if (lhs_size.is_constant() && rhs_size.is_constant())
+          {
+            BigInt lhs_val = binary2integer(lhs_size.value().as_string(), true);
+            BigInt rhs_val = binary2integer(rhs_size.value().as_string(), true);
+            // Keep the larger type
+            should_preserve_larger_type = (lhs_val > rhs_val);
+          }
+        }
+
+        if (!should_preserve_larger_type)
+        {
+          lhs_symbol->type = rhs.type();
+          lhs.type() = rhs.type();
+        }
       }
     }
     else if (rhs.type() == none_type())
@@ -3292,7 +3362,14 @@ void python_converter::handle_assignment_type_adjustments(
     }
 
     if (!rhs.type().is_empty() && !is_ctor_call)
-      lhs_symbol->value = rhs;
+    {
+      // Static symbols should not cache assignments that contain any side effects
+      // (e.g., nondet expressions, function calls). This ensures that each use
+      // of the symbol sees the expression evaluated fresh, rather than a single
+      // cached value, which is essential for proper symbolic execution semantics.
+      if (!contains_side_effects(rhs))
+        lhs_symbol->value = rhs;
+    }
   }
 }
 
@@ -4171,6 +4248,70 @@ void python_converter::get_var_assign(
       rhs.type() != lhs.type() && lhs.type().is_array() &&
       !rhs.type().is_code())
     {
+      // Check if this is a char array assignment where we should preserve
+      // the larger LHS type (set by handle_assignment_type_adjustments)
+      // to maintain symbolic string semantics.
+      bool is_preserving_string_type = false;
+      if (
+        lhs.type().is_array() && rhs.type().is_array() &&
+        to_array_type(lhs.type()).subtype() == char_type() &&
+        to_array_type(rhs.type()).subtype() == char_type())
+      {
+        const exprt &lhs_size = to_array_type(lhs.type()).size();
+        const exprt &rhs_size = to_array_type(rhs.type()).size();
+        if (lhs_size.is_constant() && rhs_size.is_constant())
+        {
+          BigInt lhs_val = binary2integer(lhs_size.value().as_string(), true);
+          BigInt rhs_val = binary2integer(rhs_size.value().as_string(), true);
+          // If LHS is larger, we're intentionally preserving it
+          is_preserving_string_type = (lhs_val > rhs_val);
+        }
+      }
+
+      if (is_preserving_string_type)
+      {
+        // The LHS array is larger than the RHS string literal.
+        // We need to pad the RHS array with zeros to match LHS size.
+        // This is semantically correct: "foo" becomes {'f','o','o','\0','\0'}
+        // Note: The RHS could be either "array" or "constant" depending on
+        // how it was constructed.
+        if (rhs.type().is_array())
+        {
+          const array_typet &lhs_array_type = to_array_type(lhs.type());
+          BigInt lhs_size_val =
+            binary2integer(lhs_array_type.size().value().as_string(), true);
+
+          // Create a new array with the larger size
+          exprt padded_rhs = exprt("array", lhs.type());
+          // Copy existing elements
+          for (const auto &op : rhs.operands())
+            padded_rhs.copy_to_operands(op);
+          // Pad with zeros
+          size_t current_size = rhs.operands().size();
+          for (size_t i = current_size;
+               i < static_cast<size_t>(lhs_size_val.to_int64());
+               ++i)
+          {
+            padded_rhs.copy_to_operands(gen_zero(char_type()));
+          }
+          rhs = padded_rhs;
+        }
+
+        code_assignt code_assign(lhs, rhs);
+        code_assign.location() = location_begin;
+        target_block.copy_to_operands(code_assign);
+        if (type_assertions_enabled() && can_emit_annotation_check)
+          get_typechecker().emit_type_annotation_assertion(
+            lhs,
+            annotated_type,
+            annotation_types,
+            annotated_name,
+            annotation_location,
+            target_block);
+        current_lhs = nullptr;
+        return;
+      }
+
 #ifndef NDEBUG
       const array_typet &thetype = lhs.type();
       thetype.size().is_constant();
