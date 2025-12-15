@@ -22,8 +22,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Cache CMake dependency src and build
-      uses: actions/cache@v3
+    - uses: actions/cache@v3
+      if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
       with:
         path: |
           ${{github.workspace}}/build/_deps/*-src
