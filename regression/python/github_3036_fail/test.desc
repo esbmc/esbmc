@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
---incremental-bmc
+--unwind 5
 ^VERIFICATION FAILED$

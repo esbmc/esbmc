@@ -196,6 +196,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"Subscript", ExpressionType::SUBSCRIPT},
     {"List", ExpressionType::LIST},
     {"Set", ExpressionType::LIST},
+    {"GeneratorExp", ExpressionType::LIST},
     {"Lambda", ExpressionType::FUNC_CALL},
     {"JoinedStr", ExpressionType::FSTRING},
     {"Tuple", ExpressionType::TUPLE},
@@ -2605,6 +2606,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     {
       python_set set_handler(*this, element);
       expr = set_handler.get();
+      break;
+    }
+
+    // Handle generator expressions
+    if (element["_type"] == "GeneratorExp")
+    {
+      python_list list(*this, element);
+      expr = list.handle_comprehension(element);
       break;
     }
 
