@@ -12,6 +12,7 @@
 #include <util/ieee_float.h>
 #include <util/message.h>
 #include <util/python_types.h>
+#include <util/std_code.h>
 #include <util/string_constant.h>
 
 #include <regex>
@@ -252,16 +253,43 @@ exprt function_call_expr::build_nondet_call() const
     typet char_array_type =
       array_typet(char_type(), from_integer(max_str_length, size_type()));
 
-    exprt nondet_array = exprt("sideeffect", char_array_type);
-    nondet_array.statement("nondet");
+    locationt location = converter_.get_location_from_decl(call_);
 
-    exprt last_index = from_integer(max_str_length - 1, size_type());
+    // Create a fresh symbol for the nondet string
+    // Don't set initial value - let our assignments handle initialization
+    // Setting initial value causes ESBMC to use it when assigning to variables
+    symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
+      call_, "$nondet_str$", char_array_type, exprt());
+
+    // Declare the temporary in the current block
+    code_declt temp_decl(symbol_expr(nondet_str_symbol));
+    temp_decl.location() = location;
+    converter_.current_block->copy_to_operands(temp_decl);
+
+    // Initialize with nondet characters
+    exprt array_expr = symbol_expr(nondet_str_symbol);
+    for (int i = 0; i < max_str_length - 1; ++i)
+    {
+      exprt nondet_char = exprt("sideeffect", char_type());
+      nondet_char.statement("nondet");
+
+      exprt array_elem = index_exprt(array_expr, from_integer(i, size_type()));
+
+      code_assignt assign(array_elem, nondet_char);
+      assign.location() = location;
+      converter_.current_block->copy_to_operands(assign);
+    }
+
+    // Add null terminator
+    exprt last_elem = index_exprt(
+      array_expr, from_integer(max_str_length - 1, size_type()));
     exprt null_char = from_integer(0, char_type());
 
-    with_exprt result(nondet_array, last_index, null_char);
-    result.type() = char_array_type;
+    code_assignt assign_null(last_elem, null_char);
+    assign_null.location() = location;
+    converter_.current_block->copy_to_operands(assign_null);
 
-    return result;
+    return symbol_expr(nondet_str_symbol);
   }
 
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));

@@ -412,15 +412,6 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
     return bitsize(0);
   }
 
-  if (is_with2t(expr))
-  {
-    // For with2t expressions (array/struct updates), the offset is the same
-    // as the source object's offset, since with2t only updates a value but
-    // doesn't change the object's position.
-    const with2t &with = to_with2t(expr);
-    return pointer_offset_bits(with.source_value);
-  }
-
   if (is_dereference2t(expr))
   {
     // This is a dereference at the base of a set of index/members. Here, we
@@ -462,9 +453,6 @@ const expr2tc &get_base_object(const expr2tc &expr)
 
   if (is_dereference2t(expr))
     return get_base_object(to_dereference2t(expr).value);
-
-  if (is_with2t(expr))
-    return get_base_object(to_with2t(expr).source_value);
 
   return expr;
 }
