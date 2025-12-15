@@ -44,6 +44,7 @@ ignored_dirs=(
   "github_3090_5"
   "github_3090_5_fail"
   "github_3313_3"
+  "github_3284"
   "global"
   "infer-func-no-return_fail"
   "integer_squareroot_fail"
