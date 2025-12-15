@@ -272,14 +272,19 @@ __ESBMC_HIDE:;
 void *__memcpy_impl(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
+  if (n == 0)
+    return dst;
+
   char *cdst = dst;
   const char *csrc = src;
+
   size_t i = 0;
   while (i < n)
   {
     cdst[i] = csrc[i];
     ++i;
   }
+
   return dst;
 }
 
