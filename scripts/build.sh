@@ -239,7 +239,15 @@ do
           -DENABLE_GOTO_CONTRACTOR=OFF \
           -DACADEMIC_BUILD=ON"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
-    x) BASE_ARGS="$BASE_ARGS -DESBMC_CHERI=ON" ;;
+    x) BASE_ARGS="\
+          $BASE_ARGS \
+          -DENABLE_SOLIDITY_FRONTEND=OFF \
+          -DENABLE_JIMPLE_FRONTEND=OFF \
+          -DENABLE_PYTHON_FRONTEND=OFF \
+          -DESBMC_CHERI=ON"
+        SOLVER_FLAGS="\
+          -DENABLE_BOOLECTOR=On \
+          -DENABLE_Z3=On" ;;
     *) exit 1 ;;
     esac
 done
