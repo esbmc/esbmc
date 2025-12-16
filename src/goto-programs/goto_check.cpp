@@ -702,8 +702,7 @@ expr2tc goto_checkt::build_python_isinstance_check(
   return isinstance2tc(value_expr, type_operand);
 }
 
-expr2tc goto_checkt::build_python_is_none_check(
-  const expr2tc &value_expr) const
+expr2tc goto_checkt::build_python_is_none_check(const expr2tc &value_expr) const
 {
   const type2tc &original_type = value_expr->type;
   type2tc resolved_type = ns.follow(original_type);
