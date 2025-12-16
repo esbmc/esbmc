@@ -1,22 +1,63 @@
 name: Generate benchexec diff
+
 on:
   workflow_dispatch:
     inputs:
-      original_id:
-        description: 'Old run'
+      old_url:
+        description: 'Old run URL'
         required: true
-        default: '30'
-      new_id:
-        description: 'New run'
-        required: false
-        default: ''
+      new_url:
+        description: 'New run URL'
+        required: true
 
 jobs:
-  create-diff:
+  benchexec-diff:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          artifact_ids: ${{ inputs.original_id }}
-      - name: Display results
-        run: ls -R
+          python-version: '3.12'
+      - name: Install benchexec (for table-generator)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --user benchexec
+          echo "$(python -m site --user-base)/bin" >> "$GITHUB_PATH"
+      - uses: actions/checkout@v4
+      - name: Extract run IDs from URLs
+        id: parse
+        run: |
+          old="${{ inputs.old_url }}"
+          new="${{ inputs.new_url }}"
+          old_id=${old#*/runs/}; old_id=${old_id%%/*}
+          new_id=${new#*/runs/}; new_id=${new_id%%/*}
+          echo "old_id=$old_id" >> "$GITHUB_OUTPUT"
+          echo "new_id=$new_id" >> "$GITHUB_OUTPUT"
+      - name: Download old artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ steps.parse.outputs.old_id }}" \
+            --repo esbmc/esbmc \
+            --name esbmc-result \
+            --dir old-artifact
+      - name: Download new artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ steps.parse.outputs.new_id }}" \
+            --repo esbmc/esbmc \
+            --name esbmc-result \
+            --dir new-artifact
+      - name: Extract artifacts
+        run: |
+          unzip old-artifact/output.zip -d old-extracted || true
+          unzip new-artifact/output.zip -d new-extracted || true
+          mv old-extracted/esbmc-output old
+          mv new-extracted/esbmc-output new
+      - name: Run diff
+        run: ./scripts/competitions/compare-runs.sh old new
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchexec-diff
+          path: ./diff-old-new
