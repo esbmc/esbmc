@@ -47,6 +47,21 @@ public:
 
   void convert();
 
+  // Accessors for handlers
+  const std::string &get_current_func_name() const
+  {
+    return current_func_name_;
+  }
+  const nlohmann::json &get_ast_json() const
+  {
+    return *ast_json;
+  }
+  exprt get_expr(const nlohmann::json &element);
+  std::string get_op(const std::string &op, const typet &type) const;
+  typet get_type_from_annotation(
+    const nlohmann::json &annotation_node,
+    const nlohmann::json &element);
+
   string_builder &get_string_builder();
 
   python_dict_handler *get_dict_handler()
@@ -145,8 +160,6 @@ public:
 
   exprt get_literal(const nlohmann::json &element);
 
-  exprt get_expr(const nlohmann::json &element);
-
   locationt get_location_from_decl(const nlohmann::json &element);
 
   exprt handle_string_comparison(
@@ -154,24 +167,6 @@ public:
     exprt &lhs,
     exprt &rhs,
     const nlohmann::json &element);
-
-  /**
-   * @brief Resolves dictionary subscript types for binary operations.
-   *
-   * When comparing dictionary values with primitive types (int, bool, float),
-   * the dict subscript initially returns a char* pointer. This method detects
-   * such cases and re-fetches the dictionary value with the correct expected type.
-   *
-   * @param left The left operand JSON AST node.
-   * @param right The right operand JSON AST node.
-   * @param lhs The left operand expression (may be modified).
-   * @param rhs The right operand expression (may be modified).
-   */
-  void resolve_dict_subscript_types(
-    const nlohmann::json &left,
-    const nlohmann::json &right,
-    exprt &lhs,
-    exprt &rhs);
 
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
@@ -240,10 +235,6 @@ private:
   std::string remove_quotes_from_type_string(const std::string &type_string);
 
   bool function_has_missing_return_paths(const nlohmann::json &function_node);
-
-  typet get_type_from_annotation(
-    const nlohmann::json &annotation_node,
-    const nlohmann::json &element);
 
   symbolt create_return_temp_variable(
     const typet &return_type,
@@ -354,9 +345,6 @@ private:
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
-
-  exprt
-  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
 
   void get_attributes_from_self(
     const nlohmann::json &method_body,
@@ -482,20 +470,6 @@ private:
   // =========================================================================
   // Dictionary assignment helper methods
   // =========================================================================
-
-  /**
-   * Extract the value type from a dict type annotation.
-   * For dict[K, V], returns V.
-   * For dict[K, dict[K2, V2]], returns dict[K2, V2].
-   */
-  typet
-  get_dict_value_type_from_annotation(const nlohmann::json &annotation_node);
-
-  /**
-   * Resolve the expected return type for a dict subscript operation
-   * by examining the dict variable's type annotation.
-   */
-  typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
 
   /**
    * @brief Handles dictionary subscript assignment (dict[key] = value).
@@ -852,20 +826,10 @@ private:
   // String method helpers
   // =========================================================================
 
-  exprt handle_str_join(const nlohmann::json &call_json);
-
   exprt handle_string_type_mismatch(
     const exprt &lhs,
     const exprt &rhs,
     const std::string &op);
-
-  // Create character comparison expression from preprocessed operands
-  exprt create_char_comparison_expr(
-    const std::string &op,
-    const exprt &lhs_char_value,
-    const exprt &rhs_char_value,
-    const exprt &lhs_source,
-    const exprt &rhs_source) const;
 
   void process_forward_reference(
     const nlohmann::json &annotation,

@@ -1297,6 +1297,10 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
   // Get the start of the base-case, default 1
   unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+
+  // For pytest test generation
+  pytest_generator pytest_gen;
+
   if (k_step_base >= max_k_step)
   {
     log_error(
@@ -1329,7 +1333,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
           report_coverage(
             options,
             goto_functions.reached_claims,
-            goto_functions.reached_mul_claims);
+            goto_functions.reached_mul_claims,
+            pytest_gen);
         return 0;
       }
 
@@ -1344,7 +1349,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
             report_coverage(
               options,
               goto_functions.reached_claims,
-              goto_functions.reached_mul_claims);
+              goto_functions.reached_mul_claims,
+              pytest_gen);
           return 0;
         }
       }
@@ -1379,7 +1385,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
           report_coverage(
             options,
             goto_functions.reached_claims,
-            goto_functions.reached_mul_claims);
+            goto_functions.reached_mul_claims,
+            pytest_gen);
         return 0;
       }
     }
@@ -1398,7 +1405,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
     report_coverage(
       options,
       goto_functions.reached_claims,
-      goto_functions.reached_mul_claims);
+      goto_functions.reached_mul_claims,
+      pytest_gen);
   return 0;
 }
 

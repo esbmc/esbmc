@@ -1,0 +1,22 @@
+name: Generate benchexec diff
+on:
+  workflow_dispatch:
+    inputs:
+      original_id:
+        description: 'Old run'
+        required: true
+        default: '30'
+      new_id:
+        description: 'New run'
+        required: false
+        default: ''
+
+jobs:
+  create-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          artifact_ids: ${{ inputs.original_id }}
+      - name: Display results
+        run: ls -R

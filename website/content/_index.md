@@ -38,7 +38,7 @@ announcement [here](/news/new-website-announcement). {{< /callout >}}
 
 {{% /details %}}
 
-ESBMC is a mature, permissively licensed open-source SMT-based context-bounded model checker for single and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It automatically detects or proves the absence of runtime errors (e.g., bounds checks, pointer safety, overflow) and verifies user-defined assertions without requiring pre- or postconditions. For multi-threaded programs, ESBMC supports lazy and schedule-recording approaches, encoding verification conditions into SMT formulas solved directly by an SMT solver.
+ESBMC is a mature, permissively licensed open-source SMT-based context-bounded model checker for single and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, Rust, and Solidity programs. It automatically detects or proves the absence of runtime errors (e.g., bounds checks, pointer safety, overflow) and verifies user-defined assertions without requiring pre- or postconditions. For multi-threaded programs, ESBMC supports lazy and schedule-recording approaches, encoding verification conditions into SMT formulas solved directly by an SMT solver.
 
 ## Features
 
@@ -57,23 +57,58 @@ We provide some background material/publications to help you understand what ESB
 
 ## Applications
 
-ESBMC has been used in a broad range of applications. If you applied ESBMC in your research, but it is not mentioned below, please, do not hesitate to contact us through our [GitHub repository](https://github.com/esbmc/esbmc).
+ESBMC has been used in a broad range of cutting-edge applications across multiple domains. If you applied ESBMC in your research, but it is not mentioned below, please, do not hesitate to contact us through our [GitHub repository](https://github.com/esbmc/esbmc).
 
-* DSVerifier-Aided Verification Applied to Attitude Control Software in Unmanned Aerial Vehicles(https://ssvlab.github.io/lucasccordeiro/papers/tr2018.pdf)
+### Recent Applications (2022-2024)
+
+* **[ESBMC-Python: A Bounded Model Checker for Python Programs](https://dl.acm.org/doi/10.1145/3650212.3685304)** (ISSTA 2024)
+>The first BMC-based Python code verifier, successfully detecting bugs in the Ethereum Consensus Specification and other Python applications.
+
+* **[Verifying Components of Arm® Confidential Computing Architecture](https://link.springer.com/chapter/10.1007/978-3-031-74776-2_18)** (SAS 2024)
+>ESBMC is used to verify the Realm Management Monitor (RMM) firmware in Arm's Confidential Computing Architecture, detecting 23 new vulnerabilities that other tools missed.
+
+* **[LLM-Generated Invariants for Bounded Model Checking Without Loop Unrolling](https://doi.org/10.1145/3691620.3695512)** (ASE 2024)
+>Integration of large language models with ESBMC to automatically generate loop invariants, eliminating the need for manual loop unrolling.
+
+* **[ESBMC-Solidity: Verifying Blockchain Smart Contracts](https://dl.acm.org/doi/10.1145/3510454.3516855)** (ICSE 2022)
+>ESBMC is used to verify Solidity smart contracts on Ethereum blockchain, detecting vulnerabilities in financial applications handling millions of dollars.
+
+* **[ESBMC-CHERI: Hardware-Assisted Memory Safety Verification](https://dl.acm.org/doi/10.1145/3533767.3543289)** (ISSTA 2022)
+>The first bounded model checker for CHERI-enabled platforms, verifying C programs with hardware-level memory protection capabilities.
+
+* **[ESBMC-Jimple: Verifying Kotlin Programs](https://doi.org/10.1145/3533767.3543294)** (ISSTA 2022)
+>ESBMC is extended to verify Android/Kotlin applications through the Jimple intermediate representation.
+
+* **[Arduino Integration for Embedded Systems](https://doi.org/10.1109/SBESC60926.2023.10324055)** (SBESC 2023)
+>ESBMC verification for Arduino-based embedded systems, enhancing integrity and reliability in IoT devices.
+
+### Earlier Applications
+
+* **[DSVerifier-Aided Verification Applied to Attitude Control Software in Unmanned Aerial Vehicles](https://ssvlab.github.io/lucasccordeiro/papers/tr2018.pdf)**
 >ESBMC is used to verify embedded control software in Unmanned Aerial Vehicles.
-* BMCLua: A Translator for Model Checking Lua Programs
+
+* **[Model Checking C++ Programs](https://onlinelibrary.wiley.com/doi/10.1002/stvr.1793)** (STVR 2022)
+>ESBMC provides comprehensive verification of modern C++ programs including STL containers and templates.
+
+* **BMCLua: A Translator for Model Checking Lua Programs**
 >ESBMC is used to verify a ANSI-C version of the respective Lua program.
-* [CSeq: A Sequentialization Tool for C](https://link.springer.com/chapter/10.1007%2F978-3-642-36742-7_46)
+
+* **[CSeq: A Sequentialization Tool for C](https://link.springer.com/chapter/10.1007%2F978-3-642-36742-7_46)**
 >ESBMC is used as sequential verification back-end to model check multi-threaded programs.
-* [Sound and Unified Software Verification for Weak Memory Models](http://www.cs.ox.ac.uk/people/vincent.nimal/sas12/paper.pdf)
+
+* **[Sound and Unified Software Verification for Weak Memory Models](http://www.cs.ox.ac.uk/people/vincent.nimal/sas12/paper.pdf)**
 >ESBMC is used as a sequential consistency software verification tool in real-life C programs.
-* [Understanding Programming Bugs in ANSI-C Software Using Bounded Model Checking Counter-Examples](https://ssvlab.github.io/lucasccordeiro/papers/ifm2012.pdf)
+
+* **[Understanding Programming Bugs in ANSI-C Software Using Bounded Model Checking Counter-Examples](https://ssvlab.github.io/lucasccordeiro/papers/ifm2012.pdf)**
 >The counter-example produced by ESBMC is used to automatically debug software systems.
-* [Verifying Embedded C Software with Timing Constraints using an Untimed Model Checker](http://eprints.soton.ac.uk/272442/1/formats2011.pdf)
+
+* **[Verifying Embedded C Software with Timing Constraints using an Untimed Model Checker](http://eprints.soton.ac.uk/272442/1/formats2011.pdf)**
 >ESBMC is used as an untimed software model checker to verify real-time software.
-* [Scalable hybrid verification for embedded software](http://ieeexplore.ieee.org/xpl/freeabs_all.jsp?arnumber=5763039)
+
+* **[Scalable hybrid verification for embedded software](http://ieeexplore.ieee.org/xpl/freeabs_all.jsp?arnumber=5763039)**
 >ESBMC is used as a verification engine to model check embedded (sequential) software.
-* [Getting Rid of Store-Buffers in TSO Analysis](https://link.springer.com/chapter/10.1007%2F978-3-642-22110-1_9)
+
+* **[Getting Rid of Store-Buffers in TSO Analysis](https://link.springer.com/chapter/10.1007%2F978-3-642-22110-1_9)**
 >ESBMC is used to verify _sequential consistency_ concurrent C programs.
 
 ## Cite

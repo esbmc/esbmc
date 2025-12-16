@@ -609,7 +609,40 @@ exprt python_list::handle_range_slice(
 
     // Process bounds
     exprt lower_expr = process_bound("lower", gen_zero(size_type()));
-    exprt upper_expr = process_bound("upper", logical_len);
+
+    // For pointer types with no upper bound, compute length using strlen
+    exprt upper_expr;
+    if (array.type().is_pointer() && elem_type == char_type())
+    {
+      if (!slice_node.contains("upper") || slice_node["upper"].is_null())
+      {
+        // Call strlen to get the length
+        const symbolt *strlen_symbol =
+          converter_.symbol_table().find_symbol("c:@F@strlen");
+        if (!strlen_symbol)
+          throw std::runtime_error("strlen function not found in symbol table");
+
+        symbolt &strlen_result = converter_.create_tmp_symbol(
+          slice_node, "$strlen_result$", size_type(), gen_zero(size_type()));
+        code_declt strlen_decl(symbol_expr(strlen_result));
+        strlen_decl.location() = location;
+        converter_.add_instruction(strlen_decl);
+
+        code_function_callt strlen_call;
+        strlen_call.function() = symbol_expr(*strlen_symbol);
+        strlen_call.lhs() = symbol_expr(strlen_result);
+        strlen_call.arguments().push_back(array);
+        strlen_call.type() = size_type();
+        strlen_call.location() = location;
+        converter_.add_instruction(strlen_call);
+
+        upper_expr = symbol_expr(strlen_result);
+      }
+      else
+        upper_expr = process_bound("upper", logical_len);
+    }
+    else
+      upper_expr = process_bound("upper", logical_len);
 
     // Calculate slice length
     minus_exprt slice_len(upper_expr, lower_expr);
