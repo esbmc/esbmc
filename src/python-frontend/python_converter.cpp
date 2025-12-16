@@ -522,8 +522,7 @@ std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
   // Helper to check if a symbol's value contains side effects (nondet, function calls)
   // If so, we should NOT resolve it to the cached value, as this would lose
   // the symbolic semantics needed for proper verification.
-  auto value_contains_side_effects = [this](const symbolt *sym) -> bool
-  {
+  auto value_contains_side_effects = [this](const symbolt *sym) -> bool {
     if (!sym || sym->value.is_nil())
       return false;
     return contains_side_effects(sym->value);
@@ -533,8 +532,9 @@ std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
   // String comparisons should generally NOT be resolved to cached values
   // because strings can be reassigned conditionally (e.g., if s == "": s = "foo")
   // and we need to preserve the symbolic path semantics.
-  auto is_string_type = [](const typet &t) -> bool
-  { return t.is_array() && to_array_type(t).subtype() == char_type(); };
+  auto is_string_type = [](const typet &t) -> bool {
+    return t.is_array() && to_array_type(t).subtype() == char_type();
+  };
 
   // Only resolve constant arrays, not pointers
   // But skip resolution for symbols whose values contain side effects
