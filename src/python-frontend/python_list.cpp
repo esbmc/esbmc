@@ -1275,7 +1275,7 @@ exprt python_list::list_repetition(
         converter_.find_symbol(lhs.identifier().as_string());
       assert(list_symbol);
 
-      if (size_var->value.is_code())
+      if (size_var->value.is_code() || size_var->value.is_nil())
       {
         return create_vla(list_value_, list_symbol, size_var, list_elem);
       }
