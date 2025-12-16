@@ -5308,9 +5308,12 @@ size_t python_converter::register_function_argument(
   param_symbol.static_lifetime = false;
   param_symbol.is_extern = false;
   symbol_table_.add(param_symbol);
-  if (element.contains("annotation") && !element["annotation"].is_null())
+  symbolt *stored_param = symbol_table_.find_symbol(arg_id);
+  if (
+    stored_param != nullptr && element.contains("annotation") &&
+    !element["annotation"].is_null())
     get_typechecker().cache_annotation_types(
-      param_symbol, element["annotation"]);
+      *stored_param, element["annotation"]);
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via
