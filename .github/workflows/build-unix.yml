@@ -22,15 +22,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: actions/cache@v5
+    # For restore ccache
+    - uses: hendrikmuhs/ccache-action@v1.2
       if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
       with:
-        path: |
-          ${{github.workspace}}/build/_deps/*-src
-          ${{github.workspace}}/build/_deps/*-build
-          ${{github.workspace}}/build/_deps/*-subbuild
-        key:  |
-          ${{ inputs.operating-system }}-${{ hashFiles('**/CMakeLists.txt') }}
+        save: ${{ github.event_name == 'push' }}
+        key: ${{ inputs.operating-system }}-${{ hashFiles('**/*.cpp','**/*.h') }}
         restore-keys: |
           ${{ inputs.operating-system }}-
 
