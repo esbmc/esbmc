@@ -13,7 +13,7 @@ on:
 
 jobs:
   create-diff:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/download-artifact@v5
         with:
