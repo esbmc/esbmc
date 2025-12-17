@@ -483,6 +483,18 @@ protected:
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
 
+  /** Helper function to handle Python dictionary size calculation.
+   *  For dictionaries, returns the size of the keys list by calling __ESBMC_list_size.
+   *  @param func_call The original function call (used to clone for list_size call)
+   *  @param dict_expr The dictionary expression (struct or pointer to struct)
+   *  @param struct_type The struct type information
+   *  @return true if dictionary was handled, false otherwise
+   */
+  bool handle_dict_size_for_get_object_size(
+    const code_function_call2t &func_call,
+    const expr2tc &dict_expr,
+    const struct_type2t &struct_type);
+
   /** Returns the size of the object
    *
    * If the object is invalid, then this function will return 0

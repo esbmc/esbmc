@@ -2627,26 +2627,97 @@ void goto_symext::intrinsic_builtin_object_size(
     cur_state->guard);
 }
 
+bool goto_symext::handle_dict_size_for_get_object_size(
+  const code_function_call2t &func_call,
+  const expr2tc &dict_expr,
+  const struct_type2t &struct_type)
+{
+  if (struct_type.name != "__python_dict__")
+    return false;
+
+  // Find the "keys" member in the dictionary struct
+  for (size_t i = 0; i < struct_type.members.size(); ++i)
+  {
+    if (struct_type.member_names[i] == "keys")
+    {
+      // Create member expression for dict.keys and call __ESBMC_list_size
+      expr2tc keys_member = member2tc(struct_type.members[i], dict_expr, "keys");
+      expr2tc newcall = func_call.clone();
+      code_function_call2t &list_size_call = to_code_function_call2t(newcall);
+      list_size_call.function = symbol2tc(get_empty_type(), "c:@F@__ESBMC_list_size");
+      list_size_call.operands.clear();
+      list_size_call.operands.push_back(keys_member);
+      bump_call(list_size_call, "c:@F@__ESBMC_list_size");
+      return true;
+    }
+  }
+  return false;
+}
+
 void goto_symext::intrinsic_get_object_size(
   const code_function_call2t &func_call,
   reachability_treet &)
 {
   assert(func_call.operands.size() == 1 && "Wrong get_object_size signature");
   expr2tc ptr = func_call.operands[0];
+  cur_state->rename(ptr);
 
-  // Work out what the ptr points at.
+  // Handle Python dictionary types: dictionaries are represented as structs
+  // with "keys" and "values" members. For __ESBMC_get_object_size(dict), we
+  // return the size of the keys list.
+  if (is_struct_type(ptr->type))
+  {
+    const struct_type2t &struct_type = to_struct_type(ptr->type);
+    if (handle_dict_size_for_get_object_size(func_call, ptr, struct_type))
+      return;
+  }
+
+  // For pointer types, dereference to find the object
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), ptr);
   dereference(deref, dereferencet::INTERNAL);
 
-  assert(is_array_type(internal_deref_items.front().object->type));
-  expr2tc obj_size =
-    to_array_type(internal_deref_items.front().object->type).array_size;
+  if (internal_deref_items.empty())
+  {
+    // No object found, return 0
+    expr2tc ret_ref = func_call.ret;
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(
+      code_assign2tc(ret_ref, gen_zero(ret_ref->type)),
+      false,
+      cur_state->guard);
+    return;
+  }
 
+  const auto &item = internal_deref_items.front();
+  expr2tc obj = item.object;
+
+  // Handle pointer to dictionary
+  if (is_struct_type(obj->type))
+  {
+    const struct_type2t &struct_type = to_struct_type(obj->type);
+    if (handle_dict_size_for_get_object_size(func_call, obj, struct_type))
+      return;
+  }
+
+  // Handle array types (original behavior)
+  if (is_array_type(obj->type))
+  {
+    expr2tc obj_size = to_array_type(obj->type).array_size;
+    expr2tc ret_ref = func_call.ret;
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(
+      code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
+      false,
+      cur_state->guard);
+    return;
+  }
+
+  // For other types, return 0
   expr2tc ret_ref = func_call.ret;
   dereference(ret_ref, dereferencet::READ);
   symex_assign(
-    code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
+    code_assign2tc(ret_ref, gen_zero(ret_ref->type)),
     false,
     cur_state->guard);
 }
