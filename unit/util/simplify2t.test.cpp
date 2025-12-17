@@ -1165,6 +1165,7 @@ TEST_CASE(
   REQUIRE(to_not2t(result).value == cond);
 }
 
+
 TEST_CASE("uint_32_t v = 10; (uint64_t) v ==> 10", "[typecast][if]")
 {
   const expr2tc ten_32 = constant_int2tc(get_uint_type(32), BigInt(10));
@@ -1174,6 +1175,49 @@ TEST_CASE("uint_32_t v = 10; (uint64_t) v ==> 10", "[typecast][if]")
   REQUIRE(to_constant_int2t(result).value == 10);
 }
 
+TEST_CASE("object_size regression", "[pointer_object]")
+{
+  // x: char[50]
+  // OFFSET_OF(&x[0] + 10) = 10
+
+  const type2tc arr_t = array_type2tc(
+    get_int_type(8), constant_int2tc(get_uint_type(64), BigInt(50)), false);
+
+  const expr2tc x = symbol2tc(arr_t, "x");
+  const expr2tc zero_index =
+    index2tc(get_int_type(8), x, gen_zero(get_int_type(64)));
+
+  // const expr2tc obj =  pointer_object2tc(pointer_type2tc(get_int_type(8)), zero_index);
+
+  const expr2tc side_1 = address_of2tc(get_int_type(8), zero_index);
+
+  const expr2tc side_2 = constant_int2tc(get_int_type(32), BigInt(10));
+
+  config.ansi_c.address_width = 64;
+  const expr2tc pointer_offset = pointer_offset2tc(
+    get_int_type(config.ansi_c.address_width),
+    add2tc(pointer_type2tc(get_int_type(8)), side_1, side_2));
+
+  const expr2tc result = pointer_offset->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == 10);
+}
+
+TEST_CASE("object_size regression 2", "[pointer_object]")
+{
+  // x: char[50]
+  // OFFSET_OF(&x[0] + 10) = 10
+
+  expr2tc zero = constant_int2tc(get_uint_type(67), BigInt(0));
+  expr2tc add = add2tc(get_uint_type(67), zero, zero);
+
+  expr2tc result = add->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == 0);
+}
 // TODO: Tests that should be valid but... not yet!
 
 #if 0

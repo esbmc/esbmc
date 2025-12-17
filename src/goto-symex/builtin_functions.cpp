@@ -2603,7 +2603,12 @@ void goto_symext::intrinsic_builtin_object_size(
       else
       {
         // Offset is symbolic - can't determine remaining size statically
-        obj_size = create_fallback_size(use_zero_for_unknown);
+        const expr2tc total_size_expr = constant_int2tc(get_int64_type(), total_size);
+        obj_size = if2tc(
+          size_type2(),
+          greaterthan2tc(total_size_expr, offset_expr),
+          sub2tc(size_type2(), total_size_expr, offset_expr),
+          gen_zero(size_type2()));
       }
     }
     else

@@ -1062,8 +1062,7 @@ expr2tc pointer_offset2t::do_simplify() const
 
       if (is_constant_int2t(index_value))
       {
-        expr2tc offs =
-          try_simplification(compute_pointer_offset(addrof.ptr_obj));
+        expr2tc offs = compute_pointer_offset(addrof.ptr_obj)->simplify();
         if (is_constant_int2t(offs))
           return offs;
       }
@@ -1075,7 +1074,7 @@ expr2tc pointer_offset2t::do_simplify() const
 
       // First, try to use our existing compute_pointer_offset function
       // This should handle most struct member cases
-      expr2tc offs = try_simplification(compute_pointer_offset(addrof.ptr_obj));
+      expr2tc offs = compute_pointer_offset(addrof.ptr_obj)->simplify();
       if (is_constant_int2t(offs))
         return offs;
 
@@ -1220,26 +1219,23 @@ resolve_with_chain_lookup(const expr2tc &source, const expr2tc &lookup_index)
 
 expr2tc index2t::do_simplify() const
 {
-  expr2tc new_index = try_simplification(index);
-  expr2tc src = try_simplification(source_value);
-
-  if (is_with2t(src))
+  if (is_with2t(source_value))
   {
-    expr2tc resolved = resolve_with_chain_lookup(src, new_index);
+    expr2tc resolved = resolve_with_chain_lookup(source_value, index);
     if (!is_nil_expr(resolved))
       return resolved;
   }
 
-  if (is_constant_array2t(src) && is_constant_int2t(new_index))
+  if (is_constant_array2t(source_value) && is_constant_int2t(index))
   {
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
     // model. We don't have to think about this now though.
-    const constant_int2t &idx = to_constant_int2t(new_index);
+    const constant_int2t &idx = to_constant_int2t(index);
     if (idx.value.is_negative())
       return expr2tc();
 
-    const constant_array2t &arr = to_constant_array2t(src);
+    const constant_array2t &arr = to_constant_array2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if (the_idx >= arr.datatype_members.size())
       return expr2tc();
@@ -1263,14 +1259,14 @@ expr2tc index2t::do_simplify() const
     return arr.datatype_members[idx.as_ulong()];
   }
 
-  if (is_constant_string2t(src) && is_constant_int2t(new_index))
+  if (is_constant_string2t(source_value) && is_constant_int2t(index))
   {
     // Same index situation
-    const constant_int2t &idx = to_constant_int2t(new_index);
+    const constant_int2t &idx = to_constant_int2t(index);
     if (idx.value.is_negative())
       return expr2tc();
 
-    const constant_string2t &str = to_constant_string2t(src);
+    const constant_string2t &str = to_constant_string2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if (the_idx >= str.array_size()) // allow reading null term.
       return expr2tc();
@@ -1283,11 +1279,8 @@ expr2tc index2t::do_simplify() const
   }
 
   // Only thing this index can evaluate to is the default value of this array
-  if (is_constant_array_of2t(src))
-    return to_constant_array_of2t(src).initializer;
-
-  if (src != source_value || new_index != index)
-    return index2tc(type, src, new_index);
+  if (is_constant_array_of2t(source_value))
+    return to_constant_array_of2t(source_value).initializer;
 
   return expr2tc();
 }
@@ -2586,12 +2579,11 @@ expr2tc address_of2t::do_simplify() const
       to_constant_int2t(idx.index).value.is_zero())
       return expr2tc();
 
-    expr2tc new_index = try_simplification(idx.index);
     expr2tc zero = constant_int2tc(index_type2(), BigInt(0));
     expr2tc new_idx = index2tc(idx.type, idx.source_value, zero);
     expr2tc sub_addr_of = address_of2tc(ptr_type.subtype, new_idx);
 
-    return add2tc(type, sub_addr_of, new_index);
+    return add2tc(type, sub_addr_of, idx.index);
   }
 
   return expr2tc();

@@ -196,6 +196,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"Subscript", ExpressionType::SUBSCRIPT},
     {"List", ExpressionType::LIST},
     {"Set", ExpressionType::LIST},
+    {"GeneratorExp", ExpressionType::LIST},
     {"Lambda", ExpressionType::FUNC_CALL},
     {"JoinedStr", ExpressionType::FSTRING},
     {"Tuple", ExpressionType::TUPLE},
@@ -2608,6 +2609,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
+    // Handle generator expressions
+    if (element["_type"] == "GeneratorExp")
+    {
+      python_list list(*this, element);
+      expr = list.handle_comprehension(element);
+      break;
+    }
+
     // Check if we should use static arrays (for numpy and similar operations)
     if (build_static_lists)
     {
@@ -3864,6 +3873,25 @@ void python_converter::get_var_assign(
     std::string name = extract_target_name(target);
     sid.set_object(name);
     annotated_name = name;
+
+    // Check if this is a forward declaration with union type and no value
+    // e.g., dt: str | datetime (without assignment)
+    // These should be skipped; wait for the actual assignment
+    bool is_union_type = false;
+    if (
+      ast_node.contains("annotation") && !ast_node["annotation"].is_null() &&
+      ast_node["annotation"].contains("_type") &&
+      ast_node["annotation"]["_type"] == "BinOp")
+    {
+      is_union_type = true;
+    }
+
+    if (is_union_type && ast_node["value"].is_null())
+    {
+      // Skip this forward declaration; wait for the actual assignment
+      // that will give us the type information
+      return;
+    }
 
     // Infer type from function return if annotation is "Any"
     lhs_type = infer_type_from_any_annotation(ast_node, lhs_type);
@@ -5280,9 +5308,12 @@ size_t python_converter::register_function_argument(
   param_symbol.static_lifetime = false;
   param_symbol.is_extern = false;
   symbol_table_.add(param_symbol);
-  if (element.contains("annotation") && !element["annotation"].is_null())
+  symbolt *stored_param = symbol_table_.find_symbol(arg_id);
+  if (
+    stored_param != nullptr && element.contains("annotation") &&
+    !element["annotation"].is_null())
     get_typechecker().cache_annotation_types(
-      param_symbol, element["annotation"]);
+      *stored_param, element["annotation"]);
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via

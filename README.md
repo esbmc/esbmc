@@ -91,7 +91,7 @@ make -j4
 
 M1/M2/M3/M4 Macs are now supported.
 
-Given the common elements of OS X, run the script. It runs on both ARM and Intel macs. You do need Homebrew installed.
+Given the elements of OS X, run the script. It runs on both ARM and Intel macs. You do need Homebrew installed.
 It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script also supports building the Python frontend. Note that the Python frontend is quite early in its support for Python.
 
 ```
