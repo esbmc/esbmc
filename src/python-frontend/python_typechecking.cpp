@@ -6,6 +6,7 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <unordered_set>
+#include <util/std_expr.h>
 #include <util/std_types.h>
 
 python_typechecking::python_typechecking(python_converter &converter)
@@ -202,6 +203,43 @@ exprt python_typechecking::build_isinstance_check(
   return isinstance_expr;
 }
 
+exprt python_typechecking::build_none_check(const exprt &value_expr) const
+{
+  const namespacet &ns = converter_.name_space();
+  const typet &original_type = value_expr.type();
+  typet resolved_type = ns.follow(original_type);
+
+  auto is_optional_struct = [](const typet &type) -> bool {
+    if (!type.is_struct())
+      return false;
+
+    const struct_typet &struct_type = to_struct_type(type);
+    const std::string &tag = struct_type.tag().as_string();
+    return tag.rfind("tag-Optional_", 0) == 0;
+  };
+
+  if (is_optional_struct(resolved_type))
+    return member_exprt(value_expr, "is_none", bool_type());
+
+  if (resolved_type.is_pointer())
+  {
+    typet subtype = ns.follow(resolved_type.subtype());
+    if (is_optional_struct(subtype))
+    {
+      dereference_exprt deref(value_expr, subtype);
+      return member_exprt(deref, "is_none", bool_type());
+    }
+
+    exprt null_expr = gen_zero(original_type);
+    return equality_exprt(value_expr, null_expr);
+  }
+
+  if (resolved_type == none_type())
+    return true_exprt();
+
+  return nil_exprt();
+}
+
 bool python_typechecking::build_type_assertion(
   const exprt &value_expr,
   const typet &annotated_type,
@@ -215,14 +253,25 @@ bool python_typechecking::build_type_assertion(
     effective_types.push_back(annotated_type);
 
   std::vector<exprt> checks;
+  bool allow_none = false;
   for (const auto &type : effective_types)
   {
     if (type == none_type())
+    {
+      allow_none = true;
       continue;
+    }
 
     exprt isinstance_expr = build_isinstance_check(value_expr, type);
     if (!isinstance_expr.is_nil())
       checks.push_back(isinstance_expr);
+  }
+
+  if (allow_none)
+  {
+    exprt none_check = build_none_check(value_expr);
+    if (!none_check.is_nil())
+      checks.push_back(none_check);
   }
 
   if (checks.empty())
