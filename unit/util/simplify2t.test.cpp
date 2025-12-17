@@ -1165,7 +1165,6 @@ TEST_CASE(
   REQUIRE(to_not2t(result).value == cond);
 }
 
-
 TEST_CASE("uint_32_t v = 10; (uint64_t) v ==> 10", "[typecast][if]")
 {
   const expr2tc ten_32 = constant_int2tc(get_uint_type(32), BigInt(10));
