@@ -332,74 +332,11 @@ void goto_symext::symex_step(reachability_treet &art)
     if (is_symbol2t(call.function))
     {
       const irep_idt &id = to_symbol2t(call.function).thename;
-      std::string id_str = id.as_string();
-
-      // Handle __ESBMC intrinsic functions with both C and Python prefixes.
-      // Python frontend generates function names like "py:1.py@F@__ESBMC_get_object_size"
-      // which need to be converted to "c:@F@__ESBMC_get_object_size" format.
-      if (has_prefix(id_str, "c:@F@__ESBMC"))
+      if (has_prefix(id.as_string(), "c:@F@__ESBMC"))
       {
         cur_state->source.pc++;
-        run_intrinsic(call, art, id_str);
+        run_intrinsic(call, art, id.as_string());
         return;
-      }
-      else if (id_str.find("@F@__ESBMC") != std::string::npos)
-      {
-        // Extract function suffix from Python-style identifier and check if it's
-        // a known intrinsic. Only convert known intrinsics to avoid errors with
-        // non-intrinsic __ESBMC functions (e.g., __ESBMC_copy_value).
-        size_t at_pos = id_str.find("@F@__ESBMC");
-        if (at_pos != std::string::npos)
-        {
-          std::string func_suffix = id_str.substr(at_pos + 10);
-          std::string candidate_name = "c:@F@__ESBMC" + func_suffix;
-
-          // Check if this function is handled in run_intrinsic().
-          // We check both exact matches and prefix matches to cover all cases.
-          bool is_known_intrinsic =
-            // Exact matches
-            func_suffix == "_get_object_size" ||
-            func_suffix == "_builtin_object_size" || func_suffix == "_memset" ||
-            func_suffix == "_memcpy" || func_suffix == "_yield" ||
-            func_suffix == "_switch_to" || func_suffix == "_switch_away_from" ||
-            func_suffix == "_set_thread_internal_data" ||
-            func_suffix == "_get_thread_internal_data" ||
-            func_suffix == "_spawn_thread" ||
-            func_suffix == "_terminate_thread" ||
-            func_suffix == "_get_thread_state" ||
-            func_suffix == "_really_atomic_begin" ||
-            func_suffix == "_really_atomic_end" ||
-            func_suffix == "_switch_to_monitor" ||
-            func_suffix == "_switch_from_monitor" ||
-            func_suffix == "_register_monitor" ||
-            func_suffix == "_kill_monitor" ||
-            func_suffix == "_builtin_constant_p" ||
-            func_suffix == "_no_abnormal_memory_leak" ||
-            func_suffix == "_bitcast" || func_suffix == "_r_ok" ||
-            func_suffix == "_unreachable" ||
-            // Prefix matches
-            has_prefix(func_suffix, "_get_thread_id") ||
-            has_prefix(func_suffix, "_convertvector") ||
-            has_prefix(func_suffix, "_shufflevector") ||
-            has_prefix(func_suffix, "_atomic_load") ||
-            has_prefix(func_suffix, "_atomic_store") ||
-            has_prefix(func_suffix, "_is_little_endian") ||
-            has_prefix(func_suffix, "_init_object") ||
-            has_prefix(func_suffix, "_memory_leak_checks") ||
-            has_prefix(func_suffix, "_pthread_start_main_hook") ||
-            has_prefix(func_suffix, "_pthread_end_main_hook") ||
-            has_prefix(func_suffix, "_atexit_handler") ||
-            has_prefix(func_suffix, "_track_cheri") ||
-            has_prefix(func_suffix, "_list") ||
-            has_prefix(func_suffix, "_create_inf_obj");
-
-          if (is_known_intrinsic)
-          {
-            cur_state->source.pc++;
-            run_intrinsic(call, art, candidate_name);
-            return;
-          }
-        }
       }
 
       if (id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")
