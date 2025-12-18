@@ -990,6 +990,34 @@ exprt python_list::handle_index_access(
     }
     else if (slice_node["_type"] == "Name")
     {
+      // First try to get element type from list_node if it's an AnnAssign
+      if (
+        !list_node.is_null() && list_node["_type"] == "AnnAssign" &&
+        list_node.contains("annotation") && elem_type == typet())
+      {
+        elem_type = get_elem_type_from_annotation(
+          list_node, converter_.get_type_handler());
+      }
+
+      // If still no elem_type, try to get it from the array variable's type annotation
+      if (array.is_symbol() && elem_type == typet())
+      {
+        // Extract variable name from the symbol identifier
+        std::string list_var_name = json_utils::extract_var_name_from_symbol_id(
+          array.identifier().as_string());
+
+        // Find the variable's declaration to check for type annotation
+        nlohmann::json list_var_decl = json_utils::find_var_decl(
+          list_var_name, converter_.current_function_name(), converter_.ast());
+
+        // If the variable has a type annotation such as list[str], extract element type
+        if (!list_var_decl.is_null() && list_var_decl.contains("annotation"))
+        {
+          elem_type = get_elem_type_from_annotation(
+            list_var_decl, converter_.get_type_handler());
+        }
+      }
+
       // Handle variable-based indexing
       if (!list_node.is_null() && list_node["_type"] == "arg")
       {
