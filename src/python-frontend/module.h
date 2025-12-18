@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 struct function
 {
@@ -27,6 +28,8 @@ using FunctionsList = std::unordered_set<function, function_hash>;
 /* Keeping submodules as shared_ptr since ownership needs to be shared in
  * module_manager::get_module_from_dir */
 using SubmodulesList = std::unordered_set<std::shared_ptr<module>>;
+
+using OverloadList = std::vector<nlohmann::json>;
 
 class module
 {
@@ -55,6 +58,11 @@ public:
     submodules_.insert(mod);
   }
 
+  void add_overload(const nlohmann::json &ast)
+  {
+    overloads_.push_back(ast);
+  }
+
   function get_function(const std::string &func_name) const
   {
     auto it = std::find_if(
@@ -78,8 +86,14 @@ public:
     return submodules_;
   }
 
+  const OverloadList &overloads() const
+  {
+    return overloads_;
+  }
+
 private:
   std::string name_;
   FunctionsList functions_;
   SubmodulesList submodules_;
+  OverloadList overloads_;
 };

@@ -311,6 +311,11 @@ exprt function_call_expr::handle_isinstance() const
     std::string type_name = "NoneType";
     return build_isinstance(type_name);
   }
+  else if (type_arg["_type"] == "Attribute")
+  {
+    std::string type_name = args[1]["attr"];
+    return build_isinstance(type_name);
+  }
   else if (type_arg["_type"] == "Tuple")
   {
     // isinstance(v, (int, str))
