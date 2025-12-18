@@ -1186,8 +1186,6 @@ TEST_CASE("object_size regression", "[pointer_object]")
   const expr2tc zero_index =
     index2tc(get_int_type(8), x, gen_zero(get_int_type(64)));
 
-  // const expr2tc obj =  pointer_object2tc(pointer_type2tc(get_int_type(8)), zero_index);
-
   const expr2tc side_1 = address_of2tc(get_int_type(8), zero_index);
 
   const expr2tc side_2 = constant_int2tc(get_int_type(32), BigInt(10));
