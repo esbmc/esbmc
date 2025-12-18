@@ -58,6 +58,9 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
         else
           f.return_type_ = node["returns"]["id"];
 
+        if (json_utils::has_overload_decorator(node))
+          md->add_overload(node);
+
         md->add_function(f);
       }
     }

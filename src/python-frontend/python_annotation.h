@@ -1421,38 +1421,10 @@ private:
       return "Any"; // Default for cases where annotation is missing or null
   }
 
-  // Check for @overload decorators
-  bool has_overload_decorator(const Json &func_node) const
+  std::string match_literal_argument(
+    const Json &call_node,
+    std::vector<Json> overloads) const
   {
-    if (!func_node.contains("decorator_list"))
-      return false;
-
-    for (const auto &decorator : func_node["decorator_list"])
-    {
-      if (decorator["_type"] == "Name" && decorator["id"] == "overload")
-        return true;
-    }
-    return false;
-  }
-
-  // Find the best matching overload
-  std::string resolve_overload_return_type(
-    const std::string &func_name,
-    const Json &call_node) const
-  {
-    std::vector<Json> overloads;
-
-    // Find all overload definitions
-    for (const Json &elem : ast_["body"])
-    {
-      if (
-        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
-        has_overload_decorator(elem))
-      {
-        overloads.push_back(elem);
-      }
-    }
-
     if (overloads.empty())
       return "";
 
@@ -1501,6 +1473,25 @@ private:
     }
 
     return "";
+  }
+
+  // Find the best matching overload
+  std::string resolve_overload_return_type(
+    const std::string &func_name,
+    const Json &call_node) const
+  {
+    std::vector<Json> overloads;
+
+    // Find all overload definitions
+    for (const Json &elem : ast_["body"])
+    {
+      if (
+        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
+        json_utils::has_overload_decorator(elem))
+        overloads.push_back(elem);
+    }
+
+    return match_literal_argument(call_node, overloads);
   }
 
   std::string get_type_from_call(const Json &element)
@@ -1564,6 +1555,24 @@ private:
           return "dict";
         else
           return class_name; // Default: method returns same type as class
+      }
+
+      if (module_manager_)
+      {
+        auto module = module_manager_->get_module(class_name);
+        if (module)
+        {
+          auto overloads_funcs = module->overloads();
+          std::vector<Json> overloads;
+
+          for (const auto &elem : overloads_funcs)
+          {
+            if (elem["_type"] == "FunctionDef" && elem["name"] == method_name)
+              overloads.push_back(elem);
+          }
+
+          return match_literal_argument(element["value"], overloads);
+        }
       }
     }
 

@@ -422,4 +422,19 @@ inline std::string extract_var_name_from_symbol_id(const std::string &symbol_id)
                                         : symbol_id;
 }
 
+template <typename JsonType>
+bool has_overload_decorator(const JsonType &func_node)
+{
+  // Check for @overload decorators
+  if (!func_node.contains("decorator_list"))
+    return false;
+
+  for (const auto &decorator : func_node["decorator_list"])
+  {
+    if (decorator["_type"] == "Name" && decorator["id"] == "overload")
+      return true;
+  }
+  return false;
+}
+
 } // namespace json_utils
