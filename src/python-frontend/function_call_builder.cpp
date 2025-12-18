@@ -465,7 +465,7 @@ exprt function_call_builder::build() const
     {
       exprt obj_expr = converter_.get_expr(arg);
       typet obj_type = obj_expr.type();
-      
+
       // Normalize type: dereference pointers and follow symbol references
       if (obj_type.is_pointer())
         obj_type = obj_type.subtype();
