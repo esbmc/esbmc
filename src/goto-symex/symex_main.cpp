@@ -333,7 +333,7 @@ void goto_symext::symex_step(reachability_treet &art)
     {
       const irep_idt &id = to_symbol2t(call.function).thename;
       std::string id_str = id.as_string();
-      
+
       // Handle __ESBMC intrinsic functions with both C and Python prefixes.
       // Python frontend generates function names like "py:1.py@F@__ESBMC_get_object_size"
       // which need to be converted to "c:@F@__ESBMC_get_object_size" format.
@@ -353,18 +353,15 @@ void goto_symext::symex_step(reachability_treet &art)
         {
           std::string func_suffix = id_str.substr(at_pos + 10);
           std::string candidate_name = "c:@F@__ESBMC" + func_suffix;
-          
+
           // Check if this function is handled in run_intrinsic().
           // We check both exact matches and prefix matches to cover all cases.
           bool is_known_intrinsic =
             // Exact matches
             func_suffix == "_get_object_size" ||
-            func_suffix == "_builtin_object_size" ||
-            func_suffix == "_memset" ||
-            func_suffix == "_memcpy" ||
-            func_suffix == "_yield" ||
-            func_suffix == "_switch_to" ||
-            func_suffix == "_switch_away_from" ||
+            func_suffix == "_builtin_object_size" || func_suffix == "_memset" ||
+            func_suffix == "_memcpy" || func_suffix == "_yield" ||
+            func_suffix == "_switch_to" || func_suffix == "_switch_away_from" ||
             func_suffix == "_set_thread_internal_data" ||
             func_suffix == "_get_thread_internal_data" ||
             func_suffix == "_spawn_thread" ||
@@ -378,8 +375,7 @@ void goto_symext::symex_step(reachability_treet &art)
             func_suffix == "_kill_monitor" ||
             func_suffix == "_builtin_constant_p" ||
             func_suffix == "_no_abnormal_memory_leak" ||
-            func_suffix == "_bitcast" ||
-            func_suffix == "_r_ok" ||
+            func_suffix == "_bitcast" || func_suffix == "_r_ok" ||
             func_suffix == "_unreachable" ||
             // Prefix matches
             has_prefix(func_suffix, "_get_thread_id") ||
@@ -396,7 +392,7 @@ void goto_symext::symex_step(reachability_treet &art)
             has_prefix(func_suffix, "_track_cheri") ||
             has_prefix(func_suffix, "_list") ||
             has_prefix(func_suffix, "_create_inf_obj");
-          
+
           if (is_known_intrinsic)
           {
             cur_state->source.pc++;

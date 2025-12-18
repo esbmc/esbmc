@@ -2641,10 +2641,12 @@ bool goto_symext::handle_dict_size_for_get_object_size(
     if (struct_type.member_names[i] == "keys")
     {
       // Create member expression for dict.keys and call __ESBMC_list_size
-      expr2tc keys_member = member2tc(struct_type.members[i], dict_expr, "keys");
+      expr2tc keys_member =
+        member2tc(struct_type.members[i], dict_expr, "keys");
       expr2tc newcall = func_call.clone();
       code_function_call2t &list_size_call = to_code_function_call2t(newcall);
-      list_size_call.function = symbol2tc(get_empty_type(), "c:@F@__ESBMC_list_size");
+      list_size_call.function =
+        symbol2tc(get_empty_type(), "c:@F@__ESBMC_list_size");
       list_size_call.operands.clear();
       list_size_call.operands.push_back(keys_member);
       bump_call(list_size_call, "c:@F@__ESBMC_list_size");
@@ -2717,9 +2719,7 @@ void goto_symext::intrinsic_get_object_size(
   expr2tc ret_ref = func_call.ret;
   dereference(ret_ref, dereferencet::READ);
   symex_assign(
-    code_assign2tc(ret_ref, gen_zero(ret_ref->type)),
-    false,
-    cur_state->guard);
+    code_assign2tc(ret_ref, gen_zero(ret_ref->type)), false, cur_state->guard);
 }
 
 void goto_symext::bump_call(

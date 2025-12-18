@@ -577,7 +577,7 @@ void value_sett::get_value_set_rec(
 
     if (sym.rlevel == symbol2t::renaming_level::level1_global)
       assert(sym.level1_num == 0);
-    
+
     /* This assertion does not hold in some cases:
      * 1. During value_sett::assign() the RHS is the L2 symbol 
      *    c:pthread_lib.c@5466@F@pthread_create@startdata in e.g.
@@ -594,7 +594,8 @@ void value_sett::get_value_set_rec(
     {
       log_debug(
         "value_set",
-        "Encountered level2_global symbol {} in value set analysis (suffix: {})",
+        "Encountered level2_global symbol {} in value set analysis (suffix: "
+        "{})",
         sym.get_symbol_name(),
         suffix);
       // Continue processing - level2_global symbols are valid in certain contexts
