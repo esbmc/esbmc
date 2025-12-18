@@ -8,104 +8,6 @@
 #include <irep2/irep2_utils.h>
 #include <util/type_byte_size.h>
 
-expr2tc expr2t::do_simplify() const
-{
-  return expr2tc();
-}
-
-expr2tc expr2t::simplify() const
-{
-  try
-  {
-    // Corner case! Don't even try to simplify address of's operands, might end up
-    // taking the address of some /completely/ arbitary pice of data, by
-    // simplifiying an index to its data, discarding the symbol.
-    if (expr_id == address_of_id) // unlikely
-      return expr2tc();
-
-    // And overflows too. We don't wish an add to distribute itself, for example,
-    // when we're trying to work out whether or not it's going to overflow.
-    if (expr_id == overflow_id)
-      return expr2tc();
-
-    // Try initial simplification
-    expr2tc res = do_simplify();
-    if (!is_nil_expr(res))
-    {
-      // Woot, we simplified some of this. It may have _additional_ fields that
-      // need to get simplified (member2ts in arrays for example), so invoke the
-      // simplifier again, to hit those potential subfields.
-      expr2tc res2 = res->simplify();
-
-      // If we simplified even further, return res2; otherwise res.
-      if (is_nil_expr(res2))
-        return res;
-      else
-        return res2;
-    }
-
-    // Try simplifying all the sub-operands.
-    bool changed = false;
-    std::list<expr2tc> newoperands;
-
-    for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++)
-    {
-      expr2tc tmp;
-      const expr2tc *e = get_sub_expr(idx);
-
-      if (expr_id == with_id && idx == 0 && is_with2t(*e))
-      {
-        // Don't simplifying all the sub-operands for with
-        // as they have already been simplified
-        newoperands.push_back(tmp);
-        continue;
-      }
-
-      if (!is_nil_expr(*e))
-      {
-        tmp = e->simplify();
-        if (!is_nil_expr(tmp))
-          changed = true;
-      }
-
-      newoperands.push_back(tmp);
-    }
-
-    if (changed == false)
-      // Second shot at simplification. For efficiency, a simplifier may be
-      // holding something back until it's certain all its operands are
-      // simplified. It's responsible for simplifying further if it's made that
-      // call though.
-      return do_simplify();
-
-    // An operand has been changed; clone ourselves and update.
-    expr2tc new_us = clone();
-    std::list<expr2tc>::iterator it2 = newoperands.begin();
-    new_us->Foreach_operand([&it2](expr2tc &e) {
-      if (!*it2)
-        ; // No change in operand;
-      else
-        e = *it2; // Operand changed; overwrite with new one.
-      it2++;
-    });
-
-    // Finally, attempt simplification again.
-    expr2tc tmp = new_us->do_simplify();
-    if (is_nil_expr(tmp))
-      return new_us;
-    else
-      return tmp;
-  }
-  catch (const array_type2t::dyn_sized_array_excp &e)
-  {
-    // Pretty much anything in any expression could be fouled up by there
-    // being a dynamically sized array somewhere in there. In this circumstance,
-    // don't even attempt partial simpilfication. We'd probably have to double
-    // the size of simplification code in that case.
-    return expr2tc();
-  }
-}
-
 static expr2tc try_simplification(const expr2tc &expr)
 {
   expr2tc to_simplify = expr->do_simplify();
@@ -131,6 +33,55 @@ static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
 
   // Create a typecast of the result
   return try_simplification(typecast2tc(type, expr));
+}
+
+expr2tc expr2t::do_simplify() const
+{
+  return expr2tc();
+}
+
+expr2tc expr2t::simplify() const
+{
+  try
+  {
+    // Corner case! Don't even try to simplify address of's operands, might end up
+    // taking the address of some /completely/ arbitary pice of data, by
+    // simplifiying an index to its data, discarding the symbol.
+    if (expr_id == address_of_id) // unlikely
+      return expr2tc();
+
+    // And overflows too. We don't wish an add to distribute itself, for example,
+    // when we're trying to work out whether or not it's going to overflow.
+    if (expr_id == overflow_id)
+      return expr2tc();
+
+    // Try simplifying all the sub-operands.
+    expr2tc new_us = clone();
+    bool changed = false;
+    new_us->Foreach_operand(
+      [&changed](expr2tc &e) { changed |= ::simplify(e); });
+
+    // Try to simplify top-level expr
+    expr2tc simplified = typecast_check_return(type, new_us->do_simplify());
+
+    // If we could simplify it, just return
+    if (!is_nil_expr(simplified))
+      return simplified;
+
+    // Otherwise, check if we at least simplified the operand
+    if (changed)
+      return new_us;
+
+    // Give up
+  }
+  catch (const array_type2t::dyn_sized_array_excp &e)
+  {
+    // Pretty much anything in any expression could be fouled up by there
+    // being a dynamically sized array somewhere in there. In this circumstance,
+    // don't even attempt partial simplification. We'd probably have to double
+    // the size of simplification code in that case.
+  }
+  return expr2tc();
 }
 
 static void fetch_ops_from_this_type(
@@ -277,23 +228,8 @@ static expr2tc simplify_arith_2ops(
   if (!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
-
-  if (!is_constant_expr(simplied_side_1) && !is_constant_expr(simplied_side_2))
-  {
-    // Were we able to simplify the sides?
-    if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-    {
-      expr2tc new_op(
-        std::make_shared<constructor>(type, simplied_side_1, simplied_side_2));
-
-      return typecast_check_return(type, new_op);
-    }
-
+  if (!is_constant_expr(side_1) && !is_constant_expr(side_2))
     return expr2tc();
-  }
 
   // This should be handled by ieee_*
   assert(!is_floatbv_type(type));
@@ -308,10 +244,10 @@ static expr2tc simplify_arith_2ops(
       return to_constant_int2t(c).value;
     };
 
-    simpl_res = TFunctor<BigInt>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<BigInt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if (is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
+  else if (is_bv_type(side_1) || is_bv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
@@ -320,8 +256,8 @@ static expr2tc simplify_arith_2ops(
       return to_constant_int2t(c).value;
     };
 
-    simpl_res = TFunctor<BigInt>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<BigInt>::simplify(side_1, side_2, is_constant, get_value);
 
     // Fix rounding when an overflow occurs
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
@@ -331,7 +267,7 @@ static expr2tc simplify_arith_2ops(
           migrate_type_back(simpl_res->type)),
         simpl_res);
   }
-  else if (is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
+  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -339,10 +275,10 @@ static expr2tc simplify_arith_2ops(
     std::function<fixedbvt &(expr2tc &)> get_value =
       [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
 
-    simpl_res = TFunctor<fixedbvt>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<fixedbvt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if (is_bool_type(simplied_side_1) || is_bool_type(simplied_side_2))
+  else if (is_bool_type(side_1) || is_bool_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_bool2t;
@@ -351,8 +287,8 @@ static expr2tc simplify_arith_2ops(
       return to_constant_bool2t(c).value;
     };
 
-    simpl_res = TFunctor<bool>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<bool>::simplify(side_1, side_2, is_constant, get_value);
   }
   else
     return expr2tc();
@@ -744,6 +680,43 @@ expr2tc modulus2t::do_simplify() const
   if (side_1 == side_2)
     return gen_zero(type);
 
+  if (!is_constant_expr(side_1) && !is_constant_expr(side_2))
+    return expr2tc();
+
+  // Is a vector operation ? Apply the op
+  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
+  {
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return modulus2tc(t, e1, e2);
+    };
+    return distribute_vector_operation(op, side_1, side_2);
+  }
+
+  if (is_bv_type(type))
+  {
+    if (is_constant_int2t(side_2))
+    {
+      // Denominator is one? Simplify to zero
+      if (to_constant_int2t(side_2).value == 1)
+        return constant_int2tc(type, BigInt(0));
+
+      // Denominator is zero? UB!
+      if (to_constant_int2t(side_2).value == 0)
+        return expr2tc();
+    }
+
+    if (is_constant_int2t(side_1) && is_constant_int2t(side_2))
+    {
+      const constant_int2t &numerator = to_constant_int2t(side_1);
+      const constant_int2t &denominator = to_constant_int2t(side_2);
+
+      auto c = numerator.value;
+      c %= denominator.value;
+
+      return constant_int2tc(type, c);
+    }
+  }
+
   return simplify_arith_2ops<Modtor, modulus2t>(type, side_1, side_2);
 }
 
@@ -753,19 +726,8 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
   if (!is_number_type(type) && !is_vector_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operation, if any
-  expr2tc to_simplify = try_simplification(value);
-  if (!is_constant_expr(to_simplify))
-  {
-    // Were we able to simplify anything?
-    if (value != to_simplify)
-    {
-      expr2tc new_neg(std::make_shared<constructor>(type, to_simplify));
-      return typecast_check_return(type, new_neg);
-    }
-
+  if (!is_constant_expr(value))
     return expr2tc();
-  }
 
   expr2tc simpl_res;
   if (is_bv_type(value))
@@ -773,32 +735,21 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     std::function<constant_int2t &(expr2tc &)> to_constant =
       (constant_int2t & (*)(expr2tc &)) to_constant_int2t;
 
-    simpl_res = TFunctor<constant_int2t>::simplify(to_simplify, to_constant);
-
-    // Properly handle truncation when an overflow occurs
-    // or when the result gets out of the bounds of the type
-    if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
-      migrate_expr(
-        from_integer(
-          to_constant_int2t(simpl_res).value,
-          migrate_type_back(simpl_res->type)),
-        simpl_res);
+    simpl_res = TFunctor<constant_int2t>::simplify(value, to_constant);
   }
   else if (is_fixedbv_type(value))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
 
-    simpl_res =
-      TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
+    simpl_res = TFunctor<constant_fixedbv2t>::simplify(value, to_constant);
   }
   else if (is_floatbv_type(value))
   {
     std::function<constant_floatbv2t &(expr2tc &)> to_constant =
       (constant_floatbv2t & (*)(expr2tc &)) to_constant_floatbv2t;
 
-    simpl_res =
-      TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
+    simpl_res = TFunctor<constant_floatbv2t>::simplify(value, to_constant);
   }
   else
     return expr2tc();
@@ -1115,8 +1066,7 @@ expr2tc pointer_offset2t::do_simplify() const
 
       if (is_constant_int2t(index_value))
       {
-        expr2tc offs =
-          try_simplification(compute_pointer_offset(addrof.ptr_obj));
+        expr2tc offs = compute_pointer_offset(addrof.ptr_obj)->simplify();
         if (is_constant_int2t(offs))
           return offs;
       }
@@ -1128,7 +1078,7 @@ expr2tc pointer_offset2t::do_simplify() const
 
       // First, try to use our existing compute_pointer_offset function
       // This should handle most struct member cases
-      expr2tc offs = try_simplification(compute_pointer_offset(addrof.ptr_obj));
+      expr2tc offs = compute_pointer_offset(addrof.ptr_obj)->simplify();
       if (is_constant_int2t(offs))
         return offs;
 
@@ -1273,26 +1223,23 @@ resolve_with_chain_lookup(const expr2tc &source, const expr2tc &lookup_index)
 
 expr2tc index2t::do_simplify() const
 {
-  expr2tc new_index = try_simplification(index);
-  expr2tc src = try_simplification(source_value);
-
-  if (is_with2t(src))
+  if (is_with2t(source_value))
   {
-    expr2tc resolved = resolve_with_chain_lookup(src, new_index);
+    expr2tc resolved = resolve_with_chain_lookup(source_value, index);
     if (!is_nil_expr(resolved))
       return resolved;
   }
 
-  if (is_constant_array2t(src) && is_constant_int2t(new_index))
+  if (is_constant_array2t(source_value) && is_constant_int2t(index))
   {
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
     // model. We don't have to think about this now though.
-    const constant_int2t &idx = to_constant_int2t(new_index);
+    const constant_int2t &idx = to_constant_int2t(index);
     if (idx.value.is_negative())
       return expr2tc();
 
-    const constant_array2t &arr = to_constant_array2t(src);
+    const constant_array2t &arr = to_constant_array2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if (the_idx >= arr.datatype_members.size())
       return expr2tc();
@@ -1316,14 +1263,14 @@ expr2tc index2t::do_simplify() const
     return arr.datatype_members[idx.as_ulong()];
   }
 
-  if (is_constant_string2t(src) && is_constant_int2t(new_index))
+  if (is_constant_string2t(source_value) && is_constant_int2t(index))
   {
     // Same index situation
-    const constant_int2t &idx = to_constant_int2t(new_index);
+    const constant_int2t &idx = to_constant_int2t(index);
     if (idx.value.is_negative())
       return expr2tc();
 
-    const constant_string2t &str = to_constant_string2t(src);
+    const constant_string2t &str = to_constant_string2t(source_value);
     unsigned long the_idx = idx.as_ulong();
     if (the_idx >= str.array_size()) // allow reading null term.
       return expr2tc();
@@ -1336,44 +1283,38 @@ expr2tc index2t::do_simplify() const
   }
 
   // Only thing this index can evaluate to is the default value of this array
-  if (is_constant_array_of2t(src))
-    return to_constant_array_of2t(src).initializer;
-
-  if (src != source_value || new_index != index)
-    return index2tc(type, src, new_index);
+  if (is_constant_array_of2t(source_value))
+    return to_constant_array_of2t(source_value).initializer;
 
   return expr2tc();
 }
 
 expr2tc not2t::do_simplify() const
 {
-  expr2tc simp = try_simplification(value);
-
-  // !!x = x (double negation)
-  if (is_not2t(simp))
+  if (is_not2t(value))
     // These negate.
-    return to_not2t(simp).value;
+    return to_not2t(value).value;
 
   // De Morgan's laws for logical operations
   // !(x && y) = !x || !y
-  if (is_and2t(simp))
+  if (is_and2t(value))
   {
-    const and2t &and_expr = to_and2t(simp);
+    const and2t &and_expr = to_and2t(value);
     return or2tc(not2tc(and_expr.side_1), not2tc(and_expr.side_2));
   }
 
   // !(x || y) = !x && !y
-  if (is_or2t(simp))
+  if (is_or2t(value))
   {
-    const or2t &or_expr = to_or2t(simp);
+    const or2t &or_expr = to_or2t(value);
     return and2tc(not2tc(or_expr.side_1), not2tc(or_expr.side_2));
   }
 
   // Comparison negations - only for non-floating point types
   // !(x == y) = x != y
-  if (is_equality2t(simp))
+  if (is_equality2t(value))
   {
-    const equality2t &eq = to_equality2t(simp);
+    const equality2t &eq = to_equality2t(value);
     if (is_floatbv_type(eq.side_1) || is_floatbv_type(eq.side_2))
       return expr2tc();
     else
@@ -1381,9 +1322,9 @@ expr2tc not2t::do_simplify() const
   }
 
   // !(x != y) = x == y
-  if (is_notequal2t(simp))
+  if (is_notequal2t(value))
   {
-    const notequal2t &neq = to_notequal2t(simp);
+    const notequal2t &neq = to_notequal2t(value);
     if (is_floatbv_type(neq.side_1) || is_floatbv_type(neq.side_2))
       return expr2tc();
     else
@@ -1391,9 +1332,9 @@ expr2tc not2t::do_simplify() const
   }
 
   // !(x < y) = x >= y
-  if (is_lessthan2t(simp))
+  if (is_lessthan2t(value))
   {
-    const lessthan2t &lt = to_lessthan2t(simp);
+    const lessthan2t &lt = to_lessthan2t(value);
     if (is_floatbv_type(lt.side_1) || is_floatbv_type(lt.side_2))
       return expr2tc();
     else
@@ -1401,9 +1342,9 @@ expr2tc not2t::do_simplify() const
   }
 
   // !(x <= y) = x > y
-  if (is_lessthanequal2t(simp))
+  if (is_lessthanequal2t(value))
   {
-    const lessthanequal2t &lte = to_lessthanequal2t(simp);
+    const lessthanequal2t &lte = to_lessthanequal2t(value);
     if (is_floatbv_type(lte.side_1) || is_floatbv_type(lte.side_2))
       return expr2tc();
     else
@@ -1411,9 +1352,9 @@ expr2tc not2t::do_simplify() const
   }
 
   // !(x > y) = x <= y
-  if (is_greaterthan2t(simp))
+  if (is_greaterthan2t(value))
   {
-    const greaterthan2t &gt = to_greaterthan2t(simp);
+    const greaterthan2t &gt = to_greaterthan2t(value);
     if (is_floatbv_type(gt.side_1) || is_floatbv_type(gt.side_2))
       return expr2tc();
     else
@@ -1421,19 +1362,19 @@ expr2tc not2t::do_simplify() const
   }
 
   // !(x >= y) = x < y
-  if (is_greaterthanequal2t(simp))
+  if (is_greaterthanequal2t(value))
   {
-    const greaterthanequal2t &gte = to_greaterthanequal2t(simp);
+    const greaterthanequal2t &gte = to_greaterthanequal2t(value);
     if (is_floatbv_type(gte.side_1) || is_floatbv_type(gte.side_2))
       return expr2tc();
     else
       return lessthan2tc(gte.side_1, gte.side_2);
   }
 
-  if (!is_constant_bool2t(simp))
+  if (!is_constant_bool2t(value))
     return expr2tc();
 
-  const constant_bool2t &val = to_constant_bool2t(simp);
+  const constant_bool2t &val = to_constant_bool2t(value);
   return constant_bool2tc(!val.value);
 }
 
@@ -1446,27 +1387,12 @@ static expr2tc simplify_logic_2ops(
   if (!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
-
-  if (!is_constant_expr(simplied_side_1) && !is_constant_expr(simplied_side_2))
-  {
-    // Were we able to simplify the sides?
-    if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-    {
-      expr2tc new_op(
-        std::make_shared<constructor>(simplied_side_1, simplied_side_2));
-
-      return typecast_check_return(type, new_op);
-    }
-
+  if (!is_constant_expr(side_1) && !is_constant_expr(side_2))
     return expr2tc();
-  }
 
   expr2tc simpl_res;
 
-  if (is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
+  if (is_bv_type(side_1) || is_bv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
@@ -1475,10 +1401,10 @@ static expr2tc simplify_logic_2ops(
       return to_constant_int2t(c).value;
     };
 
-    simpl_res = TFunctor<BigInt>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<BigInt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if (is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
+  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -1486,10 +1412,10 @@ static expr2tc simplify_logic_2ops(
     std::function<fixedbvt &(expr2tc &)> get_value =
       [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
 
-    simpl_res = TFunctor<fixedbvt>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<fixedbvt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if (is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -1499,10 +1425,10 @@ static expr2tc simplify_logic_2ops(
       return to_constant_floatbv2t(c).value;
     };
 
-    simpl_res = TFunctor<ieee_floatt>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<ieee_floatt>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if (is_bool_type(simplied_side_1) || is_bool_type(simplied_side_2))
+  else if (is_bool_type(side_1) || is_bool_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_bool2t;
@@ -1511,8 +1437,8 @@ static expr2tc simplify_logic_2ops(
       return to_constant_bool2t(c).value;
     };
 
-    simpl_res = TFunctor<bool>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<bool>::simplify(side_1, side_2, is_constant, get_value);
   }
   else
     return expr2tc();
@@ -1808,20 +1734,16 @@ static expr2tc do_bit_munge_operation(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplified_side_1 = try_simplification(side_1);
-  expr2tc simplified_side_2 = try_simplification(side_2);
-
   /* Only support constant folding for integer and's. If you're a float,
    * pointer, or whatever, you're on your own. */
   if (
-    is_constant_int2t(simplified_side_1) &&
-    is_constant_int2t(simplified_side_2) && type->get_width() <= 64)
+    is_constant_int2t(side_1) && is_constant_int2t(side_2) &&
+    type->get_width() <= 64)
   {
     // So - we can't make BigInt by itself do the operation. But we can try to
     // map it to the corresponding operation on our native types.
-    const constant_int2t &int1 = to_constant_int2t(simplified_side_1);
-    const constant_int2t &int2 = to_constant_int2t(simplified_side_2);
+    const constant_int2t &int1 = to_constant_int2t(side_1);
+    const constant_int2t &int2 = to_constant_int2t(side_2);
     const BigInt &bl = int1.value;
     const BigInt &br = int2.value;
 
@@ -1841,8 +1763,7 @@ static expr2tc do_bit_munge_operation(
     {
       /* do we have a small enough LHS to evaluate on uint64_t? */
       can_eval &=
-        br == 0 ||
-        (is_signedbv_type(simplified_side_1) ? bl.is_int64() : bl.is_uint64());
+        br == 0 || (is_signedbv_type(side_1) ? bl.is_int64() : bl.is_uint64());
       is_shift = true;
     }
     else
@@ -1880,13 +1801,6 @@ static expr2tc do_bit_munge_operation(
       return constant_int2tc(type, z);
     }
   }
-
-  // Were we able to simplify any side?
-  if (side_1 != simplified_side_1 || side_2 != simplified_side_2)
-    return typecast_check_return(
-      type,
-      expr2tc(std::make_shared<constructor>(
-        type, simplified_side_1, simplified_side_2)));
 
   return expr2tc();
 }
@@ -2446,26 +2360,24 @@ expr2tc typecast2t::do_simplify() const
     return from;
   }
 
-  auto simp = try_simplification(from);
-
-  if (is_constant_expr(simp))
+  if (is_constant_expr(from))
   {
     // Casts from constant operands can be done here.
-    if (is_bool_type(simp) && is_number_type(type))
+    if (is_bool_type(from) && is_number_type(type))
     {
       // bool to int
       if (is_bv_type(type))
-        return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
+        return constant_int2tc(type, BigInt(to_constant_bool2t(from).value));
 
       if (is_fixedbv_type(type))
       {
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
-        fbv.from_integer(to_constant_bool2t(simp).value);
+        fbv.from_integer(to_constant_bool2t(from).value);
         return constant_fixedbv2tc(fbv);
       }
 
-      if (is_floatbv_type(simp))
+      if (is_floatbv_type(from))
       {
         if (!is_constant_int2t(rounding_mode))
           return expr2tc();
@@ -2475,16 +2387,16 @@ expr2tc typecast2t::do_simplify() const
         BigInt rm_value = to_constant_int2t(rounding_mode).value;
         fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
-        fpbv.from_expr(to_constant_floatbv2t(simp).value.to_expr());
+        fpbv.from_expr(to_constant_floatbv2t(from).value.to_expr());
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
 
         return constant_floatbv2tc(fpbv);
       }
     }
-    else if (is_bv_type(simp) && is_number_type(type))
+    else if (is_bv_type(from) && is_number_type(type))
     {
       // int to int/float/double
-      const constant_int2t &theint = to_constant_int2t(simp);
+      const constant_int2t &theint = to_constant_int2t(from);
 
       if (is_bv_type(type))
       {
@@ -2509,7 +2421,7 @@ expr2tc typecast2t::do_simplify() const
 
       if (is_bool_type(type))
       {
-        const constant_int2t &theint = to_constant_int2t(simp);
+        const constant_int2t &theint = to_constant_int2t(from);
         return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
       }
 
@@ -2524,15 +2436,15 @@ expr2tc typecast2t::do_simplify() const
         fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
         fpbv.spec = to_floatbv_type(migrate_type_back(type));
-        fpbv.from_integer(to_constant_int2t(simp).value);
+        fpbv.from_integer(to_constant_int2t(from).value);
 
         return constant_floatbv2tc(fpbv);
       }
     }
-    else if (is_fixedbv_type(simp) && is_number_type(type))
+    else if (is_fixedbv_type(from) && is_number_type(type))
     {
       // float/double to int/float/double
-      fixedbvt fbv(to_constant_fixedbv2t(simp).value);
+      fixedbvt fbv(to_constant_fixedbv2t(from).value);
 
       if (is_bv_type(type))
         return constant_int2tc(type, fbv.to_integer());
@@ -2545,17 +2457,17 @@ expr2tc typecast2t::do_simplify() const
 
       if (is_bool_type(type))
       {
-        const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
+        const constant_fixedbv2t &fbv = to_constant_fixedbv2t(from);
         return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
       }
     }
-    else if (is_floatbv_type(simp) && is_number_type(type))
+    else if (is_floatbv_type(from) && is_number_type(type))
     {
       // float/double to int/float/double
       if (!is_constant_int2t(rounding_mode))
         return expr2tc();
 
-      ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
+      ieee_floatt fpbv(to_constant_floatbv2t(from).value);
 
       BigInt rm_value = to_constant_int2t(rounding_mode).value;
       fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
@@ -2576,20 +2488,20 @@ expr2tc typecast2t::do_simplify() const
   else if (is_bool_type(type))
   {
     // Bool type -> turn into equality with zero
-    exprt zero = gen_zero(migrate_type_back(simp->type));
+    exprt zero = gen_zero(migrate_type_back(from->type));
 
     expr2tc zero2;
     migrate_expr(zero, zero2);
 
-    return not2tc(equality2tc(simp, zero2));
+    return not2tc(equality2tc(from, zero2));
   }
-  else if (is_pointer_type(type) && is_pointer_type(simp))
+  else if (is_pointer_type(type) && is_pointer_type(from))
   {
     // Casting from one pointer to another is meaningless... except when there's
     // pointer arithmetic about to be applied to it. So, only remove typecasts
     // that don't change the subtype width.
     const pointer_type2t &ptr_to = to_pointer_type(type);
-    const pointer_type2t &ptr_from = to_pointer_type(simp->type);
+    const pointer_type2t &ptr_from = to_pointer_type(from->type);
 
     if (
       is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype) ||
@@ -2614,7 +2526,7 @@ expr2tc typecast2t::do_simplify() const
         (is_empty_type(ptr_from.subtype)) ? 8 : ptr_from.subtype->get_width();
 
       if (to_width == from_width)
-        return simp;
+        return from;
     }
     catch (const array_type2t::dyn_sized_array_excp &e)
     {
@@ -2629,11 +2541,11 @@ expr2tc typecast2t::do_simplify() const
 
     return expr2tc();
   }
-  else if (is_typecast2t(simp) && type == simp->type)
+  else if (is_typecast2t(from) && type == from->type)
   {
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
-    return typecast2tc(type, to_typecast2t(simp).from);
+    return typecast2tc(type, to_typecast2t(from).from);
   }
 
   return expr2tc();
@@ -2644,18 +2556,10 @@ expr2tc nearbyint2t::do_simplify() const
   if (!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operation, if any
-  expr2tc to_simplify = try_simplification(from);
-  if (!is_constant_floatbv2t(to_simplify))
-  {
-    // Were we able to simplify anything?
-    if (from != to_simplify)
-      return typecast_check_return(type, nearbyint2tc(type, to_simplify));
-
+  if (!is_constant_floatbv2t(from))
     return expr2tc();
-  }
 
-  ieee_floatt n = to_constant_floatbv2t(to_simplify).value;
+  ieee_floatt n = to_constant_floatbv2t(from).value;
   if (n.is_NaN() || n.is_zero() || n.is_infinity())
     return typecast_check_return(type, from);
 
@@ -2679,12 +2583,11 @@ expr2tc address_of2t::do_simplify() const
       to_constant_int2t(idx.index).value.is_zero())
       return expr2tc();
 
-    expr2tc new_index = try_simplification(idx.index);
     expr2tc zero = constant_int2tc(index_type2(), BigInt(0));
     expr2tc new_idx = index2tc(idx.type, idx.source_value, zero);
     expr2tc sub_addr_of = address_of2tc(ptr_type.subtype, new_idx);
 
-    return add2tc(type, sub_addr_of, new_index);
+    return add2tc(type, sub_addr_of, idx.index);
   }
 
   return expr2tc();
@@ -2699,31 +2602,19 @@ static expr2tc simplify_relations(
   if (!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
-
-  if (!is_constant(simplied_side_1) || !is_constant(simplied_side_2))
+  if (!is_constant(side_1) || !is_constant(side_2))
   {
-    // Were we able to simplify the sides?
-    if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-    {
-      expr2tc new_op(
-        std::make_shared<constructor>(simplied_side_1, simplied_side_2));
-
-      return typecast_check_return(type, new_op);
-    }
-    else if (
-      is_add2t(simplied_side_1) && is_add2t(simplied_side_2) &&
-      is_pointer_type(simplied_side_1) && is_pointer_type(simplied_side_2))
+    if (
+      is_add2t(side_1) && is_add2t(side_2) && is_pointer_type(side_1) &&
+      is_pointer_type(side_2))
     {
       // Simplification of pointer comparison:
       // address = pointer + offset
       // When the pointer objects are the same, comparing the addresses is equivalent
       // to comparing the offsets.
       // (&x + 1 == &x + 2) => (1 == 2) => false
-      add2t lhs = to_add2t(simplied_side_1);
-      add2t rhs = to_add2t(simplied_side_2);
+      add2t lhs = to_add2t(side_1);
+      add2t rhs = to_add2t(side_2);
 
       if (
         lhs.side_1 == rhs.side_1 && is_constant(lhs.side_2) &&
@@ -2756,13 +2647,11 @@ static expr2tc simplify_relations(
 
       return expr2tc();
     }
-
-    return expr2tc();
   }
 
   expr2tc simpl_res;
 
-  if (is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
+  if (is_bv_type(side_1) || is_bv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
@@ -2771,10 +2660,10 @@ static expr2tc simplify_relations(
       return to_constant_int2t(c).value;
     };
 
-    simpl_res = TFunctor<BigInt &>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<BigInt &>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if (is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
+  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -2782,10 +2671,10 @@ static expr2tc simplify_relations(
     std::function<fixedbvt &(expr2tc &)> get_value =
       [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
 
-    simpl_res = TFunctor<fixedbvt &>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<fixedbvt &>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if (is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -2795,10 +2684,10 @@ static expr2tc simplify_relations(
       return to_constant_floatbv2t(c).value;
     };
 
-    simpl_res = TFunctor<ieee_floatt &>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res =
+      TFunctor<ieee_floatt &>::simplify(side_1, side_2, is_constant, get_value);
   }
-  else if (is_pointer_type(simplied_side_1) || is_pointer_type(simplied_side_2))
+  else if (is_pointer_type(side_1) || is_pointer_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       [&](const expr2tc &t) -> bool {
@@ -2815,8 +2704,7 @@ static expr2tc simplify_relations(
       return 0xbadbeef;
     };
 
-    simpl_res = TFunctor<int>::simplify(
-      simplied_side_1, simplied_side_2, is_constant, get_value);
+    simpl_res = TFunctor<int>::simplify(side_1, side_2, is_constant, get_value);
   }
   else
     return expr2tc();
@@ -2833,45 +2721,27 @@ static expr2tc simplify_floatbv_relations(
   if (!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
+  if (!(is_constant_expr(side_1) || is_constant_expr(side_2) ||
+        (side_1 == side_2)))
+    return expr2tc();
 
-  if (
-    is_constant_expr(simplied_side_1) || is_constant_expr(simplied_side_2) ||
-    (simplied_side_1 == simplied_side_2))
+  expr2tc simpl_res;
+  if (is_floatbv_type(side_1) || is_floatbv_type(side_2) || (side_1 == side_2))
   {
-    expr2tc simpl_res = expr2tc();
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
-    if (is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
-    {
-      std::function<bool(const expr2tc &)> is_constant =
-        (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
-
-      std::function<ieee_floatt &(expr2tc &)> get_value =
-        [](expr2tc &c) -> ieee_floatt & {
-        return to_constant_floatbv2t(c).value;
-      };
-
-      simpl_res = TFunctor<ieee_floatt>::simplify(
-        simplied_side_1, simplied_side_2, is_constant, get_value);
-    }
-    else
-      assert(0);
-
-    return typecast_check_return(type, simpl_res);
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
+    simpl_res =
+      TFunctor<ieee_floatt>::simplify(side_1, side_2, is_constant, get_value);
   }
+  else
+    assert(0);
 
-  // Were we able to simplify the sides?
-  if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-  {
-    expr2tc new_op(
-      std::make_shared<constructor>(simplied_side_1, simplied_side_2));
-
-    return typecast_check_return(type, new_op);
-  }
-
-  return expr2tc();
+  return typecast_check_return(type, simpl_res);
 }
 
 template <class constant_type>
@@ -3712,19 +3582,8 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
   if (!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operation, if any
-  expr2tc to_simplify = try_simplification(value);
-  if (!is_constant_expr(to_simplify))
-  {
-    // Were we able to simplify anything?
-    if (value != to_simplify)
-    {
-      expr2tc new_neg(std::make_shared<constructor>(to_simplify));
-      return typecast_check_return(type, new_neg);
-    }
-
+  if (!is_constant_expr(value))
     return expr2tc();
-  }
 
   expr2tc simpl_res = expr2tc();
 
@@ -3733,16 +3592,14 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
 
-    simpl_res =
-      TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
+    simpl_res = TFunctor<constant_fixedbv2t>::simplify(value, to_constant);
   }
   else if (is_floatbv_type(value))
   {
     std::function<constant_floatbv2t &(expr2tc &)> to_constant =
       (constant_floatbv2t & (*)(expr2tc &)) to_constant_floatbv2t;
 
-    simpl_res =
-      TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
+    simpl_res = TFunctor<constant_floatbv2t>::simplify(value, to_constant);
   }
   else
     return expr2tc();
@@ -3884,34 +3741,19 @@ static expr2tc simplify_floatbv_2ops(
   if (!is_number_type(type) && !is_pointer_type(type) && !is_vector_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
-
   // Try to handle NaN
-  if (is_constant_floatbv2t(simplied_side_1))
-    if (to_constant_floatbv2t(simplied_side_1).value.is_NaN())
-      return simplied_side_1;
+  if (is_constant_floatbv2t(side_1))
+    if (to_constant_floatbv2t(side_1).value.is_NaN())
+      return side_1;
 
-  if (is_constant_floatbv2t(simplied_side_2))
-    if (to_constant_floatbv2t(simplied_side_2).value.is_NaN())
-      return simplied_side_2;
+  if (is_constant_floatbv2t(side_2))
+    if (to_constant_floatbv2t(side_2).value.is_NaN())
+      return side_2;
 
   if (
-    !is_constant_expr(simplied_side_1) || !is_constant_expr(simplied_side_2) ||
+    !is_constant_expr(side_1) || !is_constant_expr(side_2) ||
     !is_constant_int2t(rounding_mode))
-  {
-    // Were we able to simplify the sides?
-    if ((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
-    {
-      expr2tc new_op(std::make_shared<constructor>(
-        type, simplied_side_1, simplied_side_2, rounding_mode));
-
-      return typecast_check_return(type, new_op);
-    }
-
     return expr2tc();
-  }
 
   expr2tc simpl_res = expr2tc();
 
@@ -3926,9 +3768,9 @@ static expr2tc simplify_floatbv_2ops(
     };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
-      simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
+      side_1, side_2, rounding_mode, is_constant, get_value);
   }
-  else if (is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
@@ -3939,7 +3781,7 @@ static expr2tc simplify_floatbv_2ops(
     };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
-      simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
+      side_1, side_2, rounding_mode, is_constant, get_value);
   }
   else
     assert(0);
@@ -4149,37 +3991,14 @@ expr2tc ieee_fma2t::do_simplify() const
   if (!is_number_type(type) && !is_pointer_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_value_1 = try_simplification(value_1);
-  expr2tc simplied_value_2 = try_simplification(value_2);
-  expr2tc simplied_value_3 = try_simplification(value_3);
-
   if (
-    !is_constant_expr(simplied_value_1) ||
-    !is_constant_expr(simplied_value_2) ||
-    !is_constant_expr(simplied_value_3) || !is_constant_int2t(rounding_mode))
-  {
-    // Were we able to simplify the sides?
-    if (
-      (value_1 != simplied_value_1) || (value_2 != simplied_value_2) ||
-      (value_3 != simplied_value_3))
-    {
-      expr2tc new_op = ieee_fma2tc(
-        type,
-        simplied_value_1,
-        simplied_value_2,
-        simplied_value_3,
-        rounding_mode);
-
-      return typecast_check_return(type, new_op);
-    }
-
+    !is_constant_expr(value_1) || !is_constant_expr(value_2) ||
+    !is_constant_expr(value_3) || !is_constant_int2t(rounding_mode))
     return expr2tc();
-  }
 
-  ieee_floatt n1 = to_constant_floatbv2t(simplied_value_1).value;
-  ieee_floatt n2 = to_constant_floatbv2t(simplied_value_2).value;
-  ieee_floatt n3 = to_constant_floatbv2t(simplied_value_3).value;
+  ieee_floatt n1 = to_constant_floatbv2t(value_1).value;
+  ieee_floatt n2 = to_constant_floatbv2t(value_2).value;
+  ieee_floatt n3 = to_constant_floatbv2t(value_3).value;
 
   // If x or y are NaN, NaN is returned
   if (n1.is_NaN() || n2.is_NaN())
@@ -4226,19 +4045,10 @@ expr2tc ieee_sqrt2t::do_simplify() const
   if (!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operation, if any
-  expr2tc to_simplify = try_simplification(value);
-  if (!is_constant_floatbv2t(to_simplify))
-  {
-    // Were we able to simplify anything?
-    if (value != to_simplify)
-      return typecast_check_return(
-        type, ieee_sqrt2tc(type, to_simplify, rounding_mode));
-
+  if (!is_constant_floatbv2t(value))
     return expr2tc();
-  }
 
-  ieee_floatt n = to_constant_floatbv2t(to_simplify).value;
+  ieee_floatt n = to_constant_floatbv2t(value).value;
   if (n < 0)
   {
     n.make_NaN();

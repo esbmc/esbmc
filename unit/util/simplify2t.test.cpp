@@ -1165,6 +1165,15 @@ TEST_CASE(
   REQUIRE(to_not2t(result).value == cond);
 }
 
+TEST_CASE("uint_32_t v = 10; (uint64_t) v ==> 10", "[typecast][if]")
+{
+  const expr2tc ten_32 = constant_int2tc(get_uint_type(32), BigInt(10));
+  const expr2tc typecast = typecast2tc(get_uint_type(64), ten_32);
+  const expr2tc result = typecast->simplify();
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == 10);
+}
+
 TEST_CASE("object_size regression", "[pointer_object]")
 {
   // x: char[50]
@@ -1193,6 +1202,19 @@ TEST_CASE("object_size regression", "[pointer_object]")
   REQUIRE(to_constant_int2t(result).value == 10);
 }
 
+TEST_CASE("object_size regression 2", "[pointer_object]")
+{
+  // x: char[50]
+  // OFFSET_OF(&x[0] + 10) = 10
+
+  expr2tc zero = constant_int2tc(get_uint_type(67), BigInt(0));
+  expr2tc add = add2tc(get_uint_type(67), zero, zero);
+
+  expr2tc result = add->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == 0);
+}
 // TODO: Tests that should be valid but... not yet!
 
 #if 0
