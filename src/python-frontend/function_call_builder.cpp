@@ -240,7 +240,7 @@ symbol_id function_call_builder::build_function_id() const
         // by returning 1 directly instead of calling a C function
         func_name = "__ESBMC_len_single_char";
         function_id.clear();
-        function_id.set_prefix("esbmc:");
+        function_id.set_prefix("c:");
         function_id.set_function(func_name);
         return function_id;
       }
@@ -269,7 +269,7 @@ symbol_id function_call_builder::build_function_id() const
             // Mark this as a tuple len() call
             func_name = "__ESBMC_len_tuple";
             function_id.clear();
-            function_id.set_prefix("esbmc:");
+            function_id.set_prefix("c:");
             function_id.set_function(func_name);
             return function_id;
           }
@@ -280,7 +280,7 @@ symbol_id function_call_builder::build_function_id() const
         // Mark this as a dict len() call
         func_name = "__ESBMC_len_dict";
         function_id.clear();
-        function_id.set_prefix("esbmc:");
+        function_id.set_prefix("c:");
         function_id.set_function(func_name);
         return function_id;
       }
@@ -310,7 +310,7 @@ symbol_id function_call_builder::build_function_id() const
           // This is a single character variable
           func_name = "__ESBMC_len_single_char";
           function_id.clear();
-          function_id.set_prefix("esbmc:");
+          function_id.set_prefix("c:");
           function_id.set_function(func_name);
           return function_id;
         }
@@ -385,6 +385,40 @@ symbol_id function_call_builder::build_function_id() const
 
   function_id.set_function(func_name);
 
+  // Handle __ESBMC_get_object_size calls for dictionaries.
+  // The preprocessor.py generates __ESBMC_get_object_size calls in for loops
+  // instead of len() calls. We need to:
+  // 1. Convert dict arguments to __ESBMC_len_dict (handled in build() phase)
+  // 2. Ensure "c:" prefix for symex_main.cpp to recognize it as an intrinsic
+  if (func_name == "__ESBMC_get_object_size")
+  {
+    // Check if argument is a dictionary by variable type annotation
+    if (!call_["args"].empty())
+    {
+      const auto &arg = call_["args"][0];
+      if (arg["_type"] == "Name")
+      {
+        const std::string &var_type = th.get_var_type(arg["id"]);
+        if (var_type == "dict")
+        {
+          // Convert to dictionary len() call early if type is known
+          func_name = "__ESBMC_len_dict";
+          function_id.clear();
+          function_id.set_prefix("c:");
+          function_id.set_filename("");
+          function_id.set_function(func_name);
+          return function_id;
+        }
+      }
+    }
+
+    // Ensure "c:" prefix for __ESBMC_get_object_size.
+    // Clear filename to generate correct format: c:@F@__ESBMC_get_object_size
+    // This allows symex_main.cpp to recognize and handle it as an intrinsic.
+    function_id.set_prefix("c:");
+    function_id.set_filename("");
+  }
+
   // Check if this is a nested function call
   if (func_type == "Name" && !current_function_name.empty())
   {
@@ -418,6 +452,59 @@ symbol_id function_call_builder::build_function_id() const
 exprt function_call_builder::build() const
 {
   symbol_id function_id = build_function_id();
+
+  // Handle __ESBMC_get_object_size calls for dictionaries in build() phase.
+  // This is a fallback when type information wasn't available in build_function_id().
+  // For dictionaries, we convert to __ESBMC_list_size(dict.keys) to get the size.
+  if (
+    function_id.get_function() == "__ESBMC_get_object_size" &&
+    !call_["args"].empty())
+  {
+    const auto &arg = call_["args"][0];
+    try
+    {
+      exprt obj_expr = converter_.get_expr(arg);
+      typet obj_type = obj_expr.type();
+      
+      // Normalize type: dereference pointers and follow symbol references
+      if (obj_type.is_pointer())
+        obj_type = obj_type.subtype();
+      if (obj_type.id() == "symbol")
+        obj_type = converter_.ns.follow(obj_type);
+
+      // Check if this is a dictionary struct type
+      if (
+        obj_type.is_struct() &&
+        converter_.get_dict_handler()->is_dict_type(obj_type))
+      {
+        // Convert to dictionary len() handling:
+        // __ESBMC_get_object_size(dict) -> __ESBMC_list_size(dict.keys)
+        typet keys_type = pointer_typet(struct_typet());
+        member_exprt keys_member(obj_expr, "keys", keys_type);
+
+        // Create __ESBMC_list_size function call
+        code_typet list_get_size_type;
+        list_get_size_type.return_type() = size_type();
+        code_typet::argumentt arg_type;
+        arg_type.type() = keys_type;
+        list_get_size_type.arguments().push_back(arg_type);
+
+        symbol_exprt list_get_size_func(
+          "c:@F@__ESBMC_list_size", list_get_size_type);
+
+        side_effect_expr_function_callt call_expr(size_type());
+        call_expr.function() = list_get_size_func;
+        call_expr.arguments().push_back(keys_member);
+
+        return call_expr;
+      }
+    }
+    catch (const std::exception &)
+    {
+      // If type resolution fails, continue with normal processing
+      // The function will be handled by symex_main.cpp as an intrinsic
+    }
+  }
 
   if (is_len_call(function_id) && !call_["args"].empty())
   {
