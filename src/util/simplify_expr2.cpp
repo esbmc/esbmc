@@ -699,6 +699,10 @@ expr2tc modulus2t::do_simplify() const
       // Denominator is one? Simplify to zero
       if (to_constant_int2t(side_2).value == 1)
         return constant_int2tc(type, BigInt(0));
+
+      // Denominator is zero? UB!
+      if (to_constant_int2t(side_2).value == 0)
+        return expr2tc();
     }
 
     if (is_constant_int2t(side_1) && is_constant_int2t(side_2))
