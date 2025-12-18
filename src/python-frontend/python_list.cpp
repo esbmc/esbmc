@@ -1003,13 +1003,8 @@ exprt python_list::handle_index_access(
       if (array.is_symbol() && elem_type == typet())
       {
         // Extract variable name from the symbol identifier
-        std::string list_var_id = array.identifier().as_string();
-
-        // Extract just the variable name (last part after '@')
-        size_t last_at = list_var_id.find_last_of('@');
-        std::string list_var_name = (last_at != std::string::npos)
-                                      ? list_var_id.substr(last_at + 1)
-                                      : list_var_id;
+        std::string list_var_name = json_utils::extract_var_name_from_symbol_id(
+          array.identifier().as_string());
 
         // Find the variable's declaration to check for type annotation
         nlohmann::json list_var_decl = json_utils::find_var_decl(

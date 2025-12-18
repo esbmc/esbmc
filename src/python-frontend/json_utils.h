@@ -410,4 +410,16 @@ const JsonType find_return_node(const JsonType &block)
   return JsonType();
 }
 
+/// Extract the variable name from a symbol identifier
+/// Examples:
+///   "py:test.py@l" -> "l"
+///   "py:test.py@F@foo@x" -> "x"
+///   "py:test.py@C@MyClass@F@method@var" -> "var"
+inline std::string extract_var_name_from_symbol_id(const std::string &symbol_id)
+{
+  size_t last_at = symbol_id.find_last_of('@');
+  return (last_at != std::string::npos) ? symbol_id.substr(last_at + 1)
+                                        : symbol_id;
+}
+
 } // namespace json_utils
