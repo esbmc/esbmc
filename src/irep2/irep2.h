@@ -765,7 +765,8 @@ public:
    *  @return Either a nil expr (null pointer contents) if nothing could be
    *          simplified or a simplified expression.
    */
-  expr2tc simplify() const;
+  expr2tc simplify() const;  
+  expr2tc in_simplify() const;
 
   /** expr-specific simplification methods.
    *  By default, an expression can't be simplified, and this method returns

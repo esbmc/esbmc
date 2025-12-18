@@ -8,12 +8,33 @@
 #include <irep2/irep2_utils.h>
 #include <util/type_byte_size.h>
 
+
+class cachet
+{
+public:
+  using map = std::unordered_map<expr2tc, expr2tc, irep2_hash>;
+  static inline map cache { };
+};
+
+expr2tc expr2t::simplify() const
+{
+  auto hash = clone();
+  if (cachet::cache.contains(hash))
+  {
+    return cachet::cache.at(hash);
+  }
+
+  expr2tc optimized = in_simplify();
+  cachet::cache[hash] =  optimized;
+  return cachet::cache[hash];
+}
+
 expr2tc expr2t::do_simplify() const
 {
   return expr2tc();
 }
 
-expr2tc expr2t::simplify() const
+expr2tc expr2t::in_simplify() const
 {
   try
   {

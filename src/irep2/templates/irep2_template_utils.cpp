@@ -556,7 +556,14 @@ size_t do_type_crc(const std::vector<expr2tc> &theval)
 {
   size_t crc = 0;
   for (auto const &it : theval)
+  {
+    if (is_nil_expr(it))
+    {boost::hash_combine(crc, 0);
+      continue;
+    }
     boost::hash_combine(crc, it->do_crc());
+  }    
+    
 
   return crc;
 }
