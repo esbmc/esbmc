@@ -282,6 +282,7 @@ void goto_symext::symex_assign(
   replace_dynamic_allocation(rhs);
 
   replace_races_check(lhs);
+  simplify_python_builtins(rhs);
 
   // If rhs is a printf expression, handle it specially
   if (is_code_printf2t(rhs))
