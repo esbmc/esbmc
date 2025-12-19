@@ -1180,6 +1180,42 @@ class Preprocessor(ast.NodeTransformer):
 
         return node
 
+    def _as_load_target(self, target, source_node):
+        """Create a Load-context version of an AugAssign target."""
+        # Mirror the target with a Load context so it can be read on the RHS.
+        if isinstance(target, ast.Name):
+            load_target = ast.Name(id=target.id, ctx=ast.Load())
+        elif isinstance(target, ast.Subscript):
+            # Reuse the same container/index with a Load context.
+            load_target = ast.Subscript(value=target.value, slice=target.slice, ctx=ast.Load())
+        elif isinstance(target, ast.Attribute):
+            # Preserve attribute access while switching to a Load context.
+            load_target = ast.Attribute(value=target.value, attr=target.attr, ctx=ast.Load())
+        else:
+            load_target = target
+        return self.ensure_all_locations(load_target, source_node)
+
+    def visit_AugAssign(self, node):
+        """Lower augmented assignment into a simple assignment."""
+        # Transform children first so nested expressions are already lowered.
+        node = self.generic_visit(node)
+
+        # Only lower subscript targets; other augmented assignments are handled downstream.
+        if not isinstance(node.target, ast.Subscript):
+            return node
+
+        # Convert "target op= value" into "target = target op value".
+        load_target = self._as_load_target(node.target, node)
+        # Build the RHS binary operation using the original operator.
+        binop = ast.BinOp(left=load_target, op=node.op, right=node.value)
+        # Replace the augmented assignment with a plain assignment statement.
+        assign = ast.Assign(targets=[node.target], value=binop)
+        # Keep location metadata so downstream diagnostics point to the original line.
+        self._copy_location_info(node, assign)
+        self.ensure_all_locations(assign, node)
+        ast.fix_missing_locations(assign)
+        return assign
+
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
