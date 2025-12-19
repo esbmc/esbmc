@@ -98,9 +98,12 @@ public:
     classes_.insert(other_classes.begin(), other_classes.end());
   }
 
+  /// @brief Retrieve a class definition by name
+  /// @param class_name The name of the class to find
+  /// @return The class definition, or empty class_definition if not found
+  /// @complexity O(1) average case via hash lookup
   class_definition get_class(const std::string &class_name) const
   {
-    // Use find() for O(1) lookup
     class_definition key;
     key.name_ = class_name;
     auto it = classes_.find(key);
@@ -111,9 +114,12 @@ public:
     return {};
   }
 
+  /// @brief Retrieve a function definition by name
+  /// @param func_name The name of the function to find
+  /// @return The function definition, or empty function if not found
+  /// @complexity O(1) average case via hash lookup
   function get_function(const std::string &func_name) const
   {
-    // Use find() for O(1) lookup
     function key;
     key.name_ = func_name;
     auto it = functions_.find(key);

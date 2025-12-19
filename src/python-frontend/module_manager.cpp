@@ -49,12 +49,28 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
     json_file >> ast;
     json_file.close();
 
-    for (size_t i = 0; i < ast["body"].size(); ++i)
+    // Validate JSON structure
+    if (!ast.contains("body") || !ast["body"].is_array())
     {
-      const auto &node = ast["body"][i];
+      log_error(
+        "[module_manager] create_module: Invalid or missing 'body' in {}",
+        json_path.string());
+      return nullptr;
+    }
+
+    for (const auto &node : ast["body"])
+    {
       std::string node_type = node.contains("_type") && node["_type"].is_string()
                                 ? node["_type"].get<std::string>()
                                 : "unknown";
+      
+      if (node_type == "unknown")
+      {
+        log_warning(
+          "[module_manager] create_module: Unknown or missing node type in {}",
+          json_path.string());
+        continue;
+      }
       
       if (node_type == "FunctionDef")
       {
