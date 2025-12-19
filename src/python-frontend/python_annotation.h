@@ -1685,7 +1685,7 @@ private:
     {
       // Try to get module using the object name directly
       auto module = module_manager_->get_module(obj);
-      
+
       // If not found, try using get_object_alias to resolve import aliases
       if (!module && !obj.empty())
       {
@@ -1695,7 +1695,7 @@ private:
           module = module_manager_->get_module(resolved_obj);
         }
       }
-      
+
       if (module)
       {
         // First try as function
@@ -1712,7 +1712,7 @@ private:
           // Return the class name as the type for constructor calls
           return cls.name_;
         }
-        
+
         // If module exists but attribute not found, don't continue to search
         // in AST (which would fail for imported modules)
         return "";

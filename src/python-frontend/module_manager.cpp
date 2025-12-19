@@ -18,10 +18,10 @@ std::string get_string_safe(const nlohmann::json &node, const std::string &key)
 {
   if (!node.contains(key))
     return "";
-  
+
   if (node[key].is_string())
     return node[key].get<std::string>();
-  
+
   return "";
 }
 } // namespace
@@ -36,7 +36,8 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
   std::ifstream json_file(json_path);
   if (!json_file.is_open())
   {
-    log_warning("[module_manager] create_module: failed to open {}", json_path.string());
+    log_warning(
+      "[module_manager] create_module: failed to open {}", json_path.string());
     return nullptr;
   }
 
@@ -60,10 +61,11 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
 
     for (const auto &node : ast["body"])
     {
-      std::string node_type = node.contains("_type") && node["_type"].is_string()
-                                ? node["_type"].get<std::string>()
-                                : "unknown";
-      
+      std::string node_type =
+        node.contains("_type") && node["_type"].is_string()
+          ? node["_type"].get<std::string>()
+          : "unknown";
+
       if (node_type == "unknown")
       {
         log_warning(
@@ -71,7 +73,7 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
           json_path.string());
         continue;
       }
-      
+
       if (node_type == "FunctionDef")
       {
         function f;
@@ -128,7 +130,7 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
       else if (node_type == "ClassDef")
       {
         class_definition c;
-        
+
         // Safely get class name
         c.name_ = get_string_safe(node, "name");
         if (c.name_.empty())
