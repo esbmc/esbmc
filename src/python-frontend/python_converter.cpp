@@ -4430,7 +4430,19 @@ typet resolve_ternary_type(
   if (type_utils::is_integer_type(else_type) && then_type.is_floatbv())
     return then_type;
 
-  // Both arrays (strings)
+  // String handling: use pointer type for consistency
+  // Handles: array+array, array+pointer, pointer+array
+  bool then_is_string =
+    (then_type.is_array() && then_type.subtype() == char_type()) ||
+    (then_type.is_pointer() && then_type.subtype() == char_type());
+  bool else_is_string =
+    (else_type.is_array() && else_type.subtype() == char_type()) ||
+    (else_type.is_pointer() && else_type.subtype() == char_type());
+
+  if (then_is_string && else_is_string)
+    return gen_pointer_type(char_type());
+
+  // Both arrays (non-strings)
   if (then_type.is_array() && else_type.is_array())
     return then_type;
 
