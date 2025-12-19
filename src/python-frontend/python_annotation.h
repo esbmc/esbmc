@@ -1676,13 +1676,47 @@ private:
     }
 
     const std::string &obj = get_object_name(call["func"], std::string());
+    std::string attr_name = call["func"].contains("attr")
+                              ? call["func"]["attr"].template get<std::string>()
+                              : "";
 
     // Get type from imported module
     if (module_manager_)
     {
+      // Try to get module using the object name directly
       auto module = module_manager_->get_module(obj);
+      
+      // If not found, try using get_object_alias to resolve import aliases
+      if (!module && !obj.empty())
+      {
+        std::string resolved_obj = json_utils::get_object_alias(ast_, obj);
+        if (resolved_obj != obj)
+        {
+          module = module_manager_->get_module(resolved_obj);
+        }
+      }
+      
       if (module)
-        return module->get_function(call["func"]["attr"]).return_type_;
+      {
+        // First try as function
+        function func = module->get_function(attr_name);
+        if (!func.name_.empty())
+        {
+          return func.return_type_;
+        }
+
+        // If not a function, try as class
+        class_definition cls = module->get_class(attr_name);
+        if (!cls.name_.empty())
+        {
+          // Return the class name as the type for constructor calls
+          return cls.name_;
+        }
+        
+        // If module exists but attribute not found, don't continue to search
+        // in AST (which would fail for imported modules)
+        return "";
+      }
     }
 
     Json obj_node =
