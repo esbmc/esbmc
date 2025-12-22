@@ -344,6 +344,8 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
     ast_type == "oct")
   {
+    if (type_size == 0)
+      return gen_pointer_type(char_type());
     if (type_size == 1)
     {
       typet type = char_type();      // 8-bit char

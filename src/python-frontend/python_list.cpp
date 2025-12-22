@@ -1164,13 +1164,22 @@ exprt python_list::handle_index_access(
       return tc;
     }
 
-    // Cast from void* to target type pointer
-    typecast_exprt tc(obj_value, pointer_typet(elem_type));
-
-    // Dereference to get the actual value (for non-array types)
-    dereference_exprt deref(elem_type);
-    deref.op0() = tc;
-    return deref;
+    // For char* strings, the void* already contains the pointer value
+    // For all other types, the void* contains a pointer to the value
+    if (elem_type.is_pointer() && elem_type.subtype() == char_type())
+    {
+      // String case: cast void* directly to char* (no dereference needed)
+      typecast_exprt tc(obj_value, elem_type);
+      return tc;
+    }
+    else
+    {
+      // All other types: cast void* to pointer-to-type, then dereference
+      typecast_exprt tc(obj_value, pointer_typet(elem_type));
+      dereference_exprt deref(elem_type);
+      deref.op0() = tc;
+      return deref;
+    }
   }
 
   // Handle static arrays
