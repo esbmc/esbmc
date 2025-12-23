@@ -1,4 +1,4 @@
 CORE
 main.py
 --multi-property --unwind 10
-^Properties: 43 verified \✓ 38 passed, \✗ 5 failed$
+^VERIFICATION FAILED$
