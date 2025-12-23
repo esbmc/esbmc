@@ -663,7 +663,7 @@ public:
     optionst &options,
     unsigned int *ptotal_claims,
     unsigned int *premaining_claims,
-    unsigned int *ptrivial_claims)
+    unsigned int *psimplified_claims)
     : execution_statet(
         goto_functions,
         ns,
@@ -675,10 +675,10 @@ public:
   {
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;
-    this->ptrivial_claims = ptrivial_claims;
+    this->psimplified_claims = psimplified_claims;
     *ptotal_claims = 0;
     *premaining_claims = 0;
-    *ptrivial_claims = 0;
+    *psimplified_claims = 0;
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref) = default;
@@ -688,7 +688,7 @@ public:
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;
-  unsigned int *ptrivial_claims;
+  unsigned int *psimplified_claims;
 };
 
 #endif /* EXECUTION_STATE_H_ */

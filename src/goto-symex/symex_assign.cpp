@@ -22,7 +22,7 @@ goto_symext::goto_symext(
     first_loop(0),
     total_claims(0),
     remaining_claims(0),
-    trivial_claims(0),
+    simplified_claims(0),
     max_unwind(options.get_option("unwind").c_str()),
     constant_propagation(!options.get_bool_option("no-propagation")),
     ns(_ns),
@@ -148,7 +148,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
-  trivial_claims = sym.trivial_claims;
+  simplified_claims = sym.simplified_claims;
   guard_identifier_s = sym.guard_identifier_s;
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;

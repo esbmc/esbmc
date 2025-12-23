@@ -1339,8 +1339,10 @@ smt_convt::resultt bmct::multi_property_check(
 
   // Add summary tracking
   SimpleSummary summary;
-  summary.total_properties = remaining_claims;
-  summary.trivial_properties = symex->get_cur_state().trivial_claims;
+  summary.simplified_properties = symex->get_cur_state().simplified_claims;
+  summary.total_properties = remaining_claims + summary.simplified_properties;
+  summary.passed_properties =
+    summary.passed_properties + summary.simplified_properties;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
@@ -1696,10 +1698,6 @@ void bmct::report_simple_summary(const SimpleSummary &summary) const
   if (summary.passed_properties > 0)
     properties_oss << " " << GREEN << "✓ " << summary.passed_properties
                    << " passed" << RESET;
-
-  if (summary.trivial_properties > 0)
-    properties_oss << " " << GREEN << "✓ " << summary.trivial_properties
-                   << " trivial" << RESET;
 
   if (summary.skipped_properties > 0)
     properties_oss << ", " << GREEN << "✓ " << summary.skipped_properties

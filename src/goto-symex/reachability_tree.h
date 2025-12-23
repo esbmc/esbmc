@@ -347,7 +347,7 @@ protected:
   /** Number of remaining claims in current --schedule exploration */
   unsigned int schedule_remaining_claims;
   /** Number of trivial claims in current --schedule exploration */
-  unsigned int schedule_trivial_claims;
+  unsigned int schedule_simplified_claims;
   /** Next thread ID to switch to, decided by analyse_* routines */
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
