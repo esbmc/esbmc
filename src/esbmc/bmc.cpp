@@ -1176,7 +1176,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_SMTLIB;
 
     log_status(
-      "Generated {} VCC(s), {} remaining after simplification ({} assignments)",
+      "Generated {} VCC(s), {} remaining after simplification ({} "
+      "assignments)",
       solver_result.total_claims,
       remaining_asserts,
       BigInt(eq->SSA_steps.size()) - ignored);
@@ -1338,7 +1339,10 @@ smt_convt::resultt bmct::multi_property_check(
 
   // Add summary tracking
   SimpleSummary summary;
-  summary.total_properties = remaining_claims;
+  summary.simplified_properties = symex->get_cur_state().simplified_claims;
+  summary.total_properties = remaining_claims + summary.simplified_properties;
+  summary.passed_properties =
+    summary.passed_properties + summary.simplified_properties;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
