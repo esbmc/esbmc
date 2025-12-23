@@ -1,0 +1,4 @@
+CORE
+main.py
+--multi-property
+^\✓ PASSED: \'assertion x == y\' at file main\.py line 3 column 0$
