@@ -5,6 +5,8 @@
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
 
+#include <langapi/language_util.h>
+
 #include <pointer-analysis/value_set_analysis.h>
 
 #include <util/c_types.h>
@@ -500,11 +502,14 @@ void goto_symext::symex_assert()
   if (cur_state->source.pc->location.user_provided() && no_assertions)
     return;
 
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+
   std::string msg = cur_state->source.pc->location.comment().as_string();
   if (msg == "")
-    msg = "assertion";
-
-  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  {
+    exprt guard = migrate_expr_back(instruction.guard);
+    msg = "assertion " + from_expr(ns, "", guard);
+  }
 
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
