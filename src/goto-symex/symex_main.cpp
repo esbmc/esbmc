@@ -74,6 +74,13 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   if (is_true(new_expr))
   {
+    // Log that this assertion was trivially verified
+    log_success(
+      "✓ TRIVIAL: '{}' at {}", msg, cur_state->source.pc->location.as_string());
+
+    // Track trivially verified claims
+    ++trivial_claims;
+
     // Strengthen the claim by assuming it when trivially true
     assume(claim_expr);
     return;
@@ -167,7 +174,8 @@ void goto_symext::assume(const expr2tc &the_assumption)
 
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
-  return goto_symext::symex_resultt(target, total_claims, remaining_claims);
+  return goto_symext::symex_resultt(
+    target, total_claims, remaining_claims, trivial_claims);
 }
 
 void goto_symext::symex_step(reachability_treet &art)

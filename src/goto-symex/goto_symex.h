@@ -89,12 +89,17 @@ public:
     symex_resultt(
       std::shared_ptr<symex_targett> t,
       unsigned int claims,
-      unsigned int remain)
-      : target(std::move(t)), total_claims(claims), remaining_claims(remain){};
+      unsigned int remain,
+      unsigned int trivial)
+      : target(std::move(t)),
+        total_claims(claims),
+        remaining_claims(remain),
+        trivial_claims(trivial){};
 
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
+    unsigned int trivial_claims;
   };
 
   // Macros
@@ -1097,6 +1102,8 @@ protected:
   unsigned total_claims;
   /** Number of assertions remaining to be discharged. */
   unsigned remaining_claims;
+  /** Number of assertions that were trivially verified. */
+  unsigned trivial_claims;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */
