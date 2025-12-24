@@ -252,16 +252,36 @@ exprt function_call_expr::build_nondet_call() const
     typet char_array_type =
       array_typet(char_type(), from_integer(max_str_length, size_type()));
 
-    exprt nondet_array = exprt("sideeffect", char_array_type);
-    nondet_array.statement("nondet");
+    // Create a temporary variable to hold the nondeterministic string
+    symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
+      call_, "$nondet_str$", char_array_type, exprt());
 
+    // Declare the temporary
+    code_declt decl(symbol_expr(nondet_str_symbol));
+    decl.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(decl);
+
+    // Create nondet assignment for the array
+    exprt nondet_value("sideeffect", char_array_type);
+    nondet_value.statement("nondet");
+
+    code_assignt nondet_assign(symbol_expr(nondet_str_symbol), nondet_value);
+    nondet_assign.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(nondet_assign);
+
+    // Ensure null terminator at the last position
     exprt last_index = from_integer(max_str_length - 1, size_type());
     exprt null_char = from_integer(0, char_type());
 
-    with_exprt result(nondet_array, last_index, null_char);
-    result.type() = char_array_type;
+    index_exprt last_elem(symbol_expr(nondet_str_symbol), last_index);
+    code_assignt null_assign(last_elem, null_char);
+    null_assign.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(null_assign);
 
-    return result;
+    // Return address of first element: &arr[0] which is char*
+    index_exprt first_elem(
+      symbol_expr(nondet_str_symbol), from_integer(0, size_type()));
+    return address_of_exprt(first_elem);
   }
 
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
