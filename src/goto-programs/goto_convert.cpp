@@ -402,6 +402,13 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
   // Convert each expression
   for (auto const &it : code.operands())
   {
+    if (!it.is_code())
+    {
+      log_error(
+        "goto_convert: non-code operand in this block:\n{}\n", code.pretty());
+      abort();
+    }
+
     const codet &code_it = to_code(it);
     convert(code_it, dest);
   }
@@ -735,7 +742,8 @@ void goto_convertt::convert_assign(
     Forall_operands (it, rhs)
       remove_sideeffects(*it, dest);
 
-    do_function_call(lhs, rhs.op0(), rhs.op1().operands(), dest);
+    do_function_call(
+      lhs, rhs.op0(), rhs.op1().operands(), rhs.location(), dest);
   }
   else if (
     rhs.id() == "sideeffect" &&

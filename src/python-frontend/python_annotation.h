@@ -470,7 +470,7 @@ private:
         "default ({}:{})",
         python_filename_,
         current_line_);
-      return "list[int]"; // Default fallback
+      return "list"; // Default fallback
     }
 
     // Get the type of the first element
@@ -842,6 +842,18 @@ private:
         {
           type = left_op["annotation"]["id"];
         }
+        // As a fallback, check global scope for prior annotation
+        if (type.empty())
+        {
+          Json global_op = find_annotated_assign(lhs["id"], ast_["body"]);
+          if (
+            !global_op.empty() && global_op.contains("annotation") &&
+            global_op["annotation"].contains("id") &&
+            global_op["annotation"]["id"].is_string())
+          {
+            type = global_op["annotation"]["id"];
+          }
+        }
       }
       else if (lhs["_type"] == "UnaryOp")
       {
@@ -918,6 +930,33 @@ private:
         type = get_type_from_constant(lhs);
       else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Attribute")
         type = get_type_from_method(lhs);
+    }
+
+    // If still unknown, try RHS or fallback to Any for arithmetic ops
+    if (type.empty())
+    {
+      const Json &rhs =
+        stmt.contains("value") ? stmt["value"]["right"] : stmt["right"];
+
+      if (rhs["_type"] == "Constant")
+        type = get_type_from_constant(rhs);
+      else if (rhs["_type"] == "Name")
+      {
+        Json right_op = find_annotated_assign(
+          rhs["id"], body.contains("body") ? body["body"] : ast_["body"]);
+        if (
+          right_op.contains("annotation") &&
+          right_op["annotation"].contains("id") &&
+          right_op["annotation"]["id"].is_string())
+          type = right_op["annotation"]["id"];
+      }
+
+      if (
+        type.empty() && stmt.contains("value") &&
+        stmt["value"].contains("op") && stmt["value"]["op"].contains("_type"))
+      {
+        type = "Any";
+      }
     }
 
     return type;
@@ -1382,38 +1421,10 @@ private:
       return "Any"; // Default for cases where annotation is missing or null
   }
 
-  // Check for @overload decorators
-  bool has_overload_decorator(const Json &func_node) const
+  std::string match_literal_argument(
+    const Json &call_node,
+    std::vector<Json> overloads) const
   {
-    if (!func_node.contains("decorator_list"))
-      return false;
-
-    for (const auto &decorator : func_node["decorator_list"])
-    {
-      if (decorator["_type"] == "Name" && decorator["id"] == "overload")
-        return true;
-    }
-    return false;
-  }
-
-  // Find the best matching overload
-  std::string resolve_overload_return_type(
-    const std::string &func_name,
-    const Json &call_node) const
-  {
-    std::vector<Json> overloads;
-
-    // Find all overload definitions
-    for (const Json &elem : ast_["body"])
-    {
-      if (
-        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
-        has_overload_decorator(elem))
-      {
-        overloads.push_back(elem);
-      }
-    }
-
     if (overloads.empty())
       return "";
 
@@ -1462,6 +1473,25 @@ private:
     }
 
     return "";
+  }
+
+  // Find the best matching overload
+  std::string resolve_overload_return_type(
+    const std::string &func_name,
+    const Json &call_node) const
+  {
+    std::vector<Json> overloads;
+
+    // Find all overload definitions
+    for (const Json &elem : ast_["body"])
+    {
+      if (
+        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
+        json_utils::has_overload_decorator(elem))
+        overloads.push_back(elem);
+    }
+
+    return match_literal_argument(call_node, overloads);
   }
 
   std::string get_type_from_call(const Json &element)
@@ -1525,6 +1555,24 @@ private:
           return "dict";
         else
           return class_name; // Default: method returns same type as class
+      }
+
+      if (module_manager_)
+      {
+        auto module = module_manager_->get_module(class_name);
+        if (module)
+        {
+          auto overloads_funcs = module->overloads();
+          std::vector<Json> overloads;
+
+          for (const auto &elem : overloads_funcs)
+          {
+            if (elem["_type"] == "FunctionDef" && elem["name"] == method_name)
+              overloads.push_back(elem);
+          }
+
+          return match_literal_argument(element["value"], overloads);
+        }
       }
     }
 
@@ -1628,13 +1676,47 @@ private:
     }
 
     const std::string &obj = get_object_name(call["func"], std::string());
+    std::string attr_name = call["func"].contains("attr")
+                              ? call["func"]["attr"].template get<std::string>()
+                              : "";
 
     // Get type from imported module
     if (module_manager_)
     {
+      // Try to get module using the object name directly
       auto module = module_manager_->get_module(obj);
+
+      // If not found, try using get_object_alias to resolve import aliases
+      if (!module && !obj.empty())
+      {
+        std::string resolved_obj = json_utils::get_object_alias(ast_, obj);
+        if (resolved_obj != obj)
+        {
+          module = module_manager_->get_module(resolved_obj);
+        }
+      }
+
       if (module)
-        return module->get_function(call["func"]["attr"]).return_type_;
+      {
+        // First try as function
+        function func = module->get_function(attr_name);
+        if (!func.name_.empty())
+        {
+          return func.return_type_;
+        }
+
+        // If not a function, try as class
+        class_definition cls = module->get_class(attr_name);
+        if (!cls.name_.empty())
+        {
+          // Return the class name as the type for constructor calls
+          return cls.name_;
+        }
+
+        // If module exists but attribute not found, don't continue to search
+        // in AST (which would fail for imported modules)
+        return "";
+      }
     }
 
     Json obj_node =

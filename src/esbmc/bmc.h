@@ -5,6 +5,8 @@
 #include <goto-symex/slice.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
+#include <goto-symex/witnesses.h>
+#include <goto-symex/pytest.h>
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
@@ -44,6 +46,7 @@ protected:
 
   std::unique_ptr<smt_convt> runtime_solver;
   std::unique_ptr<reachability_treet> symex;
+  pytest_generator pytest_gen; // For Python pytest test case generation
   mutable std::atomic<bool> keep_alive_running;
   mutable std::atomic<int> keep_alive_interval;
 
@@ -120,6 +123,7 @@ private:
     std::atomic<size_t> total_properties = 0;
     std::atomic<size_t> passed_properties = 0;
     std::atomic<size_t> skipped_properties = 0;
+    std::atomic<size_t> simplified_properties = 0;
     std::atomic<size_t> failed_properties = 0;
     std::atomic<double> total_time_s = 0.0;
     std::string solver_name;
@@ -132,6 +136,7 @@ private:
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
-  const std::unordered_multiset<std::string> &reached_mul_claims);
+  const std::unordered_multiset<std::string> &reached_mul_claims,
+  pytest_generator &pytest_gen);
 
 #endif

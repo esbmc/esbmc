@@ -1,5 +1,5 @@
-KNOWNBUG
+CORE
 main.py
---unwind 8 --no-bounds-check --no-pointer-check --no-align-check
+--no-bounds-check --no-pointer-check --no-align-check --unwind 12 --bitwuzla
 
 ^VERIFICATION SUCCESSFUL$

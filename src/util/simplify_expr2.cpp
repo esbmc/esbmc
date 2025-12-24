@@ -458,6 +458,12 @@ expr2tc add2t::do_simplify() const
       return sub.side_1;
   }
 
+  // x + ~x -> -1
+  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+    return constant_int2tc(type, BigInt(-1));
+  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+    return constant_int2tc(type, BigInt(-1));
+
   // x + (-y) -> x - y
   if (is_neg2t(side_2))
     return sub2tc(type, side_1, to_neg2t(side_2).value);
@@ -1945,6 +1951,34 @@ expr2tc bitand2t::do_simplify() const
       return side_2;
   }
 
+  // (a | ~b) & (a | b) -> a
+  if (is_bitor2t(side_1) && is_bitor2t(side_2))
+  {
+    const bitor2t &or1 = to_bitor2t(side_1);
+    const bitor2t &or2 = to_bitor2t(side_2);
+
+    // Check if one expr is the bitwise not of another
+    auto is_complement = [](const expr2tc &a, const expr2tc &b) -> bool {
+      return (is_bitnot2t(a) && to_bitnot2t(a).value == b) ||
+             (is_bitnot2t(b) && to_bitnot2t(b).value == a);
+    };
+
+    // Check all four combinations: we're looking for a common operand 'a'
+    // and complementary operands 'b' and '~b'
+
+    // Case 1: or1.side_1 is the common operand
+    if (or1.side_1 == or2.side_1 && is_complement(or1.side_2, or2.side_2))
+      return or1.side_1;
+    if (or1.side_1 == or2.side_2 && is_complement(or1.side_2, or2.side_1))
+      return or1.side_1;
+
+    // Case 2: or1.side_2 is the common operand
+    if (or1.side_2 == or2.side_1 && is_complement(or1.side_1, or2.side_2))
+      return or1.side_2;
+    if (or1.side_2 == or2.side_2 && is_complement(or1.side_1, or2.side_1))
+      return or1.side_2;
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
 
   // Is a vector operation ? Apply the op
@@ -2002,6 +2036,199 @@ expr2tc bitor2t::do_simplify() const
     const bitand2t &band = to_bitand2t(side_1);
     if (band.side_1 == side_2 || band.side_2 == side_2)
       return side_2;
+  }
+
+  // Helper lambdas used by multiple simplifications
+  auto is_complement = [](const expr2tc &a, const expr2tc &b) -> bool {
+    return (is_bitnot2t(a) && to_bitnot2t(a).value == b) ||
+           (is_bitnot2t(b) && to_bitnot2t(b).value == a);
+  };
+
+  auto unwrap_if_not = [](const expr2tc &e) -> expr2tc {
+    if (is_bitnot2t(e))
+      return to_bitnot2t(e).value;
+    return expr2tc();
+  };
+
+  // (a & ~b) | (a ^ b) --> a ^ b
+  // (a ^ b) | (a & ~b) --> a ^ b (symmetric case handled together)
+  if (
+    (is_bitand2t(side_1) && is_bitxor2t(side_2)) ||
+    (is_bitxor2t(side_1) && is_bitand2t(side_2)))
+  {
+    const expr2tc &band_expr = is_bitand2t(side_1) ? side_1 : side_2;
+    const expr2tc &bxor_expr = is_bitxor2t(side_1) ? side_1 : side_2;
+
+    const bitand2t &band = to_bitand2t(band_expr);
+    const bitxor2t &bxor = to_bitxor2t(bxor_expr);
+
+    // Check all combinations where one AND operand matches one XOR operand
+    // and the other AND operand is the complement of the other XOR operand
+    if (band.side_1 == bxor.side_1 && is_complement(band.side_2, bxor.side_2))
+      return bxor_expr;
+
+    if (band.side_1 == bxor.side_2 && is_complement(band.side_2, bxor.side_1))
+      return bxor_expr;
+
+    if (band.side_2 == bxor.side_1 && is_complement(band.side_1, bxor.side_2))
+      return bxor_expr;
+
+    if (band.side_2 == bxor.side_2 && is_complement(band.side_1, bxor.side_1))
+      return bxor_expr;
+  }
+
+  // (~a & b) | ~(a | b) --> ~a
+  // ~(a | b) | (~a & b) --> ~a (symmetric case handled together)
+  if (
+    (is_bitand2t(side_1) && is_bitnot2t(side_2)) ||
+    (is_bitnot2t(side_1) && is_bitand2t(side_2)))
+  {
+    const expr2tc &band_expr = is_bitand2t(side_1) ? side_1 : side_2;
+    const expr2tc &bnot_expr = is_bitnot2t(side_1) ? side_1 : side_2;
+
+    const bitand2t &band = to_bitand2t(band_expr);
+    const bitnot2t &bnot = to_bitnot2t(bnot_expr);
+
+    // Check if the NOT operand is an OR
+    if (is_bitor2t(bnot.value))
+    {
+      const bitor2t &bor = to_bitor2t(bnot.value);
+
+      // Case 1: band.side_1 = ~a, band.side_2 = b
+      expr2tc unwrapped1 = unwrap_if_not(band.side_1);
+      if (!is_nil_expr(unwrapped1))
+      {
+        // Check if OR contains both unwrapped1 (a) and band.side_2 (b)
+        if (
+          (bor.side_1 == unwrapped1 && bor.side_2 == band.side_2) ||
+          (bor.side_2 == unwrapped1 && bor.side_1 == band.side_2))
+          return band.side_1; // return ~a
+      }
+
+      // Case 2: band.side_2 = ~a, band.side_1 = b
+      expr2tc unwrapped2 = unwrap_if_not(band.side_2);
+      if (!is_nil_expr(unwrapped2))
+      {
+        // Check if OR contains both unwrapped2 (a) and band.side_1 (b)
+        if (
+          (bor.side_1 == unwrapped2 && bor.side_2 == band.side_1) ||
+          (bor.side_2 == unwrapped2 && bor.side_1 == band.side_1))
+          return band.side_2; // return ~a
+      }
+    }
+  }
+
+  // (~a ^ b) | (a & b) --> ~a ^ b
+  // (a & b) | (~a ^ b) --> ~a ^ b (symmetric case handled together)
+  if (
+    (is_bitxor2t(side_1) && is_bitand2t(side_2)) ||
+    (is_bitand2t(side_1) && is_bitxor2t(side_2)))
+  {
+    const expr2tc &bxor_expr = is_bitxor2t(side_1) ? side_1 : side_2;
+    const expr2tc &band_expr = is_bitand2t(side_1) ? side_1 : side_2;
+
+    const bitxor2t &bxor = to_bitxor2t(bxor_expr);
+    const bitand2t &band = to_bitand2t(band_expr);
+
+    // Case 1: bxor.side_1 = ~a, bxor.side_2 = b
+    expr2tc unwrapped1 = unwrap_if_not(bxor.side_1);
+    if (!is_nil_expr(unwrapped1))
+    {
+      // Check if AND contains both unwrapped1 (a) and bxor.side_2 (b)
+      if (
+        (band.side_1 == unwrapped1 && band.side_2 == bxor.side_2) ||
+        (band.side_2 == unwrapped1 && band.side_1 == bxor.side_2))
+        return bxor_expr;
+    }
+
+    // Case 2: bxor.side_2 = ~a, bxor.side_1 = b
+    expr2tc unwrapped2 = unwrap_if_not(bxor.side_2);
+    if (!is_nil_expr(unwrapped2))
+    {
+      // Check if AND contains both unwrapped2 (a) and bxor.side_1 (b)
+      if (
+        (band.side_1 == unwrapped2 && band.side_2 == bxor.side_1) ||
+        (band.side_2 == unwrapped2 && band.side_1 == bxor.side_1))
+        return bxor_expr;
+    }
+  }
+
+  // (a ^ b) | (a | b) --> a | b
+  // (a | b) | (a ^ b) --> a | b (symmetric case handled together)
+  if (
+    (is_bitxor2t(side_1) && is_bitor2t(side_2)) ||
+    (is_bitor2t(side_1) && is_bitxor2t(side_2)))
+  {
+    const expr2tc &xor_expr_ptr = is_bitxor2t(side_1) ? side_1 : side_2;
+    const expr2tc &or_expr_ptr = is_bitor2t(side_1) ? side_1 : side_2;
+
+    const bitxor2t &xor_expr = to_bitxor2t(xor_expr_ptr);
+    const bitor2t &or_expr = to_bitor2t(or_expr_ptr);
+
+    // Check if XOR operands match OR operands (any order)
+    bool match =
+      (xor_expr.side_1 == or_expr.side_1 &&
+       xor_expr.side_2 == or_expr.side_2) ||
+      (xor_expr.side_1 == or_expr.side_2 && xor_expr.side_2 == or_expr.side_1);
+
+    if (match)
+    {
+      // Return a canonicalized version where operands are ordered consistently
+      if (or_expr.side_1.get() < or_expr.side_2.get())
+        return bitor2tc(type, or_expr.side_1, or_expr.side_2);
+      else
+        return bitor2tc(type, or_expr.side_2, or_expr.side_1);
+    }
+  }
+
+  // ~(a ^ b) | (a & b) --> ~(a ^ b)
+  if (
+    (is_bitnot2t(side_1) && is_bitand2t(side_2)) ||
+    (is_bitand2t(side_1) && is_bitnot2t(side_2)))
+  {
+    const expr2tc &bnot_expr = is_bitnot2t(side_1) ? side_1 : side_2;
+    const expr2tc &band_expr = is_bitand2t(side_1) ? side_1 : side_2;
+
+    const bitnot2t &bnot = to_bitnot2t(bnot_expr);
+    const bitand2t &band = to_bitand2t(band_expr);
+
+    // Check if the NOT operand is an XOR
+    if (is_bitxor2t(bnot.value))
+    {
+      const bitxor2t &bxor = to_bitxor2t(bnot.value);
+
+      // Check if AND operands match XOR operands (any order)
+      bool match = (bxor.side_1 == band.side_1 && bxor.side_2 == band.side_2) ||
+                   (bxor.side_1 == band.side_2 && bxor.side_2 == band.side_1);
+
+      if (match)
+        return bnot_expr; // Return ~(a ^ b)
+    }
+  }
+
+  // ~(a & b) | (a ^ b) --> ~(a & b)
+  if (
+    (is_bitnot2t(side_1) && is_bitxor2t(side_2)) ||
+    (is_bitxor2t(side_1) && is_bitnot2t(side_2)))
+  {
+    const expr2tc &bnot_expr = is_bitnot2t(side_1) ? side_1 : side_2;
+    const expr2tc &bxor_expr = is_bitxor2t(side_1) ? side_1 : side_2;
+
+    const bitnot2t &bnot = to_bitnot2t(bnot_expr);
+    const bitxor2t &bxor = to_bitxor2t(bxor_expr);
+
+    // Check if the NOT operand is an AND
+    if (is_bitand2t(bnot.value))
+    {
+      const bitand2t &band = to_bitand2t(bnot.value);
+
+      // Check if XOR operands match AND operands (any order)
+      bool match = (bxor.side_1 == band.side_1 && bxor.side_2 == band.side_2) ||
+                   (bxor.side_1 == band.side_2 && bxor.side_2 == band.side_1);
+
+      if (match)
+        return bnot_expr; // Return ~(a & b)
+    }
   }
 
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
@@ -2788,6 +3015,53 @@ expr2tc equality2t::do_simplify() const
           return equality2tc(mul_expr.side_2, side_2);
       }
     }
+  }
+
+  // d + c == d + e -> c == e (cancel common addend)
+  if (is_add2t(side_1) && is_add2t(side_2))
+  {
+    const add2t &add1 = to_add2t(side_1);
+    const add2t &add2 = to_add2t(side_2);
+    // Check all four combinations for common operands
+    // Case 1: (d + c) == (d + e) -> c == e
+    if (add1.side_1 == add2.side_1)
+      return equality2tc(add1.side_2, add2.side_2);
+    // Case 2: (d + c) == (e + d) -> c == e
+    if (add1.side_1 == add2.side_2)
+      return equality2tc(add1.side_2, add2.side_1);
+    // Case 3: (c + d) == (d + e) -> c == e
+    if (add1.side_2 == add2.side_1)
+      return equality2tc(add1.side_1, add2.side_2);
+    // Case 4: (c + d) == (e + d) -> c == e
+    if (add1.side_2 == add2.side_2)
+      return equality2tc(add1.side_1, add2.side_1);
+  }
+
+  // (d - c) == (d - e) -> c == e (cancel common minuend)
+  if (is_sub2t(side_1) && is_sub2t(side_2))
+  {
+    const sub2t &sub1 = to_sub2t(side_1);
+    const sub2t &sub2 = to_sub2t(side_2);
+
+    // (d - c) == (d - e) -> c == e
+    if (sub1.side_1 == sub2.side_1)
+      return equality2tc(sub1.side_2, sub2.side_2);
+  }
+
+  // (-x) == (-y) -> x == y
+  if (is_neg2t(side_1) && is_neg2t(side_2))
+  {
+    const neg2t &neg1 = to_neg2t(side_1);
+    const neg2t &neg2 = to_neg2t(side_2);
+    return equality2tc(neg1.value, neg2.value);
+  }
+
+  // (~x) == (~y) -> x == y
+  if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
+  {
+    const bitnot2t &not1 = to_bitnot2t(side_1);
+    const bitnot2t &not2 = to_bitnot2t(side_2);
+    return equality2tc(not1.value, not2.value);
   }
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);

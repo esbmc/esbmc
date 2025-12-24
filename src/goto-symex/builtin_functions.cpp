@@ -2766,7 +2766,13 @@ void goto_symext::intrinsic_builtin_object_size(
       else
       {
         // Offset is symbolic - can't determine remaining size statically
-        obj_size = create_fallback_size(use_zero_for_unknown);
+        const expr2tc total_size_expr =
+          constant_int2tc(get_int64_type(), total_size);
+        obj_size = if2tc(
+          size_type2(),
+          greaterthan2tc(total_size_expr, offset_expr),
+          sub2tc(size_type2(), total_size_expr, offset_expr),
+          gen_zero(size_type2()));
       }
     }
     else
@@ -3071,6 +3077,44 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       expr = gen_true_expr();
     else
       expr = gen_false_expr();
+  }
+  else if (is_hasattr2t(expr))
+  {
+    const hasattr2t &obj = to_hasattr2t(expr);
+    expr2tc value = obj.side_1;
+    expr2tc attr = obj.side_2;
+
+    // Only simplify when the attribute name is a constant string.
+    if (!is_constant_string2t(attr))
+      return;
+
+    const auto &attr_const = to_constant_string2t(attr);
+    std::string attr_name = attr_const.value.as_string();
+
+    cur_state->rename(value);
+    while (is_typecast2t(value))
+      value = to_typecast2t(value).from;
+    if (is_address_of2t(value))
+      value = to_address_of2t(value).ptr_obj;
+
+    type2tc obj_type = value->type;
+    if (is_pointer_type(obj_type))
+      obj_type = to_pointer_type(obj_type).subtype;
+
+    if (is_struct_type(obj_type))
+    {
+      const struct_type2t &st = to_struct_type(obj_type);
+      const auto &members = st.get_structure_member_names();
+      const bool has_member =
+        std::any_of(members.begin(), members.end(), [&](const irep_idt &memb) {
+          return memb.as_string() == attr_name;
+        });
+      expr = has_member ? gen_true_expr() : gen_false_expr();
+    }
+    else
+      expr = gen_false_expr();
+
+    return;
   }
   else if (is_isnone2t(expr))
   {

@@ -2,6 +2,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/symbol_id.h>
 #include <util/expr.h>
 #include <util/type.h>
 #include <util/symbol.h>
@@ -9,6 +10,7 @@
 #include <util/arith_tools.h>
 #include <util/std_code.h>
 #include <util/mp_arith.h>
+#include <util/python_types.h>
 #include <util/symbolic_types.h>
 #include <string>
 #include <functional>
@@ -609,7 +611,40 @@ exprt python_list::handle_range_slice(
 
     // Process bounds
     exprt lower_expr = process_bound("lower", gen_zero(size_type()));
-    exprt upper_expr = process_bound("upper", logical_len);
+
+    // For pointer types with no upper bound, compute length using strlen
+    exprt upper_expr;
+    if (array.type().is_pointer() && elem_type == char_type())
+    {
+      if (!slice_node.contains("upper") || slice_node["upper"].is_null())
+      {
+        // Call strlen to get the length
+        const symbolt *strlen_symbol =
+          converter_.symbol_table().find_symbol("c:@F@strlen");
+        if (!strlen_symbol)
+          throw std::runtime_error("strlen function not found in symbol table");
+
+        symbolt &strlen_result = converter_.create_tmp_symbol(
+          slice_node, "$strlen_result$", size_type(), gen_zero(size_type()));
+        code_declt strlen_decl(symbol_expr(strlen_result));
+        strlen_decl.location() = location;
+        converter_.add_instruction(strlen_decl);
+
+        code_function_callt strlen_call;
+        strlen_call.function() = symbol_expr(*strlen_symbol);
+        strlen_call.lhs() = symbol_expr(strlen_result);
+        strlen_call.arguments().push_back(array);
+        strlen_call.type() = size_type();
+        strlen_call.location() = location;
+        converter_.add_instruction(strlen_call);
+
+        upper_expr = symbol_expr(strlen_result);
+      }
+      else
+        upper_expr = process_bound("upper", logical_len);
+    }
+    else
+      upper_expr = process_bound("upper", logical_len);
 
     // Calculate slice length
     minus_exprt slice_len(upper_expr, lower_expr);
@@ -955,6 +990,34 @@ exprt python_list::handle_index_access(
     }
     else if (slice_node["_type"] == "Name")
     {
+      // First try to get element type from list_node if it's an AnnAssign
+      if (
+        !list_node.is_null() && list_node["_type"] == "AnnAssign" &&
+        list_node.contains("annotation") && elem_type == typet())
+      {
+        elem_type = get_elem_type_from_annotation(
+          list_node, converter_.get_type_handler());
+      }
+
+      // If still no elem_type, try to get it from the array variable's type annotation
+      if (array.is_symbol() && elem_type == typet())
+      {
+        // Extract variable name from the symbol identifier
+        std::string list_var_name = json_utils::extract_var_name_from_symbol_id(
+          array.identifier().as_string());
+
+        // Find the variable's declaration to check for type annotation
+        nlohmann::json list_var_decl = json_utils::find_var_decl(
+          list_var_name, converter_.current_function_name(), converter_.ast());
+
+        // If the variable has a type annotation such as list[str], extract element type
+        if (!list_var_decl.is_null() && list_var_decl.contains("annotation"))
+        {
+          elem_type = get_elem_type_from_annotation(
+            list_var_decl, converter_.get_type_handler());
+        }
+      }
+
       // Handle variable-based indexing
       if (!list_node.is_null() && list_node["_type"] == "arg")
       {
@@ -1101,13 +1164,22 @@ exprt python_list::handle_index_access(
       return tc;
     }
 
-    // Cast from void* to target type pointer
-    typecast_exprt tc(obj_value, pointer_typet(elem_type));
-
-    // Dereference to get the actual value (for non-array types)
-    dereference_exprt deref(elem_type);
-    deref.op0() = tc;
-    return deref;
+    // For char* strings, the void* already contains the pointer value
+    // For all other types, the void* contains a pointer to the value
+    if (elem_type.is_pointer() && elem_type.subtype() == char_type())
+    {
+      // String case: cast void* directly to char* (no dereference needed)
+      typecast_exprt tc(obj_value, elem_type);
+      return tc;
+    }
+    else
+    {
+      // All other types: cast void* to pointer-to-type, then dereference
+      typecast_exprt tc(obj_value, pointer_typet(elem_type));
+      dereference_exprt deref(elem_type);
+      deref.op0() = tc;
+      return deref;
+    }
   }
 
   // Handle static arrays
@@ -1240,7 +1312,7 @@ exprt python_list::list_repetition(
         converter_.find_symbol(lhs.identifier().as_string());
       assert(list_symbol);
 
-      if (size_var->value.is_code())
+      if (size_var->value.is_code() || size_var->value.is_nil())
       {
         return create_vla(list_value_, list_symbol, size_var, list_elem);
       }
@@ -1437,4 +1509,241 @@ typet python_list::get_list_element_type(
     index = 0;
 
   return type_map_it->second[index].second;
+}
+
+exprt python_list::handle_comprehension(const nlohmann::json &element)
+{
+  if (!element.contains("generators") || element["generators"].empty())
+  {
+    throw std::runtime_error(
+      "Comprehension expression missing generators clause");
+  }
+
+  const auto &generator = element["generators"][0];
+  const auto &elt = element["elt"];
+  const auto &target = generator["target"];
+  const auto &iter = generator["iter"];
+
+  locationt location = converter_.get_location_from_decl(element);
+  typet list_type = converter_.get_type_handler().get_list_type();
+
+  // 1. Create result list
+  symbolt &result_list = create_list();
+  const std::string &result_list_id = result_list.id.as_string();
+
+  // 2. Get iterable expression
+  exprt iterable_expr = converter_.get_expr(iter);
+
+  // 3. Create loop variable
+  std::string loop_var_name = target["id"].get<std::string>();
+  symbol_id loop_var_sid = converter_.create_symbol_id();
+  loop_var_sid.set_object(loop_var_name);
+
+  // Infer loop variable type from iterable
+  typet loop_var_type;
+  if (iterable_expr.type().is_array())
+    loop_var_type = iterable_expr.type().subtype();
+  else if (iterable_expr.type().is_pointer())
+    loop_var_type = iterable_expr.type().subtype();
+  else if (iterable_expr.type() == list_type)
+    loop_var_type = any_type();
+  else
+    loop_var_type = any_type();
+
+  symbolt loop_var_symbol = converter_.create_symbol(
+    location.get_file().as_string(),
+    loop_var_name,
+    loop_var_sid.to_string(),
+    location,
+    loop_var_type);
+  loop_var_symbol.lvalue = true;
+  loop_var_symbol.file_local = true;
+  loop_var_symbol.is_extern = false;
+  symbolt *loop_var =
+    converter_.symbol_table().move_symbol_to_context(loop_var_symbol);
+
+  // 4. Create index variable
+  symbolt &index_var = converter_.create_tmp_symbol(
+    element, "comp_i", size_type(), gen_zero(size_type()));
+
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  // 5. Get length of iterable
+  exprt length_expr;
+  if (iterable_expr.type() == list_type)
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error("__ESBMC_list_size not found in symbol table");
+
+    symbolt &length_var = converter_.create_tmp_symbol(
+      element, "comp_len", size_type(), gen_zero(size_type()));
+
+    code_declt length_decl(symbol_expr(length_var));
+    length_decl.location() = location;
+    converter_.add_instruction(length_decl);
+
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.arguments().push_back(
+      iterable_expr.type().is_pointer() ? iterable_expr
+                                        : address_of_exprt(iterable_expr));
+    size_call.lhs() = symbol_expr(length_var);
+    size_call.type() = size_type();
+    size_call.location() = location;
+    converter_.add_instruction(size_call);
+
+    length_expr = symbol_expr(length_var);
+  }
+  else if (iterable_expr.type().is_array())
+  {
+    const array_typet &arr_type = to_array_type(iterable_expr.type());
+    length_expr = arr_type.size();
+  }
+  else if (iterable_expr.type().is_pointer())
+  {
+    const symbolt *strlen_func =
+      converter_.symbol_table().find_symbol("c:@F@strlen");
+    if (strlen_func)
+    {
+      symbolt &length_var = converter_.create_tmp_symbol(
+        element, "comp_len", size_type(), gen_zero(size_type()));
+
+      code_declt length_decl(symbol_expr(length_var));
+      length_decl.location() = location;
+      converter_.add_instruction(length_decl);
+
+      code_function_callt strlen_call;
+      strlen_call.function() = symbol_expr(*strlen_func);
+      strlen_call.arguments().push_back(iterable_expr);
+      strlen_call.lhs() = symbol_expr(length_var);
+      strlen_call.type() = size_type();
+      strlen_call.location() = location;
+      converter_.add_instruction(strlen_call);
+
+      length_expr = symbol_expr(length_var);
+    }
+    else
+    {
+      throw std::runtime_error("strlen not found for string iteration");
+    }
+  }
+  else
+  {
+    throw std::runtime_error(
+      "Unsupported iterable type in comprehension: " +
+      iterable_expr.type().id_string());
+  }
+
+  // 6. Build while loop body
+  code_blockt loop_body;
+
+  // Get current element: loop_var = iterable[i]
+  exprt current_element;
+  if (iterable_expr.type() == list_type)
+  {
+    // For lists, use list_at
+    current_element =
+      build_list_at_call(iterable_expr, symbol_expr(index_var), element);
+
+    // Dereference the returned pointer to get the value
+    member_exprt obj_value(
+      current_element, "value", pointer_typet(empty_typet()));
+    {
+      exprt &base = obj_value.struct_op();
+      exprt deref("dereference");
+      deref.type() = base.type().subtype();
+      deref.move_to_operands(base);
+      base.swap(deref);
+    }
+
+    typecast_exprt tc(obj_value, pointer_typet(loop_var_type));
+    dereference_exprt final_deref(loop_var_type);
+    final_deref.op0() = tc;
+    current_element = final_deref;
+  }
+  else if (iterable_expr.type().is_array() || iterable_expr.type().is_pointer())
+  {
+    // For arrays/strings, use direct indexing
+    index_exprt array_index(
+      iterable_expr, symbol_expr(index_var), loop_var_type);
+    current_element = array_index;
+  }
+  else
+  {
+    throw std::runtime_error(
+      "Cannot index into type: " + iterable_expr.type().id_string());
+  }
+
+  code_assignt loop_var_assign(symbol_expr(*loop_var), current_element);
+  loop_var_assign.location() = location;
+  loop_body.copy_to_operands(loop_var_assign);
+
+  // 7. Handle filter conditions (if present)
+  code_blockt conditional_block;
+
+  // 8. Evaluate element expression and append to result
+  // Switch context to loop body for all operations
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+
+  // Evaluate element expression - temporaries go to loop_body
+  exprt element_expr = converter_.get_expr(elt);
+
+  // Build push call - temporaries also go to loop_body
+  exprt push_call = build_push_list_call(result_list, element, element_expr);
+  loop_body.copy_to_operands(push_call);
+
+  // Restore context
+  converter_.current_block = saved_block;
+
+  // Update type map
+  list_type_map[result_list_id].push_back(
+    std::make_pair(element_expr.identifier().as_string(), element_expr.type()));
+
+  // If we had filter conditions, wrap append in if statement
+  if (generator.contains("ifs") && !generator["ifs"].empty())
+  {
+    exprt combined_condition = gen_boolean(true);
+    for (const auto &if_clause : generator["ifs"])
+    {
+      exprt if_expr = converter_.get_expr(if_clause);
+      if (combined_condition.is_true())
+        combined_condition = if_expr;
+      else
+      {
+        exprt and_expr("and", bool_type());
+        and_expr.copy_to_operands(combined_condition, if_expr);
+        combined_condition = and_expr;
+      }
+    }
+
+    codet if_stmt;
+    if_stmt.set_statement("ifthenelse");
+    if_stmt.copy_to_operands(combined_condition, conditional_block);
+    if_stmt.location() = location;
+    loop_body.copy_to_operands(if_stmt);
+  }
+
+  // 9. Increment index: i = i + 1
+  exprt increment("+", size_type());
+  increment.copy_to_operands(symbol_expr(index_var), gen_one(size_type()));
+  code_assignt index_increment(symbol_expr(index_var), increment);
+  index_increment.location() = location;
+  loop_body.copy_to_operands(index_increment);
+
+  // 10. Create while loop: while (i < length)
+  exprt loop_condition("<", bool_type());
+  loop_condition.copy_to_operands(symbol_expr(index_var), length_expr);
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_condition, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  return symbol_expr(result_list);
 }

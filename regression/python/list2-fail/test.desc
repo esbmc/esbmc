@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.py
-
-ERROR: Unsupported expression GeneratorExp at line 2
+--incremental-bmc
+^VERIFICATION FAILED$

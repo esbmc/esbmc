@@ -1,3 +1,6 @@
+#ifndef CPROVER_GOTO_SYMEX_WITNESSES_H
+#define CPROVER_GOTO_SYMEX_WITNESSES_H
+
 #include <boost/property_tree/xml_parser.hpp>
 #include <util/namespace.h>
 #include <irep2/irep2.h>
@@ -237,3 +240,5 @@ void generate_testcase(
   const std::string &file_name,
   const symex_target_equationt &target,
   smt_convt &smt_conv);
+
+#endif

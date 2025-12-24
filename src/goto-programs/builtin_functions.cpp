@@ -179,7 +179,8 @@ void goto_convertt::do_atomic_begin(
   {
     code_function_callt call;
     call.function() = symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
-    do_function_call(call.lhs(), call.function(), call.arguments(), dest);
+    do_function_call(
+      call.lhs(), call.function(), call.arguments(), function.location(), dest);
   }
 
   goto_programt::targett t = dest.add_instruction(ATOMIC_BEGIN);

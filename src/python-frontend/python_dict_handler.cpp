@@ -1,3 +1,4 @@
+#include <python-frontend/json_utils.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_list.h>
@@ -339,6 +340,11 @@ exprt python_dict_handler::handle_dict_subscript(
   locationt location = converter_.get_location_from_decl(slice_node);
   typet list_type = type_handler_.get_list_type();
 
+  // If expected_type is not provided, try to infer it from the dict's annotation
+  typet resolved_type = expected_type;
+  if (resolved_type.is_nil() || resolved_type.is_empty())
+    resolved_type = resolve_expected_type_for_dict_subscript(dict_expr);
+
   exprt key_expr = get_key_expr(slice_node);
 
   // Get dict.keys and dict.values
@@ -418,46 +424,113 @@ exprt python_dict_handler::handle_dict_subscript(
     pointer_typet(empty_typet()));
 
   // Handle dict types
-  // Check expected_type first to see if we're retrieving a nested dict
-  if (!expected_type.is_nil() && is_dict_type(expected_type))
+  if (!resolved_type.is_nil() && is_dict_type(resolved_type))
   {
     return retrieve_nested_dict_value(
-      slice_node, obj_value, expected_type, location);
+      slice_node, obj_value, resolved_type, location);
   }
 
   // Handle list types
-  if (expected_type == list_type)
+  if (resolved_type == list_type)
   {
-    // obj_value is void* pointing to a (PyListObj*)
-    // We need to:
-    // 1. Cast void* to (PyListObj**)  - pointer to pointer to list
-    // 2. Dereference to get PyListObj*
     typecast_exprt value_as_list_ptr_ptr(obj_value, pointer_typet(list_type));
     dereference_exprt list_ptr(value_as_list_ptr_ptr, list_type);
     list_ptr.type() = list_type;
-    return list_ptr;
+
+    // Create a temporary symbol for this list to store in the type map
+    symbolt &list_result = converter_.create_tmp_symbol(
+      slice_node, "$dict_list_result$", list_type, exprt());
+
+    code_declt list_decl(symbol_expr(list_result));
+    list_decl.location() = location;
+    converter_.add_instruction(list_decl);
+
+    code_assignt list_assign(symbol_expr(list_result), list_ptr);
+    list_assign.location() = location;
+    converter_.add_instruction(list_assign);
+
+    // Extract element type and populate list_type_map for correct iteration
+    if (dict_expr.is_symbol())
+    {
+      const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
+      if (!sym)
+      {
+        log_warning(
+          "Could not find symbol '{}' in symbol table for dict subscript type "
+          "resolution",
+          dict_expr.identifier());
+      }
+      else
+      {
+        std::string var_name = sym->name.as_string();
+        nlohmann::json var_decl = json_utils::find_var_decl(
+          var_name,
+          converter_.get_current_func_name(),
+          converter_.get_ast_json());
+
+        if (
+          !var_decl.empty() && var_decl.contains("value") &&
+          var_decl["value"]["_type"] == "Call" &&
+          var_decl["value"]["func"]["_type"] == "Name")
+        {
+          std::string func_name =
+            var_decl["value"]["func"]["id"].get<std::string>();
+          nlohmann::json func_def = json_utils::find_function(
+            converter_.get_ast_json()["body"], func_name);
+
+          if (
+            !func_def.empty() && func_def.contains("returns") &&
+            !func_def["returns"].is_null())
+          {
+            const auto &returns = func_def["returns"];
+            if (
+              returns.contains("slice") &&
+              returns["slice"]["_type"] == "Tuple" &&
+              returns["slice"]["elts"].size() >= 2)
+            {
+              const auto &value_type = returns["slice"]["elts"][1];
+              if (
+                value_type["_type"] == "Subscript" &&
+                value_type.contains("slice") &&
+                value_type["slice"].contains("id"))
+              {
+                std::string elem_type_str =
+                  value_type["slice"]["id"].get<std::string>();
+                typet elem_type = type_handler_.get_typet(elem_type_str);
+
+                const std::string &list_id = list_result.id.as_string();
+                python_list::list_type_map[list_id].push_back(
+                  std::make_pair("", elem_type));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return symbol_expr(list_result);
   }
 
-  // Handle float types: cast void* to double*, then dereference
-  if (expected_type.is_floatbv())
+  // Handle float types
+  if (resolved_type.is_floatbv())
   {
-    typecast_exprt value_as_float_ptr(obj_value, pointer_typet(expected_type));
-    dereference_exprt result(value_as_float_ptr, expected_type);
-    result.type() = expected_type;
+    typecast_exprt value_as_float_ptr(obj_value, pointer_typet(resolved_type));
+    dereference_exprt result(value_as_float_ptr, resolved_type);
+    result.type() = resolved_type;
     return result;
   }
 
-  // Handle integer types: cast void* to int*, then dereference
-  if (expected_type.is_signedbv() || expected_type.is_unsignedbv())
+  // Handle integer types
+  if (resolved_type.is_signedbv() || resolved_type.is_unsignedbv())
   {
-    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(expected_type));
-    dereference_exprt result(value_as_int_ptr, expected_type);
-    result.type() = expected_type;
+    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(resolved_type));
+    dereference_exprt result(value_as_int_ptr, resolved_type);
+    result.type() = resolved_type;
     return result;
   }
 
-  // Handle boolean types: cast void* to bool*, then dereference
-  if (expected_type.is_bool())
+  // Handle boolean types
+  if (resolved_type.is_bool())
   {
     typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
     dereference_exprt result(value_as_bool_ptr, bool_type());
@@ -762,4 +835,153 @@ void python_dict_handler::handle_dict_delete(
   if_stmt.location() = location;
 
   target_block.copy_to_operands(if_stmt);
+}
+
+void python_dict_handler::resolve_dict_subscript_types(
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  exprt &lhs,
+  exprt &rhs)
+{
+  bool lhs_is_dict_subscript = type_utils::is_dict_subscript(left);
+  bool rhs_is_dict_subscript = type_utils::is_dict_subscript(right);
+
+  bool lhs_is_ptr = lhs.type().is_pointer();
+  bool rhs_is_ptr = rhs.type().is_pointer();
+
+  auto is_primitive_type = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_bool() ||
+           t.is_floatbv();
+  };
+
+  bool lhs_is_primitive = is_primitive_type(lhs.type());
+  bool rhs_is_primitive = is_primitive_type(rhs.type());
+
+  // Case 1: LHS is dict subscript (returning pointer) and RHS is primitive
+  if (lhs_is_dict_subscript && lhs_is_ptr && rhs_is_primitive)
+  {
+    exprt dict_expr = converter_.get_expr(left["value"]);
+    if (dict_expr.type().is_struct() && is_dict_type(dict_expr.type()))
+    {
+      lhs = handle_dict_subscript(dict_expr, left["slice"], rhs.type());
+      // Dereference the pointer to get the actual value
+      if (lhs.type().is_pointer())
+        lhs = dereference_exprt(lhs, lhs.type().subtype());
+    }
+  }
+
+  // Case 2: RHS is dict subscript (returning pointer) and LHS is primitive
+  if (rhs_is_dict_subscript && rhs_is_ptr && lhs_is_primitive)
+  {
+    exprt dict_expr = converter_.get_expr(right["value"]);
+    if (dict_expr.type().is_struct() && is_dict_type(dict_expr.type()))
+    {
+      rhs = handle_dict_subscript(dict_expr, right["slice"], lhs.type());
+      // Dereference the pointer to get the actual value
+      if (rhs.type().is_pointer())
+        rhs = dereference_exprt(rhs, rhs.type().subtype());
+    }
+  }
+
+  // Case 3: Both sides are dict subscripts (returning pointers)
+  // Default to long_int_type for dict-to-dict comparisons
+  if (
+    lhs_is_dict_subscript && rhs_is_dict_subscript && lhs_is_ptr && rhs_is_ptr)
+  {
+    typet default_type = long_int_type();
+
+    exprt lhs_dict = converter_.get_expr(left["value"]);
+    if (lhs_dict.type().is_struct() && is_dict_type(lhs_dict.type()))
+    {
+      lhs = handle_dict_subscript(lhs_dict, left["slice"], default_type);
+      // Dereference the pointer to get the actual value
+      if (lhs.type().is_pointer())
+        lhs = dereference_exprt(lhs, lhs.type().subtype());
+    }
+
+    exprt rhs_dict = converter_.get_expr(right["value"]);
+    if (rhs_dict.type().is_struct() && is_dict_type(rhs_dict.type()))
+    {
+      rhs = handle_dict_subscript(rhs_dict, right["slice"], default_type);
+      // Dereference the pointer to get the actual value
+      if (rhs.type().is_pointer())
+      {
+        rhs = dereference_exprt(rhs, rhs.type().subtype());
+      }
+    }
+  }
+}
+
+typet python_dict_handler::get_dict_value_type_from_annotation(
+  const nlohmann::json &annotation_node)
+{
+  // Get the slice which contains the key and value types
+  if (!annotation_node.contains("slice"))
+    return empty_typet();
+
+  const auto &slice = annotation_node["slice"];
+
+  // For dict[K, V], slice is a Tuple with two elements
+  if (
+    slice.contains("_type") && slice["_type"] == "Tuple" &&
+    slice.contains("elts") && slice["elts"].size() >= 2)
+  {
+    // Return the value type (second element of the tuple)
+    const auto &value_type_node = slice["elts"][1];
+    return converter_.get_type_from_annotation(
+      value_type_node, annotation_node);
+  }
+
+  return empty_typet();
+}
+
+typet python_dict_handler::resolve_expected_type_for_dict_subscript(
+  const exprt &dict_expr)
+{
+  // Only works if dict_expr is a symbol (variable reference)
+  if (!dict_expr.is_symbol())
+    return empty_typet();
+
+  const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
+  if (!sym)
+    return empty_typet();
+
+  // Look up the variable's declaration in the AST to get its annotation
+  std::string var_name = sym->name.as_string();
+  nlohmann::json var_decl = json_utils::find_var_decl(
+    var_name, converter_.get_current_func_name(), converter_.get_ast_json());
+
+  if (var_decl.empty() || !var_decl.contains("annotation"))
+    return empty_typet();
+
+  // Check if the annotation is just a simple type (e.g., "dict")
+  // If so, try to get the full type from the RHS (function call)
+  if (
+    var_decl["annotation"]["_type"] == "Name" &&
+    var_decl["annotation"]["id"] == "dict" && var_decl.contains("value") &&
+    var_decl["value"]["_type"] == "Call")
+  {
+    const auto &call_node = var_decl["value"];
+    if (call_node["func"]["_type"] == "Name")
+    {
+      std::string func_name = call_node["func"]["id"].get<std::string>();
+
+      // Find the function definition to get its return type annotation
+      nlohmann::json func_def =
+        json_utils::find_function(converter_.get_ast_json()["body"], func_name);
+
+      if (
+        !func_def.empty() && func_def.contains("returns") &&
+        !func_def["returns"].is_null())
+      {
+        // Extract the value type from the function's return annotation
+        typet result = get_dict_value_type_from_annotation(func_def["returns"]);
+        if (!result.is_nil())
+          return result;
+      }
+    }
+  }
+
+  // Extract the value type from the dict annotation
+  return get_dict_value_type_from_annotation(var_decl["annotation"]);
 }

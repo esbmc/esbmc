@@ -118,6 +118,7 @@ protected:
     const exprt &lhs,
     const exprt &function,
     const exprt::operandst &arguments,
+    const locationt &location,
     goto_programt &dest);
 
   virtual void do_function_call_if(

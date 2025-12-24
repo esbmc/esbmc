@@ -5,6 +5,8 @@
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
 
+#include <langapi/language_util.h>
+
 #include <pointer-analysis/value_set_analysis.h>
 
 #include <util/c_types.h>
@@ -74,6 +76,18 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   if (is_true(new_expr))
   {
+    if (options.get_bool_option("multi-property"))
+    {
+      // Log that this assertion was trivially verified
+      log_success(
+        "✓ PASSED: '{}' at {}",
+        msg,
+        cur_state->source.pc->location.as_string());
+
+      // Track trivially verified claims
+      ++simplified_claims;
+    }
+
     // Strengthen the claim by assuming it when trivially true
     assume(claim_expr);
     return;
@@ -167,7 +181,8 @@ void goto_symext::assume(const expr2tc &the_assumption)
 
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
-  return goto_symext::symex_resultt(target, total_claims, remaining_claims);
+  return goto_symext::symex_resultt(
+    target, total_claims, remaining_claims, simplified_claims);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -487,11 +502,14 @@ void goto_symext::symex_assert()
   if (cur_state->source.pc->location.user_provided() && no_assertions)
     return;
 
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+
   std::string msg = cur_state->source.pc->location.comment().as_string();
   if (msg == "")
-    msg = "assertion";
-
-  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  {
+    exprt guard = migrate_expr_back(instruction.guard);
+    msg = "assertion " + from_expr(ns, "", guard);
+  }
 
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
