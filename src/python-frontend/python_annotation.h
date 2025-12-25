@@ -1313,6 +1313,21 @@ private:
     return list_subtype;
   }
 
+  std::string get_base_var_name(const Json &node) const
+  {
+    if (node["_type"] == "Name")
+      return node["id"];
+    else if (node["_type"] == "Subscript")
+      return get_base_var_name(node["value"]);
+    else if (node["_type"] == "Attribute")
+    {
+      // Handle attribute access such as obj.attr[0]
+      std::string base = get_base_var_name(node["value"]);
+      return base + "." + node["attr"].template get<std::string>();
+    }
+    return "";
+  }
+
   std::string get_type_from_rhs_variable(const Json &element, const Json &body)
   {
     const auto &value_type = element["value"]["_type"];
@@ -1332,8 +1347,12 @@ private:
       rhs_var_name = element["value"]["id"];
     else if (value_type == "UnaryOp")
       rhs_var_name = element["value"]["operand"]["id"];
+    else if (value_type == "Subscript")
+      rhs_var_name = get_base_var_name(
+        element["value"]["value"]); // handle nested subscripts
     else
-      rhs_var_name = element["value"]["value"]["id"];
+      rhs_var_name =
+        get_base_var_name(element["value"]["value"]); // handle general case
 
     assert(!rhs_var_name.empty());
 
