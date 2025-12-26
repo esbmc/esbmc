@@ -14,6 +14,7 @@ class Preprocessor(ast.NodeTransformer):
         self.helper_functions_added = False  # Track if helper functions have been added
         self.functionKwonlyParams = {}
         self.listcomp_counter = 0  # Counter for list comprehension temporaries
+        self.variable_annotations = {}  # Store full AST annotations
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -322,6 +323,22 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(first_elem, ast.Constant):
                 return type(first_elem.value).__name__
         elif container_type in ['list', 'tuple']:
+            # Try to extract element type from generic annotation
+            if isinstance(iterable_node, ast.Name) and hasattr(self, 'variable_annotations'):
+                var_name = iterable_node.id
+                if var_name in self.variable_annotations:
+                    annotation = self.variable_annotations[var_name]
+                    # Extract element type from Subscript such as list[dict] or list[dict[str, str]]
+                    if isinstance(annotation, ast.Subscript):
+                        element_annotation = annotation.slice
+                        # Handle simple Name: list[dict] -> 'dict'
+                        if isinstance(element_annotation, ast.Name):
+                            return element_annotation.id
+                        # Handle nested Subscript: list[dict[str, str]] -> 'dict'
+                        elif isinstance(element_annotation, ast.Subscript):
+                            # Extract base type from nested subscript
+                            if isinstance(element_annotation.value, ast.Name):
+                                return element_annotation.value.id
             return 'Any'
         return 'Any'
 
@@ -955,7 +972,7 @@ class Preprocessor(ast.NodeTransformer):
         index_slice = self.create_name_node(index_var, ast.Load(), node)
         subscript = ast.Subscript(value=iter_value, slice=index_slice, ctx=ast.Load())
         self.ensure_all_locations(subscript, node)
-        element_type = self._get_element_type_from_container(annotation_id)
+        element_type = self._get_element_type_from_container(annotation_id, node.iter)
         item_annotation = self.create_name_node(element_type, ast.Load(), node)
         item_assign = ast.AnnAssign(
             target=item_target,
@@ -1177,6 +1194,8 @@ class Preprocessor(ast.NodeTransformer):
             var_name = node.target.id
             var_type = self._extract_type_from_annotation(node.annotation)
             self.known_variable_types[var_name] = var_type
+            # Store full annotation for generic type extraction
+            self.variable_annotations[var_name] = node.annotation
 
         return node
 
