@@ -401,6 +401,20 @@ private:
     const exprt &obj_value,
     const typet &expected_type,
     const locationt &location);
+
+  /**
+   * @brief Generate a unique dictionary name based on source location
+   * 
+   * Creates deterministic names using file, line, and column information.
+   * Falls back to JSON node hash if location is unavailable.
+   * 
+   * @param element The JSON AST node for the dictionary
+   * @param location The source location
+   * @return A unique dictionary identifier
+   */
+  std::string generate_unique_dict_name(
+    const nlohmann::json &element,
+    const locationt &location) const;
 };
 
 #endif // PYTHON_DICT_HANDLER_H
