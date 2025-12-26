@@ -1279,7 +1279,7 @@ private:
     {
       std::string full_type = annotation["id"];
 
-      // Parse generic notation like "list[dict]"
+      // Parse generic notation such as "list[dict]"
       size_t bracket_pos = full_type.find('[');
       if (bracket_pos != std::string::npos)
       {
@@ -1354,7 +1354,7 @@ private:
   {
     const auto &value_type = element["value"]["_type"];
 
-    // Handle subscript of string constant
+    // Handle subscript of string constant (e.g., "hello"[0] returns str)
     if (
       value_type == "Subscript" &&
       element["value"]["value"]["_type"] == "Constant" &&
@@ -2366,7 +2366,6 @@ private:
         ? target["end_lineno"].template get<int>()
         : target_lineno;
 
-    // Create annotation using helper
     element["annotation"] = create_annotation_from_type(
       inferred_type, target_lineno, col_offset, target_end_lineno);
 
@@ -2420,7 +2419,6 @@ private:
     int col_offset = param["col_offset"].template get<int>() +
                      param["arg"].template get<std::string>().length() + 1;
 
-    // Create annotation using helper
     param["annotation"] = create_annotation_from_type(
       type,
       param["lineno"].template get<int>(),
