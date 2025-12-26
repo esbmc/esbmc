@@ -1128,81 +1128,85 @@ class Preprocessor(ast.NodeTransformer):
     def _create_annotation_node_from_value(self, value):
         """Create an annotation AST node from a value node for storage"""
         if isinstance(value, ast.List):
-            # Infer list element type if possible
-            if value.elts:
-                elem_type = self._infer_type_from_value(value.elts[0])
-                if elem_type and elem_type != 'Any':
-                    # Create list[elem_type] annotation
-                    return ast.Subscript(
-                        value=ast.Name(id='list', ctx=ast.Load()),
-                        slice=ast.Name(id=elem_type, ctx=ast.Load()),
-                        ctx=ast.Load()
-                    )
-            return ast.Name(id='list', ctx=ast.Load())
-
+            return self._create_list_annotation(value)
         elif isinstance(value, ast.Dict):
-            # Try to infer dict[K, V] from the literal structure
-            if value.keys and value.values:
-                # Get key type from first key
-                key_type = 'Any'
-                if isinstance(value.keys[0], ast.Constant):
-                    if isinstance(value.keys[0].value, str):
-                        key_type = 'str'
-                    elif isinstance(value.keys[0].value, int):
-                        key_type = 'int'
+            return self._create_dict_annotation(value)
+        elif isinstance(value, ast.Subscript):
+            return self._create_subscript_annotation(value)
+        return None
 
-                # Get value type from first value
-                first_value = value.values[0]
-                value_annotation = None
+    def _create_list_annotation(self, list_node):
+        """Create list[T] annotation from a list literal"""
+        if list_node.elts:
+            elem_type = self._infer_type_from_value(list_node.elts[0])
+            if elem_type and elem_type != 'Any':
+                return ast.Subscript(
+                    value=ast.Name(id='list', ctx=ast.Load()),
+                    slice=ast.Name(id=elem_type, ctx=ast.Load()),
+                    ctx=ast.Load()
+                )
+        return ast.Name(id='list', ctx=ast.Load())
 
-                if isinstance(first_value, ast.List):
-                    # Value is a list - infer its element type
-                    if first_value.elts:
-                        list_elem_type = self._infer_type_from_value(first_value.elts[0])
-                        if list_elem_type and list_elem_type != 'Any':
-                            # Create list[elem_type] for the value
-                            value_annotation = ast.Subscript(
-                                value=ast.Name(id='list', ctx=ast.Load()),
-                                slice=ast.Name(id=list_elem_type, ctx=ast.Load()),
-                                ctx=ast.Load()
-                            )
-                elif isinstance(first_value, ast.Dict):
-                    # Recursively handle nested dicts
-                    value_annotation = self._create_annotation_node_from_value(first_value)
-                elif isinstance(first_value, ast.Constant):
-                    const_type = type(first_value.value).__name__
-                    value_annotation = ast.Name(id=const_type, ctx=ast.Load())
-
-                # Create dict[K, V] annotation if we got both types
-                if key_type != 'Any' and value_annotation:
-                    return ast.Subscript(
-                        value=ast.Name(id='dict', ctx=ast.Load()),
-                        slice=ast.Tuple(
-                            elts=[
-                                ast.Name(id=key_type, ctx=ast.Load()),
-                                value_annotation
-                            ],
-                            ctx=ast.Load()
-                        ),
-                        ctx=ast.Load()
-                    )
-
+    def _create_dict_annotation(self, dict_node):
+        """Create dict[K, V] annotation from a dict literal"""
+        if not dict_node.keys or not dict_node.values:
             return ast.Name(id='dict', ctx=ast.Load())
 
-        elif isinstance(value, ast.Subscript):
-            # Propagate annotation from subscript source
-            if isinstance(value.value, ast.Name):
-                base_var = value.value.id
+        key_type = self._infer_dict_key_type(dict_node.keys[0])
+        value_annotation = self._infer_dict_value_annotation(dict_node.values[0])
 
-                if hasattr(self, 'variable_annotations') and base_var in self.variable_annotations:
-                    base_annotation = self.variable_annotations[base_var]
+        if key_type != 'Any' and value_annotation:
+            return ast.Subscript(
+                value=ast.Name(id='dict', ctx=ast.Load()),
+                slice=ast.Tuple(
+                    elts=[
+                        ast.Name(id=key_type, ctx=ast.Load()),
+                        value_annotation
+                    ],
+                    ctx=ast.Load()
+                ),
+                ctx=ast.Load()
+            )
 
-                    # Extract value type from dict annotation
-                    if isinstance(base_annotation, ast.Subscript):
-                        if isinstance(base_annotation.value, ast.Name) and base_annotation.value.id == 'dict':
-                            if isinstance(base_annotation.slice, ast.Tuple) and len(base_annotation.slice.elts) == 2:
-                                return base_annotation.slice.elts[1]
+        return ast.Name(id='dict', ctx=ast.Load())
+
+    def _infer_dict_key_type(self, key_node):
+        """Infer key type from dict literal's first key"""
+        if isinstance(key_node, ast.Constant):
+            if isinstance(key_node.value, str):
+                return 'str'
+            elif isinstance(key_node.value, int):
+                return 'int'
+        return 'Any'
+
+    def _infer_dict_value_annotation(self, value_node):
+        """Infer value annotation from dict literal's first value"""
+        if isinstance(value_node, ast.List):
+            return self._create_list_annotation(value_node)
+        elif isinstance(value_node, ast.Dict):
+            return self._create_annotation_node_from_value(value_node)
+        elif isinstance(value_node, ast.Constant):
+            const_type = type(value_node.value).__name__
+            return ast.Name(id=const_type, ctx=ast.Load())
+        return None
+
+    def _create_subscript_annotation(self, subscript_node):
+        """Extract annotation from subscript operation (e.g., d["key"])"""
+        if not isinstance(subscript_node.value, ast.Name):
             return None
+
+        base_var = subscript_node.value.id
+
+        if not (hasattr(self, 'variable_annotations') and base_var in self.variable_annotations):
+            return None
+
+        base_annotation = self.variable_annotations[base_var]
+
+        # Extract value type from dict[K, V] annotation
+        if isinstance(base_annotation, ast.Subscript):
+            if isinstance(base_annotation.value, ast.Name) and base_annotation.value.id == 'dict':
+                if isinstance(base_annotation.slice, ast.Tuple) and len(base_annotation.slice.elts) == 2:
+                    return base_annotation.slice.elts[1]
 
         return None
 
