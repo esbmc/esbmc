@@ -1347,6 +1347,30 @@ private:
     if (base_type == "dict")
       return infer_dict_value_type(var_node);
 
+    // List subscript
+    if (base_type == "list")
+    {
+      // First try to use the element_type from annotation (e.g., list[int])
+      if (!element_type.empty())
+        return element_type;
+
+      // Try to infer from initialization if available
+      if (var_node.contains("value") && !var_node["value"].is_null())
+      {
+        std::string inferred = get_list_subtype(var_node["value"]);
+        if (!inferred.empty())
+          return inferred;
+      }
+
+      // Last resort: return Any for unknown list element types
+      return "Any";
+    }
+
+    // String subscript: str[index] returns str
+    if (base_type == "str")
+      return "str";
+
+    // For other types, return the base type
     return base_type;
   }
 
