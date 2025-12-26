@@ -131,6 +131,13 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
     elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
   }
+  // Handle struct types (such as dictionaries): store by reference
+  else if (elem_symbol.type.is_struct())
+  {
+    // Dictionaries are reference types in Python: store pointer, not value
+    const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
+    elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
+  }
   // For string pointers (char*), calculate length at runtime using strlen
   else if (
     elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == char_type())
