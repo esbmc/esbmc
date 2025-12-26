@@ -88,6 +88,12 @@ static inline void *__ESBMC_copy_value(const void *value, size_t size)
 
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
+  else if (size == 16)
+  {
+    // Handle 16-byte structs (such as dictionaries) explicitly
+    *(uint64_t *)copied = *(const uint64_t *)value;
+    *((uint64_t *)copied + 1) = *((const uint64_t *)value + 1);
+  }
   else
     memcpy(copied, value, size);
 

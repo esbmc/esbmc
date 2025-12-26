@@ -1,4 +1,4 @@
-KNOWNBUG
+THOROUGH
 main.py
---incremental-bmc --no-bounds-check --no-pointer-check --no-align-check --no-div-by-zero-check
+--unwind 4 --no-bounds-check --no-pointer-check --no-align-check --no-div-by-zero-check
 ^VERIFICATION SUCCESSFUL$

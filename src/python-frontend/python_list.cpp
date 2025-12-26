@@ -131,6 +131,19 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
     elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
   }
+  // Handle struct types (such as dictionaries): store by reference
+  else if (elem_symbol.type.is_struct())
+  {
+    // Calculate actual struct size by counting pointer-sized components
+    const struct_union_typet &struct_type =
+      to_struct_union_type(elem_symbol.type);
+
+    // For dictionary structs, each component is a pointer (keys, values)
+    size_t num_components = struct_type.components().size();
+    size_t total_size = num_components * (config.ansi_c.pointer_width() / 8);
+
+    elem_size = from_integer(BigInt(total_size), size_type());
+  }
   // For string pointers (char*), calculate length at runtime using strlen
   else if (
     elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == char_type())
@@ -245,6 +258,11 @@ exprt python_list::build_push_list_call(
   {
     // For string type (char*), we must pass the pointer value itself
     element_arg = symbol_expr(*elem_info.elem_symbol);
+  }
+  else if (elem_info.elem_symbol->type.is_struct())
+  {
+    // For structs (dictionaries), pass address of the struct directly
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
   }
   else
   {
