@@ -9,9 +9,10 @@
 #include <util/config.h>
 #include <util/context.h>
 #include <util/std_code.h>
-#include <functional>
 
-int python_dict_handler::dict_counter_ = 0;
+#include <algorithm>
+#include <functional>
+#include <sstream>
 
 python_dict_handler::python_dict_handler(
   python_converter &converter,
@@ -21,6 +22,49 @@ python_dict_handler::python_dict_handler(
     symbol_table_(symbol_table),
     type_handler_(type_handler)
 {
+}
+
+std::string python_dict_handler::generate_unique_dict_name(
+  const nlohmann::json &element,
+  const locationt &location) const
+{
+  std::ostringstream name;
+  name << "$py_dict$";
+
+  // Try to use location information for deterministic naming
+  if (!location.get_file().empty() && !location.get_line().empty())
+  {
+    // Use file name (without path) + line + column
+    std::string file = location.get_file().as_string();
+
+    // Extract just the filename without path
+    size_t last_slash = file.find_last_of("/\\");
+    if (last_slash != std::string::npos)
+      file = file.substr(last_slash + 1);
+
+    // Replace dots and special chars with underscores for valid identifiers
+    std::replace(file.begin(), file.end(), '.', '_');
+    std::replace(file.begin(), file.end(), '-', '_');
+
+    name << file << "$" << location.get_line().as_string() << "$"
+         << location.get_column().as_string();
+  }
+  else
+  {
+    // Fallback: use hash of the JSON element for uniqueness
+    // This handles cases where location info is missing
+    std::hash<std::string> hasher;
+    size_t hash = hasher(element.dump());
+    name << "noloc$" << std::hex << hash;
+  }
+
+  // Add a disambiguator based on element content hash to handle
+  // multiple dicts at the same location (e.g., in list comprehensions)
+  std::hash<std::string> hasher;
+  size_t content_hash = hasher(element.dump());
+  name << "$" << std::hex << (content_hash & 0xFFFF); // Use last 4 hex digits
+
+  return name.str();
 }
 
 bool python_dict_handler::is_dict_literal(const nlohmann::json &element) const
@@ -219,7 +263,9 @@ exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
   // For nested dictionaries, we need to create a temporary variable
   // because the dict needs to exist as a concrete symbol to be used as a value
   locationt location = converter_.get_location_from_decl(element);
-  std::string dict_name = "$py_dict$" + std::to_string(dict_counter_++);
+
+  // Generate unique name based on location
+  std::string dict_name = generate_unique_dict_name(element, location);
 
   struct_typet dict_type = get_dict_struct_type();
 
@@ -243,7 +289,9 @@ exprt python_dict_handler::create_dict_from_literal(
   const exprt &target_symbol)
 {
   locationt location = converter_.get_location_from_decl(element);
-  std::string dict_name = "$py_dict$" + std::to_string(dict_counter_++);
+
+  // Generate unique name based on location
+  std::string dict_name = generate_unique_dict_name(element, location);
 
   struct_typet dict_type = get_dict_struct_type();
   typet list_type = type_handler_.get_list_type();
