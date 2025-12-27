@@ -7,37 +7,56 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
+#include <util/message.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 
 namespace
 {
-void copy_location_fields(const nlohmann::json &from, nlohmann::json &to)
+bool is_nondet_str_call(const nlohmann::json &node)
 {
-  if (from.contains("lineno"))
-    to["lineno"] = from["lineno"];
-  if (from.contains("col_offset"))
-    to["col_offset"] = from["col_offset"];
-  if (from.contains("end_lineno"))
-    to["end_lineno"] = from["end_lineno"];
-  if (from.contains("end_col_offset"))
-    to["end_col_offset"] = from["end_col_offset"];
+  return node.contains("_type") && node["_type"] == "Call" &&
+         node.contains("func") && node["func"].contains("_type") &&
+         node["func"]["_type"] == "Name" && node["func"].contains("id") &&
+         node["func"]["id"] == "nondet_str";
 }
 
-bool extract_constant_string(
+bool is_symbolic_string(
+  const nlohmann::json &node,
+  python_converter &converter)
+{
+  if (is_nondet_str_call(node))
+    return true;
+
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  {
+    const std::string var_name = node["id"].get<std::string>();
+    nlohmann::json var_value = json_utils::get_var_value(
+      var_name, converter.get_current_func_name(), converter.get_ast_json());
+
+    if (
+      !var_value.empty() && var_value.contains("value") &&
+      is_nondet_str_call(var_value["value"]))
+      return true;
+  }
+
+  return false;
+}
+
+bool extract_constant_integer(
   const nlohmann::json &node,
   python_converter &converter,
-  std::string &out)
+  long long &value)
 {
-  if (
-    node.contains("_type") && node["_type"] == "Constant" &&
-    node.contains("value") && node["value"].is_string())
+  if (node.contains("_type") && node["_type"] == "Constant" &&
+      node.contains("value") && node["value"].is_number_integer())
   {
-    out = node["value"].get<std::string>();
+    value = node["value"].get<long long>();
     return true;
   }
 
-  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  if (node.contains("_type") && node["_type"] == "Name" &&
+      node.contains("id"))
   {
     const std::string var_name = node["id"].get<std::string>();
     nlohmann::json var_value = json_utils::get_var_value(
@@ -48,55 +67,14 @@ bool extract_constant_string(
       var_value["value"].contains("_type") &&
       var_value["value"]["_type"] == "Constant" &&
       var_value["value"].contains("value") &&
-      var_value["value"]["value"].is_string())
+      var_value["value"]["value"].is_number_integer())
     {
-      out = var_value["value"]["value"].get<std::string>();
+      value = var_value["value"]["value"].get<long long>();
       return true;
     }
   }
 
   return false;
-}
-
-exprt build_split_list(
-  python_converter &converter,
-  const nlohmann::json &call_node,
-  const std::string &input,
-  const std::string &separator)
-{
-  if (separator.empty())
-    throw std::runtime_error("split() separator cannot be empty");
-
-  std::vector<std::string> parts;
-  size_t start = 0;
-  while (true)
-  {
-    size_t pos = input.find(separator, start);
-    if (pos == std::string::npos)
-    {
-      parts.push_back(input.substr(start));
-      break;
-    }
-    parts.push_back(input.substr(start, pos - start));
-    start = pos + separator.size();
-  }
-
-  nlohmann::json list_node;
-  list_node["_type"] = "List";
-  list_node["elts"] = nlohmann::json::array();
-  copy_location_fields(call_node, list_node);
-
-  for (const auto &part : parts)
-  {
-    nlohmann::json elem;
-    elem["_type"] = "Constant";
-    elem["value"] = part;
-    copy_location_fields(call_node, elem);
-    list_node["elts"].push_back(elem);
-  }
-
-  python_list list(converter, list_node);
-  return list.get();
 }
 } // namespace
 
@@ -280,6 +258,8 @@ symbol_id function_call_builder::build_function_id() const
     else if (func_json["value"]["_type"] == "Call")
     {
       obj_name = func_json["value"]["func"]["id"];
+      if (obj_name == "nondet_str")
+        obj_name = "str";
       if (obj_name == "super")
       {
         symbolt *base_class_func = converter_.find_function_in_base_classes(
@@ -774,25 +754,40 @@ exprt function_call_builder::build() const
 
     if (method_name == "split")
     {
-      if (call_["args"].size() != 1)
+      if (call_["args"].size() != 1 && call_["args"].size() != 2)
         throw std::runtime_error(
-          "split() requires exactly one argument in minimal support");
+          "split() requires one or two arguments in minimal support");
 
       std::string separator;
-      if (!extract_constant_string(call_["args"][0], converter_, separator))
+      if (!string_handler::extract_constant_string(
+            call_["args"][0], converter_, separator))
       {
         throw std::runtime_error(
           "split() only supports constant string separators in minimal support");
       }
 
-      std::string input;
-      if (!extract_constant_string(call_["func"]["value"], converter_, input))
+      long long count = -1;
+      if (call_["args"].size() == 2)
       {
+        if (!extract_constant_integer(call_["args"][1], converter_, count))
+        {
+          throw std::runtime_error(
+            "split() only supports constant count in minimal support");
+        }
+      }
+
+      std::string input;
+      if (!string_handler::extract_constant_string(
+            call_["func"]["value"], converter_, input))
+      {
+        if (is_symbolic_string(call_["func"]["value"], converter_))
+          log_error("Unsupported symbolic string in split()");
         throw std::runtime_error(
           "split() only supports constant string inputs in minimal support");
       }
 
-      return build_split_list(converter_, call_, input, separator);
+      return python_list::build_split_list(
+        converter_, call_, input, separator, count);
     }
   }
 
