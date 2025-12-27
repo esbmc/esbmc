@@ -135,4 +135,92 @@ private:
   static std::unordered_map<std::string, TypeInfo> list_type_map;
 
   exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
+
+  /**
+   * @brief Validate and normalize the index expression
+   * @param pos_expr The index expression to validate
+   * @param slice_node The slice AST node
+   * @throws std::runtime_error if index type is invalid (e.g., array indices)
+   */
+  void validate_index_expression(
+    const exprt &pos_expr,
+    const nlohmann::json &slice_node) const;
+
+  /**
+   * @brief Adjust negative index to positive
+   * @param pos_expr The index expression (will be modified if negative)
+   * @param slice_node The slice AST node
+   * @param array The array being indexed
+   * @param list_node The list declaration node (may be null)
+   * @return The adjusted index value (for constant indices)
+   */
+  size_t handle_negative_index(
+    exprt &pos_expr,
+    const nlohmann::json &slice_node,
+    const exprt &array,
+    const nlohmann::json &list_node);
+
+  /**
+   * @brief Check if this is a nested list access
+   * @param array The array being indexed
+   * @param index The index value
+   * @return Expression for nested list symbol, or nil_exprt if not nested
+   */
+  exprt try_nested_list_access(const exprt &array, size_t index);
+
+  /**
+   * @brief Resolve element type from function parameter annotation
+   * @param list_node The parameter node with annotation
+   * @return The element type, or empty_typet if not resolvable
+   */
+  typet resolve_type_from_parameter(const nlohmann::json &list_node) const;
+
+  /**
+   * @brief Resolve element type from constant index into list
+   * @param array The array being indexed
+   * @param index The constant index value
+   * @param list_node The list declaration node
+   * @return The element type, or empty_typet if not resolvable
+   */
+  typet resolve_type_from_constant_index(
+    const exprt &array,
+    size_t index,
+    const nlohmann::json &list_node);
+
+  /**
+   * @brief Resolve element type from variable index
+   * @param array The array being indexed
+   * @param list_node The list declaration node
+   * @return The element type, or empty_typet if not resolvable
+   */
+  typet resolve_type_from_variable_index(
+    const exprt &array,
+    const nlohmann::json &list_node);
+
+  /**
+   * @brief Try to resolve element type from dict subscript value
+   * @param list_node The variable declaration node
+   * @return The element type, or empty_typet if not resolvable
+   */
+  typet resolve_type_from_dict_subscript(const nlohmann::json &list_node);
+
+  /**
+   * @brief Build list access expression and cast to proper type
+   * @param array The list/array being indexed
+   * @param pos_expr The position expression
+   * @param elem_type The element type to cast to
+   * @return The constructed access expression
+   */
+  exprt build_list_access_expression(
+    const exprt &array,
+    const exprt &pos_expr,
+    const typet &elem_type);
+
+  /**
+   * @brief Build static array access expression
+   * @param array The static array
+   * @param pos_expr The position expression
+   * @return The index expression
+   */
+  exprt build_static_array_access(const exprt &array, const exprt &pos_expr);
 };
