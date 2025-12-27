@@ -530,6 +530,73 @@ exprt python_list::build_list_at_call(
   return list_at_call;
 }
 
+exprt python_list::build_split_list(
+  python_converter &converter,
+  const nlohmann::json &call_node,
+  const std::string &input,
+  const std::string &separator,
+  long long count)
+{
+  if (separator.empty())
+    throw std::runtime_error("split() separator cannot be empty");
+
+  if (count == 0)
+  {
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    json_utils::copy_location_fields(call_node, list_node);
+
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = input;
+    json_utils::copy_location_fields(call_node, elem);
+    list_node["elts"].push_back(elem);
+
+    python_list list(converter, list_node);
+    return list.get();
+  }
+
+  std::vector<std::string> parts;
+  size_t start = 0;
+  long long splits = 0;
+  while (true)
+  {
+    if (count >= 0 && splits >= count)
+    {
+      parts.push_back(input.substr(start));
+      break;
+    }
+
+    size_t pos = input.find(separator, start);
+    if (pos == std::string::npos)
+    {
+      parts.push_back(input.substr(start));
+      break;
+    }
+    parts.push_back(input.substr(start, pos - start));
+    start = pos + separator.size();
+    ++splits;
+  }
+
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+  json_utils::copy_location_fields(call_node, list_node);
+
+  for (const auto &part : parts)
+  {
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = part;
+    json_utils::copy_location_fields(call_node, elem);
+    list_node["elts"].push_back(elem);
+  }
+
+  python_list list(converter, list_node);
+  return list.get();
+}
+
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
 {
   if (slice_node["_type"] == "Slice") // arr[lower:upper]

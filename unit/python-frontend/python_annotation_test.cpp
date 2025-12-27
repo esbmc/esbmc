@@ -1206,4 +1206,237 @@ TEST_CASE("Add type annotation")
 
     REQUIRE(input_json == expected_output);
   }
+
+  SECTION("Infer list type from split")
+  {
+    std::istringstream input_data(R"json({
+      "_type": "Module",
+      "body": [
+        {
+          "_type": "Assign",
+          "col_offset": 0,
+          "end_col_offset": 12,
+          "end_lineno": 1,
+          "lineno": 1,
+          "targets": [
+            {
+              "_type": "Name",
+              "col_offset": 0,
+              "ctx": {
+                "_type": "Store"
+              },
+              "end_col_offset": 5,
+              "end_lineno": 1,
+              "id": "price",
+              "lineno": 1
+            }
+          ],
+          "type_comment": null,
+          "value": {
+            "_type": "Constant",
+            "col_offset": 8,
+            "end_col_offset": 12,
+            "end_lineno": 1,
+            "kind": null,
+            "lineno": 1,
+            "value": ".12"
+          }
+        },
+        {
+          "_type": "Assign",
+          "col_offset": 0,
+          "end_col_offset": 26,
+          "end_lineno": 2,
+          "lineno": 2,
+          "targets": [
+            {
+              "_type": "Name",
+              "col_offset": 0,
+              "ctx": {
+                "_type": "Store"
+              },
+              "end_col_offset": 5,
+              "end_lineno": 2,
+              "id": "parts",
+              "lineno": 2
+            }
+          ],
+          "type_comment": null,
+          "value": {
+            "_type": "Call",
+            "args": [
+              {
+                "_type": "Constant",
+                "col_offset": 25,
+                "end_col_offset": 26,
+                "end_lineno": 2,
+                "kind": null,
+                "lineno": 2,
+                "value": "."
+              }
+            ],
+            "col_offset": 8,
+            "end_col_offset": 26,
+            "end_lineno": 2,
+            "func": {
+              "_type": "Attribute",
+              "attr": "split",
+              "col_offset": 8,
+              "ctx": {
+                "_type": "Load"
+              },
+              "end_col_offset": 24,
+              "end_lineno": 2,
+              "lineno": 2,
+              "value": {
+                "_type": "Name",
+                "col_offset": 8,
+                "ctx": {
+                  "_type": "Load"
+                },
+                "end_col_offset": 13,
+                "end_lineno": 2,
+                "id": "price",
+                "lineno": 2
+              }
+            },
+            "keywords": [],
+            "lineno": 2
+          }
+        }
+      ],
+      "filename": "test.py",
+      "type_ignores": []
+    })json");
+
+    nlohmann::json input_json;
+    input_data >> input_json;
+
+    std::istringstream output_data(R"json({
+      "_type": "Module",
+      "body": [
+        {
+          "_type": "AnnAssign",
+          "annotation": {
+            "_type": "Name",
+            "col_offset": 6,
+            "ctx": {
+              "_type": "Load"
+            },
+            "end_col_offset": 9,
+            "end_lineno": 1,
+            "id": "str",
+            "lineno": 1
+          },
+          "col_offset": 0,
+          "end_col_offset": 16,
+          "end_lineno": 1,
+          "lineno": 1,
+          "simple": 1,
+          "target": {
+            "_type": "Name",
+            "col_offset": 0,
+            "ctx": {
+              "_type": "Store"
+            },
+            "end_col_offset": 5,
+            "end_lineno": 1,
+            "id": "price",
+            "lineno": 1
+          },
+          "value": {
+            "_type": "Constant",
+            "col_offset": 12,
+            "end_col_offset": 16,
+            "end_lineno": 1,
+            "kind": null,
+            "lineno": 1,
+            "value": ".12"
+          }
+        },
+        {
+          "_type": "AnnAssign",
+          "annotation": {
+            "_type": "Name",
+            "col_offset": 6,
+            "ctx": {
+              "_type": "Load"
+            },
+            "end_col_offset": 10,
+            "end_lineno": 2,
+            "id": "list",
+            "lineno": 2
+          },
+          "col_offset": 0,
+          "end_col_offset": 31,
+          "end_lineno": 2,
+          "lineno": 2,
+          "simple": 1,
+          "target": {
+            "_type": "Name",
+            "col_offset": 0,
+            "ctx": {
+              "_type": "Store"
+            },
+            "end_col_offset": 5,
+            "end_lineno": 2,
+            "id": "parts",
+            "lineno": 2
+          },
+          "value": {
+            "_type": "Call",
+            "args": [
+              {
+                "_type": "Constant",
+                "col_offset": 30,
+                "end_col_offset": 31,
+                "end_lineno": 2,
+                "kind": null,
+                "lineno": 2,
+                "value": "."
+              }
+            ],
+            "col_offset": 13,
+            "end_col_offset": 31,
+            "end_lineno": 2,
+            "func": {
+              "_type": "Attribute",
+              "attr": "split",
+              "col_offset": 13,
+              "ctx": {
+                "_type": "Load"
+              },
+              "end_col_offset": 29,
+              "end_lineno": 2,
+              "lineno": 2,
+              "value": {
+                "_type": "Name",
+                "col_offset": 8,
+                "ctx": {
+                  "_type": "Load"
+                },
+                "end_col_offset": 13,
+                "end_lineno": 2,
+                "id": "price",
+                "lineno": 2
+              }
+            },
+            "keywords": [],
+            "lineno": 2
+          }
+        }
+      ],
+      "filename": "test.py",
+      "type_ignores": []
+    })json");
+
+    nlohmann::json expected_output;
+    output_data >> expected_output;
+
+    global_scope gs;
+    python_annotation<nlohmann::json> ann(input_json, gs);
+    ann.add_type_annotation();
+
+    REQUIRE(input_json == expected_output);
+  }
 }
