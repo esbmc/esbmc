@@ -1281,7 +1281,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     (op == "Sub" || op == "BitAnd" || op == "BitOr"))
   {
     exprt set_result =
-      handle_set_operations(op, lhs, rhs, left, right, element);
+      python_set::handle_operations(*this, op, lhs, rhs, element);
     if (!set_result.is_nil())
       return set_result;
   }
@@ -3425,92 +3425,6 @@ void python_converter::handle_list_literal_unpacking(
   }
 }
 
-bool python_converter::handle_dict_subscript_assignment(
-  const nlohmann::json &ast_node,
-  const nlohmann::json &target,
-  codet &target_block)
-{
-  if (target["_type"] != "Subscript")
-    return false;
-
-  exprt container_expr = get_expr(target["value"]);
-  typet container_type = container_expr.type();
-
-  if (container_expr.is_symbol())
-  {
-    const symbolt *sym = symbol_table_.find_symbol(container_expr.identifier());
-    if (sym)
-      container_type = sym->type;
-  }
-
-  if (container_type.id() == "symbol")
-    container_type = ns.follow(container_type);
-
-  if (!dict_handler_->is_dict_type(container_type))
-    return false;
-
-  // Handle dict[key] = value assignment
-  is_converting_rhs = true;
-  exprt rhs = get_expr(ast_node["value"]);
-  is_converting_rhs = false;
-
-  dict_handler_->handle_dict_subscript_assign(
-    container_expr, target["slice"], rhs, target_block);
-  return true;
-}
-
-bool python_converter::handle_dict_literal_assignment(
-  const nlohmann::json &ast_node,
-  const exprt &lhs)
-{
-  if (!ast_node.contains("value") || ast_node["value"].is_null())
-    return false;
-
-  if (!dict_handler_->is_dict_literal(ast_node["value"]))
-    return false;
-
-  dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
-  current_lhs = nullptr;
-  return true;
-}
-
-bool python_converter::handle_unannotated_dict_literal(
-  const nlohmann::json &ast_node,
-  const nlohmann::json &target,
-  const symbol_id &sid)
-{
-  if (!ast_node.contains("value") || !ast_node["value"].contains("_type"))
-    return false;
-
-  if (!dict_handler_->is_dict_literal(ast_node["value"]))
-    return false;
-
-  locationt location = get_location_from_decl(target);
-  std::string module_name = location.get_file().as_string();
-  std::string name;
-
-  if (target["_type"] == "Name")
-    name = target["id"].get<std::string>();
-  else if (target["_type"] == "Attribute")
-    name = target["attr"].get<std::string>();
-
-  symbolt symbol = create_symbol(
-    module_name,
-    name,
-    sid.to_string(),
-    location,
-    dict_handler_->get_dict_struct_type());
-  symbol.lvalue = true;
-  symbol.file_local = true;
-  symbol.is_extern = false;
-  symbolt *lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
-
-  exprt lhs = create_lhs_expression(target, lhs_symbol, location);
-  dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
-  current_lhs = nullptr;
-  return true;
-}
-
 exprt python_converter::get_rhs_with_dict_resolution(
   const nlohmann::json &ast_node,
   const typet &target_type)
@@ -3864,7 +3778,8 @@ void python_converter::get_var_assign(
   }
 
   // Handle dict subscript assignment: dict[key] = value
-  if (handle_dict_subscript_assignment(ast_node, target, target_block))
+  if (dict_handler_->handle_subscript_assignment_check(
+        *this, ast_node, target, target_block))
     return;
 
   if (ast_node["_type"] == "AnnAssign")
@@ -3992,7 +3907,7 @@ void python_converter::get_var_assign(
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
 
     // Handle dict literal assignment specially - after LHS is created
-    if (handle_dict_literal_assignment(ast_node, lhs))
+    if (dict_handler_->handle_literal_assignment_check(*this, ast_node, lhs))
     {
       if (type_assertions_enabled() && can_emit_annotation_check)
         get_typechecker().emit_type_annotation_assertion(
@@ -4022,7 +3937,9 @@ void python_converter::get_var_assign(
     bool is_global = is_global_variable(sid);
 
     // Handle unannotated dict literal assignment
-    if (!lhs_symbol && handle_unannotated_dict_literal(ast_node, target, sid))
+    if (
+      !lhs_symbol && dict_handler_->handle_unannotated_literal_check(
+                       *this, ast_node, target, sid))
       return;
 
     // Create symbol for unannotated assignments with inferrable types
@@ -7105,66 +7022,4 @@ void python_converter::get_delete_statement(
         target["_type"].get<std::string>());
     }
   }
-}
-
-exprt python_converter::handle_set_operations(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs,
-  const nlohmann::json & /* left */,
-  const nlohmann::json & /* right */,
-  const nlohmann::json &element)
-{
-  typet list_type = type_handler_.get_list_type();
-
-  // Ensure both operands are lists (sets are represented as lists)
-  if (lhs.type() != list_type || rhs.type() != list_type)
-    return nil_exprt();
-
-  // Resolve function calls to temporary variables
-  auto resolve_list_call = [&](exprt &expr) -> bool {
-    if (
-      expr.id().as_string() != "sideeffect" ||
-      expr.get("statement") != "function_call" || expr.type() != list_type)
-      return false;
-
-    locationt location = get_location_from_decl(element);
-
-    // Create temporary variable for the list
-    symbolt &tmp_var_symbol =
-      create_tmp_symbol(element, "tmp_set_op", list_type, gen_zero(list_type));
-
-    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
-    tmp_var_decl.location() = location;
-    current_block->copy_to_operands(tmp_var_decl);
-
-    side_effect_expr_function_callt &side_effect =
-      to_side_effect_expr_function_call(expr);
-
-    code_function_callt call;
-    call.function() = side_effect.function();
-    call.arguments() = side_effect.arguments();
-    call.lhs() = symbol_expr(tmp_var_symbol);
-    call.type() = list_type;
-    call.location() = location;
-
-    current_block->copy_to_operands(call);
-    expr = symbol_expr(tmp_var_symbol);
-    return true;
-  };
-
-  resolve_list_call(lhs);
-  resolve_list_call(rhs);
-
-  python_set set_handler(*this, element);
-
-  // Map Python set operations to internal functions
-  if (op == "Sub") // Set difference: a - b
-    return set_handler.build_set_difference_call(lhs, rhs, element);
-  else if (op == "BitAnd") // Set intersection: a & b
-    return set_handler.build_set_intersection_call(lhs, rhs, element);
-  else if (op == "BitOr") // Set union: a | b
-    return set_handler.build_set_union_call(lhs, rhs, element);
-
-  return nil_exprt();
 }

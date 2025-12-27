@@ -546,3 +546,65 @@ exprt python_set::build_set_union_call(
 
   return symbol_expr(result_set);
 }
+
+exprt python_set::handle_operations(
+  python_converter &converter,
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  const type_handler &type_handler = converter.get_type_handler();
+  typet list_type = type_handler.get_list_type();
+
+  // Ensure both operands are lists (sets are represented as lists)
+  if (lhs.type() != list_type || rhs.type() != list_type)
+    return nil_exprt();
+
+  // Resolve function calls to temporary variables
+  auto resolve_list_call = [&](exprt &expr) -> bool {
+    if (
+      expr.id().as_string() != "sideeffect" ||
+      expr.get("statement") != "function_call" || expr.type() != list_type)
+      return false;
+
+    locationt location = converter.get_location_from_decl(element);
+
+    // Create temporary variable for the list
+    symbolt &tmp_var_symbol = converter.create_tmp_symbol(
+      element, "tmp_set_op", list_type, gen_zero(list_type));
+
+    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+    tmp_var_decl.location() = location;
+    converter.add_instruction(tmp_var_decl);
+
+    side_effect_expr_function_callt &side_effect =
+      to_side_effect_expr_function_call(expr);
+
+    code_function_callt call;
+    call.function() = side_effect.function();
+    call.arguments() = side_effect.arguments();
+    call.lhs() = symbol_expr(tmp_var_symbol);
+    call.type() = list_type;
+    call.location() = location;
+
+    converter.add_instruction(call);
+    expr = symbol_expr(tmp_var_symbol);
+    return true;
+  };
+
+  resolve_list_call(lhs);
+  resolve_list_call(rhs);
+
+  python_set set_handler(converter, element);
+
+  // Map Python set operations to internal functions
+  if (op == "Sub") // Set difference: a - b
+    return set_handler.build_set_difference_call(lhs, rhs, element);
+  else if (op == "BitAnd") // Set intersection: a & b
+    return set_handler.build_set_intersection_call(lhs, rhs, element);
+  else if (op == "BitOr") // Set union: a | b
+    return set_handler.build_set_union_call(lhs, rhs, element);
+
+  return nil_exprt();
+}

@@ -73,6 +73,8 @@
 #ifndef PYTHON_DICT_HANDLER_H
 #define PYTHON_DICT_HANDLER_H
 
+#include <python-frontend/symbol_id.h>
+
 #include <util/std_types.h>
 #include <util/std_code.h>
 #include <util/expr.h>
@@ -328,6 +330,50 @@ public:
    * @return The expected value type from annotation, or empty_typet
    */
   typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
+
+  /**
+   * @brief Check and handle dictionary subscript assignment
+   * 
+   * Checks if the target is a dictionary subscript and handles the assignment
+   * @param converter Reference to python_converter
+   * @param ast_node Assignment AST node
+   * @param target Target subscript node
+   * @param target_block Code block to append instructions
+   * @return true if handled, false otherwise
+   */
+  bool handle_subscript_assignment_check(
+    python_converter &converter,
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
+  /**
+   * @brief Check and handle dictionary literal assignment
+   * 
+   * @param converter Reference to python_converter
+   * @param ast_node Assignment AST node
+   * @param lhs Left-hand side expression
+   * @return true if handled, false otherwise
+   */
+  bool handle_literal_assignment_check(
+    python_converter &converter,
+    const nlohmann::json &ast_node,
+    const exprt &lhs);
+
+  /**
+   * @brief Check and handle unannotated dictionary literal
+   * 
+   * @param converter Reference to python_converter
+   * @param ast_node Assignment AST node
+   * @param target Target node
+   * @param sid Symbol identifier
+   * @return true if handled, false otherwise
+   */
+  bool handle_unannotated_literal_check(
+    python_converter &converter,
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const symbol_id &sid);
 
 private:
   /// Reference to the main Python converter
