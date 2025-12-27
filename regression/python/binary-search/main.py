@@ -33,7 +33,6 @@ def is_sorted(arr: List[int]) -> bool:
 
 def main() -> None:
     # Concrete, well-typed test array
-    x:int = nondet_int()
     arr: list[int] = [1, 3, 5, 7, 9, 11]
 
     # Precondition
