@@ -1610,6 +1610,42 @@ exprt function_call_expr::handle_list_pop() const
   return deref_value;
 }
 
+bool function_call_expr::is_dict_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+
+  // Check if this is a known dict method
+  return method_name == "get";
+}
+
+exprt function_call_expr::handle_dict_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+
+  if (method_name == "get")
+  {
+    // Get the dict object
+    std::string dict_name = get_object_name();
+
+    symbol_id dict_symbol_id = converter_.create_symbol_id();
+    dict_symbol_id.set_object(dict_name);
+    const symbolt *dict_symbol =
+      converter_.find_symbol(dict_symbol_id.to_string());
+
+    if (!dict_symbol)
+      throw std::runtime_error("Dictionary variable not found: " + dict_name);
+
+    // Delegate to dict handler
+    return converter_.get_dict_handler()->handle_dict_get(
+      symbol_expr(*dict_symbol), call_);
+  }
+
+  throw std::runtime_error("Unsupported dict method: " + method_name);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1913,6 +1949,11 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_list_method_call(); },
      [this]() { return handle_list_method(); },
      "list methods"},
+
+    // Dict methods
+    {[this]() { return is_dict_method_call(); },
+     [this]() { return handle_dict_method(); },
+     "dict methods"},
 
     // Math module functions
     {[this]() {
