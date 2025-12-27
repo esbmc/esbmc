@@ -432,6 +432,8 @@ private:
       return "set";
     else if (arg["_type"] == "Tuple")
       return "tuple";
+    else if (arg["_type"] == "BoolOp")
+      return "bool";
     else if (arg["_type"] == "Call")
     {
       // Handle function calls like abs(a - b), len(list), etc.
