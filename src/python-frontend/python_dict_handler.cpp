@@ -1120,3 +1120,63 @@ bool python_dict_handler::handle_unannotated_literal_check(
   converter.set_current_lhs(nullptr);
   return true;
 }
+
+typet python_dict_handler::resolve_type_from_dict_subscript(
+  const nlohmann::json &list_node)
+{
+  if (list_node["value"]["value"]["_type"] != "Name")
+    return empty_typet();
+
+  std::string dict_var_name =
+    list_node["value"]["value"]["id"].get<std::string>();
+
+  nlohmann::json dict_node = json_utils::find_var_decl(
+    dict_var_name,
+    converter_.get_current_func_name(),
+    converter_.get_ast_json());
+
+  if (dict_node.is_null() || !dict_node.contains("value"))
+    return empty_typet();
+
+  const auto &dict_value = dict_node["value"];
+  if (!list_node["value"].contains("slice"))
+    return empty_typet();
+
+  const auto &key_node = list_node["value"]["slice"];
+
+  // Handle constant string key
+  if (key_node["_type"] != "Constant" || !key_node.contains("value"))
+    return empty_typet();
+
+  std::string key = key_node["value"].get<std::string>();
+
+  // For dict literals, get the corresponding value
+  if (
+    dict_value["_type"] != "Dict" || !dict_value.contains("keys") ||
+    !dict_value.contains("values"))
+    return empty_typet();
+
+  const auto &keys = dict_value["keys"];
+  const auto &values = dict_value["values"];
+
+  // Find the matching key
+  for (size_t i = 0; i < keys.size(); i++)
+  {
+    if (
+      keys[i]["_type"] == "Constant" &&
+      keys[i]["value"].get<std::string>() == key)
+    {
+      // Found the value: get its element type
+      const auto &list_value = values[i];
+      nlohmann::json first_elem = json_utils::get_list_element(list_value, 0);
+
+      if (!first_elem.is_null() && !first_elem.empty())
+      {
+        return type_handler_.get_typet(first_elem);
+      }
+      break;
+    }
+  }
+
+  return empty_typet();
+}
