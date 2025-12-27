@@ -11,9 +11,8 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
-namespace
-{
-bool is_nondet_str_call(const nlohmann::json &node)
+bool function_call_builder::is_nondet_str_call(
+  const nlohmann::json &node) const
 {
   return node.contains("_type") && node["_type"] == "Call" &&
          node.contains("func") && node["func"].contains("_type") &&
@@ -21,9 +20,8 @@ bool is_nondet_str_call(const nlohmann::json &node)
          node["func"]["id"] == "nondet_str";
 }
 
-bool is_symbolic_string(
-  const nlohmann::json &node,
-  python_converter &converter)
+bool function_call_builder::is_symbolic_string(
+  const nlohmann::json &node) const
 {
   if (is_nondet_str_call(node))
     return true;
@@ -32,7 +30,9 @@ bool is_symbolic_string(
   {
     const std::string var_name = node["id"].get<std::string>();
     nlohmann::json var_value = json_utils::get_var_value(
-      var_name, converter.get_current_func_name(), converter.get_ast_json());
+      var_name,
+      converter_.get_current_func_name(),
+      converter_.get_ast_json());
 
     if (
       !var_value.empty() && var_value.contains("value") &&
@@ -43,10 +43,9 @@ bool is_symbolic_string(
   return false;
 }
 
-bool extract_constant_integer(
+bool function_call_builder::extract_constant_integer(
   const nlohmann::json &node,
-  python_converter &converter,
-  long long &value)
+  long long &value) const
 {
   if (node.contains("_type") && node["_type"] == "Constant" &&
       node.contains("value") && node["value"].is_number_integer())
@@ -60,7 +59,9 @@ bool extract_constant_integer(
   {
     const std::string var_name = node["id"].get<std::string>();
     nlohmann::json var_value = json_utils::get_var_value(
-      var_name, converter.get_current_func_name(), converter.get_ast_json());
+      var_name,
+      converter_.get_current_func_name(),
+      converter_.get_ast_json());
 
     if (
       !var_value.empty() && var_value.contains("value") &&
@@ -76,7 +77,6 @@ bool extract_constant_integer(
 
   return false;
 }
-} // namespace
 
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
@@ -769,7 +769,7 @@ exprt function_call_builder::build() const
       long long count = -1;
       if (call_["args"].size() == 2)
       {
-        if (!extract_constant_integer(call_["args"][1], converter_, count))
+        if (!extract_constant_integer(call_["args"][1], count))
         {
           throw std::runtime_error(
             "split() only supports constant count in minimal support");
@@ -780,7 +780,7 @@ exprt function_call_builder::build() const
       if (!string_handler::extract_constant_string(
             call_["func"]["value"], converter_, input))
       {
-        if (is_symbolic_string(call_["func"]["value"], converter_))
+        if (is_symbolic_string(call_["func"]["value"]))
           log_error("Unsupported symbolic string in split()");
         throw std::runtime_error(
           "split() only supports constant string inputs in minimal support");
