@@ -11,8 +11,7 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
-bool function_call_builder::is_nondet_str_call(
-  const nlohmann::json &node) const
+bool function_call_builder::is_nondet_str_call(const nlohmann::json &node) const
 {
   return node.contains("_type") && node["_type"] == "Call" &&
          node.contains("func") && node["func"].contains("_type") &&
@@ -20,8 +19,7 @@ bool function_call_builder::is_nondet_str_call(
          node["func"]["id"] == "nondet_str";
 }
 
-bool function_call_builder::is_symbolic_string(
-  const nlohmann::json &node) const
+bool function_call_builder::is_symbolic_string(const nlohmann::json &node) const
 {
   if (is_nondet_str_call(node))
     return true;
@@ -30,9 +28,7 @@ bool function_call_builder::is_symbolic_string(
   {
     const std::string var_name = node["id"].get<std::string>();
     nlohmann::json var_value = json_utils::get_var_value(
-      var_name,
-      converter_.get_current_func_name(),
-      converter_.get_ast_json());
+      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
 
     if (
       !var_value.empty() && var_value.contains("value") &&
@@ -47,21 +43,19 @@ bool function_call_builder::extract_constant_integer(
   const nlohmann::json &node,
   long long &value) const
 {
-  if (node.contains("_type") && node["_type"] == "Constant" &&
-      node.contains("value") && node["value"].is_number_integer())
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_number_integer())
   {
     value = node["value"].get<long long>();
     return true;
   }
 
-  if (node.contains("_type") && node["_type"] == "Name" &&
-      node.contains("id"))
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
   {
     const std::string var_name = node["id"].get<std::string>();
     nlohmann::json var_value = json_utils::get_var_value(
-      var_name,
-      converter_.get_current_func_name(),
-      converter_.get_ast_json());
+      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
 
     if (
       !var_value.empty() && var_value.contains("value") &&
@@ -732,7 +726,8 @@ exprt function_call_builder::build() const
             call_["args"][0], converter_, separator))
       {
         throw std::runtime_error(
-          "split() only supports constant string separators in minimal support");
+          "split() only supports constant string separators in minimal "
+          "support");
       }
 
       long long count = -1;

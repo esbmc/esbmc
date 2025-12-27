@@ -43,9 +43,8 @@ public:
 private:
   bool is_nondet_str_call(const nlohmann::json &node) const;
   bool is_symbolic_string(const nlohmann::json &node) const;
-  bool extract_constant_integer(
-    const nlohmann::json &node,
-    long long &value) const;
+  bool
+  extract_constant_integer(const nlohmann::json &node, long long &value) const;
 
   python_converter &converter_;
   const nlohmann::json &call_;
