@@ -1285,40 +1285,6 @@ exprt string_handler::handle_string_find(
   return find_call;
 }
 
-bool string_handler::extract_constant_string(
-  const nlohmann::json &node,
-  python_converter &converter,
-  std::string &out)
-{
-  if (
-    node.contains("_type") && node["_type"] == "Constant" &&
-    node.contains("value") && node["value"].is_string())
-  {
-    out = node["value"].get<std::string>();
-    return true;
-  }
-
-  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
-  {
-    const std::string var_name = node["id"].get<std::string>();
-    nlohmann::json var_value = json_utils::get_var_value(
-      var_name, converter.get_current_func_name(), converter.get_ast_json());
-
-    if (
-      !var_value.empty() && var_value.contains("value") &&
-      var_value["value"].contains("_type") &&
-      var_value["value"]["_type"] == "Constant" &&
-      var_value["value"].contains("value") &&
-      var_value["value"]["value"].is_string())
-    {
-      out = var_value["value"]["value"].get<std::string>();
-      return true;
-    }
-  }
-
-  return false;
-}
-
 exprt string_handler::handle_string_to_int(
   const exprt &string_obj,
   const exprt &base_arg,

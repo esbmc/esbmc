@@ -29,13 +29,6 @@ public:
   {
   }
 
-  static exprt build_split_list(
-    python_converter &converter,
-    const nlohmann::json &call_node,
-    const std::string &input,
-    const std::string &separator,
-    long long count);
-
   exprt get();
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
