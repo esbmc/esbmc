@@ -987,7 +987,6 @@ typet python_dict_handler::get_dict_value_type_from_annotation(
 typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   const exprt &dict_expr)
 {
-  // Only works if dict_expr is a symbol (variable reference)
   if (!dict_expr.is_symbol())
     return empty_typet();
 
@@ -1000,39 +999,73 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   nlohmann::json var_decl = json_utils::find_var_decl(
     var_name, converter_.get_current_func_name(), converter_.get_ast_json());
 
-  if (var_decl.empty() || !var_decl.contains("annotation"))
+  if (var_decl.empty())
     return empty_typet();
 
-  // Check if the annotation is just a simple type (e.g., "dict")
-  // If so, try to get the full type from the RHS (function call)
-  if (
-    var_decl["annotation"]["_type"] == "Name" &&
-    var_decl["annotation"]["id"] == "dict" && var_decl.contains("value") &&
-    var_decl["value"]["_type"] == "Call")
+  // First, try to get type from annotation if present
+  if (var_decl.contains("annotation") && !var_decl["annotation"].is_null())
   {
-    const auto &call_node = var_decl["value"];
-    if (call_node["func"]["_type"] == "Name")
+    // Check if the annotation is just a simple type (e.g., "dict")
+    // If so, try to get the full type from the RHS (function call)
+    if (
+      var_decl["annotation"]["_type"] == "Name" &&
+      var_decl["annotation"]["id"] == "dict" && var_decl.contains("value") &&
+      var_decl["value"]["_type"] == "Call")
     {
-      std::string func_name = call_node["func"]["id"].get<std::string>();
-
-      // Find the function definition to get its return type annotation
-      nlohmann::json func_def =
-        json_utils::find_function(converter_.get_ast_json()["body"], func_name);
-
-      if (
-        !func_def.empty() && func_def.contains("returns") &&
-        !func_def["returns"].is_null())
+      const auto &call_node = var_decl["value"];
+      if (call_node["func"]["_type"] == "Name")
       {
-        // Extract the value type from the function's return annotation
-        typet result = get_dict_value_type_from_annotation(func_def["returns"]);
-        if (!result.is_nil())
-          return result;
+        std::string func_name = call_node["func"]["id"].get<std::string>();
+
+        // Find the function definition to get its return type annotation
+        nlohmann::json func_def = json_utils::find_function(
+          converter_.get_ast_json()["body"], func_name);
+
+        if (
+          !func_def.empty() && func_def.contains("returns") &&
+          !func_def["returns"].is_null())
+        {
+          // Extract the value type from the function's return annotation
+          typet result =
+            get_dict_value_type_from_annotation(func_def["returns"]);
+          if (!result.is_nil() && !result.is_empty())
+            return result;
+        }
+      }
+    }
+
+    // Extract the value type from the dict annotation
+    typet annotated_type =
+      get_dict_value_type_from_annotation(var_decl["annotation"]);
+    if (!annotated_type.is_nil() && !annotated_type.is_empty())
+      return annotated_type;
+  }
+
+  // If no annotation or annotation didn't help, try to infer from literal values
+  if (var_decl.contains("value") && !var_decl["value"].is_null())
+  {
+    const auto &value_node = var_decl["value"];
+
+    // Check if the value is a dict literal
+    if (is_dict_literal(value_node))
+    {
+      const auto &values = value_node["values"];
+
+      // If the dict has values, infer type from the first value
+      if (!values.empty() && !values[0].is_null())
+      {
+        // Convert the first value to get its type
+        exprt first_value = converter_.get_expr(values[0]);
+        typet inferred_type = first_value.type();
+
+        // Validate that this is a reasonable type
+        if (!inferred_type.is_nil())
+          return inferred_type;
       }
     }
   }
 
-  // Extract the value type from the dict annotation
-  return get_dict_value_type_from_annotation(var_decl["annotation"]);
+  return empty_typet();
 }
 
 bool python_dict_handler::handle_subscript_assignment_check(
@@ -1147,13 +1180,22 @@ exprt python_dict_handler::handle_dict_get(
   typet result_type = resolve_expected_type_for_dict_subscript(dict_expr);
 
   // If we can't infer from dict annotation, use sensible defaults
-  if (result_type.is_nil() || result_type.is_empty())
+  if (result_type.is_nil())
   {
     if (default_value.type() != none_type())
       result_type = default_value.type(); // Use explicit default's type
     else
-      result_type =
-        long_int_type(); // Default to int when returning None or unknown
+      result_type = none_type(); // Only when we have no type info at all
+  }
+  else if (
+    default_value.type() != none_type() && default_value.type() != result_type)
+  {
+    if (
+      default_value.type().is_floatbv() &&
+      (result_type.is_signedbv() || result_type.is_unsignedbv()))
+    {
+      result_type = default_value.type();
+    }
   }
 
   // Get dict members
@@ -1277,21 +1319,9 @@ exprt python_dict_handler::handle_dict_get(
   // Else branch: key not found, use default
   code_blockt else_block;
 
-  // Cast default to result_type if needed
-  if (default_value.type() == none_type() && result_type != none_type())
-  {
-    // Cast None to result_type (represents None as zero/null of that type)
-    typecast_exprt casted_default(default_value, result_type);
-    code_assignt default_assign(symbol_expr(result_var), casted_default);
-    default_assign.location() = location;
-    else_block.copy_to_operands(default_assign);
-  }
-  else
-  {
-    code_assignt default_assign(symbol_expr(result_var), default_value);
-    default_assign.location() = location;
-    else_block.copy_to_operands(default_assign);
-  }
+  code_assignt default_assign(symbol_expr(result_var), default_value);
+  default_assign.location() = location;
+  else_block.copy_to_operands(default_assign);
 
   // Create if-then-else
   code_ifthenelset if_stmt;
