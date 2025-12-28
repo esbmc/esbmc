@@ -375,6 +375,20 @@ public:
     const nlohmann::json &target,
     const symbol_id &sid);
 
+  /**
+   * @brief Handles dict.get() method calls
+   * 
+   * Implements Python's dict.get(key, default=None) semantics:
+   * - Returns value if key exists
+   * - Returns default (or None) if key doesn't exist
+   * 
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node containing arguments
+   * @return Expression representing the result (value or default)
+   */
+  exprt
+  handle_dict_get(const exprt &dict_expr, const nlohmann::json &call_node);
+
 private:
   /// Reference to the main Python converter
   python_converter &converter_;

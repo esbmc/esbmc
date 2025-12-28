@@ -314,6 +314,32 @@ size_t __ESBMC_list_find_index(
   return 0;
 }
 
+size_t __ESBMC_list_try_find_index(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  if (!l || !item || l->size == 0)
+    return SIZE_MAX;
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      if (__ESBMC_values_equal(elem->value, item, item_size))
+        return i;
+    }
+
+    i = i + 1;
+  }
+
+  return SIZE_MAX; // Not found
+}
+
 bool __ESBMC_list_remove_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(l != NULL, "list_remove_at: list is null");
