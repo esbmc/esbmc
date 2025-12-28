@@ -218,6 +218,10 @@ private:
    */
   exprt gen_exception_raise(std::string exc, std::string message) const;
 
+  // Dict method detection and handling
+  bool is_dict_method_call() const;
+  exprt handle_dict_method() const;
+
   // List method detection and handling
   bool is_list_method_call() const;
   exprt handle_list_method() const;

@@ -88,6 +88,12 @@ static inline void *__ESBMC_copy_value(const void *value, size_t size)
 
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
+  else if (size == 16)
+  {
+    // Handle 16-byte structs (such as dictionaries) explicitly
+    *(uint64_t *)copied = *(const uint64_t *)value;
+    *((uint64_t *)copied + 1) = *((const uint64_t *)value + 1);
+  }
   else
     memcpy(copied, value, size);
 
@@ -306,6 +312,32 @@ size_t __ESBMC_list_find_index(
 
   __ESBMC_assert(0, "KeyError: key not found in dictionary");
   return 0;
+}
+
+size_t __ESBMC_list_try_find_index(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  if (!l || !item || l->size == 0)
+    return SIZE_MAX;
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      if (__ESBMC_values_equal(elem->value, item, item_size))
+        return i;
+    }
+
+    i = i + 1;
+  }
+
+  return SIZE_MAX; // Not found
 }
 
 bool __ESBMC_list_remove_at(PyListObject *l, size_t index)

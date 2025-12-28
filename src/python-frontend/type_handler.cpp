@@ -377,7 +377,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // For generic "dict" without key/value types, return empty type
   // so the actual type is inferred from the dictionary literal
   if (ast_type == "dict")
-    return empty_typet();
+    return get_dict_type();
 
   // Reuse list infrastructure for simplicity for now
   if (ast_type == "set")
@@ -489,6 +489,10 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 
       return tuple_type;
     }
+
+    // Handle Dict
+    if (elem["_type"] == "Dict" && elem.contains("keys"))
+      return get_dict_type(elem);
   }
 
   if (elem.is_array())
@@ -955,4 +959,19 @@ bool type_handler::class_derives_from(
       return true;
   }
   return false;
+}
+
+const typet type_handler::get_dict_type() const
+{
+  return converter_.dict_handler_->get_dict_struct_type();
+}
+
+typet type_handler::get_dict_type(const nlohmann::json &dict_value) const
+{
+  std::string dict_str = dict_value.dump(2);
+  log_debug("type_handler", "get_dict_type - dict_value: {}", dict_str.c_str());
+
+  // For now, return the generic dict type
+  // In the future, this could infer specific key/value types
+  return get_dict_type();
 }
