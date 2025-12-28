@@ -375,6 +375,17 @@ public:
     const nlohmann::json &target,
     const symbol_id &sid);
 
+  /**
+   * @brief Resolve element type from dict subscript in list context
+   * 
+   * Handles cases such as ESBMC_iter_0 = d['a'] where d is a dict containing lists.
+   * Extracts the type of elements in the list value retrieved from the dict.
+   * 
+   * @param list_node The variable declaration node that contains a dict subscript
+   * @return The element type of the list, or empty_typet if not resolvable
+   */
+  typet resolve_type_from_dict_subscript(const nlohmann::json &list_node);
+
 private:
   /// Reference to the main Python converter
   python_converter &converter_;
