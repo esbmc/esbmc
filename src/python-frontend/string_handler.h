@@ -343,18 +343,6 @@ public:
     const exprt &find_arg,
     const locationt &location);
 
-  /**
-   * @brief Extract a constant string from the AST node (literal or const var)
-   * @param node JSON node to inspect
-   * @param converter Converter used to resolve Name references
-   * @param out Output string
-   * @return True if a constant string was resolved
-   */
-  static bool extract_constant_string(
-    const nlohmann::json &node,
-    python_converter &converter,
-    std::string &out);
-
   // Utility methods
 
   /**
