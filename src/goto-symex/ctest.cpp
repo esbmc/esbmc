@@ -22,12 +22,12 @@ std::string ctest_generator::clean_variable_name(const std::string &name) const
   // Remove everything after '!' (SSA suffix)
   size_t exclaim_pos = var_name.find('!');
   if (exclaim_pos != std::string::npos)
-    var_name = var_name.substr(0, exclaim_pos);
+    var_name.resize(exclaim_pos);
 
   // Remove everything after '?' (other suffix)
   size_t question_pos = var_name.find('?');
   if (question_pos != std::string::npos)
-    var_name = var_name.substr(0, question_pos);
+    var_name.resize(question_pos);
 
   // Remove "c::main::" or "c::" prefix if present
   if (has_prefix(var_name, "c::main::"))
@@ -415,9 +415,6 @@ void ctest_generator::generate_single(
 
   std::unordered_set<std::string> seen_nondets; // Match witnesses.cpp pattern
   std::vector<test_variable> test_vars;
-
-  // Extract function name
-  std::string func_name = extract_function_name(target, smt_conv);
 
   // Traverse SSA steps to extract nondet variables - following witnesses.cpp
   log_status(
