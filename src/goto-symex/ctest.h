@@ -26,20 +26,20 @@ private:
   std::string source_file;
   mutable std::mutex data_mutex;
 
-  /// Helper: Clean up ESBMC internal variable names
+  /// Clean up ESBMC internal variable names
   std::string clean_variable_name(const std::string &name) const;
 
-  /// Helper: Extract function name from SSA steps
+  /// Extract function name from SSA steps
   std::string extract_function_name(
     const symex_target_equationt &target,
     smt_convt &smt_conv) const;
 
-  /// Helper: Convert type2t to C type string and VERIFIER type string
+  /// Convert type2t to C type string and VERIFIER type string
   std::string type_to_c_string(const type2tc &type) const;
   std::string type_to_verifier_string(const type2tc &type) const;
 
-  /// Helper: Format value for C code
-  std::string format_c_value(const expr2tc &value, const type2tc &type) const;
+  /// Format value for C code
+  std::string format_c_value(const expr2tc &value) const;
 
 public:
   ctest_generator() = default;
@@ -54,7 +54,7 @@ public:
     const namespacet &ns);
 
   /// Generate C test files and CMakeLists.txt from collected data
-  void generate(const std::string &output_dir) const;
+  void generate() const;
 
   /// Single-shot generation for non-coverage mode
   void generate_single(

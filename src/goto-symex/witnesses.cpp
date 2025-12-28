@@ -1119,9 +1119,6 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
 
-  log_status(
-    "[collect_nondet] Starting - total SSA steps: {}", target.SSA_steps.size());
-
   // Use the EXACT same logic as generate_testcase
   for (auto const &SSA_step : target.SSA_steps)
   {
@@ -1145,23 +1142,12 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
         has_prefix(file_path, "/usr/include/") ||
         has_prefix(file_path, "/lib/") || has_prefix(file_path, "/opt/"))
       {
-        log_status(
-          "[collect_nondet] Skipping system library nondet: '{}' from {}",
-          sym.thename.as_string(),
-          file_path);
         continue;
       }
-
-      // Log EVERY nondet symbol found (before dedup)
-      log_status(
-        "[collect_nondet] Found nondet symbol: '{}'", sym.thename.as_string());
-      SSA_step.dump(); // Dump SSA step for debugging
 
       // Deduplicate by symbol name (same as generate_testcase)
       if (seen_nondets.count(sym.thename.as_string()))
       {
-        log_status(
-          "[collect_nondet] Skipping duplicate: '{}'", sym.thename.as_string());
         continue;
       }
 
@@ -1176,19 +1162,9 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
       val.value_expr = concrete_value;
       val.type = concrete_value->type;
 
-      log_status(
-        "[collect_nondet] Collected #{}: symbol='{}', value={}",
-        results.size() + 1,
-        val.symbol_name,
-        is_constant_int2t(concrete_value)
-          ? std::to_string(to_constant_int2t(concrete_value).value.to_int64())
-          : "?");
-
       results.push_back(val);
     }
   }
-
-  log_status("[collect_nondet] Finished - collected {} values", results.size());
   return results;
 }
 
@@ -1213,10 +1189,6 @@ void generate_testcase(
   // Use the SHARED collection logic
   auto collected_values = collect_nondet_values(target, smt_conv);
 
-  log_status(
-    "[TestComp] Collected {} values, now outputting to XML",
-    collected_values.size());
-
   // Output collected values to XML
   for (const auto &val : collected_values)
   {
@@ -1237,7 +1209,4 @@ void generate_testcase(
 
   test_case << "</testcase>";
   test_case.close();
-
-  log_status(
-    "[TestComp] Written {} inputs to {}", collected_values.size(), file_name);
 }

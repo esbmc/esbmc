@@ -763,7 +763,7 @@ void report_coverage(
   // Generate CTest test cases from collected data (for coverage mode)
   if (options.get_bool_option("generate-ctest-testcase"))
   {
-    ctest_gen.generate(".");
+    ctest_gen.generate();
   }
 }
 

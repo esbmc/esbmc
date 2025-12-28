@@ -210,8 +210,7 @@ std::string ctest_generator::type_to_verifier_string(const type2tc &type) const
   return "int"; // Fallback
 }
 
-std::string
-ctest_generator::format_c_value(const expr2tc &value, const type2tc &type) const
+std::string ctest_generator::format_c_value(const expr2tc &value) const
 {
   if (is_constant_int2t(value))
   {
@@ -254,28 +253,15 @@ void ctest_generator::collect(
   // Use the SHARED collection logic from witnesses.cpp
   auto collected_values = collect_nondet_values(target, smt_conv);
 
-  log_status(
-    "[CTest DEBUG] Collected {} nondet values using shared logic",
-    collected_values.size());
-
   // Convert collected values to test_variable format
   for (const auto &val : collected_values)
   {
     test_variable var;
     var.verifier_type = type_to_verifier_string(val.type);
     var.c_type = type_to_c_string(val.type);
-    var.value = format_c_value(val.value_expr, val.type);
-
-    log_status(
-      "[CTest DEBUG] Nondet: symbol='{}', type={}, value={}",
-      val.symbol_name,
-      var.verifier_type,
-      var.value);
-
+    var.value = format_c_value(val.value_expr);
     current_test.push_back(var);
   }
-
-  log_status("[CTest DEBUG] Finished collect - total: {}", current_test.size());
 
   // Store collected data if we found any nondet values
   if (!current_test.empty())
@@ -300,7 +286,7 @@ bool ctest_generator::has_tests() const
   return !test_cases.empty();
 }
 
-void ctest_generator::generate(const std::string &output_dir) const
+void ctest_generator::generate() const
 {
   std::lock_guard<std::mutex> lock(data_mutex);
 
@@ -413,12 +399,10 @@ void ctest_generator::generate_single(
   // Extract source file
   std::string src_file = config.options.get_option("input-file");
 
-  std::unordered_set<std::string> seen_nondets; // Match witnesses.cpp pattern
+  std::unordered_set<std::string> seen_nondets;
   std::vector<test_variable> test_vars;
 
   // Traverse SSA steps to extract nondet variables - following witnesses.cpp
-  log_status(
-    "[CTest DEBUG] generate_single() - SSA steps: {}", target.SSA_steps.size());
   int collected_count = 0;
   int skipped_count = 0;
 
@@ -441,9 +425,6 @@ void ctest_generator::generate_single(
       if (seen_nondets.count(sym.thename.as_string()))
       {
         skipped_count++;
-        log_status(
-          "[CTest DEBUG] generate_single() - Skipped duplicate: {}",
-          sym.thename.as_string());
         continue;
       }
 
@@ -455,25 +436,12 @@ void ctest_generator::generate_single(
       test_variable var;
       var.verifier_type = type_to_verifier_string(concrete_value->type);
       var.c_type = type_to_c_string(concrete_value->type);
-      var.value = format_c_value(concrete_value, concrete_value->type);
+      var.value = format_c_value(concrete_value);
 
       collected_count++;
-      log_status(
-        "[CTest DEBUG] generate_single() - Collected #{}: symbol='{}', "
-        "type={}, value={}",
-        collected_count,
-        sym.thename.as_string(),
-        var.verifier_type,
-        var.value);
-
       test_vars.push_back(var);
     }
   }
-
-  log_status(
-    "[CTest DEBUG] generate_single() - collected: {}, skipped: {}",
-    collected_count,
-    skipped_count);
 
   if (test_vars.empty())
   {
