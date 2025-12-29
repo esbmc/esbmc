@@ -131,10 +131,19 @@ find build -name "*.gcda" -delete
 ```
 
 **Step 3: Run with coverage**
+
+Generate coverage report (using gcovr).
+
 ```bash
-# Generate coverage report (using gcovr)
 gcovr -r .. --branches --object-directory . --gcov-executable "llvm-cov gcov"
 ```
+
+Note: if you don't have `gcovr` installed on your machine, you can run the command:
+
+````bash
+sudo apt install gcovr
+````
+
 ### Example Results
 ```bash
 Total Test time (real) =   0.01 sec
