@@ -2,7 +2,7 @@
 
 ## Overview
 
-ESBMC supports automatic generation of CTest branch coverage test cases for C programs.
+ESBMC supports the automatic generation of CTest branch-coverage test cases for C programs.
 
 ## Dependencies
 - CMake (includes CTest)
@@ -14,8 +14,9 @@ ESBMC supports automatic generation of CTest branch coverage test cases for C pr
 
 ### Basic Command
 
+Generate multiple test cases (branch coverage mode)
+
 ```bash
-# Generate multiple test cases (branch coverage mode)
 esbmc program.c --branch-coverage --generate-ctest-testcase
 ```
 
