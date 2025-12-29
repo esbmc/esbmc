@@ -284,10 +284,6 @@ void pytest_generator::collect(
   std::vector<std::string> current_param_names;
   std::unordered_set<std::string> seen_nondets;
 
-  // Debug: Log that collect was called
-  log_status("[DEBUG] pytest_gen.collect() called");
-  log_status("[DEBUG] Total SSA steps: {}", target.SSA_steps.size());
-
   // Extract function name if not already set
   std::string extracted_func_name;
   if (function_name.empty())
@@ -329,9 +325,6 @@ void pytest_generator::collect(
       seen_nondets.insert(sym.thename.as_string());
       found_nondets++;
 
-      log_status(
-        "[DEBUG] Found nondet: {} = {}", var_name, sym.thename.as_string());
-
       // Get concrete value
       auto concrete_value = smt_conv.get(nondet_expr);
       std::string value_str;
@@ -357,16 +350,8 @@ void pytest_generator::collect(
 
       current_params.push_back(value_str);
       current_param_names.push_back(var_name);
-
-      log_status("[DEBUG] Collected: {} = {}", var_name, value_str);
     }
   }
-
-  log_status(
-    "[DEBUG] Checked {} assignments, found {} nondets, collected {} params",
-    checked_assignments,
-    found_nondets,
-    current_params.size());
 
   // Store collected data if we found any nondet values
   if (!current_params.empty())
@@ -431,15 +416,9 @@ void pytest_generator::collect(
 
     test_cases.push_back(matched_params);
 
-    log_status("[DEBUG] Total test cases collected: {}", test_cases.size());
-
     // Store function name if we found one
     if (!extracted_func_name.empty() && function_name.empty())
       function_name = extracted_func_name;
-  }
-  else
-  {
-    log_warning("[DEBUG] No nondet parameters found in this counterexample");
   }
 }
 

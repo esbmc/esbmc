@@ -166,6 +166,9 @@ set(REGRESSIONS_CPP17 esbmc-cpp17/cpp
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
 
+# enable test case geeneration
+set(TEST_GENERATION witnesses/test_case_generation)
+
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
     set(REGRESSIONS esbmc-unix
@@ -197,6 +200,7 @@ if(APPLE)
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${TEST_GENERATION}
                     ltl
                     goto-transcoder
                     loop-invariants
@@ -262,6 +266,7 @@ else()
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${TEST_GENERATION}
                     ltl
                     goto-coverage
                     goto-transcoder
