@@ -9,6 +9,7 @@
 #include <util/expr_util.h>
 #include <util/arith_tools.h>
 #include <util/std_code.h>
+#include <util/std_expr.h>
 #include <util/mp_arith.h>
 #include <util/python_types.h>
 #include <util/symbolic_types.h>
@@ -1283,6 +1284,26 @@ exprt python_list::handle_index_access(
       deref.op0() = tc;
       return deref;
     }
+  }
+
+  // Handle static string indexing with safe null fallback
+  if (array.type().is_array() && array.type().subtype() == char_type())
+  {
+    exprt idx = pos_expr;
+    if (idx.type() != size_type())
+      idx = typecast_exprt(idx, size_type());
+
+    exprt bound = to_array_type(array.type()).size();
+    if (bound.type() != size_type())
+      bound = typecast_exprt(bound, size_type());
+
+    exprt cond("<", bool_type());
+    cond.copy_to_operands(idx, bound);
+
+    index_exprt in_bounds(array, idx, char_type());
+    if_exprt result(cond, in_bounds, gen_zero(char_type()));
+    result.type() = char_type();
+    return result;
   }
 
   // Handle static arrays
