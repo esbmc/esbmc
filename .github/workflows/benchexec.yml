@@ -96,13 +96,11 @@ on:
         - MemSafety-Huawei-Concurrency-Challenges
         - NoOverflows-Huawei-Concurrency-Challenges
       cpachecker:
-            description: "Run CPAChecker for violation witness validation"
+            description: "Run CPAChecker for witness validation"
             required: true
             type: boolean
 
 jobs:
-
-
   build-unix:
     uses: ./.github/workflows/build.yml
     with:
@@ -194,5 +192,3 @@ jobs:
         with:
           name: witness-result
           path: witness-output.zip
-
-      
