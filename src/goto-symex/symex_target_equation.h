@@ -47,6 +47,13 @@ public:
     const std::string &fmt,
     const std::list<expr2tc> &args) override;
 
+  void branching(
+    const expr2tc &guard,
+    const expr2tc &cond,
+    const sourcet &source,
+    const bool hidden,
+    unsigned loop_number) override;
+
   // record an assumption
   // cond is destroyed
   void assumption(
@@ -116,6 +123,10 @@ public:
     bool is_skip() const
     {
       return type == goto_trace_stept::SKIP;
+    }
+    bool is_branching() const
+    {
+      return type == goto_trace_stept::BREANCHING;
     }
 
     expr2tc guard;
