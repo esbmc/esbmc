@@ -63,6 +63,7 @@ ignored_dirs=(
   "list9"
   "list10"
   "list15_fail"
+  "list-repetition-symbolic"
   "loop-invariant"
   "loop-invariant2"
   "min_max_3_fail"

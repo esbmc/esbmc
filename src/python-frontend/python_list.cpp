@@ -1296,6 +1296,18 @@ exprt python_list::list_repetition(
   BigInt list_size;
   exprt list_elem;
 
+  auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
+    if (
+      size_var->value.is_code() || size_var->value.is_nil() ||
+      !size_var->value.is_constant())
+    {
+      return false;
+    }
+
+    out = binary2integer(size_var->value.value().c_str(), true);
+    return true;
+  };
+
   // Get list size from lhs (e.g.: 3 * [1])
   if (lhs.type() != list_type)
   {
@@ -1304,10 +1316,14 @@ exprt python_list::list_repetition(
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(lhs).get_identifier().as_string());
       assert(size_var);
-      list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
+      symbolt *list_symbol =
+        converter_.find_symbol(rhs.identifier().as_string());
+      assert(list_symbol);
+      if (!parse_size_from_symbol(size_var, list_size))
+        return create_vla(list_value_, list_symbol, size_var, list_elem);
     }
     else if (lhs.is_constant())
-      list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
+      list_size = binary2integer(lhs.value().c_str(), true);
 
     // List element is the rhs
     list_elem = converter_.get_expr(right_node["elts"][0]);
@@ -1330,15 +1346,11 @@ exprt python_list::list_repetition(
         converter_.find_symbol(lhs.identifier().as_string());
       assert(list_symbol);
 
-      if (size_var->value.is_code() || size_var->value.is_nil())
-      {
+      if (!parse_size_from_symbol(size_var, list_size))
         return create_vla(list_value_, list_symbol, size_var, list_elem);
-      }
-
-      list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
     }
     else if (rhs.is_constant())
-      list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
+      list_size = binary2integer(rhs.value().c_str(), true);
   }
 
   symbolt *list_symbol = converter_.find_symbol(lhs.identifier().as_string());
