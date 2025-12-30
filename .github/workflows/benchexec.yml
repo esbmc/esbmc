@@ -96,9 +96,16 @@ on:
         - MemSafety-Huawei-Concurrency-Challenges
         - NoOverflows-Huawei-Concurrency-Challenges
       cpachecker:
-            description: "Run CPAChecker for witness validation"
-            required: true
-            type: boolean
+        description: "Run CPAChecker for witness validation"
+        required: true
+        type: boolean
+      witness:
+        type: choice
+        description: Benchexec witness run mode
+        options:
+        - Full
+        - Correctness
+        - Violation
 
 jobs:
   build-unix:
@@ -175,12 +182,18 @@ jobs:
       - name: Run Validation (Full)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/witness.sh -f
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Run Validation (RunSet)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'RunSet' }}
         run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Run Validation (Task)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'Task' }}
         run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Move output
         if: ${{ inputs.cpachecker == true }}
         run: mv $HOME/witness-output.zip ./witness-output.zip      
