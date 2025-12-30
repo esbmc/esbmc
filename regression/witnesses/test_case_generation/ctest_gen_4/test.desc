@@ -1,0 +1,5 @@
+CORE
+main.c
+--branch-coverage --generate-ctest-testcase
+^Generated 12 CTest test case\(s\) with CMakeLists\.txt
+^VERIFICATION FAILED$
