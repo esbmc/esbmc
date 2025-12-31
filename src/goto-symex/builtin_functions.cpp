@@ -2977,12 +2977,6 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
                is_empty_type(ptr_type.subtype);
       }
 
-      if (is_constant_int2t(e))
-      {
-        const constant_int2t &const_val = to_constant_int2t(e);
-        return const_val.value.is_zero();
-      }
-
       return false;
     };
 
