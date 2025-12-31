@@ -2969,9 +2969,21 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       rhs = to_typecast2t(rhs).from;
 
     auto is_none_type = [](const expr2tc &e) -> bool {
-      // None is represented as pointer to bool
-      return is_pointer_type(e) &&
-             is_bool_type(to_pointer_type(e->type).subtype);
+      // Check for pointer to bool or pointer to empty (void*)
+      if (is_pointer_type(e))
+      {
+        const pointer_type2t &ptr_type = to_pointer_type(e->type);
+        return is_bool_type(ptr_type.subtype) ||
+               is_empty_type(ptr_type.subtype);
+      }
+
+      if (is_constant_int2t(e))
+      {
+        const constant_int2t &const_val = to_constant_int2t(e);
+        return const_val.value.is_zero();
+      }
+
+      return false;
     };
 
     const bool lhs_is_none = is_none_type(lhs);
