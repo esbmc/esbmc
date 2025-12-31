@@ -84,6 +84,11 @@ size_t __ESBMC_list_size(const PyListObject *l)
 
 static inline void *__ESBMC_copy_value(const void *value, size_t size)
 {
+  // None type (NULL pointer with size 0)
+  // Don't allocate: return NULL to preserve None semantics
+  if (value == NULL && size == 0)
+    return NULL;
+
   void *copied = __ESBMC_alloca(size);
 
   if (size == 8)

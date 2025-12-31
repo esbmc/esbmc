@@ -791,12 +791,33 @@ exprt python_converter::handle_none_comparison(
   const bool rhs_is_none = (rhs.type() == none_type());
 
   // Only handle actual None comparisons
-  // If neither side is None, this is NOT a None comparison
   if (!lhs_is_none && !rhs_is_none)
     return exprt();
 
-  // Handle None == None and None != None
-  // Create isnone expression
+  // If one side is None and the other is a different type (e.g., int, str)
+  // Handle type mismatch comparison
+  if (lhs_is_none != rhs_is_none)
+  {
+    // Check if the non-None side is a different type
+    const exprt &non_none = lhs_is_none ? rhs : lhs;
+
+    // If comparing with a constant integer, string, or other non-None constant
+    // exclude pointer to array (strings), as they could be Optional[str] parameters
+    if (
+      non_none.is_constant() && (!non_none.type().is_pointer() ||
+                                 (non_none.type().is_pointer() &&
+                                  non_none.type().subtype() != bool_type() &&
+                                  non_none.type().subtype() != empty_typet() &&
+                                  !non_none.type().subtype().is_array())))
+    {
+      // None is never equal to non-None constant values
+      // For == or is: return False
+      // For != or is not: return True
+      return gen_boolean(!is_eq);
+    }
+  }
+
+  // Create isnone expression with unwrapped operands
   exprt isnone_expr("isnone", typet("bool"));
   isnone_expr.copy_to_operands(lhs);
   isnone_expr.copy_to_operands(rhs);

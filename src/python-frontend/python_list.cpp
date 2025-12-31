@@ -125,7 +125,15 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 
   // For list pointers (PyListObj*), use pointer size
   typet list_type = converter_.get_type_handler().get_list_type();
-  if (elem_symbol.type == list_type)
+  // None type: store pointer directly without copying
+  // Set size to 0 so memcpy is skipped and NULL is preserved
+  if (
+    elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == bool_type())
+  {
+    elem_size = from_integer(BigInt(0), size_type());
+  }
+  // For list pointers (PyListObj*), use pointer size
+  else if (elem_symbol.type == list_type)
   {
     // This is a pointer to PyListObj: use pointer size
     const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
@@ -257,6 +265,14 @@ exprt python_list::build_push_list_call(
     elem_info.elem_symbol->type.subtype() == char_type())
   {
     // For string type (char*), we must pass the pointer value itself
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  }
+  else if (
+    elem_info.elem_symbol->type.is_pointer() &&
+    elem_info.elem_symbol->type.subtype() == bool_type())
+  {
+    // For None type (_Bool*), pass the pointer value itself
+    // This allows direct NULL checks without dereferencing
     element_arg = symbol_expr(*elem_info.elem_symbol);
   }
   else if (elem_info.elem_symbol->type.is_struct())
@@ -1182,11 +1198,13 @@ exprt python_list::handle_index_access(
       return tc;
     }
 
-    // For char* strings, the void* already contains the pointer value
+    // For char* strings and None (_Bool*), the void* already contains the pointer value
     // For all other types, the void* contains a pointer to the value
-    if (elem_type.is_pointer() && elem_type.subtype() == char_type())
+    if (
+      elem_type.is_pointer() && (elem_type.subtype() == char_type() ||
+                                 elem_type.subtype() == bool_type()))
     {
-      // String case: cast void* directly to char* (no dereference needed)
+      // String and None case: cast void* directly to the pointer type (no dereference needed)
       typecast_exprt tc(obj_value, elem_type);
       return tc;
     }
