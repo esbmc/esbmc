@@ -81,6 +81,7 @@ ignored_dirs=(
   "random1"
   "random1-fail"
   "random2-fail"
+  "random6_fail"
   "range19-fail"
   "ternary_symbolic"
   "try-fail"
