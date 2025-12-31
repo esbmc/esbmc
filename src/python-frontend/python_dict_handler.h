@@ -389,6 +389,27 @@ public:
   exprt
   handle_dict_get(const exprt &dict_expr, const nlohmann::json &call_node);
 
+  /**
+   * @brief Compares two dictionaries for equality or inequality
+   *
+   * Implements Python's dictionary comparison semantics by performing
+   * order-independent content comparison:
+   * - Calls __ESBMC_dict_eq which checks if all key-value pairs in lhs
+   *   exist in rhs with matching values (regardless of insertion order)
+   * - Returns true only if both dictionaries have the same keys and
+   *   corresponding values are equal
+   *
+   * This correctly handles cases such as {"a": 1, "b": 2} == {"b": 2, "a": 1}
+   *
+   * Supports both == (Eq) and != (NotEq) operators.
+   *
+   * @param lhs Left-hand side dictionary expression
+   * @param rhs Right-hand side dictionary expression
+   * @param op Comparison operator ("Eq" or "NotEq")
+   * @return Boolean expression representing the comparison result
+   */
+  exprt compare(const exprt &lhs, const exprt &rhs, const std::string &op);
+
 private:
   /// Reference to the main Python converter
   python_converter &converter_;

@@ -1303,3 +1303,61 @@ exprt python_dict_handler::handle_dict_get(
 
   return symbol_expr(result_var);
 }
+
+exprt python_dict_handler::compare(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &op)
+{
+  locationt location = lhs.location();
+  if (location.is_nil())
+    location = rhs.location();
+
+  typet list_type = type_handler_.get_list_type();
+
+  // Get keys and values from both dicts
+  member_exprt lhs_keys(lhs, "keys", list_type);
+  member_exprt lhs_values(lhs, "values", list_type);
+  member_exprt rhs_keys(rhs, "keys", list_type);
+  member_exprt rhs_values(rhs, "values", list_type);
+
+  // Find __ESBMC_dict_eq function
+  const symbolt *dict_eq_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_dict_eq");
+
+  if (!dict_eq_func)
+    throw std::runtime_error("__ESBMC_dict_eq not found in symbol table");
+
+  // Create temp for result
+  symbolt &result_var = converter_.create_tmp_symbol(
+    nlohmann::json(), "$dict_eq_result$", bool_type(), exprt());
+  code_declt result_decl(symbol_expr(result_var));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Call __ESBMC_dict_eq(lhs_keys, lhs_values, rhs_keys, rhs_values)
+  code_function_callt dict_eq_call;
+  dict_eq_call.function() = symbol_expr(*dict_eq_func);
+  dict_eq_call.lhs() = symbol_expr(result_var);
+  dict_eq_call.arguments().push_back(lhs_keys);
+  dict_eq_call.arguments().push_back(lhs_values);
+  dict_eq_call.arguments().push_back(rhs_keys);
+  dict_eq_call.arguments().push_back(rhs_values);
+  dict_eq_call.type() = bool_type();
+  dict_eq_call.location() = location;
+  converter_.add_instruction(dict_eq_call);
+
+  // Return result
+  exprt result = symbol_expr(result_var);
+  result.location() = location;
+
+  if (op == "NotEq")
+  {
+    exprt negated("not", bool_type());
+    negated.move_to_operands(result);
+    negated.location() = location;
+    return negated;
+  }
+
+  return result;
+}
