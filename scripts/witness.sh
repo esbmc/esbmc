@@ -2,16 +2,16 @@
 
 BENCHEXEC_BIN=/usr/bin/benchexec
 BENCHEXEC_COMMON_FLAGS="-o $HOME/witness-output/ -N 9 --read-only-dir / --overlay-dir /home/benchexec --container"
-BENCHEXEC_COMMON_FLAGS_CORRECTNESS="$BENCHEXEC_COMMON_FLAGS ./cpachecker-c.xml"
-BENCHEXEC_COMMON_FLAGS_VIOLATION="$BENCHEXEC_COMMON_FLAGS ./cpachecker.xml"
+BENCHEXEC_COMMON_FLAGS_CORRECTNESS="$BENCHEXEC_COMMON_FLAGS ./cpachecker-correctness-v2.xml"
+BENCHEXEC_COMMON_FLAGS_VIOLATION="$BENCHEXEC_COMMON_FLAGS ./cpachecker-violation-v2.xml"
 
 # Prepare Environment to run benchexec
 setup_folder () {
     echo "Setting up machine folder..."
     rm -rf $HOME/witness-files/*
     mv $HOME/esbmc-output/*.files/* $HOME/witness-files
-    cp esbmc-src/scripts/competitions/svcomp/cpachecker.xml $HOME/cpachecker.xml
-    cp esbmc-src/scripts/competitions/svcomp/cpachecker-c.xml $HOME/cpachecker-c.xml
+    cp esbmc-src/scripts/competitions/svcomp/cpachecker-violation-v2.xml $HOME/cpachecker-violation-v2.xml
+    cp esbmc-src/scripts/competitions/svcomp/cpachecker-correctness-v2.xml $HOME/cpachecker-correctness-v2.xml
     rm -rf $HOME/validation-action $HOME/witness-output $HOME/witness-output.zip
     mkdir $HOME/validation-action
     cd $HOME/validation-action
@@ -19,8 +19,8 @@ setup_folder () {
     curl -sSL https://zenodo.org/records/17777566/files/CPAchecker-4.2.2-unix.zip?download=1 -o cpa.zip
     unzip -q cpa.zip
     mv CPAchecker* cpachecker && cd cpachecker
-    cp $HOME/cpachecker.xml .
-    cp $HOME/cpachecker-c.xml .
+    cp $HOME/cpachecker-violation-v2.xml .
+    cp $HOME/cpachecker-correctness-v2.xml .
     echo "Configuration done. See files below"
     ls -l
     echo
@@ -64,7 +64,7 @@ benchexec_run_task () {
 
 save_files () {
     cd $HOME
-    zip -r witness-output.zip $HOME/witness-output
+    zip -r witness-output.zip witness-output
 }
 
 setup_folder
