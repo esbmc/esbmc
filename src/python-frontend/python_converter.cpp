@@ -1324,6 +1324,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return result;
   }
 
+  // Handle dictionary comparison
+  if (
+    lhs.type().is_struct() && rhs.type().is_struct() &&
+    dict_handler_->is_dict_type(lhs.type()) &&
+    dict_handler_->is_dict_type(rhs.type()) && (op == "Eq" || op == "NotEq"))
+  {
+    return dict_handler_->compare(lhs, rhs, op);
+  }
+
   // Handle list operations
   exprt list_result =
     handle_list_operations(op, lhs, rhs, left, right, element);
