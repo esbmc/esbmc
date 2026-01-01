@@ -1231,10 +1231,36 @@ exprt python_list::compare(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_eq");
   assert(list_eq_func_sym);
 
+  // Convert member expressions into temporary symbols
+  auto materialize_if_needed = [&](const exprt &e) -> exprt {
+    if (e.id() == "member")
+    {
+      // Extract member expression to a temporary variable
+      const member_exprt &member = to_member_expr(e);
+
+      symbolt &temp_sym = converter_.create_tmp_symbol(
+        list_value_, "$list_temp$", e.type(), exprt());
+
+      code_declt temp_decl(symbol_expr(temp_sym));
+      temp_decl.location() = converter_.get_location_from_decl(list_value_);
+      converter_.add_instruction(temp_decl);
+
+      code_assignt temp_assign(symbol_expr(temp_sym), member);
+      temp_assign.location() = converter_.get_location_from_decl(list_value_);
+      converter_.add_instruction(temp_assign);
+
+      return symbol_expr(temp_sym);
+    }
+    return e;
+  };
+
+  const exprt converted_l1 = materialize_if_needed(l1);
+  const exprt converted_l2 = materialize_if_needed(l2);
+
   const symbolt *lhs_symbol =
-    converter_.find_symbol(l1.identifier().as_string());
+    converter_.find_symbol(converted_l1.identifier().as_string());
   const symbolt *rhs_symbol =
-    converter_.find_symbol(l2.identifier().as_string());
+    converter_.find_symbol(converted_l2.identifier().as_string());
   assert(lhs_symbol);
   assert(rhs_symbol);
 
