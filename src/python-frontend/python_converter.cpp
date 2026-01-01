@@ -1956,6 +1956,26 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
 
+  // Handle dict.keys() and dict.values() methods
+  if (element["func"]["_type"] == "Attribute")
+  {
+    const std::string &method_name = element["func"]["attr"].get<std::string>();
+
+    if (method_name == "keys" || method_name == "values")
+    {
+      exprt obj_expr = get_expr(element["func"]["value"]);
+
+      // Check if this is a dict type
+      if (dict_handler_->is_dict_type(obj_expr.type()))
+      {
+        // Return the keys or values member directly
+        typet list_type = type_handler_.get_list_type();
+        member_exprt member(obj_expr, method_name, list_type);
+        return member;
+      }
+    }
+  }
+
   // Handle str.join() method calls
   // Python syntax: separator.join(iterable), e.g., " ".join(["a", "b"])
   if (
