@@ -1732,11 +1732,55 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     type = type_handler_.get_typet(var_type);
   }
 
-  exprt unary_expr(
-    map_operator(element["op"]["_type"].get<std::string>(), type), type);
-
-  // get subexpr
+  // Get the operand expression
   exprt unary_sub = get_expr(element["operand"]);
+
+  // Handle 'not' operator on dictionary types: convert to emptiness check
+  std::string op = element["op"]["_type"].get<std::string>();
+  if (op == "Not" && dict_handler_->is_dict_type(unary_sub.type()))
+  {
+    if (!current_block)
+      throw std::runtime_error(
+        "Dictionary truthiness check requires a statement context");
+
+    locationt location = get_location_from_decl(element);
+    typet list_type = type_handler_.get_list_type();
+
+    // Get dict.keys member
+    member_exprt keys_member(unary_sub, "keys", list_type);
+
+    // Find __ESBMC_list_size function
+    const symbolt *size_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error(
+        "__ESBMC_list_size not found for dict truthiness check");
+
+    // Create temporary variable to store the size result
+    symbolt &size_result = create_tmp_symbol(
+      element, "$dict_size$", size_type(), gen_zero(size_type()));
+    code_declt size_decl(symbol_expr(size_result));
+    size_decl.location() = location;
+    current_block->copy_to_operands(size_decl);
+
+    // Call __ESBMC_list_size(dict.keys)
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.lhs() = symbol_expr(size_result);
+    size_call.arguments().push_back(keys_member);
+    size_call.type() = size_type();
+    size_call.location() = location;
+    current_block->copy_to_operands(size_call);
+
+    // Return comparison: size == 0 (empty dict is truthy for 'not')
+    exprt is_empty("=", bool_type());
+    is_empty.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+    is_empty.location() = location;
+
+    return is_empty;
+  }
+
+  exprt unary_expr(map_operator(op, type), type);
   unary_expr.operands().push_back(unary_sub);
 
   return unary_expr;
@@ -6050,6 +6094,46 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         code_expr.operands().push_back(test);
         block.move_to_operands(code_expr);
         break;
+      }
+
+      // Convert dictionary to boolean (truthiness check)
+      if (dict_handler_->is_dict_type(test.type()))
+      {
+        locationt location = get_location_from_decl(element);
+        typet list_type = type_handler_.get_list_type();
+
+        // Get dict.keys member
+        member_exprt keys_member(test, "keys", list_type);
+
+        // Find __ESBMC_list_size function
+        const symbolt *size_func =
+          symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+        if (!size_func)
+          throw std::runtime_error(
+            "__ESBMC_list_size not found for dict truthiness check");
+
+        // Create temporary variable to store the size result
+        symbolt &size_result = create_tmp_symbol(
+          element, "$dict_size$", size_type(), gen_zero(size_type()));
+        code_declt size_decl(symbol_expr(size_result));
+        size_decl.location() = location;
+        block.copy_to_operands(size_decl);
+
+        // Call __ESBMC_list_size(dict.keys)
+        code_function_callt size_call;
+        size_call.function() = symbol_expr(*size_func);
+        size_call.lhs() = symbol_expr(size_result);
+        size_call.arguments().push_back(keys_member);
+        size_call.type() = size_type();
+        size_call.location() = location;
+        block.copy_to_operands(size_call);
+
+        // Replace test with: size != 0 (non-empty dict is truthy)
+        exprt is_not_empty("notequal", bool_type());
+        is_not_empty.copy_to_operands(
+          symbol_expr(size_result), gen_zero(size_type()));
+        is_not_empty.location() = location;
+        test = is_not_empty;
       }
 
       // Attach assertion message if present
