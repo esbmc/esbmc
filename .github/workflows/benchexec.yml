@@ -199,7 +199,7 @@ jobs:
         run: mv $HOME/witness-output.zip ./witness-output.zip      
       - name: Show summary (CPAChecker)
         if: ${{ inputs.cpachecker == true }}
-        run: tail $HOME/witness-output/*results*.txt
+        run: tail -v $HOME/witness-output/*results*.txt | sed -E 's|^==> .*/([^/.]+)\..* <==$|==> \1 <==|'
       - uses: actions/upload-artifact@v4
         if: ${{ inputs.cpachecker == true }}
         with:
