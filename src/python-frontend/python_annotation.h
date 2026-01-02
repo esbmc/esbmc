@@ -1746,6 +1746,72 @@ private:
     std::string attr_name = call["func"].contains("attr")
                               ? call["func"]["attr"].template get<std::string>()
                               : "";
+    // Handle dict.keys() and dict.values()
+    if (attr_name == "keys" || attr_name == "values")
+    {
+      Json obj_node =
+        json_utils::find_var_decl(obj, get_current_func_name(), ast_);
+
+      // Check function parameters if not found in body
+      if (
+        obj_node.empty() && current_func != nullptr &&
+        (*current_func).contains("args") &&
+        (*current_func)["args"].contains("args"))
+      {
+        obj_node = find_annotated_assign(obj, (*current_func)["args"]["args"]);
+      }
+
+      if (
+        !obj_node.empty() && obj_node.contains("annotation") &&
+        !obj_node["annotation"].is_null())
+      {
+        const Json &annotation = obj_node["annotation"];
+        std::string base_type;
+
+        // Handle simple dict annotation
+        if (annotation.contains("id"))
+          base_type = annotation["id"].template get<std::string>();
+        // Handle generic dict[K,V] annotation (Subscript node)
+        else if (
+          annotation.contains("_type") && annotation["_type"] == "Subscript" &&
+          annotation.contains("value") && annotation["value"].contains("id"))
+          base_type = annotation["value"]["id"].template get<std::string>();
+
+        // If it's a dict type, extract key/value types
+        if (base_type == "dict")
+        {
+          // For dict[K,V], extract the K and V types
+          if (
+            annotation.contains("_type") &&
+            annotation["_type"] == "Subscript" && annotation.contains("slice"))
+          {
+            const Json &slice = annotation["slice"];
+
+            // dict[K,V] has slice as Tuple with 2 elements
+            if (
+              slice.contains("_type") && slice["_type"] == "Tuple" &&
+              slice.contains("elts") && slice["elts"].size() >= 2)
+            {
+              std::string key_type, value_type;
+
+              // Extract key type (first element)
+              if (slice["elts"][0].contains("id"))
+                key_type = slice["elts"][0]["id"].template get<std::string>();
+
+              // Extract value type (second element)
+              if (slice["elts"][1].contains("id"))
+                value_type = slice["elts"][1]["id"].template get<std::string>();
+
+              // Return appropriate list type based on method
+              if (attr_name == "keys" && !key_type.empty())
+                return "list[" + key_type + "]";
+              else if (attr_name == "values" && !value_type.empty())
+                return "list[" + value_type + "]";
+            }
+          }
+        }
+      }
+    }
 
     // Get type from imported module
     if (module_manager_)
@@ -2089,7 +2155,33 @@ private:
     else if (value_type == "Tuple")
       inferred_type = "tuple";
     else if (value_type == "Dict")
-      inferred_type = "dict";
+    {
+      // Infer generic dict type from literal: {key: value, ...}
+      const Json &dict_value = stmt["value"];
+
+      if (
+        dict_value.contains("keys") && dict_value.contains("values") &&
+        !dict_value["keys"].empty() && !dict_value["values"].empty())
+      {
+        // Get types of first key and value
+        std::string key_type = get_argument_type(dict_value["keys"][0]);
+        std::string value_type = get_argument_type(dict_value["values"][0]);
+
+        // Only infer generic dict type for non-nested types
+        // Nested structures (such as list[dict]) are better handled
+        // with plain 'dict' so the converter can use dynamic type info
+        bool key_is_simple = key_type.find('[') == std::string::npos;
+        bool value_is_simple = value_type.find('[') == std::string::npos;
+        if (
+          !key_type.empty() && !value_type.empty() && key_is_simple &&
+          value_is_simple)
+          inferred_type = "dict[" + key_type + ", " + value_type + "]";
+        else
+          inferred_type = "dict";
+      }
+      else
+        inferred_type = "dict";
+    }
     else if (value_type == "Compare")
       inferred_type = "bool";
     else if (value_type == "UnaryOp") // Handle negative numbers
@@ -2310,6 +2402,54 @@ private:
     int total_end_col = col_offset + base_type.size() + 1 +
                         element_type.size() + 1; // type[element]
 
+    // Check if this is a dict type with comma-separated types: dict[K, V]
+    if (base_type == "dict" && element_type.find(',') != std::string::npos)
+    {
+      // Split element_type on comma
+      size_t comma_pos = element_type.find(',');
+      std::string key_type = element_type.substr(0, comma_pos);
+      std::string value_type = element_type.substr(comma_pos + 1);
+
+      // Trim whitespace
+      key_type.erase(0, key_type.find_first_not_of(" \t"));
+      key_type.erase(key_type.find_last_not_of(" \t") + 1);
+      value_type.erase(0, value_type.find_first_not_of(" \t"));
+      value_type.erase(value_type.find_last_not_of(" \t") + 1);
+
+      // Create Tuple slice with two Name elements
+      int key_col = slice_col;
+      int key_end_col = key_col + key_type.size();
+      int value_col = key_end_col + 2; // After ", "
+      int value_end_col = value_col + value_type.size();
+
+      Json tuple_slice = {
+        {"_type", "Tuple"},
+        {"elts",
+         Json::array(
+           {create_name_annotation(
+              key_type, lineno, key_col, end_lineno, key_end_col),
+            create_name_annotation(
+              value_type, lineno, value_col, end_lineno, value_end_col)})},
+        {"ctx", {{"_type", "Load"}}},
+        {"lineno", lineno},
+        {"col_offset", slice_col},
+        {"end_lineno", end_lineno},
+        {"end_col_offset", slice_end_col}};
+
+      return {
+        {"_type", "Subscript"},
+        {"value",
+         create_name_annotation(
+           base_type, lineno, col_offset, end_lineno, base_end_col)},
+        {"slice", tuple_slice},
+        {"ctx", {{"_type", "Load"}}},
+        {"lineno", lineno},
+        {"col_offset", col_offset},
+        {"end_lineno", end_lineno},
+        {"end_col_offset", total_end_col}};
+    }
+
+    // Default: single element type (for list[T], set[T], etc.)
     return {
       {"_type", "Subscript"},
       {"value",
