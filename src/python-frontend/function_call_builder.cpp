@@ -452,8 +452,39 @@ exprt function_call_builder::build() const
     const auto &arg = call_["args"][0];
     exprt obj_expr = converter_.get_expr(arg);
 
-    // Get the keys member from the dictionary struct
-    typet keys_type = pointer_typet(struct_typet()); // Type of the keys pointer
+    // Check actual type: could be dict or list (e.g., from d.keys())
+    typet actual_type = obj_expr.type();
+    if (actual_type.is_pointer())
+      actual_type = actual_type.subtype();
+    if (actual_type.id() == "symbol")
+      actual_type = converter_.ns.follow(actual_type);
+
+    // If it's actually a list, call list_size directly
+    if (actual_type.is_struct())
+    {
+      const struct_typet &struct_type = to_struct_type(actual_type);
+      std::string tag = struct_type.tag().as_string();
+      if (tag.find("__ESBMC_PyListObj") != std::string::npos)
+      {
+        // It's a list, not a dict: call list_size on it directly
+        code_typet list_size_type;
+        list_size_type.return_type() = size_type();
+        code_typet::argumentt arg_type;
+        arg_type.type() = pointer_typet(struct_type);
+        list_size_type.arguments().push_back(arg_type);
+
+        symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
+
+        side_effect_expr_function_callt call_expr(size_type());
+        call_expr.function() = list_size_func;
+        call_expr.arguments().push_back(obj_expr);
+
+        return call_expr;
+      }
+    }
+
+    // It's genuinely a dict: get the keys member
+    typet keys_type = pointer_typet(struct_typet());
     member_exprt keys_member(obj_expr, "keys", keys_type);
 
     // Create the list_get_size function symbol
