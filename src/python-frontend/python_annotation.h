@@ -2262,6 +2262,76 @@ private:
     return InferResult::OK;
   }
 
+  void infer_loop_variable_types(Json &while_stmt)
+  {
+    if (!while_stmt.contains("body"))
+      return;
+
+    for (auto &stmt : while_stmt["body"])
+    {
+      // Look for pattern: loop_var: Any = iterable[ESBMC_index_N]
+      if (
+        stmt["_type"] == "AnnAssign" && stmt.contains("value") &&
+        stmt["value"]["_type"] == "Subscript")
+      {
+        if (!stmt["value"]["value"].contains("id"))
+          continue;
+
+        std::string iter_var =
+          stmt["value"]["value"]["id"].template get<std::string>();
+
+        // Find the iterable's annotation
+        Json iter_node;
+        if (current_func != nullptr && (*current_func).contains("body"))
+          iter_node = find_annotated_assign(iter_var, (*current_func)["body"]);
+        if (iter_node.empty())
+          iter_node = find_annotated_assign(iter_var, ast_["body"]);
+
+        if (iter_node.empty() || !iter_node.contains("annotation"))
+          continue;
+
+        auto &iter_annotation = iter_node["annotation"];
+
+        // Extract element type from container annotation
+        if (
+          iter_annotation["_type"] == "Subscript" &&
+          iter_annotation.contains("value") &&
+          iter_annotation["value"].contains("id"))
+        {
+          std::string container_type =
+            iter_annotation["value"]["id"].template get<std::string>();
+
+          if (container_type == "list" || container_type == "List")
+          {
+            // Extract T from list[T]
+            if (iter_annotation.contains("slice"))
+              stmt["annotation"] = iter_annotation["slice"];
+          }
+          else if (container_type == "dict" || container_type == "Dict")
+          {
+            // For dict iteration, iterate over keys (first type parameter)
+            if (
+              iter_annotation.contains("slice") &&
+              iter_annotation["slice"]["_type"] == "Tuple" &&
+              iter_annotation["slice"].contains("elts") &&
+              !iter_annotation["slice"]["elts"].empty())
+            {
+              stmt["annotation"] = iter_annotation["slice"]["elts"][0];
+            }
+          }
+        }
+        else if (iter_annotation["_type"] == "Name")
+        {
+          // For str iteration, element type is also str
+          std::string type_name =
+            iter_annotation["id"].template get<std::string>();
+          if (type_name == "str")
+            stmt["annotation"] = iter_annotation;
+        }
+      }
+    }
+  }
+
   void add_annotation(Json &body)
   {
     for (auto &element : body["body"])
@@ -2282,6 +2352,10 @@ private:
       if (stmt_type == "If" || stmt_type == "While" || stmt_type == "Try")
       {
         add_annotation(element);
+
+        // Infer loop variable types for preprocessor-transformed for loops
+        if (stmt_type == "While")
+          infer_loop_variable_types(element);
 
         // Process else block if it exists
         if (
