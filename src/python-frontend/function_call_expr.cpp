@@ -445,19 +445,65 @@ exprt function_call_expr::handle_isinstance() const
   }
   else if (type_arg["_type"] == "Tuple")
   {
-    // isinstance(v, (int, str))
-    // converted into isinstance(v, int) || isinstance(v, str)
+    // isinstance(v, (int, str)) or isinstance(v, (int, type(None)))
+    // converted into isinstance(v, int) || isinstance(v, str) || ...
     const auto &elts = type_arg["elts"];
 
-    std::string first_type = elts[0]["id"];
+    if (elts.empty())
+      throw std::runtime_error("isinstance() tuple cannot be empty");
+
+    // Extract type name from each tuple element
+    auto get_type_name = [](const nlohmann::json &elt) -> std::string {
+      if (elt["_type"] == "Name")
+      {
+        // isinstance(v, (int, str))
+        return elt["id"];
+      }
+      else if (elt["_type"] == "Constant")
+      {
+        // isinstance(v, (None, int))
+        return "NoneType";
+      }
+      else if (elt["_type"] == "Call")
+      {
+        // isinstance(v, (type(None), int))
+        const auto &func = elt["func"];
+        const auto &call_args = elt["args"];
+
+        if (func["_type"] == "Name" && func["id"] == "type")
+        {
+          if (call_args.size() != 1)
+            throw std::runtime_error("type() expects exactly 1 argument");
+
+          const auto &type_call_arg = call_args[0];
+
+          if (type_call_arg["_type"] == "Constant")
+          {
+            if (
+              type_call_arg["value"].is_null() ||
+              (type_call_arg.contains("value") &&
+               type_call_arg["value"] == nullptr))
+            {
+              return "NoneType";
+            }
+          }
+        }
+        throw std::runtime_error("Unsupported Call in isinstance() tuple");
+      }
+      else
+      {
+        throw std::runtime_error("Unsupported type in isinstance() tuple");
+      }
+    };
+
+    // Build isinstance check for first element
+    std::string first_type = get_type_name(elts[0]);
     exprt tuple_instance = build_isinstance(first_type);
 
+    // Chain OR expressions for remaining elements
     for (size_t i = 1; i < elts.size(); ++i)
     {
-      if (elts[i]["_type"] != "Name")
-        throw std::runtime_error("Unsupported type in isinstance()");
-
-      std::string type_name = elts[i]["id"];
+      std::string type_name = get_type_name(elts[i]);
       exprt next_isinstance = build_isinstance(type_name);
 
       exprt or_expr("or", typet("bool"));
