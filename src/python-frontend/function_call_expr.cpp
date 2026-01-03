@@ -307,7 +307,16 @@ exprt function_call_expr::handle_isinstance() const
     {
       // isinstance(x, type(None)) should check: x == None
       // In ESBMC, None is represented as a null pointer
-      exprt null_ptr = gen_zero(pointer_typet(empty_typet()));
+
+      // If x is not a pointer type, it can never be None
+      if (!obj_expr.type().is_pointer())
+      {
+        exprt false_expr = gen_zero(typet("bool"));
+        return false_expr;
+      }
+
+      // For pointer types, check if it's null
+      exprt null_ptr = gen_zero(obj_expr.type());
 
       exprt equality("=", typet("bool"));
       equality.copy_to_operands(obj_expr);
