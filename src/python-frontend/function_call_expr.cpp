@@ -303,11 +303,41 @@ exprt function_call_expr::handle_isinstance() const
 
   auto build_isinstance = [&](const std::string &type_name) {
     typet expected_type = type_handler_.get_typet(type_name, 0);
+
+    // Verify we got a valid type
+    if (expected_type.is_nil())
+      throw std::runtime_error("Could not resolve type: " + type_name);
+
     exprt t;
-    if (expected_type.is_symbol())
+
+    // Handle pointer types (common for Python container types such as list, dict)
+    if (expected_type.is_pointer())
     {
-      // struct type
+      const pointer_typet &ptr_type = to_pointer_type(expected_type);
+      const typet &pointee_type = ptr_type.subtype();
+
+      if (pointee_type.is_symbol())
+      {
+        // Get the symbol for the pointed-to type
+        const symbolt *symbol = converter_.ns.lookup(pointee_type);
+        if (!symbol)
+          throw std::runtime_error(
+            "Could not find symbol for type: " + type_name);
+        t = symbol_expr(*symbol);
+      }
+      else
+      {
+        // For non-symbol pointee types, use the pointee type directly
+        t = gen_zero(pointee_type);
+      }
+    }
+    // Handle direct symbol types (user-defined classes)
+    else if (expected_type.is_symbol())
+    {
       const symbolt *symbol = converter_.ns.lookup(expected_type);
+      if (!symbol)
+        throw std::runtime_error(
+          "Could not find symbol for type: " + type_name);
       t = symbol_expr(*symbol);
     }
     else
@@ -327,7 +357,7 @@ exprt function_call_expr::handle_isinstance() const
   }
   else if (type_arg["_type"] == "Constant")
   {
-    // isintance(v, None)
+    // isinstance(v, None)
     std::string type_name = "NoneType";
     return build_isinstance(type_name);
   }
@@ -339,11 +369,11 @@ exprt function_call_expr::handle_isinstance() const
   else if (type_arg["_type"] == "Tuple")
   {
     // isinstance(v, (int, str))
-    // converted into instance(v, int) || isinstance(v, str)
+    // converted into isinstance(v, int) || isinstance(v, str)
     const auto &elts = type_arg["elts"];
 
     std::string first_type = elts[0]["id"];
-    exprt tupe_instance = build_isinstance(first_type);
+    exprt tuple_instance = build_isinstance(first_type);
 
     for (size_t i = 1; i < elts.size(); ++i)
     {
@@ -354,12 +384,12 @@ exprt function_call_expr::handle_isinstance() const
       exprt next_isinstance = build_isinstance(type_name);
 
       exprt or_expr("or", typet("bool"));
-      or_expr.move_to_operands(tupe_instance);
+      or_expr.move_to_operands(tuple_instance);
       or_expr.move_to_operands(next_isinstance);
-      tupe_instance = or_expr;
+      tuple_instance = or_expr;
     }
 
-    return tupe_instance;
+    return tuple_instance;
   }
   else
     throw std::runtime_error("Unsupported type format in isinstance()");
