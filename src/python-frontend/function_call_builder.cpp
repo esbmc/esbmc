@@ -3,11 +3,112 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy_call_expr.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+
+namespace
+{
+bool extract_constant_string(
+  const nlohmann::json &node,
+  python_converter &converter,
+  std::string &out)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_string())
+  {
+    out = node["value"].get<std::string>();
+    return true;
+  }
+
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  {
+    const std::string var_name = node["id"].get<std::string>();
+    nlohmann::json var_value = json_utils::get_var_value(
+      var_name, converter.get_current_func_name(), converter.get_ast_json());
+
+    if (
+      !var_value.empty() && var_value.contains("value") &&
+      var_value["value"].contains("_type") &&
+      var_value["value"]["_type"] == "Constant" &&
+      var_value["value"].contains("value") &&
+      var_value["value"]["value"].is_string())
+    {
+      out = var_value["value"]["value"].get<std::string>();
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool extract_constant_integer(
+  const nlohmann::json &node,
+  python_converter &converter,
+  long long &out)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_number_integer())
+  {
+    out = node["value"].get<long long>();
+    return true;
+  }
+
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  {
+    const std::string var_name = node["id"].get<std::string>();
+    nlohmann::json var_value = json_utils::get_var_value(
+      var_name, converter.get_current_func_name(), converter.get_ast_json());
+
+    if (
+      !var_value.empty() && var_value.contains("value") &&
+      var_value["value"].contains("_type") &&
+      var_value["value"]["_type"] == "Constant" &&
+      var_value["value"].contains("value") &&
+      var_value["value"]["value"].is_number_integer())
+    {
+      out = var_value["value"]["value"].get<long long>();
+      return true;
+    }
+  }
+
+  return false;
+}
+
+exprt build_replace_string(
+  python_converter &converter,
+  const std::string &input,
+  const std::string &old_value,
+  const std::string &new_value,
+  long long count)
+{
+  if (old_value.empty())
+    throw std::runtime_error(
+      "replace() does not support empty old string in minimal support");
+
+  if (count == 0)
+    return converter.get_string_builder().build_string_literal(input);
+
+  std::string result = input;
+  size_t pos = 0;
+  long long replaced = 0;
+  while ((pos = result.find(old_value, pos)) != std::string::npos)
+  {
+    if (count >= 0 && replaced >= count)
+      break;
+    result.replace(pos, old_value.size(), new_value);
+    pos += new_value.size();
+    ++replaced;
+  }
+
+  return converter.get_string_builder().build_string_literal(result);
+}
+} // namespace
 
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
@@ -679,6 +780,47 @@ exprt function_call_builder::build() const
 
       locationt loc = converter_.get_location_from_decl(call_);
       return converter_.get_string_handler().handle_string_strip(obj_expr, loc);
+    }
+
+    if (method_name == "replace")
+    {
+      if (call_["args"].size() != 2 && call_["args"].size() != 3)
+        throw std::runtime_error(
+          "replace() requires two or three arguments in minimal support");
+
+      std::string old_value;
+      if (!extract_constant_string(call_["args"][0], converter_, old_value))
+      {
+        throw std::runtime_error(
+          "replace() only supports constant old strings in minimal support");
+      }
+
+      std::string new_value;
+      if (!extract_constant_string(call_["args"][1], converter_, new_value))
+      {
+        throw std::runtime_error(
+          "replace() only supports constant new strings in minimal support");
+      }
+
+      long long count = -1;
+      if (call_["args"].size() == 3)
+      {
+        if (!extract_constant_integer(call_["args"][2], converter_, count))
+        {
+          throw std::runtime_error(
+            "replace() only supports constant count in minimal support");
+        }
+      }
+
+      std::string input;
+      if (!extract_constant_string(call_["func"]["value"], converter_, input))
+      {
+        throw std::runtime_error(
+          "replace() only supports constant string inputs in minimal support");
+      }
+
+      return build_replace_string(
+        converter_, input, old_value, new_value, count);
     }
   }
 
