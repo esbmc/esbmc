@@ -315,6 +315,48 @@ class Preprocessor(ast.NodeTransformer):
 
     def _get_element_type_from_container(self, container_type, iterable_node=None):
         """Get the element type from a container type with better inference"""
+        # 1. Handle method calls such as d.keys(), d.values()
+        if isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute):
+            method_name = iterable_node.func.attr
+
+            if method_name in ['keys', 'values']:
+                # Get the base object (e.g., 'd' in d.keys())
+                if isinstance(iterable_node.func.value, ast.Name):
+                    dict_var_name = iterable_node.func.value.id
+
+                    # Look up the dict's annotation
+                    if hasattr(self, 'variable_annotations') and dict_var_name in self.variable_annotations:
+                        dict_annotation = self.variable_annotations[dict_var_name]
+
+                        # Extract key/value types from dict[K, V]
+                        if isinstance(dict_annotation, ast.Subscript):
+                            if isinstance(dict_annotation.slice, ast.Tuple):
+                                key_type = dict_annotation.slice.elts[0]
+                                value_type = dict_annotation.slice.elts[1]
+
+                                if method_name == 'keys':
+                                    if isinstance(key_type, ast.Name):
+                                        return key_type.id
+                                elif method_name == 'values':
+                                    if isinstance(value_type, ast.Name):
+                                        return value_type.id
+
+        # 2. Handle direct dict iteration: for k in d:
+        if isinstance(iterable_node, ast.Name):
+            var_name = iterable_node.id
+
+            if hasattr(self, 'variable_annotations') and var_name in self.variable_annotations:
+                annotation = self.variable_annotations[var_name]
+
+                # Check if it's a dict annotation
+                if isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name):
+                    if annotation.value.id == 'dict':
+                        # Extract key type from dict[K, V]
+                        if isinstance(annotation.slice, ast.Tuple) and len(annotation.slice.elts) >= 1:
+                            key_type = annotation.slice.elts[0]
+                            if isinstance(key_type, ast.Name):
+                                return key_type.id
+
         if container_type == 'str':
             return 'str'
         elif isinstance(iterable_node, ast.List) and iterable_node.elts:
@@ -841,6 +883,27 @@ class Preprocessor(ast.NodeTransformer):
         # Determine annotation type based on the iterable value
         annotation_id = self._get_iterable_type_annotation(node.iter)
 
+        # Get element type for proper annotation
+        element_type = self._get_element_type_from_container(annotation_id, node.iter)
+
+        # Handle dict iteration
+        if annotation_id in ['dict', 'Dict']:
+            # Transform: for k in d: into for k in d.keys():
+            if isinstance(node.iter, ast.Name):
+                # Create d.keys() call
+                keys_call = ast.Call(
+                    func=ast.Attribute(
+                        value=node.iter,
+                        attr='keys',
+                        ctx=ast.Load()
+                    ),
+                    args=[],
+                    keywords=[]
+                )
+                self.ensure_all_locations(keys_call, node)
+                node.iter = keys_call
+                annotation_id = 'list'  # d.keys() returns list
+
         # Determine iterator variable name and whether to create ESBMC_iter
         if isinstance(node.iter, ast.Name):
             # For any Name reference (parameter or variable), use it directly
@@ -850,7 +913,7 @@ class Preprocessor(ast.NodeTransformer):
         else:
             # For other iterables (literals, calls, expressions), create ESBMC_iter copy
             iter_var_name = f'{iter_var_base}_{loop_id}'
-            iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name)
+            iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name, element_type)
             setup_statements = [iter_assign]
 
         # Create common setup statements (index and length) with unique names
@@ -863,7 +926,7 @@ class Preprocessor(ast.NodeTransformer):
 
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name,
-                                                annotation_id, index_var)
+                                                annotation_id, index_var, element_type)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
@@ -878,13 +941,24 @@ class Preprocessor(ast.NodeTransformer):
 
         return result
 
-    def _create_iter_assignment(self, node, annotation_id, iter_var_name):
-        """Create ESBMC_iter assignment with custom name."""
-        iter_target = self.create_name_node(iter_var_name, ast.Store(), node)
-        str_annotation = self.create_name_node(annotation_id, ast.Load(), node)
+    def _create_iter_assignment(self, node, annotation_id, iter_var_name, element_type):
+        """Create assignment for iterator variable with proper type annotation."""
+        # Create proper list[T] annotation instead of just 'list'
+        if element_type and element_type != 'Any':
+            # Create Subscript: list[element_type]
+            iter_annotation = ast.Subscript(
+                value=ast.Name(id='list', ctx=ast.Load()),
+                slice=ast.Name(id=element_type, ctx=ast.Load()),
+                ctx=ast.Load()
+            )
+        else:
+            # Fallback to simple 'list' if we can't infer element type
+            iter_annotation = ast.Name(id=annotation_id, ctx=ast.Load())
+
+        # Create: ESBMC_iter_N: list[element_type] = <iterable>
         iter_assign = ast.AnnAssign(
-            target=iter_target,
-            annotation=str_annotation,
+            target=ast.Name(id=iter_var_name, ctx=ast.Store()),
+            annotation=iter_annotation,
             value=node.iter,
             simple=1
         )
@@ -945,25 +1019,43 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(while_cond, node)
         return while_cond
 
-    def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id, index_var='ESBMC_index'):
-        """Create the complete loop body with custom index variable name."""
-        # Item assignment
-        item_assign = self._create_item_assignment(node, target_var_name, iter_var_name,
-                                                annotation_id, index_var)
+    def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id, index_var, element_type):
+        """Create the body of the while loop with proper type annotations."""
+        # Create target variable annotation
+        if element_type and element_type != 'Any':
+            target_annotation = ast.Name(id=element_type, ctx=ast.Load())
+        else:
+            target_annotation = ast.Name(id='Any', ctx=ast.Load())
 
-        # Index increment
-        index_increment = self._create_index_increment(node, index_var)
+        # Create: target: element_type = iter_var[index]
+        target_assign = ast.AnnAssign(
+            target=ast.Name(id=target_var_name, ctx=ast.Store()),
+            annotation=target_annotation,
+            value=ast.Subscript(
+                value=ast.Name(id=iter_var_name, ctx=ast.Load()),
+                slice=ast.Name(id=index_var, ctx=ast.Load()),
+                ctx=ast.Load()
+            ),
+            simple=1
+        )
+        self.ensure_all_locations(target_assign, node)
 
-        # Transform original body
-        transformed_original_body = []
-        for statement in node.body:
-            transformed_statement = self.visit(statement)
-            if isinstance(transformed_statement, list):
-                transformed_original_body.extend(transformed_statement)
-            else:
-                transformed_original_body.append(transformed_statement)
+        # Create: index += 1
+        index_increment = ast.AnnAssign(
+            target=ast.Name(id=index_var, ctx=ast.Store()),
+            annotation=ast.Name(id='int', ctx=ast.Load()),
+            value=ast.BinOp(
+                left=ast.Name(id=index_var, ctx=ast.Load()),
+                op=ast.Add(),
+                right=ast.Constant(value=1)
+            ),
+            simple=1
+        )
+        self.ensure_all_locations(index_increment, node)
 
-        return [item_assign, index_increment] + transformed_original_body
+        # Combine with original body
+        return [target_assign, index_increment] + node.body
+
 
     def _create_item_assignment(self, node, target_var_name, iter_var_name, annotation_id, index_var='ESBMC_index'):
         """Create assignment to get current item from iterable with custom index variable."""
