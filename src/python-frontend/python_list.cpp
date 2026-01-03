@@ -562,12 +562,12 @@ exprt python_list::build_split_list(
     nlohmann::json list_node;
     list_node["_type"] = "List";
     list_node["elts"] = nlohmann::json::array();
-    json_utils::copy_location_fields(call_node, list_node);
+    converter.copy_location_fields_from_decl(call_node, list_node);
 
     nlohmann::json elem;
     elem["_type"] = "Constant";
     elem["value"] = input;
-    json_utils::copy_location_fields(call_node, elem);
+    converter.copy_location_fields_from_decl(call_node, elem);
     list_node["elts"].push_back(elem);
 
     python_list list(converter, list_node);
@@ -599,14 +599,14 @@ exprt python_list::build_split_list(
   nlohmann::json list_node;
   list_node["_type"] = "List";
   list_node["elts"] = nlohmann::json::array();
-  json_utils::copy_location_fields(call_node, list_node);
+  converter.copy_location_fields_from_decl(call_node, list_node);
 
   for (const auto &part : parts)
   {
     nlohmann::json elem;
     elem["_type"] = "Constant";
     elem["value"] = part;
-    json_utils::copy_location_fields(call_node, elem);
+    converter.copy_location_fields_from_decl(call_node, elem);
     list_node["elts"].push_back(elem);
   }
 

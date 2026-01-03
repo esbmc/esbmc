@@ -19,6 +19,7 @@
 #include <util/c_types.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
+#include <util/irep.h>
 #include <util/message.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
@@ -1787,7 +1788,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 }
 
 locationt
-python_converter::get_location_from_decl(const nlohmann::json &ast_node)
+python_converter::get_location_from_decl(const nlohmann::json &ast_node) const
 {
   locationt location;
   if (ast_node.contains("lineno"))
@@ -1799,6 +1800,25 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
   location.set_file(current_python_file.c_str());
   location.set_function(current_func_name_);
   return location;
+}
+
+void python_converter::copy_location_fields_from_decl(
+  const nlohmann::json &from,
+  nlohmann::json &to) const
+{
+  const locationt loc = get_location_from_decl(from);
+  const std::string line = id2string(loc.get_line());
+  if (!line.empty())
+    to["lineno"] = std::stoi(line);
+
+  const std::string column = id2string(loc.get_column());
+  if (!column.empty())
+    to["col_offset"] = std::stoi(column);
+
+  if (from.contains("end_lineno"))
+    to["end_lineno"] = from["end_lineno"];
+  if (from.contains("end_col_offset"))
+    to["end_col_offset"] = from["end_col_offset"];
 }
 
 symbolt *python_converter::find_function_in_base_classes(

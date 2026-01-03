@@ -8,8 +8,6 @@
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
-class python_converter;
-
 namespace json_utils
 {
 template <typename JsonType>
