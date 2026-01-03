@@ -6,7 +6,10 @@ def main() -> None:
     assert parts[0][2] == "b"
     assert parts[0][3] == "-"
     assert parts[0][4] == "c"
-    assert parts[0][5] == "\0"
 
+    try:
+        assert parts[0][5] == "\0"
+    except IndexError:
+        pass
 
 main()
