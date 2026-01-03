@@ -301,16 +301,91 @@ exprt function_call_expr::handle_isinstance() const
   const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &type_arg = args[1];
 
-  auto build_isinstance = [&](const std::string &type_name) {
-    typet expected_type = type_handler_.get_typet(type_name, 0);
+  // Extract type name from various AST node formats
+  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
+    const std::string node_type = node["_type"];
 
-    // Verify we got a valid type
+    if (node_type == "Name")
+    {
+      // isinstance(v, int)
+      return node["id"];
+    }
+    else if (node_type == "Constant")
+    {
+      // isinstance(v, None)
+      return "NoneType";
+    }
+    else if (node_type == "Attribute")
+    {
+      // isinstance(v, MyClass.InnerClass)
+      return node["attr"];
+    }
+    else if (node_type == "Call")
+    {
+      // isinstance(v, type(None)) or isinstance(v, type(x))
+      const auto &func = node["func"];
+
+      if (func["_type"] != "Name" || func["id"] != "type")
+        throw std::runtime_error(
+          "Only type() calls are supported in isinstance()");
+
+      const auto &call_args = node["args"];
+      if (call_args.size() != 1)
+        throw std::runtime_error("type() expects exactly 1 argument");
+
+      const auto &type_call_arg = call_args[0];
+
+      // Handle type(None)
+      if (type_call_arg["_type"] == "Constant")
+      {
+        if (
+          type_call_arg["value"].is_null() ||
+          (type_call_arg.contains("value") &&
+           type_call_arg["value"] == nullptr))
+        {
+          return "NoneType";
+        }
+        throw std::runtime_error(
+          "isinstance() with type(constant) only supports type(None)");
+      }
+      else if (type_call_arg["_type"] == "Name")
+      {
+        throw std::runtime_error(
+          "isinstance() with type(variable) not yet supported - use direct "
+          "type names");
+      }
+      else
+        throw std::runtime_error(
+          "Unsupported argument to type() in isinstance()");
+    }
+    else
+      throw std::runtime_error("Unsupported type format in isinstance()");
+  };
+
+  // Build isinstance check for a given type name
+  auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    // Special case: Check if object is None (null pointer)
+    if (type_name == "NoneType")
+    {
+      // If x is not a pointer type, it can never be None
+      if (!obj_expr.type().is_pointer())
+        return gen_zero(typet("bool")); // false
+
+      // For pointer types, check if it's null
+      exprt null_ptr = gen_zero(obj_expr.type());
+      exprt equality("=", typet("bool"));
+      equality.copy_to_operands(obj_expr);
+      equality.move_to_operands(null_ptr);
+      return equality;
+    }
+
+    // Regular type checking
+    typet expected_type = type_handler_.get_typet(type_name, 0);
     if (expected_type.is_nil())
       throw std::runtime_error("Could not resolve type: " + type_name);
 
     exprt t;
 
-    // Handle pointer types (common for Python container types such as list, dict)
     if (expected_type.is_pointer())
     {
       const pointer_typet &ptr_type = to_pointer_type(expected_type);
@@ -318,7 +393,6 @@ exprt function_call_expr::handle_isinstance() const
 
       if (pointee_type.is_symbol())
       {
-        // Get the symbol for the pointed-to type
         const symbolt *symbol = converter_.ns.lookup(pointee_type);
         if (!symbol)
           throw std::runtime_error(
@@ -326,12 +400,8 @@ exprt function_call_expr::handle_isinstance() const
         t = symbol_expr(*symbol);
       }
       else
-      {
-        // For non-symbol pointee types, use the pointee type directly
         t = gen_zero(pointee_type);
-      }
     }
-    // Handle direct symbol types (user-defined classes)
     else if (expected_type.is_symbol())
     {
       const symbolt *symbol = converter_.ns.lookup(expected_type);
@@ -349,50 +419,32 @@ exprt function_call_expr::handle_isinstance() const
     return isinstance;
   };
 
-  if (type_arg["_type"] == "Name")
+  // Handle tuple of types: isinstance(v, (int, str, type(None)))
+  if (type_arg["_type"] == "Tuple")
   {
-    // isinstance(v, int)
-    std::string type_name = args[1]["id"];
-    return build_isinstance(type_name);
-  }
-  else if (type_arg["_type"] == "Constant")
-  {
-    // isinstance(v, None)
-    std::string type_name = "NoneType";
-    return build_isinstance(type_name);
-  }
-  else if (type_arg["_type"] == "Attribute")
-  {
-    std::string type_name = args[1]["attr"];
-    return build_isinstance(type_name);
-  }
-  else if (type_arg["_type"] == "Tuple")
-  {
-    // isinstance(v, (int, str))
-    // converted into isinstance(v, int) || isinstance(v, str)
     const auto &elts = type_arg["elts"];
+    if (elts.empty())
+      throw std::runtime_error("isinstance() tuple cannot be empty");
 
-    std::string first_type = elts[0]["id"];
-    exprt tuple_instance = build_isinstance(first_type);
+    // Build isinstance check for first element
+    exprt result = build_isinstance(extract_type_name(elts[0]));
 
+    // Chain OR expressions for remaining elements
     for (size_t i = 1; i < elts.size(); ++i)
     {
-      if (elts[i]["_type"] != "Name")
-        throw std::runtime_error("Unsupported type in isinstance()");
-
-      std::string type_name = elts[i]["id"];
-      exprt next_isinstance = build_isinstance(type_name);
+      exprt next_check = build_isinstance(extract_type_name(elts[i]));
 
       exprt or_expr("or", typet("bool"));
-      or_expr.move_to_operands(tuple_instance);
-      or_expr.move_to_operands(next_isinstance);
-      tuple_instance = or_expr;
+      or_expr.move_to_operands(result);
+      or_expr.move_to_operands(next_check);
+      result = or_expr;
     }
 
-    return tuple_instance;
+    return result;
   }
-  else
-    throw std::runtime_error("Unsupported type format in isinstance()");
+
+  // Handle single type: isinstance(v, int) or isinstance(v, type(None))
+  return build_isinstance(extract_type_name(type_arg));
 }
 
 exprt function_call_expr::handle_hasattr() const
