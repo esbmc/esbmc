@@ -302,6 +302,20 @@ exprt function_call_expr::handle_isinstance() const
   const auto &type_arg = args[1];
 
   auto build_isinstance = [&](const std::string &type_name) {
+    // Check whether object is None (null pointer)
+    if (type_name == "NoneType")
+    {
+      // isinstance(x, type(None)) should check: x == None
+      // In ESBMC, None is represented as a null pointer
+      exprt null_ptr = gen_zero(pointer_typet(empty_typet()));
+
+      exprt equality("=", typet("bool"));
+      equality.copy_to_operands(obj_expr);
+      equality.move_to_operands(null_ptr);
+
+      return equality;
+    }
+
     typet expected_type = type_handler_.get_typet(type_name, 0);
 
     // Verify we got a valid type
@@ -365,6 +379,60 @@ exprt function_call_expr::handle_isinstance() const
   {
     std::string type_name = args[1]["attr"];
     return build_isinstance(type_name);
+  }
+  else if (type_arg["_type"] == "Call")
+  {
+    // isinstance(v, type(None)) or isinstance(v, type(x))
+    const auto &func = type_arg["func"];
+    const auto &call_args = type_arg["args"];
+
+    // Verify this is a call to type()
+    if (func["_type"] == "Name" && func["id"] == "type")
+    {
+      if (call_args.size() != 1)
+        throw std::runtime_error("type() expects exactly 1 argument");
+
+      const auto &type_call_arg = call_args[0];
+
+      // Handle type(None)
+      if (type_call_arg["_type"] == "Constant")
+      {
+        // Check if it's None
+        if (
+          type_call_arg["value"].is_null() ||
+          (type_call_arg.contains("value") &&
+           type_call_arg["value"] == nullptr))
+        {
+          std::string type_name = "NoneType";
+          return build_isinstance(type_name);
+        }
+        // For other constants, could extract their type
+        else
+        {
+          throw std::runtime_error(
+            "isinstance() with type(constant) only supports type(None) "
+            "currently");
+        }
+      }
+      else if (type_call_arg["_type"] == "Name")
+      {
+        // isinstance(x, type(y)) - runtime type checking
+        // This would require checking y's actual runtime type
+        throw std::runtime_error(
+          "isinstance() with type(variable) not yet supported: use direct "
+          "type names instead");
+      }
+      else
+      {
+        throw std::runtime_error(
+          "Unsupported argument to type() in isinstance()");
+      }
+    }
+    else
+    {
+      throw std::runtime_error(
+        "Unsupported callable in isinstance(): only type() is supported");
+    }
   }
   else if (type_arg["_type"] == "Tuple")
   {
