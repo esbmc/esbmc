@@ -113,6 +113,18 @@ public:
 private:
   friend class python_dict_handler;
 
+  typet get_element_type_from_type_map(
+    const std::string &list_name,
+    size_t index,
+    const nlohmann::json &slice_node,
+    const nlohmann::json &list_node);
+
+  typet
+  get_element_type_from_annotation_fallback(const nlohmann::json &list_node);
+
+  exprt
+  cast_list_element_to_type(const exprt &list_at_call, const typet &elem_type);
+
   exprt create_vla(
     const nlohmann::json &element,
     const symbolt *list,

@@ -932,6 +932,123 @@ exprt python_list::handle_range_slice(
   return symbol_expr(sliced_list);
 }
 
+typet python_list::get_element_type_from_type_map(
+  const std::string &list_name,
+  size_t index,
+  const nlohmann::json &slice_node,
+  const nlohmann::json &list_node)
+{
+  if (list_type_map[list_name].empty())
+  {
+    // Fall back to annotation for function parameters
+    const nlohmann::json list_value_node = json_utils::get_var_value(
+      list_value_["value"]["id"],
+      converter_.current_function_name(),
+      converter_.ast());
+
+    return get_elem_type_from_annotation(
+      list_value_node, converter_.get_type_handler());
+  }
+
+  size_t type_index = (!list_node.is_null() && list_node.contains("value") &&
+                       list_node["value"]["_type"] == "BinOp")
+                        ? 0
+                        : index;
+
+  try
+  {
+    return list_type_map[list_name].at(type_index).second;
+  }
+  catch (const std::out_of_range &)
+  {
+    // Only throw compile-time error if this is a static list with known elements
+    if (
+      (slice_node["_type"] == "Constant" ||
+       (slice_node["_type"] == "UnaryOp" &&
+        slice_node["operand"]["_type"] == "Constant")) &&
+      !list_node.is_null() && list_node.contains("value") &&
+      list_node["value"].contains("elts") &&
+      list_node["value"]["elts"].is_array())
+    {
+      const locationt l = converter_.get_location_from_decl(list_value_);
+      throw std::runtime_error(
+        "List out of bounds at " + l.get_file().as_string() +
+        " line: " + l.get_line().as_string());
+    }
+
+    // Try annotation fallback for dynamic lists or function parameters
+    const nlohmann::json list_value_node = json_utils::get_var_value(
+      list_value_["value"]["id"],
+      converter_.current_function_name(),
+      converter_.ast());
+
+    typet elem_type = get_elem_type_from_annotation(
+      list_value_node, converter_.get_type_handler());
+
+    if (elem_type == typet())
+    {
+      const locationt l = converter_.get_location_from_decl(list_value_);
+      throw std::runtime_error(
+        "List out of bounds at " + l.get_file().as_string() +
+        " line: " + l.get_line().as_string());
+    }
+
+    return elem_type;
+  }
+}
+
+typet python_list::get_element_type_from_annotation_fallback(
+  const nlohmann::json &list_node)
+{
+  if (list_node["_type"] == "arg")
+  {
+    return get_elem_type_from_annotation(
+      list_node, converter_.get_type_handler());
+  }
+
+  return typet();
+}
+
+exprt python_list::cast_list_element_to_type(
+  const exprt &list_at_call,
+  const typet &elem_type)
+{
+  // Get obj->value and cast to correct type
+  member_exprt obj_value(list_at_call, "value", pointer_typet(empty_typet()));
+  {
+    exprt &base = obj_value.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+
+  // For array types, return pointer to element type instead of pointer to array
+  if (elem_type.is_array())
+  {
+    const array_typet &arr_type = to_array_type(elem_type);
+    typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
+    return tc;
+  }
+
+  // For char* strings and None (_Bool*), the void* already contains the pointer value
+  if (
+    elem_type.is_pointer() &&
+    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
+  {
+    typecast_exprt tc(obj_value, elem_type);
+    return tc;
+  }
+  else
+  {
+    // All other types: cast void* to pointer-to-type, then dereference
+    typecast_exprt tc(obj_value, pointer_typet(elem_type));
+    dereference_exprt deref(elem_type);
+    deref.op0() = tc;
+    return deref;
+  }
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -962,7 +1079,9 @@ exprt python_list::handle_index_access(
   // Handle negative indices
   if (slice_node.contains("op") && slice_node["op"]["_type"] == "USub")
   {
-    if (list_node.is_null() || list_node["value"]["_type"] != "List")
+    if (
+      list_node.is_null() || !list_node.contains("value") ||
+      list_node["value"]["_type"] != "List")
     {
       BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
       v *= -1;
@@ -1017,85 +1136,30 @@ exprt python_list::handle_index_access(
       }
     }
 
-    // Determine element type
-    if (list_node["_type"] == "arg")
+    // Determine element type from annotation for function parameters
+    if (!list_node.is_null() && list_node["_type"] == "arg")
     {
-      elem_type =
-        get_elem_type_from_annotation(list_node, converter_.get_type_handler());
+      elem_type = get_element_type_from_annotation_fallback(list_node);
     }
-    else if (
-      slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||
-      (slice_node["_type"] == "UnaryOp" &&
-       slice_node["operand"]["_type"] == "Constant"))
+
+    // Handle constant or binary operation indices
+    if (
+      elem_type == typet() &&
+      (slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||
+       (slice_node["_type"] == "UnaryOp" &&
+        slice_node["operand"]["_type"] == "Constant")))
     {
       const std::string &list_name = array.identifier().as_string();
-
-      if (list_type_map[list_name].empty())
-      {
-        /* Fall back to annotation for function parameters */
-        const nlohmann::json list_value_node = json_utils::get_var_value(
-          list_value_["value"]["id"],
-          converter_.current_function_name(),
-          converter_.ast());
-
-        elem_type = get_elem_type_from_annotation(
-          list_value_node, converter_.get_type_handler());
-      }
-      else
-      {
-        size_t type_index =
-          (!list_node.is_null() && list_node["value"]["_type"] == "BinOp")
-            ? 0
-            : index;
-
-        try
-        {
-          elem_type = list_type_map[list_name].at(type_index).second;
-        }
-        catch (const std::out_of_range &)
-        {
-          // Only throw compile-time error if this is a static list with known elements
-          // For constant indices on static lists, this is a definite out-of-bounds error
-          if (
-            (slice_node["_type"] == "Constant" ||
-             (slice_node["_type"] == "UnaryOp" &&
-              slice_node["operand"]["_type"] == "Constant")) &&
-            !list_node.is_null() && list_node.contains("value") &&
-            list_node["value"].contains("elts") &&
-            list_node["value"]["elts"].is_array())
-          {
-            const locationt l = converter_.get_location_from_decl(list_value_);
-            throw std::runtime_error(
-              "List out of bounds at " + l.get_file().as_string() +
-              " line: " + l.get_line().as_string());
-          }
-
-          // Try annotation fallback for dynamic lists or function parameters
-          const nlohmann::json list_value_node = json_utils::get_var_value(
-            list_value_["value"]["id"],
-            converter_.current_function_name(),
-            converter_.ast());
-
-          elem_type = get_elem_type_from_annotation(
-            list_value_node, converter_.get_type_handler());
-
-          // Only throw if annotation also fails
-          if (elem_type == typet())
-          {
-            const locationt l = converter_.get_location_from_decl(list_value_);
-            throw std::runtime_error(
-              "List out of bounds at " + l.get_file().as_string() +
-              " line: " + l.get_line().as_string());
-          }
-        }
-      }
+      elem_type =
+        get_element_type_from_type_map(list_name, index, slice_node, list_node);
     }
-    else if (slice_node["_type"] == "Name")
+    // Handle variable-based indexing (Name node)
+    else if (elem_type == typet() && slice_node["_type"] == "Name")
     {
-      // First try to get element type from list_node if it's an AnnAssign
+      // Try to get element type from list_node if it's an AnnAssign
       if (
         !list_node.is_null() && list_node["_type"] == "AnnAssign" &&
-        list_node.contains("annotation") && elem_type == typet())
+        list_node.contains("annotation"))
       {
         elem_type = get_elem_type_from_annotation(
           list_node, converter_.get_type_handler());
@@ -1120,22 +1184,27 @@ exprt python_list::handle_index_access(
         }
       }
 
-      // Handle variable-based indexing
-      if (!list_node.is_null() && list_node["_type"] == "arg")
+      // Handle function parameter case
+      if (
+        !list_node.is_null() && list_node["_type"] == "arg" &&
+        elem_type == typet())
       {
-        elem_type = get_elem_type_from_annotation(
-          list_node, converter_.get_type_handler());
+        elem_type = get_element_type_from_annotation_fallback(list_node);
       }
-      else
+      else if (elem_type == typet())
       {
-        // Handle case where we need to find the variable declaration
-        while (!list_node.is_null() && (!list_node.contains("value") ||
-                                        !list_node["value"].contains("elts") ||
-                                        !list_node["value"]["elts"].is_array()))
+        // Navigate through variable declarations to find the actual list
+        nlohmann::json current_node = list_node;
+        while (!current_node.is_null() &&
+               (!current_node.contains("value") ||
+                !current_node["value"].contains("elts") ||
+                !current_node["value"]["elts"].is_array()))
         {
-          if (list_node.contains("value") && list_node["value"].contains("id"))
-            list_node = json_utils::find_var_decl(
-              list_node["value"]["id"],
+          if (
+            current_node.contains("value") &&
+            current_node["value"].contains("id"))
+            current_node = json_utils::find_var_decl(
+              current_node["value"]["id"],
               converter_.current_function_name(),
               converter_.ast());
           else
@@ -1144,21 +1213,19 @@ exprt python_list::handle_index_access(
           }
         }
 
-        if (!list_node.is_null() && list_node["_type"] == "arg")
+        if (!current_node.is_null() && current_node["_type"] == "arg")
         {
-          elem_type = get_elem_type_from_annotation(
-            list_node, converter_.get_type_handler());
+          elem_type = get_element_type_from_annotation_fallback(current_node);
         }
-        else if (!list_node.is_null() && list_node.contains("value"))
+        else if (!current_node.is_null() && current_node.contains("value"))
         {
           // Check if the value is a Subscript (such as d['a'])
-          if (list_node["value"]["_type"] == "Subscript")
+          if (current_node["value"]["_type"] == "Subscript")
           {
-            // For ESBMC_iter_0 = d['a'], get element type from dict's actual value
-            if (list_node["value"]["value"]["_type"] == "Name")
+            if (current_node["value"]["value"]["_type"] == "Name")
             {
               std::string dict_var_name =
-                list_node["value"]["value"]["id"].get<std::string>();
+                current_node["value"]["value"]["id"].get<std::string>();
 
               // Find the dict's declaration
               nlohmann::json dict_node = json_utils::find_var_decl(
@@ -1171,9 +1238,9 @@ exprt python_list::handle_index_access(
                 const auto &dict_value = dict_node["value"];
 
                 // Get the key being accessed (e.g., 'a' in d['a'])
-                if (list_node["value"].contains("slice"))
+                if (current_node["value"].contains("slice"))
                 {
-                  const auto &key_node = list_node["value"]["slice"];
+                  const auto &key_node = current_node["value"]["slice"];
 
                   // Handle constant string key
                   if (
@@ -1221,13 +1288,13 @@ exprt python_list::handle_index_access(
             }
           }
           else if (
-            list_node["value"].contains("elts") &&
-            list_node["value"]["elts"].is_array() &&
-            !list_node["value"]["elts"].empty())
+            current_node["value"].contains("elts") &&
+            current_node["value"]["elts"].is_array() &&
+            !current_node["value"]["elts"].empty())
           {
             // Get element type from first list element using json_utils
             nlohmann::json first_elem =
-              json_utils::get_list_element(list_node["value"], 0);
+              json_utils::get_list_element(current_node["value"], 0);
 
             if (!first_elem.is_null() && !first_elem.empty())
               elem_type = converter_.get_type_handler().get_typet(first_elem);
@@ -1244,46 +1311,7 @@ exprt python_list::handle_index_access(
 
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
-
-    // Get obj->value and cast to correct type
-    member_exprt obj_value(list_at_call, "value", pointer_typet(empty_typet()));
-    {
-      exprt &base = obj_value.struct_op();
-      exprt deref("dereference");
-      deref.type() = base.type().subtype();
-      deref.move_to_operands(base);
-      base.swap(deref);
-    }
-
-    // For array types, return pointer to element type instead of pointer to array
-    // The dereference system doesn't support array types as target types
-    // Callers will handle the conversion when needed (similar to single-char string handling)
-    if (elem_type.is_array())
-    {
-      const array_typet &arr_type = to_array_type(elem_type);
-      // Cast to pointer to element type (e.g., char* instead of char[2]*)
-      typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
-      return tc;
-    }
-
-    // For char* strings and None (_Bool*), the void* already contains the pointer value
-    // For all other types, the void* contains a pointer to the value
-    if (
-      elem_type.is_pointer() && (elem_type.subtype() == char_type() ||
-                                 elem_type.subtype() == bool_type()))
-    {
-      // String and None case: cast void* directly to the pointer type (no dereference needed)
-      typecast_exprt tc(obj_value, elem_type);
-      return tc;
-    }
-    else
-    {
-      // All other types: cast void* to pointer-to-type, then dereference
-      typecast_exprt tc(obj_value, pointer_typet(elem_type));
-      dereference_exprt deref(elem_type);
-      deref.op0() = tc;
-      return deref;
-    }
+    return cast_list_element_to_type(list_at_call, elem_type);
   }
 
   // Handle static string indexing with safe null fallback
