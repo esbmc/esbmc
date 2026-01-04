@@ -9,6 +9,7 @@
 #include <util/expr_util.h>
 #include <util/arith_tools.h>
 #include <util/std_code.h>
+#include <util/std_expr.h>
 #include <util/mp_arith.h>
 #include <util/python_types.h>
 #include <util/symbolic_types.h>
@@ -544,6 +545,73 @@ exprt python_list::build_list_at_call(
   list_at_call.location() = converter_.get_location_from_decl(element);
 
   return list_at_call;
+}
+
+exprt python_list::build_split_list(
+  python_converter &converter,
+  const nlohmann::json &call_node,
+  const std::string &input,
+  const std::string &separator,
+  long long count)
+{
+  if (separator.empty())
+    throw std::runtime_error("split() separator cannot be empty");
+
+  if (count == 0)
+  {
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    converter.copy_location_fields_from_decl(call_node, list_node);
+
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = input;
+    converter.copy_location_fields_from_decl(call_node, elem);
+    list_node["elts"].push_back(elem);
+
+    python_list list(converter, list_node);
+    return list.get();
+  }
+
+  std::vector<std::string> parts;
+  size_t start = 0;
+  long long splits = 0;
+  while (true)
+  {
+    if (count >= 0 && splits >= count)
+    {
+      parts.push_back(input.substr(start));
+      break;
+    }
+
+    size_t pos = input.find(separator, start);
+    if (pos == std::string::npos)
+    {
+      parts.push_back(input.substr(start));
+      break;
+    }
+    parts.push_back(input.substr(start, pos - start));
+    start = pos + separator.size();
+    ++splits;
+  }
+
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+  converter.copy_location_fields_from_decl(call_node, list_node);
+
+  for (const auto &part : parts)
+  {
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = part;
+    converter.copy_location_fields_from_decl(call_node, elem);
+    list_node["elts"].push_back(elem);
+  }
+
+  python_list list(converter, list_node);
+  return list.get();
 }
 
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
@@ -1216,6 +1284,26 @@ exprt python_list::handle_index_access(
       deref.op0() = tc;
       return deref;
     }
+  }
+
+  // Handle static string indexing with safe null fallback
+  if (array.type().is_array() && array.type().subtype() == char_type())
+  {
+    exprt idx = pos_expr;
+    if (idx.type() != size_type())
+      idx = typecast_exprt(idx, size_type());
+
+    exprt bound = to_array_type(array.type()).size();
+    if (bound.type() != size_type())
+      bound = typecast_exprt(bound, size_type());
+
+    exprt cond("<", bool_type());
+    cond.copy_to_operands(idx, bound);
+
+    index_exprt in_bounds(array, idx, char_type());
+    if_exprt result(cond, in_bounds, gen_zero(char_type()));
+    result.type() = char_type();
+    return result;
   }
 
   // Handle static arrays

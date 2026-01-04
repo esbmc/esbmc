@@ -1735,6 +1735,8 @@ private:
           method == "isdigit" || method == "isalpha" || method == "isspace" ||
           method == "islower" || method == "isupper")
           return "bool";
+        else if (method == "split")
+          return "list";
         // Default for string methods
         return "str";
       }
@@ -2011,7 +2013,13 @@ private:
 
     // Handle built-in types
     if (type_utils::is_builtin_type(obj_type))
+    {
+      if (
+        obj_type == "str" && call["func"].contains("attr") &&
+        call["func"]["attr"] == "split")
+        return "list";
       type = obj_type;
+    }
     else
     {
       // Handle user-defined class methods
