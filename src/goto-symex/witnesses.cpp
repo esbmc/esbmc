@@ -213,10 +213,9 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   waypoint << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
            << wp.file;
   waypoint << YAML::Key << "line" << YAML::Value << integer2string(wp.line);
-#if 0
-  // Some validators will crash
+
   waypoint << YAML::Key << "column" << YAML::Value << integer2string(wp.column);
-#endif
+
   waypoint << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
            << wp.function;
   waypoint << YAML::EndMap;
