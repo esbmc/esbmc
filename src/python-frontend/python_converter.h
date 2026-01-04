@@ -178,7 +178,11 @@ public:
 
   exprt get_literal(const nlohmann::json &element);
 
-  locationt get_location_from_decl(const nlohmann::json &element);
+  locationt get_location_from_decl(const nlohmann::json &element) const;
+
+  void copy_location_fields_from_decl(
+    const nlohmann::json &from,
+    nlohmann::json &to) const;
 
   exprt handle_string_comparison(
     const std::string &op,

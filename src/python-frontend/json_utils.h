@@ -45,6 +45,19 @@ bool search_function_in_ast(const JsonType &node, const std::string &func_name)
 }
 
 template <typename JsonType>
+void copy_location_fields(const JsonType &from, JsonType &to)
+{
+  if (from.contains("lineno"))
+    to["lineno"] = from["lineno"];
+  if (from.contains("col_offset"))
+    to["col_offset"] = from["col_offset"];
+  if (from.contains("end_lineno"))
+    to["end_lineno"] = from["end_lineno"];
+  if (from.contains("end_col_offset"))
+    to["end_col_offset"] = from["end_col_offset"];
+}
+
+template <typename JsonType>
 JsonType find_class(const JsonType &ast_json, const std::string &class_name)
 {
   auto it =
