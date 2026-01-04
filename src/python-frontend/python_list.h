@@ -135,103 +135,11 @@ private:
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
-  exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
-
-  /**
-   * @brief Find the list node declaration for type information
-   */
-  nlohmann::json find_list_node_declaration();
-
-  /**
-   * @brief Validate that the index is not an array type
-   */
-  void validate_index_type(const exprt &index_expr);
-
-  /**
-   * @brief Process negative index by converting it to positive index
-   * @return Pair of processed index expression and actual index value
-   */
-  std::pair<exprt, size_t> process_negative_index(
-    const nlohmann::json &slice_node,
-    const nlohmann::json &list_node,
-    const exprt &array,
-    exprt index_expr);
-
-  /**
-   * @brief Check if this is a nested list access and handle it
-   * @return The nested list symbol expression, or empty if not nested
-   */
-  exprt handle_nested_list_access(const exprt &array, size_t index);
-
-  /**
-   * @brief Get element type from function parameter annotation
-   */
-  typet get_element_type_from_parameter(const nlohmann::json &list_node);
-
-  /**
-   * @brief Get element type from list type map or annotation fallback
-   */
-  typet get_element_type_from_type_map(
-    const exprt &array,
-    const nlohmann::json &list_node,
-    size_t index);
-
-  /**
-   * @brief Handle out-of-bounds access with appropriate error or type inference
-   */
-  typet handle_out_of_bounds_access(
-    const nlohmann::json &slice_node,
-    const nlohmann::json &list_node);
-
-  /**
-   * @brief Get element type for variable-based indexing
-   */
-  typet get_element_type_for_variable_index(
-    const exprt &array,
-    nlohmann::json list_node);
-
-  /**
-   * @brief Navigate through nested declarations to find element type
-   */
-  typet get_element_type_from_nested_declaration(nlohmann::json list_node);
-
-  /**
-   * @brief Get element type from dictionary subscript access (e.g., d['key'])
-   */
-  typet get_element_type_from_dict_subscript(const nlohmann::json &list_node);
-
-  /**
-   * @brief Determine element type for list-like symbol access
-   */
-  typet determine_element_type_for_list_access(
-    const exprt &array,
-    const nlohmann::json &slice_node,
-    const nlohmann::json &list_node,
-    size_t index);
-
-  /**
-   * @brief Build the final expression for accessing a list element
-   */
-  exprt build_list_element_expression(
-    const exprt &array,
-    const exprt &index_expr,
-    const typet &elem_type);
-
-  /**
-   * @brief Handle static string indexing with bounds checking
-   */
-  exprt
-  handle_static_string_indexing(const exprt &array, const exprt &index_expr);
-
-  /**
-   * @brief Handle static array indexing
-   */
-  exprt
-  handle_static_array_indexing(const exprt &array, const exprt &index_expr);
-
   python_converter &converter_;
   const nlohmann::json &list_value_;
 
   // <list_id, <elem_id, elem_type>>
   static std::unordered_map<std::string, TypeInfo> list_type_map;
+
+  exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
 };
