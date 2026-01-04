@@ -1,0 +1,11 @@
+url_path,views_total,views_unique
+/esbmc/esbmc,298,108
+/esbmc/esbmc/pulls,121,8
+/esbmc/esbmc/actions,59,7
+/esbmc/esbmc/issues,52,17
+/esbmc/esbmc/actions/workflows/benchexec.yml,40,3
+/esbmc/esbmc/commits/master,26,6
+/esbmc/esbmc/pull/3356,26,2
+/esbmc/esbmc/compare/master...prototypeC14:esbmc:claude/ctestma-investigation-014U1vsLhNtJMPNuENZcTghJ,26,1
+/esbmc/esbmc/pull/3365,25,3
+/esbmc/esbmc/tree/master/src,19,5
