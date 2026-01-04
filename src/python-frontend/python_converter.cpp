@@ -1971,6 +1971,56 @@ exprt python_converter::wrap_in_optional(
   return optional_value;
 }
 
+bool python_converter::handle_constructor_call_without_assignment(
+  const nlohmann::json &element)
+{
+  // Only handle if we're not in an assignment context and have a current block
+  if (current_lhs || !current_block)
+    return false;
+
+  // Extract the class name
+  std::string class_name = json_utils::extract_callable_name(element);
+
+  if (class_name.empty())
+    return false;
+
+  // Get the class type
+  typet class_type = type_handler_.get_typet(class_name);
+
+  // Create a temporary object to hold the instance
+  locationt location = get_location_from_decl(element);
+  symbolt &temp_obj =
+    create_tmp_symbol(element, "$ctor_temp$", class_type, gen_zero(class_type));
+
+  // Declare the temporary object
+  code_declt temp_decl(symbol_expr(temp_obj));
+  temp_decl.location() = location;
+  current_block->copy_to_operands(temp_decl);
+
+  // Temporarily set current_lhs to simulate an assignment context
+  // This allows function_call_builder to handle the constructor correctly
+  exprt *saved_lhs = current_lhs;
+  exprt temp_lhs = symbol_expr(temp_obj);
+  current_lhs = &temp_lhs;
+
+  // Build the constructor call - function_call_builder will now see current_lhs
+  // and handle the self parameter correctly
+  function_call_builder call_builder(*this, element);
+  exprt call_expr = call_builder.build();
+
+  // Restore the original current_lhs
+  current_lhs = saved_lhs;
+
+  // Verify we have a valid function call
+  if (!call_expr.is_code() || call_expr.statement() != "function_call")
+    return false;
+
+  // Add the constructor call to the block
+  current_block->copy_to_operands(call_expr);
+
+  return true;
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -2017,6 +2067,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   {
     code_blockt temp_block;
     process_forward_reference(element["func"], temp_block);
+
+    // Handle constructor calls without assignment (e.g., Positive(2))
+    if (handle_constructor_call_without_assignment(element))
+      return exprt(); // Constructor call was handled and added to block
   }
 
   // Handle indirect calls through function pointer variables

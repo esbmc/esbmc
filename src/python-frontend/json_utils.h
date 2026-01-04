@@ -437,4 +437,34 @@ bool has_overload_decorator(const JsonType &func_node)
   return false;
 }
 
+/// Extract the function or class name from a Call node
+/// Handles both direct calls (Name) and method calls (Attribute)
+/// Examples:
+///   {"_type": "Call", "func": {"_type": "Name", "id": "Positive"}} -> "Positive"
+///   {"_type": "Call", "func": {"_type": "Attribute", "attr": "foo"}} -> "foo"
+/// @param call_node JSON node representing a function/constructor call
+/// @return The name of the function/class being called, or empty string if not found
+template <typename JsonType>
+std::string extract_callable_name(const JsonType &call_node)
+{
+  if (!call_node.contains("func"))
+    return "";
+
+  const auto &func_node = call_node["func"];
+
+  if (!func_node.contains("_type"))
+    return "";
+
+  const std::string &func_type = func_node["_type"].template get<std::string>();
+
+  // Handle direct function/class calls: foo() or MyClass()
+  if (func_type == "Name" && func_node.contains("id"))
+    return func_node["id"].template get<std::string>();
+
+  // Handle attribute calls: obj.method() or module.Class()
+  if (func_type == "Attribute" && func_node.contains("attr"))
+    return func_node["attr"].template get<std::string>();
+
+  return "";
+}
 } // namespace json_utils

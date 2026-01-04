@@ -416,6 +416,21 @@ private:
   void
   get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
 
+  /**
+   * Handle constructor calls that are not assigned to a variable.
+   * Example: Positive(2) instead of p = Positive(2)
+   *
+   * Creates a temporary object and simulates an assignment context by
+   * temporarily setting current_lhs. This allows function_call_builder
+   * to reuse the existing assignment logic and correctly add the 'self'
+   * parameter to the constructor call.
+   *
+   * @param element The JSON AST node representing the constructor call
+   * @return true if handled successfully, false otherwise
+   */
+  bool
+  handle_constructor_call_without_assignment(const nlohmann::json &element);
+
   // =========================================================================
   // Assertion helper methods
   // =========================================================================
