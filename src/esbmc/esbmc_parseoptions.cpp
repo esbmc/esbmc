@@ -1301,6 +1301,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // For pytest test generation
   pytest_generator pytest_gen;
 
+  // For ctest test generation
+  ctest_generator ctest_gen;
+
   if (k_step_base >= max_k_step)
   {
     log_error(
@@ -1334,7 +1337,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
             options,
             goto_functions.reached_claims,
             goto_functions.reached_mul_claims,
-            pytest_gen);
+            pytest_gen,
+            ctest_gen);
         return 0;
       }
 
@@ -1350,7 +1354,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
               options,
               goto_functions.reached_claims,
               goto_functions.reached_mul_claims,
-              pytest_gen);
+              pytest_gen,
+              ctest_gen);
           return 0;
         }
       }
@@ -1386,7 +1391,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
             options,
             goto_functions.reached_claims,
             goto_functions.reached_mul_claims,
-            pytest_gen);
+            pytest_gen,
+            ctest_gen);
         return 0;
       }
     }
@@ -1406,7 +1412,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
       options,
       goto_functions.reached_claims,
       goto_functions.reached_mul_claims,
-      pytest_gen);
+      pytest_gen,
+      ctest_gen);
   return 0;
 }
 

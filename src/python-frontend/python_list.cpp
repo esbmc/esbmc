@@ -9,6 +9,7 @@
 #include <util/expr_util.h>
 #include <util/arith_tools.h>
 #include <util/std_code.h>
+#include <util/std_expr.h>
 #include <util/mp_arith.h>
 #include <util/python_types.h>
 #include <util/symbolic_types.h>
@@ -125,11 +126,32 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 
   // For list pointers (PyListObj*), use pointer size
   typet list_type = converter_.get_type_handler().get_list_type();
-  if (elem_symbol.type == list_type)
+  // None type: store pointer directly without copying
+  // Set size to 0 so memcpy is skipped and NULL is preserved
+  if (
+    elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == bool_type())
+  {
+    elem_size = from_integer(BigInt(0), size_type());
+  }
+  // For list pointers (PyListObj*), use pointer size
+  else if (elem_symbol.type == list_type)
   {
     // This is a pointer to PyListObj: use pointer size
     const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
     elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
+  }
+  // Handle struct types (such as dictionaries): store by reference
+  else if (elem_symbol.type.is_struct())
+  {
+    // Calculate actual struct size by counting pointer-sized components
+    const struct_union_typet &struct_type =
+      to_struct_union_type(elem_symbol.type);
+
+    // For dictionary structs, each component is a pointer (keys, values)
+    size_t num_components = struct_type.components().size();
+    size_t total_size = num_components * (config.ansi_c.pointer_width() / 8);
+
+    elem_size = from_integer(BigInt(total_size), size_type());
   }
   // For string pointers (char*), calculate length at runtime using strlen
   else if (
@@ -245,6 +267,19 @@ exprt python_list::build_push_list_call(
   {
     // For string type (char*), we must pass the pointer value itself
     element_arg = symbol_expr(*elem_info.elem_symbol);
+  }
+  else if (
+    elem_info.elem_symbol->type.is_pointer() &&
+    elem_info.elem_symbol->type.subtype() == bool_type())
+  {
+    // For None type (_Bool*), pass the pointer value itself
+    // This allows direct NULL checks without dereferencing
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  }
+  else if (elem_info.elem_symbol->type.is_struct())
+  {
+    // For structs (dictionaries), pass address of the struct directly
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
   }
   else
   {
@@ -510,6 +545,73 @@ exprt python_list::build_list_at_call(
   list_at_call.location() = converter_.get_location_from_decl(element);
 
   return list_at_call;
+}
+
+exprt python_list::build_split_list(
+  python_converter &converter,
+  const nlohmann::json &call_node,
+  const std::string &input,
+  const std::string &separator,
+  long long count)
+{
+  if (separator.empty())
+    throw std::runtime_error("split() separator cannot be empty");
+
+  if (count == 0)
+  {
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    converter.copy_location_fields_from_decl(call_node, list_node);
+
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = input;
+    converter.copy_location_fields_from_decl(call_node, elem);
+    list_node["elts"].push_back(elem);
+
+    python_list list(converter, list_node);
+    return list.get();
+  }
+
+  std::vector<std::string> parts;
+  size_t start = 0;
+  long long splits = 0;
+  while (true)
+  {
+    if (count >= 0 && splits >= count)
+    {
+      parts.push_back(input.substr(start));
+      break;
+    }
+
+    size_t pos = input.find(separator, start);
+    if (pos == std::string::npos)
+    {
+      parts.push_back(input.substr(start));
+      break;
+    }
+    parts.push_back(input.substr(start, pos - start));
+    start = pos + separator.size();
+    ++splits;
+  }
+
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+  converter.copy_location_fields_from_decl(call_node, list_node);
+
+  for (const auto &part : parts)
+  {
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = part;
+    converter.copy_location_fields_from_decl(call_node, elem);
+    list_node["elts"].push_back(elem);
+  }
+
+  python_list list(converter, list_node);
+  return list.get();
 }
 
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
@@ -1164,11 +1266,13 @@ exprt python_list::handle_index_access(
       return tc;
     }
 
-    // For char* strings, the void* already contains the pointer value
+    // For char* strings and None (_Bool*), the void* already contains the pointer value
     // For all other types, the void* contains a pointer to the value
-    if (elem_type.is_pointer() && elem_type.subtype() == char_type())
+    if (
+      elem_type.is_pointer() && (elem_type.subtype() == char_type() ||
+                                 elem_type.subtype() == bool_type()))
     {
-      // String case: cast void* directly to char* (no dereference needed)
+      // String and None case: cast void* directly to the pointer type (no dereference needed)
       typecast_exprt tc(obj_value, elem_type);
       return tc;
     }
@@ -1180,6 +1284,26 @@ exprt python_list::handle_index_access(
       deref.op0() = tc;
       return deref;
     }
+  }
+
+  // Handle static string indexing with safe null fallback
+  if (array.type().is_array() && array.type().subtype() == char_type())
+  {
+    exprt idx = pos_expr;
+    if (idx.type() != size_type())
+      idx = typecast_exprt(idx, size_type());
+
+    exprt bound = to_array_type(array.type()).size();
+    if (bound.type() != size_type())
+      bound = typecast_exprt(bound, size_type());
+
+    exprt cond("<", bool_type());
+    cond.copy_to_operands(idx, bound);
+
+    index_exprt in_bounds(array, idx, char_type());
+    if_exprt result(cond, in_bounds, gen_zero(char_type()));
+    result.type() = char_type();
+    return result;
   }
 
   // Handle static arrays
@@ -1195,10 +1319,36 @@ exprt python_list::compare(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_eq");
   assert(list_eq_func_sym);
 
+  // Convert member expressions into temporary symbols
+  auto materialize_if_needed = [&](const exprt &e) -> exprt {
+    if (e.id() == "member")
+    {
+      // Extract member expression to a temporary variable
+      const member_exprt &member = to_member_expr(e);
+
+      symbolt &temp_sym = converter_.create_tmp_symbol(
+        list_value_, "$list_temp$", e.type(), exprt());
+
+      code_declt temp_decl(symbol_expr(temp_sym));
+      temp_decl.location() = converter_.get_location_from_decl(list_value_);
+      converter_.add_instruction(temp_decl);
+
+      code_assignt temp_assign(symbol_expr(temp_sym), member);
+      temp_assign.location() = converter_.get_location_from_decl(list_value_);
+      converter_.add_instruction(temp_assign);
+
+      return symbol_expr(temp_sym);
+    }
+    return e;
+  };
+
+  const exprt converted_l1 = materialize_if_needed(l1);
+  const exprt converted_l2 = materialize_if_needed(l2);
+
   const symbolt *lhs_symbol =
-    converter_.find_symbol(l1.identifier().as_string());
+    converter_.find_symbol(converted_l1.identifier().as_string());
   const symbolt *rhs_symbol =
-    converter_.find_symbol(l2.identifier().as_string());
+    converter_.find_symbol(converted_l2.identifier().as_string());
   assert(lhs_symbol);
   assert(rhs_symbol);
 
@@ -1278,6 +1428,18 @@ exprt python_list::list_repetition(
   BigInt list_size;
   exprt list_elem;
 
+  auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
+    if (
+      size_var->value.is_code() || size_var->value.is_nil() ||
+      !size_var->value.is_constant())
+    {
+      return false;
+    }
+
+    out = binary2integer(size_var->value.value().c_str(), true);
+    return true;
+  };
+
   // Get list size from lhs (e.g.: 3 * [1])
   if (lhs.type() != list_type)
   {
@@ -1286,10 +1448,14 @@ exprt python_list::list_repetition(
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(lhs).get_identifier().as_string());
       assert(size_var);
-      list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
+      symbolt *list_symbol =
+        converter_.find_symbol(rhs.identifier().as_string());
+      assert(list_symbol);
+      if (!parse_size_from_symbol(size_var, list_size))
+        return create_vla(list_value_, list_symbol, size_var, list_elem);
     }
     else if (lhs.is_constant())
-      list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
+      list_size = binary2integer(lhs.value().c_str(), true);
 
     // List element is the rhs
     list_elem = converter_.get_expr(right_node["elts"][0]);
@@ -1312,15 +1478,11 @@ exprt python_list::list_repetition(
         converter_.find_symbol(lhs.identifier().as_string());
       assert(list_symbol);
 
-      if (size_var->value.is_code() || size_var->value.is_nil())
-      {
+      if (!parse_size_from_symbol(size_var, list_size))
         return create_vla(list_value_, list_symbol, size_var, list_elem);
-      }
-
-      list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
     }
     else if (rhs.is_constant())
-      list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
+      list_size = binary2integer(rhs.value().c_str(), true);
   }
 
   symbolt *list_symbol = converter_.find_symbol(lhs.identifier().as_string());

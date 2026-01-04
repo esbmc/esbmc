@@ -71,6 +71,23 @@ public:
     const exprt &rhs,
     const nlohmann::json &element);
 
+  /**
+   * @brief Handle set operations (difference, intersection, union)
+   * Entry point for all set binary operations
+   * @param converter Reference to python_converter
+   * @param op Operation type ("Sub", "BitAnd", "BitOr")
+   * @param lhs Left operand
+   * @param rhs Right operand
+   * @param element JSON element with location info
+   * @return Expression representing the result set, or nil_exprt if not a set operation
+   */
+  static exprt handle_operations(
+    python_converter &converter,
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
 private:
   /**
    * @brief Create an internal list representation for the set

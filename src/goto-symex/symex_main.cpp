@@ -987,7 +987,9 @@ void goto_symext::run_intrinsic(
   }
 
   // PythonList methods
-  if (has_prefix(symname, "c:@F@__ESBMC_list"))
+  if (
+    has_prefix(symname, "c:@F@__ESBMC_list") ||
+    has_prefix(symname, "c:@F@__ESBMC_dict"))
   {
     bump_call(func_call, symname);
     return;

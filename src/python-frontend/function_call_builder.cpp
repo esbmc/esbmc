@@ -2,12 +2,75 @@
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy_call_expr.h>
+#include <python-frontend/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
+#include <util/message.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+
+bool function_call_builder::is_nondet_str_call(const nlohmann::json &node) const
+{
+  return node.contains("_type") && node["_type"] == "Call" &&
+         node.contains("func") && node["func"].contains("_type") &&
+         node["func"]["_type"] == "Name" && node["func"].contains("id") &&
+         node["func"]["id"] == "nondet_str";
+}
+
+bool function_call_builder::is_symbolic_string(const nlohmann::json &node) const
+{
+  if (is_nondet_str_call(node))
+    return true;
+
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  {
+    const std::string var_name = node["id"].get<std::string>();
+    nlohmann::json var_value = json_utils::get_var_value(
+      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
+
+    if (
+      !var_value.empty() && var_value.contains("value") &&
+      is_nondet_str_call(var_value["value"]))
+      return true;
+  }
+
+  return false;
+}
+
+bool function_call_builder::extract_constant_integer(
+  const nlohmann::json &node,
+  long long &value) const
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_number_integer())
+  {
+    value = node["value"].get<long long>();
+    return true;
+  }
+
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  {
+    const std::string var_name = node["id"].get<std::string>();
+    nlohmann::json var_value = json_utils::get_var_value(
+      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
+
+    if (
+      !var_value.empty() && var_value.contains("value") &&
+      var_value["value"].contains("_type") &&
+      var_value["value"]["_type"] == "Constant" &&
+      var_value["value"].contains("value") &&
+      var_value["value"]["value"].is_number_integer())
+    {
+      value = var_value["value"]["value"].get<long long>();
+      return true;
+    }
+  }
+
+  return false;
+}
 
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
@@ -189,6 +252,8 @@ symbol_id function_call_builder::build_function_id() const
     else if (func_json["value"]["_type"] == "Call")
     {
       obj_name = func_json["value"]["func"]["id"];
+      if (obj_name == "nondet_str")
+        obj_name = "str";
       if (obj_name == "super")
       {
         symbolt *base_class_func = converter_.find_function_in_base_classes(
@@ -452,8 +517,39 @@ exprt function_call_builder::build() const
     const auto &arg = call_["args"][0];
     exprt obj_expr = converter_.get_expr(arg);
 
-    // Get the keys member from the dictionary struct
-    typet keys_type = pointer_typet(struct_typet()); // Type of the keys pointer
+    // Check actual type: could be dict or list (e.g., from d.keys())
+    typet actual_type = obj_expr.type();
+    if (actual_type.is_pointer())
+      actual_type = actual_type.subtype();
+    if (actual_type.id() == "symbol")
+      actual_type = converter_.ns.follow(actual_type);
+
+    // If it's actually a list, call list_size directly
+    if (actual_type.is_struct())
+    {
+      const struct_typet &struct_type = to_struct_type(actual_type);
+      std::string tag = struct_type.tag().as_string();
+      if (tag.find("__ESBMC_PyListObj") != std::string::npos)
+      {
+        // It's a list, not a dict: call list_size on it directly
+        code_typet list_size_type;
+        list_size_type.return_type() = size_type();
+        code_typet::argumentt arg_type;
+        arg_type.type() = pointer_typet(struct_type);
+        list_size_type.arguments().push_back(arg_type);
+
+        symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
+
+        side_effect_expr_function_callt call_expr(size_type());
+        call_expr.function() = list_size_func;
+        call_expr.arguments().push_back(obj_expr);
+
+        return call_expr;
+      }
+    }
+
+    // It's genuinely a dict: get the keys member
+    typet keys_type = pointer_typet(struct_typet());
     member_exprt keys_member(obj_expr, "keys", keys_type);
 
     // Create the list_get_size function symbol
@@ -648,6 +744,45 @@ exprt function_call_builder::build() const
 
       locationt loc = converter_.get_location_from_decl(call_);
       return converter_.get_string_handler().handle_string_strip(obj_expr, loc);
+    }
+
+    if (method_name == "split")
+    {
+      if (call_["args"].size() != 1 && call_["args"].size() != 2)
+        throw std::runtime_error(
+          "split() requires one or two arguments in minimal support");
+
+      std::string separator;
+      if (!string_handler::extract_constant_string(
+            call_["args"][0], converter_, separator))
+      {
+        throw std::runtime_error(
+          "split() only supports constant string separators in minimal "
+          "support");
+      }
+
+      long long count = -1;
+      if (call_["args"].size() == 2)
+      {
+        if (!extract_constant_integer(call_["args"][1], count))
+        {
+          throw std::runtime_error(
+            "split() only supports constant count in minimal support");
+        }
+      }
+
+      std::string input;
+      if (!string_handler::extract_constant_string(
+            call_["func"]["value"], converter_, input))
+      {
+        if (is_symbolic_string(call_["func"]["value"]))
+          log_error("Unsupported symbolic string in split()");
+        throw std::runtime_error(
+          "split() only supports constant string inputs in minimal support");
+      }
+
+      return python_list::build_split_list(
+        converter_, call_, input, separator, count);
     }
   }
 

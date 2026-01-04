@@ -19,6 +19,7 @@
 #include <util/c_types.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
+#include <util/irep.h>
 #include <util/message.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
@@ -791,12 +792,33 @@ exprt python_converter::handle_none_comparison(
   const bool rhs_is_none = (rhs.type() == none_type());
 
   // Only handle actual None comparisons
-  // If neither side is None, this is NOT a None comparison
   if (!lhs_is_none && !rhs_is_none)
     return exprt();
 
-  // Handle None == None and None != None
-  // Create isnone expression
+  // If one side is None and the other is a different type (e.g., int, str)
+  // Handle type mismatch comparison
+  if (lhs_is_none != rhs_is_none)
+  {
+    // Check if the non-None side is a different type
+    const exprt &non_none = lhs_is_none ? rhs : lhs;
+
+    // If comparing with a constant integer, string, or other non-None constant
+    // exclude pointer to array (strings), as they could be Optional[str] parameters
+    if (
+      non_none.is_constant() && (!non_none.type().is_pointer() ||
+                                 (non_none.type().is_pointer() &&
+                                  non_none.type().subtype() != bool_type() &&
+                                  non_none.type().subtype() != empty_typet() &&
+                                  !non_none.type().subtype().is_array())))
+    {
+      // None is never equal to non-None constant values
+      // For == or is: return False
+      // For != or is not: return True
+      return gen_boolean(!is_eq);
+    }
+  }
+
+  // Create isnone expression with unwrapped operands
   exprt isnone_expr("isnone", typet("bool"));
   isnone_expr.copy_to_operands(lhs);
   isnone_expr.copy_to_operands(rhs);
@@ -1281,7 +1303,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     (op == "Sub" || op == "BitAnd" || op == "BitOr"))
   {
     exprt set_result =
-      handle_set_operations(op, lhs, rhs, left, right, element);
+      python_set::handle_operations(*this, op, lhs, rhs, element);
     if (!set_result.is_nil())
       return set_result;
   }
@@ -1301,6 +1323,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     exprt result = handle_array_operations(op, lhs, rhs, left, right, element);
     if (!result.is_nil())
       return result;
+  }
+
+  // Handle dictionary comparison
+  if (
+    lhs.type().is_struct() && rhs.type().is_struct() &&
+    dict_handler_->is_dict_type(lhs.type()) &&
+    dict_handler_->is_dict_type(rhs.type()) && (op == "Eq" || op == "NotEq"))
+  {
+    return dict_handler_->compare(lhs, rhs, op);
   }
 
   // Handle list operations
@@ -1702,18 +1733,62 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     type = type_handler_.get_typet(var_type);
   }
 
-  exprt unary_expr(
-    map_operator(element["op"]["_type"].get<std::string>(), type), type);
-
-  // get subexpr
+  // Get the operand expression
   exprt unary_sub = get_expr(element["operand"]);
+
+  // Handle 'not' operator on dictionary types: convert to emptiness check
+  std::string op = element["op"]["_type"].get<std::string>();
+  if (op == "Not" && dict_handler_->is_dict_type(unary_sub.type()))
+  {
+    if (!current_block)
+      throw std::runtime_error(
+        "Dictionary truthiness check requires a statement context");
+
+    locationt location = get_location_from_decl(element);
+    typet list_type = type_handler_.get_list_type();
+
+    // Get dict.keys member
+    member_exprt keys_member(unary_sub, "keys", list_type);
+
+    // Find __ESBMC_list_size function
+    const symbolt *size_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error(
+        "__ESBMC_list_size not found for dict truthiness check");
+
+    // Create temporary variable to store the size result
+    symbolt &size_result = create_tmp_symbol(
+      element, "$dict_size$", size_type(), gen_zero(size_type()));
+    code_declt size_decl(symbol_expr(size_result));
+    size_decl.location() = location;
+    current_block->copy_to_operands(size_decl);
+
+    // Call __ESBMC_list_size(dict.keys)
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.lhs() = symbol_expr(size_result);
+    size_call.arguments().push_back(keys_member);
+    size_call.type() = size_type();
+    size_call.location() = location;
+    current_block->copy_to_operands(size_call);
+
+    // Return comparison: size == 0 (empty dict is truthy for 'not')
+    exprt is_empty("=", bool_type());
+    is_empty.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+    is_empty.location() = location;
+
+    return is_empty;
+  }
+
+  exprt unary_expr(map_operator(op, type), type);
   unary_expr.operands().push_back(unary_sub);
 
   return unary_expr;
 }
 
 locationt
-python_converter::get_location_from_decl(const nlohmann::json &ast_node)
+python_converter::get_location_from_decl(const nlohmann::json &ast_node) const
 {
   locationt location;
   if (ast_node.contains("lineno"))
@@ -1725,6 +1800,25 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
   location.set_file(current_python_file.c_str());
   location.set_function(current_func_name_);
   return location;
+}
+
+void python_converter::copy_location_fields_from_decl(
+  const nlohmann::json &from,
+  nlohmann::json &to) const
+{
+  const locationt loc = get_location_from_decl(from);
+  const std::string line = id2string(loc.get_line());
+  if (!line.empty())
+    to["lineno"] = std::stoi(line);
+
+  const std::string column = id2string(loc.get_column());
+  if (!column.empty())
+    to["col_offset"] = std::stoi(column);
+
+  if (from.contains("end_lineno"))
+    to["end_lineno"] = from["end_lineno"];
+  if (from.contains("end_col_offset"))
+    to["end_col_offset"] = from["end_col_offset"];
 }
 
 symbolt *python_converter::find_function_in_base_classes(
@@ -1881,6 +1975,26 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
+
+  // Handle dict.keys() and dict.values() methods
+  if (element["func"]["_type"] == "Attribute")
+  {
+    const std::string &method_name = element["func"]["attr"].get<std::string>();
+
+    if (method_name == "keys" || method_name == "values")
+    {
+      exprt obj_expr = get_expr(element["func"]["value"]);
+
+      // Check if this is a dict type
+      if (dict_handler_->is_dict_type(obj_expr.type()))
+      {
+        // Return the keys or values member directly
+        typet list_type = type_handler_.get_list_type();
+        member_exprt member(obj_expr, method_name, list_type);
+        return member;
+      }
+    }
+  }
 
   // Handle str.join() method calls
   // Python syntax: separator.join(iterable), e.g., " ".join(["a", "b"])
@@ -3425,92 +3539,6 @@ void python_converter::handle_list_literal_unpacking(
   }
 }
 
-bool python_converter::handle_dict_subscript_assignment(
-  const nlohmann::json &ast_node,
-  const nlohmann::json &target,
-  codet &target_block)
-{
-  if (target["_type"] != "Subscript")
-    return false;
-
-  exprt container_expr = get_expr(target["value"]);
-  typet container_type = container_expr.type();
-
-  if (container_expr.is_symbol())
-  {
-    const symbolt *sym = symbol_table_.find_symbol(container_expr.identifier());
-    if (sym)
-      container_type = sym->type;
-  }
-
-  if (container_type.id() == "symbol")
-    container_type = ns.follow(container_type);
-
-  if (!dict_handler_->is_dict_type(container_type))
-    return false;
-
-  // Handle dict[key] = value assignment
-  is_converting_rhs = true;
-  exprt rhs = get_expr(ast_node["value"]);
-  is_converting_rhs = false;
-
-  dict_handler_->handle_dict_subscript_assign(
-    container_expr, target["slice"], rhs, target_block);
-  return true;
-}
-
-bool python_converter::handle_dict_literal_assignment(
-  const nlohmann::json &ast_node,
-  const exprt &lhs)
-{
-  if (!ast_node.contains("value") || ast_node["value"].is_null())
-    return false;
-
-  if (!dict_handler_->is_dict_literal(ast_node["value"]))
-    return false;
-
-  dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
-  current_lhs = nullptr;
-  return true;
-}
-
-bool python_converter::handle_unannotated_dict_literal(
-  const nlohmann::json &ast_node,
-  const nlohmann::json &target,
-  const symbol_id &sid)
-{
-  if (!ast_node.contains("value") || !ast_node["value"].contains("_type"))
-    return false;
-
-  if (!dict_handler_->is_dict_literal(ast_node["value"]))
-    return false;
-
-  locationt location = get_location_from_decl(target);
-  std::string module_name = location.get_file().as_string();
-  std::string name;
-
-  if (target["_type"] == "Name")
-    name = target["id"].get<std::string>();
-  else if (target["_type"] == "Attribute")
-    name = target["attr"].get<std::string>();
-
-  symbolt symbol = create_symbol(
-    module_name,
-    name,
-    sid.to_string(),
-    location,
-    dict_handler_->get_dict_struct_type());
-  symbol.lvalue = true;
-  symbol.file_local = true;
-  symbol.is_extern = false;
-  symbolt *lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
-
-  exprt lhs = create_lhs_expression(target, lhs_symbol, location);
-  dict_handler_->create_dict_from_literal(ast_node["value"], lhs);
-  current_lhs = nullptr;
-  return true;
-}
-
 exprt python_converter::get_rhs_with_dict_resolution(
   const nlohmann::json &ast_node,
   const typet &target_type)
@@ -3864,7 +3892,8 @@ void python_converter::get_var_assign(
   }
 
   // Handle dict subscript assignment: dict[key] = value
-  if (handle_dict_subscript_assignment(ast_node, target, target_block))
+  if (dict_handler_->handle_subscript_assignment_check(
+        *this, ast_node, target, target_block))
     return;
 
   if (ast_node["_type"] == "AnnAssign")
@@ -3992,7 +4021,7 @@ void python_converter::get_var_assign(
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
 
     // Handle dict literal assignment specially - after LHS is created
-    if (handle_dict_literal_assignment(ast_node, lhs))
+    if (dict_handler_->handle_literal_assignment_check(*this, ast_node, lhs))
     {
       if (type_assertions_enabled() && can_emit_annotation_check)
         get_typechecker().emit_type_annotation_assertion(
@@ -4022,7 +4051,9 @@ void python_converter::get_var_assign(
     bool is_global = is_global_variable(sid);
 
     // Handle unannotated dict literal assignment
-    if (!lhs_symbol && handle_unannotated_dict_literal(ast_node, target, sid))
+    if (
+      !lhs_symbol && dict_handler_->handle_unannotated_literal_check(
+                       *this, ast_node, target, sid))
       return;
 
     // Create symbol for unannotated assignments with inferrable types
@@ -6105,6 +6136,46 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         break;
       }
 
+      // Convert dictionary to boolean (truthiness check)
+      if (dict_handler_->is_dict_type(test.type()))
+      {
+        locationt location = get_location_from_decl(element);
+        typet list_type = type_handler_.get_list_type();
+
+        // Get dict.keys member
+        member_exprt keys_member(test, "keys", list_type);
+
+        // Find __ESBMC_list_size function
+        const symbolt *size_func =
+          symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+        if (!size_func)
+          throw std::runtime_error(
+            "__ESBMC_list_size not found for dict truthiness check");
+
+        // Create temporary variable to store the size result
+        symbolt &size_result = create_tmp_symbol(
+          element, "$dict_size$", size_type(), gen_zero(size_type()));
+        code_declt size_decl(symbol_expr(size_result));
+        size_decl.location() = location;
+        block.copy_to_operands(size_decl);
+
+        // Call __ESBMC_list_size(dict.keys)
+        code_function_callt size_call;
+        size_call.function() = symbol_expr(*size_func);
+        size_call.lhs() = symbol_expr(size_result);
+        size_call.arguments().push_back(keys_member);
+        size_call.type() = size_type();
+        size_call.location() = location;
+        block.copy_to_operands(size_call);
+
+        // Replace test with: size != 0 (non-empty dict is truthy)
+        exprt is_not_empty("notequal", bool_type());
+        is_not_empty.copy_to_operands(
+          symbol_expr(size_result), gen_zero(size_type()));
+        is_not_empty.location() = location;
+        test = is_not_empty;
+      }
+
       // Attach assertion message if present
       auto attach_assert_message = [&element](code_assertt &assert_code) {
         if (element.contains("msg") && !element["msg"].is_null())
@@ -7105,66 +7176,4 @@ void python_converter::get_delete_statement(
         target["_type"].get<std::string>());
     }
   }
-}
-
-exprt python_converter::handle_set_operations(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs,
-  const nlohmann::json & /* left */,
-  const nlohmann::json & /* right */,
-  const nlohmann::json &element)
-{
-  typet list_type = type_handler_.get_list_type();
-
-  // Ensure both operands are lists (sets are represented as lists)
-  if (lhs.type() != list_type || rhs.type() != list_type)
-    return nil_exprt();
-
-  // Resolve function calls to temporary variables
-  auto resolve_list_call = [&](exprt &expr) -> bool {
-    if (
-      expr.id().as_string() != "sideeffect" ||
-      expr.get("statement") != "function_call" || expr.type() != list_type)
-      return false;
-
-    locationt location = get_location_from_decl(element);
-
-    // Create temporary variable for the list
-    symbolt &tmp_var_symbol =
-      create_tmp_symbol(element, "tmp_set_op", list_type, gen_zero(list_type));
-
-    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
-    tmp_var_decl.location() = location;
-    current_block->copy_to_operands(tmp_var_decl);
-
-    side_effect_expr_function_callt &side_effect =
-      to_side_effect_expr_function_call(expr);
-
-    code_function_callt call;
-    call.function() = side_effect.function();
-    call.arguments() = side_effect.arguments();
-    call.lhs() = symbol_expr(tmp_var_symbol);
-    call.type() = list_type;
-    call.location() = location;
-
-    current_block->copy_to_operands(call);
-    expr = symbol_expr(tmp_var_symbol);
-    return true;
-  };
-
-  resolve_list_call(lhs);
-  resolve_list_call(rhs);
-
-  python_set set_handler(*this, element);
-
-  // Map Python set operations to internal functions
-  if (op == "Sub") // Set difference: a - b
-    return set_handler.build_set_difference_call(lhs, rhs, element);
-  else if (op == "BitAnd") // Set intersection: a & b
-    return set_handler.build_set_intersection_call(lhs, rhs, element);
-  else if (op == "BitOr") // Set union: a | b
-    return set_handler.build_set_union_call(lhs, rhs, element);
-
-  return nil_exprt();
 }
