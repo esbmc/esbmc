@@ -5852,10 +5852,36 @@ void python_converter::get_return_statements(
     {
       code_function_callt &call =
         static_cast<code_function_callt &>(return_value);
-      call.arguments().emplace(
-        call.arguments().begin(), gen_address_of(temp_var_expr));
-      update_instance_from_self(
-        func_name, func_name, temp_var_expr.identifier().as_string());
+      
+      // Check if self parameter was already added by handle_general_function_call
+      // (for standalone calls like Positive(2))
+      bool self_already_added = false;
+      if (!call.arguments().empty())
+      {
+        const exprt &first_arg = call.arguments()[0];
+        if (first_arg.is_address_of() && first_arg.op0().is_symbol())
+        {
+          const std::string &arg_id = first_arg.op0().identifier().as_string();
+          // If first arg is a temp var created by handle_general_function_call,
+          // self was already added, so we should replace it with return_value temp var
+          if (arg_id.find("$ctor_self$") != std::string::npos)
+          {
+            // Replace the temp self with return_value temp var
+            call.arguments()[0] = gen_address_of(temp_var_expr);
+            self_already_added = true;
+            update_instance_from_self(
+              func_name, func_name, temp_var_expr.identifier().as_string());
+          }
+        }
+      }
+      
+      if (!self_already_added)
+      {
+        call.arguments().emplace(
+          call.arguments().begin(), gen_address_of(temp_var_expr));
+        update_instance_from_self(
+          func_name, func_name, temp_var_expr.identifier().as_string());
+      }
     }
 
     // Add the function call statement to the block

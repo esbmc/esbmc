@@ -2449,10 +2449,21 @@ exprt function_call_expr::handle_general_function_call()
   if (function_type_ == FunctionType::Constructor)
   {
     call.type() = type_handler_.get_typet(func_symbol->name.as_string());
+    
     // Self is the LHS
     if (converter_.current_lhs)
+    {
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
-    param_offset = 1;
+      param_offset = 1;
+    }
+    else
+    {
+      // For constructor calls without assignment, delay creating temp var
+      // get_return_statements() will handle return statements, we only handle
+      // standalone calls (e.g., Positive(2))
+      // Self parameter will be added later if needed (see end of function)
+      param_offset = 1;
+    }
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
@@ -2768,6 +2779,13 @@ exprt function_call_expr::handle_general_function_call()
     provided_params[i + param_offset] = true;
   }
 
+  // For constructors, ensure self parameter is marked as provided
+  // (self is always implicitly provided for constructors)
+  if (function_type_ == FunctionType::Constructor && total_params > 0)
+  {
+    provided_params[0] = true; // self parameter is always implicitly provided
+  }
+
   // Mark keyword arguments as provided
   if (call_.contains("keywords") && call_["keywords"].is_array())
   {
@@ -2878,6 +2896,33 @@ exprt function_call_expr::handle_general_function_call()
 
         return exception;
       }
+    }
+  }
+
+  // For constructors without current_lhs, create temp var and add self if needed
+  // Note: get_return_statements() will handle return statements separately
+  if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
+  {
+    size_t num_provided_args = call_["args"].size();
+    
+    // Only add self if arguments size matches user args (no self added yet)
+    if (call.arguments().size() == num_provided_args)
+    {
+      // Self parameter not added yet - this is a standalone call (e.g., Positive(2))
+      // Create temporary object as self parameter
+      typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
+      symbolt &temp_self = converter_.create_tmp_symbol(
+        call_, "$ctor_self$", class_type, exprt());
+      converter_.symbol_table().add(temp_self);
+
+      // Add declaration for temporary object
+      code_declt temp_decl(symbol_expr(temp_self));
+      temp_decl.location() = location;
+      converter_.current_block->copy_to_operands(temp_decl);
+
+      // Insert self as first argument
+      call.arguments().insert(
+        call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
     }
   }
 
