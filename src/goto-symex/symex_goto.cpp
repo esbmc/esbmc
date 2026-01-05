@@ -57,7 +57,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   if (
     options.get_option("witness-output-yaml") != "" && forward &&
-    !is_constant(old_guard) && !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
+    !is_constant(old_guard) &&
+    !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
   {
     target->branching(
       cur_state->guard.as_expr(),
