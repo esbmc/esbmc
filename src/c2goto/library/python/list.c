@@ -154,8 +154,26 @@ bool __ESBMC_list_eq(const PyListObject *l1, const PyListObject *l2)
       continue;
 
     if (
-      !a->value || !b->value || a->type_id != b->type_id ||
-      a->size != b->size || memcmp(a->value, b->value, a->size) != 0)
+      !a->value || !b->value || a->type_id != b->type_id || a->size != b->size)
+      return false;
+
+    const PyListObject *nested_a = *(const PyListObject **)a->value;
+    const PyListObject *nested_b = *(const PyListObject **)b->value;
+
+    if (nested_a != NULL && nested_b != NULL)
+    {
+      bool a_is_list = (nested_a->type == &__ESBMC_list_type);
+      bool b_is_list = (nested_b->type == &__ESBMC_list_type);
+
+      if (a_is_list && b_is_list)
+      {
+        if (!__ESBMC_list_eq(nested_a, nested_b))
+          return false;
+        continue;
+      }
+    }
+
+    if (memcmp(a->value, b->value, a->size) != 0)
       return false;
   }
   return true;
