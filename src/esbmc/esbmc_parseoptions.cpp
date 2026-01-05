@@ -2678,26 +2678,32 @@ void esbmc_parseoptionst::process_function_contracts(
     return result;
   };
 
-  // Process enforce-contract option
-  if (has_enforce)
-  {
-    std::set<std::string> to_enforce;
-    const std::list<std::string> &enforce_list =
-      cmdline.get_values("enforce-contract");
-
-    for (const auto &func : enforce_list)
+  // Lambda function to process function list (handles "*" wildcard)
+  auto process_function_list = [&collect_functions_with_contracts](
+                                 const std::list<std::string> &func_list) {
+    std::set<std::string> result;
+    for (const auto &func : func_list)
     {
       if (func == "*")
       {
-        // Enforce contracts for all functions with contracts
-        to_enforce = collect_functions_with_contracts();
+        // "*" means all functions with contracts
+        result = collect_functions_with_contracts();
         break; // "*" means all, so we can break after collecting
       }
       else
       {
-        to_enforce.insert(func);
+        result.insert(func);
       }
     }
+    return result;
+  };
+
+  // Process enforce-contract option
+  if (has_enforce)
+  {
+    const std::list<std::string> &enforce_list =
+      cmdline.get_values("enforce-contract");
+    std::set<std::string> to_enforce = process_function_list(enforce_list);
 
     if (!to_enforce.empty())
     {
@@ -2709,23 +2715,9 @@ void esbmc_parseoptionst::process_function_contracts(
   // Process replace-call-with-contract option
   if (has_replace)
   {
-    std::set<std::string> to_replace;
     const std::list<std::string> &replace_list =
       cmdline.get_values("replace-call-with-contract");
-
-    for (const auto &func : replace_list)
-    {
-      if (func == "*")
-      {
-        // Replace calls for all functions with contracts
-        to_replace = collect_functions_with_contracts();
-        break; // "*" means all, so we can break after collecting
-      }
-      else
-      {
-        to_replace.insert(func);
-      }
-    }
+    std::set<std::string> to_replace = process_function_list(replace_list);
 
     if (!to_replace.empty())
     {
