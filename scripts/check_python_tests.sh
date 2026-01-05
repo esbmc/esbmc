@@ -96,7 +96,6 @@ ignored_dirs=(
   "incremental-smt-assert-pass"
   "type-annotation-check"
   "type-annotation-generics-fail"
-  "string-split-no-args_fail"
 )
 
 for dir in */; do
