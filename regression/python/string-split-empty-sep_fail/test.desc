@@ -1,0 +1,3 @@
+CORE
+main.py
+^ERROR: split\(\) separator cannot be empty$
