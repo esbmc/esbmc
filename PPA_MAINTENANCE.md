@@ -148,7 +148,7 @@ dpkg-source --commit
 # Enter patch name (e.g., fix-new-issue)
 ```
 
-3. The patch will be automatically added to `debian/patches/series`
+3. The patch will be automatically added to `debian/patches/series`.
 
 ### Modifying an Existing Patch
 

@@ -29,6 +29,13 @@ public:
   {
   }
 
+  static exprt build_split_list(
+    python_converter &converter,
+    const nlohmann::json &call_node,
+    const std::string &input,
+    const std::string &separator,
+    long long count);
+
   exprt get();
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
@@ -95,6 +102,13 @@ public:
    */
   static typet
   get_list_element_type(const std::string &list_id, size_t index = 0);
+
+  /**
+   * @brief Convert generator expressions and list comprehensions to lists
+   * @param element The GeneratorExp or ListComp AST node
+   * @return Expression representing the materialized list
+   */
+  exprt handle_comprehension(const nlohmann::json &element);
 
 private:
   friend class python_dict_handler;

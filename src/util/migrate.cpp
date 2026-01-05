@@ -492,6 +492,19 @@ convert_operand_pair(const exprt &expr, expr2tc &arg1, expr2tc &arg2)
   migrate_expr(expr.op1(), arg2);
 }
 
+static bool handle_introspection_expr(const exprt &expr, expr2tc &new_expr_ref)
+{
+  if (expr.id() == "isinstance" || expr.id() == "hasattr")
+  {
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    new_expr_ref = expr.id() == "isinstance" ? isinstance2tc(op0, op1)
+                                             : hasattr2tc(op0, op1);
+    return true;
+  }
+  return false;
+}
+
 expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
 {
   const symbolt *sym = migrate_namespace_lookup->lookup(init);
@@ -1525,17 +1538,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = races_check2tc(op0);
   }
-  else if (expr.id() == "isinstance")
-  {
-    expr2tc op0, op1;
-    convert_operand_pair(expr, op0, op1);
-    new_expr_ref = isinstance2tc(op0, op1);
-  }
   else if (expr.id() == "isnone")
   {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
     new_expr_ref = isnone2tc(op0, op1);
+  }
+  else if (handle_introspection_expr(expr, new_expr_ref))
+  {
+    // handled
   }
   else if (expr.id() == "capability_base")
   {
@@ -2895,6 +2906,14 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt back("isinstance", bool_typet());
     back.copy_to_operands(migrate_expr_back(ins.side_1));
     back.copy_to_operands(migrate_expr_back(ins.side_2));
+    return back;
+  }
+  case expr2t::hasattr_id:
+  {
+    const hasattr2t &ha = to_hasattr2t(ref);
+    exprt back("hasattr", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ha.side_1));
+    back.copy_to_operands(migrate_expr_back(ha.side_2));
     return back;
   }
   case expr2t::isnone_id:

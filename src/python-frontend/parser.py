@@ -101,14 +101,22 @@ def is_standard_library_file(filename):
         '/Library/Frameworks/Python.framework',
         '/opt/homebrew/Cellar/python',  # Homebrew Python on macOS (Apple Silicon)
         '/usr/local/Cellar/python',     # Homebrew Python on macOS (Intel)
+        '/opt/conda/lib/python',       # Conda standard installation path
     ]
+    # Check fixed paths first (no expanduser needed)
+    if any(filename.startswith(path) for path in stdlib_paths):
+        return True
     # Check pyenv paths
     pyenv_root = os.environ.get('PYENV_ROOT', os.path.expanduser('~/.pyenv'))
     if pyenv_root and filename.startswith(pyenv_root):
         # Check if it's in the versions directory (standard library location)
         if '/versions/' in filename and '/lib/python' in filename:
             return True
-    return any(filename.startswith(path) for path in stdlib_paths)
+    # Check conda paths (including user installations)
+    if filename.startswith(os.path.expanduser('~/miniconda3/lib/python')) or \
+       filename.startswith(os.path.expanduser('~/anaconda3/lib/python')):
+        return True
+    return False
 
 
 def expand_star_import(module) -> list[str] | None:

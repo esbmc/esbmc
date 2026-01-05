@@ -4,13 +4,13 @@
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 [![GitHub All Releases](https://img.shields.io/github/downloads/esbmc/esbmc/total.svg)](https://github.com/esbmc/esbmc/releases)
 
-ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker that automatically detects or proves the absence of runtime errors in single- and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. 
+ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker that automatically detects or proves the absence of runtime errors in single- and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, Rust, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. 
 
 ESBMC supports: 
 
 - The Clang compiler as its C/C++/CHERI/CUDA frontend;
 - The Soot framework via Jimple as its Java/Kotlin frontend;
-- The [ast](https://docs.python.org/3/library/ast.html) and [ast2json](https://pypi.org/project/ast2json/) modules as its [Python frontend](./src/python-frontend/README.md); the first SMT-based bounded model checker for Python programs;
+- The CPython 3.10 parser as its [Python frontend](./src/python-frontend/README.md); the first SMT-based bounded model checker for Python programs;
 - Implements the Solidity grammar production rules as its Solidity frontend;
 - Supports IEEE floating-point arithmetic for various SMT solvers.
 
@@ -24,7 +24,7 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 #### Installing via PPA (Ubuntu - Recommended)
 
-The easiest way to install ESBMC on Ubuntu is through our official [PPA](https://launchpad.net/~esbmc/+archive/ubuntu/esbmc), which provides stable releases for automatic installation:
+The easiest way to install ESBMC on Ubuntu is through our official [PPA](https://launchpad.net/~esbmc/+archive/ubuntu/esbmc), which provides releases for automatic installation:
 
 ````
 sudo add-apt-repository ppa:esbmc/esbmc
@@ -91,7 +91,7 @@ make -j4
 
 M1/M2/M3/M4 Macs are now supported.
 
-Given the common elements of OS X, run the script. It runs on both ARM and Intel macs. You do need Homebrew installed.
+Given the elements of OS X, run the script. It runs on both ARM and Intel macs. You do need Homebrew installed.
 It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script also supports building the Python frontend. Note that the Python frontend is quite early in its support for Python.
 
 ```

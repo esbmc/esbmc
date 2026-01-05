@@ -64,6 +64,8 @@ public:
     const std::string &expected_base) const;
 
 private:
+  exprt build_none_check(const exprt &value_expr) const;
+
   python_converter &converter_;
   std::unordered_map<std::string, std::vector<typet>> annotation_type_cache_;
 };

@@ -22,6 +22,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # For restore ccache
+    - uses: hendrikmuhs/ccache-action@v1.2
+      if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
+      with:
+        restore: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+        save: ${{ github.event_name == 'push' }}
+        key: ${{ inputs.operating-system }}-${{ hashFiles('**/*.cpp','**/*.h') }}
+        restore-keys: |
+          ${{ inputs.operating-system }}
+        evict-old-files: 3d
+
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }}
     - uses: actions/upload-artifact@v4

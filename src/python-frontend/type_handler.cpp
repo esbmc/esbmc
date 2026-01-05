@@ -117,14 +117,65 @@ std::string type_handler::get_var_type(const std::string &var_name) const
     return std::string();
 
   const auto &annotation = ref["annotation"];
+
+  // Handle simple type annotations: int, str, list, etc.
   if (annotation.is_object() && annotation.contains("id"))
     return annotation["id"].get<std::string>();
 
+  // Handle subscripted types: List[str], Optional[int], etc.
   if (
     annotation.is_object() && annotation.contains("_type") &&
     annotation["_type"] == "Subscript" && annotation.contains("value") &&
     annotation["value"].is_object() && annotation["value"].contains("id"))
     return annotation["value"]["id"];
+
+  // Handle Union types (e.g., list[str] | None, str | int)
+  // Union is represented as BinOp with BitOr operator
+  if (
+    annotation.is_object() && annotation.contains("_type") &&
+    annotation["_type"] == "BinOp" && annotation.contains("op") &&
+    annotation["op"]["_type"] == "BitOr")
+  {
+    // For Union types, extract the non-None type
+    // Check left side first
+    if (annotation.contains("left"))
+    {
+      const auto &left = annotation["left"];
+
+      // Skip None type on the left
+      if (!(left.contains("_type") && left["_type"] == "Constant" &&
+            left.contains("value") && left["value"].is_null()))
+      {
+        // Recursively extract type from left side
+        if (left.contains("id"))
+          return left["id"].get<std::string>();
+
+        // Handle subscripted types on left: list[str] | None
+        if (
+          left["_type"] == "Subscript" && left.contains("value") &&
+          left["value"].contains("id"))
+          return left["value"]["id"].get<std::string>();
+      }
+    }
+
+    // If left was None, check right side
+    if (annotation.contains("right"))
+    {
+      const auto &right = annotation["right"];
+
+      if (!(right.contains("_type") && right["_type"] == "Constant" &&
+            right.contains("value") && right["value"].is_null()))
+      {
+        if (right.contains("id"))
+          return right["id"].get<std::string>();
+
+        if (
+          right["_type"] == "Subscript" && right.contains("value") &&
+          right["value"].contains("id"))
+          return right["value"]["id"].get<std::string>();
+      }
+    }
+  }
 
   return std::string();
 }
@@ -326,7 +377,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // For generic "dict" without key/value types, return empty type
   // so the actual type is inferred from the dictionary literal
   if (ast_type == "dict")
-    return empty_typet();
+    return get_dict_type();
 
   // Reuse list infrastructure for simplicity for now
   if (ast_type == "set")
@@ -438,6 +489,10 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 
       return tuple_type;
     }
+
+    // Handle Dict
+    if (elem["_type"] == "Dict" && elem.contains("keys"))
+      return get_dict_type(elem);
   }
 
   if (elem.is_array())
@@ -904,4 +959,19 @@ bool type_handler::class_derives_from(
       return true;
   }
   return false;
+}
+
+const typet type_handler::get_dict_type() const
+{
+  return converter_.dict_handler_->get_dict_struct_type();
+}
+
+typet type_handler::get_dict_type(const nlohmann::json &dict_value) const
+{
+  std::string dict_str = dict_value.dump(2);
+  log_debug("type_handler", "get_dict_type - dict_value: {}", dict_str.c_str());
+
+  // For now, return the generic dict type
+  // In the future, this could infer specific key/value types
+  return get_dict_type();
 }

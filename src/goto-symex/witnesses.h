@@ -1,8 +1,13 @@
+#ifndef CPROVER_GOTO_SYMEX_WITNESSES_H
+#define CPROVER_GOTO_SYMEX_WITNESSES_H
+
 #include <boost/property_tree/xml_parser.hpp>
 #include <util/namespace.h>
 #include <irep2/irep2.h>
 #include <langapi/language_util.h>
 #include <goto-symex/goto_trace.h>
+#include <goto-symex/pytest.h>
+#include <goto-symex/ctest.h>
 #include <string>
 #include <regex>
 #include <big-int/bigint.hh>
@@ -237,3 +242,19 @@ void generate_testcase(
   const std::string &file_name,
   const symex_target_equationt &target,
   smt_convt &smt_conv);
+
+/// Helper structure for collected nondet values
+struct collected_nondet_value
+{
+  std::string symbol_name; // e.g., "nondet$symex::nondet3"
+  expr2tc value_expr;      // The concrete value expression
+  type2tc type;            // The type
+};
+
+/// Collect all nondet values from SSA
+/// Reuses generate_testcase pattern
+std::vector<collected_nondet_value> collect_nondet_values(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);
+
+#endif

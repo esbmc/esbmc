@@ -252,16 +252,36 @@ exprt function_call_expr::build_nondet_call() const
     typet char_array_type =
       array_typet(char_type(), from_integer(max_str_length, size_type()));
 
-    exprt nondet_array = exprt("sideeffect", char_array_type);
-    nondet_array.statement("nondet");
+    // Create a temporary variable to hold the nondeterministic string
+    symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
+      call_, "$nondet_str$", char_array_type, exprt());
 
+    // Declare the temporary
+    code_declt decl(symbol_expr(nondet_str_symbol));
+    decl.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(decl);
+
+    // Create nondet assignment for the array
+    exprt nondet_value("sideeffect", char_array_type);
+    nondet_value.statement("nondet");
+
+    code_assignt nondet_assign(symbol_expr(nondet_str_symbol), nondet_value);
+    nondet_assign.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(nondet_assign);
+
+    // Ensure null terminator at the last position
     exprt last_index = from_integer(max_str_length - 1, size_type());
     exprt null_char = from_integer(0, char_type());
 
-    with_exprt result(nondet_array, last_index, null_char);
-    result.type() = char_array_type;
+    index_exprt last_elem(symbol_expr(nondet_str_symbol), last_index);
+    code_assignt null_assign(last_elem, null_char);
+    null_assign.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(null_assign);
 
-    return result;
+    // Return address of first element: &arr[0] which is char*
+    index_exprt first_elem(
+      symbol_expr(nondet_str_symbol), from_integer(0, size_type()));
+    return address_of_exprt(first_elem);
   }
 
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
@@ -281,13 +301,113 @@ exprt function_call_expr::handle_isinstance() const
   const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &type_arg = args[1];
 
-  auto build_isinstance = [&](const std::string &type_name) {
-    typet expected_type = type_handler_.get_typet(type_name, 0);
-    exprt t;
-    if (expected_type.is_symbol())
+  // Extract type name from various AST node formats
+  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
+    const std::string node_type = node["_type"];
+
+    if (node_type == "Name")
     {
-      // struct type
+      // isinstance(v, int)
+      return node["id"];
+    }
+    else if (node_type == "Constant")
+    {
+      // isinstance(v, None)
+      return "NoneType";
+    }
+    else if (node_type == "Attribute")
+    {
+      // isinstance(v, MyClass.InnerClass)
+      return node["attr"];
+    }
+    else if (node_type == "Call")
+    {
+      // isinstance(v, type(None)) or isinstance(v, type(x))
+      const auto &func = node["func"];
+
+      if (func["_type"] != "Name" || func["id"] != "type")
+        throw std::runtime_error(
+          "Only type() calls are supported in isinstance()");
+
+      const auto &call_args = node["args"];
+      if (call_args.size() != 1)
+        throw std::runtime_error("type() expects exactly 1 argument");
+
+      const auto &type_call_arg = call_args[0];
+
+      // Handle type(None)
+      if (type_call_arg["_type"] == "Constant")
+      {
+        if (
+          type_call_arg["value"].is_null() ||
+          (type_call_arg.contains("value") &&
+           type_call_arg["value"] == nullptr))
+        {
+          return "NoneType";
+        }
+        throw std::runtime_error(
+          "isinstance() with type(constant) only supports type(None)");
+      }
+      else if (type_call_arg["_type"] == "Name")
+      {
+        throw std::runtime_error(
+          "isinstance() with type(variable) not yet supported - use direct "
+          "type names");
+      }
+      else
+        throw std::runtime_error(
+          "Unsupported argument to type() in isinstance()");
+    }
+    else
+      throw std::runtime_error("Unsupported type format in isinstance()");
+  };
+
+  // Build isinstance check for a given type name
+  auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    // Special case: Check if object is None (null pointer)
+    if (type_name == "NoneType")
+    {
+      // If x is not a pointer type, it can never be None
+      if (!obj_expr.type().is_pointer())
+        return gen_zero(typet("bool")); // false
+
+      // For pointer types, check if it's null
+      exprt null_ptr = gen_zero(obj_expr.type());
+      exprt equality("=", typet("bool"));
+      equality.copy_to_operands(obj_expr);
+      equality.move_to_operands(null_ptr);
+      return equality;
+    }
+
+    // Regular type checking
+    typet expected_type = type_handler_.get_typet(type_name, 0);
+    if (expected_type.is_nil())
+      throw std::runtime_error("Could not resolve type: " + type_name);
+
+    exprt t;
+
+    if (expected_type.is_pointer())
+    {
+      const pointer_typet &ptr_type = to_pointer_type(expected_type);
+      const typet &pointee_type = ptr_type.subtype();
+
+      if (pointee_type.is_symbol())
+      {
+        const symbolt *symbol = converter_.ns.lookup(pointee_type);
+        if (!symbol)
+          throw std::runtime_error(
+            "Could not find symbol for type: " + type_name);
+        t = symbol_expr(*symbol);
+      }
+      else
+        t = gen_zero(pointee_type);
+    }
+    else if (expected_type.is_symbol())
+    {
       const symbolt *symbol = converter_.ns.lookup(expected_type);
+      if (!symbol)
+        throw std::runtime_error(
+          "Could not find symbol for type: " + type_name);
       t = symbol_expr(*symbol);
     }
     else
@@ -299,55 +419,58 @@ exprt function_call_expr::handle_isinstance() const
     return isinstance;
   };
 
-  if (type_arg["_type"] == "Name")
+  // Handle tuple of types: isinstance(v, (int, str, type(None)))
+  if (type_arg["_type"] == "Tuple")
   {
-    // isinstance(v, int)
-    std::string type_name = args[1]["id"];
-    return build_isinstance(type_name);
-  }
-  else if (type_arg["_type"] == "Constant")
-  {
-    // isintance(v, None)
-    std::string type_name = "NoneType";
-    return build_isinstance(type_name);
-  }
-  else if (type_arg["_type"] == "Tuple")
-  {
-    // isinstance(v, (int, str))
-    // converted into instance(v, int) || isinstance(v, str)
     const auto &elts = type_arg["elts"];
+    if (elts.empty())
+      throw std::runtime_error("isinstance() tuple cannot be empty");
 
-    std::string first_type = elts[0]["id"];
-    exprt tupe_instance = build_isinstance(first_type);
+    // Build isinstance check for first element
+    exprt result = build_isinstance(extract_type_name(elts[0]));
 
+    // Chain OR expressions for remaining elements
     for (size_t i = 1; i < elts.size(); ++i)
     {
-      if (elts[i]["_type"] != "Name")
-        throw std::runtime_error("Unsupported type in isinstance()");
-
-      std::string type_name = elts[i]["id"];
-      exprt next_isinstance = build_isinstance(type_name);
+      exprt next_check = build_isinstance(extract_type_name(elts[i]));
 
       exprt or_expr("or", typet("bool"));
-      or_expr.move_to_operands(tupe_instance);
-      or_expr.move_to_operands(next_isinstance);
-      tupe_instance = or_expr;
+      or_expr.move_to_operands(result);
+      or_expr.move_to_operands(next_check);
+      result = or_expr;
     }
 
-    return tupe_instance;
+    return result;
   }
-  else
-    throw std::runtime_error("Unsupported type format in isinstance()");
+
+  // Handle single type: isinstance(v, int) or isinstance(v, type(None))
+  return build_isinstance(extract_type_name(type_arg));
 }
 
 exprt function_call_expr::handle_hasattr() const
 {
   const auto &args = call_["args"];
-  symbol_id sid = converter_.create_symbol_id();
-  sid.set_object(args[0]["id"]);
-  bool has_attr = converter_.is_instance_attribute(
-    sid.to_string(), args[1]["value"], sid.get_object(), "");
-  return gen_boolean(has_attr);
+  if (args.size() != 2)
+    throw std::runtime_error("hasattr() takes exactly 2 arguments");
+
+  const exprt &obj_expr = converter_.get_expr(args[0]);
+  const auto &attr_arg = args[1];
+
+  if (
+    attr_arg["_type"] != "Constant" || !attr_arg.contains("value") ||
+    !attr_arg["value"].is_string())
+    throw std::runtime_error(
+      "hasattr() expects attribute name as string literal");
+
+  std::string attr_name = attr_arg["value"].get<std::string>();
+  typet attr_type = array_typet(
+    unsigned_char_type(), from_integer(attr_name.size() + 1, size_type()));
+  string_constantt attr_expr(attr_name, attr_type, string_constantt::k_default);
+
+  exprt hasattr("hasattr", typet("bool"));
+  hasattr.copy_to_operands(obj_expr);
+  hasattr.move_to_operands(attr_expr);
+  return hasattr;
 }
 
 exprt function_call_expr::handle_divmod() const
@@ -1569,6 +1692,42 @@ exprt function_call_expr::handle_list_pop() const
   return deref_value;
 }
 
+bool function_call_expr::is_dict_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+
+  // Check if this is a known dict method
+  return method_name == "get";
+}
+
+exprt function_call_expr::handle_dict_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+
+  if (method_name == "get")
+  {
+    // Get the dict object
+    std::string dict_name = get_object_name();
+
+    symbol_id dict_symbol_id = converter_.create_symbol_id();
+    dict_symbol_id.set_object(dict_name);
+    const symbolt *dict_symbol =
+      converter_.find_symbol(dict_symbol_id.to_string());
+
+    if (!dict_symbol)
+      throw std::runtime_error("Dictionary variable not found: " + dict_name);
+
+    // Delegate to dict handler
+    return converter_.get_dict_handler()->handle_dict_get(
+      symbol_expr(*dict_symbol), call_);
+  }
+
+  throw std::runtime_error("Unsupported dict method: " + method_name);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1624,6 +1783,22 @@ exprt function_call_expr::handle_list_append() const
 
   // Get the value to append
   exprt value_to_append = converter_.get_expr(args[0]);
+
+  if (
+    value_to_append.type().is_array() &&
+    value_to_append.type().subtype() == char_type())
+  {
+    const array_typet &array_type = to_array_type(value_to_append.type());
+    // Only convert single-element char arrays (string literals)
+    if (array_type.size().is_constant())
+    {
+      const constant_exprt &size_const = to_constant_expr(array_type.size());
+      BigInt size_value = binary2integer(size_const.value().c_str(), false);
+      if (size_value == 1)
+        value_to_append.type() = gen_pointer_type(char_type());
+    }
+  }
+
   if (value_to_append.is_constant())
   {
     // Create tmp variable to hold value
@@ -1856,6 +2031,11 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_list_method_call(); },
      [this]() { return handle_list_method(); },
      "list methods"},
+
+    // Dict methods
+    {[this]() { return is_dict_method_call(); },
+     [this]() { return handle_dict_method(); },
+     "dict methods"},
 
     // Math module functions
     {[this]() {
@@ -2365,6 +2545,47 @@ exprt function_call_expr::handle_general_function_call()
     {
       const typet &param_type = params[param_idx].type();
 
+      // Handle character-to-string-pointer conversion
+      if (
+        param_type.is_pointer() && param_type.subtype() == char_type() &&
+        (arg.type().is_signedbv() || arg.type().is_unsignedbv()) &&
+        arg.type() == char_type())
+      {
+        // Create a single-element array to hold the character
+        typet char_array_type =
+          array_typet(char_type(), from_integer(2, size_type()));
+
+        // Create a temporary variable to hold the array
+        symbolt &temp_symbol = converter_.create_tmp_symbol(
+          call_,
+          "$char_to_str$",
+          char_array_type,
+          exprt()); // No initial value here
+
+        // Declare the temporary in the current block
+        code_declt temp_decl(symbol_expr(temp_symbol));
+        temp_decl.location() = location;
+        converter_.current_block->copy_to_operands(temp_decl);
+
+        // Assign the character to the first element
+        exprt temp_array = symbol_expr(temp_symbol);
+        exprt first_element =
+          index_exprt(temp_array, from_integer(0, size_type()));
+        code_assignt assign_char(first_element, arg);
+        assign_char.location() = location;
+        converter_.current_block->copy_to_operands(assign_char);
+
+        // Assign null terminator to the second element
+        exprt second_element =
+          index_exprt(temp_array, from_integer(1, size_type()));
+        code_assignt assign_null(second_element, from_integer(0, char_type()));
+        assign_null.location() = location;
+        converter_.current_block->copy_to_operands(assign_null);
+
+        // Take address of the temporary variable
+        arg = address_of_exprt(symbol_expr(temp_symbol));
+      }
+
       // Check if parameter is an Optional type
       if (param_type.is_struct())
       {
@@ -2536,37 +2757,113 @@ exprt function_call_expr::handle_general_function_call()
     }
   }
 
-  // First, check if all required (non-default) parameters are provided
-  if (!skip_validation)
+  // Check which parameters are already provided (by position or keyword)
+  // and fill missing parameters with default values
+  std::vector<bool> provided_params(total_params, false);
+
+  // Mark positional arguments as provided
+  for (size_t i = 0; i < num_actual_args && (i + param_offset) < total_params;
+       ++i)
   {
-    for (size_t param_idx = param_offset; param_idx < total_params; ++param_idx)
+    provided_params[i + param_offset] = true;
+  }
+
+  // Mark keyword arguments as provided
+  if (call_.contains("keywords") && call_["keywords"].is_array())
+  {
+    for (const auto &kw : call_["keywords"])
     {
-      const auto &param_info = params[param_idx];
-      size_t arg_position = param_idx - param_offset;
-
-      // Check if this parameter was provided (either positionally or by keyword)
-      bool provided = arg_position < num_actual_args;
-
-      // Check if provided as keyword argument
-      if (
-        !provided && call_.contains("keywords") && call_["keywords"].is_array())
+      if (kw.contains("arg") && !kw["arg"].is_null())
       {
-        std::string param_name = param_info.get_base_name().as_string();
-        for (const auto &kw : call_["keywords"])
+        std::string kw_name = kw["arg"].get<std::string>();
+        for (size_t i = 0; i < params.size(); ++i)
         {
-          if (
-            kw.contains("arg") && !kw["arg"].is_null() &&
-            kw["arg"].get<std::string>() == param_name)
+          if (params[i].get_base_name().as_string() == kw_name)
           {
-            provided = true;
+            provided_params[i] = true;
             break;
           }
         }
       }
+    }
+  }
 
-      // If not provided and has no default, it's an error
-      if (!provided && !param_info.has_default_value())
+  // Validate required parameters and fill missing parameters with default values
+  for (size_t param_idx = param_offset; param_idx < total_params; ++param_idx)
+  {
+    if (!provided_params[param_idx])
+    {
+      const auto &param_info = params[param_idx];
+
+      // Check if parameter has a default value
+      if (param_info.has_default_value())
       {
+        exprt default_val = param_info.default_value();
+
+        // Handle string default values: ensure they are properly initialized
+        // Check if default value is a string array type
+        if (
+          default_val.type().is_array() &&
+          default_val.type().subtype() == char_type())
+        {
+          // For constant string arrays, convert to string_constantt to ensure
+          // proper initialization
+          if (default_val.is_constant() || default_val.id() == "constant")
+          {
+            // Use existing string extraction utility
+            std::string str_content =
+              converter_.get_string_handler()
+                .extract_string_from_array_operands(default_val);
+
+            // Create string_constantt with proper type
+            if (!str_content.empty() || default_val.operands().empty())
+            {
+              typet string_type = default_val.type();
+              default_val = string_constantt(
+                str_content, string_type, string_constantt::k_default);
+            }
+          }
+        }
+
+        // Handle Optional types: wrap default in Optional if needed
+        if (param_info.type().is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(param_info.type());
+          std::string tag = struct_type.tag().as_string();
+
+          if (tag.starts_with("tag-Optional_"))
+            default_val =
+              converter_.wrap_in_optional(default_val, param_info.type());
+        }
+
+        // Convert array to pointer if parameter type is pointer
+        // This matches the behavior for positional arguments (line 2470-2480)
+        const typet &param_type = param_info.type();
+        if (default_val.type().is_array() && param_type.is_pointer())
+        {
+          // For string constants, use address_of
+          if (default_val.id() == "string-constant")
+          {
+            default_val = address_of_exprt(default_val);
+          }
+          else
+          {
+            // For regular arrays, get base address
+            default_val =
+              converter_.get_string_handler().get_array_base_address(
+                default_val);
+          }
+        }
+
+        // Ensure arguments vector is large enough
+        if (call.arguments().size() <= param_idx)
+          call.arguments().resize(param_idx + 1);
+
+        call.arguments()[param_idx] = default_val;
+      }
+      else if (!skip_validation)
+      {
+        // Parameter is missing and has no default value - this is an error
         std::string param_name = param_info.get_base_name().as_string();
         std::string func_name = function_id_.get_function();
 
@@ -2580,43 +2877,6 @@ exprt function_call_expr::handle_general_function_call()
         exception.location().user_provided(true);
 
         return exception;
-      }
-    }
-  }
-
-  // Add default arguments for missing optional parameters
-  // BUT: only do this if there are no keywords in the call.
-  // When keywords are present, handle_keywords() will properly fill in
-  // missing arguments with correct Optional wrapping.
-  bool has_keywords = call_.contains("keywords") &&
-                      call_["keywords"].is_array() &&
-                      !call_["keywords"].empty();
-
-  if (!has_keywords)
-  {
-    for (size_t param_idx = num_provided_args + param_offset;
-         param_idx < total_params;
-         ++param_idx)
-    {
-      const auto &param_info = params[param_idx];
-
-      // Check if parameter has a default value
-      if (param_info.has_default_value())
-      {
-        exprt default_val = param_info.default_value();
-
-        // Handle Optional types: wrap default in Optional if needed
-        if (param_info.type().is_struct())
-        {
-          const struct_typet &struct_type = to_struct_type(param_info.type());
-          std::string tag = struct_type.tag().as_string();
-
-          if (tag.starts_with("tag-Optional_"))
-            default_val =
-              converter_.wrap_in_optional(default_val, param_info.type());
-        }
-
-        call.arguments().push_back(default_val);
       }
     }
   }
