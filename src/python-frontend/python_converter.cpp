@@ -1,6 +1,7 @@
 #include <python-frontend/char_utils.h>
 #include <python-frontend/convert_float_literal.h>
 #include <python-frontend/function_call_builder.h>
+#include <python-frontend/function_call_expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/python_annotation.h>
@@ -5861,65 +5862,16 @@ void python_converter::get_return_statements(
       code_function_callt &call =
         static_cast<code_function_callt &>(return_value);
       
-      // Check if self parameter was already added by handle_general_function_call
-      // (for standalone calls like Positive(2))
-      bool self_already_added = false;
-      
-      // Check if any argument contains $ctor_self$
-      for (const auto &arg : call.arguments())
-      {
-        if (arg.is_address_of() && arg.op0().is_symbol())
-        {
-          const std::string &arg_id = arg.op0().identifier().as_string();
-          if (arg_id.find("$ctor_self$") != std::string::npos)
-          {
-            self_already_added = true;
-            break;
-          }
-        }
-      }
-      
-      if (self_already_added)
-      {
-        // Rebuild arguments list completely: remove all $ctor_self$ parameters
-        exprt::operandst new_args;
-        new_args.push_back(gen_address_of(temp_var_expr)); // Add correct self first
-        
-        // Traverse all arguments, skip all $ctor_self$ arguments
-        for (size_t i = 0; i < call.arguments().size(); ++i)
-        {
-          const exprt &arg = call.arguments()[i];
-          bool is_ctor_self = false;
-          
-          if (arg.is_address_of() && arg.op0().is_symbol())
-          {
-            const std::string &arg_id = arg.op0().identifier().as_string();
-            if (arg_id.find("$ctor_self$") != std::string::npos)
-            {
-              is_ctor_self = true; // Skip all $ctor_self$ arguments
-            }
-          }
-          
-          if (!is_ctor_self)
-          {
-            new_args.push_back(arg);
-          }
-        }
-        
-        // Completely replace arguments list
-        call.arguments() = new_args;
-        
-        update_instance_from_self(
-          func_name, func_name, temp_var_expr.identifier().as_string());
-      }
-      else
-      {
-        // No $ctor_self$ found, add self parameter
-        call.arguments().emplace(
-          call.arguments().begin(), gen_address_of(temp_var_expr));
-        update_instance_from_self(
-          func_name, func_name, temp_var_expr.identifier().as_string());
-      }
+      // Strip any temporary $ctor_self$ parameters and add correct self
+      exprt::operandst filtered_args =
+        function_call_expr::strip_ctor_self_parameters(call.arguments());
+      exprt::operandst new_args;
+      new_args.push_back(gen_address_of(temp_var_expr));
+      for (const auto &arg : filtered_args)
+        new_args.push_back(arg);
+      call.arguments() = new_args;
+      update_instance_from_self(
+        func_name, func_name, temp_var_expr.identifier().as_string());
     }
 
     // Add the function call statement to the block

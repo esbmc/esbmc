@@ -2462,6 +2462,7 @@ exprt function_call_expr::handle_general_function_call()
       // get_return_statements() will handle return statements, we only handle
       // standalone calls (e.g., Positive(2))
       // Self parameter will be added later if needed (see end of function)
+      // param_offset is 1 because first user arg maps to param[1] (skipping self)
       param_offset = 1;
     }
   }
@@ -2686,35 +2687,14 @@ exprt function_call_expr::handle_general_function_call()
         }
       }
 
-      // For constructors used as arguments, remove $ctor_self$ arguments
-      // goto_sideeffects will create the return value variable and add the correct this parameter
+      // Strip temporary $ctor_self$ parameters when constructors are used as
+      // arguments (e.g., foo(Positive(2))). goto_sideeffects will add the
+      // correct self parameter later.
       if (is_constructor)
       {
-        // Rebuild arguments list: remove all $ctor_self$ arguments
-        // goto_sideeffects will add the correct this parameter when converting
-        exprt::operandst new_args;
-        
-        // Traverse all arguments, skip all $ctor_self$ arguments
-        for (const auto &operand : args_expr.operands())
-        {
-          bool is_ctor_self = false;
-          
-          if (operand.is_address_of() && operand.op0().is_symbol())
-          {
-            const std::string &arg_id = operand.op0().identifier().as_string();
-            if (arg_id.find("$ctor_self$") != std::string::npos)
-            {
-              is_ctor_self = true; // Skip all $ctor_self$ arguments
-            }
-          }
-          
-          if (!is_ctor_self)
-          {
-            new_args.push_back(operand);
-          }
-        }
-        
-        func_call.arguments() = new_args;
+        exprt::operandst temp_args(args_expr.operands().begin(),
+                                    args_expr.operands().end());
+        func_call.arguments() = strip_ctor_self_parameters(temp_args);
       }
       else
       {
@@ -2818,11 +2798,10 @@ exprt function_call_expr::handle_general_function_call()
     provided_params[i + param_offset] = true;
   }
 
-  // For constructors, ensure self parameter is marked as provided
-  // (self is always implicitly provided for constructors)
+  // For constructors, self is always implicitly provided
   if (function_type_ == FunctionType::Constructor && total_params > 0)
   {
-    provided_params[0] = true; // self parameter is always implicitly provided
+    provided_params[0] = true;
   }
 
   // Mark keyword arguments as provided
@@ -2962,14 +2941,35 @@ exprt function_call_expr::handle_general_function_call()
       // Insert self as first argument
       call.arguments().insert(
         call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
-      log_error(
-        "handle_general_function_call: Added $ctor_self$ at position 0, "
-        "total args: {}",
-        call.arguments().size());
     }
   }
 
   return call;
+}
+
+exprt::operandst function_call_expr::strip_ctor_self_parameters(
+  const exprt::operandst &args)
+{
+  exprt::operandst new_args;
+  for (const auto &arg : args)
+  {
+    bool is_ctor_self = false;
+    if (
+      arg.is_address_of() && !arg.operands().empty() &&
+      arg.op0().is_symbol())
+    {
+      const std::string &arg_id = arg.op0().identifier().as_string();
+      if (arg_id.find("$ctor_self$") != std::string::npos)
+      {
+        is_ctor_self = true;
+      }
+    }
+    if (!is_ctor_self)
+    {
+      new_args.push_back(arg);
+    }
+  }
+  return new_args;
 }
 
 exprt function_call_expr::gen_exception_raise(
