@@ -178,7 +178,8 @@ expr2tc code_contractst::extract_ensures_clause(const symbolt &contract_symbol)
   // TODO: Implement proper separation of requires and ensures from contract symbol
   // Currently, we extract ensures clauses from function body instead
   // This function is used for contract replacement mode which is not fully implemented yet
-  log_warning("extract_ensures_clause from contract symbol not fully implemented");
+  log_warning(
+    "extract_ensures_clause from contract symbol not fully implemented");
   return gen_true_expr();
 }
 
