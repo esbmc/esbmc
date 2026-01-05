@@ -46,6 +46,15 @@
 
 /// \brief Basic contract handling class
 /// Provides contract checking and replacement functionality at goto function level
+///
+/// Function contracts are specifications that describe the behavior of functions.
+/// They consist of:
+/// - Preconditions (requires): conditions that must hold when the function is called
+/// - Postconditions (ensures): conditions that must hold when the function returns
+/// - Assigns clauses: memory locations that the function may modify
+///
+/// Contracts enable modular verification by allowing functions to be verified
+/// independently and then used as abstractions in system-level verification.
 class code_contractst
 {
 public:

@@ -2043,8 +2043,10 @@ bool esbmc_parseoptionst::process_goto_program(
     goto_check(ns, options, goto_functions);
 
     // Process function contracts if enabled
-    if (process_function_contracts(options, goto_functions))
-      return true;
+    bool has_enforce = cmdline.isset("enforce-contract");
+    bool has_replace = cmdline.isset("replace-call-with-contract");
+    if (has_enforce || has_replace)
+      process_function_contracts(goto_functions, has_replace, has_enforce);
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
@@ -2649,19 +2651,35 @@ void esbmc_parseoptionst::print_ileave_points(
 }
 
 // Process function contracts if enabled
-bool esbmc_parseoptionst::process_function_contracts(
-  [[maybe_unused]] optionst &options,
-  goto_functionst &goto_functions)
+void esbmc_parseoptionst::process_function_contracts(
+  goto_functionst &goto_functions,
+  bool has_replace,
+  bool has_enforce)
 {
-  // Only process contracts if explicitly requested
-  bool has_enforce = cmdline.isset("enforce-contract");
-  bool has_replace = cmdline.isset("replace-call-with-contract");
-
-  if (!has_enforce && !has_replace)
-    return false; // No contract processing requested
-
   namespacet ns(context);
   code_contractst contracts(goto_functions, context, ns);
+
+  // Lambda function to collect all functions with contracts
+  // TODO: Consider adding a field in goto_functions to track this
+  auto collect_functions_with_contracts = [&contracts, &goto_functions]() {
+    std::set<std::string> result;
+    forall_goto_functions (it, goto_functions)
+    {
+      if (
+        it->second.body_available &&
+        contracts.has_contracts(it->second.body))
+      {
+        std::string func_name = id2string(it->first);
+        // Skip compiler-generated functions
+        if (
+          func_name.find("~") == 0 ||
+          func_name.find("#") != std::string::npos)
+          continue;
+        result.insert(func_name);
+      }
+    }
+    return result;
+  };
 
   // Process enforce-contract option
   if (has_enforce)
@@ -2675,22 +2693,7 @@ bool esbmc_parseoptionst::process_function_contracts(
       if (func == "*")
       {
         // Enforce contracts for all functions with contracts
-        // We'll collect them by scanning all functions
-        forall_goto_functions (it, goto_functions)
-        {
-          if (
-            it->second.body_available &&
-            contracts.has_contracts(it->second.body))
-          {
-            std::string func_name = id2string(it->first);
-            // Skip compiler-generated functions
-            if (
-              func_name.find("~") == 0 ||
-              func_name.find("#") != std::string::npos)
-              continue;
-            to_enforce.insert(func_name);
-          }
-        }
+        to_enforce = collect_functions_with_contracts();
         break; // "*" means all, so we can break after collecting
       }
       else
@@ -2718,22 +2721,7 @@ bool esbmc_parseoptionst::process_function_contracts(
       if (func == "*")
       {
         // Replace calls for all functions with contracts
-        // We'll collect them by scanning all functions
-        forall_goto_functions (it, goto_functions)
-        {
-          if (
-            it->second.body_available &&
-            contracts.has_contracts(it->second.body))
-          {
-            std::string func_name = id2string(it->first);
-            // Skip compiler-generated functions
-            if (
-              func_name.find("~") == 0 ||
-              func_name.find("#") != std::string::npos)
-              continue;
-            to_replace.insert(func_name);
-          }
-        }
+        to_replace = collect_functions_with_contracts();
         break; // "*" means all, so we can break after collecting
       }
       else
@@ -2749,8 +2737,6 @@ bool esbmc_parseoptionst::process_function_contracts(
       contracts.replace_calls(to_replace);
     }
   }
-
-  return false; // Continue processing
 }
 
 // This prints the ESBMC version and a list of CMD options
