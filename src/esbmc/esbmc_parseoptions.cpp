@@ -2665,15 +2665,12 @@ void esbmc_parseoptionst::process_function_contracts(
     std::set<std::string> result;
     forall_goto_functions (it, goto_functions)
     {
-      if (
-        it->second.body_available &&
-        contracts.has_contracts(it->second.body))
+      if (it->second.body_available && contracts.has_contracts(it->second.body))
       {
         std::string func_name = id2string(it->first);
         // Skip compiler-generated functions
         if (
-          func_name.find("~") == 0 ||
-          func_name.find("#") != std::string::npos)
+          func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
           continue;
         result.insert(func_name);
       }
