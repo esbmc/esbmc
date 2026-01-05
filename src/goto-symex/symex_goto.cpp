@@ -55,6 +55,18 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool forward =
     cur_state->source.pc->location_number < goto_target->location_number;
 
+  if (
+    options.get_option("witness-output-yaml") != "" && forward &&
+    !is_constant(old_guard) && !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
+  {
+    target->branching(
+      cur_state->guard.as_expr(),
+      new_guard,
+      cur_state->source,
+      cur_state->top().hidden,
+      first_loop);
+  }
+
   if (new_guard_false)
   {
     // reset unwinding counter
@@ -71,14 +83,6 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     cur_state->source.pc++;
     return; // nothing to do
   }
-
-  if (options.get_option("witness-output-yaml") != "")
-    target->branching(
-      cur_state->guard.as_expr(),
-      new_guard,
-      cur_state->source,
-      cur_state->top().hidden,
-      first_loop);
 
   assert(!instruction.targets.empty());
 
