@@ -5800,7 +5800,11 @@ void python_converter::get_return_statements(
   locationt location = get_location_from_decl(ast_node);
 
   // Check if return value is a function call
-  if (return_value.is_function_call() && ast_node["value"]["_type"] == "Call")
+  // get_function_call() returns code_function_callt (code statement), not side_effect_expr_function_callt
+  bool is_func_call = return_value.is_code() && 
+                      return_value.get("statement") == "function_call";
+  
+  if (is_func_call && ast_node["value"]["_type"] == "Call")
   {
     // Extract function name for temporary variable naming
     std::string func_name;
@@ -5843,12 +5847,16 @@ void python_converter::get_return_statements(
     temp_decl.location() = location;
     target_block.copy_to_operands(temp_decl);
 
-    // Set the LHS of the function call to our temporary variable
-    if (!return_type.is_empty())
+    // If a constructor is being invoked, the temporary variable is passed as 'self'
+    // For constructors, we don't set LHS because they modify the object through
+    // the first parameter (self), not through LHS
+    bool is_constructor = type_handler_.is_constructor_call(ast_node["value"]);
+    
+    // Set the LHS of the function call to our temporary variable (only for non-constructors)
+    if (!return_type.is_empty() && !is_constructor)
       return_value.op0() = temp_var_expr;
 
-    // If a constructor is being invoked, the temporary variable is passed as 'self'
-    if (type_handler_.is_constructor_call(ast_node["value"]))
+    if (is_constructor)
     {
       code_function_callt &call =
         static_cast<code_function_callt &>(return_value);
@@ -5856,27 +5864,57 @@ void python_converter::get_return_statements(
       // Check if self parameter was already added by handle_general_function_call
       // (for standalone calls like Positive(2))
       bool self_already_added = false;
-      if (!call.arguments().empty())
+      
+      // Check if any argument contains $ctor_self$
+      for (const auto &arg : call.arguments())
       {
-        const exprt &first_arg = call.arguments()[0];
-        if (first_arg.is_address_of() && first_arg.op0().is_symbol())
+        if (arg.is_address_of() && arg.op0().is_symbol())
         {
-          const std::string &arg_id = first_arg.op0().identifier().as_string();
-          // If first arg is a temp var created by handle_general_function_call,
-          // self was already added, so we should replace it with return_value temp var
+          const std::string &arg_id = arg.op0().identifier().as_string();
           if (arg_id.find("$ctor_self$") != std::string::npos)
           {
-            // Replace the temp self with return_value temp var
-            call.arguments()[0] = gen_address_of(temp_var_expr);
             self_already_added = true;
-            update_instance_from_self(
-              func_name, func_name, temp_var_expr.identifier().as_string());
+            break;
           }
         }
       }
       
-      if (!self_already_added)
+      if (self_already_added)
       {
+        // Rebuild arguments list completely: remove all $ctor_self$ parameters
+        exprt::operandst new_args;
+        new_args.push_back(gen_address_of(temp_var_expr)); // Add correct self first
+        
+        // Traverse all arguments, skip all $ctor_self$ arguments
+        for (size_t i = 0; i < call.arguments().size(); ++i)
+        {
+          const exprt &arg = call.arguments()[i];
+          bool is_ctor_self = false;
+          
+          if (arg.is_address_of() && arg.op0().is_symbol())
+          {
+            const std::string &arg_id = arg.op0().identifier().as_string();
+            if (arg_id.find("$ctor_self$") != std::string::npos)
+            {
+              is_ctor_self = true; // Skip all $ctor_self$ arguments
+            }
+          }
+          
+          if (!is_ctor_self)
+          {
+            new_args.push_back(arg);
+          }
+        }
+        
+        // Completely replace arguments list
+        call.arguments() = new_args;
+        
+        update_instance_from_self(
+          func_name, func_name, temp_var_expr.identifier().as_string());
+      }
+      else
+      {
+        // No $ctor_self$ found, add self parameter
         call.arguments().emplace(
           call.arguments().begin(), gen_address_of(temp_var_expr));
         update_instance_from_self(

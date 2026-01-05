@@ -2658,11 +2658,12 @@ exprt function_call_expr::handle_general_function_call()
 
       // Handle the arguments - op2() is an arguments expression containing operands
       const exprt &args_expr = to_code(arg).op2();
-      for (const auto &operand : args_expr.operands())
-        func_call.arguments().push_back(operand);
-
+      
       // Set the type to the return type of the function
       const exprt &func_expr = arg.op1();
+      bool is_constructor = false;
+      typet return_type;
+      
       if (func_expr.is_symbol())
       {
         const symbolt *func_symbol =
@@ -2670,11 +2671,12 @@ exprt function_call_expr::handle_general_function_call()
         if (func_symbol != nullptr)
         {
           const code_typet &func_type = to_code_type(func_symbol->type);
-          typet return_type = func_type.return_type();
+          return_type = func_type.return_type();
 
           // Special handling for constructors
           if (return_type.id() == "constructor")
           {
+            is_constructor = true;
             // For constructors, use the class type instead of "constructor"
             return_type =
               type_handler_.get_typet(func_symbol->name.as_string());
@@ -2682,6 +2684,43 @@ exprt function_call_expr::handle_general_function_call()
 
           func_call.type() = return_type;
         }
+      }
+
+      // For constructors used as arguments, remove $ctor_self$ arguments
+      // goto_sideeffects will create the return value variable and add the correct this parameter
+      if (is_constructor)
+      {
+        // Rebuild arguments list: remove all $ctor_self$ arguments
+        // goto_sideeffects will add the correct this parameter when converting
+        exprt::operandst new_args;
+        
+        // Traverse all arguments, skip all $ctor_self$ arguments
+        for (const auto &operand : args_expr.operands())
+        {
+          bool is_ctor_self = false;
+          
+          if (operand.is_address_of() && operand.op0().is_symbol())
+          {
+            const std::string &arg_id = operand.op0().identifier().as_string();
+            if (arg_id.find("$ctor_self$") != std::string::npos)
+            {
+              is_ctor_self = true; // Skip all $ctor_self$ arguments
+            }
+          }
+          
+          if (!is_ctor_self)
+          {
+            new_args.push_back(operand);
+          }
+        }
+        
+        func_call.arguments() = new_args;
+      }
+      else
+      {
+        // For non-constructors, just copy arguments
+        for (const auto &operand : args_expr.operands())
+          func_call.arguments().push_back(operand);
       }
 
       // Use the side effect expression as the argument
@@ -2923,6 +2962,10 @@ exprt function_call_expr::handle_general_function_call()
       // Insert self as first argument
       call.arguments().insert(
         call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
+      log_error(
+        "handle_general_function_call: Added $ctor_self$ at position 0, "
+        "total args: {}",
+        call.arguments().size());
     }
   }
 
