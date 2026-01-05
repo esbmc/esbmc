@@ -40,39 +40,6 @@ bool function_call_builder::is_symbolic_string(const nlohmann::json &node) const
   return false;
 }
 
-bool function_call_builder::extract_constant_integer(
-  const nlohmann::json &node,
-  long long &value) const
-{
-  if (
-    node.contains("_type") && node["_type"] == "Constant" &&
-    node.contains("value") && node["value"].is_number_integer())
-  {
-    value = node["value"].get<long long>();
-    return true;
-  }
-
-  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
-  {
-    const std::string var_name = node["id"].get<std::string>();
-    nlohmann::json var_value = json_utils::get_var_value(
-      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
-
-    if (
-      !var_value.empty() && var_value.contains("value") &&
-      var_value["value"].contains("_type") &&
-      var_value["value"]["_type"] == "Constant" &&
-      var_value["value"].contains("value") &&
-      var_value["value"]["value"].is_number_integer())
-    {
-      value = var_value["value"]["value"].get<long long>();
-      return true;
-    }
-  }
-
-  return false;
-}
-
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
@@ -747,6 +714,44 @@ exprt function_call_builder::build() const
       return converter_.get_string_handler().handle_string_strip(obj_expr, loc);
     }
 
+    if (method_name == "replace")
+    {
+      if (call_["args"].size() != 2 && call_["args"].size() != 3)
+        throw std::runtime_error(
+          "replace() requires two or three arguments in minimal support");
+
+      if (is_symbolic_string(call_["func"]["value"]))
+      {
+        log_error("Unsupported symbolic string in replace()");
+        throw std::runtime_error(
+          "replace() only supports constant string inputs in minimal support");
+      }
+
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      exprt old_arg = converter_.get_expr(call_["args"][0]);
+      exprt new_arg = converter_.get_expr(call_["args"][1]);
+
+      exprt count_expr = from_integer(-1, int_type());
+      if (call_["args"].size() == 3)
+      {
+        long long count_value = 0;
+        if (!json_utils::extract_constant_integer(
+              call_["args"][2],
+              converter_.get_current_func_name(),
+              converter_.get_ast_json(),
+              count_value))
+        {
+          throw std::runtime_error(
+            "replace() only supports constant count in minimal support");
+        }
+        count_expr = from_integer(count_value, int_type());
+      }
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_replace(
+        obj_expr, old_arg, new_arg, count_expr, loc);
+    }
+
     if (method_name == "split")
     {
       if (call_["args"].size() != 1 && call_["args"].size() != 2)
@@ -765,7 +770,11 @@ exprt function_call_builder::build() const
       long long count = -1;
       if (call_["args"].size() == 2)
       {
-        if (!extract_constant_integer(call_["args"][1], count))
+        if (!json_utils::extract_constant_integer(
+              call_["args"][1],
+              converter_.get_current_func_name(),
+              converter_.get_ast_json(),
+              count))
         {
           throw std::runtime_error(
             "split() only supports constant count in minimal support");

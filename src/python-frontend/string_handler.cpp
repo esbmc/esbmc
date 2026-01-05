@@ -1285,6 +1285,46 @@ exprt string_handler::handle_string_find(
   return find_call;
 }
 
+exprt string_handler::handle_string_replace(
+  const exprt &string_obj,
+  const exprt &old_arg,
+  const exprt &new_arg,
+  const exprt &count_arg,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr =
+    str_expr.type().is_pointer() ? str_expr : get_array_base_address(str_expr);
+
+  exprt old_copy = old_arg;
+  exprt old_expr = ensure_null_terminated_string(old_copy);
+  exprt old_addr =
+    old_expr.type().is_pointer() ? old_expr : get_array_base_address(old_expr);
+
+  exprt new_copy = new_arg;
+  exprt new_expr = ensure_null_terminated_string(new_copy);
+  exprt new_addr =
+    new_expr.type().is_pointer() ? new_expr : get_array_base_address(new_expr);
+
+  std::string func_symbol_id = ensure_string_function_symbol(
+    "__python_str_replace",
+    pointer_typet(char_type()),
+    {pointer_typet(char_type()),
+     pointer_typet(char_type()),
+     pointer_typet(char_type()),
+     int_type()},
+    location);
+
+  side_effect_expr_function_callt replace_call;
+  replace_call.function() = symbol_exprt(func_symbol_id, code_typet());
+  replace_call.arguments() = {str_addr, old_addr, new_addr, count_arg};
+  replace_call.location() = location;
+  replace_call.type() = pointer_typet(char_type());
+
+  return replace_call;
+}
+
 bool string_handler::extract_constant_string(
   const nlohmann::json &node,
   python_converter &converter,

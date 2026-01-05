@@ -249,6 +249,77 @@ __ESBMC_HIDE:;
   return -1;
 }
 
+char *__python_str_replace(
+  const char *s,
+  const char *old_sub,
+  const char *new_sub,
+  int count)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  if (!old_sub || !new_sub)
+    return (char *)s;
+
+  if (count == 0)
+    return (char *)s;
+
+  if (old_sub[0] == '\0')
+  {
+    __ESBMC_assert(
+      0, "replace() with empty pattern not supported in minimal support");
+    return (char *)s;
+  }
+
+  char *buffer = __ESBMC_alloca(512);
+  int pos = 0;
+  int i = 0;
+  int remaining = count;
+  int old_len = strlen(old_sub);
+  int new_len = strlen(new_sub);
+
+  while (s[i] != '\0')
+  {
+    if ((remaining != 0) && strncmp(s + i, old_sub, old_len) == 0)
+    {
+      int j = 0;
+      while (j < new_len && pos < 511)
+      {
+        buffer[pos] = new_sub[j];
+        pos++;
+        j++;
+      }
+
+      if (j != new_len)
+      {
+        __ESBMC_assert(
+          0, "String replace overflow - result exceeds 511 characters");
+        break;
+      }
+
+      i += old_len;
+      if (remaining > 0)
+        remaining--;
+      continue;
+    }
+
+    if (pos >= 511)
+    {
+      __ESBMC_assert(
+        0, "String replace overflow - result exceeds 511 characters");
+      break;
+    }
+
+    buffer[pos] = s[i];
+    pos++;
+    i++;
+  }
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
 // Python int() builtin - converts string to integer
 int __python_int(const char *s, int base)
 {
