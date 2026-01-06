@@ -2449,7 +2449,7 @@ exprt function_call_expr::handle_general_function_call()
   if (function_type_ == FunctionType::Constructor)
   {
     call.type() = type_handler_.get_typet(func_symbol->name.as_string());
-    
+
     // Self is the LHS
     if (converter_.current_lhs)
     {
@@ -2659,12 +2659,12 @@ exprt function_call_expr::handle_general_function_call()
 
       // Handle the arguments - op2() is an arguments expression containing operands
       const exprt &args_expr = to_code(arg).op2();
-      
+
       // Set the type to the return type of the function
       const exprt &func_expr = arg.op1();
       bool is_constructor = false;
       typet return_type;
-      
+
       if (func_expr.is_symbol())
       {
         const symbolt *func_symbol =
@@ -2692,8 +2692,8 @@ exprt function_call_expr::handle_general_function_call()
       // correct self parameter later.
       if (is_constructor)
       {
-        exprt::operandst temp_args(args_expr.operands().begin(),
-                                    args_expr.operands().end());
+        exprt::operandst temp_args(
+          args_expr.operands().begin(), args_expr.operands().end());
         func_call.arguments() = strip_ctor_self_parameters(temp_args);
       }
       else
@@ -2922,15 +2922,15 @@ exprt function_call_expr::handle_general_function_call()
   if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
   {
     size_t num_provided_args = call_["args"].size();
-    
+
     // Only add self if arguments size matches user args (no self added yet)
     if (call.arguments().size() == num_provided_args)
     {
       // Self parameter not added yet - this is a standalone call (e.g., Positive(2))
       // Create temporary object as self parameter
       typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
-      symbolt &temp_self = converter_.create_tmp_symbol(
-        call_, "$ctor_self$", class_type, exprt());
+      symbolt &temp_self =
+        converter_.create_tmp_symbol(call_, "$ctor_self$", class_type, exprt());
       converter_.symbol_table().add(temp_self);
 
       // Add declaration for temporary object
@@ -2947,16 +2947,14 @@ exprt function_call_expr::handle_general_function_call()
   return call;
 }
 
-exprt::operandst function_call_expr::strip_ctor_self_parameters(
-  const exprt::operandst &args)
+exprt::operandst
+function_call_expr::strip_ctor_self_parameters(const exprt::operandst &args)
 {
   exprt::operandst new_args;
   for (const auto &arg : args)
   {
     bool is_ctor_self = false;
-    if (
-      arg.is_address_of() && !arg.operands().empty() &&
-      arg.op0().is_symbol())
+    if (arg.is_address_of() && !arg.operands().empty() && arg.op0().is_symbol())
     {
       const std::string &arg_id = arg.op0().identifier().as_string();
       if (arg_id.find("$ctor_self$") != std::string::npos)
