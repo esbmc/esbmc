@@ -104,6 +104,43 @@ __ESBMC_HIDE:;
   return s;
 }
 
+// Python string rstrip: removes trailing whitespace characters
+const char *__python_str_rstrip(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return s;
+
+  const char *start = s;
+  const char *end = start;
+
+  while (*end)
+  {
+    end++;
+  }
+
+  while (end > start &&
+         (*(end - 1) == ' ' || *(end - 1) == '\t' || *(end - 1) == '\n' ||
+          *(end - 1) == '\v' || *(end - 1) == '\f' || *(end - 1) == '\r'))
+  {
+    end--;
+  }
+
+  size_t len = (size_t)(end - start);
+  char *buffer = __ESBMC_alloca(len + 1);
+
+  size_t i = 0;
+  while (i < len)
+  {
+    buffer[i] = start[i];
+    ++i;
+  }
+
+  buffer[len] = '\0';
+
+  return buffer;
+}
+
 // Python string strip: removes leading and trailing whitespace characters
 const char *__python_str_strip(const char *s)
 {
