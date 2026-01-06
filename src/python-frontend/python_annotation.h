@@ -342,6 +342,47 @@ private:
   {
     if (arg["_type"] == "Constant")
       return get_type_from_constant(arg);
+    else if (arg["_type"] == "Subscript")
+    {
+      // Handle subscripts like tokens[0]; try to derive element type from the
+      // container annotation.
+      const auto &val = arg["value"];
+      if (val["_type"] == "Name")
+      {
+        std::string var_name = val["id"].template get<std::string>();
+        Json var_node =
+          json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+        if (
+          !var_node.empty() && var_node.contains("annotation") &&
+          !var_node["annotation"].is_null())
+        {
+          const auto &annot = var_node["annotation"];
+          // list[T] -> return T
+          if (
+            annot.contains("_type") && annot["_type"] == "Subscript" &&
+            annot.contains("value") && annot["value"].contains("id") &&
+            annot["value"]["id"] == "list")
+          {
+            if (annot.contains("slice"))
+            {
+              const auto &slice = annot["slice"];
+              if (slice.contains("id"))
+                return slice["id"];
+              else if (
+                slice.contains("_type") && slice["_type"] == "Name" &&
+                slice.contains("id"))
+                return slice["id"];
+            }
+            return "Any";
+          }
+          // Simple name annotation (e.g., list without subtype)
+          if (annot.contains("id") && annot["id"] == "list")
+            return "Any";
+        }
+      }
+      return "";
+    }
     else if (arg["_type"] == "UnaryOp")
     {
       // Handle unary operations like -5, +3, not True
