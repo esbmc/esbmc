@@ -296,9 +296,8 @@ __ESBMC_HIDE:;
     if (count > 0 && count < slots)
       replacements = count;
 
-    size_t result_len =
-      (size_t)len_s + (size_t)replacements * (size_t)new_len;
-    char* buffer = __ESBMC_alloca(result_len + 1);
+    size_t result_len = (size_t)len_s + (size_t)replacements * (size_t)new_len;
+    char *buffer = __ESBMC_alloca(result_len + 1);
 
     int pos = 0;
     int idx = 0;
@@ -360,7 +359,7 @@ __ESBMC_HIDE:;
   if (result_len_signed < 0)
     result_len_signed = 0;
   size_t result_len = (size_t)result_len_signed;
-  char* buffer = __ESBMC_alloca(result_len + 1);
+  char *buffer = __ESBMC_alloca(result_len + 1);
 
   remaining = count;
   i = 0;

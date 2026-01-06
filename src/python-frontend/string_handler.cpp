@@ -1363,7 +1363,8 @@ exprt string_handler::handle_string_replace(
       {
         size_t found = src_str.find(old_str, pos);
 
-        if (found == std::string::npos ||
+        if (
+          found == std::string::npos ||
           (max_replacements >= 0 && replacements_done >= max_replacements))
         {
           // No more matches or reached max replacements - copy rest
