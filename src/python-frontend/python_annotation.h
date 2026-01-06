@@ -1246,11 +1246,13 @@ private:
     if (!list.contains("elts"))
       return "";
 
-    if (!list["elts"].empty())
+    if (!list["elts"].empty() && list["elts"][0].contains("value"))
       list_subtype = get_type_from_json(list["elts"][0]["value"]);
 
     for (const auto &elem : list["elts"])
-      if (get_type_from_json(elem["value"]) != list_subtype)
+      if (
+        elem.contains("value") &&
+        get_type_from_json(elem["value"]) != list_subtype)
         throw std::runtime_error("Multiple typed lists are not supported\n");
 
     return list_subtype;
