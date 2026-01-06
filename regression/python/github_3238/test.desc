@@ -1,4 +1,4 @@
 KNOWNBUG
 main.py
---no-standard-checks --unwind 8
+--no-standard-checks --unwind 2
 ^VERIFICATION SUCCESSFUL$
