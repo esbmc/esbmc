@@ -1292,18 +1292,104 @@ exprt string_handler::handle_string_replace(
   const exprt &count_arg,
   const locationt &location)
 {
+  // Try to handle constant strings directly using string_builder API
+  // This avoids the loop unwinding issues in ESBMC
+
   exprt string_copy = string_obj;
+  exprt old_copy = old_arg;
+  exprt new_copy = new_arg;
+
+  // Ensure all are proper strings
   exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt old_expr = ensure_null_terminated_string(old_copy);
+  exprt new_expr = ensure_null_terminated_string(new_copy);
+
+  // Extract the count value
+  int64_t max_replacements = -1; // -1 means replace all
+  if (count_arg.is_constant())
+  {
+    BigInt count_val = binary2integer(
+      count_arg.value().as_string(), count_arg.type().is_signedbv());
+    max_replacements = count_val.to_int64();
+
+    // count=0 means no replacements
+    if (max_replacements == 0)
+      return str_expr;
+  }
+
+  // Try to extract constant string values for compile-time replacement
+  std::string src_str = extract_string_from_array_operands(str_expr);
+  std::string old_str = extract_string_from_array_operands(old_expr);
+  std::string new_str = extract_string_from_array_operands(new_expr);
+
+  // If we can extract all strings as constants, do replacement at compile time
+  if (!src_str.empty() || str_expr.operands().size() > 0)
+  {
+    // Handle the case where source string might be empty but valid
+    if (str_expr.type().is_array() && str_expr.operands().size() > 0)
+    {
+      src_str = extract_string_from_array_operands(str_expr);
+    }
+
+    // Perform the replacement
+    std::string result;
+    int64_t replacements_done = 0;
+
+    if (old_str.empty())
+    {
+      // Special case: empty old string - insert new_str between each char
+      for (size_t i = 0; i < src_str.size(); ++i)
+      {
+        if (max_replacements < 0 || replacements_done < max_replacements)
+        {
+          result += new_str;
+          replacements_done++;
+        }
+        result += src_str[i];
+      }
+      // Add new_str at the end if we still have replacements left
+      if (max_replacements < 0 || replacements_done < max_replacements)
+      {
+        result += new_str;
+      }
+    }
+    else
+    {
+      // Normal replacement
+      size_t pos = 0;
+      size_t old_len = old_str.length();
+
+      while (pos < src_str.length())
+      {
+        size_t found = src_str.find(old_str, pos);
+
+        if (found == std::string::npos ||
+          (max_replacements >= 0 && replacements_done >= max_replacements))
+        {
+          // No more matches or reached max replacements - copy rest
+          result += src_str.substr(pos);
+          break;
+        }
+
+        // Copy characters before the match
+        result += src_str.substr(pos, found - pos);
+        // Add replacement string
+        result += new_str;
+        replacements_done++;
+        // Move past the matched substring
+        pos = found + old_len;
+      }
+    }
+
+    // Build the result string using string_builder
+    return string_builder_->build_string_literal(result);
+  }
+
+  // Fallback to C function for non-constant strings
   exprt str_addr =
     str_expr.type().is_pointer() ? str_expr : get_array_base_address(str_expr);
-
-  exprt old_copy = old_arg;
-  exprt old_expr = ensure_null_terminated_string(old_copy);
   exprt old_addr =
     old_expr.type().is_pointer() ? old_expr : get_array_base_address(old_expr);
-
-  exprt new_copy = new_arg;
-  exprt new_expr = ensure_null_terminated_string(new_copy);
   exprt new_addr =
     new_expr.type().is_pointer() ? new_expr : get_array_base_address(new_expr);
 

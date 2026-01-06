@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stddef.h>
+#include <string.h>
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
@@ -256,64 +257,134 @@ char *__python_str_replace(
   int count)
 {
 __ESBMC_HIDE:;
-  if (!s)
-    return (char *)s;
-
-  if (!old_sub || !new_sub)
+  if (!s || !old_sub || !new_sub)
     return (char *)s;
 
   if (count == 0)
     return (char *)s;
 
-  if (old_sub[0] == '\0')
-  {
-    __ESBMC_assert(
-      0, "replace() with empty pattern not supported in minimal support");
-    return (char *)s;
-  }
-
-  char *buffer = __ESBMC_alloca(512);
-  int pos = 0;
-  int i = 0;
-  int remaining = count;
+  // Get string lengths
   int old_len = strlen(old_sub);
   int new_len = strlen(new_sub);
+  int len_s = strlen(s);
 
-  while (s[i] != '\0')
+  // Bound assumptions for ESBMC - limit string sizes to reasonable values
+  __ESBMC_assume(len_s >= 0 && len_s <= 1024);
+  __ESBMC_assume(old_len >= 0 && old_len <= 256);
+  __ESBMC_assume(new_len >= 0 && new_len <= 256);
+
+  if (old_len == 0)
+  {
+    int slots = len_s + 1;
+    int replacements = slots;
+    if (count > 0 && count < slots)
+      replacements = count;
+
+    size_t result_len =
+      (size_t)len_s + (size_t)replacements * (size_t)new_len;
+    char* buffer = __ESBMC_alloca(result_len + 1);
+
+    int pos = 0;
+    int idx = 0;
+
+    while (idx < len_s)
+    {
+      if (idx < replacements)
+      {
+        int k = 0;
+        while (k < new_len)
+        {
+          buffer[pos] = new_sub[k];
+          pos++;
+          k++;
+        }
+      }
+
+      buffer[pos] = s[idx];
+      pos++;
+      idx++;
+    }
+
+    if (len_s < replacements)
+    {
+      int k = 0;
+      while (k < new_len)
+      {
+        buffer[pos] = new_sub[k];
+        pos++;
+        k++;
+      }
+    }
+
+    buffer[pos] = '\0';
+    return buffer;
+  }
+
+  int remaining = count;
+  int occurrences = 0;
+  int i = 0;
+  while (i <= len_s - old_len)
   {
     if ((remaining != 0) && strncmp(s + i, old_sub, old_len) == 0)
     {
-      int j = 0;
-      while (j < new_len && pos < 511)
-      {
-        buffer[pos] = new_sub[j];
-        pos++;
-        j++;
-      }
-
-      if (j != new_len)
-      {
-        __ESBMC_assert(
-          0, "String replace overflow - result exceeds 511 characters");
-        break;
-      }
-
+      occurrences++;
       i += old_len;
       if (remaining > 0)
         remaining--;
+      if (remaining == 0)
+        break;
       continue;
     }
+    i++;
+  }
 
-    if (pos >= 511)
+  long long diff = (long long)new_len - (long long)old_len;
+  long long result_len_signed =
+    (long long)len_s + (long long)occurrences * diff;
+  if (result_len_signed < 0)
+    result_len_signed = 0;
+  size_t result_len = (size_t)result_len_signed;
+  char* buffer = __ESBMC_alloca(result_len + 1);
+
+  remaining = count;
+  i = 0;
+  int pos = 0;
+
+  // Main replacement loop - use bounded iteration
+  while (i < len_s)
+  {
+    // Check if replacement is possible at current position
+    int do_replace = 0;
+    if (remaining != 0 && i + old_len <= len_s)
     {
-      __ESBMC_assert(
-        0, "String replace overflow - result exceeds 511 characters");
-      break;
+      // Use strncmp for comparison (ESBMC handles this better)
+      if (strncmp(s + i, old_sub, old_len) == 0)
+        do_replace = 1;
     }
 
-    buffer[pos] = s[i];
-    pos++;
-    i++;
+    if (do_replace)
+    {
+      // Copy new_sub to buffer
+      int k = 0;
+      while (k < new_len)
+      {
+        buffer[pos] = new_sub[k];
+        pos++;
+        k++;
+      }
+      // Skip old_sub in source
+      i = i + old_len;
+      // Decrement remaining replacements
+      if (remaining > 0)
+        remaining = remaining - 1;
+    }
+    else
+    {
+      // Copy single character
+      buffer[pos] = s[i];
+      pos++;
+      i++;
+    }
   }
 
   buffer[pos] = '\0';
