@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stddef.h>
+// cppcheck-suppress missingInclude
 #include <string.h>
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
@@ -8,6 +9,21 @@ _Bool __python_char_isalpha(int c)
 {
 __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+static int __python_strnlen_bounded(const char *s, int max_len)
+{
+__ESBMC_HIDE:;
+  int i = 0;
+  while (i < max_len)
+  {
+    if (s[i] == '\0')
+      return i;
+    i++;
+  }
+
+  __ESBMC_assert(0, "string not null-terminated");
+  return max_len;
 }
 
 // Python string isalpha - handles ASCII and common two-byte UTF-8 Latin letters.
@@ -264,9 +280,9 @@ __ESBMC_HIDE:;
     return (char *)s;
 
   // Get string lengths
-  int old_len = strlen(old_sub);
-  int new_len = strlen(new_sub);
-  int len_s = strlen(s);
+  int old_len = __python_strnlen_bounded(old_sub, 256);
+  int new_len = __python_strnlen_bounded(new_sub, 256);
+  int len_s = __python_strnlen_bounded(s, 1024);
 
   // Bound assumptions for ESBMC - limit string sizes to reasonable values
   __ESBMC_assume(len_s >= 0 && len_s <= 1024);
