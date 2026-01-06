@@ -280,14 +280,14 @@ __ESBMC_HIDE:;
     return (char *)s;
 
   // Get string lengths
-  int old_len = __python_strnlen_bounded(old_sub, 256);
-  int new_len = __python_strnlen_bounded(new_sub, 256);
-  int len_s = __python_strnlen_bounded(s, 1024);
+  size_t old_len = __python_strnlen_bounded(old_sub, 256);
+  size_t new_len = __python_strnlen_bounded(new_sub, 256);
+  size_t len_s = __python_strnlen_bounded(s, 1024);
 
   // Bound assumptions for ESBMC - limit string sizes to reasonable values
-  __ESBMC_assume(len_s >= 0 && len_s <= 1024);
-  __ESBMC_assume(old_len >= 0 && old_len <= 256);
-  __ESBMC_assume(new_len >= 0 && new_len <= 256);
+  __ESBMC_assert(len_s >= 0 && len_s <= 1024, "len_s bounds");
+  __ESBMC_assert(old_len >= 0 && old_len <= 256, "old_len bounds");
+  __ESBMC_assert(new_len >= 0 && new_len <= 256, "new_len bounds");
 
   if (old_len == 0)
   {
