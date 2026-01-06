@@ -132,7 +132,10 @@ bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
   return __ESBMC_list_push(l, o->value, o->type_id, o->size);
 }
 
-bool __ESBMC_list_eq(const PyListObject *l1, const PyListObject *l2)
+bool __ESBMC_list_eq(
+  const PyListObject *l1,
+  const PyListObject *l2,
+  size_t list_type_id)
 {
   if (!l1 || !l2)
     return false;
@@ -141,40 +144,44 @@ bool __ESBMC_list_eq(const PyListObject *l1, const PyListObject *l2)
   if (l1->size != l2->size)
     return false;
 
-  size_t i = 0, end = l1->size;
-
-  // BUG: Something weird is happening when I change this while into a FOR
-  while (i < end)
+  size_t i = 0;
+  while (i < l1->size)
   {
     const PyObject *a = &l1->items[i];
-    const PyObject *b = &l2->items[i++];
+    const PyObject *b = &l2->items[i];
+    ++i;
 
     // Same address => element equal; keep checking the rest.
     if (a->value == b->value)
       continue;
 
-    if (
-      !a->value || !b->value || a->type_id != b->type_id || a->size != b->size)
+    // Validation checks
+    if (!a->value || !b->value)
+      return false;
+    if (a->type_id != b->type_id)
+      return false;
+    if (a->size != b->size)
       return false;
 
-    const PyListObject *nested_a = *(const PyListObject **)a->value;
-    const PyListObject *nested_b = *(const PyListObject **)b->value;
-
-    if (nested_a != NULL && nested_b != NULL)
+    // Check if elements are nested lists by comparing type_id
+    if (a->type_id == list_type_id)
     {
-      bool a_is_list = (nested_a->type == &__ESBMC_list_type);
-      bool b_is_list = (nested_b->type == &__ESBMC_list_type);
+      // Elements are nested lists
+      // elem->value is void* containing PyListObject**
+      // We need to dereference to get PyListObject*
+      const PyListObject *nested_a = *(const PyListObject **)a->value;
+      const PyListObject *nested_b = *(const PyListObject **)b->value;
 
-      if (a_is_list && b_is_list)
-      {
-        if (!__ESBMC_list_eq(nested_a, nested_b))
-          return false;
-        continue;
-      }
+      // recursive comparison
+      if (!__ESBMC_list_eq(nested_a, nested_b, list_type_id))
+        return false;
     }
-
-    if (memcmp(a->value, b->value, a->size) != 0)
-      return false;
+    else
+    {
+      // Elements are primitives: memcmp
+      if (memcmp(a->value, b->value, a->size) != 0)
+        return false;
+    }
   }
   return true;
 }
