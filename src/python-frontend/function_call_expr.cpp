@@ -2449,10 +2449,22 @@ exprt function_call_expr::handle_general_function_call()
   if (function_type_ == FunctionType::Constructor)
   {
     call.type() = type_handler_.get_typet(func_symbol->name.as_string());
+
     // Self is the LHS
     if (converter_.current_lhs)
+    {
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
-    param_offset = 1;
+      param_offset = 1;
+    }
+    else
+    {
+      // For constructor calls without assignment, delay creating temp var
+      // get_return_statements() will handle return statements, we only handle
+      // standalone calls (e.g., Positive(2))
+      // Self parameter will be added later if needed (see end of function)
+      // param_offset is 1 because first user arg maps to param[1] (skipping self)
+      param_offset = 1;
+    }
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
@@ -2647,11 +2659,12 @@ exprt function_call_expr::handle_general_function_call()
 
       // Handle the arguments - op2() is an arguments expression containing operands
       const exprt &args_expr = to_code(arg).op2();
-      for (const auto &operand : args_expr.operands())
-        func_call.arguments().push_back(operand);
 
       // Set the type to the return type of the function
       const exprt &func_expr = arg.op1();
+      bool is_constructor = false;
+      typet return_type;
+
       if (func_expr.is_symbol())
       {
         const symbolt *func_symbol =
@@ -2659,11 +2672,12 @@ exprt function_call_expr::handle_general_function_call()
         if (func_symbol != nullptr)
         {
           const code_typet &func_type = to_code_type(func_symbol->type);
-          typet return_type = func_type.return_type();
+          return_type = func_type.return_type();
 
           // Special handling for constructors
           if (return_type.id() == "constructor")
           {
+            is_constructor = true;
             // For constructors, use the class type instead of "constructor"
             return_type =
               type_handler_.get_typet(func_symbol->name.as_string());
@@ -2671,6 +2685,22 @@ exprt function_call_expr::handle_general_function_call()
 
           func_call.type() = return_type;
         }
+      }
+
+      // Strip temporary $ctor_self$ parameters when constructors are used as
+      // arguments (e.g., foo(Positive(2))). goto_sideeffects will add the
+      // correct self parameter later.
+      if (is_constructor)
+      {
+        exprt::operandst temp_args(
+          args_expr.operands().begin(), args_expr.operands().end());
+        func_call.arguments() = strip_ctor_self_parameters(temp_args);
+      }
+      else
+      {
+        // For non-constructors, just copy arguments
+        for (const auto &operand : args_expr.operands())
+          func_call.arguments().push_back(operand);
       }
 
       // Use the side effect expression as the argument
@@ -2766,6 +2796,12 @@ exprt function_call_expr::handle_general_function_call()
        ++i)
   {
     provided_params[i + param_offset] = true;
+  }
+
+  // For constructors, self is always implicitly provided
+  if (function_type_ == FunctionType::Constructor && total_params > 0)
+  {
+    provided_params[0] = true;
   }
 
   // Mark keyword arguments as provided
@@ -2881,7 +2917,57 @@ exprt function_call_expr::handle_general_function_call()
     }
   }
 
+  // For constructors without current_lhs, create temp var and add self if needed
+  // Note: get_return_statements() will handle return statements separately
+  if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
+  {
+    size_t num_provided_args = call_["args"].size();
+
+    // Only add self if arguments size matches user args (no self added yet)
+    if (call.arguments().size() == num_provided_args)
+    {
+      // Self parameter not added yet - this is a standalone call (e.g., Positive(2))
+      // Create temporary object as self parameter
+      typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
+      symbolt &temp_self =
+        converter_.create_tmp_symbol(call_, "$ctor_self$", class_type, exprt());
+      converter_.symbol_table().add(temp_self);
+
+      // Add declaration for temporary object
+      code_declt temp_decl(symbol_expr(temp_self));
+      temp_decl.location() = location;
+      converter_.current_block->copy_to_operands(temp_decl);
+
+      // Insert self as first argument
+      call.arguments().insert(
+        call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
+    }
+  }
+
   return call;
+}
+
+exprt::operandst
+function_call_expr::strip_ctor_self_parameters(const exprt::operandst &args)
+{
+  exprt::operandst new_args;
+  for (const auto &arg : args)
+  {
+    bool is_ctor_self = false;
+    if (arg.is_address_of() && !arg.operands().empty() && arg.op0().is_symbol())
+    {
+      const std::string &arg_id = arg.op0().identifier().as_string();
+      if (arg_id.find("$ctor_self$") != std::string::npos)
+      {
+        is_ctor_self = true;
+      }
+    }
+    if (!is_ctor_self)
+    {
+      new_args.push_back(arg);
+    }
+  }
+  return new_args;
 }
 
 exprt function_call_expr::gen_exception_raise(
