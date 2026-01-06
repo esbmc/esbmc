@@ -531,12 +531,15 @@ struct cap_info __ESBMC_cheri_info[1];
  * __ESBMC_requires: precondition clause
  * __ESBMC_ensures: postcondition clause
  * __ESBMC_return_value: special variable representing function return value in ensures clauses
- *   Note: The type of __ESBMC_return_value is semi-dynamic and matches the function's return type
- *   (e.g., int for int functions, double for double functions, etc.)
+ *   Note: The type of __ESBMC_return_value is resolved at conversion time to match
+ *   the function's return type. Declared as int for compatibility, but actual type
+ *   is determined during IR conversion based on the enclosing function's return type.
+ *   For pointer return types, Clang may emit warnings but the conversion will handle
+ *   the type correctly.
  */
 void __ESBMC_requires(_Bool);
 void __ESBMC_ensures(_Bool);
-extern int __ESBMC_return_value;  /* Type is resolved at conversion time to match function return type */
+extern int __ESBMC_return_value;
     )";
   }
 

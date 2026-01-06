@@ -9,6 +9,7 @@
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 #include <util/message.h>
+#include <util/options.h>
 
 code_contractst::code_contractst(
   goto_functionst &_goto_functions,
@@ -222,6 +223,77 @@ void code_contractst::havoc_assigns_targets(
   }
 }
 
+void code_contractst::havoc_function_parameters(
+  const symbolt &original_func,
+  goto_programt &dest,
+  const locationt &location)
+{
+  if (!original_func.type.is_code())
+    return;
+
+  const code_typet &code_type = to_code_type(original_func.type);
+  const code_typet::argumentst &params = code_type.arguments();
+
+  for (const auto &param : params)
+  {
+    // Build LHS symbol for the parameter
+    type2tc param_type = migrate_type(param.type());
+    expr2tc lhs = symbol2tc(param_type, param.get_identifier());
+
+    // Do not assign nondeterministic values to pointers when value-set based
+    // symex objects are enabled, to be consistent with loop invariant havoc.
+    if (
+      config.options.get_bool_option("add-symex-value-sets") &&
+      is_pointer_type(lhs))
+      continue;
+
+    expr2tc rhs = gen_nondet(lhs->type);
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->code = code_assign2tc(lhs, rhs);
+    t->location = location;
+    t->location.comment("contract havoc parameter");
+  }
+}
+
+void code_contractst::havoc_static_globals(
+  goto_programt &dest,
+  const locationt &location)
+{
+  // Iterate over all symbols in context to find static lifetime globals
+  ns.get_context().foreach_operand([&dest, &location](const symbolt &s) {
+    // Skip functions, types, and non-lvalue symbols
+    if (s.type.is_code() || s.is_type || !s.lvalue)
+      return;
+
+    // Only process static lifetime variables (globals and static locals)
+    if (!s.static_lifetime)
+      return;
+
+    // Skip internal ESBMC symbols
+    std::string sym_name = id2string(s.name);
+    if (sym_name.find("__ESBMC_") == 0)
+      return;
+
+    // Build LHS symbol expression
+    type2tc global_type = migrate_type(s.type);
+    expr2tc lhs = symbol2tc(global_type, s.id);
+
+    // Do not assign nondeterministic values to pointers when value-set based
+    // symex objects are enabled, to be consistent with loop invariant havoc.
+    if (
+      config.options.get_bool_option("add-symex-value-sets") &&
+      is_pointer_type(lhs))
+      return;
+
+    // Generate nondeterministic value and create assignment
+    expr2tc rhs = gen_nondet(lhs->type);
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->code = code_assign2tc(lhs, rhs);
+    t->location = location;
+    t->location.comment("contract havoc global");
+  });
+}
+
 void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
 {
   for (const auto &function_name : to_enforce)
@@ -308,6 +380,11 @@ goto_programt code_contractst::generate_checking_wrapper(
 {
   goto_programt wrapper;
   locationt location = original_func.location;
+
+  // Note: Here is the design, enforce_contracts mode does NOT havoc
+  // parameters or globals. The wrapper is called by actual callers, so we
+  // preserve the caller's argument values. Global variables are handled by
+  // unified nondet_static initialization, not per-function havoc.
 
   // 1. Assume requires clause
   if (!is_nil_expr(requires_clause) && !is_constant_bool2t(requires_clause))

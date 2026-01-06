@@ -174,6 +174,20 @@ private:
   /// \param assigns_clause Assigns clause expression
   /// \return List of target variable expressions
   std::vector<expr2tc> extract_assigns_targets(const expr2tc &assigns_clause);
+
+  /// \brief Havoc function parameters before checking the contract
+  /// \param original_func Original function symbol
+  /// \param dest Destination goto program (wrapper body)
+  /// \param location Location information
+  void havoc_function_parameters(
+    const symbolt &original_func,
+    goto_programt &dest,
+    const locationt &location);
+
+  /// \brief Havoc static lifetime global variables before checking the contract
+  /// \param dest Destination goto program (wrapper body)
+  /// \param location Location information
+  void havoc_static_globals(goto_programt &dest, const locationt &location);
 };
 
 #endif // ESBMC_CONTRACTS_H
