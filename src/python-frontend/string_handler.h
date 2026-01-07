@@ -352,6 +352,22 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.replace() method
+   * @param string_obj String object
+   * @param old_arg Substring to replace
+   * @param new_arg Replacement substring
+   * @param count_arg Maximum replacements (-1 for all)
+   * @param location Source location
+   * @return Pointer to replaced string
+   */
+  exprt handle_string_replace(
+    const exprt &string_obj,
+    const exprt &old_arg,
+    const exprt &new_arg,
+    const exprt &count_arg,
+    const locationt &location);
+
+  /**
    * @brief Extract a constant string from the AST node (literal or const var)
    * @param node JSON node to inspect
    * @param converter Converter used to resolve Name references
