@@ -168,8 +168,8 @@ private:
   /// \brief Structure to store old() snapshot information
   struct old_snapshot_t
   {
-    expr2tc original_expr;  ///< Expression inside __ESBMC_old()
-    expr2tc snapshot_var;   ///< Snapshot variable symbol
+    expr2tc original_expr; ///< Expression inside __ESBMC_old()
+    expr2tc snapshot_var;  ///< Snapshot variable symbol
   };
 
   /// \brief Check if expression is an __ESBMC_old() call

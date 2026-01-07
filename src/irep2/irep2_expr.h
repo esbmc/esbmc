@@ -1003,7 +1003,7 @@ public:
     postincrement,
     predecrement,
     postdecrement,
-    old_snapshot  // For __ESBMC_old() in function contracts
+    old_snapshot // For __ESBMC_old() in function contracts
   };
 
   sideeffect_data(

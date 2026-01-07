@@ -391,7 +391,7 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
       goto_programt &renamed_body = renamed_func.body;
 
       for (auto it = renamed_body.instructions.begin();
-           it != renamed_body.instructions.end(); )
+           it != renamed_body.instructions.end();)
       {
         bool should_remove = false;
 
@@ -418,7 +418,11 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
 
     // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
-      *func_sym, requires_clause, ensures_clause, original_name_id, original_body);
+      *func_sym,
+      requires_clause,
+      ensures_clause,
+      original_name_id,
+      original_body);
 
     // Create new function entry
     goto_functiont new_func;
@@ -485,18 +489,17 @@ goto_programt code_contractst::generate_checking_wrapper(
   for (size_t i = 0; i < old_snapshots.size(); ++i)
   {
     expr2tc original_expr = old_snapshots[i].original_expr;
-    expr2tc old_temp_var = old_snapshots[i].snapshot_var;  // The temp var from function body
+    expr2tc old_temp_var =
+      old_snapshots[i].snapshot_var; // The temp var from function body
 
     // Create a NEW snapshot variable for the wrapper
     expr2tc new_snapshot_var = create_snapshot_variable(
-      original_expr,
-      id2string(original_func.name) + "_wrapper",
-      i);
+      original_expr, id2string(original_func.name) + "_wrapper", i);
 
     // Generate snapshot declaration
     goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
-    decl_inst->code = code_decl2tc(original_expr->type,
-      to_symbol2t(new_snapshot_var).thename);
+    decl_inst->code =
+      code_decl2tc(original_expr->type, to_symbol2t(new_snapshot_var).thename);
     decl_inst->location = location;
     decl_inst->location.comment("__ESBMC_old snapshot declaration");
 
@@ -509,8 +512,8 @@ goto_programt code_contractst::generate_checking_wrapper(
     // Store both old and new variables in the snapshot structure
     // We'll keep the old temp var as original_expr for matching,
     // and new snapshot var as snapshot_var for replacement
-    old_snapshots[i].original_expr = old_temp_var;  // What to find
-    old_snapshots[i].snapshot_var = new_snapshot_var;  // What to replace with
+    old_snapshots[i].original_expr = old_temp_var;    // What to find
+    old_snapshots[i].snapshot_var = new_snapshot_var; // What to replace with
   }
 
   // 1. Assume requires clause
@@ -706,7 +709,8 @@ expr2tc code_contractst::create_snapshot_variable(
   symbolt snapshot_symbol;
   snapshot_symbol.name = snapshot_name;
   snapshot_symbol.id = snapshot_name;
-  snapshot_symbol.type = migrate_type_back(expr->type);  // IRep2 → IRep1 conversion
+  snapshot_symbol.type =
+    migrate_type_back(expr->type); // IRep2 → IRep1 conversion
   snapshot_symbol.lvalue = true;
   snapshot_symbol.static_lifetime = false;
   snapshot_symbol.file_local = false;
@@ -730,7 +734,7 @@ expr2tc code_contractst::replace_old_in_expr(
   {
     const symbol2t &sym = to_symbol2t(expr);
     std::string sym_name = id2string(sym.thename);
-    
+
     // Only process symbols that are related to __ESBMC_old
     // These temp variables have names containing "___ESBMC_old"
     // This prevents accidentally replacing __ESBMC_return_value or other symbols
@@ -821,7 +825,8 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     "\n"
     "Please use --enforce-contract mode instead.\n"
     "\n"
-    "TODO: Complete implementation of replace_calls() and generate_replacement_at_call()");
+    "TODO: Complete implementation of replace_calls() and "
+    "generate_replacement_at_call()");
   abort();
 
   Forall_goto_functions (it, goto_functions)

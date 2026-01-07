@@ -652,8 +652,7 @@ void goto_convertt::do_function_call_symbol(
 
     if (lhs.is_nil())
     {
-      log_error(
-        "`__ESBMC_old' must be used in an expression (requires LHS)");
+      log_error("`__ESBMC_old' must be used in an expression (requires LHS)");
       abort();
     }
 
