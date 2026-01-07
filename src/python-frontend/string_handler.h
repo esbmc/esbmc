@@ -302,6 +302,14 @@ public:
   exprt handle_string_strip(const exprt &str_expr, const locationt &location);
 
   /**
+   * @brief Handle str.rstrip() method
+   * @param str_expr String expression
+   * @param location Source location
+   * @return Pointer to stripped string
+   */
+  exprt handle_string_rstrip(const exprt &str_expr, const locationt &location);
+
+  /**
    * @brief Handle 'in' operator for strings
    * @param lhs Substring to find
    * @param rhs String to search in

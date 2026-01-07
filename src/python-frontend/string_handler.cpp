@@ -951,6 +951,87 @@ exprt string_handler::handle_string_strip(
   return call;
 }
 
+exprt string_handler::handle_string_rstrip(
+  const exprt &str_expr,
+  const locationt &location)
+{
+  bool can_fold_constant = str_expr.type().is_array();
+
+  if (!can_fold_constant && str_expr.is_symbol())
+  {
+    const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
+    if (symbol && symbol->value.type().is_array())
+      can_fold_constant = true;
+  }
+
+  if (can_fold_constant && string_builder_)
+  {
+    std::vector<exprt> chars = string_builder_->extract_string_chars(str_expr);
+    bool all_constant = true;
+
+    for (const auto &ch : chars)
+    {
+      if (!ch.is_constant())
+      {
+        all_constant = false;
+        break;
+      }
+    }
+
+    if (all_constant)
+    {
+      auto is_whitespace = [](const exprt &ch) -> bool {
+        BigInt char_val =
+          binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+        char c = static_cast<char>(char_val.to_uint64());
+        return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+               c == '\r';
+      };
+
+      while (!chars.empty() && is_whitespace(chars.back()))
+        chars.pop_back();
+
+      return string_builder_->build_null_terminated_string(chars);
+    }
+  }
+
+  std::string func_symbol_id = ensure_string_function_symbol(
+    "__python_str_rstrip",
+    pointer_typet(char_type()),
+    {pointer_typet(char_type())},
+    location);
+
+  exprt str_ptr = str_expr;
+
+  if (str_expr.is_constant() && str_expr.type().is_array())
+  {
+    str_ptr = exprt("index", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+    str_ptr.copy_to_operands(from_integer(0, int_type()));
+  }
+  else if (str_expr.type().is_array())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    exprt index_expr("index", char_type());
+    index_expr.copy_to_operands(str_expr);
+    index_expr.copy_to_operands(from_integer(0, int_type()));
+    str_ptr.copy_to_operands(index_expr);
+  }
+  else if (!str_expr.type().is_pointer())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+  }
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt(func_symbol_id, code_typet());
+  call.arguments().push_back(str_ptr);
+  call.type() = pointer_typet(char_type());
+  call.location() = location;
+
+  return call;
+}
+
 exprt string_handler::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
