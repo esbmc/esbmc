@@ -1352,6 +1352,14 @@ exprt python_list::compare(
   assert(lhs_symbol);
   assert(rhs_symbol);
 
+  // Compute list type_id for nested list detection
+  const typet &list_type = l1.type();
+  const std::string list_type_name =
+    converter_.get_type_handler().type_to_string(list_type);
+  constant_exprt list_type_id(size_type());
+  list_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
+
   symbolt &eq_ret = converter_.create_tmp_symbol(
     list_value_, "eq_tmp", bool_type(), gen_boolean(false));
   code_declt eq_ret_decl(symbol_expr(eq_ret));
@@ -1363,6 +1371,7 @@ exprt python_list::compare(
   // passing arguments
   list_eq_func_call.arguments().push_back(symbol_expr(*lhs_symbol)); // l1
   list_eq_func_call.arguments().push_back(symbol_expr(*rhs_symbol)); // l2
+  list_eq_func_call.arguments().push_back(list_type_id); // list_type_id
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
