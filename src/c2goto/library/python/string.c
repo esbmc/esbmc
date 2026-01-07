@@ -1,7 +1,6 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stddef.h>
-// cppcheck-suppress missingInclude
 #include <string.h>
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
