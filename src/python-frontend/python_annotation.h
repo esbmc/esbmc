@@ -1778,6 +1778,8 @@ private:
           method == "isdigit" || method == "isalpha" || method == "isspace" ||
           method == "islower" || method == "isupper")
           return "bool";
+        else if (method == "find" || method == "rfind")
+          return "int";
         else if (method == "split")
           return "list";
         // Default for string methods

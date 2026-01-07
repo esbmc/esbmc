@@ -1366,6 +1366,34 @@ exprt string_handler::handle_string_find(
   return find_call;
 }
 
+exprt string_handler::handle_string_rfind(
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  exprt arg_copy = find_arg;
+  exprt arg_expr = ensure_null_terminated_string(arg_copy);
+  exprt arg_addr = get_array_base_address(arg_expr);
+
+  symbolt *rfind_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_rfind");
+  if (!rfind_str_symbol)
+    throw std::runtime_error("str_rfind function not found in symbol table");
+
+  side_effect_expr_function_callt rfind_call;
+  rfind_call.function() = symbol_expr(*rfind_str_symbol);
+  rfind_call.arguments().push_back(str_addr);
+  rfind_call.arguments().push_back(arg_addr);
+  rfind_call.location() = location;
+  rfind_call.type() = int_type();
+
+  return rfind_call;
+}
+
 exprt string_handler::handle_string_replace(
   const exprt &string_obj,
   const exprt &old_arg,

@@ -302,6 +302,30 @@ __ESBMC_HIDE:;
   return -1;
 }
 
+int __python_str_rfind(const char *s1, const char *s2)
+{
+__ESBMC_HIDE:;
+  // str.rfind('') = len(s1)
+  if (s2[0] == '\0')
+    return strlen(s1);
+
+  int len_s = strlen(s1);
+  int len_sub = strlen(s2);
+
+  if (len_sub > len_s)
+    return -1;
+
+  int i = len_s - len_sub;
+  while (i >= 0)
+  {
+    if (strncmp(s1 + i, s2, len_sub) == 0)
+      return i;
+    i--;
+  }
+
+  return -1;
+}
+
 char *__python_str_replace(
   const char *s,
   const char *old_sub,
