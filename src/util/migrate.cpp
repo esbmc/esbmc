@@ -1663,6 +1663,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = sideeffect2t::predecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
+    else if (expr.statement() == "old_snapshot")
+    {
+      // __ESBMC_old() in function contracts
+      t = sideeffect2t::old_snapshot;
+      migrate_expr(expr.op0(), new_expr_ref);
+    }
     else
     {
       log_error("Unexpected side-effect statement: {}", expr.statement());
@@ -3016,6 +3022,9 @@ exprt migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::postdecrement:
       theexpr.statement("postdecrement");
+      break;
+    case sideeffect2t::old_snapshot:
+      theexpr.statement("old_snapshot");
       break;
     default:
 

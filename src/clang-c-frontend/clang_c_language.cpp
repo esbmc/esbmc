@@ -540,6 +540,18 @@ struct cap_info __ESBMC_cheri_info[1];
 void __ESBMC_requires(_Bool);
 void __ESBMC_ensures(_Bool);
 extern int __ESBMC_return_value;
+
+/* __ESBMC_old: captures pre-state value of expressions in ensures clauses
+ * This function is used in __ESBMC_ensures to reference the value of an
+ * expression before the function executes. For example:
+ *   __ESBMC_ensures(x == __ESBMC_old(x) + 1);
+ * declares that x after the function should equal x before plus 1.
+ *
+ * Note: Declared as returning int, but at IR level the actual return type
+ * is automatically inherited from the argument type. C's type system will
+ * perform implicit conversions as needed, similar to __ESBMC_return_value.
+ */
+int __ESBMC_old(int);
     )";
   }
 

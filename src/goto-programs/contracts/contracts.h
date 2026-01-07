@@ -113,12 +113,14 @@ private:
   /// \param requires_clause Requires expression
   /// \param ensures_clause Ensures expression
   /// \param original_func_id ID of the renamed original function
+  /// \param original_body Original function body (before renaming)
   /// \return Generated wrapper function body
   goto_programt generate_checking_wrapper(
     const symbolt &original_func,
     const expr2tc &requires_clause,
     const expr2tc &ensures_clause,
-    const irep_idt &original_func_id);
+    const irep_idt &original_func_id,
+    const goto_programt &original_body);
 
   /// \brief Generate replacement code at function call site
   /// \param contract_symbol Contract symbol
@@ -160,6 +162,38 @@ private:
   /// \return Expression with __ESBMC_return_value replaced
   expr2tc
   replace_return_value_in_expr(const expr2tc &expr, const expr2tc &ret_val);
+
+  // ========== __ESBMC_old support ==========
+
+  /// \brief Structure to store old() snapshot information
+  struct old_snapshot_t
+  {
+    expr2tc original_expr;  ///< Expression inside __ESBMC_old()
+    expr2tc snapshot_var;   ///< Snapshot variable symbol
+  };
+
+  /// \brief Check if expression is an __ESBMC_old() call
+  /// \param expr Expression to check
+  /// \return True if expr is a sideeffect with kind old_snapshot
+  bool is_old_call(const expr2tc &expr) const;
+
+  /// \brief Create a snapshot variable for an old() expression
+  /// \param expr Expression to snapshot
+  /// \param func_name Function name (for unique naming)
+  /// \param index Index of this snapshot (for unique naming)
+  /// \return Symbol expression for the snapshot variable
+  expr2tc create_snapshot_variable(
+    const expr2tc &expr,
+    const std::string &func_name,
+    size_t index);
+
+  /// \brief Replace __ESBMC_old() calls with snapshot variables
+  /// \param expr Expression containing old() calls
+  /// \param snapshots Vector of snapshot information
+  /// \return Expression with old() calls replaced by snapshot variables
+  expr2tc replace_old_in_expr(
+    const expr2tc &expr,
+    const std::vector<old_snapshot_t> &snapshots) const;
 
   /// \brief Havoc assigns targets (similar to loop invariant approach)
   /// \param assigns_clause Assigns clause expression

@@ -329,9 +329,12 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
       continue;
     }
 
+    // Save the original function body BEFORE renaming
+    const goto_programt &original_body = func_it->second.body;
+
     // Extract contract clauses from function body
-    expr2tc requires_clause = extract_requires_from_body(func_it->second.body);
-    expr2tc ensures_clause = extract_ensures_from_body(func_it->second.body);
+    expr2tc requires_clause = extract_requires_from_body(original_body);
+    expr2tc ensures_clause = extract_ensures_from_body(original_body);
 
     // Skip if no contracts found (should not happen after has_contracts check, but double-check)
     bool has_requires = !is_constant_bool2t(requires_clause) ||
@@ -352,9 +355,70 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
 
     rename_function(original_id, original_name_id);
 
-    // Generate wrapper function
+    // Check if function uses __ESBMC_old by scanning for old_snapshot sideeffects
+    bool uses_old = false;
+    forall_goto_program_instructions (it, original_body)
+    {
+      if (it->is_assign() && is_code_assign2t(it->code))
+      {
+        const code_assign2t &assign = to_code_assign2t(it->code);
+        if (is_sideeffect2t(assign.source))
+        {
+          const sideeffect2t &se = to_sideeffect2t(assign.source);
+          if (se.kind == sideeffect2t::old_snapshot)
+          {
+            uses_old = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // Clean up the renamed original function: remove contract::ensures ASSUME statements
+    // if the function uses __ESBMC_old.
+    //
+    // WHY: contract::ensures assumptions in the renamed function would force postconditions
+    // to be true. For ensures clauses using __ESBMC_old, this is incorrect because:
+    // 1. The old() snapshot variables in the function body are temporary and local
+    // 2. The ASSUME would make verification always pass even for buggy implementations
+    //
+    // NOTE: We only remove ensures ASSUME if the function uses __ESBMC_old.
+    // For functions without __ESBMC_old, keeping ensures ASSUME is safe and may help
+    // with optimization/type inference.
+    if (uses_old)
+    {
+      auto &renamed_func = goto_functions.function_map[original_name_id];
+      goto_programt &renamed_body = renamed_func.body;
+
+      for (auto it = renamed_body.instructions.begin();
+           it != renamed_body.instructions.end(); )
+      {
+        bool should_remove = false;
+
+        // Remove contract::ensures assumptions
+        if (it->is_assume())
+        {
+          std::string comment = id2string(it->location.comment());
+          if (comment == "contract::ensures")
+          {
+            should_remove = true;
+          }
+        }
+
+        if (should_remove)
+        {
+          it = renamed_body.instructions.erase(it);
+        }
+        else
+        {
+          ++it;
+        }
+      }
+    }
+
+    // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
-      *func_sym, requires_clause, ensures_clause, original_name_id);
+      *func_sym, requires_clause, ensures_clause, original_name_id, original_body);
 
     // Create new function entry
     goto_functiont new_func;
@@ -376,7 +440,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   const symbolt &original_func,
   const expr2tc &requires_clause,
   const expr2tc &ensures_clause,
-  const irep_idt &original_func_id)
+  const irep_idt &original_func_id,
+  const goto_programt &original_body)
 {
   goto_programt wrapper;
   locationt location = original_func.location;
@@ -385,6 +450,68 @@ goto_programt code_contractst::generate_checking_wrapper(
   // parameters or globals. The wrapper is called by actual callers, so we
   // preserve the caller's argument values. Global variables are handled by
   // unified nondet_static initialization, not per-function havoc.
+
+  // 0. Extract and create snapshots for __ESBMC_old() expressions
+  // Note: __ESBMC_old() calls are converted to assignments in the function body
+  // We need to find these assignments and extract the old_snapshot sideeffects
+  std::vector<old_snapshot_t> old_snapshots;
+
+  // Scan the original function body to find old_snapshot assignments
+  {
+    const goto_programt &body = original_body;
+
+    // Scan for assignments from old_snapshot sideeffects
+    forall_goto_program_instructions (it, body)
+    {
+      if (it->is_assign() && is_code_assign2t(it->code))
+      {
+        const code_assign2t &assign = to_code_assign2t(it->code);
+        if (is_sideeffect2t(assign.source))
+        {
+          const sideeffect2t &se = to_sideeffect2t(assign.source);
+          if (se.kind == sideeffect2t::old_snapshot)
+          {
+            // Found an old_snapshot assignment!
+            // The LHS is the temporary variable, the operand is the original expression
+            old_snapshots.push_back({se.operand, assign.target});
+          }
+        }
+      }
+    }
+  }
+
+  // Now we need to generate snapshot assignments in the wrapper BEFORE calling the original function
+  // We'll update old_snapshots to contain new wrapper snapshot variables
+  for (size_t i = 0; i < old_snapshots.size(); ++i)
+  {
+    expr2tc original_expr = old_snapshots[i].original_expr;
+    expr2tc old_temp_var = old_snapshots[i].snapshot_var;  // The temp var from function body
+
+    // Create a NEW snapshot variable for the wrapper
+    expr2tc new_snapshot_var = create_snapshot_variable(
+      original_expr,
+      id2string(original_func.name) + "_wrapper",
+      i);
+
+    // Generate snapshot declaration
+    goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
+    decl_inst->code = code_decl2tc(original_expr->type,
+      to_symbol2t(new_snapshot_var).thename);
+    decl_inst->location = location;
+    decl_inst->location.comment("__ESBMC_old snapshot declaration");
+
+    // Generate snapshot assignment: new_snapshot_var = original_expr
+    goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
+    assign_inst->code = code_assign2tc(new_snapshot_var, original_expr);
+    assign_inst->location = location;
+    assign_inst->location.comment("__ESBMC_old snapshot assignment");
+
+    // Store both old and new variables in the snapshot structure
+    // We'll keep the old temp var as original_expr for matching,
+    // and new snapshot var as snapshot_var for replacement
+    old_snapshots[i].original_expr = old_temp_var;  // What to find
+    old_snapshots[i].snapshot_var = new_snapshot_var;  // What to replace with
+  }
 
   // 1. Assume requires clause
   if (!is_nil_expr(requires_clause) && !is_constant_bool2t(requires_clause))
@@ -465,7 +592,7 @@ goto_programt code_contractst::generate_checking_wrapper(
     call_inst->location.comment("contract call original function");
   }
 
-  // 4. Assert ensures clause (replace __ESBMC_return_value with actual return value)
+  // 4. Assert ensures clause (replace __ESBMC_return_value and __ESBMC_old)
   if (!is_nil_expr(ensures_clause) && !is_constant_bool2t(ensures_clause))
   {
     // Replace __ESBMC_return_value with actual return value variable
@@ -474,6 +601,12 @@ goto_programt code_contractst::generate_checking_wrapper(
     {
       // Create a replacement function that replaces __ESBMC_return_value symbols
       ensures_guard = replace_return_value_in_expr(ensures_clause, ret_val);
+    }
+
+    // Replace all __ESBMC_old temporary variables with our new snapshot variables
+    if (!old_snapshots.empty())
+    {
+      ensures_guard = replace_old_in_expr(ensures_guard, old_snapshots);
     }
 
     goto_programt::targett t = wrapper.add_instruction(ASSERT);
@@ -538,6 +671,114 @@ expr2tc code_contractst::replace_return_value_in_expr(
   return new_expr;
 }
 
+// ========== __ESBMC_old support implementation ==========
+
+bool code_contractst::is_old_call(const expr2tc &expr) const
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  // Check if this is a sideeffect with kind old_snapshot
+  if (is_sideeffect2t(expr))
+  {
+    const sideeffect2t &se = to_sideeffect2t(expr);
+    return se.kind == sideeffect2t::old_snapshot;
+  }
+
+  return false;
+}
+
+expr2tc code_contractst::create_snapshot_variable(
+  const expr2tc &expr,
+  const std::string &func_name,
+  size_t index)
+{
+  // Generate unique snapshot variable name
+  std::string snapshot_name =
+    "__ESBMC_old_snapshot_" + func_name + "_" + std::to_string(index);
+
+  // Create symbol and add to symbol table
+  // Note: symbolt uses IRep1 (typet) while we work with IRep2 (type2tc).
+  // This is ESBMC's architecture: Symbol Table is IRep1-based for global state,
+  // while modern code (GOTO programs, contracts) uses IRep2 for local logic.
+  // Migration is needed at the boundary when adding symbols to context.
+  // If ESBMC migrates Symbol Table to IRep2, update this to use expr->type directly.
+  symbolt snapshot_symbol;
+  snapshot_symbol.name = snapshot_name;
+  snapshot_symbol.id = snapshot_name;
+  snapshot_symbol.type = migrate_type_back(expr->type);  // IRep2 → IRep1 conversion
+  snapshot_symbol.lvalue = true;
+  snapshot_symbol.static_lifetime = false;
+  snapshot_symbol.file_local = false;
+
+  // Add to context (symbol table)
+  symbolt *added = context.move_symbol_to_context(snapshot_symbol);
+
+  // Return symbol expression (IRep2)
+  return symbol2tc(expr->type, added->id);
+}
+
+expr2tc code_contractst::replace_old_in_expr(
+  const expr2tc &expr,
+  const std::vector<old_snapshot_t> &snapshots) const
+{
+  if (is_nil_expr(expr))
+    return expr;
+
+  // Check if this is a symbol that matches one of the old temp variables
+  if (is_symbol2t(expr))
+  {
+    const symbol2t &sym = to_symbol2t(expr);
+    std::string sym_name = id2string(sym.thename);
+    
+    // Only process symbols that are related to __ESBMC_old
+    // These temp variables have names containing "___ESBMC_old"
+    // This prevents accidentally replacing __ESBMC_return_value or other symbols
+    if (sym_name.find("___ESBMC_old") != std::string::npos)
+    {
+      for (const auto &snapshot : snapshots)
+      {
+        if (is_symbol2t(snapshot.original_expr))
+        {
+          const symbol2t &snap_sym = to_symbol2t(snapshot.original_expr);
+          if (sym.thename == snap_sym.thename)
+          {
+            return snapshot.snapshot_var;
+          }
+        }
+      }
+    }
+  }
+
+  // Check if this is an old_snapshot sideeffect (for compatibility)
+  if (is_old_call(expr))
+  {
+    // Get the expression inside old()
+    const sideeffect2t &se = to_sideeffect2t(expr);
+    expr2tc original_expr = se.operand;
+
+    // Find matching snapshot
+    for (const auto &snapshot : snapshots)
+    {
+      if (snapshot.original_expr == original_expr)
+      {
+        return snapshot.snapshot_var;
+      }
+    }
+
+    log_error("Cannot find snapshot for __ESBMC_old expression");
+    abort();
+  }
+
+  // Recursively replace in all operands
+  expr2tc new_expr = expr->clone();
+  new_expr->Foreach_operand([this, &snapshots](expr2tc &op) {
+    op = replace_old_in_expr(op, snapshots);
+  });
+
+  return new_expr;
+}
+
 bool code_contractst::has_contracts(const goto_programt &function_body) const
 {
   // Quick check: scan for contract markers without extracting full clauses
@@ -557,6 +798,32 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
 
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 {
+  // TODO: Function contract replacement mode (--replace-call-with-contract) is not fully implemented
+  // The current implementation does not properly handle:
+  // 1. Contract symbol extraction and storage
+  // 2. __ESBMC_old() snapshot creation at call sites
+  // 3. __ESBMC_return_value replacement in ensures clauses
+  //
+  // This feature requires significant additional work to be production-ready.
+  // For now, only --enforce-contract mode is supported.
+  log_error(
+    "ERROR: --replace-call-with-contract mode is not yet fully implemented.\n"
+    "\n"
+    "Current status:\n"
+    "  ✓ --enforce-contract mode: FULLY SUPPORTED\n"
+    "  ✗ --replace-call-with-contract mode: NOT IMPLEMENTED\n"
+    "\n"
+    "The replace mode requires:\n"
+    "  - Contract symbol management\n"
+    "  - __ESBMC_old() snapshot handling at call sites\n"
+    "  - __ESBMC_return_value replacement\n"
+    "  - Proper assigns clause havoc logic\n"
+    "\n"
+    "Please use --enforce-contract mode instead.\n"
+    "\n"
+    "TODO: Complete implementation of replace_calls() and generate_replacement_at_call()");
+  abort();
+
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)

@@ -637,6 +637,38 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
   }
+  else if (base_name == "__ESBMC_old")
+  {
+    // __ESBMC_old(expr): captures the pre-state value of expr in ensures clauses
+    // This function should only be used within __ESBMC_ensures clauses
+    //
+    // Type handling: Declared as int in frontend, but at IR level we use
+    // arguments[0].type() to automatically inherit the correct type from the argument.
+    if (arguments.size() != 1)
+    {
+      log_error("`__ESBMC_old' expected to have one argument");
+      abort();
+    }
+
+    if (lhs.is_nil())
+    {
+      log_error(
+        "`__ESBMC_old' must be used in an expression (requires LHS)");
+      abort();
+    }
+
+    // Create a special sideeffect expression to mark this as an old() call
+    // Type is automatically inherited from the argument
+    exprt old_expr("sideeffect", arguments[0].type());
+    old_expr.set("statement", "old_snapshot");
+    old_expr.copy_to_operands(arguments[0]);
+    old_expr.location() = function.location();
+
+    // Generate assignment: lhs = old_expr
+    code_assignt assignment(lhs, old_expr);
+    assignment.location() = function.location();
+    copy(assignment, ASSIGN, dest);
+  }
   else if (base_name == "__ESBMC_assert")
   {
     // 1 argument --> Default assertion
