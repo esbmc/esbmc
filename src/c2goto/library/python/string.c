@@ -10,10 +10,10 @@ __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
-static int __python_strnlen_bounded(const char *s, int max_len)
+static size_t __python_strnlen_bounded(const char *s, size_t max_len)
 {
 __ESBMC_HIDE:;
-  int i = 0;
+  size_t i = 0;
   while (i < max_len)
   {
     if (s[i] == '\0')
@@ -261,7 +261,7 @@ __ESBMC_HIDE:;
 
   char *buffer = __ESBMC_alloca(256);
 
-  int i = 0;
+  size_t i = 0;
   while (i < 255 && s[i])
   {
     if (s[i] >= 'A' && s[i] <= 'Z')
@@ -288,14 +288,19 @@ __ESBMC_HIDE:;
   if (s2[0] == '\0')
     return 0;
 
-  int len_s = strlen(s1);
-  int len_sub = strlen(s2);
+  size_t len_s = strlen(s1);
+  size_t len_sub = strlen(s2);
 
-  int i = 0;
-  while (i <= len_s - len_sub)
+  __ESBMC_assert(len_s <= INT_MAX, "string too long for find()");
+
+  if (len_sub > len_s)
+    return -1;
+
+  size_t i = 0;
+  while (i + len_sub <= len_s)
   {
     if (strncmp(s1 + i, s2, len_sub) == 0)
-      return i;
+      return (int)i;
     i++;
   }
 
@@ -305,22 +310,24 @@ __ESBMC_HIDE:;
 int __python_str_rfind(const char *s1, const char *s2)
 {
 __ESBMC_HIDE:;
+  size_t len_s = strlen(s1);
+  size_t len_sub = strlen(s2);
+
+  __ESBMC_assert(len_s <= INT_MAX, "string too long for rfind()");
+
   // str.rfind('') = len(s1)
   if (s2[0] == '\0')
-    return strlen(s1);
-
-  int len_s = strlen(s1);
-  int len_sub = strlen(s2);
+    return (int)len_s;
 
   if (len_sub > len_s)
     return -1;
 
-  int i = len_s - len_sub;
-  while (i >= 0)
+  size_t start = len_s - len_sub;
+  size_t i = start + 1;
+  while (i-- > 0)
   {
     if (strncmp(s1 + i, s2, len_sub) == 0)
-      return i;
-    i--;
+      return (int)i;
   }
 
   return -1;
@@ -345,28 +352,28 @@ __ESBMC_HIDE:;
   size_t len_s = __python_strnlen_bounded(s, 1024);
 
   // Bound assumptions for ESBMC - limit string sizes to reasonable values
-  __ESBMC_assert(len_s >= 0 && len_s <= 1024, "len_s bounds");
-  __ESBMC_assert(old_len >= 0 && old_len <= 256, "old_len bounds");
-  __ESBMC_assert(new_len >= 0 && new_len <= 256, "new_len bounds");
+  __ESBMC_assert(len_s <= 1024, "len_s bounds");
+  __ESBMC_assert(old_len <= 256, "old_len bounds");
+  __ESBMC_assert(new_len <= 256, "new_len bounds");
 
   if (old_len == 0)
   {
-    int slots = len_s + 1;
-    int replacements = slots;
-    if (count > 0 && count < slots)
-      replacements = count;
+    size_t slots = len_s + 1;
+    size_t replacements = slots;
+    if (count > 0 && (size_t)count < slots)
+      replacements = (size_t)count;
 
     size_t result_len = (size_t)len_s + (size_t)replacements * (size_t)new_len;
     char *buffer = __ESBMC_alloca(result_len + 1);
 
-    int pos = 0;
-    int idx = 0;
+    size_t pos = 0;
+    size_t idx = 0;
 
     while (idx < len_s)
     {
       if (idx < replacements)
       {
-        int k = 0;
+        size_t k = 0;
         while (k < new_len)
         {
           buffer[pos] = new_sub[k];
@@ -382,7 +389,7 @@ __ESBMC_HIDE:;
 
     if (len_s < replacements)
     {
-      int k = 0;
+      size_t k = 0;
       while (k < new_len)
       {
         buffer[pos] = new_sub[k];
@@ -396,9 +403,9 @@ __ESBMC_HIDE:;
   }
 
   int remaining = count;
-  int occurrences = 0;
-  int i = 0;
-  while (i <= len_s - old_len)
+  size_t occurrences = 0;
+  size_t i = 0;
+  while (i + old_len <= len_s)
   {
     if ((remaining != 0) && strncmp(s + i, old_sub, old_len) == 0)
     {
@@ -423,7 +430,7 @@ __ESBMC_HIDE:;
 
   remaining = count;
   i = 0;
-  int pos = 0;
+  size_t pos = 0;
 
   // Main replacement loop - use bounded iteration
   while (i < len_s)
@@ -440,7 +447,7 @@ __ESBMC_HIDE:;
     if (do_replace)
     {
       // Copy new_sub to buffer
-      int k = 0;
+      size_t k = 0;
       while (k < new_len)
       {
         buffer[pos] = new_sub[k];
@@ -686,8 +693,8 @@ __ESBMC_HIDE:;
 
   char *buffer = __ESBMC_alloca(512);
 
-  int i = 0;
-  int pos = 0;
+  size_t i = 0;
+  size_t pos = 0;
 
   // Copy first string
   while (pos < 511 && s1[i])
