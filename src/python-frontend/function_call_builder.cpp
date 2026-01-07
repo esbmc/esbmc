@@ -735,6 +735,19 @@ exprt function_call_builder::build() const
         obj_expr, loc);
     }
 
+    if (method_name == "rstrip")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      // rstrip() takes optional chars argument, but we only support no arguments
+      if (!call_["args"].empty())
+        throw std::runtime_error("rstrip() with arguments not yet supported");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_rstrip(
+        obj_expr, loc);
+    }
+
     if (method_name == "strip")
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
