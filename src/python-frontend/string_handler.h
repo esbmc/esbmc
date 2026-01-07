@@ -352,6 +352,51 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.find() with start/end
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the first occurrence within range, or -1 if not found
+   */
+  exprt handle_string_find_range(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rfind() method
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param location Source location
+   * @return returns the index of the last occurrence of the substring.
+   * If not found, it returns -1.
+   */
+  exprt handle_string_rfind(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rfind() with start/end
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the last occurrence within range, or -1 if not found
+   */
+  exprt handle_string_rfind_range(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
    * @brief Handle str.replace() method
    * @param string_obj String object
    * @param old_arg Substring to replace
