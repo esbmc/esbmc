@@ -20,7 +20,7 @@
 using namespace json_utils;
 namespace
 {
-// Constants for input handling
+// Constants for input handling (maximum number of characters, excluding null)
 constexpr int DEFAULT_NONDET_STR_LENGTH = 16;
 
 // Constants for UTF-8 encoding
@@ -230,7 +230,8 @@ exprt function_call_expr::handle_input() const
   // with a reasonable maximum length (e.g., 16 characters)
   // This is an under-approximation to model the input function
   int max_str_length = get_nondet_str_length();
-  typet string_type = type_handler_.get_typet("str", max_str_length);
+  size_t array_length = static_cast<size_t>(max_str_length) + 1;
+  typet string_type = type_handler_.get_typet("str", array_length);
   exprt rhs = exprt("sideeffect", string_type);
   rhs.statement("nondet");
 
@@ -248,9 +249,10 @@ exprt function_call_expr::build_nondet_call() const
   if (type == "str")
   {
     int max_str_length = get_nondet_str_length();
+    size_t array_length = static_cast<size_t>(max_str_length) + 1;
 
     typet char_array_type =
-      array_typet(char_type(), from_integer(max_str_length, size_type()));
+      array_typet(char_type(), from_integer(array_length, size_type()));
 
     // Create a temporary variable to hold the nondeterministic string
     symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
@@ -270,7 +272,7 @@ exprt function_call_expr::build_nondet_call() const
     converter_.add_instruction(nondet_assign);
 
     // Ensure null terminator at the last position
-    exprt last_index = from_integer(max_str_length - 1, size_type());
+    exprt last_index = from_integer(array_length - 1, size_type());
     exprt null_char = from_integer(0, char_type());
 
     index_exprt last_elem(symbol_expr(nondet_str_symbol), last_index);
