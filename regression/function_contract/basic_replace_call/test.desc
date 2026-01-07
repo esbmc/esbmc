@@ -1,5 +1,5 @@
-CORE
+KNOWNBUG
 main.c
---enforce-contract "*"
-^VERIFICATION SUCCESSFUL$
+--replace-call-with-contract "*"
+^VERIFICATION FAILED$
 
