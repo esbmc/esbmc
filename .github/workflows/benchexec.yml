@@ -116,7 +116,7 @@ jobs:
       testing: false     
 
   run-benchexec:
-    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec', 'witness']
     timeout-minutes: 12000
     needs: build-unix
     steps:
