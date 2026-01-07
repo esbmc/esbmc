@@ -3,6 +3,7 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/symbol_id.h>
+#include <util/config.h>
 #include <util/expr.h>
 #include <util/type.h>
 #include <util/symbol.h>
@@ -15,6 +16,24 @@
 #include <util/symbolic_types.h>
 #include <string>
 #include <functional>
+
+static int get_nondet_str_length()
+{
+  std::string opt_value = config.options.get_option("nondet-str-length");
+  if (!opt_value.empty())
+  {
+    try
+    {
+      int length = std::stoi(opt_value);
+      if (length > 0)
+        return length;
+    }
+    catch (...)
+    {
+    }
+  }
+  return 16;
+}
 
 // Extract element type from annotation
 static typet get_elem_type_from_annotation(
@@ -153,39 +172,12 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 
     elem_size = from_integer(BigInt(total_size), size_type());
   }
-  // For string pointers (char*), calculate length at runtime using strlen
+  // For string pointers (char*), use bounded size from nondet-str-length
   else if (
     elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == char_type())
   {
-    // Call strlen to get actual string length
-    const symbolt *strlen_symbol =
-      converter_.symbol_table().find_symbol("c:@F@strlen");
-    if (!strlen_symbol)
-    {
-      throw std::runtime_error("strlen function not found in symbol table");
-    }
-
-    // Create temp variable to store strlen result
-    symbolt &strlen_result = converter_.create_tmp_symbol(
-      op, "$strlen_result$", size_type(), gen_zero(size_type()));
-    code_declt strlen_decl(symbol_expr(strlen_result));
-    strlen_decl.location() = location;
-    converter_.add_instruction(strlen_decl);
-
-    // Call strlen(elem_symbol)
-    code_function_callt strlen_call;
-    strlen_call.function() = symbol_expr(*strlen_symbol);
-    strlen_call.lhs() = symbol_expr(strlen_result);
-    strlen_call.arguments().push_back(symbol_expr(elem_symbol));
-    strlen_call.type() = size_type();
-    strlen_call.location() = location;
-    converter_.add_instruction(strlen_call);
-
-    // Add 1 for null terminator: size = strlen(s) + 1
-    // Use strlen_result.type to ensure exact type match
-    exprt one_const = from_integer(1, strlen_result.type);
-    elem_size = exprt("+", strlen_result.type);
-    elem_size.copy_to_operands(symbol_expr(strlen_result), one_const);
+    const int max_str_length = get_nondet_str_length();
+    elem_size = from_integer(BigInt(max_str_length), size_type());
   }
   else
   {

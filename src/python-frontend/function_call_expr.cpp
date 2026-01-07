@@ -230,12 +230,33 @@ exprt function_call_expr::handle_input() const
   // with a reasonable maximum length (e.g., 16 characters)
   // This is an under-approximation to model the input function
   int max_str_length = get_nondet_str_length();
-  size_t array_length = static_cast<size_t>(max_str_length) + 1;
+  size_t array_length = static_cast<size_t>(max_str_length);
   typet string_type = type_handler_.get_typet("str", array_length);
+  symbolt &input_symbol = converter_.create_tmp_symbol(
+    call_, "$input_str$", string_type, exprt());
+
+  code_declt decl(symbol_expr(input_symbol));
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+
   exprt rhs = exprt("sideeffect", string_type);
   rhs.statement("nondet");
 
-  return rhs;
+  code_assignt assign(symbol_expr(input_symbol), rhs);
+  assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(assign);
+
+  if (array_length > 0)
+  {
+    exprt last_index = from_integer(array_length - 1, size_type());
+    exprt null_char = from_integer(0, char_type());
+    index_exprt last_elem(symbol_expr(input_symbol), last_index);
+    code_assignt null_assign(last_elem, null_char);
+    null_assign.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(null_assign);
+  }
+
+  return symbol_expr(input_symbol);
 }
 
 exprt function_call_expr::build_nondet_call() const
@@ -249,7 +270,7 @@ exprt function_call_expr::build_nondet_call() const
   if (type == "str")
   {
     int max_str_length = get_nondet_str_length();
-    size_t array_length = static_cast<size_t>(max_str_length) + 1;
+    size_t array_length = static_cast<size_t>(max_str_length);
 
     typet char_array_type =
       array_typet(char_type(), from_integer(array_length, size_type()));
