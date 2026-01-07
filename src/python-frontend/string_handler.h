@@ -339,6 +339,14 @@ public:
   exprt handle_string_lower(const exprt &string_obj, const locationt &location);
 
   /**
+   * @brief Handle str.upper() method
+   * @param string_obj String object
+   * @param location Source location
+   * @return Pointer to uppercase string
+   */
+  exprt handle_string_upper(const exprt &string_obj, const locationt &location);
+
+  /**
    * @brief Handle str.find() method
    * @param string_obj String object
    * @param find_arg String to check
