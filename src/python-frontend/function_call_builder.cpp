@@ -11,6 +11,7 @@
 #include <util/message.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <climits>
 
 bool function_call_builder::is_nondet_str_call(const nlohmann::json &node) const
 {
@@ -646,28 +647,50 @@ exprt function_call_builder::build() const
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
 
-      if (call_["args"].size() != 1)
-        throw std::runtime_error("rfind() requires exactly one argument");
+      if (call_["args"].size() < 1 || call_["args"].size() > 3)
+        throw std::runtime_error("rfind() requires one to three arguments");
 
       exprt find_arg = converter_.get_expr(call_["args"][0]);
-
       locationt loc = converter_.get_location_from_decl(call_);
-      return converter_.get_string_handler().handle_string_rfind(
-        obj_expr, find_arg, loc);
+
+      if (call_["args"].size() == 1)
+      {
+        return converter_.get_string_handler().handle_string_rfind(
+          obj_expr, find_arg, loc);
+      }
+
+      exprt start_arg = converter_.get_expr(call_["args"][1]);
+      exprt end_arg = from_integer(INT_MIN, int_type());
+      if (call_["args"].size() == 3)
+        end_arg = converter_.get_expr(call_["args"][2]);
+
+      return converter_.get_string_handler().handle_string_rfind_range(
+        obj_expr, find_arg, start_arg, end_arg, loc);
     }
 
     if (method_name == "find")
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
 
-      if (call_["args"].size() != 1)
-        throw std::runtime_error("find() requires exactly one argument");
+      if (call_["args"].size() < 1 || call_["args"].size() > 3)
+        throw std::runtime_error("find() requires one to three arguments");
 
       exprt find_arg = converter_.get_expr(call_["args"][0]);
-
       locationt loc = converter_.get_location_from_decl(call_);
-      return converter_.get_string_handler().handle_string_find(
-        obj_expr, find_arg, loc);
+
+      if (call_["args"].size() == 1)
+      {
+        return converter_.get_string_handler().handle_string_find(
+          obj_expr, find_arg, loc);
+      }
+
+      exprt start_arg = converter_.get_expr(call_["args"][1]);
+      exprt end_arg = from_integer(INT_MIN, int_type());
+      if (call_["args"].size() == 3)
+        end_arg = converter_.get_expr(call_["args"][2]);
+
+      return converter_.get_string_handler().handle_string_find_range(
+        obj_expr, find_arg, start_arg, end_arg, loc);
     }
 
     if (method_name == "isalpha")

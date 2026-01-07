@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstring>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 
@@ -1366,6 +1367,47 @@ exprt string_handler::handle_string_find(
   return find_call;
 }
 
+exprt string_handler::handle_string_find_range(
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const exprt &start_arg,
+  const exprt &end_arg,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  exprt arg_copy = find_arg;
+  exprt arg_expr = ensure_null_terminated_string(arg_copy);
+  exprt arg_addr = get_array_base_address(arg_expr);
+
+  exprt start_expr = start_arg;
+  if (start_expr.type() != int_type())
+    start_expr = typecast_exprt(start_expr, int_type());
+
+  exprt end_expr = end_arg;
+  if (end_expr.type() != int_type())
+    end_expr = typecast_exprt(end_expr, int_type());
+
+  symbolt *find_range_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_find_range");
+  if (!find_range_symbol)
+    throw std::runtime_error(
+      "str_find_range function not found in symbol table");
+
+  side_effect_expr_function_callt find_call;
+  find_call.function() = symbol_expr(*find_range_symbol);
+  find_call.arguments().push_back(str_addr);
+  find_call.arguments().push_back(arg_addr);
+  find_call.arguments().push_back(start_expr);
+  find_call.arguments().push_back(end_expr);
+  find_call.location() = location;
+  find_call.type() = int_type();
+
+  return find_call;
+}
+
 exprt string_handler::handle_string_rfind(
   const exprt &string_obj,
   const exprt &find_arg,
@@ -1388,6 +1430,47 @@ exprt string_handler::handle_string_rfind(
   rfind_call.function() = symbol_expr(*rfind_str_symbol);
   rfind_call.arguments().push_back(str_addr);
   rfind_call.arguments().push_back(arg_addr);
+  rfind_call.location() = location;
+  rfind_call.type() = int_type();
+
+  return rfind_call;
+}
+
+exprt string_handler::handle_string_rfind_range(
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const exprt &start_arg,
+  const exprt &end_arg,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  exprt arg_copy = find_arg;
+  exprt arg_expr = ensure_null_terminated_string(arg_copy);
+  exprt arg_addr = get_array_base_address(arg_expr);
+
+  exprt start_expr = start_arg;
+  if (start_expr.type() != int_type())
+    start_expr = typecast_exprt(start_expr, int_type());
+
+  exprt end_expr = end_arg;
+  if (end_expr.type() != int_type())
+    end_expr = typecast_exprt(end_expr, int_type());
+
+  symbolt *rfind_range_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_rfind_range");
+  if (!rfind_range_symbol)
+    throw std::runtime_error(
+      "str_rfind_range function not found in symbol table");
+
+  side_effect_expr_function_callt rfind_call;
+  rfind_call.function() = symbol_expr(*rfind_range_symbol);
+  rfind_call.arguments().push_back(str_addr);
+  rfind_call.arguments().push_back(arg_addr);
+  rfind_call.arguments().push_back(start_expr);
+  rfind_call.arguments().push_back(end_expr);
   rfind_call.location() = location;
   rfind_call.type() = int_type();
 

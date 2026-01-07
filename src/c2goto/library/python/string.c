@@ -61,6 +61,36 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+static void __python_str_normalize_range(int *start, int *end, size_t len_s)
+{
+__ESBMC_HIDE:;
+  int len_i = (int)len_s;
+
+  if (*start == INT_MIN)
+    *start = 0;
+
+  if (*end == INT_MIN)
+    *end = len_i;
+
+  if (*start < 0)
+    *start = *start + len_i;
+  if (*end < 0)
+    *end = *end + len_i;
+
+  if (*start < 0)
+    *start = 0;
+  if (*start > len_i)
+    *start = len_i;
+
+  if (*end < 0)
+    *end = 0;
+  if (*end > len_i)
+    *end = len_i;
+
+  if (*end < *start)
+    *end = *start;
+}
+
 // Python character isdigit - checks if a single character is a digit
 _Bool __python_char_isdigit(int c)
 {
@@ -288,8 +318,8 @@ __ESBMC_HIDE:;
   if (s2[0] == '\0')
     return 0;
 
-  size_t len_s = strlen(s1);
-  size_t len_sub = strlen(s2);
+  size_t len_s = __python_strnlen_bounded(s1, 1024);
+  size_t len_sub = __python_strnlen_bounded(s2, 1024);
 
   __ESBMC_assert(len_s <= INT_MAX, "string too long for find()");
 
@@ -307,11 +337,41 @@ __ESBMC_HIDE:;
   return -1;
 }
 
+int __python_str_find_range(const char *s1, const char *s2, int start, int end)
+{
+__ESBMC_HIDE:;
+  size_t len_s = __python_strnlen_bounded(s1, 1024);
+  size_t len_sub = __python_strnlen_bounded(s2, 1024);
+
+  __ESBMC_assert(len_s <= INT_MAX, "string too long for find()");
+
+  __python_str_normalize_range(&start, &end, len_s);
+
+  if (len_sub == 0)
+    return (start <= end) ? start : -1;
+
+  if (end - start < (int)len_sub)
+    return -1;
+
+  size_t start_u = (size_t)start;
+  size_t end_u = (size_t)end;
+
+  size_t i = start_u;
+  while (i + len_sub <= end_u)
+  {
+    if (strncmp(s1 + i, s2, len_sub) == 0)
+      return (int)i;
+    i++;
+  }
+
+  return -1;
+}
+
 int __python_str_rfind(const char *s1, const char *s2)
 {
 __ESBMC_HIDE:;
-  size_t len_s = strlen(s1);
-  size_t len_sub = strlen(s2);
+  size_t len_s = __python_strnlen_bounded(s1, 1024);
+  size_t len_sub = __python_strnlen_bounded(s2, 1024);
 
   __ESBMC_assert(len_s <= INT_MAX, "string too long for rfind()");
 
@@ -325,6 +385,35 @@ __ESBMC_HIDE:;
   size_t start = len_s - len_sub;
   size_t i = start + 1;
   while (i-- > 0)
+  {
+    if (strncmp(s1 + i, s2, len_sub) == 0)
+      return (int)i;
+  }
+
+  return -1;
+}
+
+int __python_str_rfind_range(const char *s1, const char *s2, int start, int end)
+{
+__ESBMC_HIDE:;
+  size_t len_s = __python_strnlen_bounded(s1, 1024);
+  size_t len_sub = __python_strnlen_bounded(s2, 1024);
+
+  __ESBMC_assert(len_s <= INT_MAX, "string too long for rfind()");
+
+  __python_str_normalize_range(&start, &end, len_s);
+
+  if (len_sub == 0)
+    return (start <= end) ? end : -1;
+
+  if (end - start < (int)len_sub)
+    return -1;
+
+  size_t start_u = (size_t)start;
+  size_t end_u = (size_t)end;
+  size_t i = end_u - len_sub + 1;
+
+  while (i-- > start_u)
   {
     if (strncmp(s1 + i, s2, len_sub) == 0)
       return (int)i;
