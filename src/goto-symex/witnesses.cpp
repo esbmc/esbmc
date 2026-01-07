@@ -122,7 +122,6 @@ void yamlt::generate_yaml(optionst &options)
       yaml_emitter << YAML::BeginMap;
       yaml_emitter << YAML::Key << "invariant" << YAML::Value << YAML::BeginMap;
 
-      log_progress("{}", invariant.value);
       create_invariant(invariant, yaml_emitter);
 
       yaml_emitter << YAML::EndMap;
@@ -249,16 +248,18 @@ void create_invariant(const invariant &i, YAML::Emitter &invariant)
   invariant << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
             << i.file;
   invariant << YAML::Key << "line" << YAML::Value << integer2string(i.line);
-#if 0
-  // Some validators will crash
-  invariant << YAML::Key << "column" << YAML::Value << integer2string(wp.column);
-#endif
+
+  invariant << YAML::Key << "column" << YAML::Value << integer2string(i.column);
+
   invariant << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
             << i.function;
   invariant << YAML::EndMap;
 
   invariant << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
             << i.value;
+
+  invariant << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+            << "c_expression";
   invariant << YAML::EndMap;
 }
 
@@ -1069,7 +1070,7 @@ static const std::regex regex_invariants(
   "+)?(__((VERIFIER|ESBMC))_)?(assume|assert)\\([a-zA-Z(-?(0-9))\\[\\]_>=+/"
   "*<~.&! \\(\\)]+\\);( +)?");
 
-static const std::regex regex_loop(R"(\b(while|for)\s*\(\s*([^)]*)\s*\))");
+static const std::regex regex_loop(R"(\b(while|for)\b)");
 
 std::string
 get_invariant(std::string verified_file, BigInt line_number, optionst &options)
@@ -1103,9 +1104,10 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
   }
 #endif
 
-  std::smatch m;
-  if (std::regex_search(line_code, m, regex_loop))
-    invariant = m[2];
+  if (std::regex_search(line_code, regex_loop))
+  {
+    invariant = "1";
+  }
 
   return invariant;
 }

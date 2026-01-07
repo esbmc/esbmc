@@ -135,7 +135,7 @@ void build_successful_goto_trace(
       goto_trace.steps.emplace_back();
       goto_trace_stept &goto_trace_step = goto_trace.steps.back();
       goto_trace_step.thread_nr = SSA_step.source.thread_nr;
-      goto_trace_step.lhs = SSA_step.cond;
+      goto_trace_step.lhs = SSA_step.lhs;
       goto_trace_step.rhs = SSA_step.rhs;
       goto_trace_step.pc = SSA_step.source.pc;
       goto_trace_step.comment = SSA_step.comment;

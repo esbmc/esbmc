@@ -506,9 +506,14 @@ void correctness_yaml_goto_trace(
     switch (step.type)
     {
     case goto_trace_stept::BREANCHING:
-      if (step.pc->is_goto())
+      if (step.pc->is_backwards_goto())
       {
-        if (!is_constant_expr(step.lhs))
+        std::string in = get_invariant(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+
+        if (in.empty())
           continue;
 
         invariant i;
