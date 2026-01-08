@@ -1364,6 +1364,25 @@ private:
 
     const Json &dict_init = var_node["value"];
 
+    // Handle function calls that return dict[K, V]
+    if (dict_init["_type"] == "Call" && dict_init["func"]["_type"] == "Name")
+    {
+      Json func_def = find_function_recursive(
+        dict_init["func"]["id"].template get<std::string>(), ast_["body"]);
+      if (
+        !func_def.empty() && func_def.contains("returns") &&
+        func_def["returns"]["_type"] == "Subscript" &&
+        func_def["returns"]["value"]["id"] == "dict" &&
+        func_def["returns"]["slice"]["elts"].size() >= 2)
+      {
+        const Json &val_type = func_def["returns"]["slice"]["elts"][1];
+        if (
+          val_type["_type"] == "Subscript" && val_type["value"].contains("id"))
+          return val_type["value"]["id"].template get<std::string>();
+      }
+    }
+
+    // Handle dict initialized from function call
     if (
       dict_init["_type"] == "Dict" && dict_init.contains("values") &&
       !dict_init["values"].empty())
