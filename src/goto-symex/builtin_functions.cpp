@@ -1936,7 +1936,7 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
   return result;
 }
 
-static inline expr2tc do_memcpy_expression(
+expr2tc goto_symex_utils::do_memcpy_expression(
   const expr2tc &dst,
   const size_t &dst_offset,
   const expr2tc &src,
@@ -1952,15 +1952,154 @@ static inline expr2tc do_memcpy_expression(
     type_byte_size(dst->type).to_uint64() == num_of_bytes)
     return src;
 
-  if (
-    is_array_type(src->type) || is_array_type(dst->type) ||
-    is_struct_type(dst->type) || is_union_type(dst->type) ||
-    is_struct_type(src->type) || is_union_type(src->type))
+  if (is_array_type(dst->type))
   {
-    log_debug("memcpy", "Only primitives are supported for now");
+    expr2tc result = gen_zero(dst->type);
+    constant_array2t &data = to_constant_array2t(result);
+    uint64_t dst_base_size =
+      type_byte_size(to_array_type(dst->type).subtype).to_uint64();
+
+    if (dst_offset % dst_base_size)
+    {
+      // TODO: misalignment
+      return expr2tc();
+    }
+
+    uint64_t bytes_left = num_of_bytes;
+    uint64_t dst_offset_left = dst_offset;
+
+    std::optional<unsigned> last_pos_updated;
+
+    // Skip dst offset
+    for (unsigned i = 0; i < data.datatype_members.size(); i++)
+    {
+      BigInt position(i);
+      expr2tc local_member = index2tc(
+        to_array_type(dst->type).subtype,
+        dst,
+        constant_int2tc(get_uint32_type(), position));
+
+      if (dst_offset_left < dst_base_size)
+        break;
+      data.datatype_members[i] = local_member;
+      dst_offset_left -= dst_base_size;
+      last_pos_updated = i;
+    }
+
+    if (is_struct_type(src->type) || is_union_type(src->type))
+    {
+      return expr2tc();
+    }
+
+    // Copy indexes until impossible
+    else if (is_array_type(src->type))
+    {
+      if (to_array_type(src->type).subtype != to_array_type(dst->type).subtype)
+        return expr2tc(); // TODO: Different array types, give up!
+
+      uint64_t src_base_size =
+        type_byte_size(to_array_type(src->type).subtype).to_uint64();
+
+      if (src_offset % src_base_size || bytes_left % src_base_size)
+      {
+        // TODO: Misalignment
+        return expr2tc();
+      }
+
+      for (unsigned i = src_offset / src_base_size;
+           i < data.datatype_members.size();
+           i++)
+      {
+        BigInt position(i);
+        expr2tc local_member = index2tc(
+          to_array_type(dst->type).subtype,
+          src,
+          constant_int2tc(get_uint32_type(), position));
+
+        if (bytes_left < src_base_size)
+          break;
+
+        if (!last_pos_updated.has_value())
+          last_pos_updated = 0;
+        else
+          last_pos_updated.value()++;
+
+        data.datatype_members[last_pos_updated.value()] = local_member;
+        bytes_left -= src_base_size;
+      }
+
+      // For now we dont support misalignment... lets be extra sure
+      assert(!bytes_left);
+    }
+    else
+    {
+      // This is a primitive into an array.
+      // for now... only support byte arrays
+      if (dst_base_size != 1)
+        return expr2tc();
+
+      // if we are an array of bytes it should be impossible to reach
+      // here with some offset left
+      assert(dst_offset_left == 0);
+
+      uint64_t src_base_size = type_byte_size(src->type).to_uint64();
+
+      // Should have been prevented already
+      assert(src_base_size <= bytes_left);
+
+      for (unsigned i = src_offset; i < src_base_size; i++)
+      {
+        auto local_member = byte_extract2tc(
+          to_array_type(dst->type).subtype,
+          src,
+          gen_ulong(i),
+          config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+
+        if (!bytes_left)
+          break;
+
+        if (!last_pos_updated.has_value())
+          last_pos_updated = 0;
+        else
+          last_pos_updated.value()++;
+
+        data.datatype_members[last_pos_updated.value()] =
+          std::move(local_member);
+        bytes_left -= 1;
+      }
+
+      assert(!bytes_left);
+    }
+
+    // last_pos should have a value, otherwise we did not copy anything :)
+    assert(!bytes_left && last_pos_updated.has_value());
+    last_pos_updated.value()++;
+
+    // Copy missing elements, if any
+    for (unsigned i = last_pos_updated.value();
+         i < data.datatype_members.size();
+         i++)
+    {
+      BigInt position(i);
+      expr2tc local_member = index2tc(
+        to_array_type(dst->type).subtype,
+        dst,
+        constant_int2tc(get_uint32_type(), position));
+      data.datatype_members[i] = local_member;
+    }
+
+    return result;
+  }
+
+  if (
+    is_array_type(src->type) || is_struct_type(dst->type) ||
+    is_union_type(dst->type) || is_struct_type(src->type) ||
+    is_union_type(src->type))
+  {
     return expr2tc();
   }
 
+  assert(!is_array_type(dst->type));
   // Base-case. Primitives!
   return goto_symex_utils::gen_byte_memcpy(
     src, dst, num_of_bytes, src_offset, dst_offset);
@@ -2018,6 +2157,7 @@ void goto_symext::intrinsic_memcpy(
   cur_state->rename(n_arg);
   if (!n_arg || is_symbol2t(n_arg))
   {
+    log_debug("memcpy", "number of bytes is symbolic");
     bump_call(func_call, bump_name);
     return;
   }
@@ -2025,6 +2165,7 @@ void goto_symext::intrinsic_memcpy(
   simplify(n_arg);
   if (!is_constant_int2t(n_arg))
   {
+    log_debug("memcpy", "number of bytes is non-constant");
     bump_call(func_call, bump_name);
     return;
   }
@@ -2040,6 +2181,7 @@ void goto_symext::intrinsic_memcpy(
 
   if (!internal_deref_items.size())
   {
+    log_debug("memcpy", "no srcs found in VSA");
     bump_call(func_call, bump_name);
     return;
   }
@@ -2060,6 +2202,7 @@ void goto_symext::intrinsic_memcpy(
 
     if (!item_object || !item_offset)
     {
+      log_debug("memcpy", "could not identify src");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2067,6 +2210,7 @@ void goto_symext::intrinsic_memcpy(
     offset_simplifier(item_offset);
     if (!is_constant_int2t(item_offset))
     {
+      log_debug("memcpy", "non consts src offset");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2081,11 +2225,13 @@ void goto_symext::intrinsic_memcpy(
     }
     catch (const array_type2t::dyn_sized_array_excp &)
     {
+      log_debug("memcpy", "non consts src size");
       bump_call(func_call, bump_name);
       return;
     }
     catch (const array_type2t::inf_sized_array_excp &)
     {
+      log_debug("memcpy", "non consts src size");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2132,6 +2278,13 @@ void goto_symext::intrinsic_memcpy(
       claim(check, error_msg);
       continue;
     }
+
+    // Arrived here means that we are doing an invalid memcpy and the user does not care if its wrong
+    if (is_out_bounds)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
   }
 
   // Readings are sorted... now go for writings
@@ -2151,6 +2304,7 @@ void goto_symext::intrinsic_memcpy(
     offset_simplifier(item.offset);
     if (!is_constant_int2t(item.offset))
     {
+      log_debug("memcpy", "non consts dst offset");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2165,11 +2319,13 @@ void goto_symext::intrinsic_memcpy(
     }
     catch (const array_type2t::dyn_sized_array_excp &)
     {
+      log_debug("memcpy", "no dst array size");
       bump_call(func_call, bump_name);
       return;
     }
     catch (const array_type2t::inf_sized_array_excp &)
     {
+      log_debug("memcpy", "inf dst array size");
       bump_call(func_call, bump_name);
       return;
     }
@@ -2192,13 +2348,20 @@ void goto_symext::intrinsic_memcpy(
       continue;
     }
 
+    // Arrived here means that we are doing an invalid memcpy and the user does not care if its wrong
+    if (is_out_bounds)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
     // Time to do the actual copy
     for (const auto &src_item : src_items)
     {
       // Offset is garanteed to be a constant
       const uint64_t src_offset =
         to_constant_int2t(src_item.offset).value.to_uint64();
-      const expr2tc new_object = do_memcpy_expression(
+      const expr2tc new_object = goto_symex_utils::do_memcpy_expression(
         item.object,
         number_of_offset,
         src_item.object,
