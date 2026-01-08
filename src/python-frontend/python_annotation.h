@@ -2373,6 +2373,8 @@ private:
         Json iter_node;
         if (current_func != nullptr && (*current_func).contains("body"))
           iter_node = find_annotated_assign(iter_var, (*current_func)["body"]);
+        if (iter_node.empty() && current_func != nullptr && (*current_func).contains("args"))
+          iter_node = find_annotated_assign(iter_var, (*current_func)["args"]["args"]);
         if (iter_node.empty())
           iter_node = find_annotated_assign(iter_var, ast_["body"]);
 
