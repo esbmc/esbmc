@@ -18,7 +18,7 @@ class string_builder;
 
 /**
  * @brief Handles all string-related operations for Python-to-C conversion
- * 
+ *
  * This class extracts string manipulation functionality from python_converter
  * to improve modularity and maintainability. It handles:
  * - String size calculations
@@ -218,7 +218,7 @@ public:
    * @brief Handle str.join() method
    * @param call_json JSON node representing the join call
    * @return Expression representing the joined string
-   * 
+   *
    * Handles Python's str.join(iterable) method, e.g.:
    * - " ".join(["a", "b", "c"]) -> "a b c"
    * - "-".join(list_var) -> joined string
@@ -338,6 +338,13 @@ public:
    */
   exprt handle_string_lower(const exprt &string_obj, const locationt &location);
 
+  /**
+   * @brief Handle str.upper() method
+   * @param string_obj String object
+   * @param location Source location
+   * @return Pointer to uppercase string
+   */
+  exprt handle_string_upper(const exprt& string_obj, const locationt& location);
   /**
    * @brief Handle str.find() method
    * @param string_obj String object

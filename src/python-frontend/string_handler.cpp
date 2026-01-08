@@ -1339,6 +1339,47 @@ exprt string_handler::handle_string_lower(
   return lower_call;
 }
 
+exprt string_handler::handle_string_upper(
+  const exprt& string_obj,
+  const locationt& location)
+{
+  // For single characters, handle directly
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    symbolt* upper_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_upper");
+    if (!upper_symbol)
+      throw std::runtime_error(
+        "__python_char_upper function not found in symbol table");
+
+    side_effect_expr_function_callt upper_call;
+    upper_call.function() = symbol_expr(*upper_symbol);
+    upper_call.arguments().push_back(string_obj);
+    upper_call.location() = location;
+    upper_call.type() = char_type();
+
+    return upper_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt* upper_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_upper");
+  if (!upper_str_symbol)
+    throw std::runtime_error("str_upper function not found in symbol table");
+
+  side_effect_expr_function_callt upper_call;
+  upper_call.function() = symbol_expr(*upper_str_symbol);
+  upper_call.arguments().push_back(str_addr);
+  upper_call.location() = location;
+  upper_call.type() = pointer_typet(char_type());
+
+  return upper_call;
+}
+
 exprt string_handler::handle_string_find(
   const exprt &string_obj,
   const exprt &find_arg,

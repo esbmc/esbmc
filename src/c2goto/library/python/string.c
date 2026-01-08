@@ -282,6 +282,15 @@ __ESBMC_HIDE:;
   return c;
 }
 
+// Python character upper - converts a single character to uppercase
+int __python_char_upper(int c)
+{
+__ESBMC_HIDE:;
+  if (c >= 'a' && c <= 'z')
+    return c - ('a' - 'A');
+  return c;
+}
+
 // Python string lower - converts all characters to lowercase
 char *__python_str_lower(const char *s)
 {
@@ -304,6 +313,31 @@ __ESBMC_HIDE:;
   if (s[i] != '\0')
   {
     __ESBMC_assert(0, "String too long for lower() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
+
+// Python string upper - converts all characters to uppercase
+char* __python_str_upper(const char* s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char*)s;
+
+  char* buffer = __ESBMC_alloca(256);
+
+  int i = 0;
+  while (i < 255 && s[i])
+  {
+    if (s[i] >= 'a' && s[i] <= 'z')
+      buffer[i] = s[i] - ('a' - 'A');
+    else
+      buffer[i] = s[i];
+    i++;
   }
 
   buffer[i] = '\0';
