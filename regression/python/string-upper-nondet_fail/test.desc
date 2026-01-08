@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc
+--incremental-bmc --nondet-str-length 4
 ^VERIFICATION FAILED$
