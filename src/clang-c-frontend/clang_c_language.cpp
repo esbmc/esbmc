@@ -1,6 +1,7 @@
 #include <util/compiler_defs.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <llvm/ADT/APFloat.h>
 #include <clang/Frontend/ASTUnit.h>
 CC_DIAGNOSTIC_POP()
 

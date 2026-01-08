@@ -2,6 +2,7 @@
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <llvm/ADT/APFloat.h>
 #include <clang/AST/Attr.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
