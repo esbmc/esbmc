@@ -1695,13 +1695,12 @@ exprt function_call_expr::handle_list_pop() const
     base.swap(deref);
   }
 
-  // Handle array types specially
-  if (elem_type.is_array())
+  // Handle string data stored as raw bytes (string literals or char* elements)
+  if (
+    (elem_type.is_array() && elem_type.subtype() == char_type()) ||
+    (elem_type.is_pointer() && elem_type.subtype() == char_type()))
   {
-    const array_typet &arr_type = to_array_type(elem_type);
-    // Cast from void* to pointer to element type (e.g., char* instead of char[2]*)
-    // This matches how python_list::handle_index_access() handles array access
-    typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
+    typecast_exprt tc(obj_value, gen_pointer_type(char_type()));
     return tc;
   }
 
@@ -1834,10 +1833,13 @@ exprt function_call_expr::handle_list_append() const
 
   python_list list(converter_, nlohmann::json());
 
+  typet append_type = value_to_append.type();
+  if (append_type.is_array() && append_type.subtype() == char_type())
+    append_type = gen_pointer_type(char_type());
   list.add_type_info(
     list_symbol->id.as_string(),
     value_to_append.identifier().as_string(),
-    value_to_append.type());
+    append_type);
 
   return list.build_push_list_call(*list_symbol, call_, value_to_append);
 }

@@ -108,7 +108,12 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 {
   const type_handler type_handler_ = converter_.get_type_handler();
   locationt location = converter_.get_location_from_decl(op);
-  const std::string elem_type_name = type_handler_.type_to_string(elem.type());
+  const bool is_char_array =
+    elem.type().is_array() && elem.type().subtype() == char_type();
+  const typet elem_type_for_hash =
+    is_char_array ? gen_pointer_type(char_type()) : elem.type();
+  const std::string elem_type_name =
+    type_handler_.type_to_string(elem_type_for_hash);
 
   // Create type name as null-terminated char array
   const typet type_name_type =
@@ -139,6 +144,26 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   elem_decl.copy_to_operands(elem);
   elem_decl.location() = location;
   converter_.add_instruction(elem_decl);
+  symbolt *elem_symbol_ptr = &elem_symbol;
+  if (is_char_array)
+  {
+    symbolt &elem_ptr_symbol = converter_.create_tmp_symbol(
+      op,
+      "$list_elem_ptr$",
+      gen_pointer_type(char_type()),
+      exprt());
+    code_declt ptr_decl(symbol_expr(elem_ptr_symbol));
+    ptr_decl.location() = location;
+    converter_.add_instruction(ptr_decl);
+
+    exprt first_index = from_integer(0, size_type());
+    index_exprt first_elem(symbol_expr(elem_symbol), first_index);
+    code_assignt ptr_assign(
+      symbol_expr(elem_ptr_symbol), address_of_exprt(first_elem));
+    ptr_assign.location() = location;
+    converter_.add_instruction(ptr_assign);
+    elem_symbol_ptr = &elem_ptr_symbol;
+  }
 
   // Calculate element size in bytes
   exprt elem_size;
@@ -148,19 +173,20 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   // None type: store pointer directly without copying
   // Set size to 0 so memcpy is skipped and NULL is preserved
   if (
-    elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == bool_type())
+    elem_symbol_ptr->type.is_pointer() &&
+    elem_symbol_ptr->type.subtype() == bool_type())
   {
     elem_size = from_integer(BigInt(0), size_type());
   }
   // For list pointers (PyListObj*), use pointer size
-  else if (elem_symbol.type == list_type)
+  else if (elem_symbol_ptr->type == list_type)
   {
     // This is a pointer to PyListObj: use pointer size
     const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
     elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
   }
   // Handle struct types (such as dictionaries): store by reference
-  else if (elem_symbol.type.is_struct())
+  else if (elem_symbol_ptr->type.is_struct())
   {
     // Calculate actual struct size by counting pointer-sized components
     const struct_union_typet &struct_type =
@@ -172,12 +198,55 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 
     elem_size = from_integer(BigInt(total_size), size_type());
   }
-  // For string pointers (char*), use bounded size from nondet-str-length
-  else if (
-    elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == char_type())
+  // For string arrays, use the constant array size.
+  else if (is_char_array)
   {
+    const array_typet &array_type = to_array_type(elem.type());
+    if (!array_type.size().is_constant())
+      throw std::runtime_error("String array size must be constant");
+    const constant_exprt &size_const = to_constant_expr(array_type.size());
+    elem_size =
+      from_integer(binary2integer(size_const.value().c_str(), false), size_type());
+  }
+  // For string pointers (char*), use strlen + 1 with a bounded length.
+  else if (
+    elem_symbol_ptr->type.is_pointer() &&
+    elem_symbol_ptr->type.subtype() == char_type())
+  {
+    const symbolt *strlen_symbol =
+      converter_.symbol_table().find_symbol("c:@F@strlen");
+    if (!strlen_symbol)
+    {
+      throw std::runtime_error("strlen function not found in symbol table");
+    }
+
+    symbolt &strlen_result = converter_.create_tmp_symbol(
+      op, "$strlen_result$", size_type(), gen_zero(size_type()));
+    code_declt strlen_decl(symbol_expr(strlen_result));
+    strlen_decl.location() = location;
+    converter_.add_instruction(strlen_decl);
+
+    code_function_callt strlen_call;
+    strlen_call.function() = symbol_expr(*strlen_symbol);
+    strlen_call.lhs() = symbol_expr(strlen_result);
+    strlen_call.arguments().push_back(symbol_expr(*elem_symbol_ptr));
+    strlen_call.type() = size_type();
+    strlen_call.location() = location;
+    converter_.add_instruction(strlen_call);
+
     const int max_str_length = get_nondet_str_length();
-    elem_size = from_integer(BigInt(max_str_length), size_type());
+    exprt bound =
+      from_integer(BigInt(max_str_length - 1), size_type());
+    exprt cond("<=", bool_type());
+    cond.copy_to_operands(symbol_expr(strlen_result), bound);
+    codet assume_code("assume");
+    assume_code.copy_to_operands(cond);
+    assume_code.location() = location;
+    converter_.add_instruction(assume_code);
+
+    exprt one_const = from_integer(1, strlen_result.type);
+    elem_size = exprt("+", strlen_result.type);
+    elem_size.copy_to_operands(symbol_expr(strlen_result), one_const);
   }
   else
   {
@@ -225,7 +294,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   // Build and return the push function call
   list_elem_info elem_info;
   elem_info.elem_type_sym = &elem_type_sym;
-  elem_info.elem_symbol = &elem_symbol;
+  elem_info.elem_symbol = elem_symbol_ptr;
   elem_info.elem_size = elem_size;
   elem_info.location = location;
   return elem_info;
@@ -507,8 +576,11 @@ exprt python_list::get()
     exprt list_push_func_call =
       build_push_list_call(list_symbol, list_value_, elem);
     converter_.add_instruction(list_push_func_call);
+    typet elem_type = elem.type();
+    if (elem_type.is_array() && elem_type.subtype() == char_type())
+      elem_type = gen_pointer_type(char_type());
     list_type_map[list_id].push_back(
-      std::make_pair(elem.identifier().as_string(), elem.type()));
+      std::make_pair(elem.identifier().as_string(), elem_type));
   }
 
   return symbol_expr(list_symbol);
@@ -1560,13 +1632,19 @@ exprt python_list::contains(const exprt &item, const exprt &list)
       {
         const typet &stored_type = stored_entry.second;
 
-        // Check if stored type is a char array (string)
-        if (stored_type.is_array() && stored_type.subtype() == char_type())
+        // Check if stored type is a string (char array or char pointer)
+        if (
+          (stored_type.is_array() &&
+           stored_type.subtype() == char_type()) ||
+          (stored_type.is_pointer() &&
+           stored_type.subtype() == char_type()))
         {
+          const typet normalized_type =
+            gen_pointer_type(char_type());
           // Use the stored string array type instead of void pointer type
           const type_handler type_handler_ = converter_.get_type_handler();
           const std::string stored_type_name =
-            type_handler_.type_to_string(stored_type);
+            type_handler_.type_to_string(normalized_type);
 
           constant_exprt stored_hash(size_type());
           stored_hash.set_value(integer2binary(
@@ -1574,35 +1652,42 @@ exprt python_list::contains(const exprt &item, const exprt &list)
             config.ansi_c.address_width));
           type_hash = stored_hash;
 
-          // Use strlen for void* strings from iteration
           const symbolt *strlen_symbol =
             converter_.symbol_table().find_symbol("c:@F@strlen");
-          if (strlen_symbol)
-          {
-            // Call strlen to get actual string length
-            symbolt &strlen_result = converter_.create_tmp_symbol(
-              list_value_,
-              "$strlen_result$",
-              size_type(),
-              gen_zero(size_type()));
-            code_declt strlen_decl(symbol_expr(strlen_result));
-            strlen_decl.location() = item_info.location;
-            converter_.add_instruction(strlen_decl);
+          if (!strlen_symbol)
+            throw std::runtime_error("strlen function not found in symbol table");
 
-            code_function_callt strlen_call;
-            strlen_call.function() = symbol_expr(*strlen_symbol);
-            strlen_call.lhs() = symbol_expr(strlen_result);
-            strlen_call.arguments().push_back(
-              symbol_expr(*item_info.elem_symbol));
-            strlen_call.type() = size_type();
-            strlen_call.location() = item_info.location;
-            converter_.add_instruction(strlen_call);
+          symbolt &strlen_result = converter_.create_tmp_symbol(
+            list_value_,
+            "$strlen_result$",
+            size_type(),
+            gen_zero(size_type()));
+          code_declt strlen_decl(symbol_expr(strlen_result));
+          strlen_decl.location() = item_info.location;
+          converter_.add_instruction(strlen_decl);
 
-            // Add 1 for null terminator: size = strlen(s) + 1
-            exprt one_const = from_integer(1, strlen_result.type);
-            elem_size = exprt("+", strlen_result.type);
-            elem_size.copy_to_operands(symbol_expr(strlen_result), one_const);
-          }
+          code_function_callt strlen_call;
+          strlen_call.function() = symbol_expr(*strlen_symbol);
+          strlen_call.lhs() = symbol_expr(strlen_result);
+          strlen_call.arguments().push_back(
+            symbol_expr(*item_info.elem_symbol));
+          strlen_call.type() = size_type();
+          strlen_call.location() = item_info.location;
+          converter_.add_instruction(strlen_call);
+
+          const int max_str_length = get_nondet_str_length();
+          exprt bound =
+            from_integer(BigInt(max_str_length - 1), size_type());
+          exprt cond("<=", bool_type());
+          cond.copy_to_operands(symbol_expr(strlen_result), bound);
+          codet assume_code("assume");
+          assume_code.copy_to_operands(cond);
+          assume_code.location() = item_info.location;
+          converter_.add_instruction(assume_code);
+
+          exprt one_const = from_integer(1, strlen_result.type);
+          elem_size = exprt("+", strlen_result.type);
+          elem_size.copy_to_operands(symbol_expr(strlen_result), one_const);
 
           break; // Found string array type, use it
         }
