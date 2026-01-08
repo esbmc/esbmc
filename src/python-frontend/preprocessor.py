@@ -984,11 +984,9 @@ class Preprocessor(ast.NodeTransformer):
         length_target = self.create_name_node(length_var, ast.Store(), node)
         int_annotation = self.create_name_node('int', ast.Load(), node)
 
-        # Always use len(): let the C++ converter decide the implementation
-        # based on actual runtime type information from the symbol table.
         # The function_call_builder will map len() to either:
-        #   - strlen() for string types
-        #   - __ESBMC_get_object_size() for list/dict/set types
+        # - strlen(): string types
+        # - __ESBMC_get_object_size(): list/dict/set/sequence types
         len_func = self.create_name_node('len', ast.Load(), node)
 
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
