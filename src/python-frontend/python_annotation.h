@@ -474,7 +474,24 @@ private:
     else if (arg["_type"] == "Tuple")
       return "tuple";
     else if (arg["_type"] == "BoolOp")
+    {
+      if (arg.contains("values") && arg["values"].is_array())
+      {
+        for (const auto &val : arg["values"])
+        {
+          if (
+            val.contains("_type") && val["_type"] == "Call" &&
+            val.contains("func") && val["func"].contains("_type") &&
+            val["func"]["_type"] == "Name" && val["func"].contains("id"))
+          {
+            auto it = builtin_functions.find(val["func"]["id"]);
+            if (it != builtin_functions.end())
+              return it->second;
+          }
+        }
+      }
       return "bool";
+    }
     else if (arg["_type"] == "Call")
     {
       // Handle function calls like abs(a - b), len(list), etc.

@@ -546,6 +546,8 @@ exprt function_call_builder::build() const
       throw std::runtime_error("__ESBMC_assume requires one boolean argument");
 
     exprt condition = converter_.get_expr(call_["args"][0]);
+    if (!condition.type().is_bool())
+      condition = typecast_exprt(condition, bool_type());
 
     // Create code_assume statement
     codet assume_code("assume");
