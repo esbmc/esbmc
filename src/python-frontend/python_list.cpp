@@ -148,10 +148,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   if (is_char_array)
   {
     symbolt &elem_ptr_symbol = converter_.create_tmp_symbol(
-      op,
-      "$list_elem_ptr$",
-      gen_pointer_type(char_type()),
-      exprt());
+      op, "$list_elem_ptr$", gen_pointer_type(char_type()), exprt());
     code_declt ptr_decl(symbol_expr(elem_ptr_symbol));
     ptr_decl.location() = location;
     converter_.add_instruction(ptr_decl);
@@ -205,8 +202,8 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     if (!array_type.size().is_constant())
       throw std::runtime_error("String array size must be constant");
     const constant_exprt &size_const = to_constant_expr(array_type.size());
-    elem_size =
-      from_integer(binary2integer(size_const.value().c_str(), false), size_type());
+    elem_size = from_integer(
+      binary2integer(size_const.value().c_str(), false), size_type());
   }
   // For string pointers (char*), use strlen + 1 with a bounded length.
   else if (
@@ -235,8 +232,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     converter_.add_instruction(strlen_call);
 
     const int max_str_length = get_nondet_str_length();
-    exprt bound =
-      from_integer(BigInt(max_str_length - 1), size_type());
+    exprt bound = from_integer(BigInt(max_str_length - 1), size_type());
     exprt cond("<=", bool_type());
     cond.copy_to_operands(symbol_expr(strlen_result), bound);
     codet assume_code("assume");
@@ -1634,13 +1630,10 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
         // Check if stored type is a string (char array or char pointer)
         if (
-          (stored_type.is_array() &&
-           stored_type.subtype() == char_type()) ||
-          (stored_type.is_pointer() &&
-           stored_type.subtype() == char_type()))
+          (stored_type.is_array() && stored_type.subtype() == char_type()) ||
+          (stored_type.is_pointer() && stored_type.subtype() == char_type()))
         {
-          const typet normalized_type =
-            gen_pointer_type(char_type());
+          const typet normalized_type = gen_pointer_type(char_type());
           // Use the stored string array type instead of void pointer type
           const type_handler type_handler_ = converter_.get_type_handler();
           const std::string stored_type_name =
@@ -1655,13 +1648,11 @@ exprt python_list::contains(const exprt &item, const exprt &list)
           const symbolt *strlen_symbol =
             converter_.symbol_table().find_symbol("c:@F@strlen");
           if (!strlen_symbol)
-            throw std::runtime_error("strlen function not found in symbol table");
+            throw std::runtime_error(
+              "strlen function not found in symbol table");
 
           symbolt &strlen_result = converter_.create_tmp_symbol(
-            list_value_,
-            "$strlen_result$",
-            size_type(),
-            gen_zero(size_type()));
+            list_value_, "$strlen_result$", size_type(), gen_zero(size_type()));
           code_declt strlen_decl(symbol_expr(strlen_result));
           strlen_decl.location() = item_info.location;
           converter_.add_instruction(strlen_decl);
@@ -1676,8 +1667,7 @@ exprt python_list::contains(const exprt &item, const exprt &list)
           converter_.add_instruction(strlen_call);
 
           const int max_str_length = get_nondet_str_length();
-          exprt bound =
-            from_integer(BigInt(max_str_length - 1), size_type());
+          exprt bound = from_integer(BigInt(max_str_length - 1), size_type());
           exprt cond("<=", bool_type());
           cond.copy_to_operands(symbol_expr(strlen_result), bound);
           codet assume_code("assume");

@@ -232,8 +232,8 @@ exprt function_call_expr::handle_input() const
   int max_str_length = get_nondet_str_length();
   size_t array_length = static_cast<size_t>(max_str_length);
   typet string_type = type_handler_.get_typet("str", array_length);
-  symbolt &input_symbol = converter_.create_tmp_symbol(
-    call_, "$input_str$", string_type, exprt());
+  symbolt &input_symbol =
+    converter_.create_tmp_symbol(call_, "$input_str$", string_type, exprt());
 
   code_declt decl(symbol_expr(input_symbol));
   decl.location() = converter_.get_location_from_decl(call_);
