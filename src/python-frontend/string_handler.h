@@ -552,17 +552,6 @@ private:
     const std::vector<unsigned char> &chars,
     const typet &type);
 
-  /**
-   * @brief Create an exception raise expression
-   * @param exc Exception class name
-   * @param message Exception message
-   * @param location Source location
-   * @return Expression representing a raise
-   */
-  exprt make_exception_raise(
-    const std::string &exc,
-    const std::string &message,
-    const locationt &location) const;
 
   /**
    * @brief Find or create a function symbol for string operations

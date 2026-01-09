@@ -1,4 +1,5 @@
 #include <python-frontend/char_utils.h>
+#include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/python_converter.h>
@@ -235,36 +236,6 @@ exprt string_handler::make_char_array_expr(
     arr.operands()[i] = from_integer(chars[i], char_type());
   }
   return arr;
-}
-
-exprt string_handler::make_exception_raise(
-  const std::string &exc,
-  const std::string &message,
-  const locationt &location) const
-{
-  if (!type_utils::is_python_exceptions(exc))
-  {
-    log_error("This exception type is not supported: {}", exc);
-    abort();
-  }
-
-  typet type = type_handler_.get_typet(exc);
-
-  exprt size = constant_exprt(
-    integer2binary(message.size(), bv_width(size_type())),
-    integer2string(message.size()),
-    size_type());
-  typet t = array_typet(char_type(), size);
-  string_constantt string_name(message, t, string_constantt::k_default);
-
-  exprt sym("struct", type);
-  sym.copy_to_operands(address_of_exprt(string_name));
-
-  exprt raise = side_effect_exprt("cpp-throw", type);
-  raise.move_to_operands(sym);
-  raise.location() = location;
-  raise.location().user_provided(true);
-  return raise;
 }
 
 exprt string_handler::convert_to_string(const exprt &expr)
@@ -1499,8 +1470,8 @@ exprt string_handler::handle_string_index(
 
   exprt not_found =
     equality_exprt(symbol_expr(find_result), from_integer(-1, int_type()));
-  exprt raise =
-    make_exception_raise("ValueError", "substring not found", location);
+  exprt raise = python_exception_utils::make_exception_raise(
+    type_handler_, "ValueError", "substring not found", &location);
 
   code_expressiont raise_code(raise);
   raise_code.location() = location;
@@ -1537,8 +1508,8 @@ exprt string_handler::handle_string_index_range(
 
   exprt not_found =
     equality_exprt(symbol_expr(find_result), from_integer(-1, int_type()));
-  exprt raise =
-    make_exception_raise("ValueError", "substring not found", location);
+  exprt raise = python_exception_utils::make_exception_raise(
+    type_handler_, "ValueError", "substring not found", &location);
 
   code_expressiont raise_code(raise);
   raise_code.location() = location;

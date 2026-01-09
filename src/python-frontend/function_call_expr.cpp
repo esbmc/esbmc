@@ -1,4 +1,5 @@
 #include <python-frontend/function_call_expr.h>
+#include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
@@ -2974,31 +2975,8 @@ exprt function_call_expr::gen_exception_raise(
   std::string exc,
   std::string message) const
 {
-  if (!type_utils::is_python_exceptions(exc))
-  {
-    log_error("This exception type is not supported: {}", exc);
-    abort();
-  }
-
-  typet type = type_handler_.get_typet(exc);
-
-  exprt size = constant_exprt(
-    integer2binary(message.size(), bv_width(size_type())),
-    integer2string(message.size()),
-    size_type());
-  typet t = array_typet(char_type(), size);
-  string_constantt string_name(message, t, string_constantt::k_default);
-
-  // Construct a constant struct to throw:
-  // raise VauleError{ .message=&"Error message" }
-  // If the exception model is modified, it might be necessary to make changes
-  exprt sym("struct", type);
-  sym.copy_to_operands(address_of_exprt(string_name));
-
-  exprt raise = side_effect_exprt("cpp-throw", type);
-  raise.move_to_operands(sym);
-
-  return raise;
+  return python_exception_utils::make_exception_raise(
+    type_handler_, exc, message, nullptr);
 }
 
 std::vector<std::string>
