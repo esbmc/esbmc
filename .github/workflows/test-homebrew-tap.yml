@@ -98,7 +98,7 @@ jobs:
       
       - name: Install Python dependencies for ESBMC
         run: |
-          pip3 install mypy
+          pip3 install --break-system-packages mypy
           echo "✅ mypy installed successfully!"
       
       - name: Test ESBMC with simple Python program
