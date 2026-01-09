@@ -852,8 +852,7 @@ exprt function_call_builder::build() const
         }
         if (
           node.contains("_type") && node["_type"] == "Name" &&
-          node.contains("id") && node["id"].is_string() &&
-          node["id"] == "None")
+          node.contains("id") && node["id"].is_string() && node["id"] == "None")
         {
           return true;
         }
@@ -867,8 +866,8 @@ exprt function_call_builder::build() const
         for (const auto &kw : call_["keywords"])
         {
           if (
-            kw.contains("arg") && kw["arg"].is_string() &&
-            kw["arg"] == name && kw.contains("value"))
+            kw.contains("arg") && kw["arg"].is_string() && kw["arg"] == name &&
+            kw.contains("value"))
           {
             return &kw["value"];
           }
@@ -882,9 +881,8 @@ exprt function_call_builder::build() const
         const nlohmann::json *sep_kw = find_keyword("sep");
         if (sep_kw == nullptr || is_none_literal(*sep_kw))
           separator = "";
-        else if (
-          !string_handler::extract_constant_string(
-            *sep_kw, converter_, separator))
+        else if (!string_handler::extract_constant_string(
+                   *sep_kw, converter_, separator))
         {
           throw std::runtime_error(
             "split() only supports constant string separators in minimal "
