@@ -1,5 +1,5 @@
 def validate_no_empty_parts(price: str) -> None:
-    parts = ".".split(".")
+    parts = price.split(".")
     i = 0
     while i < len(parts):
         if parts[i] == "":
@@ -8,7 +8,7 @@ def validate_no_empty_parts(price: str) -> None:
 
 
 def main() -> None:
-    price = "."
+    price = "1.2"
     validate_no_empty_parts(price)
 
 
