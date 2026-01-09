@@ -557,7 +557,6 @@ private:
     const exprt &find_expr,
     const locationt &location);
 
-
   /**
    * @brief Find or create a function symbol for string operations
    * @param function_name Name of the function
