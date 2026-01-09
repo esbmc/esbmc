@@ -237,6 +237,36 @@ exprt string_handler::make_char_array_expr(
   return arr;
 }
 
+exprt string_handler::make_exception_raise(
+  const std::string &exc,
+  const std::string &message,
+  const locationt &location) const
+{
+  if (!type_utils::is_python_exceptions(exc))
+  {
+    log_error("This exception type is not supported: {}", exc);
+    abort();
+  }
+
+  typet type = type_handler_.get_typet(exc);
+
+  exprt size = constant_exprt(
+    integer2binary(message.size(), bv_width(size_type())),
+    integer2string(message.size()),
+    size_type());
+  typet t = array_typet(char_type(), size);
+  string_constantt string_name(message, t, string_constantt::k_default);
+
+  exprt sym("struct", type);
+  sym.copy_to_operands(address_of_exprt(string_name));
+
+  exprt raise = side_effect_exprt("cpp-throw", type);
+  raise.move_to_operands(sym);
+  raise.location() = location;
+  raise.location().user_provided(true);
+  return raise;
+}
+
 exprt string_handler::convert_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
@@ -1447,6 +1477,79 @@ exprt string_handler::handle_string_find_range(
   find_call.type() = int_type();
 
   return find_call;
+}
+
+exprt string_handler::handle_string_index(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const locationt &location)
+{
+  exprt find_expr = handle_string_find(string_obj, find_arg, location);
+
+  symbolt &find_result = converter_.create_tmp_symbol(
+    call, "$str_index$", int_type(), gen_zero(int_type()));
+  code_declt decl(symbol_expr(find_result));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  code_assignt assign(symbol_expr(find_result), find_expr);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+
+  exprt not_found =
+    equality_exprt(symbol_expr(find_result), from_integer(-1, int_type()));
+  exprt raise =
+    make_exception_raise("ValueError", "substring not found", location);
+
+  code_expressiont raise_code(raise);
+  raise_code.location() = location;
+
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = not_found;
+  if_stmt.then_case() = raise_code;
+  if_stmt.location() = location;
+  converter_.add_instruction(if_stmt);
+
+  return symbol_expr(find_result);
+}
+
+exprt string_handler::handle_string_index_range(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const exprt &start_arg,
+  const exprt &end_arg,
+  const locationt &location)
+{
+  exprt find_expr =
+    handle_string_find_range(string_obj, find_arg, start_arg, end_arg, location);
+
+  symbolt &find_result = converter_.create_tmp_symbol(
+    call, "$str_index$", int_type(), gen_zero(int_type()));
+  code_declt decl(symbol_expr(find_result));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  code_assignt assign(symbol_expr(find_result), find_expr);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+
+  exprt not_found =
+    equality_exprt(symbol_expr(find_result), from_integer(-1, int_type()));
+  exprt raise =
+    make_exception_raise("ValueError", "substring not found", location);
+
+  code_expressiont raise_code(raise);
+  raise_code.location() = location;
+
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = not_found;
+  if_stmt.then_case() = raise_code;
+  if_stmt.location() = location;
+  converter_.add_instruction(if_stmt);
+
+  return symbol_expr(find_result);
 }
 
 exprt string_handler::handle_string_rfind(
