@@ -984,17 +984,10 @@ class Preprocessor(ast.NodeTransformer):
         length_target = self.create_name_node(length_var, ast.Store(), node)
         int_annotation = self.create_name_node('int', ast.Load(), node)
 
-        # Determine annotation type
-        annotation_id = self._get_iterable_type_annotation(node.iter)
-
-        # For list/set/dict types (pointers), use __ESBMC_get_object_size
-        # For strings (arrays), use len()
-        if annotation_id in ['list', 'set', 'dict']:
-            # Use __ESBMC_get_object_size for pointer-based collections
-            len_func = self.create_name_node('__ESBMC_get_object_size', ast.Load(), node)
-        else:
-            # Use len() for strings and other types
-            len_func = self.create_name_node('len', ast.Load(), node)
+        # The function_call_builder will map len() to either:
+        # - strlen(): string types
+        # - __ESBMC_get_object_size(): list/dict/set/sequence types
+        len_func = self.create_name_node('len', ast.Load(), node)
 
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
