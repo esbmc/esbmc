@@ -39,7 +39,19 @@ jobs:
               formula = f.read()
           
           current = re.search(r'version\s+"([^"]+)"', formula).group(1)
-          latest = requests.get("https://api.github.com/repos/esbmc/esbmc/releases/latest").json()['tag_name'].lstrip('v')
+          
+          # Get latest release from main ESBMC repository
+          response = requests.get("https://api.github.com/repos/esbmc/esbmc/releases/latest")
+          release_data = response.json()
+          
+          # Handle no releases or API errors
+          if 'tag_name' not in release_data:
+              print(f"No releases found or API error: {release_data.get('message', 'Unknown error')}")
+              with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+                  f.write('update_needed=false\n')
+              exit(0)
+          
+          latest = release_data['tag_name'].lstrip('v')
           
           get_base = lambda v: re.search(r'(\d+\.\d+)', v).group(1)
           current_base, latest_base = get_base(current), get_base(latest)
