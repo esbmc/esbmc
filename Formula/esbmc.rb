@@ -1,9 +1,9 @@
 class Esbmc < Formula
   desc "Context-Bounded Model Checker for C/C++/Python programs"
   homepage "https://esbmc.org"
-  url "https://github.com/esbmc/esbmc/archive/b96be749557e02df873e8a010f94ff464b4de03c.tar.gz"
+  url "https://github.com/esbmc/esbmc/archive/4e47d6057f6e34c345419ea113f981dd1f9ada45.tar.gz"
   version "7.11-nightly-20260109"
-  sha256 "203227b5807ab646b0e2294cbe961894123fd7ee3f73083e11b89f10107a438a"
+  sha256 "19bf000dc6ea993cb6cb6065e4fa90c2d0909b99e4d4cf654d228316ec4cca41"
   license "Apache-2.0"
   head "https://github.com/esbmc/esbmc.git", branch: "master"
 
