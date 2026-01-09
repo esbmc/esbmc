@@ -1,0 +1,86 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-formula:
+    runs-on: macos-latest
+    if: github.repository == 'esbmc/esbmc'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          pip install requests packaging
+      
+      - name: Update formula
+        id: update
+        run: |
+          python3 << 'EOF'
+          import re, os, requests, hashlib
+          from packaging import version as pkg_version
+          
+          with open('Formula/esbmc.rb') as f:
+              formula = f.read()
+          
+          current = re.search(r'version\s+"([^"]+)"', formula).group(1)
+          latest = requests.get("https://api.github.com/repos/esbmc/esbmc/releases/latest").json()['tag_name'].lstrip('v')
+          
+          get_base = lambda v: re.search(r'(\d+\.\d+)', v).group(1)
+          current_base, latest_base = get_base(current), get_base(latest)
+          
+          if pkg_version.parse(latest_base) <= pkg_version.parse(current_base):
+              print(f"Up to date: {current_base}")
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('update_needed=false\n')
+              exit(0)
+          
+          print(f"Updating: {current} -> {latest}")
+          url = f"https://github.com/esbmc/esbmc/archive/refs/tags/v{latest}.tar.gz"
+          tarball = requests.get(url).content
+          sha256 = hashlib.sha256(tarball).hexdigest()
+          
+          formula = re.sub(r'url\s+"[^"]+"', f'url "{url}"', formula)
+          formula = re.sub(r'version\s+"[^"]+"', f'version "{latest}"', formula)
+          formula = re.sub(r'sha256\s+"[^"]+"', f'sha256 "{sha256}"', formula)
+          
+          with open('Formula/esbmc.rb', 'w') as f:
+              f.write(formula)
+          
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'update_needed=true\nnew_version={latest}\nold_version={current}\n')
+          
+          EOF
+      
+      - name: Audit formula
+        if: steps.update.outputs.update_needed == 'true'
+        run: brew audit --strict Formula/esbmc.rb
+      
+      - name: Create Pull Request
+        if: steps.update.outputs.update_needed == 'true'
+        uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'Update formula to v${{ steps.update.outputs.new_version }}'
+          branch: formula-update-${{ steps.update.outputs.new_version }}
+          delete-branch: true
+          title: 'Update formula to v${{ steps.update.outputs.new_version }}'
+          body: |
+            Automated update from ${{ steps.update.outputs.old_version }} to ${{ steps.update.outputs.new_version }}
+            
+            Release: https://github.com/esbmc/esbmc/releases/tag/v${{ steps.update.outputs.new_version }}
+          labels: homebrew
