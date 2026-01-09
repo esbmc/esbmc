@@ -1,4 +1,6 @@
 class Esbmc < Formula
+  include Language::Python::Virtualenv
+
   desc "Context-Bounded Model Checker for C/C++/Python programs"
   homepage "https://esbmc.org"
   url "https://github.com/esbmc/esbmc/archive/4e47d6057f6e34c345419ea113f981dd1f9ada45.tar.gz"
@@ -23,16 +25,15 @@ class Esbmc < Formula
   depends_on "z3"
 
   def install
-    python3 = Formula["python@3.12"].opt_bin/"python3.12"
-    python3_bin = Formula["python@3.12"].opt_bin
+    # Create a dedicated virtual environment for ESBMC's Python dependencies
+    venv = virtualenv_create(libexec, "python3.12")
     
-    system python3, "-m", "pip", "install", "--break-system-packages",
-           "--upgrade", "pip"
-    system python3, "-m", "pip", "install", "--break-system-packages",
-           "meson", "ast2json", "mypy", "pyparsing", "toml", "tomli"
+    # Install Python dependencies into the virtual environment
+    venv.pip_install "meson", "ast2json", "mypy", "pyparsing", "toml", "tomli"
     
-    # Add Python 3.12 bin to PATH for mypy availability
-    ENV.prepend_path "PATH", python3_bin
+    # Use Python from virtual environment
+    python3 = venv.root/"bin"/"python3"
+    ENV.prepend_path "PATH", venv.root/"bin"
 
     args = %W[
       -DCMAKE_BUILD_TYPE=RelWithDebInfo
@@ -61,13 +62,27 @@ class Esbmc < Formula
     system "cmake", "--build", "build"
     system "cmake", "--install", "build"
     
-    # Create symlinks for Python tools needed by ESBMC Python frontend  
-    python3_libexec = Formula["python@3.12"].opt_libexec
-    if (python3_libexec/"bin"/"mypy").exist?
-      %w[mypy].each do |tool|
-        (bin/tool).write_env_script python3_libexec/"bin"/tool, PATH: "#{python3_bin}:$PATH"
-      end
-    end
+    # Rename the original esbmc binary
+    mv bin/"esbmc", bin/"esbmc-bin"
+    
+    # Create a wrapper script that sets up the Python virtual environment
+    (bin/"esbmc").write <<~EOS
+      #!/bin/bash
+      export PATH="#{libexec}/bin:$PATH"
+      export PYTHONPATH="#{libexec}/lib/python3.12/site-packages:$PYTHONPATH"
+      exec "#{bin}/esbmc-bin" "$@"
+    EOS
+    chmod 0755, bin/"esbmc"
+  end
+
+  def caveats
+    <<~EOS
+      ESBMC Python frontend uses a dedicated virtual environment at:
+        #{libexec}
+      
+      All Python dependencies (mypy, ast2json, etc.) are managed automatically.
+      No additional user setup is required.
+    EOS
   end
 
   test do
