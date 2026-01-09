@@ -16,7 +16,7 @@ class Esbmc < Formula
   depends_on "boost"
   depends_on "fmt"
   depends_on "gmp"
-  depends_on "llvm@16"
+  depends_on "llvm"
   depends_on "nlohmann-json"
   depends_on "python@3.12"
   depends_on "yaml-cpp"
@@ -32,8 +32,8 @@ class Esbmc < Formula
     args = %W[
       -DCMAKE_BUILD_TYPE=RelWithDebInfo
       -DCMAKE_INSTALL_PREFIX=#{prefix}
-      -DLLVM_DIR=#{Formula["llvm@16"].opt_lib}/cmake/llvm
-      -DClang_DIR=#{Formula["llvm@16"].opt_lib}/cmake/clang
+      -DLLVM_DIR=#{Formula["llvm"].opt_lib}/cmake/llvm
+      -DClang_DIR=#{Formula["llvm"].opt_lib}/cmake/clang
       -DC2GOTO_SYSROOT=#{MacOS.sdk_path}
       -DPython3_EXECUTABLE=#{python3}
       -DDOWNLOAD_DEPENDENCIES=ON
