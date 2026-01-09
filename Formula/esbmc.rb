@@ -50,7 +50,6 @@ class Esbmc < Formula
       -DENABLE_BITWUZLA=OFF
       -DENABLE_GOTO_CONTRACTOR=OFF
       -DBUILD_STATIC=OFF
-      -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
     ]
 
     system "cmake", "-S", ".", "-B", "build", "-G", "Ninja", *args
