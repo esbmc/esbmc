@@ -24,10 +24,15 @@ class Esbmc < Formula
 
   def install
     python3 = Formula["python@3.12"].opt_bin/"python3.12"
+    python3_bin = Formula["python@3.12"].opt_bin
+    
     system python3, "-m", "pip", "install", "--break-system-packages",
            "--upgrade", "pip"
     system python3, "-m", "pip", "install", "--break-system-packages",
            "meson", "ast2json", "mypy", "pyparsing", "toml", "tomli"
+    
+    # Add Python 3.12 bin to PATH for mypy availability
+    ENV.prepend_path "PATH", python3_bin
 
     args = %W[
       -DCMAKE_BUILD_TYPE=RelWithDebInfo
@@ -55,6 +60,14 @@ class Esbmc < Formula
     system "cmake", "-S", ".", "-B", "build", "-G", "Ninja", *args
     system "cmake", "--build", "build"
     system "cmake", "--install", "build"
+    
+    # Create symlinks for Python tools needed by ESBMC Python frontend  
+    python3_libexec = Formula["python@3.12"].opt_libexec
+    if (python3_libexec/"bin"/"mypy").exist?
+      %w[mypy].each do |tool|
+        (bin/tool).write_env_script python3_libexec/"bin"/tool, PATH: "#{python3_bin}:$PATH"
+      end
+    end
   end
 
   test do
