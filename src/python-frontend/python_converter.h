@@ -199,6 +199,7 @@ private:
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
+  friend class string_handler;
   friend class tuple_handler;
   friend class python_typechecking;
   friend class python_class_builder;
