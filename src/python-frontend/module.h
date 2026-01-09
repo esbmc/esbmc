@@ -1,8 +1,12 @@
 #pragma once
 
-#include <algorithm>
+#include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
+#include <nlohmann/json.hpp>
+
+class module;
 
 struct function
 {
@@ -27,6 +31,30 @@ using FunctionsList = std::unordered_set<function, function_hash>;
 /* Keeping submodules as shared_ptr since ownership needs to be shared in
  * module_manager::get_module_from_dir */
 using SubmodulesList = std::unordered_set<std::shared_ptr<module>>;
+
+using OverloadList = std::vector<nlohmann::json>;
+
+struct class_definition
+{
+  std::string name_;
+  std::vector<std::string> bases_;
+  std::vector<std::string> methods_;
+
+  bool operator==(const class_definition &other) const
+  {
+    return name_ == other.name_;
+  }
+};
+
+struct class_definition_hash
+{
+  std::size_t operator()(const class_definition &c) const
+  {
+    return std::hash<std::string>()(c.name_);
+  }
+};
+
+using ClassesList = std::unordered_set<class_definition, class_definition_hash>;
 
 class module
 {
@@ -55,12 +83,46 @@ public:
     submodules_.insert(mod);
   }
 
+  void add_overload(const nlohmann::json &ast)
+  {
+    overloads_.push_back(ast);
+  }
+
+  void add_class(const class_definition &cls)
+  {
+    classes_.insert(cls);
+  }
+
+  void add_classes(const ClassesList &other_classes)
+  {
+    classes_.insert(other_classes.begin(), other_classes.end());
+  }
+
+  /// @brief Retrieve a class definition by name
+  /// @param class_name The name of the class to find
+  /// @return The class definition, or empty class_definition if not found
+  /// @complexity O(1) average case via hash lookup
+  class_definition get_class(const std::string &class_name) const
+  {
+    class_definition key;
+    key.name_ = class_name;
+    auto it = classes_.find(key);
+
+    if (it != classes_.end())
+      return *it;
+
+    return {};
+  }
+
+  /// @brief Retrieve a function definition by name
+  /// @param func_name The name of the function to find
+  /// @return The function definition, or empty function if not found
+  /// @complexity O(1) average case via hash lookup
   function get_function(const std::string &func_name) const
   {
-    auto it = std::find_if(
-      functions_.begin(), functions_.end(), [&](const function &func) {
-        return func.name_ == func_name;
-      });
+    function key;
+    key.name_ = func_name;
+    auto it = functions_.find(key);
 
     if (it != functions_.end())
       return *it;
@@ -78,8 +140,20 @@ public:
     return submodules_;
   }
 
+  const OverloadList &overloads() const
+  {
+    return overloads_;
+  }
+
+  const ClassesList &classes() const
+  {
+    return classes_;
+  }
+
 private:
   std::string name_;
   FunctionsList functions_;
   SubmodulesList submodules_;
+  OverloadList overloads_;
+  ClassesList classes_;
 };

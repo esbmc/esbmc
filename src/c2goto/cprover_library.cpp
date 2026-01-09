@@ -166,10 +166,17 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_isspace",
   "isspace",
   "__python_str_lstrip",
+  "__python_str_rstrip",
+  "__python_str_strip",
   "__python_char_islower",
   "__python_str_islower",
   "__python_char_lower",
   "__python_str_lower",
+  "__python_str_find",
+  "__python_str_find_range",
+  "__python_str_rfind",
+  "__python_str_rfind_range",
+  "__python_str_replace",
   "__ESBMC_create_inf_obj",
   "__python_int",
   "__python_chr",
@@ -177,7 +184,9 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_list_find_index",
   "__ESBMC_list_remove_at",
   "__ESBMC_list_set_at",
-  "__ESBMC_list_pop"};
+  "__ESBMC_list_pop",
+  "__ESBMC_list_try_find_index",
+  "__ESBMC_dict_eq"};
 } // namespace
 
 static void generate_symbol_deps(

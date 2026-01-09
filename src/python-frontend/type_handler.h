@@ -74,6 +74,19 @@ public:
 
   typet get_list_element_type() const;
 
+  /*
+   * Gets the generic dictionary type from the symbol table.
+   * @return A pointer to the generic __python_dict__ struct type.
+   */
+  const typet get_dict_type() const;
+
+  /*
+   * Infers the specific dictionary type from a JSON value.
+   * @param dict_value The JSON node representing the dict value.
+   * @return The inferred dictionary type based on the value's structure.
+   */
+  typet get_dict_type(const nlohmann::json &dict_value) const;
+
   typet get_tuple_type(const nlohmann::json &tuple_node) const;
 
   /*

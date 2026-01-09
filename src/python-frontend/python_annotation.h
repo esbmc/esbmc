@@ -342,6 +342,47 @@ private:
   {
     if (arg["_type"] == "Constant")
       return get_type_from_constant(arg);
+    else if (arg["_type"] == "Subscript")
+    {
+      // Handle subscripts like tokens[0]; try to derive element type from the
+      // container annotation.
+      const auto &val = arg["value"];
+      if (val["_type"] == "Name")
+      {
+        std::string var_name = val["id"].template get<std::string>();
+        Json var_node =
+          json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+        if (
+          !var_node.empty() && var_node.contains("annotation") &&
+          !var_node["annotation"].is_null())
+        {
+          const auto &annot = var_node["annotation"];
+          // list[T] -> return T
+          if (
+            annot.contains("_type") && annot["_type"] == "Subscript" &&
+            annot.contains("value") && annot["value"].contains("id") &&
+            annot["value"]["id"] == "list")
+          {
+            if (annot.contains("slice"))
+            {
+              const auto &slice = annot["slice"];
+              if (slice.contains("id"))
+                return slice["id"];
+              else if (
+                slice.contains("_type") && slice["_type"] == "Name" &&
+                slice.contains("id"))
+                return slice["id"];
+            }
+            return "Any";
+          }
+          // Simple name annotation (e.g., list without subtype)
+          if (annot.contains("id") && annot["id"] == "list")
+            return "Any";
+        }
+      }
+      return "";
+    }
     else if (arg["_type"] == "UnaryOp")
     {
       // Handle unary operations like -5, +3, not True
@@ -432,6 +473,25 @@ private:
       return "set";
     else if (arg["_type"] == "Tuple")
       return "tuple";
+    else if (arg["_type"] == "BoolOp")
+    {
+      if (arg.contains("values") && arg["values"].is_array())
+      {
+        for (const auto &val : arg["values"])
+        {
+          if (
+            val.contains("_type") && val["_type"] == "Call" &&
+            val.contains("func") && val["func"].contains("_type") &&
+            val["func"]["_type"] == "Name" && val["func"].contains("id"))
+          {
+            auto it = builtin_functions.find(val["func"]["id"]);
+            if (it != builtin_functions.end())
+              return it->second;
+          }
+        }
+      }
+      return "bool";
+    }
     else if (arg["_type"] == "Call")
     {
       // Handle function calls like abs(a - b), len(list), etc.
@@ -505,65 +565,6 @@ private:
 
     // Return the full generic type notation
     return "list[" + element_type + "]";
-  }
-
-  // Method to add annotation to a parameter
-  void add_parameter_annotation(Json &param, const std::string &type)
-  {
-    int col_offset = param["col_offset"].template get<int>() +
-                     param["arg"].template get<std::string>().length() + 1;
-
-    // Check if this is a generic type (e.g., list[int])
-    size_t bracket_pos = type.find('[');
-    if (bracket_pos != std::string::npos)
-    {
-      // Extract base type and element type
-      std::string base_type = type.substr(0, bracket_pos);
-      std::string element_type =
-        type.substr(bracket_pos + 1, type.length() - bracket_pos - 2);
-
-      // Create Subscript annotation for generic types
-      param["annotation"] = {
-        {"_type", "Subscript"},
-        {"value",
-         {{"_type", "Name"},
-          {"id", base_type},
-          {"ctx", {{"_type", "Load"}}},
-          {"lineno", param["lineno"]},
-          {"col_offset", col_offset},
-          {"end_lineno", param["lineno"]},
-          {"end_col_offset", col_offset + base_type.size()}}},
-        {"slice",
-         {{"_type", "Name"},
-          {"id", element_type},
-          {"ctx", {{"_type", "Load"}}},
-          {"lineno", param["lineno"]},
-          {"col_offset", col_offset + base_type.size() + 1},
-          {"end_lineno", param["lineno"]},
-          {"end_col_offset",
-           col_offset + base_type.size() + 1 + element_type.size()}}},
-        {"ctx", {{"_type", "Load"}}},
-        {"lineno", param["lineno"]},
-        {"col_offset", col_offset},
-        {"end_lineno", param["lineno"]},
-        {"end_col_offset", col_offset + type.size()}};
-    }
-    else
-    {
-      // Create simple Name annotation for basic types
-      param["annotation"] = {
-        {"_type", "Name"},
-        {"id", type},
-        {"ctx", {{"_type", "Load"}}},
-        {"lineno", param["lineno"]},
-        {"col_offset", col_offset},
-        {"end_lineno", param["lineno"]},
-        {"end_col_offset", col_offset + type.size()}};
-    }
-
-    // Update the parameter's end_col_offset to account for the annotation
-    param["end_col_offset"] =
-      param["end_col_offset"].template get<int>() + type.size() + 1;
   }
 
   /* Get the global elements referenced by a function */
@@ -1303,14 +1304,136 @@ private:
     if (!list.contains("elts"))
       return "";
 
-    if (!list["elts"].empty())
+    if (!list["elts"].empty() && list["elts"][0].contains("value"))
       list_subtype = get_type_from_json(list["elts"][0]["value"]);
 
     for (const auto &elem : list["elts"])
-      if (get_type_from_json(elem["value"]) != list_subtype)
+      if (
+        elem.contains("value") &&
+        get_type_from_json(elem["value"]) != list_subtype)
         throw std::runtime_error("Multiple typed lists are not supported\n");
 
     return list_subtype;
+  }
+
+  std::string get_base_var_name(const Json &node) const
+  {
+    if (node["_type"] == "Name")
+      return node["id"];
+    else if (node["_type"] == "Subscript")
+      return get_base_var_name(node["value"]);
+    else if (node["_type"] == "Attribute")
+    {
+      // Handle attribute access such as obj.attr[0]
+      std::string base = get_base_var_name(node["value"]);
+      return base + "." + node["attr"].template get<std::string>();
+    }
+    return "";
+  }
+
+  bool extract_type_info(
+    const Json &annotation,
+    std::string &base_type,
+    std::string &element_type)
+  {
+    // Handle simple Name annotations
+    if (annotation.contains("id"))
+    {
+      std::string full_type = annotation["id"];
+
+      // Parse generic notation such as "list[dict]"
+      size_t bracket_pos = full_type.find('[');
+      if (bracket_pos != std::string::npos)
+      {
+        base_type = full_type.substr(0, bracket_pos);
+        element_type = full_type.substr(
+          bracket_pos + 1, full_type.length() - bracket_pos - 2);
+      }
+      else
+        base_type = full_type;
+
+      return true;
+    }
+    return false;
+  }
+
+  std::string infer_dict_value_type(const Json &var_node)
+  {
+    if (!var_node.contains("value") || var_node["value"].is_null())
+      return "Any";
+
+    const Json &dict_init = var_node["value"];
+
+    if (
+      dict_init["_type"] == "Dict" && dict_init.contains("values") &&
+      !dict_init["values"].empty())
+    {
+      const Json &first_value = dict_init["values"][0];
+      std::string value_type = get_argument_type(first_value);
+
+      if (!value_type.empty())
+        return value_type;
+    }
+
+    return "Any";
+  }
+
+  std::string
+  resolve_subscript_type(const Json &subscript_node, const Json &body)
+  {
+    const Json &base = subscript_node["value"];
+
+    // Recursively resolve nested subscripts
+    if (base["_type"] == "Subscript")
+      return resolve_subscript_type(base, body);
+
+    // Only handle Name nodes
+    if (base["_type"] != "Name")
+      return "Any";
+
+    std::string var_name = base["id"];
+    Json var_node =
+      json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+    if (
+      var_node.empty() || !var_node.contains("annotation") ||
+      var_node["annotation"].is_null())
+      return "Any";
+
+    std::string base_type, element_type;
+
+    if (!extract_type_info(var_node["annotation"], base_type, element_type))
+      return "Any";
+
+    // Dict subscript: infer value type from initialization
+    if (base_type == "dict")
+      return infer_dict_value_type(var_node);
+
+    // List subscript
+    if (base_type == "list")
+    {
+      // First try to use the element_type from annotation (e.g., list[int])
+      if (!element_type.empty())
+        return element_type;
+
+      // Try to infer from initialization if available
+      if (var_node.contains("value") && !var_node["value"].is_null())
+      {
+        std::string inferred = get_list_subtype(var_node["value"]);
+        if (!inferred.empty())
+          return inferred;
+      }
+
+      // Last resort: return Any for unknown list element types
+      return "Any";
+    }
+
+    // String subscript: str[index] returns str
+    if (base_type == "str")
+      return "str";
+
+    // For other types, return the base type
+    return base_type;
   }
 
   std::string get_type_from_rhs_variable(const Json &element, const Json &body)
@@ -1326,6 +1449,10 @@ private:
       return "str";
     }
 
+    // Handle subscript operations (including nested ones)
+    if (value_type == "Subscript")
+      return resolve_subscript_type(element["value"], body);
+
     std::string rhs_var_name;
 
     if (value_type == "Name")
@@ -1333,7 +1460,7 @@ private:
     else if (value_type == "UnaryOp")
       rhs_var_name = element["value"]["operand"]["id"];
     else
-      rhs_var_name = element["value"]["value"]["id"];
+      rhs_var_name = get_base_var_name(element["value"]["value"]);
 
     assert(!rhs_var_name.empty());
 
@@ -1421,38 +1548,10 @@ private:
       return "Any"; // Default for cases where annotation is missing or null
   }
 
-  // Check for @overload decorators
-  bool has_overload_decorator(const Json &func_node) const
+  std::string match_literal_argument(
+    const Json &call_node,
+    std::vector<Json> overloads) const
   {
-    if (!func_node.contains("decorator_list"))
-      return false;
-
-    for (const auto &decorator : func_node["decorator_list"])
-    {
-      if (decorator["_type"] == "Name" && decorator["id"] == "overload")
-        return true;
-    }
-    return false;
-  }
-
-  // Find the best matching overload
-  std::string resolve_overload_return_type(
-    const std::string &func_name,
-    const Json &call_node) const
-  {
-    std::vector<Json> overloads;
-
-    // Find all overload definitions
-    for (const Json &elem : ast_["body"])
-    {
-      if (
-        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
-        has_overload_decorator(elem))
-      {
-        overloads.push_back(elem);
-      }
-    }
-
     if (overloads.empty())
       return "";
 
@@ -1501,6 +1600,25 @@ private:
     }
 
     return "";
+  }
+
+  // Find the best matching overload
+  std::string resolve_overload_return_type(
+    const std::string &func_name,
+    const Json &call_node) const
+  {
+    std::vector<Json> overloads;
+
+    // Find all overload definitions
+    for (const Json &elem : ast_["body"])
+    {
+      if (
+        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
+        json_utils::has_overload_decorator(elem))
+        overloads.push_back(elem);
+    }
+
+    return match_literal_argument(call_node, overloads);
   }
 
   std::string get_type_from_call(const Json &element)
@@ -1564,6 +1682,24 @@ private:
           return "dict";
         else
           return class_name; // Default: method returns same type as class
+      }
+
+      if (module_manager_)
+      {
+        auto module = module_manager_->get_module(class_name);
+        if (module)
+        {
+          auto overloads_funcs = module->overloads();
+          std::vector<Json> overloads;
+
+          for (const auto &elem : overloads_funcs)
+          {
+            if (elem["_type"] == "FunctionDef" && elem["name"] == method_name)
+              overloads.push_back(elem);
+          }
+
+          return match_literal_argument(element["value"], overloads);
+        }
       }
     }
 
@@ -1659,6 +1795,10 @@ private:
           method == "isdigit" || method == "isalpha" || method == "isspace" ||
           method == "islower" || method == "isupper")
           return "bool";
+        else if (method == "find" || method == "rfind")
+          return "int";
+        else if (method == "split")
+          return "list";
         // Default for string methods
         return "str";
       }
@@ -1667,13 +1807,113 @@ private:
     }
 
     const std::string &obj = get_object_name(call["func"], std::string());
+    std::string attr_name = call["func"].contains("attr")
+                              ? call["func"]["attr"].template get<std::string>()
+                              : "";
+    // Handle dict.keys() and dict.values()
+    if (attr_name == "keys" || attr_name == "values")
+    {
+      Json obj_node =
+        json_utils::find_var_decl(obj, get_current_func_name(), ast_);
+
+      // Check function parameters if not found in body
+      if (
+        obj_node.empty() && current_func != nullptr &&
+        (*current_func).contains("args") &&
+        (*current_func)["args"].contains("args"))
+      {
+        obj_node = find_annotated_assign(obj, (*current_func)["args"]["args"]);
+      }
+
+      if (
+        !obj_node.empty() && obj_node.contains("annotation") &&
+        !obj_node["annotation"].is_null())
+      {
+        const Json &annotation = obj_node["annotation"];
+        std::string base_type;
+
+        // Handle simple dict annotation
+        if (annotation.contains("id"))
+          base_type = annotation["id"].template get<std::string>();
+        // Handle generic dict[K,V] annotation (Subscript node)
+        else if (
+          annotation.contains("_type") && annotation["_type"] == "Subscript" &&
+          annotation.contains("value") && annotation["value"].contains("id"))
+          base_type = annotation["value"]["id"].template get<std::string>();
+
+        // If it's a dict type, extract key/value types
+        if (base_type == "dict")
+        {
+          // For dict[K,V], extract the K and V types
+          if (
+            annotation.contains("_type") &&
+            annotation["_type"] == "Subscript" && annotation.contains("slice"))
+          {
+            const Json &slice = annotation["slice"];
+
+            // dict[K,V] has slice as Tuple with 2 elements
+            if (
+              slice.contains("_type") && slice["_type"] == "Tuple" &&
+              slice.contains("elts") && slice["elts"].size() >= 2)
+            {
+              std::string key_type, value_type;
+
+              // Extract key type (first element)
+              if (slice["elts"][0].contains("id"))
+                key_type = slice["elts"][0]["id"].template get<std::string>();
+
+              // Extract value type (second element)
+              if (slice["elts"][1].contains("id"))
+                value_type = slice["elts"][1]["id"].template get<std::string>();
+
+              // Return appropriate list type based on method
+              if (attr_name == "keys" && !key_type.empty())
+                return "list[" + key_type + "]";
+              else if (attr_name == "values" && !value_type.empty())
+                return "list[" + value_type + "]";
+            }
+          }
+        }
+      }
+    }
 
     // Get type from imported module
     if (module_manager_)
     {
+      // Try to get module using the object name directly
       auto module = module_manager_->get_module(obj);
+
+      // If not found, try using get_object_alias to resolve import aliases
+      if (!module && !obj.empty())
+      {
+        std::string resolved_obj = json_utils::get_object_alias(ast_, obj);
+        if (resolved_obj != obj)
+        {
+          module = module_manager_->get_module(resolved_obj);
+        }
+      }
+
       if (module)
-        return module->get_function(call["func"]["attr"]).return_type_;
+      {
+        // First try as function
+        function func = module->get_function(attr_name);
+        if (!func.name_.empty())
+        {
+          return func.return_type_;
+        }
+
+        // If not a function, try as class
+        class_definition cls = module->get_class(attr_name);
+        if (!cls.name_.empty())
+        {
+          // Return the class name as the type for constructor calls
+          return cls.name_;
+        }
+
+        // If module exists but attribute not found, don't continue to search
+        // in AST (which would fail for imported modules)
+        return "";
+      }
     }
 
     Json obj_node =
@@ -1835,7 +2075,13 @@ private:
 
     // Handle built-in types
     if (type_utils::is_builtin_type(obj_type))
+    {
+      if (
+        obj_type == "str" && call["func"].contains("attr") &&
+        call["func"]["attr"] == "split")
+        return "list";
       type = obj_type;
+    }
     else
     {
       // Handle user-defined class methods
@@ -1979,7 +2225,33 @@ private:
     else if (value_type == "Tuple")
       inferred_type = "tuple";
     else if (value_type == "Dict")
-      inferred_type = "dict";
+    {
+      // Infer generic dict type from literal: {key: value, ...}
+      const Json &dict_value = stmt["value"];
+
+      if (
+        dict_value.contains("keys") && dict_value.contains("values") &&
+        !dict_value["keys"].empty() && !dict_value["values"].empty())
+      {
+        // Get types of first key and value
+        std::string key_type = get_argument_type(dict_value["keys"][0]);
+        std::string value_type = get_argument_type(dict_value["values"][0]);
+
+        // Only infer generic dict type for non-nested types
+        // Nested structures (such as list[dict]) are better handled
+        // with plain 'dict' so the converter can use dynamic type info
+        bool key_is_simple = key_type.find('[') == std::string::npos;
+        bool value_is_simple = value_type.find('[') == std::string::npos;
+        if (
+          !key_type.empty() && !value_type.empty() && key_is_simple &&
+          value_is_simple)
+          inferred_type = "dict[" + key_type + ", " + value_type + "]";
+        else
+          inferred_type = "dict";
+      }
+      else
+        inferred_type = "dict";
+    }
     else if (value_type == "Compare")
       inferred_type = "bool";
     else if (value_type == "UnaryOp") // Handle negative numbers
@@ -2060,6 +2332,76 @@ private:
     return InferResult::OK;
   }
 
+  void infer_loop_variable_types(Json &while_stmt)
+  {
+    if (!while_stmt.contains("body"))
+      return;
+
+    for (auto &stmt : while_stmt["body"])
+    {
+      // Look for pattern: loop_var: Any = iterable[ESBMC_index_N]
+      if (
+        stmt["_type"] == "AnnAssign" && stmt.contains("value") &&
+        stmt["value"]["_type"] == "Subscript")
+      {
+        if (!stmt["value"]["value"].contains("id"))
+          continue;
+
+        std::string iter_var =
+          stmt["value"]["value"]["id"].template get<std::string>();
+
+        // Find the iterable's annotation
+        Json iter_node;
+        if (current_func != nullptr && (*current_func).contains("body"))
+          iter_node = find_annotated_assign(iter_var, (*current_func)["body"]);
+        if (iter_node.empty())
+          iter_node = find_annotated_assign(iter_var, ast_["body"]);
+
+        if (iter_node.empty() || !iter_node.contains("annotation"))
+          continue;
+
+        auto &iter_annotation = iter_node["annotation"];
+
+        // Extract element type from container annotation
+        if (
+          iter_annotation["_type"] == "Subscript" &&
+          iter_annotation.contains("value") &&
+          iter_annotation["value"].contains("id"))
+        {
+          std::string container_type =
+            iter_annotation["value"]["id"].template get<std::string>();
+
+          if (container_type == "list" || container_type == "List")
+          {
+            // Extract T from list[T]
+            if (iter_annotation.contains("slice"))
+              stmt["annotation"] = iter_annotation["slice"];
+          }
+          else if (container_type == "dict" || container_type == "Dict")
+          {
+            // For dict iteration, iterate over keys (first type parameter)
+            if (
+              iter_annotation.contains("slice") &&
+              iter_annotation["slice"]["_type"] == "Tuple" &&
+              iter_annotation["slice"].contains("elts") &&
+              !iter_annotation["slice"]["elts"].empty())
+            {
+              stmt["annotation"] = iter_annotation["slice"]["elts"][0];
+            }
+          }
+        }
+        else if (iter_annotation["_type"] == "Name")
+        {
+          // For str iteration, element type is also str
+          std::string type_name =
+            iter_annotation["id"].template get<std::string>();
+          if (type_name == "str")
+            stmt["annotation"] = iter_annotation;
+        }
+      }
+    }
+  }
+
   void add_annotation(Json &body)
   {
     for (auto &element : body["body"])
@@ -2080,6 +2422,10 @@ private:
       if (stmt_type == "If" || stmt_type == "While" || stmt_type == "Try")
       {
         add_annotation(element);
+
+        // Infer loop variable types for preprocessor-transformed for loops
+        if (stmt_type == "While")
+          infer_loop_variable_types(element);
 
         // Process else block if it exists
         if (
@@ -2170,6 +2516,127 @@ private:
     }
   }
 
+  Json create_name_annotation(
+    const std::string &type_id,
+    int lineno,
+    int col_offset,
+    int end_lineno,
+    int end_col_offset)
+  {
+    return {
+      {"_type", "Name"},
+      {"id", type_id},
+      {"ctx", {{"_type", "Load"}}},
+      {"lineno", lineno},
+      {"col_offset", col_offset},
+      {"end_lineno", end_lineno},
+      {"end_col_offset", end_col_offset}};
+  }
+
+  Json create_subscript_annotation(
+    const std::string &base_type,
+    const std::string &element_type,
+    int lineno,
+    int col_offset,
+    int end_lineno)
+  {
+    int base_end_col = col_offset + base_type.size();
+    int slice_col = base_end_col + 1; // After '['
+    int slice_end_col = slice_col + element_type.size();
+    int total_end_col = col_offset + base_type.size() + 1 +
+                        element_type.size() + 1; // type[element]
+
+    // Check if this is a dict type with comma-separated types: dict[K, V]
+    if (base_type == "dict" && element_type.find(',') != std::string::npos)
+    {
+      // Split element_type on comma
+      size_t comma_pos = element_type.find(',');
+      std::string key_type = element_type.substr(0, comma_pos);
+      std::string value_type = element_type.substr(comma_pos + 1);
+
+      // Trim whitespace
+      key_type.erase(0, key_type.find_first_not_of(" \t"));
+      key_type.erase(key_type.find_last_not_of(" \t") + 1);
+      value_type.erase(0, value_type.find_first_not_of(" \t"));
+      value_type.erase(value_type.find_last_not_of(" \t") + 1);
+
+      // Create Tuple slice with two Name elements
+      int key_col = slice_col;
+      int key_end_col = key_col + key_type.size();
+      int value_col = key_end_col + 2; // After ", "
+      int value_end_col = value_col + value_type.size();
+
+      Json tuple_slice = {
+        {"_type", "Tuple"},
+        {"elts",
+         Json::array(
+           {create_name_annotation(
+              key_type, lineno, key_col, end_lineno, key_end_col),
+            create_name_annotation(
+              value_type, lineno, value_col, end_lineno, value_end_col)})},
+        {"ctx", {{"_type", "Load"}}},
+        {"lineno", lineno},
+        {"col_offset", slice_col},
+        {"end_lineno", end_lineno},
+        {"end_col_offset", slice_end_col}};
+
+      return {
+        {"_type", "Subscript"},
+        {"value",
+         create_name_annotation(
+           base_type, lineno, col_offset, end_lineno, base_end_col)},
+        {"slice", tuple_slice},
+        {"ctx", {{"_type", "Load"}}},
+        {"lineno", lineno},
+        {"col_offset", col_offset},
+        {"end_lineno", end_lineno},
+        {"end_col_offset", total_end_col}};
+    }
+
+    // Default: single element type (for list[T], set[T], etc.)
+    return {
+      {"_type", "Subscript"},
+      {"value",
+       create_name_annotation(
+         base_type, lineno, col_offset, end_lineno, base_end_col)},
+      {"slice",
+       create_name_annotation(
+         element_type, lineno, slice_col, end_lineno, slice_end_col)},
+      {"ctx", {{"_type", "Load"}}},
+      {"lineno", lineno},
+      {"col_offset", col_offset},
+      {"end_lineno", end_lineno},
+      {"end_col_offset", total_end_col}};
+  }
+
+  Json create_annotation_from_type(
+    const std::string &inferred_type,
+    int lineno,
+    int col_offset,
+    int end_lineno)
+  {
+    // Check if this is a generic type (e.g., list[dict])
+    size_t bracket_pos = inferred_type.find('[');
+
+    if (bracket_pos != std::string::npos)
+    {
+      // Generic type: extract base and element types
+      std::string base_type = inferred_type.substr(0, bracket_pos);
+      std::string element_type = inferred_type.substr(
+        bracket_pos + 1, inferred_type.length() - bracket_pos - 2);
+
+      return create_subscript_annotation(
+        base_type, element_type, lineno, col_offset, end_lineno);
+    }
+    else
+    {
+      // Simple type
+      int end_col_offset = col_offset + inferred_type.size();
+      return create_name_annotation(
+        inferred_type, lineno, col_offset, end_lineno, end_col_offset);
+    }
+  }
+
   void update_assignment_node(Json &element, const std::string &inferred_type)
   {
     // Update type field
@@ -2209,15 +2676,8 @@ private:
         ? target["end_lineno"].template get<int>()
         : target_lineno;
 
-    // Create the annotation field
-    element["annotation"] = {
-      {"_type", target["_type"]},
-      {"col_offset", col_offset},
-      {"ctx", {{"_type", "Load"}}},
-      {"end_col_offset", col_offset + inferred_type.size()},
-      {"end_lineno", target_end_lineno},
-      {"id", inferred_type},
-      {"lineno", target_lineno}};
+    element["annotation"] = create_annotation_from_type(
+      inferred_type, target_lineno, col_offset, target_end_lineno);
 
     // Update element properties with null safety
     int element_end_col_offset =
@@ -2262,6 +2722,22 @@ private:
     // Adjust column offsets in function call node
     if (element["value"].contains("func"))
       update_offsets(element["value"]["func"]);
+  }
+
+  void add_parameter_annotation(Json &param, const std::string &type)
+  {
+    int col_offset = param["col_offset"].template get<int>() +
+                     param["arg"].template get<std::string>().length() + 1;
+
+    param["annotation"] = create_annotation_from_type(
+      type,
+      param["lineno"].template get<int>(),
+      col_offset,
+      param["lineno"].template get<int>());
+
+    // Update the parameter's end_col_offset to account for the annotation
+    param["end_col_offset"] =
+      param["end_col_offset"].template get<int>() + type.size() + 1;
   }
 
   void update_end_col_offset(Json &ast)

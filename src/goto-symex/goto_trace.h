@@ -44,6 +44,10 @@ public:
   {
     return type == RENUMBER;
   }
+  bool is_branching() const
+  {
+    return type == BREANCHING;
+  }
 
   typedef enum
   {
@@ -52,7 +56,8 @@ public:
     ASSERT,
     OUTPUT,
     SKIP,
-    RENUMBER
+    RENUMBER,
+    BREANCHING
   } typet;
   typet type;
 

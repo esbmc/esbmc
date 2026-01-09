@@ -84,10 +84,21 @@ size_t __ESBMC_list_size(const PyListObject *l)
 
 static inline void *__ESBMC_copy_value(const void *value, size_t size)
 {
+  // None type (NULL pointer with size 0)
+  // Don't allocate: return NULL to preserve None semantics
+  if (value == NULL && size == 0)
+    return NULL;
+
   void *copied = __ESBMC_alloca(size);
 
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
+  else if (size == 16)
+  {
+    // Handle 16-byte structs (such as dictionaries) explicitly
+    *(uint64_t *)copied = *(const uint64_t *)value;
+    *((uint64_t *)copied + 1) = *((const uint64_t *)value + 1);
+  }
   else
     memcpy(copied, value, size);
 
@@ -121,7 +132,10 @@ bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
   return __ESBMC_list_push(l, o->value, o->type_id, o->size);
 }
 
-bool __ESBMC_list_eq(const PyListObject *l1, const PyListObject *l2)
+bool __ESBMC_list_eq(
+  const PyListObject *l1,
+  const PyListObject *l2,
+  size_t list_type_id)
 {
   if (!l1 || !l2)
     return false;
@@ -130,22 +144,44 @@ bool __ESBMC_list_eq(const PyListObject *l1, const PyListObject *l2)
   if (l1->size != l2->size)
     return false;
 
-  size_t i = 0, end = l1->size;
-
-  // BUG: Something weird is happening when I change this while into a FOR
-  while (i < end)
+  size_t i = 0;
+  while (i < l1->size)
   {
     const PyObject *a = &l1->items[i];
-    const PyObject *b = &l2->items[i++];
+    const PyObject *b = &l2->items[i];
+    ++i;
 
     // Same address => element equal; keep checking the rest.
     if (a->value == b->value)
       continue;
 
-    if (
-      !a->value || !b->value || a->type_id != b->type_id ||
-      a->size != b->size || memcmp(a->value, b->value, a->size) != 0)
+    // Validation checks
+    if (!a->value || !b->value)
       return false;
+    if (a->type_id != b->type_id)
+      return false;
+    if (a->size != b->size)
+      return false;
+
+    // Check if elements are nested lists by comparing type_id
+    if (a->type_id == list_type_id)
+    {
+      // Elements are nested lists
+      // elem->value is void* containing PyListObject**
+      // We need to dereference to get PyListObject*
+      const PyListObject *nested_a = *(const PyListObject **)a->value;
+      const PyListObject *nested_b = *(const PyListObject **)b->value;
+
+      // recursive comparison
+      if (!__ESBMC_list_eq(nested_a, nested_b, list_type_id))
+        return false;
+    }
+    else
+    {
+      // Elements are primitives: memcmp
+      if (memcmp(a->value, b->value, a->size) != 0)
+        return false;
+    }
   }
   return true;
 }
@@ -308,6 +344,32 @@ size_t __ESBMC_list_find_index(
   return 0;
 }
 
+size_t __ESBMC_list_try_find_index(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  if (!l || !item || l->size == 0)
+    return SIZE_MAX;
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      if (__ESBMC_values_equal(elem->value, item, item_size))
+        return i;
+    }
+
+    i = i + 1;
+  }
+
+  return SIZE_MAX; // Not found
+}
+
 bool __ESBMC_list_remove_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(l != NULL, "list_remove_at: list is null");
@@ -369,4 +431,55 @@ PyObject *__ESBMC_list_pop(PyListObject *l, int64_t index)
   l->size = l->size - 1;
 
   return popped;
+}
+
+bool __ESBMC_dict_eq(
+  const PyListObject *lhs_keys,
+  const PyListObject *lhs_values,
+  const PyListObject *rhs_keys,
+  const PyListObject *rhs_values)
+{
+  if (!lhs_keys || !lhs_values || !rhs_keys || !rhs_values)
+    return false;
+
+  // Sizes must match
+  if (lhs_keys->size != rhs_keys->size)
+    return false;
+
+  // For each key-value pair in lhs, check if it exists in rhs
+  size_t i = 0;
+  while (i < lhs_keys->size)
+  {
+    const PyObject *lhs_key = &lhs_keys->items[i];
+    const PyObject *lhs_value = &lhs_values->items[i];
+
+    // Find this key in rhs_keys
+    size_t rhs_idx = __ESBMC_list_try_find_index(
+      (PyListObject *)rhs_keys,
+      lhs_key->value,
+      lhs_key->type_id,
+      lhs_key->size);
+
+    // Key not found in rhs
+    if (rhs_idx == SIZE_MAX)
+      return false;
+
+    // Key found: compare the corresponding values
+    const PyObject *rhs_value = &rhs_values->items[rhs_idx];
+
+    // Values must have same type and size
+    if (
+      lhs_value->type_id != rhs_value->type_id ||
+      lhs_value->size != rhs_value->size)
+      return false;
+
+    // Compare actual value contents
+    if (!__ESBMC_values_equal(
+          lhs_value->value, rhs_value->value, lhs_value->size))
+      return false;
+
+    i++;
+  }
+
+  return true;
 }

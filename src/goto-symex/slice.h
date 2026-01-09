@@ -84,7 +84,9 @@ class symex_slicet : public slicer
 public:
   explicit symex_slicet(const optionst &options)
     : slice_assumes(options.get_bool_option("slice-assumes")),
-      slice_nondet(!options.get_bool_option("generate-testcase"))
+      slice_nondet(
+        !options.get_bool_option("generate-testcase") &&
+        !options.get_bool_option("generate-ctest-testcase"))
   {
   }
 

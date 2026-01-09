@@ -154,7 +154,11 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
     - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
     - **lstrip() method**: Removes leading whitespace characters from strings (e.g., `"  hello".lstrip()` returns `"hello"`).
+    - **rstrip() method**: Removes trailing whitespace characters from strings (e.g., `"hi  ".rstrip()` returns `"hi"`).
+    - **strip() method**: Removes leading and trailing whitespace characters from strings (e.g., `"  hi  ".strip()` returns `"hi"`).
     - **isspace() method**: Returns `True` if all characters in the string are whitespace characters and the string is non-empty, `False` otherwise.
+    - **rfind() method**: Returns the highest index of a substring, or -1 if not found (e.g., `"banana".rfind("na")` returns `4`).
+    - **find()/rfind() with range**: Optional `start` and `end` arguments are supported (e.g., `"banana".rfind("na", 0, 4)` returns `2`).
     - **String Slicing**: Comprehensive support for Python's slice notation on strings:
       - **Basic Slicing**: `string[start:end]` returns a substring from index `start` to `end-1`.
       - **Omitted Bounds**: Supports slices with omitted start (`string[:end]`) or end (`string[start:]`) indices.

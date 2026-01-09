@@ -1,11 +1,28 @@
 #include <ctype.h>
 #include <limits.h>
+#include <stddef.h>
+#include <string.h>
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
 {
 __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+static size_t __python_strnlen_bounded(const char *s, size_t max_len)
+{
+__ESBMC_HIDE:;
+  size_t i = 0;
+  while (i < max_len)
+  {
+    if (s[i] == '\0')
+      return i;
+    i++;
+  }
+
+  __ESBMC_assert(0, "string not null-terminated");
+  return max_len;
 }
 
 // Python string isalpha - handles ASCII and common two-byte UTF-8 Latin letters.
@@ -42,6 +59,36 @@ __ESBMC_HIDE:;
   }
 
   return 1;
+}
+
+static void __python_str_normalize_range(int *start, int *end, size_t len_s)
+{
+__ESBMC_HIDE:;
+  int len_i = (int)len_s;
+
+  if (*start == INT_MIN)
+    *start = 0;
+
+  if (*end == INT_MIN)
+    *end = len_i;
+
+  if (*start < 0)
+    *start = *start + len_i;
+  if (*end < 0)
+    *end = *end + len_i;
+
+  if (*start < 0)
+    *start = 0;
+  if (*start > len_i)
+    *start = len_i;
+
+  if (*end < 0)
+    *end = 0;
+  if (*end > len_i)
+    *end = len_i;
+
+  if (*end < *start)
+    *end = *start;
 }
 
 // Python character isdigit - checks if a single character is a digit
@@ -101,6 +148,86 @@ __ESBMC_HIDE:;
   }
 
   return s;
+}
+
+// Python string rstrip: removes trailing whitespace characters
+const char *__python_str_rstrip(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return s;
+
+  const char *start = s;
+  const char *end = start;
+
+  while (*end)
+  {
+    end++;
+  }
+
+  while (end > start &&
+         (*(end - 1) == ' ' || *(end - 1) == '\t' || *(end - 1) == '\n' ||
+          *(end - 1) == '\v' || *(end - 1) == '\f' || *(end - 1) == '\r'))
+  {
+    end--;
+  }
+
+  size_t len = (size_t)(end - start);
+  char *buffer = __ESBMC_alloca(len + 1);
+
+  size_t i = 0;
+  while (i < len)
+  {
+    buffer[i] = start[i];
+    ++i;
+  }
+
+  buffer[len] = '\0';
+
+  return buffer;
+}
+
+// Python string strip: removes leading and trailing whitespace characters
+const char *__python_str_strip(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return s;
+
+  while (*s && (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' ||
+                *s == '\f' || *s == '\r'))
+  {
+    s++;
+  }
+
+  const char *start = s;
+  const char *end = start;
+
+  while (*end)
+  {
+    end++;
+  }
+
+  while (end > start &&
+         (*(end - 1) == ' ' || *(end - 1) == '\t' || *(end - 1) == '\n' ||
+          *(end - 1) == '\v' || *(end - 1) == '\f' || *(end - 1) == '\r'))
+  {
+    end--;
+  }
+
+  size_t len = (size_t)(end - start);
+  char *buffer = __ESBMC_alloca(len + 1);
+
+  size_t i = 0;
+  while (i < len)
+  {
+    buffer[i] = start[i];
+    ++i;
+  }
+
+  buffer[len] = '\0';
+
+  return buffer;
 }
 
 // Python character islower - checks if a single character is lowercase
@@ -164,7 +291,7 @@ __ESBMC_HIDE:;
 
   char *buffer = __ESBMC_alloca(256);
 
-  int i = 0;
+  size_t i = 0;
   while (i < 255 && s[i])
   {
     if (s[i] >= 'A' && s[i] <= 'Z')
@@ -181,6 +308,257 @@ __ESBMC_HIDE:;
 
   buffer[i] = '\0';
 
+  return buffer;
+}
+
+int __python_str_find(const char *s1, const char *s2)
+{
+__ESBMC_HIDE:;
+  // str.find('') = 0
+  if (s2[0] == '\0')
+    return 0;
+
+  size_t len_s = __python_strnlen_bounded(s1, 1024);
+  size_t len_sub = __python_strnlen_bounded(s2, 1024);
+
+  __ESBMC_assert(len_s <= INT_MAX, "string too long for find()");
+
+  if (len_sub > len_s)
+    return -1;
+
+  size_t i = 0;
+  while (i + len_sub <= len_s)
+  {
+    if (strncmp(s1 + i, s2, len_sub) == 0)
+      return (int)i;
+    i++;
+  }
+
+  return -1;
+}
+
+int __python_str_find_range(const char *s1, const char *s2, int start, int end)
+{
+__ESBMC_HIDE:;
+  size_t len_s = __python_strnlen_bounded(s1, 1024);
+  size_t len_sub = __python_strnlen_bounded(s2, 1024);
+
+  __ESBMC_assert(len_s <= INT_MAX, "string too long for find()");
+
+  __python_str_normalize_range(&start, &end, len_s);
+
+  if (len_sub == 0)
+    return (start <= end) ? start : -1;
+
+  if (end - start < (int)len_sub)
+    return -1;
+
+  size_t start_u = (size_t)start;
+  size_t end_u = (size_t)end;
+
+  size_t i = start_u;
+  while (i + len_sub <= end_u)
+  {
+    if (strncmp(s1 + i, s2, len_sub) == 0)
+      return (int)i;
+    i++;
+  }
+
+  return -1;
+}
+
+int __python_str_rfind(const char *s1, const char *s2)
+{
+__ESBMC_HIDE:;
+  size_t len_s = __python_strnlen_bounded(s1, 1024);
+  size_t len_sub = __python_strnlen_bounded(s2, 1024);
+
+  __ESBMC_assert(len_s <= INT_MAX, "string too long for rfind()");
+
+  // str.rfind('') = len(s1)
+  if (s2[0] == '\0')
+    return (int)len_s;
+
+  if (len_sub > len_s)
+    return -1;
+
+  size_t start = len_s - len_sub;
+  size_t i = start + 1;
+  while (i-- > 0)
+  {
+    if (strncmp(s1 + i, s2, len_sub) == 0)
+      return (int)i;
+  }
+
+  return -1;
+}
+
+int __python_str_rfind_range(const char *s1, const char *s2, int start, int end)
+{
+__ESBMC_HIDE:;
+  size_t len_s = __python_strnlen_bounded(s1, 1024);
+  size_t len_sub = __python_strnlen_bounded(s2, 1024);
+
+  __ESBMC_assert(len_s <= INT_MAX, "string too long for rfind()");
+
+  __python_str_normalize_range(&start, &end, len_s);
+
+  if (len_sub == 0)
+    return (start <= end) ? end : -1;
+
+  if (end - start < (int)len_sub)
+    return -1;
+
+  size_t start_u = (size_t)start;
+  size_t end_u = (size_t)end;
+  size_t i = end_u - len_sub + 1;
+
+  while (i-- > start_u)
+  {
+    if (strncmp(s1 + i, s2, len_sub) == 0)
+      return (int)i;
+  }
+
+  return -1;
+}
+
+char *__python_str_replace(
+  const char *s,
+  const char *old_sub,
+  const char *new_sub,
+  int count)
+{
+__ESBMC_HIDE:;
+  if (!s || !old_sub || !new_sub)
+    return (char *)s;
+
+  if (count == 0)
+    return (char *)s;
+
+  // Get string lengths
+  size_t old_len = __python_strnlen_bounded(old_sub, 256);
+  size_t new_len = __python_strnlen_bounded(new_sub, 256);
+  size_t len_s = __python_strnlen_bounded(s, 1024);
+
+  // Bound assumptions for ESBMC - limit string sizes to reasonable values
+  __ESBMC_assert(len_s <= 1024, "len_s bounds");
+  __ESBMC_assert(old_len <= 256, "old_len bounds");
+  __ESBMC_assert(new_len <= 256, "new_len bounds");
+
+  if (old_len == 0)
+  {
+    size_t slots = len_s + 1;
+    size_t replacements = slots;
+    if (count > 0 && (size_t)count < slots)
+      replacements = (size_t)count;
+
+    size_t result_len = (size_t)len_s + (size_t)replacements * (size_t)new_len;
+    char *buffer = __ESBMC_alloca(result_len + 1);
+
+    size_t pos = 0;
+    size_t idx = 0;
+
+    while (idx < len_s)
+    {
+      if (idx < replacements)
+      {
+        size_t k = 0;
+        while (k < new_len)
+        {
+          buffer[pos] = new_sub[k];
+          pos++;
+          k++;
+        }
+      }
+
+      buffer[pos] = s[idx];
+      pos++;
+      idx++;
+    }
+
+    if (len_s < replacements)
+    {
+      size_t k = 0;
+      while (k < new_len)
+      {
+        buffer[pos] = new_sub[k];
+        pos++;
+        k++;
+      }
+    }
+
+    buffer[pos] = '\0';
+    return buffer;
+  }
+
+  int remaining = count;
+  size_t occurrences = 0;
+  size_t i = 0;
+  while (i + old_len <= len_s)
+  {
+    if ((remaining != 0) && strncmp(s + i, old_sub, old_len) == 0)
+    {
+      occurrences++;
+      i += old_len;
+      if (remaining > 0)
+        remaining--;
+      if (remaining == 0)
+        break;
+      continue;
+    }
+    i++;
+  }
+
+  long long diff = (long long)new_len - (long long)old_len;
+  long long result_len_signed =
+    (long long)len_s + (long long)occurrences * diff;
+  if (result_len_signed < 0)
+    result_len_signed = 0;
+  size_t result_len = (size_t)result_len_signed;
+  char *buffer = __ESBMC_alloca(result_len + 1);
+
+  remaining = count;
+  i = 0;
+  size_t pos = 0;
+
+  // Main replacement loop - use bounded iteration
+  while (i < len_s)
+  {
+    // Check if replacement is possible at current position
+    int do_replace = 0;
+    if (remaining != 0 && i + old_len <= len_s)
+    {
+      // Use strncmp for comparison (ESBMC handles this better)
+      if (strncmp(s + i, old_sub, old_len) == 0)
+        do_replace = 1;
+    }
+
+    if (do_replace)
+    {
+      // Copy new_sub to buffer
+      size_t k = 0;
+      while (k < new_len)
+      {
+        buffer[pos] = new_sub[k];
+        pos++;
+        k++;
+      }
+      // Skip old_sub in source
+      i = i + old_len;
+      // Decrement remaining replacements
+      if (remaining > 0)
+        remaining = remaining - 1;
+    }
+    else
+    {
+      // Copy single character
+      buffer[pos] = s[i];
+      pos++;
+      i++;
+    }
+  }
+
+  buffer[pos] = '\0';
   return buffer;
 }
 
@@ -404,8 +782,8 @@ __ESBMC_HIDE:;
 
   char *buffer = __ESBMC_alloca(512);
 
-  int i = 0;
-  int pos = 0;
+  size_t i = 0;
+  size_t pos = 0;
 
   // Copy first string
   while (pos < 511 && s1[i])

@@ -252,16 +252,36 @@ exprt function_call_expr::build_nondet_call() const
     typet char_array_type =
       array_typet(char_type(), from_integer(max_str_length, size_type()));
 
-    exprt nondet_array = exprt("sideeffect", char_array_type);
-    nondet_array.statement("nondet");
+    // Create a temporary variable to hold the nondeterministic string
+    symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
+      call_, "$nondet_str$", char_array_type, exprt());
 
+    // Declare the temporary
+    code_declt decl(symbol_expr(nondet_str_symbol));
+    decl.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(decl);
+
+    // Create nondet assignment for the array
+    exprt nondet_value("sideeffect", char_array_type);
+    nondet_value.statement("nondet");
+
+    code_assignt nondet_assign(symbol_expr(nondet_str_symbol), nondet_value);
+    nondet_assign.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(nondet_assign);
+
+    // Ensure null terminator at the last position
     exprt last_index = from_integer(max_str_length - 1, size_type());
     exprt null_char = from_integer(0, char_type());
 
-    with_exprt result(nondet_array, last_index, null_char);
-    result.type() = char_array_type;
+    index_exprt last_elem(symbol_expr(nondet_str_symbol), last_index);
+    code_assignt null_assign(last_elem, null_char);
+    null_assign.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(null_assign);
 
-    return result;
+    // Return address of first element: &arr[0] which is char*
+    index_exprt first_elem(
+      symbol_expr(nondet_str_symbol), from_integer(0, size_type()));
+    return address_of_exprt(first_elem);
   }
 
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
@@ -281,13 +301,113 @@ exprt function_call_expr::handle_isinstance() const
   const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &type_arg = args[1];
 
-  auto build_isinstance = [&](const std::string &type_name) {
-    typet expected_type = type_handler_.get_typet(type_name, 0);
-    exprt t;
-    if (expected_type.is_symbol())
+  // Extract type name from various AST node formats
+  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
+    const std::string node_type = node["_type"];
+
+    if (node_type == "Name")
     {
-      // struct type
+      // isinstance(v, int)
+      return node["id"];
+    }
+    else if (node_type == "Constant")
+    {
+      // isinstance(v, None)
+      return "NoneType";
+    }
+    else if (node_type == "Attribute")
+    {
+      // isinstance(v, MyClass.InnerClass)
+      return node["attr"];
+    }
+    else if (node_type == "Call")
+    {
+      // isinstance(v, type(None)) or isinstance(v, type(x))
+      const auto &func = node["func"];
+
+      if (func["_type"] != "Name" || func["id"] != "type")
+        throw std::runtime_error(
+          "Only type() calls are supported in isinstance()");
+
+      const auto &call_args = node["args"];
+      if (call_args.size() != 1)
+        throw std::runtime_error("type() expects exactly 1 argument");
+
+      const auto &type_call_arg = call_args[0];
+
+      // Handle type(None)
+      if (type_call_arg["_type"] == "Constant")
+      {
+        if (
+          type_call_arg["value"].is_null() ||
+          (type_call_arg.contains("value") &&
+           type_call_arg["value"] == nullptr))
+        {
+          return "NoneType";
+        }
+        throw std::runtime_error(
+          "isinstance() with type(constant) only supports type(None)");
+      }
+      else if (type_call_arg["_type"] == "Name")
+      {
+        throw std::runtime_error(
+          "isinstance() with type(variable) not yet supported - use direct "
+          "type names");
+      }
+      else
+        throw std::runtime_error(
+          "Unsupported argument to type() in isinstance()");
+    }
+    else
+      throw std::runtime_error("Unsupported type format in isinstance()");
+  };
+
+  // Build isinstance check for a given type name
+  auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    // Special case: Check if object is None (null pointer)
+    if (type_name == "NoneType")
+    {
+      // If x is not a pointer type, it can never be None
+      if (!obj_expr.type().is_pointer())
+        return gen_zero(typet("bool")); // false
+
+      // For pointer types, check if it's null
+      exprt null_ptr = gen_zero(obj_expr.type());
+      exprt equality("=", typet("bool"));
+      equality.copy_to_operands(obj_expr);
+      equality.move_to_operands(null_ptr);
+      return equality;
+    }
+
+    // Regular type checking
+    typet expected_type = type_handler_.get_typet(type_name, 0);
+    if (expected_type.is_nil())
+      throw std::runtime_error("Could not resolve type: " + type_name);
+
+    exprt t;
+
+    if (expected_type.is_pointer())
+    {
+      const pointer_typet &ptr_type = to_pointer_type(expected_type);
+      const typet &pointee_type = ptr_type.subtype();
+
+      if (pointee_type.is_symbol())
+      {
+        const symbolt *symbol = converter_.ns.lookup(pointee_type);
+        if (!symbol)
+          throw std::runtime_error(
+            "Could not find symbol for type: " + type_name);
+        t = symbol_expr(*symbol);
+      }
+      else
+        t = gen_zero(pointee_type);
+    }
+    else if (expected_type.is_symbol())
+    {
       const symbolt *symbol = converter_.ns.lookup(expected_type);
+      if (!symbol)
+        throw std::runtime_error(
+          "Could not find symbol for type: " + type_name);
       t = symbol_expr(*symbol);
     }
     else
@@ -299,45 +419,32 @@ exprt function_call_expr::handle_isinstance() const
     return isinstance;
   };
 
-  if (type_arg["_type"] == "Name")
+  // Handle tuple of types: isinstance(v, (int, str, type(None)))
+  if (type_arg["_type"] == "Tuple")
   {
-    // isinstance(v, int)
-    std::string type_name = args[1]["id"];
-    return build_isinstance(type_name);
-  }
-  else if (type_arg["_type"] == "Constant")
-  {
-    // isintance(v, None)
-    std::string type_name = "NoneType";
-    return build_isinstance(type_name);
-  }
-  else if (type_arg["_type"] == "Tuple")
-  {
-    // isinstance(v, (int, str))
-    // converted into instance(v, int) || isinstance(v, str)
     const auto &elts = type_arg["elts"];
+    if (elts.empty())
+      throw std::runtime_error("isinstance() tuple cannot be empty");
 
-    std::string first_type = elts[0]["id"];
-    exprt tupe_instance = build_isinstance(first_type);
+    // Build isinstance check for first element
+    exprt result = build_isinstance(extract_type_name(elts[0]));
 
+    // Chain OR expressions for remaining elements
     for (size_t i = 1; i < elts.size(); ++i)
     {
-      if (elts[i]["_type"] != "Name")
-        throw std::runtime_error("Unsupported type in isinstance()");
-
-      std::string type_name = elts[i]["id"];
-      exprt next_isinstance = build_isinstance(type_name);
+      exprt next_check = build_isinstance(extract_type_name(elts[i]));
 
       exprt or_expr("or", typet("bool"));
-      or_expr.move_to_operands(tupe_instance);
-      or_expr.move_to_operands(next_isinstance);
-      tupe_instance = or_expr;
+      or_expr.move_to_operands(result);
+      or_expr.move_to_operands(next_check);
+      result = or_expr;
     }
 
-    return tupe_instance;
+    return result;
   }
-  else
-    throw std::runtime_error("Unsupported type format in isinstance()");
+
+  // Handle single type: isinstance(v, int) or isinstance(v, type(None))
+  return build_isinstance(extract_type_name(type_arg));
 }
 
 exprt function_call_expr::handle_hasattr() const
@@ -1585,6 +1692,42 @@ exprt function_call_expr::handle_list_pop() const
   return deref_value;
 }
 
+bool function_call_expr::is_dict_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+
+  // Check if this is a known dict method
+  return method_name == "get";
+}
+
+exprt function_call_expr::handle_dict_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+
+  if (method_name == "get")
+  {
+    // Get the dict object
+    std::string dict_name = get_object_name();
+
+    symbol_id dict_symbol_id = converter_.create_symbol_id();
+    dict_symbol_id.set_object(dict_name);
+    const symbolt *dict_symbol =
+      converter_.find_symbol(dict_symbol_id.to_string());
+
+    if (!dict_symbol)
+      throw std::runtime_error("Dictionary variable not found: " + dict_name);
+
+    // Delegate to dict handler
+    return converter_.get_dict_handler()->handle_dict_get(
+      symbol_expr(*dict_symbol), call_);
+  }
+
+  throw std::runtime_error("Unsupported dict method: " + method_name);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1640,6 +1783,22 @@ exprt function_call_expr::handle_list_append() const
 
   // Get the value to append
   exprt value_to_append = converter_.get_expr(args[0]);
+
+  if (
+    value_to_append.type().is_array() &&
+    value_to_append.type().subtype() == char_type())
+  {
+    const array_typet &array_type = to_array_type(value_to_append.type());
+    // Only convert single-element char arrays (string literals)
+    if (array_type.size().is_constant())
+    {
+      const constant_exprt &size_const = to_constant_expr(array_type.size());
+      BigInt size_value = binary2integer(size_const.value().c_str(), false);
+      if (size_value == 1)
+        value_to_append.type() = gen_pointer_type(char_type());
+    }
+  }
+
   if (value_to_append.is_constant())
   {
     // Create tmp variable to hold value
@@ -1872,6 +2031,11 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_list_method_call(); },
      [this]() { return handle_list_method(); },
      "list methods"},
+
+    // Dict methods
+    {[this]() { return is_dict_method_call(); },
+     [this]() { return handle_dict_method(); },
+     "dict methods"},
 
     // Math module functions
     {[this]() {
@@ -2285,10 +2449,22 @@ exprt function_call_expr::handle_general_function_call()
   if (function_type_ == FunctionType::Constructor)
   {
     call.type() = type_handler_.get_typet(func_symbol->name.as_string());
+
     // Self is the LHS
     if (converter_.current_lhs)
+    {
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
-    param_offset = 1;
+      param_offset = 1;
+    }
+    else
+    {
+      // For constructor calls without assignment, delay creating temp var
+      // get_return_statements() will handle return statements, we only handle
+      // standalone calls (e.g., Positive(2))
+      // Self parameter will be added later if needed (see end of function)
+      // param_offset is 1 because first user arg maps to param[1] (skipping self)
+      param_offset = 1;
+    }
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
@@ -2483,11 +2659,12 @@ exprt function_call_expr::handle_general_function_call()
 
       // Handle the arguments - op2() is an arguments expression containing operands
       const exprt &args_expr = to_code(arg).op2();
-      for (const auto &operand : args_expr.operands())
-        func_call.arguments().push_back(operand);
 
       // Set the type to the return type of the function
       const exprt &func_expr = arg.op1();
+      bool is_constructor = false;
+      typet return_type;
+
       if (func_expr.is_symbol())
       {
         const symbolt *func_symbol =
@@ -2495,11 +2672,12 @@ exprt function_call_expr::handle_general_function_call()
         if (func_symbol != nullptr)
         {
           const code_typet &func_type = to_code_type(func_symbol->type);
-          typet return_type = func_type.return_type();
+          return_type = func_type.return_type();
 
           // Special handling for constructors
           if (return_type.id() == "constructor")
           {
+            is_constructor = true;
             // For constructors, use the class type instead of "constructor"
             return_type =
               type_handler_.get_typet(func_symbol->name.as_string());
@@ -2507,6 +2685,22 @@ exprt function_call_expr::handle_general_function_call()
 
           func_call.type() = return_type;
         }
+      }
+
+      // Strip temporary $ctor_self$ parameters when constructors are used as
+      // arguments (e.g., foo(Positive(2))). goto_sideeffects will add the
+      // correct self parameter later.
+      if (is_constructor)
+      {
+        exprt::operandst temp_args(
+          args_expr.operands().begin(), args_expr.operands().end());
+        func_call.arguments() = strip_ctor_self_parameters(temp_args);
+      }
+      else
+      {
+        // For non-constructors, just copy arguments
+        for (const auto &operand : args_expr.operands())
+          func_call.arguments().push_back(operand);
       }
 
       // Use the side effect expression as the argument
@@ -2602,6 +2796,12 @@ exprt function_call_expr::handle_general_function_call()
        ++i)
   {
     provided_params[i + param_offset] = true;
+  }
+
+  // For constructors, self is always implicitly provided
+  if (function_type_ == FunctionType::Constructor && total_params > 0)
+  {
+    provided_params[0] = true;
   }
 
   // Mark keyword arguments as provided
@@ -2717,7 +2917,57 @@ exprt function_call_expr::handle_general_function_call()
     }
   }
 
+  // For constructors without current_lhs, create temp var and add self if needed
+  // Note: get_return_statements() will handle return statements separately
+  if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
+  {
+    size_t num_provided_args = call_["args"].size();
+
+    // Only add self if arguments size matches user args (no self added yet)
+    if (call.arguments().size() == num_provided_args)
+    {
+      // Self parameter not added yet - this is a standalone call (e.g., Positive(2))
+      // Create temporary object as self parameter
+      typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
+      symbolt &temp_self =
+        converter_.create_tmp_symbol(call_, "$ctor_self$", class_type, exprt());
+      converter_.symbol_table().add(temp_self);
+
+      // Add declaration for temporary object
+      code_declt temp_decl(symbol_expr(temp_self));
+      temp_decl.location() = location;
+      converter_.current_block->copy_to_operands(temp_decl);
+
+      // Insert self as first argument
+      call.arguments().insert(
+        call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
+    }
+  }
+
   return call;
+}
+
+exprt::operandst
+function_call_expr::strip_ctor_self_parameters(const exprt::operandst &args)
+{
+  exprt::operandst new_args;
+  for (const auto &arg : args)
+  {
+    bool is_ctor_self = false;
+    if (arg.is_address_of() && !arg.operands().empty() && arg.op0().is_symbol())
+    {
+      const std::string &arg_id = arg.op0().identifier().as_string();
+      if (arg_id.find("$ctor_self$") != std::string::npos)
+      {
+        is_ctor_self = true;
+      }
+    }
+    if (!is_ctor_self)
+    {
+      new_args.push_back(arg);
+    }
+  }
+  return new_args;
 }
 
 exprt function_call_expr::gen_exception_raise(

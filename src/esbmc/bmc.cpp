@@ -168,6 +168,11 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     pytest_gen.generate_single(pytest_filename, eq, smt_conv, ns);
   }
 
+  if (options.get_bool_option("generate-ctest-testcase"))
+  {
+    ctest_gen.generate_single(".", eq, smt_conv, ns);
+  }
+
   if (options.get_bool_option("generate-html-report"))
     generate_html_report("1", ns, goto_trace, options);
 
@@ -516,7 +521,8 @@ void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims,
-  pytest_generator &pytest_gen)
+  pytest_generator &pytest_gen,
+  ctest_generator &ctest_gen)
 {
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -749,6 +755,12 @@ void report_coverage(
     std::string pytest_filename =
       pytest_generator::generate_pytest_filename(module_name);
     pytest_gen.generate(pytest_filename);
+  }
+
+  // Generate CTest test cases from collected data (for coverage mode)
+  if (options.get_bool_option("generate-ctest-testcase"))
+  {
+    ctest_gen.generate();
   }
 }
 
@@ -1129,6 +1141,10 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   if (options.get_bool_option("generate-pytest-testcase"))
     pytest_gen.clear();
 
+  // Clear collected ctest test data at the start of coverage run
+  if (options.get_bool_option("generate-ctest-testcase"))
+    ctest_gen.clear();
+
   fine_timet symex_start = current_time();
   try
   {
@@ -1173,7 +1189,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_SMTLIB;
 
     log_status(
-      "Generated {} VCC(s), {} remaining after simplification ({} assignments)",
+      "Generated {} VCC(s), {} remaining after simplification ({} "
+      "assignments)",
       solver_result.total_claims,
       remaining_asserts,
       BigInt(eq->SSA_steps.size()) - ignored);
@@ -1335,7 +1352,10 @@ smt_convt::resultt bmct::multi_property_check(
 
   // Add summary tracking
   SimpleSummary summary;
-  summary.total_properties = remaining_claims;
+  summary.simplified_properties = symex->get_cur_state().simplified_claims;
+  summary.total_properties = remaining_claims + summary.simplified_properties;
+  summary.passed_properties =
+    summary.passed_properties + summary.simplified_properties;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
@@ -1564,6 +1584,10 @@ smt_convt::resultt bmct::multi_property_check(
       if (options.get_bool_option("generate-pytest-testcase"))
         pytest_gen.collect(local_eq, *solver_ptr);
 
+      // Collect ctest test data if requested (for coverage mode)
+      if (options.get_bool_option("generate-ctest-testcase"))
+        ctest_gen.collect(local_eq, *solver_ptr, ns);
+
       // Store claim signature
       if (is_assert_cov)
       {
@@ -1668,7 +1692,8 @@ smt_convt::resultt bmct::multi_property_check(
   if (
     bs && !fc && !is && !options.get_bool_option("k-induction") &&
     !options.get_bool_option("incremental-bmc"))
-    report_coverage(options, reached_claims, reached_mul_claims, pytest_gen);
+    report_coverage(
+      options, reached_claims, reached_mul_claims, pytest_gen, ctest_gen);
 
   return final_result;
 }

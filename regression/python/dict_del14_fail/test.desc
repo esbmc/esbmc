@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 17 --ir
+--unwind 17
 ^  Should have raised KeyError$

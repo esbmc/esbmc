@@ -9,10 +9,10 @@ USAGE:
     x = nondet_list(max_size=10, elem_type=nondet_bool())     # bool list, size [0, 10]
     
     # Dictionaries:
-    x = nondet_dict()                                    # str->int dict, size [0, 8]
-    x = nondet_dict(5)                                   # str->int dict, size [0, 5]
-    x = nondet_dict(key_type=nondet_str(), value_type=nondet_float())
-    x = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
+    d = nondet_dict()                                    # int->int dict, size [0, 8]
+    d = nondet_dict(5)                                   # int->int dict, size [0, 5]
+    d = nondet_dict(key_type=nondet_str(), value_type=nondet_float())
+    d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
 """
 
 from typing import Any
@@ -44,8 +44,8 @@ def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> 
     Args:
         max_size: Maximum size of the list (default: 8).
                   The actual size will be in range [0, max_size].
-        elem_type: Type constructor for list elements (default: nondet_int()).
-              Supported: nondet_int(), nondet_float(), nondet_bool()
+        elem_type: Value returned by type constructor for list elements (default: nondet_int()).
+                   Supported: nondet_int(), nondet_float(), nondet_bool(), nondet_str()
     
     Returns:
         list: A list with arbitrary size and contents of specified type.
@@ -74,23 +74,32 @@ def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
     Args:
         max_size: Maximum size of the dictionary (default: 8).
                   The actual size will be in range [0, max_size].
-        key_type: Type constructor for dictionary keys (default: nondet_int()).
+        key_type: Value returned by type constructor for dictionary keys (default: nondet_int()).
                   Supported: nondet_int(), nondet_str(), nondet_bool()
-        value_type: Type constructor for dictionary values (default: nondet_int()).
+        value_type: Value returned by type constructor for dictionary values (default: nondet_int()).
                     Supported: nondet_int(), nondet_float(), nondet_bool(), nondet_str()
 
     Returns:
         dict: A dictionary with arbitrary size and contents of specified types.
+
+    Examples:
+        d = nondet_dict()                    # int->int dict, size [0, 8]
+        d = nondet_dict(5)                   # int->int dict, size [0, 5]
+        d = nondet_dict(key_type=nondet_str(), value_type=nondet_float())
+        d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
     """
+    # Default to nondet_int if no types specified
+    if key_type is None:
+        key_type = nondet_int()
+    if value_type is None:
+        value_type = nondet_int()
+
     result: dict = {}
     size: int = _nondet_size(max_size)
 
     i: int = 0
     while i < size:
-        # Generate fresh nondet values inside the loop
-        k: int = nondet_int() if key_type is None else key_type
-        v: int = nondet_int() if value_type is None else value_type
-        result[k] = v
+        result[key_type] = value_type
         i = i + 1
 
     return result

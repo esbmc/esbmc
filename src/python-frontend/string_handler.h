@@ -27,6 +27,8 @@ class string_builder;
  * - String comparison operations
  * - String method operations (startswith, endswith, isdigit, isalpha, etc.)
  * - String concatenation and membership testing
+ * - String joining operations (str.join)
+ * - Character-level comparisons
  */
 class string_handler
 {
@@ -157,6 +159,32 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Handle single character comparisons
+   * @param op Comparison operator
+   * @param lhs Left operand
+   * @param rhs Right operand
+   * @return Comparison expression or nil_exprt if not a char comparison
+   */
+  exprt
+  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
+
+  /**
+   * @brief Create a character comparison expression
+   * @param op Comparison operator
+   * @param lhs_char_value Left character value (as integer)
+   * @param rhs_char_value Right character value (as integer)
+   * @param lhs_source Original left source expression
+   * @param rhs_source Original right source expression
+   * @return Comparison expression with proper location info
+   */
+  exprt create_char_comparison_expr(
+    const std::string &op,
+    const exprt &lhs_char_value,
+    const exprt &rhs_char_value,
+    const exprt &lhs_source,
+    const exprt &rhs_source) const;
+
+  /**
    * @brief Handle string repetition
    * @param op multiply operator (Eq, Mult)
    * @param lhs Left operand
@@ -183,6 +211,19 @@ public:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+
+  // String joining operations
+
+  /**
+   * @brief Handle str.join() method
+   * @param call_json JSON node representing the join call
+   * @return Expression representing the joined string
+   * 
+   * Handles Python's str.join(iterable) method, e.g.:
+   * - " ".join(["a", "b", "c"]) -> "a b c"
+   * - "-".join(list_var) -> joined string
+   */
+  exprt handle_str_join(const nlohmann::json &call_json);
 
   // String method operations
 
@@ -253,6 +294,22 @@ public:
   exprt handle_string_lstrip(const exprt &str_expr, const locationt &location);
 
   /**
+   * @brief Handle str.strip() method
+   * @param str_expr String expression
+   * @param location Source location
+   * @return Pointer to stripped string
+   */
+  exprt handle_string_strip(const exprt &str_expr, const locationt &location);
+
+  /**
+   * @brief Handle str.rstrip() method
+   * @param str_expr String expression
+   * @param location Source location
+   * @return Pointer to stripped string
+   */
+  exprt handle_string_rstrip(const exprt &str_expr, const locationt &location);
+
+  /**
    * @brief Handle 'in' operator for strings
    * @param lhs Substring to find
    * @param rhs String to search in
@@ -280,6 +337,92 @@ public:
    * @return Pointer to lowercase string
    */
   exprt handle_string_lower(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.find() method
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param location Source location
+   * @return returns the index of the first occurrence of the substring.
+   * If not found, it returns -1.
+   */
+  exprt handle_string_find(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.find() with start/end
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the first occurrence within range, or -1 if not found
+   */
+  exprt handle_string_find_range(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rfind() method
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param location Source location
+   * @return returns the index of the last occurrence of the substring.
+   * If not found, it returns -1.
+   */
+  exprt handle_string_rfind(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rfind() with start/end
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the last occurrence within range, or -1 if not found
+   */
+  exprt handle_string_rfind_range(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.replace() method
+   * @param string_obj String object
+   * @param old_arg Substring to replace
+   * @param new_arg Replacement substring
+   * @param count_arg Maximum replacements (-1 for all)
+   * @param location Source location
+   * @return Pointer to replaced string
+   */
+  exprt handle_string_replace(
+    const exprt &string_obj,
+    const exprt &old_arg,
+    const exprt &new_arg,
+    const exprt &count_arg,
+    const locationt &location);
+
+  /**
+   * @brief Extract a constant string from the AST node (literal or const var)
+   * @param node JSON node to inspect
+   * @param converter Converter used to resolve Name references
+   * @param out Output string
+   * @return True if a constant string was resolved
+   */
+  static bool extract_constant_string(
+    const nlohmann::json &node,
+    python_converter &converter,
+    std::string &out);
 
   // Utility methods
 

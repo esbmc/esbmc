@@ -367,6 +367,41 @@ const JsonType get_var_value(
 }
 
 template <typename JsonType>
+bool extract_constant_integer(
+  const JsonType &node,
+  const std::string &function,
+  const JsonType &ast,
+  long long &value)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_number_integer())
+  {
+    value = node["value"].template get<long long>();
+    return true;
+  }
+
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  {
+    const std::string var_name = node["id"].template get<std::string>();
+    JsonType var_value = get_var_value(var_name, function, ast);
+
+    if (
+      !var_value.empty() && var_value.contains("value") &&
+      var_value["value"].contains("_type") &&
+      var_value["value"]["_type"] == "Constant" &&
+      var_value["value"].contains("value") &&
+      var_value["value"]["value"].is_number_integer())
+    {
+      value = var_value["value"]["value"].template get<long long>();
+      return true;
+    }
+  }
+
+  return false;
+}
+
+template <typename JsonType>
 const JsonType get_list_element(const JsonType &list_value, int pos)
 {
   // Handle direct List node
@@ -408,6 +443,33 @@ const JsonType find_return_node(const JsonType &block)
       return stmt;
   }
   return JsonType();
+}
+
+/// Extract the variable name from a symbol identifier
+/// Examples:
+///   "py:test.py@l" -> "l"
+///   "py:test.py@F@foo@x" -> "x"
+///   "py:test.py@C@MyClass@F@method@var" -> "var"
+inline std::string extract_var_name_from_symbol_id(const std::string &symbol_id)
+{
+  size_t last_at = symbol_id.find_last_of('@');
+  return (last_at != std::string::npos) ? symbol_id.substr(last_at + 1)
+                                        : symbol_id;
+}
+
+template <typename JsonType>
+bool has_overload_decorator(const JsonType &func_node)
+{
+  // Check for @overload decorators
+  if (!func_node.contains("decorator_list"))
+    return false;
+
+  for (const auto &decorator : func_node["decorator_list"])
+  {
+    if (decorator["_type"] == "Name" && decorator["id"] == "overload")
+      return true;
+  }
+  return false;
 }
 
 } // namespace json_utils
