@@ -15,7 +15,6 @@
 #include <util/symbolic_types.h>
 #include <string>
 #include <functional>
-#include <cctype>
 
 // Extract element type from annotation
 static typet get_elem_type_from_annotation(
