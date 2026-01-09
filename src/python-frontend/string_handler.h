@@ -552,6 +552,11 @@ private:
     const std::vector<unsigned char> &chars,
     const typet &type);
 
+  exprt build_string_index_result(
+    const nlohmann::json &call,
+    const exprt &find_expr,
+    const locationt &location);
+
 
   /**
    * @brief Find or create a function symbol for string operations

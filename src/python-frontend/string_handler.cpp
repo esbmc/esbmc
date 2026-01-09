@@ -1457,32 +1457,7 @@ exprt string_handler::handle_string_index(
   const locationt &location)
 {
   exprt find_expr = handle_string_find(string_obj, find_arg, location);
-
-  symbolt &find_result = converter_.create_tmp_symbol(
-    call, "$str_index$", int_type(), gen_zero(int_type()));
-  code_declt decl(symbol_expr(find_result));
-  decl.location() = location;
-  converter_.add_instruction(decl);
-
-  code_assignt assign(symbol_expr(find_result), find_expr);
-  assign.location() = location;
-  converter_.add_instruction(assign);
-
-  exprt not_found =
-    equality_exprt(symbol_expr(find_result), from_integer(-1, int_type()));
-  exprt raise = python_exception_utils::make_exception_raise(
-    type_handler_, "ValueError", "substring not found", &location);
-
-  code_expressiont raise_code(raise);
-  raise_code.location() = location;
-
-  code_ifthenelset if_stmt;
-  if_stmt.cond() = not_found;
-  if_stmt.then_case() = raise_code;
-  if_stmt.location() = location;
-  converter_.add_instruction(if_stmt);
-
-  return symbol_expr(find_result);
+  return build_string_index_result(call, find_expr, location);
 }
 
 exprt string_handler::handle_string_index_range(
@@ -1495,7 +1470,14 @@ exprt string_handler::handle_string_index_range(
 {
   exprt find_expr = handle_string_find_range(
     string_obj, find_arg, start_arg, end_arg, location);
+  return build_string_index_result(call, find_expr, location);
+}
 
+exprt string_handler::build_string_index_result(
+  const nlohmann::json &call,
+  const exprt &find_expr,
+  const locationt &location)
+{
   symbolt &find_result = converter_.create_tmp_symbol(
     call, "$str_index$", int_type(), gen_zero(int_type()));
   code_declt decl(symbol_expr(find_result));
