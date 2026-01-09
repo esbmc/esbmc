@@ -10,7 +10,8 @@ on:
 jobs:
   update-formula:
     runs-on: macos-latest
-    if: github.repository == 'esbmc/esbmc'
+    # Only auto-update in main repository, but allow manual trigger in forks
+    if: github.repository == 'esbmc/esbmc' || github.event_name == 'workflow_dispatch'
     
     steps:
       - name: Checkout repository
