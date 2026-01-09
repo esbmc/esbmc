@@ -120,11 +120,11 @@ symbol_id function_call_builder::build_function_id() const
     if (func_json["value"]["_type"] == "Attribute")
     {
       /* Handle nested attribute chains (e.g., self.f.foo(), a.b.c.method())
-       * 
+       *
        * When calling a method through an attribute chain, we need to determine
        * the class type of the intermediate object. For example, in self.f.foo(),
        * we need to know that 'f' has type Foo to correctly resolve Foo.foo().
-       * 
+       *
        * Strategy: Recursively walk the attribute chain from left to right,
        * resolving each component's type by looking up struct members in the
        * symbol table, until we reach the final object whose class we need.
@@ -669,7 +669,15 @@ exprt function_call_builder::build() const
       return converter_.get_string_handler().handle_string_rfind_range(
         obj_expr, find_arg, start_arg, end_arg, loc);
     }
+    if (method_name == "upper")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("upper() takes no arguments");
 
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_upper(obj_expr, loc);
+    }
     if (method_name == "find")
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);

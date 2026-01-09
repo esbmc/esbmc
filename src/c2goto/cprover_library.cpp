@@ -172,6 +172,8 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_islower",
   "__python_char_lower",
   "__python_str_lower",
+  "__python_char_upper",
+  "__python_str_upper",
   "__python_str_find",
   "__python_str_find_range",
   "__python_str_rfind",
@@ -382,11 +384,11 @@ void add_cprover_library(contextt &context, const languaget *language)
 
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
    * These will be symbols that didn't make it into store_ctx
-   * 
+   *
    * For Python:
    *    - symbols that didn't make it into store_ctx didn't make it because they're not in new_ctx
    *    - they will be found in ignored_ctx
-   * 
+   *
    * For other frontends:
    *    - every symbol made it into new_ctx (no ignored_ctx)
    *    - not every symbol made it into store_ctx from new_ctx
