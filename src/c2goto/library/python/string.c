@@ -320,15 +320,14 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
-
 // Python string upper - converts all characters to uppercase
-char* __python_str_upper(const char* s)
+char *__python_str_upper(const char *s)
 {
 __ESBMC_HIDE:;
   if (!s)
-    return (char*)s;
+    return (char *)s;
 
-  char* buffer = __ESBMC_alloca(256);
+  char *buffer = __ESBMC_alloca(256);
 
   int i = 0;
   while (i < 255 && s[i])

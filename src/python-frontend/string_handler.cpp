@@ -1340,13 +1340,13 @@ exprt string_handler::handle_string_lower(
 }
 
 exprt string_handler::handle_string_upper(
-  const exprt& string_obj,
-  const locationt& location)
+  const exprt &string_obj,
+  const locationt &location)
 {
   // For single characters, handle directly
   if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
   {
-    symbolt* upper_symbol =
+    symbolt *upper_symbol =
       symbol_table_.find_symbol("c:@F@__python_char_upper");
     if (!upper_symbol)
       throw std::runtime_error(
@@ -1366,7 +1366,7 @@ exprt string_handler::handle_string_upper(
   exprt str_expr = ensure_null_terminated_string(string_copy);
   exprt str_addr = get_array_base_address(str_expr);
 
-  symbolt* upper_str_symbol =
+  symbolt *upper_str_symbol =
     symbol_table_.find_symbol("c:@F@__python_str_upper");
   if (!upper_str_symbol)
     throw std::runtime_error("str_upper function not found in symbol table");

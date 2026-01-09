@@ -344,7 +344,7 @@ public:
    * @param location Source location
    * @return Pointer to uppercase string
    */
-  exprt handle_string_upper(const exprt& string_obj, const locationt& location);
+  exprt handle_string_upper(const exprt &string_obj, const locationt &location);
   /**
    * @brief Handle str.find() method
    * @param string_obj String object
