@@ -213,6 +213,21 @@ void goto_symext::handle_sideeffect(
   case sideeffect2t::printf2:
     // Do nothing for printf
     break;
+  case sideeffect2t::old_snapshot:
+    // __ESBMC_old() snapshots are handled during contract processing
+    // If we encounter one here, it means we're in the original function body
+    // where the ensures clause is still present. We simply evaluate the
+    // inner expression (the current value) as a placeholder.
+    {
+      expr2tc result = effect.operand;
+      replace_nondet(result);
+      dereference(result, dereferencet::READ);
+
+      // Create a simple assignment from the evaluated expression to lhs
+      expr2tc assign_code = code_assign2tc(lhs, result);
+      symex_assign(assign_code, true, guard);
+    }
+    break;
   default:
     assert(0 && "unexpected side effect");
   }

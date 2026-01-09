@@ -519,6 +519,42 @@ struct cap_info __ESBMC_cheri_info[1];
     )";
   }
 
+  // Function contract support - only add symbols when contract processing is enabled
+  // Check if enforce-contract or replace-call-with-contract options are set
+  std::string enforce_opt = config.options.get_option("enforce-contract");
+  std::string replace_opt =
+    config.options.get_option("replace-call-with-contract");
+  if (!enforce_opt.empty() || !replace_opt.empty())
+  {
+    intrinsics += R"(
+/* Function contract support
+ * __ESBMC_requires: precondition clause
+ * __ESBMC_ensures: postcondition clause
+ * __ESBMC_return_value: special variable representing function return value in ensures clauses
+ *   Note: The type of __ESBMC_return_value is resolved at conversion time to match
+ *   the function's return type. Declared as int for compatibility, but actual type
+ *   is determined during IR conversion based on the enclosing function's return type.
+ *   For pointer return types, Clang may emit warnings but the conversion will handle
+ *   the type correctly.
+ */
+void __ESBMC_requires(_Bool);
+void __ESBMC_ensures(_Bool);
+extern int __ESBMC_return_value;
+
+/* __ESBMC_old: captures pre-state value of expressions in ensures clauses
+ * This function is used in __ESBMC_ensures to reference the value of an
+ * expression before the function executes. For example:
+ *   __ESBMC_ensures(x == __ESBMC_old(x) + 1);
+ * declares that x after the function should equal x before plus 1.
+ *
+ * Note: Declared as returning int, but at IR level the actual return type
+ * is automatically inherited from the argument type. C's type system will
+ * perform implicit conversions as needed, similar to __ESBMC_return_value.
+ */
+int __ESBMC_old(int);
+    )";
+  }
+
   return intrinsics;
 }
 
