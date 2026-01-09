@@ -1,6 +1,4 @@
 class Esbmc < Formula
-  include Language::Python::Virtualenv
-
   desc "Context-Bounded Model Checker for C/C++/Python programs"
   homepage "https://esbmc.org"
   url "https://github.com/esbmc/esbmc/archive/4e47d6057f6e34c345419ea113f981dd1f9ada45.tar.gz"
@@ -26,14 +24,18 @@ class Esbmc < Formula
 
   def install
     # Create a dedicated virtual environment for ESBMC's Python dependencies
-    venv = virtualenv_create(libexec, "python3.12")
+    python3_bin = Formula["python@3.12"].opt_bin/"python3.12"
+    
+    # Create virtual environment
+    system python3_bin, "-m", "venv", libexec
     
     # Install Python dependencies into the virtual environment
-    venv.pip_install "meson", "ast2json", "mypy", "pyparsing", "toml", "tomli"
+    system libexec/"bin"/"pip", "install", "--upgrade", "pip"
+    system libexec/"bin"/"pip", "install", "meson", "ast2json", "mypy", "pyparsing", "toml", "tomli"
     
     # Use Python from virtual environment
-    python3 = venv.root/"bin"/"python3"
-    ENV.prepend_path "PATH", venv.root/"bin"
+    python3 = libexec/"bin"/"python3"
+    ENV.prepend_path "PATH", libexec/"bin"
 
     args = %W[
       -DCMAKE_BUILD_TYPE=RelWithDebInfo
