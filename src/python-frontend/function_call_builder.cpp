@@ -678,6 +678,31 @@ exprt function_call_builder::build() const
       locationt loc = converter_.get_location_from_decl(call_);
       return converter_.get_string_handler().handle_string_upper(obj_expr, loc);
     }
+    if (method_name == "index")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() < 1 || call_["args"].size() > 3)
+        throw std::runtime_error("index() requires one to three arguments");
+
+      exprt find_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+
+      if (call_["args"].size() == 1)
+      {
+        return converter_.get_string_handler().handle_string_index(
+          call_, obj_expr, find_arg, loc);
+      }
+
+      exprt start_arg = converter_.get_expr(call_["args"][1]);
+      exprt end_arg = from_integer(INT_MIN, int_type());
+      if (call_["args"].size() == 3)
+        end_arg = converter_.get_expr(call_["args"][2]);
+
+      return converter_.get_string_handler().handle_string_index_range(
+        call_, obj_expr, find_arg, start_arg, end_arg, loc);
+    }
+
     if (method_name == "find")
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);

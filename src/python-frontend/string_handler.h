@@ -375,6 +375,38 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.index() method
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param location Source location
+   * @return returns the index of the first occurrence of the substring.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_index(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.index() with start/end
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the first occurrence within range.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_index_range(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
    * @brief Handle str.rfind() method
    * @param string_obj String object
    * @param find_arg String to check
@@ -519,6 +551,11 @@ private:
   exprt make_char_array_expr(
     const std::vector<unsigned char> &chars,
     const typet &type);
+
+  exprt build_string_index_result(
+    const nlohmann::json &call,
+    const exprt &find_expr,
+    const locationt &location);
 
   /**
    * @brief Find or create a function symbol for string operations
