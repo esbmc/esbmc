@@ -61,13 +61,35 @@ class Esbmc < Formula
     system "cmake", "--build", "build"
     system "cmake", "--install", "build"
     
-    # Create symlinks for Python tools needed by ESBMC Python frontend  
+    # Create wrapper scripts for Python tools needed by ESBMC Python frontend
+    # This ensures mypy is available when users run ESBMC with Python files
     python3_libexec = Formula["python@3.12"].opt_libexec
-    if (python3_libexec/"bin"/"mypy").exist?
-      %w[mypy].each do |tool|
-        (bin/tool).write_env_script python3_libexec/"bin"/tool, PATH: "#{python3_bin}:$PATH"
-      end
+    mypy_path = python3_libexec/"bin"/"mypy"
+    
+    # First try libexec, then opt_bin as fallback
+    mypy_path = python3_bin/"mypy" unless mypy_path.exist?
+    
+    if mypy_path.exist?
+      (bin/"mypy").write_env_script mypy_path, PATH: "#{python3_bin}:$PATH"
+    else
+      # If mypy is not found, create a wrapper that uses the bundled Python
+      (bin/"mypy").write <<~EOS
+        #!/bin/bash
+        exec "#{python3}" -m mypy "$@"
+      EOS
+      chmod 0755, bin/"mypy"
     end
+  end
+  
+  def caveats
+    <<~EOS
+      ESBMC Python frontend requires mypy, which has been installed.
+      
+      If you encounter issues with Python verification, ensure that:
+        #{opt_bin}/mypy
+      is accessible in your PATH, or mypy is available via:
+        #{Formula["python@3.12"].opt_bin}/python3.12 -m mypy
+    EOS
   end
 
   test do
