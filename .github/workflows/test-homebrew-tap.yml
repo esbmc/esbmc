@@ -96,6 +96,11 @@ jobs:
           esbmc test.c --no-bounds-check --no-pointer-check
           echo "✅ C test passed!"
       
+      - name: Install Python dependencies for ESBMC
+        run: |
+          pip3 install mypy
+          echo "✅ mypy installed successfully!"
+      
       - name: Test ESBMC with simple Python program
         run: |
           cat > test.py << 'EOF'
