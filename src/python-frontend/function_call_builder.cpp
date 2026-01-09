@@ -839,24 +839,88 @@ exprt function_call_builder::build() const
 
     if (method_name == "split")
     {
-      if (call_["args"].size() != 1 && call_["args"].size() != 2)
+      if (call_["args"].size() > 2)
         throw std::runtime_error(
-          "split() requires one or two arguments in minimal support");
+          "split() requires zero, one, or two arguments in minimal support");
+
+      auto is_none_literal = [](const nlohmann::json &node) {
+        if (
+          node.contains("_type") && node["_type"] == "Constant" &&
+          node.contains("value") && node["value"].is_null())
+        {
+          return true;
+        }
+        if (
+          node.contains("_type") && node["_type"] == "Name" &&
+          node.contains("id") && node["id"].is_string() && node["id"] == "None")
+        {
+          return true;
+        }
+        return false;
+      };
+
+      auto find_keyword =
+        [&](const std::string &name) -> const nlohmann::json * {
+        if (!call_.contains("keywords") || !call_["keywords"].is_array())
+          return nullptr;
+        for (const auto &kw : call_["keywords"])
+        {
+          if (
+            kw.contains("arg") && kw["arg"].is_string() && kw["arg"] == name &&
+            kw.contains("value"))
+          {
+            return &kw["value"];
+          }
+        }
+        return nullptr;
+      };
 
       std::string separator;
-      if (!string_handler::extract_constant_string(
-            call_["args"][0], converter_, separator))
+      if (call_["args"].empty())
       {
-        throw std::runtime_error(
-          "split() only supports constant string separators in minimal "
-          "support");
+        const nlohmann::json *sep_kw = find_keyword("sep");
+        if (sep_kw == nullptr || is_none_literal(*sep_kw))
+          separator = "";
+        else if (!string_handler::extract_constant_string(
+                   *sep_kw, converter_, separator))
+        {
+          throw std::runtime_error(
+            "split() only supports constant string separators in minimal "
+            "support");
+        }
+      }
+      else if (is_none_literal(call_["args"][0]))
+      {
+        separator = "";
+      }
+      else
+      {
+        if (!string_handler::extract_constant_string(
+              call_["args"][0], converter_, separator))
+        {
+          throw std::runtime_error(
+            "split() only supports constant string separators in minimal "
+            "support");
+        }
       }
 
       long long count = -1;
+      const nlohmann::json *count_node = nullptr;
       if (call_["args"].size() == 2)
       {
+        count_node = &call_["args"][1];
+      }
+      else
+      {
+        const nlohmann::json *count_kw = find_keyword("maxsplit");
+        if (count_kw != nullptr)
+          count_node = count_kw;
+      }
+
+      if (count_node != nullptr)
+      {
         if (!json_utils::extract_constant_integer(
-              call_["args"][1],
+              *count_node,
               converter_.get_current_func_name(),
               converter_.get_ast_json(),
               count))
