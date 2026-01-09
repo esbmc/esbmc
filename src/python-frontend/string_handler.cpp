@@ -1522,8 +1522,8 @@ exprt string_handler::handle_string_index_range(
   const exprt &end_arg,
   const locationt &location)
 {
-  exprt find_expr =
-    handle_string_find_range(string_obj, find_arg, start_arg, end_arg, location);
+  exprt find_expr = handle_string_find_range(
+    string_obj, find_arg, start_arg, end_arg, location);
 
   symbolt &find_result = converter_.create_tmp_symbol(
     call, "$str_index$", int_type(), gen_zero(int_type()));

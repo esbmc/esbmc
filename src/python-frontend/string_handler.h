@@ -383,10 +383,10 @@ public:
    * @throws ValueError if substring is not found.
    */
   exprt handle_string_index(
-    const nlohmann::json& call,
-    const exprt& string_obj,
-    const exprt& find_arg,
-    const locationt& location);
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
 
   /**
    * @brief Handle str.index() with start/end
@@ -399,12 +399,12 @@ public:
    * @throws ValueError if substring is not found.
    */
   exprt handle_string_index_range(
-    const nlohmann::json& call,
-    const exprt& string_obj,
-    const exprt& find_arg,
-    const exprt& start_arg,
-    const exprt& end_arg,
-    const locationt& location);
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
 
   /**
    * @brief Handle str.rfind() method
@@ -560,9 +560,9 @@ private:
    * @return Expression representing a raise
    */
   exprt make_exception_raise(
-    const std::string& exc,
-    const std::string& message,
-    const locationt& location) const;
+    const std::string &exc,
+    const std::string &message,
+    const locationt &location) const;
 
   /**
    * @brief Find or create a function symbol for string operations
