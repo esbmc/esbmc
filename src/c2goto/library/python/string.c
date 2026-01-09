@@ -87,8 +87,7 @@ __ESBMC_HIDE:;
   if (*end > len_i)
     *end = len_i;
 
-  if (*end < *start)
-    *end = *start;
+  // Do not force end >= start; Python allows empty ranges when start > end.
 }
 
 // Python character isdigit - checks if a single character is a digit

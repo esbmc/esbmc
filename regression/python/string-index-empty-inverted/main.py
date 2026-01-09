@@ -1,9 +1,11 @@
 def main() -> None:
     s = "abc"
+    got_error = False
     try:
         s.index("", 2, 1)
-        assert False, "Expected ValueError for empty substring with inverted range"
     except ValueError:
-        pass
+        got_error = True
+
+    assert got_error
 
 main()
