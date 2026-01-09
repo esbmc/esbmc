@@ -1,6 +1,6 @@
 def main() -> None:
-    s = ""
+    s = "abc"
     parts = s.split(",")
-    assert parts[0] == "x"
+    assert parts[0] == "abc"
 
 main()
