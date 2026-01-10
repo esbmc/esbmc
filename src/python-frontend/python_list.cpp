@@ -555,7 +555,112 @@ exprt python_list::build_split_list(
   long long count)
 {
   if (separator.empty())
-    throw std::runtime_error("split() separator cannot be empty");
+  {
+    // Whitespace split: split on any whitespace and collapse runs.
+    auto is_space = [](char c) {
+      return std::isspace(static_cast<unsigned char>(c)) != 0;
+    };
+
+    if (count == 0)
+    {
+      size_t first = 0;
+      while (first < input.size() && is_space(input[first]))
+        ++first;
+
+      if (first == input.size())
+      {
+        nlohmann::json list_node;
+        list_node["_type"] = "List";
+        list_node["elts"] = nlohmann::json::array();
+        converter.copy_location_fields_from_decl(call_node, list_node);
+        python_list list(converter, list_node);
+        return list.get();
+      }
+
+      size_t last = input.size();
+      while (last > first && is_space(input[last - 1]))
+        --last;
+
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      converter.copy_location_fields_from_decl(call_node, list_node);
+
+      nlohmann::json elem;
+      elem["_type"] = "Constant";
+      elem["value"] = input.substr(first, last - first);
+      converter.copy_location_fields_from_decl(call_node, elem);
+      list_node["elts"].push_back(elem);
+
+      python_list list(converter, list_node);
+      return list.get();
+    }
+
+    std::vector<std::string> parts;
+    size_t i = 0;
+    const size_t n = input.size();
+
+    auto skip_ws = [&](size_t &idx) {
+      while (idx < n && is_space(input[idx]))
+        ++idx;
+    };
+
+    auto scan_token = [&](size_t &idx) {
+      while (idx < n && !is_space(input[idx]))
+        ++idx;
+    };
+
+    skip_ws(i);
+    if (i == n)
+    {
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      converter.copy_location_fields_from_decl(call_node, list_node);
+      python_list list(converter, list_node);
+      return list.get();
+    }
+
+    long long remaining = count;
+    while (i < n)
+    {
+      size_t start = i;
+      scan_token(i);
+      parts.push_back(input.substr(start, i - start));
+
+      if (count >= 0 && remaining == 1)
+      {
+        skip_ws(i);
+        if (i < n)
+          parts.push_back(input.substr(i));
+        break;
+      }
+
+      if (count >= 0)
+        --remaining;
+
+      skip_ws(i);
+      if (i >= n)
+        break;
+    }
+
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    converter.copy_location_fields_from_decl(call_node, list_node);
+
+    for (const auto &part : parts)
+    {
+      nlohmann::json elem;
+      elem["_type"] = "Constant";
+      elem["value"] = part;
+      converter.copy_location_fields_from_decl(call_node, elem);
+      list_node["elts"].push_back(elem);
+    }
+
+    python_list list(converter, list_node);
+    return list.get();
+  }
 
   if (count == 0)
   {

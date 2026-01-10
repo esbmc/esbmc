@@ -1,9 +1,3 @@
-### Getting started
-
-We need a better guide for getting started with ESBMC, although we hope to improve this in the future. Examining some of the benchmarks in the SV-COMP competition (http://sv-comp.sosy-lab.org/) would be a good start, using the ESBMC command line for the relevant competition year.
-
-You can also explore practical examples using the ESBMC tool on the documentation page, which is available at https://ssvlab.github.io/esbmc/documentation.html.
-
 ### Contributing to the code base
 
 Here are some steps to contributing to the code base:

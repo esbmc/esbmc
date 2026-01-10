@@ -381,6 +381,28 @@ bool extract_constant_integer(
     return true;
   }
 
+  if (
+    node.contains("_type") && node["_type"] == "UnaryOp" &&
+    node.contains("operand") && node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer() && node.contains("op"))
+  {
+    const auto &op = node["op"];
+    const bool is_usub =
+      (op.is_object() && op.contains("_type") && op["_type"] == "USub") ||
+      (op.is_string() && op == "USub");
+    const bool is_uadd =
+      (op.is_object() && op.contains("_type") && op["_type"] == "UAdd") ||
+      (op.is_string() && op == "UAdd");
+
+    if (is_usub || is_uadd)
+    {
+      value = node["operand"]["value"].template get<long long>();
+      if (is_usub)
+        value = -value;
+      return true;
+    }
+  }
+
   if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
   {
     const std::string var_name = node["id"].template get<std::string>();
