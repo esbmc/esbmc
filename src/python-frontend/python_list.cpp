@@ -1541,6 +1541,7 @@ exprt python_list::list_repetition(
 
   BigInt list_size;
   exprt list_elem;
+  symbolt *list_symbol = nullptr;
 
   auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
     if (
@@ -1562,9 +1563,10 @@ exprt python_list::list_repetition(
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(lhs).get_identifier().as_string());
       assert(size_var);
-      symbolt *list_symbol =
-        converter_.find_symbol(rhs.identifier().as_string());
+
+      list_symbol = converter_.find_symbol(rhs.identifier().as_string());
       assert(list_symbol);
+
       if (!parse_size_from_symbol(size_var, list_size))
         return create_vla(list_value_, list_symbol, size_var, list_elem);
     }
@@ -1585,11 +1587,9 @@ exprt python_list::list_repetition(
     {
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(rhs).get_identifier().as_string());
-
       assert(size_var);
 
-      symbolt *list_symbol =
-        converter_.find_symbol(lhs.identifier().as_string());
+      list_symbol = converter_.find_symbol(lhs.identifier().as_string());
       assert(list_symbol);
 
       if (!parse_size_from_symbol(size_var, list_size))
@@ -1599,10 +1599,20 @@ exprt python_list::list_repetition(
       list_size = binary2integer(rhs.value().c_str(), true);
   }
 
-  symbolt *list_symbol = converter_.find_symbol(lhs.identifier().as_string());
+  if (!list_symbol)
+  {
+    if (lhs.type() == list_type && lhs.is_symbol())
+      list_symbol = converter_.find_symbol(lhs.identifier().as_string());
+    else if (rhs.type() == list_type && rhs.is_symbol())
+      list_symbol = converter_.find_symbol(rhs.identifier().as_string());
+  }
   assert(list_symbol);
 
-  const std::string &list_id = converter_.current_lhs->identifier().as_string();
+  std::string list_id;
+  if (converter_.current_lhs && converter_.current_lhs->is_symbol())
+    list_id = converter_.current_lhs->identifier().as_string();
+  else
+    list_id = list_symbol->id.as_string();
 
   for (int64_t i = 0; i < list_size.to_int64() - 1; ++i)
   {
