@@ -86,6 +86,17 @@ static const std::map<std::string, std::string> builtin_functions = {
   {"exec", "NoneType"},
   {"compile", "code"},
 
+  // String module constants
+  {"string.digits", "str"},
+  {"string.ascii_lowercase", "str"},
+  {"string.ascii_uppercase", "str"},
+  {"string.ascii_letters", "str"},
+  {"string.punctuation", "str"},
+  {"string.whitespace", "str"},
+  {"string.printable", "str"},
+  {"string.hexdigits", "str"},
+  {"string.octdigits", "str"},
+
   // Import functions
   {"__import__", "module"}};
 
@@ -931,6 +942,19 @@ private:
         type = get_type_from_constant(lhs);
       else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Attribute")
         type = get_type_from_method(lhs);
+      else if (lhs["_type"] == "Attribute")
+      {
+        // Construct full attribute name (e.g., "string.digits")
+        if (lhs["value"]["_type"] == "Name" && lhs["value"].contains("id"))
+        {
+          std::string full_name =
+            lhs["value"]["id"].template get<std::string>() + "." +
+            lhs["attr"].template get<std::string>();
+          auto it = builtin_functions.find(full_name);
+          if (it != builtin_functions.end())
+            type = it->second;
+        }
+      }
     }
 
     // If still unknown, try RHS or fallback to Any for arithmetic ops
