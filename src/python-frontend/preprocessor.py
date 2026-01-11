@@ -265,14 +265,49 @@ class Preprocessor(ast.NodeTransformer):
         node = self.generic_visit(node)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
+        node.test = self._transform_list_truthiness(node.test, node)
         if prefix:
             return prefix + [node]
         return node
+
+    def _transform_list_truthiness(self, test_expr, source_node):
+        """
+        Transform list truthiness checks to explicit len() > 0 checks.
+        Converts: while xs: -> while len(xs) > 0:
+        """
+        # Only transform if the test is a simple Name node referring to a list
+        if not isinstance(test_expr, ast.Name):
+            return test_expr
+
+        var_name = test_expr.id
+        var_type = self.known_variable_types.get(var_name)
+
+        # Check if this is a list type
+        if var_type != 'list':
+            return test_expr
+
+        # Create: len(xs) > 0
+        len_call = ast.Call(
+            func=self.create_name_node('len', ast.Load(), source_node),
+            args=[self.create_name_node(var_name, ast.Load(), source_node)],
+            keywords=[]
+        )
+        self.ensure_all_locations(len_call, source_node)
+
+        comparison = ast.Compare(
+            left=len_call,
+            ops=[ast.Gt()],
+            comparators=[self.create_constant_node(0, source_node)]
+        )
+        self.ensure_all_locations(comparison, source_node)
+
+        return comparison
 
     def visit_While(self, node):
         node = self.generic_visit(node)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
+        node.test = self._transform_list_truthiness(node.test, node)
         if prefix:
             return prefix + [node]
         return node
