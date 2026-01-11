@@ -1614,22 +1614,13 @@ exprt function_call_expr::handle_list_pop() const
   const typet pyobject_ptr_type =
     pointer_typet(converter_.get_type_handler().get_list_element_type());
 
-  symbolt &pop_result_sym = converter_.create_tmp_symbol(
-    call_, "$pop_result$", pyobject_ptr_type, exprt());
-
-  code_declt pop_result_decl(symbol_expr(pop_result_sym));
-  pop_result_decl.location() = converter_.get_location_from_decl(call_);
-  converter_.add_instruction(pop_result_decl);
-
-  // Build function call
-  code_function_callt pop_call;
+  // Build side-effect function call expression
+  side_effect_expr_function_callt pop_call;
   pop_call.function() = symbol_expr(*pop_func);
-  pop_call.lhs() = symbol_expr(pop_result_sym);
   pop_call.arguments().push_back(symbol_expr(*list_symbol));
   pop_call.arguments().push_back(index_expr);
   pop_call.type() = pyobject_ptr_type;
   pop_call.location() = converter_.get_location_from_decl(call_);
-  converter_.add_instruction(pop_call);
 
   // Determine the element type from the list's type map
   const std::string &list_id = list_symbol->id.as_string();
@@ -1661,8 +1652,7 @@ exprt function_call_expr::handle_list_pop() const
   }
 
   // Extract value from PyObject: pop_result->value
-  member_exprt obj_value(
-    symbol_expr(pop_result_sym), "value", pointer_typet(empty_typet()));
+  member_exprt obj_value(pop_call, "value", pointer_typet(empty_typet()));
 
   // Dereference the PyObject*
   {
