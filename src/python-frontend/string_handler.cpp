@@ -521,9 +521,20 @@ exprt string_handler::handle_string_concatenation_with_promotion(
     // RHS is array, LHS is single char - promote LHS to string array
     if (type_utils::is_integer_type(lhs.type()))
     {
+      // Extract index/dereference to avoid nested dereferences
+      exprt lhs_value = lhs;
+      if (lhs.is_index())
+      {
+        symbolt &temp = converter_.create_tmp_symbol(
+          nlohmann::json(), "$char_temp$", lhs.type(), gen_zero(lhs.type()));
+        code_assignt assign(symbol_expr(temp), lhs);
+        converter_.add_instruction(assign);
+        lhs_value = symbol_expr(temp);
+      }
+
       typet string_type = type_handler_.build_array(char_type(), 2);
       exprt str_array = gen_zero(string_type);
-      str_array.operands().at(0) = lhs;
+      str_array.operands().at(0) = lhs_value;
       str_array.operands().at(1) = gen_zero(char_type()); // null terminator
       lhs = str_array;
     }
