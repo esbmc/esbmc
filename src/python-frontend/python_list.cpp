@@ -2053,12 +2053,20 @@ exprt python_list::build_pop_list_call(
       const auto &elts = list_node["value"]["elts"];
       elem_type = converter_.get_expr(elts[elts.size() - 1]).type();
     }
-    else
+    // Try to get type from annotation (e.g., l: list[int] = [])
+    else if (!list_node.is_null() && list_node.contains("annotation"))
     {
-      throw std::runtime_error(
-        "Could not determine list element type for pop() on '" + list_name +
-        "'");
+      elem_type =
+        get_elem_type_from_annotation(list_node, converter_.get_type_handler());
     }
+  }
+
+  // If all type inference failed, use a generic fallback type
+  // The runtime assertion in __ESBMC_list_pop will catch actual errors
+  if (elem_type == typet())
+  {
+    // Use any_type() for cases such as empty lists with no annotation
+    elem_type = any_type();
   }
 
   // Extract and dereference PyObject value
