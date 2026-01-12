@@ -790,7 +790,8 @@ expr2tc dereferencet::build_reference_to(
       return expr2tc();
     /* here, both of them are code */
   }
-  else if (is_array_type(value)) // Encode some access bounds checks.
+
+  if (is_array_type(value)) // Encode some access bounds checks.
   {
     bool can_carry = is_pointer_type(deref_expr) &&
                      to_pointer_type(deref_expr->type).carry_provenance;
@@ -944,9 +945,7 @@ void dereferencet::build_reference_rec(
 
   // All accesses to code need no further construction
   if (is_code_type(value) || is_code_type(type))
-  {
     return;
-  }
 
   if (is_struct_type(type))
     flags |= flag_dst_struct;
@@ -1878,6 +1877,40 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     return;
   }
 
+  if (is_union_type(value->type))
+  {
+    // Handle union types. All members of a union are at offset 0.
+    // If target type matches, guard that offset is zero and return.
+    expr2tc tmp = value;
+    if (dereference_type_compare(tmp, type))
+    {
+      expr2tc offs_is_zero =
+        and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+      output.emplace_back(offs_is_zero, tmp);
+    }
+
+    // For union members, all are at offset 0, so recurse into each member
+    // that could contain the target type.
+    const union_type2t &union_type = to_union_type(value->type);
+    unsigned int i = 0;
+    for (auto const &it : union_type.members)
+    {
+      if (is_scalar_type(it))
+      {
+        i++;
+        continue;
+      }
+
+      // All union members are at offset 0
+      expr2tc memb = member2tc(it, value, union_type.member_names[i]);
+
+      construct_struct_ref_from_dyn_offs_rec(
+        memb, offs, type, accuml_guard, mode, output);
+      i++;
+    }
+    return;
+  }
+
   if (
     is_array_type(value->type) &&
     get_base_array_subtype(value->type)->get_width() == 8)
@@ -1894,33 +1927,51 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     if (is_symbol2t(value))
       bounds_check(value, offs, type, tmp);
 
-    // We are left with constructing a structure from a byte array. XXX, this
-    // is duplicated from above, refactor?
-    std::vector<expr2tc> fields;
-    assert(is_struct_type(type));
-    const struct_type2t &structtype = to_struct_type(type);
-    expr2tc array_offset = offs;
-    for (const type2tc &target_type : structtype.members)
+    // We are left with constructing a structure/union from a byte array.
+    if (is_struct_type(type))
     {
-      expr2tc target = value; // The byte array;
+      std::vector<expr2tc> fields;
+      const struct_type2t &structtype = to_struct_type(type);
+      expr2tc array_offset = offs;
+      for (const type2tc &target_type : structtype.members)
+      {
+        expr2tc target = value; // The byte array;
 
-      simplify(array_offset);
-      if (is_array_type(target_type))
-        construct_from_array(target, array_offset, target_type, tmp, mode);
-      else
-        build_reference_rec(target, array_offset, target_type, tmp, mode);
-      fields.push_back(target);
+        simplify(array_offset);
+        if (is_array_type(target_type))
+          construct_from_array(target, array_offset, target_type, tmp, mode);
+        else
+          build_reference_rec(target, array_offset, target_type, tmp, mode);
+        fields.push_back(target);
 
-      // Update dynamic offset into array
-      array_offset = add2tc(
-        array_offset->type,
-        array_offset,
-        gen_long(array_offset->type, type_byte_size_bits(target_type)));
+        // Update dynamic offset into array
+        array_offset = add2tc(
+          array_offset->type,
+          array_offset,
+          gen_long(array_offset->type, type_byte_size_bits(target_type)));
+      }
+
+      // We now have a vector of fields reconstructed from the byte array
+      expr2tc the_struct = constant_struct2tc(type, std::move(fields));
+      output.emplace_back(accuml_guard, the_struct);
     }
+    else if (is_union_type(type))
+    {
+      // For unions from byte arrays, read the first member at offset
+      const union_type2t &uniontype = to_union_type(type);
+      if (!uniontype.members.empty())
+      {
+        expr2tc target = value; // The byte array
+        expr2tc union_offs = offs;
+        simplify(union_offs);
+        build_reference_rec(target, union_offs, uniontype.members[0], tmp, mode);
 
-    // We now have a vector of fields reconstructed from the byte array
-    expr2tc the_struct = constant_struct2tc(type, std::move(fields));
-    output.emplace_back(accuml_guard, the_struct);
+        std::vector<expr2tc> members = {target};
+        expr2tc the_union =
+          constant_union2tc(type, uniontype.member_names[0], members);
+        output.emplace_back(accuml_guard, the_union);
+      }
+    }
     return;
   }
 }
