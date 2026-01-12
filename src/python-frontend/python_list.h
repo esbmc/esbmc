@@ -110,6 +110,18 @@ public:
    */
   exprt handle_comprehension(const nlohmann::json &element);
 
+  /**
+   * @brief Build a list pop operation
+   * @param list The list symbol to pop from
+   * @param index The index to pop (default -1 for last element)
+   * @param element The AST node for location information
+   * @return Expression representing the popped value
+   */
+  exprt build_pop_list_call(
+    const symbolt &list,
+    const exprt &index,
+    const nlohmann::json &element);
+
 private:
   friend class python_dict_handler;
 
