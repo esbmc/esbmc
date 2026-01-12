@@ -1350,45 +1350,8 @@ exprt python_list::handle_index_access(
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
 
-    // Get obj->value and cast to correct type
-    member_exprt obj_value(list_at_call, "value", pointer_typet(empty_typet()));
-    {
-      exprt &base = obj_value.struct_op();
-      exprt deref("dereference");
-      deref.type() = base.type().subtype();
-      deref.move_to_operands(base);
-      base.swap(deref);
-    }
-
-    // For array types, return pointer to element type instead of pointer to array
-    // The dereference system doesn't support array types as target types
-    // Callers will handle the conversion when needed (similar to single-char string handling)
-    if (elem_type.is_array())
-    {
-      const array_typet &arr_type = to_array_type(elem_type);
-      // Cast to pointer to element type (e.g., char* instead of char[2]*)
-      typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
-      return tc;
-    }
-
-    // For char* strings and None (_Bool*), the void* already contains the pointer value
-    // For all other types, the void* contains a pointer to the value
-    if (
-      elem_type.is_pointer() && (elem_type.subtype() == char_type() ||
-                                 elem_type.subtype() == bool_type()))
-    {
-      // String and None case: cast void* directly to the pointer type (no dereference needed)
-      typecast_exprt tc(obj_value, elem_type);
-      return tc;
-    }
-    else
-    {
-      // All other types: cast void* to pointer-to-type, then dereference
-      typecast_exprt tc(obj_value, pointer_typet(elem_type));
-      dereference_exprt deref(elem_type);
-      deref.op0() = tc;
-      return deref;
-    }
+    // Extract and dereference PyObject value
+    return extract_pyobject_value(list_at_call, elem_type);
   }
 
   // Handle static string indexing with safe null fallback
@@ -2098,9 +2061,16 @@ exprt python_list::build_pop_list_call(
     }
   }
 
-  // Extract value from PyObject: pop_call->value
-  // This follows the same pattern as handle_index_access()
-  member_exprt obj_value(pop_call, "value", pointer_typet(empty_typet()));
+  // Extract and dereference PyObject value
+  return extract_pyobject_value(pop_call, elem_type);
+}
+
+exprt python_list::extract_pyobject_value(
+  const exprt &pyobject_expr,
+  const typet &elem_type)
+{
+  // Extract value from PyObject: pyobject_expr->value
+  member_exprt obj_value(pyobject_expr, "value", pointer_typet(empty_typet()));
 
   // Dereference the PyObject* to access its members
   {
@@ -2111,17 +2081,18 @@ exprt python_list::build_pop_list_call(
     base.swap(deref);
   }
 
-  // Handle array types specially (same logic as handle_index_access)
+  // For array types, return pointer to element type instead of pointer to array
+  // The dereference system doesn't support array types as target types
   if (elem_type.is_array())
   {
     const array_typet &arr_type = to_array_type(elem_type);
-    // Cast from void* to pointer to element type (e.g., char* instead of char[2]*)
+    // Cast to pointer to element type (e.g., char* instead of char[2]*)
     typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
     return tc;
   }
 
   // For char* strings and None (_Bool*), the void* already contains the pointer value
-  // (same logic as handle_index_access)
+  // For all other types, the void* contains a pointer to the value
   if (
     elem_type.is_pointer() &&
     (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
