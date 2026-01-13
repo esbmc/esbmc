@@ -1,4 +1,5 @@
 #include <python-frontend/function_call_expr.h>
+#include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
@@ -1604,92 +1605,9 @@ exprt function_call_expr::handle_list_pop() const
     index_expr = converter_.get_expr(args[0]);
   }
 
-  // Find the list_pop C function
-  const symbolt *pop_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_pop");
-  assert(pop_func);
-
-  // Create temporary to hold the PyObject* result
-  const typet pyobject_ptr_type =
-    pointer_typet(converter_.get_type_handler().get_list_element_type());
-
-  symbolt &pop_result_sym = converter_.create_tmp_symbol(
-    call_, "$pop_result$", pyobject_ptr_type, exprt());
-
-  code_declt pop_result_decl(symbol_expr(pop_result_sym));
-  pop_result_decl.location() = converter_.get_location_from_decl(call_);
-  converter_.add_instruction(pop_result_decl);
-
-  // Build function call
-  code_function_callt pop_call;
-  pop_call.function() = symbol_expr(*pop_func);
-  pop_call.lhs() = symbol_expr(pop_result_sym);
-  pop_call.arguments().push_back(symbol_expr(*list_symbol));
-  pop_call.arguments().push_back(index_expr);
-  pop_call.type() = pyobject_ptr_type;
-  pop_call.location() = converter_.get_location_from_decl(call_);
-  converter_.add_instruction(pop_call);
-
-  // Determine the element type from the list's type map
-  const std::string &list_id = list_symbol->id.as_string();
-  typet elem_type = python_list::get_list_element_type(list_id);
-
-  // If type map lookup failed, try to infer from list declaration
-  if (elem_type == typet())
-  {
-    nlohmann::json list_node = json_utils::find_var_decl(
-      list_name, converter_.current_function_name(), converter_.ast());
-
-    if (
-      !list_node.is_null() && list_node.contains("value") &&
-      list_node["value"].contains("elts") &&
-      list_node["value"]["elts"].is_array() &&
-      !list_node["value"]["elts"].empty())
-    {
-      // Get type from first element
-      elem_type = converter_.get_expr(list_node["value"]["elts"][0]).type();
-    }
-    else
-    {
-      // Last resort: assume int
-      log_warning(
-        "Could not determine list element type for '{}', defaulting to int",
-        list_name);
-      elem_type = converter_.get_type_handler().get_typet("int", 0);
-    }
-  }
-
-  // Extract value from PyObject: pop_result->value
-  member_exprt obj_value(
-    symbol_expr(pop_result_sym), "value", pointer_typet(empty_typet()));
-
-  // Dereference the PyObject*
-  {
-    exprt &base = obj_value.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-
-  // Handle array types specially
-  if (elem_type.is_array())
-  {
-    const array_typet &arr_type = to_array_type(elem_type);
-    // Cast from void* to pointer to element type (e.g., char* instead of char[2]*)
-    // This matches how python_list::handle_index_access() handles array access
-    typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
-    return tc;
-  }
-
-  // Cast from void* to the actual element type pointer (for non-array types)
-  typecast_exprt tc(obj_value, pointer_typet(elem_type));
-
-  // Dereference to get the actual value
-  dereference_exprt deref_value(elem_type);
-  deref_value.op0() = tc;
-
-  return deref_value;
+  // Delegate to python_list to build the pop operation
+  python_list list_helper(converter_, call_);
+  return list_helper.build_pop_list_call(*list_symbol, index_expr, call_);
 }
 
 bool function_call_expr::is_dict_method_call() const
@@ -2449,10 +2367,22 @@ exprt function_call_expr::handle_general_function_call()
   if (function_type_ == FunctionType::Constructor)
   {
     call.type() = type_handler_.get_typet(func_symbol->name.as_string());
+
     // Self is the LHS
     if (converter_.current_lhs)
+    {
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
-    param_offset = 1;
+      param_offset = 1;
+    }
+    else
+    {
+      // For constructor calls without assignment, delay creating temp var
+      // get_return_statements() will handle return statements, we only handle
+      // standalone calls (e.g., Positive(2))
+      // Self parameter will be added later if needed (see end of function)
+      // param_offset is 1 because first user arg maps to param[1] (skipping self)
+      param_offset = 1;
+    }
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
@@ -2647,11 +2577,12 @@ exprt function_call_expr::handle_general_function_call()
 
       // Handle the arguments - op2() is an arguments expression containing operands
       const exprt &args_expr = to_code(arg).op2();
-      for (const auto &operand : args_expr.operands())
-        func_call.arguments().push_back(operand);
 
       // Set the type to the return type of the function
       const exprt &func_expr = arg.op1();
+      bool is_constructor = false;
+      typet return_type;
+
       if (func_expr.is_symbol())
       {
         const symbolt *func_symbol =
@@ -2659,11 +2590,12 @@ exprt function_call_expr::handle_general_function_call()
         if (func_symbol != nullptr)
         {
           const code_typet &func_type = to_code_type(func_symbol->type);
-          typet return_type = func_type.return_type();
+          return_type = func_type.return_type();
 
           // Special handling for constructors
           if (return_type.id() == "constructor")
           {
+            is_constructor = true;
             // For constructors, use the class type instead of "constructor"
             return_type =
               type_handler_.get_typet(func_symbol->name.as_string());
@@ -2671,6 +2603,22 @@ exprt function_call_expr::handle_general_function_call()
 
           func_call.type() = return_type;
         }
+      }
+
+      // Strip temporary $ctor_self$ parameters when constructors are used as
+      // arguments (e.g., foo(Positive(2))). goto_sideeffects will add the
+      // correct self parameter later.
+      if (is_constructor)
+      {
+        exprt::operandst temp_args(
+          args_expr.operands().begin(), args_expr.operands().end());
+        func_call.arguments() = strip_ctor_self_parameters(temp_args);
+      }
+      else
+      {
+        // For non-constructors, just copy arguments
+        for (const auto &operand : args_expr.operands())
+          func_call.arguments().push_back(operand);
       }
 
       // Use the side effect expression as the argument
@@ -2766,6 +2714,12 @@ exprt function_call_expr::handle_general_function_call()
        ++i)
   {
     provided_params[i + param_offset] = true;
+  }
+
+  // For constructors, self is always implicitly provided
+  if (function_type_ == FunctionType::Constructor && total_params > 0)
+  {
+    provided_params[0] = true;
   }
 
   // Mark keyword arguments as provided
@@ -2881,38 +2835,65 @@ exprt function_call_expr::handle_general_function_call()
     }
   }
 
+  // For constructors without current_lhs, create temp var and add self if needed
+  // Note: get_return_statements() will handle return statements separately
+  if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
+  {
+    size_t num_provided_args = call_["args"].size();
+
+    // Only add self if arguments size matches user args (no self added yet)
+    if (call.arguments().size() == num_provided_args)
+    {
+      // Self parameter not added yet - this is a standalone call (e.g., Positive(2))
+      // Create temporary object as self parameter
+      typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
+      symbolt &temp_self =
+        converter_.create_tmp_symbol(call_, "$ctor_self$", class_type, exprt());
+      converter_.symbol_table().add(temp_self);
+
+      // Add declaration for temporary object
+      code_declt temp_decl(symbol_expr(temp_self));
+      temp_decl.location() = location;
+      converter_.current_block->copy_to_operands(temp_decl);
+
+      // Insert self as first argument
+      call.arguments().insert(
+        call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
+    }
+  }
+
   return call;
+}
+
+exprt::operandst
+function_call_expr::strip_ctor_self_parameters(const exprt::operandst &args)
+{
+  exprt::operandst new_args;
+  for (const auto &arg : args)
+  {
+    bool is_ctor_self = false;
+    if (arg.is_address_of() && !arg.operands().empty() && arg.op0().is_symbol())
+    {
+      const std::string &arg_id = arg.op0().identifier().as_string();
+      if (arg_id.find("$ctor_self$") != std::string::npos)
+      {
+        is_ctor_self = true;
+      }
+    }
+    if (!is_ctor_self)
+    {
+      new_args.push_back(arg);
+    }
+  }
+  return new_args;
 }
 
 exprt function_call_expr::gen_exception_raise(
   std::string exc,
   std::string message) const
 {
-  if (!type_utils::is_python_exceptions(exc))
-  {
-    log_error("This exception type is not supported: {}", exc);
-    abort();
-  }
-
-  typet type = type_handler_.get_typet(exc);
-
-  exprt size = constant_exprt(
-    integer2binary(message.size(), bv_width(size_type())),
-    integer2string(message.size()),
-    size_type());
-  typet t = array_typet(char_type(), size);
-  string_constantt string_name(message, t, string_constantt::k_default);
-
-  // Construct a constant struct to throw:
-  // raise VauleError{ .message=&"Error message" }
-  // If the exception model is modified, it might be necessary to make changes
-  exprt sym("struct", type);
-  sym.copy_to_operands(address_of_exprt(string_name));
-
-  exprt raise = side_effect_exprt("cpp-throw", type);
-  raise.move_to_operands(sym);
-
-  return raise;
+  return python_exception_utils::make_exception_raise(
+    type_handler_, exc, message, nullptr);
 }
 
 std::vector<std::string>

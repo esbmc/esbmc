@@ -1,6 +1,6 @@
 def main() -> None:
-    parts = "abc".split("")
-    assert len(parts) == 3
-
+    s = ""
+    parts = s.split(",")
+    assert parts[0] == "x"
 
 main()

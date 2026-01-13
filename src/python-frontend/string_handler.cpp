@@ -1,4 +1,5 @@
 #include <python-frontend/char_utils.h>
+#include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/python_converter.h>
@@ -18,6 +19,7 @@
 #include <cmath>
 #include <cstring>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 
@@ -519,9 +521,20 @@ exprt string_handler::handle_string_concatenation_with_promotion(
     // RHS is array, LHS is single char - promote LHS to string array
     if (type_utils::is_integer_type(lhs.type()))
     {
+      // Extract index/dereference to avoid nested dereferences
+      exprt lhs_value = lhs;
+      if (lhs.is_index())
+      {
+        symbolt &temp = converter_.create_tmp_symbol(
+          nlohmann::json(), "$char_temp$", lhs.type(), gen_zero(lhs.type()));
+        code_assignt assign(symbol_expr(temp), lhs);
+        converter_.add_instruction(assign);
+        lhs_value = symbol_expr(temp);
+      }
+
       typet string_type = type_handler_.build_array(char_type(), 2);
       exprt str_array = gen_zero(string_type);
-      str_array.operands().at(0) = lhs;
+      str_array.operands().at(0) = lhs_value;
       str_array.operands().at(1) = gen_zero(char_type()); // null terminator
       lhs = str_array;
     }
@@ -951,6 +964,87 @@ exprt string_handler::handle_string_strip(
   return call;
 }
 
+exprt string_handler::handle_string_rstrip(
+  const exprt &str_expr,
+  const locationt &location)
+{
+  bool can_fold_constant = str_expr.type().is_array();
+
+  if (!can_fold_constant && str_expr.is_symbol())
+  {
+    const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
+    if (symbol && symbol->value.type().is_array())
+      can_fold_constant = true;
+  }
+
+  if (can_fold_constant && string_builder_)
+  {
+    std::vector<exprt> chars = string_builder_->extract_string_chars(str_expr);
+    bool all_constant = true;
+
+    for (const auto &ch : chars)
+    {
+      if (!ch.is_constant())
+      {
+        all_constant = false;
+        break;
+      }
+    }
+
+    if (all_constant)
+    {
+      auto is_whitespace = [](const exprt &ch) -> bool {
+        BigInt char_val =
+          binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+        char c = static_cast<char>(char_val.to_uint64());
+        return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+               c == '\r';
+      };
+
+      while (!chars.empty() && is_whitespace(chars.back()))
+        chars.pop_back();
+
+      return string_builder_->build_null_terminated_string(chars);
+    }
+  }
+
+  std::string func_symbol_id = ensure_string_function_symbol(
+    "__python_str_rstrip",
+    pointer_typet(char_type()),
+    {pointer_typet(char_type())},
+    location);
+
+  exprt str_ptr = str_expr;
+
+  if (str_expr.is_constant() && str_expr.type().is_array())
+  {
+    str_ptr = exprt("index", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+    str_ptr.copy_to_operands(from_integer(0, int_type()));
+  }
+  else if (str_expr.type().is_array())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    exprt index_expr("index", char_type());
+    index_expr.copy_to_operands(str_expr);
+    index_expr.copy_to_operands(from_integer(0, int_type()));
+    str_ptr.copy_to_operands(index_expr);
+  }
+  else if (!str_expr.type().is_pointer())
+  {
+    str_ptr = exprt("address_of", pointer_typet(char_type()));
+    str_ptr.copy_to_operands(str_expr);
+  }
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt(func_symbol_id, code_typet());
+  call.arguments().push_back(str_ptr);
+  call.type() = pointer_typet(char_type());
+  call.location() = location;
+
+  return call;
+}
+
 exprt string_handler::handle_string_membership(
   exprt &lhs,
   exprt &rhs,
@@ -1257,6 +1351,47 @@ exprt string_handler::handle_string_lower(
   return lower_call;
 }
 
+exprt string_handler::handle_string_upper(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // For single characters, handle directly
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    symbolt *upper_symbol =
+      symbol_table_.find_symbol("c:@F@__python_char_upper");
+    if (!upper_symbol)
+      throw std::runtime_error(
+        "__python_char_upper function not found in symbol table");
+
+    side_effect_expr_function_callt upper_call;
+    upper_call.function() = symbol_expr(*upper_symbol);
+    upper_call.arguments().push_back(string_obj);
+    upper_call.location() = location;
+    upper_call.type() = char_type();
+
+    return upper_call;
+  }
+
+  // For full strings, use the string version
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *upper_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_upper");
+  if (!upper_str_symbol)
+    throw std::runtime_error("str_upper function not found in symbol table");
+
+  side_effect_expr_function_callt upper_call;
+  upper_call.function() = symbol_expr(*upper_str_symbol);
+  upper_call.arguments().push_back(str_addr);
+  upper_call.location() = location;
+  upper_call.type() = pointer_typet(char_type());
+
+  return upper_call;
+}
+
 exprt string_handler::handle_string_find(
   const exprt &string_obj,
   const exprt &find_arg,
@@ -1283,6 +1418,298 @@ exprt string_handler::handle_string_find(
   find_call.type() = int_type();
 
   return find_call;
+}
+
+exprt string_handler::handle_string_find_range(
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const exprt &start_arg,
+  const exprt &end_arg,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  exprt arg_copy = find_arg;
+  exprt arg_expr = ensure_null_terminated_string(arg_copy);
+  exprt arg_addr = get_array_base_address(arg_expr);
+
+  exprt start_expr = start_arg;
+  if (start_expr.type() != int_type())
+    start_expr = typecast_exprt(start_expr, int_type());
+
+  exprt end_expr = end_arg;
+  if (end_expr.type() != int_type())
+    end_expr = typecast_exprt(end_expr, int_type());
+
+  symbolt *find_range_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_find_range");
+  if (!find_range_symbol)
+    throw std::runtime_error(
+      "str_find_range function not found in symbol table");
+
+  side_effect_expr_function_callt find_call;
+  find_call.function() = symbol_expr(*find_range_symbol);
+  find_call.arguments().push_back(str_addr);
+  find_call.arguments().push_back(arg_addr);
+  find_call.arguments().push_back(start_expr);
+  find_call.arguments().push_back(end_expr);
+  find_call.location() = location;
+  find_call.type() = int_type();
+
+  return find_call;
+}
+
+exprt string_handler::handle_string_index(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const locationt &location)
+{
+  exprt find_expr = handle_string_find(string_obj, find_arg, location);
+  return build_string_index_result(call, find_expr, location);
+}
+
+exprt string_handler::handle_string_index_range(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const exprt &start_arg,
+  const exprt &end_arg,
+  const locationt &location)
+{
+  exprt find_expr = handle_string_find_range(
+    string_obj, find_arg, start_arg, end_arg, location);
+  return build_string_index_result(call, find_expr, location);
+}
+
+exprt string_handler::build_string_index_result(
+  const nlohmann::json &call,
+  const exprt &find_expr,
+  const locationt &location)
+{
+  symbolt &find_result = converter_.create_tmp_symbol(
+    call, "$str_index$", int_type(), gen_zero(int_type()));
+  code_declt decl(symbol_expr(find_result));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  code_assignt assign(symbol_expr(find_result), find_expr);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+
+  exprt not_found =
+    equality_exprt(symbol_expr(find_result), from_integer(-1, int_type()));
+  exprt raise = python_exception_utils::make_exception_raise(
+    type_handler_, "ValueError", "substring not found", &location);
+
+  code_expressiont raise_code(raise);
+  raise_code.location() = location;
+
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = not_found;
+  if_stmt.then_case() = raise_code;
+  if_stmt.location() = location;
+  converter_.add_instruction(if_stmt);
+
+  return symbol_expr(find_result);
+}
+
+exprt string_handler::handle_string_rfind(
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  exprt arg_copy = find_arg;
+  exprt arg_expr = ensure_null_terminated_string(arg_copy);
+  exprt arg_addr = get_array_base_address(arg_expr);
+
+  symbolt *rfind_str_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_rfind");
+  if (!rfind_str_symbol)
+    throw std::runtime_error("str_rfind function not found in symbol table");
+
+  side_effect_expr_function_callt rfind_call;
+  rfind_call.function() = symbol_expr(*rfind_str_symbol);
+  rfind_call.arguments().push_back(str_addr);
+  rfind_call.arguments().push_back(arg_addr);
+  rfind_call.location() = location;
+  rfind_call.type() = int_type();
+
+  return rfind_call;
+}
+
+exprt string_handler::handle_string_rfind_range(
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const exprt &start_arg,
+  const exprt &end_arg,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  exprt arg_copy = find_arg;
+  exprt arg_expr = ensure_null_terminated_string(arg_copy);
+  exprt arg_addr = get_array_base_address(arg_expr);
+
+  exprt start_expr = start_arg;
+  if (start_expr.type() != int_type())
+    start_expr = typecast_exprt(start_expr, int_type());
+
+  exprt end_expr = end_arg;
+  if (end_expr.type() != int_type())
+    end_expr = typecast_exprt(end_expr, int_type());
+
+  symbolt *rfind_range_symbol =
+    symbol_table_.find_symbol("c:@F@__python_str_rfind_range");
+  if (!rfind_range_symbol)
+    throw std::runtime_error(
+      "str_rfind_range function not found in symbol table");
+
+  side_effect_expr_function_callt rfind_call;
+  rfind_call.function() = symbol_expr(*rfind_range_symbol);
+  rfind_call.arguments().push_back(str_addr);
+  rfind_call.arguments().push_back(arg_addr);
+  rfind_call.arguments().push_back(start_expr);
+  rfind_call.arguments().push_back(end_expr);
+  rfind_call.location() = location;
+  rfind_call.type() = int_type();
+
+  return rfind_call;
+}
+
+exprt string_handler::handle_string_replace(
+  const exprt &string_obj,
+  const exprt &old_arg,
+  const exprt &new_arg,
+  const exprt &count_arg,
+  const locationt &location)
+{
+  // Try to handle constant strings directly using string_builder API
+  // This avoids the loop unwinding issues in ESBMC
+
+  exprt string_copy = string_obj;
+  exprt old_copy = old_arg;
+  exprt new_copy = new_arg;
+
+  // Ensure all are proper strings
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt old_expr = ensure_null_terminated_string(old_copy);
+  exprt new_expr = ensure_null_terminated_string(new_copy);
+
+  // Extract the count value
+  int64_t max_replacements = -1; // -1 means replace all
+  if (count_arg.is_constant())
+  {
+    BigInt count_val = binary2integer(
+      count_arg.value().as_string(), count_arg.type().is_signedbv());
+    max_replacements = count_val.to_int64();
+
+    // count=0 means no replacements
+    if (max_replacements == 0)
+      return str_expr;
+  }
+
+  // Try to extract constant string values for compile-time replacement
+  std::string src_str = extract_string_from_array_operands(str_expr);
+  std::string old_str = extract_string_from_array_operands(old_expr);
+  std::string new_str = extract_string_from_array_operands(new_expr);
+
+  // If we can extract all strings as constants, do replacement at compile time
+  if (!src_str.empty() || str_expr.operands().size() > 0)
+  {
+    // Handle the case where source string might be empty but valid
+    if (str_expr.type().is_array() && str_expr.operands().size() > 0)
+    {
+      src_str = extract_string_from_array_operands(str_expr);
+    }
+
+    // Perform the replacement
+    std::string result;
+    int64_t replacements_done = 0;
+
+    if (old_str.empty())
+    {
+      // Special case: empty old string - insert new_str between each char
+      for (size_t i = 0; i < src_str.size(); ++i)
+      {
+        if (max_replacements < 0 || replacements_done < max_replacements)
+        {
+          result += new_str;
+          replacements_done++;
+        }
+        result += src_str[i];
+      }
+      // Add new_str at the end if we still have replacements left
+      if (max_replacements < 0 || replacements_done < max_replacements)
+      {
+        result += new_str;
+      }
+    }
+    else
+    {
+      // Normal replacement
+      size_t pos = 0;
+      size_t old_len = old_str.length();
+
+      while (pos < src_str.length())
+      {
+        size_t found = src_str.find(old_str, pos);
+
+        if (
+          found == std::string::npos ||
+          (max_replacements >= 0 && replacements_done >= max_replacements))
+        {
+          // No more matches or reached max replacements - copy rest
+          result += src_str.substr(pos);
+          break;
+        }
+
+        // Copy characters before the match
+        result += src_str.substr(pos, found - pos);
+        // Add replacement string
+        result += new_str;
+        replacements_done++;
+        // Move past the matched substring
+        pos = found + old_len;
+      }
+    }
+
+    // Build the result string using string_builder
+    return string_builder_->build_string_literal(result);
+  }
+
+  // Fallback to C function for non-constant strings
+  exprt str_addr =
+    str_expr.type().is_pointer() ? str_expr : get_array_base_address(str_expr);
+  exprt old_addr =
+    old_expr.type().is_pointer() ? old_expr : get_array_base_address(old_expr);
+  exprt new_addr =
+    new_expr.type().is_pointer() ? new_expr : get_array_base_address(new_expr);
+
+  std::string func_symbol_id = ensure_string_function_symbol(
+    "__python_str_replace",
+    pointer_typet(char_type()),
+    {pointer_typet(char_type()),
+     pointer_typet(char_type()),
+     pointer_typet(char_type()),
+     int_type()},
+    location);
+
+  side_effect_expr_function_callt replace_call;
+  replace_call.function() = symbol_exprt(func_symbol_id, code_typet());
+  replace_call.arguments() = {str_addr, old_addr, new_addr, count_arg};
+  replace_call.location() = location;
+  replace_call.type() = pointer_typet(char_type());
+
+  return replace_call;
 }
 
 bool string_handler::extract_constant_string(

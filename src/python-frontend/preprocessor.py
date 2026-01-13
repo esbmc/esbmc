@@ -265,14 +265,49 @@ class Preprocessor(ast.NodeTransformer):
         node = self.generic_visit(node)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
+        node.test = self._transform_list_truthiness(node.test, node)
         if prefix:
             return prefix + [node]
         return node
+
+    def _transform_list_truthiness(self, test_expr, source_node):
+        """
+        Transform list truthiness checks to explicit len() > 0 checks.
+        Converts: while xs: -> while len(xs) > 0:
+        """
+        # Only transform if the test is a simple Name node referring to a list
+        if not isinstance(test_expr, ast.Name):
+            return test_expr
+
+        var_name = test_expr.id
+        var_type = self.known_variable_types.get(var_name)
+
+        # Check if this is a list type
+        if var_type != 'list':
+            return test_expr
+
+        # Create: len(xs) > 0
+        len_call = ast.Call(
+            func=self.create_name_node('len', ast.Load(), source_node),
+            args=[self.create_name_node(var_name, ast.Load(), source_node)],
+            keywords=[]
+        )
+        self.ensure_all_locations(len_call, source_node)
+
+        comparison = ast.Compare(
+            left=len_call,
+            ops=[ast.Gt()],
+            comparators=[self.create_constant_node(0, source_node)]
+        )
+        self.ensure_all_locations(comparison, source_node)
+
+        return comparison
 
     def visit_While(self, node):
         node = self.generic_visit(node)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
+        node.test = self._transform_list_truthiness(node.test, node)
         if prefix:
             return prefix + [node]
         return node
@@ -984,17 +1019,10 @@ class Preprocessor(ast.NodeTransformer):
         length_target = self.create_name_node(length_var, ast.Store(), node)
         int_annotation = self.create_name_node('int', ast.Load(), node)
 
-        # Determine annotation type
-        annotation_id = self._get_iterable_type_annotation(node.iter)
-
-        # For list/set/dict types (pointers), use __ESBMC_get_object_size
-        # For strings (arrays), use len()
-        if annotation_id in ['list', 'set', 'dict']:
-            # Use __ESBMC_get_object_size for pointer-based collections
-            len_func = self.create_name_node('__ESBMC_get_object_size', ast.Load(), node)
-        else:
-            # Use len() for strings and other types
-            len_func = self.create_name_node('len', ast.Load(), node)
+        # The function_call_builder will map len() to either:
+        # - strlen(): string types
+        # - __ESBMC_get_object_size(): list/dict/set/sequence types
+        len_func = self.create_name_node('len', ast.Load(), node)
 
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])

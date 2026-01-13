@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: Exception thrown of type ValueError at file .*string-index-notfound_fail/main.py line 3$

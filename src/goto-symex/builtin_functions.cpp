@@ -2914,6 +2914,19 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       expr = gen_true_expr();
     else
       expr = gen_false_expr();
+
+    if (!is_nil_expr(expect_type) && is_array_type(expect_type->type))
+    {
+      // In the memory model, an array of size 1 is simplified to a single element
+      // Therefore, here we specifically check whether the subtypes of the arrays are the same
+      // s:str = "" ----> 0 with char type
+      // This should be safe because int, bool and char have different widths,
+      // so there will be no confusion
+      if (to_array_type(expect_type->type).subtype == value->type)
+        expr = gen_true_expr();
+    }
+
+    return;
   }
   else if (is_hasattr2t(expr))
   {

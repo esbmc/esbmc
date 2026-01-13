@@ -1,6 +1,7 @@
 #include <python-frontend/char_utils.h>
 #include <python-frontend/convert_float_literal.h>
 #include <python-frontend/function_call_builder.h>
+#include <python-frontend/function_call_expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/python_annotation.h>
@@ -227,6 +228,20 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   for (const auto &operand : element["values"])
   {
     exprt operand_expr = get_expr(operand);
+    if (operand_expr.is_code() && operand_expr.statement() == "function_call")
+    {
+      const code_function_callt &code_call =
+        to_code_function_call(to_code(operand_expr));
+      typet return_type = code_call.type();
+      if (return_type.is_empty() || return_type.id() == typet::t_empty)
+        return_type = type_handler_.get_typet("int", 0);
+      side_effect_expr_function_callt side_effect_call;
+      side_effect_call.function() = code_call.function();
+      side_effect_call.arguments() = code_call.arguments();
+      side_effect_call.type() = return_type;
+      side_effect_call.location() = code_call.location();
+      operand_expr = side_effect_call;
+    }
     logical_expr.copy_to_operands(operand_expr);
     contains_non_boolean |= !operand_expr.is_boolean();
   }
@@ -5800,7 +5815,11 @@ void python_converter::get_return_statements(
   locationt location = get_location_from_decl(ast_node);
 
   // Check if return value is a function call
-  if (return_value.is_function_call() && ast_node["value"]["_type"] == "Call")
+  // get_function_call() returns code_function_callt (code statement), not side_effect_expr_function_callt
+  bool is_func_call =
+    return_value.is_code() && return_value.get("statement") == "function_call";
+
+  if (is_func_call && ast_node["value"]["_type"] == "Call")
   {
     // Extract function name for temporary variable naming
     std::string func_name;
@@ -5843,17 +5862,28 @@ void python_converter::get_return_statements(
     temp_decl.location() = location;
     target_block.copy_to_operands(temp_decl);
 
-    // Set the LHS of the function call to our temporary variable
-    if (!return_type.is_empty())
+    // If a constructor is being invoked, the temporary variable is passed as 'self'
+    // For constructors, we don't set LHS because they modify the object through
+    // the first parameter (self), not through LHS
+    bool is_constructor = type_handler_.is_constructor_call(ast_node["value"]);
+
+    // Set the LHS of the function call to our temporary variable (only for non-constructors)
+    if (!return_type.is_empty() && !is_constructor)
       return_value.op0() = temp_var_expr;
 
-    // If a constructor is being invoked, the temporary variable is passed as 'self'
-    if (type_handler_.is_constructor_call(ast_node["value"]))
+    if (is_constructor)
     {
       code_function_callt &call =
         static_cast<code_function_callt &>(return_value);
-      call.arguments().emplace(
-        call.arguments().begin(), gen_address_of(temp_var_expr));
+
+      // Strip any temporary $ctor_self$ parameters and add correct self
+      exprt::operandst filtered_args =
+        function_call_expr::strip_ctor_self_parameters(call.arguments());
+      exprt::operandst new_args;
+      new_args.push_back(gen_address_of(temp_var_expr));
+      for (const auto &arg : filtered_args)
+        new_args.push_back(arg);
+      call.arguments() = new_args;
       update_instance_from_self(
         func_name, func_name, temp_var_expr.identifier().as_string());
     }
@@ -7090,7 +7120,7 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
 {
   // Only OR and AND are special
   if (!bool_op.is_and() && !bool_op.is_or())
-    return gen_zero(bool_type());
+    return gen_zero(bool_op.type());
 
   // Let's try to be smart and guess the type;
   // In the future this could be trivial with an Python Obj struct
@@ -7115,9 +7145,10 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
         found_type = e.type();
       else if (found_type != e.type() && !e.type().is_array())
       {
-        log_error("Boolean expression with more than one constant type");
-        bool_op.dump();
-        abort();
+        log_warning(
+          "Boolean expression with more than one constant type; "
+          "falling back to Any");
+        return gen_zero(any_type());
       }
     }
   }

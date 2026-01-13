@@ -86,6 +86,17 @@ static const std::map<std::string, std::string> builtin_functions = {
   {"exec", "NoneType"},
   {"compile", "code"},
 
+  // String module constants
+  {"string.digits", "str"},
+  {"string.ascii_lowercase", "str"},
+  {"string.ascii_uppercase", "str"},
+  {"string.ascii_letters", "str"},
+  {"string.punctuation", "str"},
+  {"string.whitespace", "str"},
+  {"string.printable", "str"},
+  {"string.hexdigits", "str"},
+  {"string.octdigits", "str"},
+
   // Import functions
   {"__import__", "module"}};
 
@@ -342,6 +353,47 @@ private:
   {
     if (arg["_type"] == "Constant")
       return get_type_from_constant(arg);
+    else if (arg["_type"] == "Subscript")
+    {
+      // Handle subscripts like tokens[0]; try to derive element type from the
+      // container annotation.
+      const auto &val = arg["value"];
+      if (val["_type"] == "Name")
+      {
+        std::string var_name = val["id"].template get<std::string>();
+        Json var_node =
+          json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+        if (
+          !var_node.empty() && var_node.contains("annotation") &&
+          !var_node["annotation"].is_null())
+        {
+          const auto &annot = var_node["annotation"];
+          // list[T] -> return T
+          if (
+            annot.contains("_type") && annot["_type"] == "Subscript" &&
+            annot.contains("value") && annot["value"].contains("id") &&
+            annot["value"]["id"] == "list")
+          {
+            if (annot.contains("slice"))
+            {
+              const auto &slice = annot["slice"];
+              if (slice.contains("id"))
+                return slice["id"];
+              else if (
+                slice.contains("_type") && slice["_type"] == "Name" &&
+                slice.contains("id"))
+                return slice["id"];
+            }
+            return "Any";
+          }
+          // Simple name annotation (e.g., list without subtype)
+          if (annot.contains("id") && annot["id"] == "list")
+            return "Any";
+        }
+      }
+      return "";
+    }
     else if (arg["_type"] == "UnaryOp")
     {
       // Handle unary operations like -5, +3, not True
@@ -433,7 +485,24 @@ private:
     else if (arg["_type"] == "Tuple")
       return "tuple";
     else if (arg["_type"] == "BoolOp")
+    {
+      if (arg.contains("values") && arg["values"].is_array())
+      {
+        for (const auto &val : arg["values"])
+        {
+          if (
+            val.contains("_type") && val["_type"] == "Call" &&
+            val.contains("func") && val["func"].contains("_type") &&
+            val["func"]["_type"] == "Name" && val["func"].contains("id"))
+          {
+            auto it = builtin_functions.find(val["func"]["id"]);
+            if (it != builtin_functions.end())
+              return it->second;
+          }
+        }
+      }
       return "bool";
+    }
     else if (arg["_type"] == "Call")
     {
       // Handle function calls like abs(a - b), len(list), etc.
@@ -873,6 +942,19 @@ private:
         type = get_type_from_constant(lhs);
       else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Attribute")
         type = get_type_from_method(lhs);
+      else if (lhs["_type"] == "Attribute")
+      {
+        // Construct full attribute name (e.g., "string.digits")
+        if (lhs["value"]["_type"] == "Name" && lhs["value"].contains("id"))
+        {
+          std::string full_name =
+            lhs["value"]["id"].template get<std::string>() + "." +
+            lhs["attr"].template get<std::string>();
+          auto it = builtin_functions.find(full_name);
+          if (it != builtin_functions.end())
+            type = it->second;
+        }
+      }
     }
 
     // If still unknown, try RHS or fallback to Any for arithmetic ops
@@ -1246,11 +1328,13 @@ private:
     if (!list.contains("elts"))
       return "";
 
-    if (!list["elts"].empty())
+    if (!list["elts"].empty() && list["elts"][0].contains("value"))
       list_subtype = get_type_from_json(list["elts"][0]["value"]);
 
     for (const auto &elem : list["elts"])
-      if (get_type_from_json(elem["value"]) != list_subtype)
+      if (
+        elem.contains("value") &&
+        get_type_from_json(elem["value"]) != list_subtype)
         throw std::runtime_error("Multiple typed lists are not supported\n");
 
     return list_subtype;
@@ -1304,6 +1388,25 @@ private:
 
     const Json &dict_init = var_node["value"];
 
+    // Handle function calls that return dict[K, V]
+    if (dict_init["_type"] == "Call" && dict_init["func"]["_type"] == "Name")
+    {
+      Json func_def = find_function_recursive(
+        dict_init["func"]["id"].template get<std::string>(), ast_["body"]);
+      if (
+        !func_def.empty() && func_def.contains("returns") &&
+        func_def["returns"]["_type"] == "Subscript" &&
+        func_def["returns"]["value"]["id"] == "dict" &&
+        func_def["returns"]["slice"]["elts"].size() >= 2)
+      {
+        const Json &val_type = func_def["returns"]["slice"]["elts"][1];
+        if (
+          val_type["_type"] == "Subscript" && val_type["value"].contains("id"))
+          return val_type["value"]["id"].template get<std::string>();
+      }
+    }
+
+    // Handle dict initialized from function call
     if (
       dict_init["_type"] == "Dict" && dict_init.contains("values") &&
       !dict_init["values"].empty())
@@ -1735,6 +1838,8 @@ private:
           method == "isdigit" || method == "isalpha" || method == "isspace" ||
           method == "islower" || method == "isupper")
           return "bool";
+        else if (method == "find" || method == "rfind")
+          return "int";
         else if (method == "split")
           return "list";
         // Default for string methods
@@ -2292,6 +2397,11 @@ private:
         Json iter_node;
         if (current_func != nullptr && (*current_func).contains("body"))
           iter_node = find_annotated_assign(iter_var, (*current_func)["body"]);
+        if (
+          iter_node.empty() && current_func != nullptr &&
+          (*current_func).contains("args"))
+          iter_node =
+            find_annotated_assign(iter_var, (*current_func)["args"]["args"]);
         if (iter_node.empty())
           iter_node = find_annotated_assign(iter_var, ast_["body"]);
 

@@ -555,7 +555,112 @@ exprt python_list::build_split_list(
   long long count)
 {
   if (separator.empty())
-    throw std::runtime_error("split() separator cannot be empty");
+  {
+    // Whitespace split: split on any whitespace and collapse runs.
+    auto is_space = [](char c) {
+      return std::isspace(static_cast<unsigned char>(c)) != 0;
+    };
+
+    if (count == 0)
+    {
+      size_t first = 0;
+      while (first < input.size() && is_space(input[first]))
+        ++first;
+
+      if (first == input.size())
+      {
+        nlohmann::json list_node;
+        list_node["_type"] = "List";
+        list_node["elts"] = nlohmann::json::array();
+        converter.copy_location_fields_from_decl(call_node, list_node);
+        python_list list(converter, list_node);
+        return list.get();
+      }
+
+      size_t last = input.size();
+      while (last > first && is_space(input[last - 1]))
+        --last;
+
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      converter.copy_location_fields_from_decl(call_node, list_node);
+
+      nlohmann::json elem;
+      elem["_type"] = "Constant";
+      elem["value"] = input.substr(first, last - first);
+      converter.copy_location_fields_from_decl(call_node, elem);
+      list_node["elts"].push_back(elem);
+
+      python_list list(converter, list_node);
+      return list.get();
+    }
+
+    std::vector<std::string> parts;
+    size_t i = 0;
+    const size_t n = input.size();
+
+    auto skip_ws = [&](size_t &idx) {
+      while (idx < n && is_space(input[idx]))
+        ++idx;
+    };
+
+    auto scan_token = [&](size_t &idx) {
+      while (idx < n && !is_space(input[idx]))
+        ++idx;
+    };
+
+    skip_ws(i);
+    if (i == n)
+    {
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      converter.copy_location_fields_from_decl(call_node, list_node);
+      python_list list(converter, list_node);
+      return list.get();
+    }
+
+    long long remaining = count;
+    while (i < n)
+    {
+      size_t start = i;
+      scan_token(i);
+      parts.push_back(input.substr(start, i - start));
+
+      if (count >= 0 && remaining == 1)
+      {
+        skip_ws(i);
+        if (i < n)
+          parts.push_back(input.substr(i));
+        break;
+      }
+
+      if (count >= 0)
+        --remaining;
+
+      skip_ws(i);
+      if (i >= n)
+        break;
+    }
+
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    converter.copy_location_fields_from_decl(call_node, list_node);
+
+    for (const auto &part : parts)
+    {
+      nlohmann::json elem;
+      elem["_type"] = "Constant";
+      elem["value"] = part;
+      converter.copy_location_fields_from_decl(call_node, elem);
+      list_node["elts"].push_back(elem);
+    }
+
+    python_list list(converter, list_node);
+    return list.get();
+  }
 
   if (count == 0)
   {
@@ -1245,45 +1350,8 @@ exprt python_list::handle_index_access(
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
 
-    // Get obj->value and cast to correct type
-    member_exprt obj_value(list_at_call, "value", pointer_typet(empty_typet()));
-    {
-      exprt &base = obj_value.struct_op();
-      exprt deref("dereference");
-      deref.type() = base.type().subtype();
-      deref.move_to_operands(base);
-      base.swap(deref);
-    }
-
-    // For array types, return pointer to element type instead of pointer to array
-    // The dereference system doesn't support array types as target types
-    // Callers will handle the conversion when needed (similar to single-char string handling)
-    if (elem_type.is_array())
-    {
-      const array_typet &arr_type = to_array_type(elem_type);
-      // Cast to pointer to element type (e.g., char* instead of char[2]*)
-      typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
-      return tc;
-    }
-
-    // For char* strings and None (_Bool*), the void* already contains the pointer value
-    // For all other types, the void* contains a pointer to the value
-    if (
-      elem_type.is_pointer() && (elem_type.subtype() == char_type() ||
-                                 elem_type.subtype() == bool_type()))
-    {
-      // String and None case: cast void* directly to the pointer type (no dereference needed)
-      typecast_exprt tc(obj_value, elem_type);
-      return tc;
-    }
-    else
-    {
-      // All other types: cast void* to pointer-to-type, then dereference
-      typecast_exprt tc(obj_value, pointer_typet(elem_type));
-      dereference_exprt deref(elem_type);
-      deref.op0() = tc;
-      return deref;
-    }
+    // Extract and dereference PyObject value
+    return extract_pyobject_value(list_at_call, elem_type);
   }
 
   // Handle static string indexing with safe null fallback
@@ -1352,6 +1420,14 @@ exprt python_list::compare(
   assert(lhs_symbol);
   assert(rhs_symbol);
 
+  // Compute list type_id for nested list detection
+  const typet &list_type = l1.type();
+  const std::string list_type_name =
+    converter_.get_type_handler().type_to_string(list_type);
+  constant_exprt list_type_id(size_type());
+  list_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
+
   symbolt &eq_ret = converter_.create_tmp_symbol(
     list_value_, "eq_tmp", bool_type(), gen_boolean(false));
   code_declt eq_ret_decl(symbol_expr(eq_ret));
@@ -1363,6 +1439,7 @@ exprt python_list::compare(
   // passing arguments
   list_eq_func_call.arguments().push_back(symbol_expr(*lhs_symbol)); // l1
   list_eq_func_call.arguments().push_back(symbol_expr(*rhs_symbol)); // l2
+  list_eq_func_call.arguments().push_back(list_type_id); // list_type_id
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
@@ -1427,6 +1504,7 @@ exprt python_list::list_repetition(
 
   BigInt list_size;
   exprt list_elem;
+  symbolt *list_symbol = nullptr;
 
   auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
     if (
@@ -1448,9 +1526,10 @@ exprt python_list::list_repetition(
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(lhs).get_identifier().as_string());
       assert(size_var);
-      symbolt *list_symbol =
-        converter_.find_symbol(rhs.identifier().as_string());
+
+      list_symbol = converter_.find_symbol(rhs.identifier().as_string());
       assert(list_symbol);
+
       if (!parse_size_from_symbol(size_var, list_size))
         return create_vla(list_value_, list_symbol, size_var, list_elem);
     }
@@ -1471,11 +1550,9 @@ exprt python_list::list_repetition(
     {
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(rhs).get_identifier().as_string());
-
       assert(size_var);
 
-      symbolt *list_symbol =
-        converter_.find_symbol(lhs.identifier().as_string());
+      list_symbol = converter_.find_symbol(lhs.identifier().as_string());
       assert(list_symbol);
 
       if (!parse_size_from_symbol(size_var, list_size))
@@ -1485,10 +1562,20 @@ exprt python_list::list_repetition(
       list_size = binary2integer(rhs.value().c_str(), true);
   }
 
-  symbolt *list_symbol = converter_.find_symbol(lhs.identifier().as_string());
+  if (!list_symbol)
+  {
+    if (lhs.type() == list_type && lhs.is_symbol())
+      list_symbol = converter_.find_symbol(lhs.identifier().as_string());
+    else if (rhs.type() == list_type && rhs.is_symbol())
+      list_symbol = converter_.find_symbol(rhs.identifier().as_string());
+  }
   assert(list_symbol);
 
-  const std::string &list_id = converter_.current_lhs->identifier().as_string();
+  std::string list_id;
+  if (converter_.current_lhs && converter_.current_lhs->is_symbol())
+    list_id = converter_.current_lhs->identifier().as_string();
+  else
+    list_id = list_symbol->id.as_string();
 
   for (int64_t i = 0; i < list_size.to_int64() - 1; ++i)
   {
@@ -1908,4 +1995,126 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   converter_.add_instruction(while_stmt);
 
   return symbol_expr(result_list);
+}
+
+exprt python_list::build_pop_list_call(
+  const symbolt &list,
+  const exprt &index,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+
+  // Find the list_pop C function
+  const symbolt *pop_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_pop");
+  assert(pop_func && "list_pop function not found in symbol table");
+
+  // Create side-effect function call
+  const typet pyobject_ptr_type =
+    pointer_typet(converter_.get_type_handler().get_list_element_type());
+
+  side_effect_expr_function_callt pop_call;
+  pop_call.function() = symbol_expr(*pop_func);
+  pop_call.arguments().push_back(symbol_expr(list));
+  pop_call.arguments().push_back(index);
+  pop_call.type() = pyobject_ptr_type;
+  pop_call.location() = location;
+
+  // Determine the element type from the list's type map
+  const std::string &list_id = list.id.as_string();
+  typet elem_type;
+
+  // Try to get element type from list_type_map (use last element for default pop)
+  auto type_map_it = list_type_map.find(list_id);
+  if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+  {
+    // Get the last element's type (since default pop() pops from the end)
+    size_t last_idx = type_map_it->second.size() - 1;
+    elem_type = type_map_it->second[last_idx].second;
+
+    // Remove the popped element from type map to maintain consistency
+    type_map_it->second.pop_back();
+  }
+
+  // If type map lookup failed, try to infer from list declaration
+  if (elem_type == typet())
+  {
+    std::string list_name = list.name.as_string();
+    nlohmann::json list_node = json_utils::find_var_decl(
+      list_name, converter_.current_function_name(), converter_.ast());
+
+    if (
+      !list_node.is_null() && list_node.contains("value") &&
+      list_node["value"].contains("elts") &&
+      list_node["value"]["elts"].is_array() &&
+      !list_node["value"]["elts"].empty())
+    {
+      // Get type from last element (default for pop)
+      const auto &elts = list_node["value"]["elts"];
+      elem_type = converter_.get_expr(elts[elts.size() - 1]).type();
+    }
+    // Try to get type from annotation (e.g., l: list[int] = [])
+    else if (!list_node.is_null() && list_node.contains("annotation"))
+    {
+      elem_type =
+        get_elem_type_from_annotation(list_node, converter_.get_type_handler());
+    }
+  }
+
+  // If all type inference failed, use a generic fallback type
+  // The runtime assertion in __ESBMC_list_pop will catch actual errors
+  if (elem_type == typet())
+  {
+    // Use any_type() for cases such as empty lists with no annotation
+    elem_type = any_type();
+  }
+
+  // Extract and dereference PyObject value
+  return extract_pyobject_value(pop_call, elem_type);
+}
+
+exprt python_list::extract_pyobject_value(
+  const exprt &pyobject_expr,
+  const typet &elem_type)
+{
+  // Extract value from PyObject: pyobject_expr->value
+  member_exprt obj_value(pyobject_expr, "value", pointer_typet(empty_typet()));
+
+  // Dereference the PyObject* to access its members
+  {
+    exprt &base = obj_value.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+
+  // For array types, return pointer to element type instead of pointer to array
+  // The dereference system doesn't support array types as target types
+  if (elem_type.is_array())
+  {
+    const array_typet &arr_type = to_array_type(elem_type);
+    // Cast to pointer to element type (e.g., char* instead of char[2]*)
+    typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
+    return tc;
+  }
+
+  // For char* strings and None (_Bool*), the void* already contains the pointer value
+  // For all other types, the void* contains a pointer to the value
+  if (
+    elem_type.is_pointer() &&
+    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
+  {
+    // String and None case: cast void* directly to the pointer type (no dereference needed)
+    typecast_exprt tc(obj_value, elem_type);
+    return tc;
+  }
+  else
+  {
+    // All other types: cast void* to pointer-to-type, then dereference
+    typecast_exprt tc(obj_value, pointer_typet(elem_type));
+    dereference_exprt deref(elem_type);
+    deref.op0() = tc;
+    return deref;
+  }
 }

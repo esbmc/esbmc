@@ -18,7 +18,7 @@ class string_builder;
 
 /**
  * @brief Handles all string-related operations for Python-to-C conversion
- * 
+ *
  * This class extracts string manipulation functionality from python_converter
  * to improve modularity and maintainability. It handles:
  * - String size calculations
@@ -218,7 +218,7 @@ public:
    * @brief Handle str.join() method
    * @param call_json JSON node representing the join call
    * @return Expression representing the joined string
-   * 
+   *
    * Handles Python's str.join(iterable) method, e.g.:
    * - " ".join(["a", "b", "c"]) -> "a b c"
    * - "-".join(list_var) -> joined string
@@ -302,6 +302,14 @@ public:
   exprt handle_string_strip(const exprt &str_expr, const locationt &location);
 
   /**
+   * @brief Handle str.rstrip() method
+   * @param str_expr String expression
+   * @param location Source location
+   * @return Pointer to stripped string
+   */
+  exprt handle_string_rstrip(const exprt &str_expr, const locationt &location);
+
+  /**
    * @brief Handle 'in' operator for strings
    * @param lhs Substring to find
    * @param rhs String to search in
@@ -331,6 +339,13 @@ public:
   exprt handle_string_lower(const exprt &string_obj, const locationt &location);
 
   /**
+   * @brief Handle str.upper() method
+   * @param string_obj String object
+   * @param location Source location
+   * @return Pointer to uppercase string
+   */
+  exprt handle_string_upper(const exprt &string_obj, const locationt &location);
+  /**
    * @brief Handle str.find() method
    * @param string_obj String object
    * @param find_arg String to check
@@ -341,6 +356,99 @@ public:
   exprt handle_string_find(
     const exprt &string_obj,
     const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.find() with start/end
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the first occurrence within range, or -1 if not found
+   */
+  exprt handle_string_find_range(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.index() method
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param location Source location
+   * @return returns the index of the first occurrence of the substring.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_index(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.index() with start/end
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the first occurrence within range.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_index_range(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rfind() method
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param location Source location
+   * @return returns the index of the last occurrence of the substring.
+   * If not found, it returns -1.
+   */
+  exprt handle_string_rfind(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rfind() with start/end
+   * @param string_obj String object
+   * @param find_arg String to check
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the last occurrence within range, or -1 if not found
+   */
+  exprt handle_string_rfind_range(
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.replace() method
+   * @param string_obj String object
+   * @param old_arg Substring to replace
+   * @param new_arg Replacement substring
+   * @param count_arg Maximum replacements (-1 for all)
+   * @param location Source location
+   * @return Pointer to replaced string
+   */
+  exprt handle_string_replace(
+    const exprt &string_obj,
+    const exprt &old_arg,
+    const exprt &new_arg,
+    const exprt &count_arg,
     const locationt &location);
 
   /**
@@ -443,6 +551,11 @@ private:
   exprt make_char_array_expr(
     const std::vector<unsigned char> &chars,
     const typet &type);
+
+  exprt build_string_index_result(
+    const nlohmann::json &call,
+    const exprt &find_expr,
+    const locationt &location);
 
   /**
    * @brief Find or create a function symbol for string operations

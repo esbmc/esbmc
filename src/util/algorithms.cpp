@@ -66,6 +66,9 @@ void ssa_step_algorithm::run_on_step(symex_target_equationt::SSA_stept &step)
   case ssa_type::SKIP:
     run_on_skip(step);
     break;
+  case ssa_type::BREANCHING:
+    run_on_branching(step);
+    break;
   default:
     log_warning("Invalid type for SSA step");
     abort();

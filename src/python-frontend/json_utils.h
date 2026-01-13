@@ -367,6 +367,63 @@ const JsonType get_var_value(
 }
 
 template <typename JsonType>
+bool extract_constant_integer(
+  const JsonType &node,
+  const std::string &function,
+  const JsonType &ast,
+  long long &value)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_number_integer())
+  {
+    value = node["value"].template get<long long>();
+    return true;
+  }
+
+  if (
+    node.contains("_type") && node["_type"] == "UnaryOp" &&
+    node.contains("operand") && node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer() && node.contains("op"))
+  {
+    const auto &op = node["op"];
+    const bool is_usub =
+      (op.is_object() && op.contains("_type") && op["_type"] == "USub") ||
+      (op.is_string() && op == "USub");
+    const bool is_uadd =
+      (op.is_object() && op.contains("_type") && op["_type"] == "UAdd") ||
+      (op.is_string() && op == "UAdd");
+
+    if (is_usub || is_uadd)
+    {
+      value = node["operand"]["value"].template get<long long>();
+      if (is_usub)
+        value = -value;
+      return true;
+    }
+  }
+
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  {
+    const std::string var_name = node["id"].template get<std::string>();
+    JsonType var_value = get_var_value(var_name, function, ast);
+
+    if (
+      !var_value.empty() && var_value.contains("value") &&
+      var_value["value"].contains("_type") &&
+      var_value["value"]["_type"] == "Constant" &&
+      var_value["value"].contains("value") &&
+      var_value["value"]["value"].is_number_integer())
+    {
+      value = var_value["value"]["value"].template get<long long>();
+      return true;
+    }
+  }
+
+  return false;
+}
+
+template <typename JsonType>
 const JsonType get_list_element(const JsonType &list_value, int pos)
 {
   // Handle direct List node
