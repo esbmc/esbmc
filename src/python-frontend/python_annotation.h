@@ -242,9 +242,6 @@ private:
     std::vector<Json> function_calls =
       find_function_calls(func_name, search_context);
 
-    if (function_calls.empty())
-      return; // No calls found, cannot infer
-
     // For each parameter, try to infer its type from the function calls
     if (
       function_element.contains("args") &&
@@ -260,15 +257,18 @@ private:
         if (param.contains("annotation") && !param["annotation"].is_null())
           continue;
 
-        // Try to infer type from function calls
-        std::string inferred_type =
-          infer_parameter_type_from_calls(i, function_calls);
+        std::string inferred_type;
 
-        if (!inferred_type.empty())
-        {
-          // Add annotation to parameter
-          add_parameter_annotation(param, inferred_type);
-        }
+        // Try to infer type from function calls if available
+        if (!function_calls.empty())
+          inferred_type = infer_parameter_type_from_calls(i, function_calls);
+
+        // If inference failed or no calls found, use Any
+        if (inferred_type.empty())
+          inferred_type = "Any"; // Default fallback for unknown types
+
+        // Add annotation to parameter
+        add_parameter_annotation(param, inferred_type);
       }
     }
   }
