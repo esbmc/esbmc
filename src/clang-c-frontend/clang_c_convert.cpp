@@ -2931,8 +2931,21 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
     rewrite_builtin_ref(d, name, id);
 
     typet type;
-    if (get_type(nd->getType(), type))
-      return true;
+
+    // Special handling for __ESBMC_return_value: use function return type if available
+    // This allows __ESBMC_return_value to have a semi-dynamic type matching the function
+    if (name == "__ESBMC_return_value" && current_functionDecl)
+    {
+      // Use the current function's return type instead of the declared type
+      if (get_type(current_functionDecl->getReturnType(), type))
+        return true;
+    }
+    else
+    {
+      // Normal case: use the declared type
+      if (get_type(nd->getType(), type))
+        return true;
+    }
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
