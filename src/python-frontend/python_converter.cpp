@@ -582,6 +582,22 @@ exprt python_converter::compare_constants_internal(
     return gen_boolean((op == "Eq") ? equal : !equal);
   }
 
+  // Array vs array comparisons (string literal comparison)
+  if (lhs.type().is_array() && rhs.type().is_array())
+  {
+    // Check if both are char arrays (strings)
+    if (lhs.type().subtype() == char_type() && rhs.type().subtype() == char_type())
+    {
+      // Extract string values
+      std::string lhs_str = string_handler_.extract_string_from_array_operands(lhs);
+      std::string rhs_str = string_handler_.extract_string_from_array_operands(rhs);
+
+      // Compare strings
+      bool equal = (lhs_str == rhs_str);
+      return gen_boolean((op == "Eq") ? equal : !equal);
+    }
+  }
+
   // Mixed character vs array comparisons
   if (
     (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
