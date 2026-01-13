@@ -110,6 +110,27 @@ public:
    */
   exprt handle_comprehension(const nlohmann::json &element);
 
+  /**
+   * @brief Build a list pop operation
+   * @param list The list symbol to pop from
+   * @param index The index to pop (default -1 for last element)
+   * @param element The AST node for location information
+   * @return Expression representing the popped value
+   */
+  exprt build_pop_list_call(
+    const symbolt &list,
+    const exprt &index,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Extract and dereference value from a PyObject* expression
+   * @param pyobject_expr Expression representing PyObject* (from list_at or list_pop)
+   * @param elem_type The expected element type
+   * @return Properly cast and dereferenced value expression
+   */
+  exprt
+  extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
+
 private:
   friend class python_dict_handler;
 
