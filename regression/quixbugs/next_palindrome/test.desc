@@ -1,5 +1,4 @@
 THOROUGH
 main.py
---unwind 1 --no-unwinding-assertions --no-standard-checks --z3
-
+--unwind 10 --no-standard-checks --smt-during-symex --smt-symex-guard --bitwuzla
 ^VERIFICATION SUCCESSFUL$
