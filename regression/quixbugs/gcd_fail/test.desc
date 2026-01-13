@@ -1,5 +1,4 @@
 THOROUGH
 main.py
---unwind 9 --no-unwinding-assertions
-
-^VERIFICATION SUCCESSFUL$
+--unwind 100
+^VERIFICATION FAILED$
