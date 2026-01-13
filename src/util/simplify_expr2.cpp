@@ -989,14 +989,15 @@ expr2tc member2t::do_simplify() const
     }
     else
     {
-      // The constant array has some number of elements, up to the size of the
-      // array, but possibly fewer. This is legal C. So bounds check first that
-      // we can actually perform this member operation.
+      // constant_union stores the value at position 0 with init_field indicating
+      // which member was initialized.
       const constant_union2t &uni = to_constant_union2t(source_value);
-      if (uni.datatype_members.size() <= no)
+
+      // The value is always stored at position 0
+      if (uni.datatype_members.empty())
         return expr2tc();
 
-      s = uni.datatype_members[no];
+      s = uni.datatype_members[0];
 
       /* If the type we just selected isn't compatible, it means that whatever
        * field is in the constant union /isn't/ the field we're selecting from

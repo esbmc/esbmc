@@ -382,6 +382,17 @@ void goto_symext::symex_assign_rec(
   {
     symex_assign_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
+  else if (is_constant_union2t(lhs))
+  {
+    // For unions, assign through the active member
+    const constant_union2t &the_union = to_constant_union2t(lhs);
+    if (!the_union.datatype_members.empty())
+    {
+      const expr2tc &lhs_memb = the_union.datatype_members[0];
+      expr2tc rhs_memb = member2tc(lhs_memb->type, rhs, the_union.init_field);
+      symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
+    }
+  }
   else if (is_extract2t(lhs))
   {
     symex_assign_extract(lhs, full_lhs, rhs, full_rhs, guard, hidden);
