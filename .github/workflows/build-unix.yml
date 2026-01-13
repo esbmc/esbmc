@@ -25,13 +25,14 @@ jobs:
     # For restore ccache
     - uses: hendrikmuhs/ccache-action@v1.2
       if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
+      # TODO: Onpush and PR used different CMake flags
       with:
-        restore: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+        restore: ${{ github.event_name == 'push' }}
         save: ${{ github.event_name == 'push' }}
         key: ${{ inputs.operating-system }}-${{ hashFiles('**/*.cpp','**/*.h') }}
         restore-keys: |
           ${{ inputs.operating-system }}
-        evict-old-files: 3d
+        evict-old-files: 2d
 
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }}
