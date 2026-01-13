@@ -790,8 +790,7 @@ expr2tc dereferencet::build_reference_to(
       return expr2tc();
     /* here, both of them are code */
   }
-
-  if (is_array_type(value)) // Encode some access bounds checks.
+  else if (is_array_type(value)) // Encode some access bounds checks.
   {
     bool can_carry = is_pointer_type(deref_expr) &&
                      to_pointer_type(deref_expr->type).carry_provenance;

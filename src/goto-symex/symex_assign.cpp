@@ -389,8 +389,7 @@ void goto_symext::symex_assign_rec(
     if (!the_union.datatype_members.empty())
     {
       const expr2tc &lhs_memb = the_union.datatype_members[0];
-      expr2tc rhs_memb = member2tc(
-        lhs_memb->type, rhs, the_union.init_field);
+      expr2tc rhs_memb = member2tc(lhs_memb->type, rhs, the_union.init_field);
       symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     }
   }
