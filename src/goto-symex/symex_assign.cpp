@@ -384,14 +384,7 @@ void goto_symext::symex_assign_rec(
   }
   else if (is_constant_union2t(lhs))
   {
-    // For unions, assign through the active member
-    const constant_union2t &the_union = to_constant_union2t(lhs);
-    if (!the_union.datatype_members.empty())
-    {
-      const expr2tc &lhs_memb = the_union.datatype_members[0];
-      expr2tc rhs_memb = member2tc(lhs_memb->type, rhs, the_union.init_field);
-      symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
-    }
+    symex_assign_union(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
   else if (is_extract2t(lhs))
   {
@@ -478,6 +471,22 @@ void goto_symext::symex_assign_structure(
     symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     i++;
   }
+}
+
+void goto_symext::symex_assign_union(
+  const expr2tc &lhs,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  expr2tc &full_rhs,
+  guardt &guard,
+  const bool hidden)
+{
+  // For unions, assign through the active member
+  const constant_union2t &the_union = to_constant_union2t(lhs);
+  const expr2tc &lhs_memb = the_union.datatype_members[0];
+  expr2tc rhs_memb = member2tc(lhs_memb->type, rhs, the_union.init_field);
+
+  symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
 }
 
 void goto_symext::symex_assign_typecast(

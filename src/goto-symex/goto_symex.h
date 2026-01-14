@@ -866,6 +866,22 @@ protected:
     const bool hidden);
 
   /**
+   *  Perform assignment to a union.
+   *
+   *  @param lhs Symbol to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to symbol
+   *  @param guard Guard; intent unknown
+   */
+  void symex_assign_union(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guardt &guard,
+    const bool hidden);
+
+  /**
    *  Perform assignment to an extract irep.
    *
    *  Currently these extract assignments can crop up when we're assigning into
