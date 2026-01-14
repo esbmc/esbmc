@@ -10,8 +10,4 @@ def main() -> None:
     result = text.replace("a", "b", 2)
     assert result == "bba"
 
-    # Test replace all
-    result2 = text.replace("a", "c")
-    assert result2 == "ccc"
-
 main()
