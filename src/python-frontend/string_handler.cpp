@@ -932,7 +932,7 @@ exprt string_handler::handle_string_lstrip(
   // If chars_arg is empty, strip whitespace (default behavior)
   std::vector<typet> arg_types = { pointer_typet(char_type()) };
 
-  if (!chars_arg.is_nil() && chars_arg.is_not_nil())
+  if (chars_arg.is_not_nil())
   {
     // With chars argument: __python_str_lstrip_chars(str, chars)
     arg_types.push_back(pointer_typet(char_type()));
@@ -971,19 +971,16 @@ exprt string_handler::handle_string_lstrip(
     call.function() = symbol_exprt(func_symbol_id, code_typet());
     call.arguments().push_back(str_ptr);
 
-    if (!chars_arg.is_nil() && chars_arg.is_not_nil())
+    exprt chars_ptr = chars_arg;
+    if (chars_arg.type().is_array())
     {
-      exprt chars_ptr = chars_arg;
-      if (chars_arg.type().is_array())
-      {
-        chars_ptr = exprt("address_of", pointer_typet(char_type()));
-        exprt index_expr("index", char_type());
-        index_expr.copy_to_operands(chars_arg);
-        index_expr.copy_to_operands(from_integer(0, int_type()));
-        chars_ptr.copy_to_operands(index_expr);
-      }
-      call.arguments().push_back(chars_ptr);
+      chars_ptr = exprt("address_of", pointer_typet(char_type()));
+      exprt index_expr("index", char_type());
+      index_expr.copy_to_operands(chars_arg);
+      index_expr.copy_to_operands(from_integer(0, int_type()));
+      chars_ptr.copy_to_operands(index_expr);
     }
+    call.arguments().push_back(chars_ptr);
 
     call.type() = pointer_typet(char_type());
     call.location() = location;
@@ -1086,7 +1083,7 @@ exprt string_handler::handle_string_strip(
   }
 
   // If chars_arg is provided, use __python_str_strip_chars
-  if (!chars_arg.is_nil() && chars_arg.is_not_nil())
+  if (chars_arg.is_not_nil())
   {
     std::string func_symbol_id = ensure_string_function_symbol(
       "__python_str_strip_chars",
@@ -1167,7 +1164,7 @@ exprt string_handler::handle_string_rstrip(
   const locationt &location)
 {
   // If chars_arg is provided, use __python_str_rstrip_chars
-  if (!chars_arg.is_nil() && chars_arg.is_not_nil())
+  if (chars_arg.is_not_nil())
   {
     std::string func_symbol_id = ensure_string_function_symbol(
       "__python_str_rstrip_chars",
