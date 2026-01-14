@@ -1169,10 +1169,17 @@ exprt python_converter::handle_chained_comparisons_logic(
 
     if (op1_type == "str" && op2_type == "str")
     {
-      handle_string_comparison(op, op1, op2, element);
-      exprt expr(map_operator(op, bool_type()), bool_type());
-      expr.copy_to_operands(op1, op2);
-      cond.move_to_operands(expr);
+      exprt string_expr = handle_string_comparison(op, op1, op2, element);
+      if (string_expr.is_nil())
+      {
+        exprt expr(map_operator(op, bool_type()), bool_type());
+        expr.copy_to_operands(op1, op2);
+        cond.move_to_operands(expr);
+      }
+      else
+      {
+        cond.move_to_operands(string_expr);
+      }
     }
     else
     {
@@ -1389,7 +1396,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt string_result =
     handle_string_binary_operations(op, lhs, rhs, left, right, element);
   if (!string_result.is_nil())
+  {
+    if (element.contains("comparators") && element["comparators"].size() > 1)
+      return handle_chained_comparisons_logic(element, string_result);
     return string_result;
+  }
 
   // Handle type mismatches
   exprt type_mismatch_result = handle_string_type_mismatch(lhs, rhs, op);
