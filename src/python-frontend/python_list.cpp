@@ -1721,11 +1721,137 @@ exprt python_list::build_extend_list_call(
 
   locationt location = converter_.get_location_from_decl(op);
 
-  // Update list_type_map: copy type info from other_list to list
-  const std::string &list_name = list.id.as_string();
-  const std::string &other_list_name = other_list.identifier().as_string();
+  exprt actual_list = other_list;
 
-  // Copy all type entries from other_list to the end of list
+  // Check if other_list is a string (array or pointer to char)
+  if (
+    (other_list.type().is_array() &&
+     other_list.type().subtype() == char_type()) ||
+    (other_list.type().is_pointer() &&
+     other_list.type().subtype() == char_type()))
+  {
+    // Convert string to list of single-character strings
+    symbolt &temp_list = create_list();
+
+    // Get string length
+    exprt str_len;
+    if (other_list.type().is_array())
+    {
+      const array_typet &arr_type = to_array_type(other_list.type());
+      // Subtract 1 for null terminator
+      str_len = minus_exprt(arr_type.size(), gen_one(size_type()));
+    }
+    else // pointer type - use strlen
+    {
+      const symbolt *strlen_symbol =
+        converter_.symbol_table().find_symbol("c:@F@strlen");
+      if (!strlen_symbol)
+        throw std::runtime_error("strlen function not found in symbol table");
+
+      symbolt &strlen_result = converter_.create_tmp_symbol(
+        op, "$strlen_result$", size_type(), gen_zero(size_type()));
+      code_declt strlen_decl(symbol_expr(strlen_result));
+      strlen_decl.location() = location;
+      converter_.add_instruction(strlen_decl);
+
+      code_function_callt strlen_call;
+      strlen_call.function() = symbol_expr(*strlen_symbol);
+      strlen_call.lhs() = symbol_expr(strlen_result);
+      strlen_call.arguments().push_back(other_list);
+      strlen_call.type() = size_type();
+      strlen_call.location() = location;
+      converter_.add_instruction(strlen_call);
+
+      str_len = symbol_expr(strlen_result);
+    }
+
+    // Create char array
+    array_typet char_arr_type(
+      char_type(), from_integer(BigInt(2), size_type()));
+    symbolt &char_elem =
+      converter_.create_tmp_symbol(op, "$char_elem$", char_arr_type, exprt());
+    code_declt char_elem_decl(symbol_expr(char_elem));
+    char_elem_decl.location() = location;
+    converter_.add_instruction(char_elem_decl);
+
+    // Get type hash for char array
+    const type_handler type_handler_ = converter_.get_type_handler();
+    const std::string elem_type_name =
+      type_handler_.type_to_string(char_arr_type);
+    constant_exprt type_hash(size_type());
+    type_hash.set_value(integer2binary(
+      std::hash<std::string>{}(elem_type_name), config.ansi_c.address_width));
+
+    // Create loop index
+    symbolt &idx = converter_.create_tmp_symbol(
+      op, "$str_idx$", size_type(), gen_zero(size_type()));
+    code_assignt idx_init(symbol_expr(idx), gen_zero(size_type()));
+    converter_.add_instruction(idx_init);
+
+    // Loop condition: idx < str_len
+    exprt loop_cond("<", bool_type());
+    loop_cond.copy_to_operands(symbol_expr(idx), str_len);
+
+    code_blockt loop_body;
+
+    // Get character at index: str[idx]
+    index_exprt char_at(other_list, symbol_expr(idx), char_type());
+
+    // Update char_elem[0] = str[idx]
+    index_exprt elem_0(
+      symbol_expr(char_elem), gen_zero(size_type()), char_type());
+    code_assignt assign_char(elem_0, char_at);
+    assign_char.location() = location;
+    loop_body.copy_to_operands(assign_char);
+
+    // Update char_elem[1] = '\0'
+    index_exprt elem_1(
+      symbol_expr(char_elem), gen_one(size_type()), char_type());
+    code_assignt assign_null(elem_1, gen_zero(char_type()));
+    assign_null.location() = location;
+    loop_body.copy_to_operands(assign_null);
+
+    // Manually construct list_push call to avoid intermediate copy
+    const symbolt *push_func_sym =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push");
+    if (!push_func_sym)
+      throw std::runtime_error("Push function symbol not found");
+
+    code_function_callt push_call;
+    push_call.function() = symbol_expr(*push_func_sym);
+    push_call.arguments().push_back(symbol_expr(temp_list)); // list
+    push_call.arguments().push_back(
+      address_of_exprt(symbol_expr(char_elem))); // &char_elem
+    push_call.arguments().push_back(type_hash);  // type hash
+    push_call.arguments().push_back(
+      from_integer(BigInt(2), size_type())); // size = 2
+    push_call.type() = bool_type();
+    push_call.location() = location;
+    loop_body.copy_to_operands(push_call);
+
+    // Increment index: idx++
+    plus_exprt idx_inc(symbol_expr(idx), gen_one(size_type()));
+    code_assignt idx_update(symbol_expr(idx), idx_inc);
+    loop_body.copy_to_operands(idx_update);
+
+    // Create while loop
+    codet while_loop;
+    while_loop.set_statement("while");
+    while_loop.copy_to_operands(loop_cond, loop_body);
+    converter_.add_instruction(while_loop);
+
+    // Update type map for the elements we just added
+    list_type_map[temp_list.id.as_string()].push_back(
+      std::make_pair(char_elem.id.as_string(), char_arr_type));
+
+    actual_list = symbol_expr(temp_list);
+  }
+
+  // Update list_type_map: copy type info from actual_list to list
+  const std::string &list_name = list.id.as_string();
+  const std::string &other_list_name = actual_list.identifier().as_string();
+
+  // Copy all type entries from actual_list to the end of list
   if (list_type_map.find(other_list_name) != list_type_map.end())
   {
     for (const auto &type_entry : list_type_map[other_list_name])
@@ -1737,7 +1863,7 @@ exprt python_list::build_extend_list_call(
   code_function_callt extend_func_call;
   extend_func_call.function() = symbol_expr(*extend_func_sym);
   extend_func_call.arguments().push_back(symbol_expr(list));
-  extend_func_call.arguments().push_back(other_list);
+  extend_func_call.arguments().push_back(actual_list);
   extend_func_call.type() = empty_typet();
   extend_func_call.location() = location;
 
