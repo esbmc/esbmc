@@ -230,6 +230,20 @@ private:
   {
     const std::string &func_name = function_element["name"];
 
+    // Check if function has a meaningful body
+    bool has_meaningful_body = false;
+    if (function_element.contains("body") && !function_element["body"].empty())
+    {
+      for (const auto &stmt : function_element["body"])
+      {
+        if (stmt.contains("_type") && stmt["_type"] != "Pass")
+        {
+          has_meaningful_body = true;
+          break;
+        }
+      }
+    }
+
     // Determine where to search for function calls:
     // - For nested functions: search in parent function's body
     // - For top-level functions: search in global AST body
@@ -263,12 +277,15 @@ private:
         if (!function_calls.empty())
           inferred_type = infer_parameter_type_from_calls(i, function_calls);
 
-        // If inference failed or no calls found, use Any
-        if (inferred_type.empty())
-          inferred_type = "Any"; // Default fallback for unknown types
+        // If inference failed or no calls found, use Any only for stub functions
+        if (inferred_type.empty() && !has_meaningful_body)
+          inferred_type = "Any"; // Default fallback for stub functions
 
-        // Add annotation to parameter
-        add_parameter_annotation(param, inferred_type);
+        if (!inferred_type.empty())
+        {
+          // Add annotation to parameter
+          add_parameter_annotation(param, inferred_type);
+        }
       }
     }
   }
