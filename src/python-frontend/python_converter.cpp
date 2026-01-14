@@ -4645,11 +4645,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Recover type
   current_element_type = t;
 
+  auto type = ast_node["_type"];
+
   // Extract 'then' block from AST
   exprt then;
 
   // Skip the 'then' block when the condition evaluates to false.
-  if (cond.is_constant() && cond.value() == "false")
+  if (cond.is_constant() && cond.value() == "false" && type != "IfExp")
   {
     then = code_blockt();
   }
@@ -4674,8 +4676,6 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     else
       else_expr = get_expr(ast_node["orelse"]);
   }
-
-  auto type = ast_node["_type"];
 
   // ternary operator
   if (type == "IfExp")
