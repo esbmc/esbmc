@@ -882,51 +882,248 @@ exprt string_handler::handle_char_isspace(
 
 exprt string_handler::handle_string_lstrip(
   const exprt &str_expr,
+  const exprt& chars_arg,
   const locationt &location)
 {
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_lstrip",
-    pointer_typet(char_type()),
-    {pointer_typet(char_type())},
-    location);
-
-  // Get the string pointer
-  exprt str_ptr = str_expr;
-
-  if (str_expr.is_constant() && str_expr.type().is_array())
+  bool can_fold_constant = false;
+  if (str_expr.type().is_array())
   {
-    str_ptr = exprt("index", pointer_typet(char_type()));
-    str_ptr.copy_to_operands(str_expr);
-    str_ptr.copy_to_operands(from_integer(0, int_type()));
-  }
-  else if (str_expr.type().is_array())
-  {
-    str_ptr = exprt("address_of", pointer_typet(char_type()));
-    exprt index_expr("index", char_type());
-    index_expr.copy_to_operands(str_expr);
-    index_expr.copy_to_operands(from_integer(0, int_type()));
-    str_ptr.copy_to_operands(index_expr);
-  }
-  else if (!str_expr.type().is_pointer())
-  {
-    str_ptr = exprt("address_of", pointer_typet(char_type()));
-    str_ptr.copy_to_operands(str_expr);
+    if (str_expr.is_constant())
+      can_fold_constant = true;
+    else if (str_expr.is_symbol())
+    {
+      const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
+      if (symbol && symbol->value.is_constant() && symbol->value.type().is_array())
+        can_fold_constant = true;
+    }
   }
 
-  // Create function call
-  side_effect_expr_function_callt call;
-  call.function() = symbol_exprt(func_symbol_id, code_typet());
-  call.arguments().push_back(str_ptr);
-  call.type() = pointer_typet(char_type());
-  call.location() = location;
+  if (chars_arg.is_nil() && string_builder_ && can_fold_constant)
+  {
+    std::vector<exprt> chars = string_builder_->extract_string_chars(str_expr);
+    bool all_constant = true;
 
-  return call;
+    for (const auto &ch : chars)
+    {
+      if (!ch.is_constant())
+      {
+        all_constant = false;
+        break;
+      }
+    }
+
+    if (all_constant)
+    {
+      auto is_whitespace = [](const exprt &ch) -> bool {
+        BigInt char_val =
+          binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+        char c = static_cast<char>(char_val.to_uint64());
+        return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+               c == '\r';
+      };
+
+      while (!chars.empty() && is_whitespace(chars.front()))
+        chars.erase(chars.begin());
+
+      return string_builder_->build_null_terminated_string(chars);
+    }
+  }
+
+  // If chars_arg is empty, strip whitespace (default behavior)
+  std::vector<typet> arg_types = { pointer_typet(char_type()) };
+
+  if (!chars_arg.is_nil() && chars_arg.is_not_nil())
+  {
+    // With chars argument: __python_str_lstrip_chars(str, chars)
+    arg_types.push_back(pointer_typet(char_type()));
+
+    std::string func_symbol_id = ensure_string_function_symbol(
+      "__python_str_lstrip_chars",
+      pointer_typet(char_type()),
+      arg_types,
+      location);
+
+    // Convert arguments to pointers if needed
+    exprt str_ptr = str_expr;
+
+    if (str_expr.is_constant() && str_expr.type().is_array())
+    {
+      str_ptr = exprt("index", pointer_typet(char_type()));
+      str_ptr.copy_to_operands(str_expr);
+      str_ptr.copy_to_operands(from_integer(0, int_type()));
+    }
+    else if (str_expr.type().is_array())
+    {
+      str_ptr = exprt("address_of", pointer_typet(char_type()));
+      exprt index_expr("index", char_type());
+      index_expr.copy_to_operands(str_expr);
+      index_expr.copy_to_operands(from_integer(0, int_type()));
+      str_ptr.copy_to_operands(index_expr);
+    }
+    else if (!str_expr.type().is_pointer())
+    {
+      str_ptr = exprt("address_of", pointer_typet(char_type()));
+      str_ptr.copy_to_operands(str_expr);
+    }
+
+    // Create function call
+    side_effect_expr_function_callt call;
+    call.function() = symbol_exprt(func_symbol_id, code_typet());
+    call.arguments().push_back(str_ptr);
+
+    if (!chars_arg.is_nil() && chars_arg.is_not_nil())
+    {
+      exprt chars_ptr = chars_arg;
+      if (chars_arg.type().is_array())
+      {
+        chars_ptr = exprt("address_of", pointer_typet(char_type()));
+        exprt index_expr("index", char_type());
+        index_expr.copy_to_operands(chars_arg);
+        index_expr.copy_to_operands(from_integer(0, int_type()));
+        chars_ptr.copy_to_operands(index_expr);
+      }
+      call.arguments().push_back(chars_ptr);
+    }
+
+    call.type() = pointer_typet(char_type());
+    call.location() = location;
+
+    return call;
+  }
+  else
+  {
+    // Without chars argument: __python_str_lstrip(str) - default whitespace
+    std::string func_symbol_id = ensure_string_function_symbol(
+      "__python_str_lstrip",
+      pointer_typet(char_type()),
+      { pointer_typet(char_type()) },
+      location);
+
+    // Get the string pointer
+    exprt str_ptr = str_expr;
+
+    if (str_expr.is_constant() && str_expr.type().is_array())
+    {
+      str_ptr = exprt("index", pointer_typet(char_type()));
+      str_ptr.copy_to_operands(str_expr);
+      str_ptr.copy_to_operands(from_integer(0, int_type()));
+    }
+    else if (str_expr.type().is_array())
+    {
+      str_ptr = exprt("address_of", pointer_typet(char_type()));
+      exprt index_expr("index", char_type());
+      index_expr.copy_to_operands(str_expr);
+      index_expr.copy_to_operands(from_integer(0, int_type()));
+      str_ptr.copy_to_operands(index_expr);
+    }
+    else if (!str_expr.type().is_pointer())
+    {
+      str_ptr = exprt("address_of", pointer_typet(char_type()));
+      str_ptr.copy_to_operands(str_expr);
+    }
+
+    // Create function call
+    side_effect_expr_function_callt call;
+    call.function() = symbol_exprt(func_symbol_id, code_typet());
+    call.arguments().push_back(str_ptr);
+    call.type() = pointer_typet(char_type());
+    call.location() = location;
+
+    return call;
+  }
 }
 
 exprt string_handler::handle_string_strip(
   const exprt &str_expr,
+  const exprt& chars_arg,
   const locationt &location)
 {
+  bool can_fold_constant = false;
+  if (str_expr.type().is_array())
+  {
+    if (str_expr.is_constant())
+      can_fold_constant = true;
+    else if (str_expr.is_symbol())
+    {
+      const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
+      if (symbol && symbol->value.is_constant() && symbol->value.type().is_array())
+        can_fold_constant = true;
+    }
+  }
+
+  if (chars_arg.is_nil() && string_builder_ && can_fold_constant)
+  {
+    std::vector<exprt> chars = string_builder_->extract_string_chars(str_expr);
+    bool all_constant = true;
+
+    for (const auto &ch : chars)
+    {
+      if (!ch.is_constant())
+      {
+        all_constant = false;
+        break;
+      }
+    }
+
+    if (all_constant)
+    {
+      auto is_whitespace = [](const exprt &ch) -> bool {
+        BigInt char_val =
+          binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+        char c = static_cast<char>(char_val.to_uint64());
+        return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+               c == '\r';
+      };
+
+      while (!chars.empty() && is_whitespace(chars.front()))
+        chars.erase(chars.begin());
+
+      while (!chars.empty() && is_whitespace(chars.back()))
+        chars.pop_back();
+
+      return string_builder_->build_null_terminated_string(chars);
+    }
+  }
+
+  // If chars_arg is provided, use __python_str_strip_chars
+  if (!chars_arg.is_nil() && chars_arg.is_not_nil())
+  {
+    std::string func_symbol_id = ensure_string_function_symbol(
+      "__python_str_strip_chars",
+      pointer_typet(char_type()),
+      { pointer_typet(char_type()), pointer_typet(char_type()) },
+      location);
+
+    exprt str_ptr = str_expr;
+    if (str_expr.type().is_array())
+    {
+      str_ptr = exprt("address_of", pointer_typet(char_type()));
+      exprt index_expr("index", char_type());
+      index_expr.copy_to_operands(str_expr);
+      index_expr.copy_to_operands(from_integer(0, int_type()));
+      str_ptr.copy_to_operands(index_expr);
+    }
+
+    exprt chars_ptr = chars_arg;
+    if (chars_arg.type().is_array())
+    {
+      chars_ptr = exprt("address_of", pointer_typet(char_type()));
+      exprt index_expr("index", char_type());
+      index_expr.copy_to_operands(chars_arg);
+      index_expr.copy_to_operands(from_integer(0, int_type()));
+      chars_ptr.copy_to_operands(index_expr);
+    }
+
+    side_effect_expr_function_callt call;
+    call.function() = symbol_exprt(func_symbol_id, code_typet());
+    call.arguments().push_back(str_ptr);
+    call.arguments().push_back(chars_ptr);
+    call.type() = pointer_typet(char_type());
+    call.location() = location;
+    return call;
+  }
+
+  // Default behavior: strip whitespace
   std::string func_symbol_id = ensure_string_function_symbol(
     "__python_str_strip",
     pointer_typet(char_type()),
@@ -966,8 +1163,48 @@ exprt string_handler::handle_string_strip(
 
 exprt string_handler::handle_string_rstrip(
   const exprt &str_expr,
+  const exprt& chars_arg,
   const locationt &location)
 {
+  // If chars_arg is provided, use __python_str_rstrip_chars
+  if (!chars_arg.is_nil() && chars_arg.is_not_nil())
+  {
+    std::string func_symbol_id = ensure_string_function_symbol(
+      "__python_str_rstrip_chars",
+      pointer_typet(char_type()),
+      { pointer_typet(char_type()), pointer_typet(char_type()) },
+      location);
+
+    exprt str_ptr = str_expr;
+    if (str_expr.type().is_array())
+    {
+      str_ptr = exprt("address_of", pointer_typet(char_type()));
+      exprt index_expr("index", char_type());
+      index_expr.copy_to_operands(str_expr);
+      index_expr.copy_to_operands(from_integer(0, int_type()));
+      str_ptr.copy_to_operands(index_expr);
+    }
+
+    exprt chars_ptr = chars_arg;
+    if (chars_arg.type().is_array())
+    {
+      chars_ptr = exprt("address_of", pointer_typet(char_type()));
+      exprt index_expr("index", char_type());
+      index_expr.copy_to_operands(chars_arg);
+      index_expr.copy_to_operands(from_integer(0, int_type()));
+      chars_ptr.copy_to_operands(index_expr);
+    }
+
+    side_effect_expr_function_callt call;
+    call.function() = symbol_exprt(func_symbol_id, code_typet());
+    call.arguments().push_back(str_ptr);
+    call.arguments().push_back(chars_ptr);
+    call.type() = pointer_typet(char_type());
+    call.location() = location;
+    return call;
+  }
+
+  // Default behavior: strip whitespace (existing code)
   bool can_fold_constant = str_expr.type().is_array();
 
   if (!can_fold_constant && str_expr.is_symbol())

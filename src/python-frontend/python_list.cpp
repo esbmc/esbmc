@@ -3,6 +3,7 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/string_builder.h>
 #include <util/expr.h>
 #include <util/type.h>
 #include <util/symbol.h>
@@ -717,6 +718,87 @@ exprt python_list::build_split_list(
 
   python_list list(converter, list_node);
   return list.get();
+}
+
+exprt python_list::build_split_list(
+  python_converter& converter,
+  const nlohmann::json& call_node,
+  const exprt& input_expr,
+  const std::string& separator,
+  long long count)
+{
+  // For symbolic strings, we create a runtime call to __python_str_split
+  // This function will handle the splitting at runtime with symbolic constraints
+
+  locationt location = converter.get_location_from_decl(call_node);
+
+  // Create function symbol for __python_str_split if it doesn't exist
+  const std::string func_name = "__python_str_split";
+  const symbolt* func_symbol = converter.symbol_table().find_symbol(func_name);
+
+  if (!func_symbol)
+  {
+    // Create function type: PyObject* __python_str_split(char* str, char* sep, int maxsplit)
+    code_typet func_type;
+    func_type.return_type() = pointer_typet(empty_typet()); // PyObject*
+
+    code_typet::argumentt str_arg;
+    str_arg.type() = pointer_typet(char_type());
+    func_type.arguments().push_back(str_arg);
+
+    code_typet::argumentt sep_arg;
+    sep_arg.type() = pointer_typet(char_type());
+    func_type.arguments().push_back(sep_arg);
+
+    code_typet::argumentt count_arg;
+    count_arg.type() = long_long_int_type();
+    func_type.arguments().push_back(count_arg);
+
+    symbolt new_symbol;
+    new_symbol.name = func_name;
+    new_symbol.id = func_name;
+    new_symbol.type = func_type;
+    new_symbol.mode = "Python";
+    new_symbol.module = "python";
+    new_symbol.location = location;
+    new_symbol.is_extern = true;
+
+    converter.add_symbol(new_symbol);
+  }
+
+  // Build arguments for the call
+  exprt::operandst args;
+
+  // Argument 1: input string (ensure it's a pointer)
+  exprt str_arg = input_expr;
+  if (str_arg.type().is_array())
+  {
+    // Get address of first element
+    str_arg = converter.get_string_handler().get_array_base_address(str_arg);
+  }
+  args.push_back(str_arg);
+
+  // Argument 2: separator string
+  std::string sep_to_use = separator.empty() ? "" : separator;
+  exprt sep_expr = converter.get_string_builder().build_string_literal(sep_to_use);
+  if (sep_expr.type().is_array())
+  {
+    sep_expr = converter.get_string_handler().get_array_base_address(sep_expr);
+  }
+  args.push_back(sep_expr);
+
+  // Argument 3: maxsplit count
+  exprt count_expr = from_integer(count, long_long_int_type());
+  args.push_back(count_expr);
+
+  // Create function call expression
+  side_effect_expr_function_callt call_expr;
+  call_expr.function() = symbol_exprt(func_name, code_typet());
+  call_expr.arguments() = args;
+  call_expr.type() = pointer_typet(empty_typet());
+  call_expr.location() = location;
+
+  return call_expr;
 }
 
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
