@@ -130,6 +130,7 @@ TOTAL           10      0      8      0   100%
 - `__VERIFIER_nondet_int()` → Python int
 - `__VERIFIER_nondet_bool()` → Python True/False
 - `__VERIFIER_nondet_float()` → Python float
+- `__VERIFIER_nondet_str()` → Python string
 
 ## Example: Multiple Parameters
 

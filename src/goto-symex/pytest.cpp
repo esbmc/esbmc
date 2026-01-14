@@ -41,6 +41,23 @@ std::string pytest_generator::clean_variable_name(const std::string &name) const
 {
   std::string var_name = name;
 
+  // Remove everything before the last '$' (if present) - for internal symbols like "$nondet_str$15"
+  size_t dollar_pos = var_name.rfind('$');
+  if (dollar_pos != std::string::npos && dollar_pos > 0)
+  {
+    // Check if this looks like an internal symbol (contains multiple $)
+    size_t first_dollar = var_name.find('$');
+    if (first_dollar != dollar_pos)
+    {
+      // Multiple $ signs - this is likely an internal symbol, extract the meaningful part
+      // For "python_converter::test.py:9$nondet_str$15", extract "nondet_str"
+      size_t start = first_dollar + 1;
+      size_t end = var_name.rfind('$');
+      if (end > start)
+        var_name = var_name.substr(start, end - start);
+    }
+  }
+
   // Remove everything before the last '@' (Python mangling)
   size_t at_pos = var_name.rfind('@');
   if (at_pos != std::string::npos)
@@ -62,6 +79,21 @@ std::string pytest_generator::clean_variable_name(const std::string &name) const
   if (has_prefix(var_name, "c::main::"))
     var_name = var_name.substr(9);
 
+  // Remove "python_converter::" prefix if present
+  size_t converter_pos = var_name.find("python_converter::");
+  if (converter_pos != std::string::npos)
+    var_name = var_name.substr(converter_pos + 18);
+
+  // Remove file paths and line numbers (e.g., "test.py:9:")
+  size_t colon_pos = var_name.find(".py:");
+  if (colon_pos != std::string::npos)
+  {
+    // Find the next part after the line number
+    size_t next_part = var_name.find(':', colon_pos + 4);
+    if (next_part != std::string::npos)
+      var_name = var_name.substr(next_part + 1);
+  }
+
   return var_name;
 }
 
@@ -69,6 +101,25 @@ std::string pytest_generator::extract_function_name(
   const symex_target_equationt &target,
   smt_convt &smt_conv) const
 {
+  // List of functions to skip (C library and ESBMC internal functions)
+  static const std::vector<std::string> skip_functions = {
+    "strcmp",
+    "strlen",
+    "strcpy",
+    "strcat",
+    "memcpy",
+    "memset",
+    "malloc",
+    "free",
+    "printf",
+    "scanf",
+    "__ESBMC_main",
+    "python_user_main",
+    "python_init",
+  };
+
+  std::string best_candidate;
+
   // extract function name from SSA steps
   for (auto const &SSA_step : target.SSA_steps)
   {
@@ -80,24 +131,45 @@ std::string pytest_generator::extract_function_name(
       std::string full_func =
         SSA_step.source.pc->location.function().as_string();
 
+      // Remove "c::" prefix for comparison
+      std::string func_to_check = full_func;
+      if (has_prefix(func_to_check, "c::"))
+        func_to_check = func_to_check.substr(3);
+
       // Skip internal functions
       if (
-        !has_prefix(full_func, "python_") &&
-        !has_prefix(full_func, "__ESBMC_") &&
-        !has_prefix(full_func, "__VERIFIER_") &&
-        full_func != "c::__ESBMC_main" && full_func != "c::python_user_main" &&
-        full_func != "c::python_init")
+        has_prefix(full_func, "python_") || has_prefix(full_func, "__ESBMC_") ||
+        has_prefix(full_func, "__VERIFIER_"))
+        continue;
+
+      // Skip C library functions
+      bool should_skip = false;
+      for (const auto &skip_func : skip_functions)
+      {
+        if (func_to_check == skip_func || full_func == "c::" + skip_func)
+        {
+          should_skip = true;
+          break;
+        }
+      }
+
+      if (should_skip)
+        continue;
+
+      // This looks like a user function - save it
+      // Prefer the first non-internal function we find
+      if (best_candidate.empty())
       {
         // Clean up function name (remove "c::" prefix if present)
         if (has_prefix(full_func, "c::"))
-          return full_func.substr(3);
+          best_candidate = full_func.substr(3);
         else
-          return full_func;
+          best_candidate = full_func;
       }
     }
   }
 
-  return ""; // No function name found
+  return best_candidate;
 }
 
 std::string
@@ -177,6 +249,233 @@ std::string pytest_generator::escape_python_string(const std::string &str) const
     }
   }
 
+  return result;
+}
+
+bool pytest_generator::is_char_array(const expr2tc &array_expr) const
+{
+  if (!is_constant_array2t(array_expr))
+    return false;
+
+  const constant_array2t &arr = to_constant_array2t(array_expr);
+
+  // Check if all elements are integers (char values) in the valid range
+  // and the array ends with a null terminator (0)
+  if (arr.datatype_members.empty())
+    return false;
+
+  // Check if the last element is 0 (null terminator)
+  const expr2tc &last_elem = arr.datatype_members.back();
+  if (is_constant_int2t(last_elem))
+  {
+    BigInt value = to_constant_int2t(last_elem).value;
+    if (value == 0)
+    {
+      // All elements should be int (char) type
+      for (const auto &elem : arr.datatype_members)
+      {
+        if (!is_constant_int2t(elem))
+          return false;
+      }
+      return true;
+    }
+  }
+
+  return false;
+}
+
+std::string
+pytest_generator::convert_char_array_to_string(const expr2tc &array_expr) const
+{
+  if (!is_constant_array2t(array_expr))
+    return "\"\"";
+
+  const constant_array2t &arr = to_constant_array2t(array_expr);
+  std::string result;
+
+  // Convert character array to string (stop at null terminator or -1)
+  for (const auto &elem : arr.datatype_members)
+  {
+    if (!is_constant_int2t(elem))
+      continue;
+
+    BigInt value = to_constant_int2t(elem).value;
+
+    // Stop at null terminator or invalid chars
+    if (value == 0 || value < 0)
+      break;
+
+    // Only include valid ASCII/UTF-8 characters
+    if (value > 0 && value <= 127)
+    {
+      result += static_cast<char>(value.to_int64());
+    }
+  }
+
+  // Escape the string and wrap in quotes
+  return "\"" + escape_python_string(result) + "\"";
+}
+
+std::string
+pytest_generator::convert_array_to_python_list(const expr2tc &array_expr) const
+{
+  if (!is_constant_array2t(array_expr))
+    return "[]"; // Return empty list for non-array types
+
+  const constant_array2t &arr = to_constant_array2t(array_expr);
+  std::string result = "[";
+
+  bool first = true;
+  for (const auto &elem : arr.datatype_members)
+  {
+    if (!first)
+      result += ", ";
+    first = false;
+
+    // Recursively convert each element based on its type
+    if (is_constant_int2t(elem))
+    {
+      result += integer2string(to_constant_int2t(elem).value);
+    }
+    else if (is_constant_floatbv2t(elem))
+    {
+      std::string c_float =
+        to_constant_floatbv2t(elem).value.to_ansi_c_string();
+      result += convert_float_to_python(c_float);
+    }
+    else if (is_constant_bool2t(elem))
+    {
+      result += to_constant_bool2t(elem).value ? "True" : "False";
+    }
+    else if (is_constant_string2t(elem))
+    {
+      std::string raw_str = to_constant_string2t(elem).value.as_string();
+      result += "\"" + escape_python_string(raw_str) + "\"";
+    }
+    else if (is_constant_array2t(elem))
+    {
+      // Nested list
+      result += convert_array_to_python_list(elem);
+    }
+    else if (is_constant_struct2t(elem))
+    {
+      // Nested dict
+      result += convert_struct_to_python_dict(elem);
+    }
+    else
+    {
+      // Unsupported type - use None
+      result += "None";
+    }
+  }
+
+  result += "]";
+  return result;
+}
+
+std::string pytest_generator::convert_struct_to_python_dict(
+  const expr2tc &struct_expr) const
+{
+  if (!is_constant_struct2t(struct_expr))
+    return "{}"; // Return empty dict for non-struct types
+
+  const constant_struct2t &strct = to_constant_struct2t(struct_expr);
+
+  // Python dicts in ESBMC are represented as structs with two members:
+  // - keys (list)
+  // - values (list)
+  if (strct.datatype_members.size() != 2)
+  {
+    // Not a Python dict structure, return empty dict
+    return "{}";
+  }
+
+  const expr2tc &keys_expr = strct.datatype_members[0];
+  const expr2tc &values_expr = strct.datatype_members[1];
+
+  // Both keys and values should be arrays
+  if (!is_constant_array2t(keys_expr) || !is_constant_array2t(values_expr))
+    return "{}";
+
+  const constant_array2t &keys = to_constant_array2t(keys_expr);
+  const constant_array2t &values = to_constant_array2t(values_expr);
+
+  // Keys and values should have the same length
+  if (keys.datatype_members.size() != values.datatype_members.size())
+    return "{}";
+
+  std::string result = "{";
+  bool first = true;
+
+  for (size_t i = 0; i < keys.datatype_members.size(); ++i)
+  {
+    if (!first)
+      result += ", ";
+    first = false;
+
+    const expr2tc &key = keys.datatype_members[i];
+    const expr2tc &value = values.datatype_members[i];
+
+    // Convert key
+    std::string key_str;
+    if (is_constant_int2t(key))
+    {
+      key_str = integer2string(to_constant_int2t(key).value);
+    }
+    else if (is_constant_string2t(key))
+    {
+      std::string raw_str = to_constant_string2t(key).value.as_string();
+      key_str = "\"" + escape_python_string(raw_str) + "\"";
+    }
+    else if (is_constant_bool2t(key))
+    {
+      key_str = to_constant_bool2t(key).value ? "True" : "False";
+    }
+    else
+    {
+      key_str = "None";
+    }
+
+    // Convert value
+    std::string value_str;
+    if (is_constant_int2t(value))
+    {
+      value_str = integer2string(to_constant_int2t(value).value);
+    }
+    else if (is_constant_floatbv2t(value))
+    {
+      std::string c_float =
+        to_constant_floatbv2t(value).value.to_ansi_c_string();
+      value_str = convert_float_to_python(c_float);
+    }
+    else if (is_constant_bool2t(value))
+    {
+      value_str = to_constant_bool2t(value).value ? "True" : "False";
+    }
+    else if (is_constant_string2t(value))
+    {
+      std::string raw_str = to_constant_string2t(value).value.as_string();
+      value_str = "\"" + escape_python_string(raw_str) + "\"";
+    }
+    else if (is_constant_array2t(value))
+    {
+      // Nested list
+      value_str = convert_array_to_python_list(value);
+    }
+    else if (is_constant_struct2t(value))
+    {
+      // Nested dict
+      value_str = convert_struct_to_python_dict(value);
+    }
+    else
+    {
+      value_str = "None";
+    }
+
+    result += key_str + ": " + value_str;
+  }
+
+  result += "}";
   return result;
 }
 
@@ -302,12 +601,57 @@ void pytest_generator::collect(
     {
       checked_assignments++;
 
-      // Extract variable name
+      // Extract variable name first
       std::string var_name;
       if (is_symbol2t(SSA_step.lhs))
       {
         const symbol2t &lhs_sym = to_symbol2t(SSA_step.lhs);
         var_name = clean_variable_name(lhs_sym.get_symbol_name());
+      }
+
+      // Skip variables from internal helper functions (nondet_list, nondet_dict implementations)
+      // But ONLY skip internal implementation variables like 'elem_type', 'size', 'i', 'result'
+      if (SSA_step.source.pc->location.function() != "")
+      {
+        std::string func_name =
+          SSA_step.source.pc->location.function().as_string();
+
+        // Check if we're inside an internal function - be specific to avoid matching user functions
+        // Only match if the function name IS exactly "nondet_list", "nondet_dict", "_nondet_size"
+        // or ends with these names (to handle C++ mangling)
+        bool in_internal_func = false;
+        if (
+          func_name == "nondet_list" || func_name == "nondet_dict" ||
+          func_name == "_nondet_size")
+          in_internal_func = true;
+        else
+        {
+          // Check for mangled names that end with these function names
+          // e.g., "python::nondet_list" or "c::nondet_list"
+          size_t sep_pos = func_name.rfind("::");
+          if (sep_pos != std::string::npos)
+          {
+            std::string base_name = func_name.substr(sep_pos + 2);
+            if (
+              base_name == "nondet_list" || base_name == "nondet_dict" ||
+              base_name == "_nondet_size")
+              in_internal_func = true;
+          }
+        }
+
+        if (in_internal_func)
+        {
+          // Skip only internal implementation variables
+          // Keep variables that look like user variables (not matching internal names)
+          if (
+            var_name == "elem_type" || var_name == "size" || var_name == "i" ||
+            var_name == "result" || var_name == "key_type" ||
+            var_name == "value_type")
+          {
+            continue; // Skip this assignment - it's internal implementation
+          }
+          // If it's a different name, it might be a user variable, continue processing
+        }
       }
 
       // Check if this is a nondet assignment
@@ -345,11 +689,60 @@ void pytest_generator::collect(
           to_constant_string2t(concrete_value).value.as_string();
         value_str = "\"" + escape_python_string(raw_str) + "\"";
       }
+      else if (is_constant_array2t(concrete_value))
+      {
+        // Check if this is a character array (string) first
+        if (is_char_array(concrete_value))
+        {
+          // Python string from char array (nondet_str)
+          value_str = convert_char_array_to_string(concrete_value);
+        }
+        else
+        {
+          // Python list (nondet_list)
+          value_str = convert_array_to_python_list(concrete_value);
+        }
+      }
+      else if (is_constant_struct2t(concrete_value))
+      {
+        // Python dict (nondet_dict)
+        value_str = convert_struct_to_python_dict(concrete_value);
+      }
       else
         continue; // Skip unsupported types
 
+      // Handle duplicate parameter names by adding numeric suffix
+      std::string final_var_name = var_name;
+      if (
+        var_name.empty() || var_name == "nondet_str" ||
+        var_name == "nondet_list" || var_name == "nondet_dict" ||
+        var_name == "nondet_int" || var_name == "nondet_float" ||
+        var_name == "nondet_bool")
+      {
+        // Generic nondet name - use argN format
+        final_var_name = "arg" + std::to_string(current_param_names.size());
+      }
+      else
+      {
+        // Check if this name already exists in current_param_names
+        int count = 0;
+        for (const auto &existing_name : current_param_names)
+        {
+          if (
+            existing_name == final_var_name ||
+            existing_name.find(final_var_name) == 0)
+            count++;
+        }
+
+        if (count > 0)
+        {
+          // Add numeric suffix to make it unique
+          final_var_name = final_var_name + std::to_string(count);
+        }
+      }
+
       current_params.push_back(value_str);
-      current_param_names.push_back(var_name);
+      current_param_names.push_back(final_var_name);
     }
   }
 
@@ -494,12 +887,57 @@ void pytest_generator::generate_single(
 
     if (SSA_step.is_assignment())
     {
-      // Extract the variable name from lhs
+      // Extract the variable name from lhs first
       std::string var_name;
       if (is_symbol2t(SSA_step.lhs))
       {
         const symbol2t &lhs_sym = to_symbol2t(SSA_step.lhs);
         var_name = clean_variable_name(lhs_sym.get_symbol_name());
+      }
+
+      // Skip variables from internal helper functions (nondet_list, nondet_dict implementations)
+      // But ONLY skip internal implementation variables like 'elem_type', 'size', 'i', 'result'
+      if (SSA_step.source.pc->location.function() != "")
+      {
+        std::string func_name =
+          SSA_step.source.pc->location.function().as_string();
+
+        // Check if we're inside an internal function - be specific to avoid matching user functions
+        // Only match if the function name IS exactly "nondet_list", "nondet_dict", "_nondet_size"
+        // or ends with these names (to handle C++ mangling)
+        bool in_internal_func = false;
+        if (
+          func_name == "nondet_list" || func_name == "nondet_dict" ||
+          func_name == "_nondet_size")
+          in_internal_func = true;
+        else
+        {
+          // Check for mangled names that end with these function names
+          // e.g., "python::nondet_list" or "c::nondet_list"
+          size_t sep_pos = func_name.rfind("::");
+          if (sep_pos != std::string::npos)
+          {
+            std::string base_name = func_name.substr(sep_pos + 2);
+            if (
+              base_name == "nondet_list" || base_name == "nondet_dict" ||
+              base_name == "_nondet_size")
+              in_internal_func = true;
+          }
+        }
+
+        if (in_internal_func)
+        {
+          // Skip only internal implementation variables
+          // Keep variables that look like user variables (not matching internal names)
+          if (
+            var_name == "elem_type" || var_name == "size" || var_name == "i" ||
+            var_name == "result" || var_name == "key_type" ||
+            var_name == "value_type")
+          {
+            continue; // Skip this assignment - it's internal implementation
+          }
+          // If it's a different name, it might be a user variable, continue processing
+        }
       }
 
       // Check if this is a nondet assignment
@@ -537,11 +975,60 @@ void pytest_generator::generate_single(
           to_constant_string2t(concrete_value).value.as_string();
         value_str = "\"" + escape_python_string(raw_str) + "\"";
       }
+      else if (is_constant_array2t(concrete_value))
+      {
+        // Check if this is a character array (string) first
+        if (is_char_array(concrete_value))
+        {
+          // Python string from char array (nondet_str)
+          value_str = convert_char_array_to_string(concrete_value);
+        }
+        else
+        {
+          // Python list (nondet_list)
+          value_str = convert_array_to_python_list(concrete_value);
+        }
+      }
+      else if (is_constant_struct2t(concrete_value))
+      {
+        // Python dict (nondet_dict)
+        value_str = convert_struct_to_python_dict(concrete_value);
+      }
       else
         value_str = "None"; // Unsupported type
 
+      // Handle duplicate parameter names by adding numeric suffix
+      std::string final_var_name = var_name;
+      if (
+        var_name.empty() || var_name == "nondet_str" ||
+        var_name == "nondet_list" || var_name == "nondet_dict" ||
+        var_name == "nondet_int" || var_name == "nondet_float" ||
+        var_name == "nondet_bool")
+      {
+        // Generic nondet name - use argN format
+        final_var_name = "arg" + std::to_string(current_param_names.size());
+      }
+      else
+      {
+        // Check if this name already exists in current_param_names
+        int count = 0;
+        for (const auto &existing_name : current_param_names)
+        {
+          if (
+            existing_name == final_var_name ||
+            existing_name.find(final_var_name) == 0)
+            count++;
+        }
+
+        if (count > 0)
+        {
+          // Add numeric suffix to make it unique
+          final_var_name = final_var_name + std::to_string(count);
+        }
+      }
+
       current_params.push_back(value_str);
-      current_param_names.push_back(var_name);
+      current_param_names.push_back(final_var_name);
     }
   }
 
