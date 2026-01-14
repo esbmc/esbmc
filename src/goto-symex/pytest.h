@@ -32,6 +32,18 @@ private:
   /// Escape string for Python representation
   std::string escape_python_string(const std::string &str) const;
 
+  /// TODO: Convert array to Python list representation
+  std::string convert_array_to_python_list(const expr2tc &array_expr) const;
+
+  /// TODO: Convert struct to Python dict representation
+  std::string convert_struct_to_python_dict(const expr2tc &struct_expr) const;
+
+  /// Check if array is a character array (C string)
+  bool is_char_array(const expr2tc &array_expr) const;
+
+  /// Convert character array to Python string
+  std::string convert_char_array_to_string(const expr2tc &array_expr) const;
+
   /// Write pytest file header
   void write_file_header(std::ofstream &file, const std::string &original_file)
     const;
