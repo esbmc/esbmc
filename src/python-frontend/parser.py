@@ -87,11 +87,13 @@ def encode_bytes(value):
 
 def add_type_annotation(node):
     value_node = node.value
-    if isinstance(value_node, ast.Str):
-        value_node.esbmc_type_annotation = "str"
-    elif isinstance(value_node, ast.Bytes):
-        value_node.esbmc_type_annotation = "bytes"
-        value_node.encoded_bytes = encode_bytes(value_node.value)
+    # Python 3.8+ uses ast.Constant instead of ast.Str, ast.Num, ast.Bytes, etc.
+    if isinstance(value_node, ast.Constant):
+        if isinstance(value_node.value, str):
+            value_node.esbmc_type_annotation = "str"
+        elif isinstance(value_node.value, bytes):
+            value_node.esbmc_type_annotation = "bytes"
+            value_node.encoded_bytes = encode_bytes(value_node.value)
 
 
 def is_standard_library_file(filename):
