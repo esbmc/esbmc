@@ -274,6 +274,15 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type.empty())
     return empty_typet();
 
+  // Handle generic type annotations such as list[T], dict[K,V], etc.
+  // Extract base type and let existing code handle it
+  size_t bracket_pos = ast_type.find('[');
+  if (bracket_pos != std::string::npos)
+  {
+    std::string base_type = ast_type.substr(0, bracket_pos);
+    return get_typet(base_type, type_size);
+  }
+
   // NoneType — represents Python's None value
   // Use a pointer type to void to represent None/null properly
   if (ast_type == "NoneType")
