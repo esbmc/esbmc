@@ -230,6 +230,20 @@ private:
   {
     const std::string &func_name = function_element["name"];
 
+    // Check if function has a meaningful body
+    bool has_meaningful_body = false;
+    if (function_element.contains("body") && !function_element["body"].empty())
+    {
+      for (const auto &stmt : function_element["body"])
+      {
+        if (stmt.contains("_type") && stmt["_type"] != "Pass")
+        {
+          has_meaningful_body = true;
+          break;
+        }
+      }
+    }
+
     // Determine where to search for function calls:
     // - For nested functions: search in parent function's body
     // - For top-level functions: search in global AST body
@@ -241,9 +255,6 @@ private:
     // Find all calls to this function in the AST
     std::vector<Json> function_calls =
       find_function_calls(func_name, search_context);
-
-    if (function_calls.empty())
-      return; // No calls found, cannot infer
 
     // For each parameter, try to infer its type from the function calls
     if (
@@ -260,9 +271,15 @@ private:
         if (param.contains("annotation") && !param["annotation"].is_null())
           continue;
 
-        // Try to infer type from function calls
-        std::string inferred_type =
-          infer_parameter_type_from_calls(i, function_calls);
+        std::string inferred_type;
+
+        // Try to infer type from function calls if available
+        if (!function_calls.empty())
+          inferred_type = infer_parameter_type_from_calls(i, function_calls);
+
+        // If inference failed or no calls found, use Any only for stub functions
+        if (inferred_type.empty() && !has_meaningful_body)
+          inferred_type = "Any"; // Default fallback for stub functions
 
         if (!inferred_type.empty())
         {
