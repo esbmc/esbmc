@@ -1,4 +1,4 @@
-def f():
+def f() -> list[list]:
     return [[]]
 
 def g():
@@ -7,4 +7,3 @@ def g():
     return ret
 
 g()
-
