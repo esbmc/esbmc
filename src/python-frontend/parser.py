@@ -40,14 +40,6 @@ def is_testing_framework(module_name):
     return module_name in testing_frameworks
 
 
-def is_frontend_builtin_module(module_name):
-    # Frontend-provided helpers that don't need AST processing.
-    builtin_modules = [
-        "esbmc",
-    ]
-    return module_name in builtin_modules
-
-
 def import_module_by_name(module_name, output_dir):
     if is_unsupported_module(module_name):
         print("ERROR: \"import {}\" is not supported".format(module_name))
@@ -62,10 +54,6 @@ def import_module_by_name(module_name, output_dir):
     # Skip testing frameworks - they don't contain logic to verify
     if is_testing_framework(base_module):
         return None
-    # Skip frontend builtins (e.g., esbmc helpers) to avoid import failures.
-    if is_frontend_builtin_module(base_module):
-        return None
-
     if is_imported_model(base_module):
         parts = module_name.split(".")
         model_dir = os.path.join(output_dir, "models")
@@ -187,8 +175,6 @@ def process_imports(node, output_dir):
         module_names = []
         for alias_node in node.names:
             module_name = alias_node.name
-            if is_frontend_builtin_module(module_name):
-                continue
             alias = alias_node.asname or module_name
             import_aliases[alias] = module_name
             module_names.append(module_name)
@@ -197,8 +183,6 @@ def process_imports(node, output_dir):
         imported_elements = None
     elif isinstance(node, ast.ImportFrom):
         module_name = node.module
-        if module_name and is_frontend_builtin_module(module_name):
-            return
         # If it's a star import, set the list to None to import everything
         if any(a.name == '*' for a in node.names):
             imported_elements = None

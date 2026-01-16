@@ -1,4 +1,3 @@
-# Test: Char upper/lower - SUCESSO
 lower = "a"
 upper = lower.upper()
 assert upper == "A"

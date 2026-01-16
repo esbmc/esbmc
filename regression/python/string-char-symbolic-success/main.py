@@ -1,5 +1,3 @@
-# Test: Char em string simbólica com assume - SUCESSO
-from esbmc import nondet_string, assume
 
 s = nondet_string(3)
 assume(s == "abc")

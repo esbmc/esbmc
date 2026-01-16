@@ -1,4 +1,3 @@
-# Test: Indexação negativa
 text = "Python"
 assert text[-1] == "n"
 assert text[-2] == "o"

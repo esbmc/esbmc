@@ -1,5 +1,3 @@
-# Test: nondet_string slicing com assume - SUCESSO
-from esbmc import nondet_string, assume
 
 s = nondet_string(6)
 assume(s == "Python")

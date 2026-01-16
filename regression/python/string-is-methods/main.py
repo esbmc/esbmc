@@ -1,4 +1,3 @@
-# Test: Verificação de tipos de caracteres
 digit = "123"
 assert digit.isdigit()
 alpha = "abc"

@@ -1,5 +1,3 @@
-# Test: nondet_string com assume de diferença - SUCESSO
-from esbmc import nondet_string, assume
 
 s = nondet_string(4)
 assume(s != "test")

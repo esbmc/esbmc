@@ -1,4 +1,3 @@
-# Test: Operador 'in' - deve PASSAR
 text = "hello world"
 assert "world" in text
 assert "hello" in text

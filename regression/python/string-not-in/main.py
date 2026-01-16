@@ -1,4 +1,3 @@
-# Test: Operador not in
 text = "hello world"
 assert "xyz" not in text
 assert "python" not in text

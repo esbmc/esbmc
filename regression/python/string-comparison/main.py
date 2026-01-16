@@ -1,4 +1,3 @@
-# Test: Comparação lexicográfica
 s1 = "abc"
 s2 = "abd"
 assert s1 < s2

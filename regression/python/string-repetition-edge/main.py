@@ -1,4 +1,3 @@
-# Test: String repetição com número negativo
 s = "abc"
 result = s * 0
 assert result == ""

@@ -1,4 +1,3 @@
-# Test: Slicing de string - deve PASSAR
 text = "Python"
 slice1 = text[1:4]  # "yth"
 assert slice1 == "yth"

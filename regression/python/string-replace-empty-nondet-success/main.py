@@ -1,4 +1,3 @@
-from esbmc import nondet_str
 
 def main() -> None:
     text = nondet_str()

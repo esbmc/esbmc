@@ -1,5 +1,3 @@
-# Test: nondet_string indexação com assume - SUCESSO
-from esbmc import nondet_string, assume
 
 s = nondet_string(5)
 assume(s == "hello")

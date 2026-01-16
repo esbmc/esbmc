@@ -1,4 +1,3 @@
-# Test: Repetição com *= operator
 s = "ab"
 s *= 3
 assert s == "ababab"
