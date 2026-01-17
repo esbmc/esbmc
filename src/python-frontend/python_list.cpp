@@ -1993,9 +1993,12 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   exprt iterable_expr = converter_.get_expr(iter);
 
   // 2a. Materialize function calls that return lists
-  if (iterable_expr.is_code() && iterable_expr.get("statement") == "function_call")
+  if (
+    iterable_expr.is_code() &&
+    iterable_expr.get("statement") == "function_call")
   {
-    const code_function_callt &call = to_code_function_call(to_code(iterable_expr));
+    const code_function_callt &call =
+      to_code_function_call(to_code(iterable_expr));
 
     if (call.type() == list_type)
     {
@@ -2149,7 +2152,8 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     }
 
     // Use list_at and extract_pyobject_value for consistent handling
-    current_element = build_list_at_call(iterable_expr, symbol_expr(index_var), element);
+    current_element =
+      build_list_at_call(iterable_expr, symbol_expr(index_var), element);
     current_element = extract_pyobject_value(current_element, actual_elem_type);
   }
   else if (iterable_expr.type().is_array() || iterable_expr.type().is_pointer())
