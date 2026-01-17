@@ -230,7 +230,7 @@ __ESBMC_HIDE:;
 }
 
 // Python string strip with custom chars - removes chars from both ends
-const char* __python_str_strip_chars(const char* s, const char* chars)
+const char *__python_str_strip_chars(const char *s, const char *chars)
 {
 __ESBMC_HIDE:;
   if (!s)
@@ -242,7 +242,7 @@ __ESBMC_HIDE:;
   while (*s)
   {
     _Bool found = 0;
-    const char* p = chars;
+    const char *p = chars;
     while (*p && !found)
     {
       if (*p == *s)
@@ -254,8 +254,8 @@ __ESBMC_HIDE:;
     s++;
   }
 
-  const char* start = s;
-  const char* end = start;
+  const char *start = s;
+  const char *end = start;
 
   // Find the end
   while (*end)
@@ -267,7 +267,7 @@ __ESBMC_HIDE:;
   while (end > start)
   {
     _Bool found = 0;
-    const char* p = chars;
+    const char *p = chars;
     char ch = *(end - 1);
     while (*p && !found)
     {
@@ -281,7 +281,7 @@ __ESBMC_HIDE:;
   }
 
   size_t len = (size_t)(end - start);
-  char* buffer = __ESBMC_alloca(len + 1);
+  char *buffer = __ESBMC_alloca(len + 1);
 
   size_t i = 0;
   while (i < len)
@@ -296,7 +296,7 @@ __ESBMC_HIDE:;
 }
 
 // Python string lstrip with custom chars - removes chars from left
-const char* __python_str_lstrip_chars(const char* s, const char* chars)
+const char *__python_str_lstrip_chars(const char *s, const char *chars)
 {
 __ESBMC_HIDE:;
   if (!s)
@@ -308,7 +308,7 @@ __ESBMC_HIDE:;
   while (*s)
   {
     _Bool found = 0;
-    const char* p = chars;
+    const char *p = chars;
     while (*p && !found)
     {
       if (*p == *s)
@@ -320,8 +320,8 @@ __ESBMC_HIDE:;
     s++;
   }
 
-  const char* start = s;
-  const char* end = start;
+  const char *start = s;
+  const char *end = start;
 
   // Find the end
   while (*end)
@@ -330,7 +330,7 @@ __ESBMC_HIDE:;
   }
 
   size_t len = (size_t)(end - start);
-  char* buffer = __ESBMC_alloca(len + 1);
+  char *buffer = __ESBMC_alloca(len + 1);
 
   size_t i = 0;
   while (i < len)
@@ -345,7 +345,7 @@ __ESBMC_HIDE:;
 }
 
 // Python string rstrip with custom chars - removes chars from right
-const char* __python_str_rstrip_chars(const char* s, const char* chars)
+const char *__python_str_rstrip_chars(const char *s, const char *chars)
 {
 __ESBMC_HIDE:;
   if (!s)
@@ -353,8 +353,8 @@ __ESBMC_HIDE:;
   if (!chars || !*chars)
     return __python_str_rstrip(s);
 
-  const char* start = s;
-  const char* end = start;
+  const char *start = s;
+  const char *end = start;
 
   // Find the end
   while (*end)
@@ -366,7 +366,7 @@ __ESBMC_HIDE:;
   while (end > start)
   {
     _Bool found = 0;
-    const char* p = chars;
+    const char *p = chars;
     char ch = *(end - 1);
     while (*p && !found)
     {
@@ -380,7 +380,7 @@ __ESBMC_HIDE:;
   }
 
   size_t len = (size_t)(end - start);
-  char* buffer = __ESBMC_alloca(len + 1);
+  char *buffer = __ESBMC_alloca(len + 1);
 
   size_t i = 0;
   while (i < len)
@@ -762,7 +762,7 @@ __ESBMC_HIDE:;
 // Python string split - splits a string by separator
 // Returns a Python list (represented as PyObject*)
 // For ESBMC, we'll return a simple structure representing the split result
-void* __python_str_split(const char* str, const char* sep, long long maxsplit)
+void *__python_str_split(const char *str, const char *sep, long long maxsplit)
 {
 __ESBMC_HIDE:;
   // This is a placeholder implementation for symbolic execution
@@ -770,13 +770,13 @@ __ESBMC_HIDE:;
   // We just need to provide the function body to avoid "no body" warnings
 
   if (!str)
-    return (void*)0;
+    return (void *)0;
 
   // For symbolic strings, ESBMC will handle the actual splitting constraints
   // This function mainly serves to satisfy the linker and provide basic validation
 
   // Allocate result structure (simplified PyObject* representation)
-  void* result = __ESBMC_alloca(sizeof(void*));
+  void *result = __ESBMC_alloca(sizeof(void *));
 
   return result;
 }

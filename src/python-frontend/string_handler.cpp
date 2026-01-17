@@ -882,7 +882,7 @@ exprt string_handler::handle_char_isspace(
 
 exprt string_handler::handle_string_lstrip(
   const exprt &str_expr,
-  const exprt& chars_arg,
+  const exprt &chars_arg,
   const locationt &location)
 {
   bool can_fold_constant = false;
@@ -893,7 +893,9 @@ exprt string_handler::handle_string_lstrip(
     else if (str_expr.is_symbol())
     {
       const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
-      if (symbol && symbol->value.is_constant() && symbol->value.type().is_array())
+      if (
+        symbol && symbol->value.is_constant() &&
+        symbol->value.type().is_array())
         can_fold_constant = true;
     }
   }
@@ -930,7 +932,7 @@ exprt string_handler::handle_string_lstrip(
   }
 
   // If chars_arg is empty, strip whitespace (default behavior)
-  std::vector<typet> arg_types = { pointer_typet(char_type()) };
+  std::vector<typet> arg_types = {pointer_typet(char_type())};
 
   if (chars_arg.is_not_nil())
   {
@@ -993,7 +995,7 @@ exprt string_handler::handle_string_lstrip(
     std::string func_symbol_id = ensure_string_function_symbol(
       "__python_str_lstrip",
       pointer_typet(char_type()),
-      { pointer_typet(char_type()) },
+      {pointer_typet(char_type())},
       location);
 
     // Get the string pointer
@@ -1032,7 +1034,7 @@ exprt string_handler::handle_string_lstrip(
 
 exprt string_handler::handle_string_strip(
   const exprt &str_expr,
-  const exprt& chars_arg,
+  const exprt &chars_arg,
   const locationt &location)
 {
   bool can_fold_constant = false;
@@ -1043,7 +1045,9 @@ exprt string_handler::handle_string_strip(
     else if (str_expr.is_symbol())
     {
       const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
-      if (symbol && symbol->value.is_constant() && symbol->value.type().is_array())
+      if (
+        symbol && symbol->value.is_constant() &&
+        symbol->value.type().is_array())
         can_fold_constant = true;
     }
   }
@@ -1088,7 +1092,7 @@ exprt string_handler::handle_string_strip(
     std::string func_symbol_id = ensure_string_function_symbol(
       "__python_str_strip_chars",
       pointer_typet(char_type()),
-      { pointer_typet(char_type()), pointer_typet(char_type()) },
+      {pointer_typet(char_type()), pointer_typet(char_type())},
       location);
 
     exprt str_ptr = str_expr;
@@ -1160,7 +1164,7 @@ exprt string_handler::handle_string_strip(
 
 exprt string_handler::handle_string_rstrip(
   const exprt &str_expr,
-  const exprt& chars_arg,
+  const exprt &chars_arg,
   const locationt &location)
 {
   // If chars_arg is provided, use __python_str_rstrip_chars
@@ -1169,7 +1173,7 @@ exprt string_handler::handle_string_rstrip(
     std::string func_symbol_id = ensure_string_function_symbol(
       "__python_str_rstrip_chars",
       pointer_typet(char_type()),
-      { pointer_typet(char_type()), pointer_typet(char_type()) },
+      {pointer_typet(char_type()), pointer_typet(char_type())},
       location);
 
     exprt str_ptr = str_expr;

@@ -37,10 +37,10 @@ public:
     long long count);
 
   static exprt build_split_list(
-    python_converter& converter,
-    const nlohmann::json& call_node,
-    const exprt& input_expr,
-    const std::string& separator,
+    python_converter &converter,
+    const nlohmann::json &call_node,
+    const exprt &input_expr,
+    const std::string &separator,
     long long count);
 
   exprt get();

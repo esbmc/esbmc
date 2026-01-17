@@ -721,10 +721,10 @@ exprt python_list::build_split_list(
 }
 
 exprt python_list::build_split_list(
-  python_converter& converter,
-  const nlohmann::json& call_node,
-  const exprt& input_expr,
-  const std::string& separator,
+  python_converter &converter,
+  const nlohmann::json &call_node,
+  const exprt &input_expr,
+  const std::string &separator,
   long long count)
 {
   // For symbolic strings, we create a runtime call to __python_str_split
@@ -734,7 +734,7 @@ exprt python_list::build_split_list(
 
   // Create function symbol for __python_str_split if it doesn't exist
   const std::string func_name = "__python_str_split";
-  const symbolt* func_symbol = converter.symbol_table().find_symbol(func_name);
+  const symbolt *func_symbol = converter.symbol_table().find_symbol(func_name);
 
   if (!func_symbol)
   {
@@ -780,7 +780,8 @@ exprt python_list::build_split_list(
 
   // Argument 2: separator string
   std::string sep_to_use = separator.empty() ? "" : separator;
-  exprt sep_expr = converter.get_string_builder().build_string_literal(sep_to_use);
+  exprt sep_expr =
+    converter.get_string_builder().build_string_literal(sep_to_use);
   if (sep_expr.type().is_array())
   {
     sep_expr = converter.get_string_handler().get_array_base_address(sep_expr);

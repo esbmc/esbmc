@@ -800,7 +800,8 @@ exprt function_call_builder::build() const
         chars_arg = converter_.get_expr(call_["args"][0]);
 
       locationt loc = converter_.get_location_from_decl(call_);
-      return converter_.get_string_handler().handle_string_strip(obj_expr, chars_arg, loc);
+      return converter_.get_string_handler().handle_string_strip(
+        obj_expr, chars_arg, loc);
     }
 
     if (method_name == "replace")

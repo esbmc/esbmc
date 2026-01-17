@@ -244,18 +244,20 @@ exprt string_builder::concatenate_strings(
 
   if (lhs.is_symbol())
   {
-    symbolt* lhs_sym = converter_.find_symbol(
-      to_symbol_expr(lhs).get_identifier().as_string());
-    if (lhs_sym && lhs_sym->value.is_not_nil() &&
+    symbolt *lhs_sym =
+      converter_.find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
+    if (
+      lhs_sym && lhs_sym->value.is_not_nil() &&
       lhs_sym->value.type().is_array() && lhs_sym->value.is_constant())
       resolved_lhs = lhs_sym->value;
   }
 
   if (rhs.is_symbol())
   {
-    symbolt* rhs_sym = converter_.find_symbol(
-      to_symbol_expr(rhs).get_identifier().as_string());
-    if (rhs_sym && rhs_sym->value.is_not_nil() &&
+    symbolt *rhs_sym =
+      converter_.find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
+    if (
+      rhs_sym && rhs_sym->value.is_not_nil() &&
       rhs_sym->value.type().is_array() && rhs_sym->value.is_constant())
       resolved_rhs = rhs_sym->value;
   }

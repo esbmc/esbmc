@@ -293,9 +293,9 @@ public:
    * @return Pointer to stripped string
    */
   exprt handle_string_lstrip(
-    const exprt& str_expr,
-    const exprt& chars_arg,
-    const locationt& location);
+    const exprt &str_expr,
+    const exprt &chars_arg,
+    const locationt &location);
 
   /**
    * @brief Handle str.strip() method
@@ -305,9 +305,9 @@ public:
    * @return Pointer to stripped string
    */
   exprt handle_string_strip(
-    const exprt& str_expr,
-    const exprt& chars_arg,
-    const locationt& location);
+    const exprt &str_expr,
+    const exprt &chars_arg,
+    const locationt &location);
 
   /**
    * @brief Handle str.rstrip() method
@@ -317,9 +317,9 @@ public:
    * @return Pointer to stripped string
    */
   exprt handle_string_rstrip(
-    const exprt& str_expr,
-    const exprt& chars_arg,
-    const locationt& location);
+    const exprt &str_expr,
+    const exprt &chars_arg,
+    const locationt &location);
 
   /**
    * @brief Handle 'in' operator for strings
