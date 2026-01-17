@@ -79,7 +79,6 @@ def test_fstring_concatenation():
     part1: str = f"Hello"
     part2: str = f"World"
     
-    # This tests the string concatenation with f-string results
     combined: str = part1 + " " + part2
     assert len(combined) < 0
 

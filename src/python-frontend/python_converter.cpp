@@ -582,6 +582,26 @@ exprt python_converter::compare_constants_internal(
     return gen_boolean((op == "Eq") ? equal : !equal);
   }
 
+  // Array vs array comparisons (string literal comparison)
+  if (lhs.type().is_array() && rhs.type().is_array())
+  {
+    // Check if both are char arrays (strings)
+    if (
+      lhs.type().subtype() == char_type() &&
+      rhs.type().subtype() == char_type())
+    {
+      // Extract string values
+      std::string lhs_str =
+        string_handler_.extract_string_from_array_operands(lhs);
+      std::string rhs_str =
+        string_handler_.extract_string_from_array_operands(rhs);
+
+      // Compare strings
+      bool equal = (lhs_str == rhs_str);
+      return gen_boolean((op == "Eq") ? equal : !equal);
+    }
+  }
+
   // Mixed character vs array comparisons
   if (
     (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
@@ -1153,10 +1173,17 @@ exprt python_converter::handle_chained_comparisons_logic(
 
     if (op1_type == "str" && op2_type == "str")
     {
-      handle_string_comparison(op, op1, op2, element);
-      exprt expr(map_operator(op, bool_type()), bool_type());
-      expr.copy_to_operands(op1, op2);
-      cond.move_to_operands(expr);
+      exprt string_expr = handle_string_comparison(op, op1, op2, element);
+      if (string_expr.is_nil())
+      {
+        exprt expr(map_operator(op, bool_type()), bool_type());
+        expr.copy_to_operands(op1, op2);
+        cond.move_to_operands(expr);
+      }
+      else
+      {
+        cond.move_to_operands(string_expr);
+      }
     }
     else
     {
@@ -1373,7 +1400,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt string_result =
     handle_string_binary_operations(op, lhs, rhs, left, right, element);
   if (!string_result.is_nil())
+  {
+    if (element.contains("comparators") && element["comparators"].size() > 1)
+      return handle_chained_comparisons_logic(element, string_result);
     return string_result;
+  }
 
   // Handle type mismatches
   exprt type_mismatch_result = handle_string_type_mismatch(lhs, rhs, op);
@@ -4618,11 +4649,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Recover type
   current_element_type = t;
 
+  auto type = ast_node["_type"];
+
   // Extract 'then' block from AST
   exprt then;
 
   // Skip the 'then' block when the condition evaluates to false.
-  if (cond.is_constant() && cond.value() == "false")
+  if (cond.is_constant() && cond.value() == "false" && type != "IfExp")
   {
     then = code_blockt();
   }
@@ -4647,8 +4680,6 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     else
       else_expr = get_expr(ast_node["orelse"]);
   }
-
-  auto type = ast_node["_type"];
 
   // ternary operator
   if (type == "IfExp")

@@ -229,6 +229,171 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python string strip with custom chars - removes chars from both ends
+const char *__python_str_strip_chars(const char *s, const char *chars)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return s;
+  if (!chars || !*chars)
+    return __python_str_strip(s);
+
+  // Skip leading chars
+  while (*s)
+  {
+    _Bool found = 0;
+    const char *p = chars;
+    while (*p && !found)
+    {
+      if (*p == *s)
+        found = 1;
+      p++;
+    }
+    if (!found)
+      break;
+    s++;
+  }
+
+  const char *start = s;
+  const char *end = start;
+
+  // Find the end
+  while (*end)
+  {
+    end++;
+  }
+
+  // Skip trailing chars
+  while (end > start)
+  {
+    _Bool found = 0;
+    const char *p = chars;
+    char ch = *(end - 1);
+    while (*p && !found)
+    {
+      if (*p == ch)
+        found = 1;
+      p++;
+    }
+    if (!found)
+      break;
+    end--;
+  }
+
+  size_t len = (size_t)(end - start);
+  char *buffer = __ESBMC_alloca(len + 1);
+
+  size_t i = 0;
+  while (i < len)
+  {
+    buffer[i] = start[i];
+    ++i;
+  }
+
+  buffer[len] = '\0';
+
+  return buffer;
+}
+
+// Python string lstrip with custom chars - removes chars from left
+const char *__python_str_lstrip_chars(const char *s, const char *chars)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return s;
+  if (!chars || !*chars)
+    return __python_str_lstrip(s);
+
+  // Skip leading chars
+  while (*s)
+  {
+    _Bool found = 0;
+    const char *p = chars;
+    while (*p && !found)
+    {
+      if (*p == *s)
+        found = 1;
+      p++;
+    }
+    if (!found)
+      break;
+    s++;
+  }
+
+  const char *start = s;
+  const char *end = start;
+
+  // Find the end
+  while (*end)
+  {
+    end++;
+  }
+
+  size_t len = (size_t)(end - start);
+  char *buffer = __ESBMC_alloca(len + 1);
+
+  size_t i = 0;
+  while (i < len)
+  {
+    buffer[i] = start[i];
+    ++i;
+  }
+
+  buffer[len] = '\0';
+
+  return buffer;
+}
+
+// Python string rstrip with custom chars - removes chars from right
+const char *__python_str_rstrip_chars(const char *s, const char *chars)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return s;
+  if (!chars || !*chars)
+    return __python_str_rstrip(s);
+
+  const char *start = s;
+  const char *end = start;
+
+  // Find the end
+  while (*end)
+  {
+    end++;
+  }
+
+  // Skip trailing chars
+  while (end > start)
+  {
+    _Bool found = 0;
+    const char *p = chars;
+    char ch = *(end - 1);
+    while (*p && !found)
+    {
+      if (*p == ch)
+        found = 1;
+      p++;
+    }
+    if (!found)
+      break;
+    end--;
+  }
+
+  size_t len = (size_t)(end - start);
+  char *buffer = __ESBMC_alloca(len + 1);
+
+  size_t i = 0;
+  while (i < len)
+  {
+    buffer[i] = start[i];
+    ++i;
+  }
+
+  buffer[len] = '\0';
+
+  return buffer;
+}
+
 // Python character islower - checks if a single character is lowercase
 _Bool __python_char_islower(int c)
 {
@@ -594,6 +759,27 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python string split - splits a string by separator
+// Returns a Python list (represented as PyObject*)
+// For ESBMC, we'll return a simple structure representing the split result
+void *__python_str_split(const char *str, const char *sep, long long maxsplit)
+{
+__ESBMC_HIDE:;
+  // This is a placeholder implementation for symbolic execution
+  // In ESBMC, the actual list creation and verification happens at a higher level
+  // We just need to provide the function body to avoid "no body" warnings
+
+  if (!str)
+    return (void *)0;
+
+  // For symbolic strings, ESBMC will handle the actual splitting constraints
+  // This function mainly serves to satisfy the linker and provide basic validation
+
+  // Allocate result structure (simplified PyObject* representation)
+  void *result = __ESBMC_alloca(sizeof(void *));
+
+  return result;
+}
 // Python int() builtin - converts string to integer
 int __python_int(const char *s, int base)
 {

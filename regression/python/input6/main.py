@@ -1,7 +1,6 @@
 def validate_user_input() -> bool:
     """Validate user input with nondeterministic modeling"""
     
-    # ESBMC models input() as nondeterministic string up to 256 chars
     user_input = input("Enter a number: ")
     
     # Input validation
@@ -25,7 +24,6 @@ def validate_user_input() -> bool:
 def process_input_scenarios():
     """Process various input scenarios"""
     
-    # Test with nondeterministic input
     is_valid = validate_user_input()
     
     if is_valid:
