@@ -6740,8 +6740,6 @@ void python_converter::process_module_imports(
       const std::string &module_name = (elem["_type"] == "ImportFrom")
                                          ? elem["module"]
                                          : elem["names"][0]["name"];
-      if (module_name == "esbmc")
-        continue;
 
       // Skip if already imported
       if (imported_modules.find(module_name) != imported_modules.end())
@@ -6963,8 +6961,6 @@ void python_converter::convert()
         const std::string &module_name = (elem["_type"] == "ImportFrom")
                                            ? elem["module"]
                                            : elem["names"][0]["name"];
-        if (module_name == "esbmc")
-          continue;
 
         // Skip if already processed by recursive import
         if (imported_modules.find(module_name) != imported_modules.end())
