@@ -787,14 +787,14 @@ void goto_symext::run_intrinsic(
     // When contract enforcement is NOT enabled (e.g., in normal execution or when
     // verifying callers), this intrinsic would typically not be called, as is_fresh
     // should only appear in requires clauses of functions with enforced contracts.
-    
+
     // Return true to indicate the memory allocation succeeded
     if (!is_nil_expr(func_call.ret))
       symex_assign(code_assign2tc(func_call.ret, gen_true_expr()));
-    
+
     return;
   }
-  
+
   else if (symname == "c:@F@__ESBMC_no_abnormal_memory_leak")
   {
     expr2tc no_abnormal_memleak =

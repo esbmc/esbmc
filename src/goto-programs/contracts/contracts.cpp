@@ -20,9 +20,8 @@ static bool is_fresh_function(const std::string &funcname)
 }
 
 /// Check if is_fresh call is in ensures clause by examining next instruction
-static bool is_fresh_in_ensures(
-  goto_programt::const_targett it,
-  const goto_programt &body)
+static bool
+is_fresh_in_ensures(goto_programt::const_targett it, const goto_programt &body)
 {
   auto next_it = it;
   ++next_it;
@@ -379,19 +378,21 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
       if (it->is_assign() && is_code_assign2t(it->code))
       {
         const code_assign2t &assign = to_code_assign2t(it->code);
-        if (is_sideeffect2t(assign.source) &&
-            to_sideeffect2t(assign.source).kind == sideeffect2t::old_snapshot)
+        if (
+          is_sideeffect2t(assign.source) &&
+          to_sideeffect2t(assign.source).kind == sideeffect2t::old_snapshot)
         {
           needs_ensures_removal = true;
           break;
         }
       }
-      
+
       if (it->is_function_call() && is_code_function_call2t(it->code))
       {
         const code_function_call2t &call = to_code_function_call2t(it->code);
-        if (is_symbol2t(call.function) &&
-            is_fresh_function(to_symbol2t(call.function).thename.as_string()))
+        if (
+          is_symbol2t(call.function) &&
+          is_fresh_function(to_symbol2t(call.function).thename.as_string()))
         {
           needs_ensures_removal = true;
           break;
@@ -547,12 +548,13 @@ goto_programt code_contractst::generate_checking_wrapper(
 
   // 1. Process __ESBMC_is_fresh in requires: allocate memory before function call
   //    (ensures clauses handle is_fresh separately via replace_is_fresh_in_ensures_expr)
-  struct is_fresh_info {
+  struct is_fresh_info
+  {
     expr2tc ptr_arg;
     expr2tc size_expr;
   };
   std::vector<is_fresh_info> is_fresh_calls;
-  
+
   forall_goto_program_instructions (it, original_body)
   {
     if (it->is_function_call() && is_code_function_call2t(it->code))
@@ -561,8 +563,9 @@ goto_programt code_contractst::generate_checking_wrapper(
       if (is_symbol2t(call.function))
       {
         std::string funcname = to_symbol2t(call.function).thename.as_string();
-        if (is_fresh_function(funcname) && !is_fresh_in_ensures(it, original_body) &&
-            call.operands.size() >= 2)
+        if (
+          is_fresh_function(funcname) &&
+          !is_fresh_in_ensures(it, original_body) && call.operands.size() >= 2)
         {
           is_fresh_info info;
           info.ptr_arg = call.operands[0]->clone();
@@ -572,21 +575,26 @@ goto_programt code_contractst::generate_checking_wrapper(
       }
     }
   }
-  
+
   // Allocate memory for requires is_fresh calls
   for (const auto &info : is_fresh_calls)
   {
-    assert(is_pointer_type(info.ptr_arg->type) && "ptr_arg must be pointer type");
+    assert(
+      is_pointer_type(info.ptr_arg->type) && "ptr_arg must be pointer type");
     type2tc target_ptr_type = to_pointer_type(info.ptr_arg->type).subtype;
     if (is_empty_type(target_ptr_type))
       target_ptr_type = pointer_type2tc(get_empty_type());
-    
+
     expr2tc ptr_var = dereference2tc(target_ptr_type, info.ptr_arg);
     type2tc char_type = get_uint8_type();
     expr2tc malloc_expr = sideeffect2tc(
-      target_ptr_type, expr2tc(), info.size_expr, std::vector<expr2tc>(),
-      char_type, sideeffect2t::malloc);
-    
+      target_ptr_type,
+      expr2tc(),
+      info.size_expr,
+      std::vector<expr2tc>(),
+      char_type,
+      sideeffect2t::malloc);
+
     goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
     assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
     assign_inst->location = location;
@@ -685,10 +693,11 @@ goto_programt code_contractst::generate_checking_wrapper(
 
     if (!old_snapshots.empty())
       ensures_guard = replace_old_in_expr(ensures_guard, old_snapshots);
-    
+
     // Replace is_fresh temp vars with verification: valid_object(ptr) && is_dynamic[ptr]
     if (!is_fresh_mappings.empty())
-      ensures_guard = replace_is_fresh_in_ensures_expr(ensures_guard, is_fresh_mappings);
+      ensures_guard =
+        replace_is_fresh_in_ensures_expr(ensures_guard, is_fresh_mappings);
 
     goto_programt::targett t = wrapper.add_instruction(ASSERT);
     t->guard = ensures_guard;
@@ -765,14 +774,15 @@ code_contractst::extract_is_fresh_mappings_from_body(
     if (it->is_function_call() && is_code_function_call2t(it->code))
     {
       const code_function_call2t &call = to_code_function_call2t(it->code);
-      if (is_symbol2t(call.function) &&
-          is_fresh_function(to_symbol2t(call.function).thename.as_string()) &&
-          call.operands.size() >= 2 && !is_nil_expr(call.ret) &&
-          is_symbol2t(call.ret))
+      if (
+        is_symbol2t(call.function) &&
+        is_fresh_function(to_symbol2t(call.function).thename.as_string()) &&
+        call.operands.size() >= 2 && !is_nil_expr(call.ret) &&
+        is_symbol2t(call.ret))
       {
         code_contractst::is_fresh_mapping_t mapping;
         mapping.temp_var_name = to_symbol2t(call.ret).thename;
-        
+
         expr2tc ptr_arg = call.operands[0];
         if (is_pointer_type(ptr_arg->type))
         {
@@ -806,7 +816,7 @@ expr2tc code_contractst::replace_is_fresh_in_ensures_expr(
         // Replace with: valid_object(ptr) && is_dynamic[POINTER_OBJECT(ptr)]
         expr2tc valid_obj = valid_object2tc(mapping.ptr_expr);
         expr2tc ptr_obj = pointer_object2tc(pointer_type2(), mapping.ptr_expr);
-        
+
         const symbolt *dyn_sym = ns.lookup("c:@__ESBMC_is_dynamic");
         if (dyn_sym == nullptr)
         {
@@ -816,7 +826,7 @@ expr2tc code_contractst::replace_is_fresh_in_ensures_expr(
         type2tc dyn_arr_type = array_type2tc(get_bool_type(), expr2tc(), true);
         expr2tc dyn_arr = symbol2tc(dyn_arr_type, dyn_sym->id);
         expr2tc is_dynamic = index2tc(get_bool_type(), dyn_arr, ptr_obj);
-        
+
         return and2tc(valid_obj, is_dynamic);
       }
     }

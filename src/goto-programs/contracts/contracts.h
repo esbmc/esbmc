@@ -63,8 +63,9 @@ public:
   /// \brief Structure to store is_fresh mapping information
   struct is_fresh_mapping_t
   {
-    irep_idt temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
-    expr2tc ptr_expr;        ///< Pointer expression (dereferenced from &ptr)
+    irep_idt
+      temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
+    expr2tc ptr_expr; ///< Pointer expression (dereferenced from &ptr)
   };
 
   code_contractst(
