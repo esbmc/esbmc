@@ -238,6 +238,30 @@ exprt string_builder::concatenate_strings(
   if (!lhs_is_empty && rhs_is_empty)
     return lhs;
 
+  // Resolve symbols to their values if they point to constant arrays
+  exprt resolved_lhs = lhs;
+  exprt resolved_rhs = rhs;
+
+  if (lhs.is_symbol())
+  {
+    symbolt *lhs_sym =
+      converter_.find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
+    if (
+      lhs_sym && lhs_sym->value.is_not_nil() &&
+      lhs_sym->value.type().is_array() && lhs_sym->value.is_constant())
+      resolved_lhs = lhs_sym->value;
+  }
+
+  if (rhs.is_symbol())
+  {
+    symbolt *rhs_sym =
+      converter_.find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
+    if (
+      rhs_sym && rhs_sym->value.is_not_nil() &&
+      rhs_sym->value.type().is_array() && rhs_sym->value.is_constant())
+      resolved_rhs = rhs_sym->value;
+  }
+
   // Check if either operand contains non-deterministic/symbolic values
   auto has_nondet = [](const exprt &e) -> bool {
     if (!e.is_constant() && e.type().is_array())
@@ -245,12 +269,12 @@ exprt string_builder::concatenate_strings(
     return false;
   };
 
-  if (has_nondet(lhs) || has_nondet(rhs))
+  if (has_nondet(resolved_lhs) || has_nondet(resolved_rhs))
     return concatenate_strings_via_c_function(lhs, rhs, left);
 
   // Extract characters from both operands
-  std::vector<exprt> lhs_chars = extract_string_chars(lhs, left);
-  std::vector<exprt> rhs_chars = extract_string_chars(rhs, right);
+  std::vector<exprt> lhs_chars = extract_string_chars(resolved_lhs, left);
+  std::vector<exprt> rhs_chars = extract_string_chars(resolved_rhs, right);
 
   // Combine character vectors
   std::vector<exprt> combined_chars;
