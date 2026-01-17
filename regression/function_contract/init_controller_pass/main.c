@@ -15,8 +15,8 @@ typedef struct {
 } Controller;
 
 void init_controller(Controller *self) {
-    __ESBMC_requires(self != NULL);
     __ESBMC_requires(__ESBMC_is_fresh(&self, sizeof(Controller)));
+    __ESBMC_requires(self != NULL);
     
     __ESBMC_ensures(self->out == 0 && self->out2 == 0 && self->fault == 0 && 
                     self->turnOff_scheduled == false && 
