@@ -763,6 +763,38 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
     return;
   }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_is_fresh"))
+  {
+    assert(
+      func_call.operands.size() == 2 && "Wrong __ESBMC_is_fresh signature");
+    auto &ex_state = art.get_cur_state();
+    if (ex_state.cur_state->guard.is_false())
+      return;
+
+    // __ESBMC_is_fresh runtime handler
+    //
+    // Design rationale:
+    // When contract enforcement is enabled, memory allocation for is_fresh calls
+    // happens in the contract wrapper (see contracts.cpp generate_checking_wrapper).
+    // The wrapper allocates memory BEFORE calling the original function, avoiding
+    // the C call-by-value problem where parameter modifications don't affect the caller.
+    //
+    // In the original function body, we simply return true to satisfy the requires
+    // clause check. The actual memory has already been allocated in the wrapper,
+    // so no allocation is performed here.
+    //
+    // When contract enforcement is NOT enabled (e.g., in normal execution or when
+    // verifying callers), this intrinsic would typically not be called, as is_fresh
+    // should only appear in requires clauses of functions with enforced contracts.
+    
+    // Return true to indicate the memory allocation succeeded
+    if (!is_nil_expr(func_call.ret))
+      symex_assign(code_assign2tc(func_call.ret, gen_true_expr()));
+    
+    return;
+  }
+  
   else if (symname == "c:@F@__ESBMC_no_abnormal_memory_leak")
   {
     expr2tc no_abnormal_memleak =

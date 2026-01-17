@@ -11,6 +11,25 @@
 #include <util/message.h>
 #include <util/options.h>
 
+/// Check if function name is __ESBMC_is_fresh (handles Clang USR format)
+static bool is_fresh_function(const std::string &funcname)
+{
+  return funcname == "c:@F@is_fresh" || funcname == "__ESBMC_is_fresh" ||
+         funcname.find("c:@F@__ESBMC_is_fresh") == 0 ||
+         funcname.find("__ESBMC_is_fresh") == 0;
+}
+
+/// Check if is_fresh call is in ensures clause by examining next instruction
+static bool is_fresh_in_ensures(
+  goto_programt::const_targett it,
+  const goto_programt &body)
+{
+  auto next_it = it;
+  ++next_it;
+  return next_it != body.instructions.end() && next_it->is_assume() &&
+         id2string(next_it->location.comment()) == "contract::ensures";
+}
+
 code_contractst::code_contractst(
   goto_functionst &_goto_functions,
   contextt &_context,
@@ -330,21 +349,54 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
     }
 
     // Save the original function body BEFORE renaming
-    const goto_programt &original_body = func_it->second.body;
+    // Make a copy to avoid issues with iterator invalidation
+    goto_programt original_body_copy = func_it->second.body;
 
     // Extract contract clauses from function body
-    expr2tc requires_clause = extract_requires_from_body(original_body);
-    expr2tc ensures_clause = extract_ensures_from_body(original_body);
+    expr2tc requires_clause = extract_requires_from_body(original_body_copy);
+    expr2tc ensures_clause = extract_ensures_from_body(original_body_copy);
 
     // Skip if no contracts found (should not happen after has_contracts check, but double-check)
+    // A contract exists if it's not a constant bool, or if it's a constant false
+    // (gen_true_expr() is returned when no contract is found)
     bool has_requires = !is_constant_bool2t(requires_clause) ||
-                        !to_constant_bool2t(requires_clause).value;
+                        (is_constant_bool2t(requires_clause) &&
+                         !to_constant_bool2t(requires_clause).value);
     bool has_ensures = !is_constant_bool2t(ensures_clause) ||
-                       !to_constant_bool2t(ensures_clause).value;
+                       (is_constant_bool2t(ensures_clause) &&
+                        !to_constant_bool2t(ensures_clause).value);
 
     if (!has_requires && !has_ensures)
     {
       continue;
+    }
+
+    // Remove ensures ASSUME from renamed function if it uses __ESBMC_old or __ESBMC_is_fresh
+    // (these require special handling in the wrapper)
+    bool needs_ensures_removal = false;
+    forall_goto_program_instructions (it, original_body_copy)
+    {
+      if (it->is_assign() && is_code_assign2t(it->code))
+      {
+        const code_assign2t &assign = to_code_assign2t(it->code);
+        if (is_sideeffect2t(assign.source) &&
+            to_sideeffect2t(assign.source).kind == sideeffect2t::old_snapshot)
+        {
+          needs_ensures_removal = true;
+          break;
+        }
+      }
+      
+      if (it->is_function_call() && is_code_function_call2t(it->code))
+      {
+        const code_function_call2t &call = to_code_function_call2t(it->code);
+        if (is_symbol2t(call.function) &&
+            is_fresh_function(to_symbol2t(call.function).thename.as_string()))
+        {
+          needs_ensures_removal = true;
+          break;
+        }
+      }
     }
 
     // Rename original function
@@ -355,37 +407,8 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
 
     rename_function(original_id, original_name_id);
 
-    // Check if function uses __ESBMC_old by scanning for old_snapshot sideeffects
-    bool uses_old = false;
-    forall_goto_program_instructions (it, original_body)
-    {
-      if (it->is_assign() && is_code_assign2t(it->code))
-      {
-        const code_assign2t &assign = to_code_assign2t(it->code);
-        if (is_sideeffect2t(assign.source))
-        {
-          const sideeffect2t &se = to_sideeffect2t(assign.source);
-          if (se.kind == sideeffect2t::old_snapshot)
-          {
-            uses_old = true;
-            break;
-          }
-        }
-      }
-    }
-
-    // Clean up the renamed original function: remove contract::ensures ASSUME statements
-    // if the function uses __ESBMC_old.
-    //
-    // WHY: contract::ensures assumptions in the renamed function would force postconditions
-    // to be true. For ensures clauses using __ESBMC_old, this is incorrect because:
-    // 1. The old() snapshot variables in the function body are temporary and local
-    // 2. The ASSUME would make verification always pass even for buggy implementations
-    //
-    // NOTE: We only remove ensures ASSUME if the function uses __ESBMC_old.
-    // For functions without __ESBMC_old, keeping ensures ASSUME is safe and may help
-    // with optimization/type inference.
-    if (uses_old)
+    // Remove ensures ASSUME from renamed function (would force postconditions to be true)
+    if (needs_ensures_removal)
     {
       auto &renamed_func = goto_functions.function_map[original_name_id];
       goto_programt &renamed_body = renamed_func.body;
@@ -416,13 +439,18 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
       }
     }
 
+    // Extract is_fresh mappings from function body for ensures clause replacement
+    std::vector<code_contractst::is_fresh_mapping_t> is_fresh_mappings =
+      extract_is_fresh_mappings_from_body(original_body_copy);
+
     // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
       *func_sym,
       requires_clause,
       ensures_clause,
       original_name_id,
-      original_body);
+      original_body_copy,
+      is_fresh_mappings);
 
     // Create new function entry
     goto_functiont new_func;
@@ -445,7 +473,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   const expr2tc &requires_clause,
   const expr2tc &ensures_clause,
   const irep_idt &original_func_id,
-  const goto_programt &original_body)
+  const goto_programt &original_body,
+  const std::vector<is_fresh_mapping_t> &is_fresh_mappings)
 {
   goto_programt wrapper;
   locationt location = original_func.location;
@@ -516,7 +545,55 @@ goto_programt code_contractst::generate_checking_wrapper(
     old_snapshots[i].snapshot_var = new_snapshot_var; // What to replace with
   }
 
-  // 1. Assume requires clause
+  // 1. Process __ESBMC_is_fresh in requires: allocate memory before function call
+  //    (ensures clauses handle is_fresh separately via replace_is_fresh_in_ensures_expr)
+  struct is_fresh_info {
+    expr2tc ptr_arg;
+    expr2tc size_expr;
+  };
+  std::vector<is_fresh_info> is_fresh_calls;
+  
+  forall_goto_program_instructions (it, original_body)
+  {
+    if (it->is_function_call() && is_code_function_call2t(it->code))
+    {
+      const code_function_call2t &call = to_code_function_call2t(it->code);
+      if (is_symbol2t(call.function))
+      {
+        std::string funcname = to_symbol2t(call.function).thename.as_string();
+        if (is_fresh_function(funcname) && !is_fresh_in_ensures(it, original_body) &&
+            call.operands.size() >= 2)
+        {
+          is_fresh_info info;
+          info.ptr_arg = call.operands[0]->clone();
+          info.size_expr = call.operands[1]->clone();
+          is_fresh_calls.push_back(info);
+        }
+      }
+    }
+  }
+  
+  // Allocate memory for requires is_fresh calls
+  for (const auto &info : is_fresh_calls)
+  {
+    assert(is_pointer_type(info.ptr_arg->type) && "ptr_arg must be pointer type");
+    type2tc target_ptr_type = to_pointer_type(info.ptr_arg->type).subtype;
+    if (is_empty_type(target_ptr_type))
+      target_ptr_type = pointer_type2tc(get_empty_type());
+    
+    expr2tc ptr_var = dereference2tc(target_ptr_type, info.ptr_arg);
+    type2tc char_type = get_uint8_type();
+    expr2tc malloc_expr = sideeffect2tc(
+      target_ptr_type, expr2tc(), info.size_expr, std::vector<expr2tc>(),
+      char_type, sideeffect2t::malloc);
+    
+    goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
+    assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
+    assign_inst->location = location;
+    assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
+  }
+
+  // 2. Assume requires clause (after memory allocation for is_fresh)
   if (!is_nil_expr(requires_clause) && !is_constant_bool2t(requires_clause))
   {
     goto_programt::targett t = wrapper.add_instruction(ASSUME);
@@ -606,11 +683,12 @@ goto_programt code_contractst::generate_checking_wrapper(
       ensures_guard = replace_return_value_in_expr(ensures_clause, ret_val);
     }
 
-    // Replace all __ESBMC_old temporary variables with our new snapshot variables
     if (!old_snapshots.empty())
-    {
       ensures_guard = replace_old_in_expr(ensures_guard, old_snapshots);
-    }
+    
+    // Replace is_fresh temp vars with verification: valid_object(ptr) && is_dynamic[ptr]
+    if (!is_fresh_mappings.empty())
+      ensures_guard = replace_is_fresh_in_ensures_expr(ensures_guard, is_fresh_mappings);
 
     goto_programt::targett t = wrapper.add_instruction(ASSERT);
     t->guard = ensures_guard;
@@ -669,6 +747,84 @@ expr2tc code_contractst::replace_return_value_in_expr(
   expr2tc new_expr = expr;
   new_expr->Foreach_operand([this, &ret_val](expr2tc &op) {
     op = replace_return_value_in_expr(op, ret_val);
+  });
+
+  return new_expr;
+}
+
+// ========== __ESBMC_is_fresh support for ensures implementation ==========
+
+std::vector<code_contractst::is_fresh_mapping_t>
+code_contractst::extract_is_fresh_mappings_from_body(
+  const goto_programt &function_body) const
+{
+  std::vector<code_contractst::is_fresh_mapping_t> mappings;
+
+  forall_goto_program_instructions (it, function_body)
+  {
+    if (it->is_function_call() && is_code_function_call2t(it->code))
+    {
+      const code_function_call2t &call = to_code_function_call2t(it->code);
+      if (is_symbol2t(call.function) &&
+          is_fresh_function(to_symbol2t(call.function).thename.as_string()) &&
+          call.operands.size() >= 2 && !is_nil_expr(call.ret) &&
+          is_symbol2t(call.ret))
+      {
+        code_contractst::is_fresh_mapping_t mapping;
+        mapping.temp_var_name = to_symbol2t(call.ret).thename;
+        
+        expr2tc ptr_arg = call.operands[0];
+        if (is_pointer_type(ptr_arg->type))
+        {
+          type2tc target_ptr_type = to_pointer_type(ptr_arg->type).subtype;
+          if (is_empty_type(target_ptr_type))
+            target_ptr_type = pointer_type2tc(get_empty_type());
+          mapping.ptr_expr = dereference2tc(target_ptr_type, ptr_arg);
+          mappings.push_back(mapping);
+        }
+      }
+    }
+  }
+
+  return mappings;
+}
+
+expr2tc code_contractst::replace_is_fresh_in_ensures_expr(
+  const expr2tc &expr,
+  const std::vector<is_fresh_mapping_t> &mappings) const
+{
+  if (is_nil_expr(expr))
+    return expr;
+
+  if (is_symbol2t(expr))
+  {
+    const symbol2t &sym = to_symbol2t(expr);
+    for (const auto &mapping : mappings)
+    {
+      if (sym.thename == mapping.temp_var_name)
+      {
+        // Replace with: valid_object(ptr) && is_dynamic[POINTER_OBJECT(ptr)]
+        expr2tc valid_obj = valid_object2tc(mapping.ptr_expr);
+        expr2tc ptr_obj = pointer_object2tc(pointer_type2(), mapping.ptr_expr);
+        
+        const symbolt *dyn_sym = ns.lookup("c:@__ESBMC_is_dynamic");
+        if (dyn_sym == nullptr)
+        {
+          log_error("__ESBMC_is_dynamic symbol not found");
+          abort();
+        }
+        type2tc dyn_arr_type = array_type2tc(get_bool_type(), expr2tc(), true);
+        expr2tc dyn_arr = symbol2tc(dyn_arr_type, dyn_sym->id);
+        expr2tc is_dynamic = index2tc(get_bool_type(), dyn_arr, ptr_obj);
+        
+        return and2tc(valid_obj, is_dynamic);
+      }
+    }
+  }
+
+  expr2tc new_expr = expr;
+  new_expr->Foreach_operand([this, &mappings](expr2tc &op) {
+    op = replace_is_fresh_in_ensures_expr(op, mappings);
   });
 
   return new_expr;
