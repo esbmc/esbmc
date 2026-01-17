@@ -1261,6 +1261,10 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   y->guard = gen_true_expr();
   y->location = code.location();
 
+  // Propagate pragma unroll count
+  if (!code.get("#pragma_unroll").empty())
+    y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
+
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
   dest.destructive_append(tmp_w);
@@ -1323,6 +1327,10 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   y->make_goto(v);
   y->guard = gen_true_expr();
   y->location = code.location();
+
+  // Propagate pragma unroll count
+  if (!code.get("#pragma_unroll").empty())
+    y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
 
   dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_x);
@@ -1389,6 +1397,10 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   y->make_goto(w);
   migrate_expr(cond, y->guard);
   y->location = condition_location;
+
+  // Propagate pragma unroll count
+  if (!code.get("#pragma_unroll").empty())
+    y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
 
   dest.destructive_append(tmp_w);
   dest.destructive_append(sideeffects);

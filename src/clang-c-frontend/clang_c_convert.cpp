@@ -2816,10 +2816,45 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::AttributedStmt &astmt =
       static_cast<const clang::AttributedStmt &>(stmt);
 
-    /* ignore attributes for now */
+    // First, convert the sub-statement
     if (get_expr(*astmt.getSubStmt(), new_expr))
       return true;
 
+    // Check for loop unroll attributes
+    for (const auto *attr : astmt.getAttrs())
+    {
+      if (const auto *lha = llvm::dyn_cast<clang::LoopHintAttr>(attr))
+      {
+        if (
+          lha->getOption() == clang::LoopHintAttr::Unroll ||
+          lha->getOption() == clang::LoopHintAttr::UnrollCount)
+        {
+          unsigned unroll_count = 0;
+
+          auto state = lha->getState();
+          if (
+            state == clang::LoopHintAttr::Full ||
+            state == clang::LoopHintAttr::Enable)
+          {
+            // Full unroll - use sentinel to indicate "no limit"
+            unroll_count = UINT_MAX;
+          }
+          else if (state == clang::LoopHintAttr::Numeric)
+          {
+            if (clang::Expr *val = lha->getValue())
+            {
+              clang::Expr::EvalResult result;
+              if (val->EvaluateAsInt(result, *ASTContext))
+                unroll_count = result.Val.getInt().getZExtValue();
+            }
+          }
+
+          if (unroll_count > 0)
+            new_expr.set(
+              "#pragma_unroll", irep_idt(std::to_string(unroll_count)));
+        }
+      }
+    }
     break;
   }
 
