@@ -1992,6 +1992,36 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   // 2. Get iterable expression
   exprt iterable_expr = converter_.get_expr(iter);
 
+  // 2a. Materialize function calls that return lists
+  if (iterable_expr.is_code() && iterable_expr.get("statement") == "function_call")
+  {
+    const code_function_callt &call = to_code_function_call(to_code(iterable_expr));
+
+    if (call.type() == list_type)
+    {
+      // Create temporary variable for the list
+      symbolt &tmp_var_symbol = converter_.create_tmp_symbol(
+        element, "$iter_temp$", list_type, gen_zero(list_type));
+
+      // Declare the temporary
+      code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+      tmp_var_decl.location() = location;
+      converter_.add_instruction(tmp_var_decl);
+
+      // Create function call with temp as LHS
+      code_function_callt new_call;
+      new_call.function() = call.function();
+      new_call.arguments() = call.arguments();
+      new_call.lhs() = symbol_expr(tmp_var_symbol);
+      new_call.type() = list_type;
+      new_call.location() = location;
+      converter_.add_instruction(new_call);
+
+      // Use the temp variable as the iterable
+      iterable_expr = symbol_expr(tmp_var_symbol);
+    }
+  }
+
   // 3. Create loop variable
   std::string loop_var_name = target["id"].get<std::string>();
   symbol_id loop_var_sid = converter_.create_symbol_id();
