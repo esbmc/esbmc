@@ -9,17 +9,21 @@ if ! command -v brew &> /dev/null; then
     exit 1
 fi
 
-# Ask about Python frontend and Boolector right at the start (Y/yes is default for both)
+# Ask about Python frontend and solvers right at the start (Y/yes is default)
 read -p "Do you want to build the Python frontend? [Y/n]: " use_python
 use_python=${use_python:-Y}  # Default to Y if user just hits enter
-
 
 read -p "Do you want to install the recommended Boolector solver? [Y/n]: " use_boolector
 use_boolector=${use_boolector:-Y}  # Default to Y if user just hits enter
 
-# Install CMake
-echo "Installing CMake"
+read -p "Do you want to install the Bitwuzla solver? [Y/n]: " use_bitwuzla
+use_bitwuzla=${use_bitwuzla:-Y}  # Default to Y if user just hits enter
+
+# Install CMake, meson, and pkg-config
+echo "Installing build tools..."
 brew install cmake
+brew install meson
+brew install pkg-config
 
 # Create and enter build directory
 echo "Creating build directory..."
@@ -65,6 +69,19 @@ install_boolector() {
     cd ../../build
 }
 
+# Function to install Bitwuzla
+install_bitwuzla() {
+    echo "Installing Bitwuzla..."
+    cd ..
+    git clone --depth=1 --branch=0.8.2 https://github.com/bitwuzla/bitwuzla.git
+    cd bitwuzla
+    ./configure.py --prefix $PWD/../bitwuzla-release
+    cd build
+    ninja
+    ninja install
+    cd ../../build
+}
+
 # Build configuration
 CMAKE_ARGS=(
     -DCMAKE_PREFIX_PATH="$PATH_LLVM"
@@ -83,18 +100,32 @@ fi
 # Add Boolector if requested
 if [[ $use_boolector =~ ^[Yy]$ ]]; then
     install_boolector
-    echo "Building ESBMC with Boolector..."
+    echo "Enabling Boolector support..."
     CMAKE_ARGS+=(
         -DENABLE_BOOLECTOR=1
         -DBoolector_DIR="$PWD/../boolector-release"
     )
+fi
+
+# Add Bitwuzla if requested
+if [[ $use_bitwuzla =~ ^[Yy]$ ]]; then
+    install_bitwuzla
+    echo "Enabling Bitwuzla support..."
+    CMAKE_ARGS+=(
+        -DENABLE_BITWUZLA=1
+        -DBitwuzla_DIR="$PWD/../bitwuzla-release"
+    )
+fi
+
+# Build status message
+if [[ $use_boolector =~ ^[Yy]$ ]] || [[ $use_bitwuzla =~ ^[Yy]$ ]]; then
+    echo "Building ESBMC with Z3 and additional solvers..."
 else
     echo "Building ESBMC with Z3 only..."
 fi
 
 # Run cmake with all arguments
 cmake .. "${CMAKE_ARGS[@]}"
-
 
 echo "Running make..."
 make -j${CPU_COUNT}
