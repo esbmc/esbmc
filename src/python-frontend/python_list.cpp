@@ -2035,7 +2035,7 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   if (iterable_expr.type() == list_type)
   {
     // For list iteration, we need to determine the element type from type_map
-    loop_var_type = any_type(); // default
+    loop_var_type = iterable_expr.type(); // default
 
     if (iterable_expr.is_symbol())
     {
