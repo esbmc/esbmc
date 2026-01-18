@@ -2032,12 +2032,26 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
 
   // Infer loop variable type from iterable
   typet loop_var_type;
-  if (iterable_expr.type().is_array())
+  if (iterable_expr.type() == list_type)
+  {
+    // For list iteration, we need to determine the element type from type_map
+    loop_var_type = iterable_expr.type(); // default
+
+    if (iterable_expr.is_symbol())
+    {
+      const std::string &list_id = iterable_expr.identifier().as_string();
+      auto type_map_it = list_type_map.find(list_id);
+      if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+      {
+        // Use the actual element type from type_map
+        loop_var_type = type_map_it->second[0].second;
+      }
+    }
+  }
+  else if (iterable_expr.type().is_array())
     loop_var_type = iterable_expr.type().subtype();
   else if (iterable_expr.type().is_pointer())
     loop_var_type = iterable_expr.type().subtype();
-  else if (iterable_expr.type() == list_type)
-    loop_var_type = any_type();
   else
     loop_var_type = any_type();
 
