@@ -1,0 +1,5 @@
+CORE
+main.c
+--function init_controller --enforce-contract init_controller
+^VERIFICATION FAILED$
+
