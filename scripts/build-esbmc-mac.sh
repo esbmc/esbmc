@@ -86,6 +86,7 @@ install_bitwuzla() {
 CMAKE_ARGS=(
     -DCMAKE_PREFIX_PATH="$PATH_LLVM"
     -DENABLE_Z3=1
+    -DCMAKE_BUILD_TYPE=Debug
     -DZ3_DIR="$PATH_Z3"
     -DC2GOTO_SYSROOT="$PATH_SDK"
     -DClang_DIR="$PATH_LLVM/lib/cmake/clang"
