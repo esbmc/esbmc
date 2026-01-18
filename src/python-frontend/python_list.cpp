@@ -1992,6 +1992,39 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   // 2. Get iterable expression
   exprt iterable_expr = converter_.get_expr(iter);
 
+  // 2a. Materialize function calls that return lists
+  if (
+    iterable_expr.is_code() &&
+    iterable_expr.get("statement") == "function_call")
+  {
+    const code_function_callt &call =
+      to_code_function_call(to_code(iterable_expr));
+
+    if (call.type() == list_type)
+    {
+      // Create temporary variable for the list
+      symbolt &tmp_var_symbol = converter_.create_tmp_symbol(
+        element, "$iter_temp$", list_type, gen_zero(list_type));
+
+      // Declare the temporary
+      code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+      tmp_var_decl.location() = location;
+      converter_.add_instruction(tmp_var_decl);
+
+      // Create function call with temp as LHS
+      code_function_callt new_call;
+      new_call.function() = call.function();
+      new_call.arguments() = call.arguments();
+      new_call.lhs() = symbol_expr(tmp_var_symbol);
+      new_call.type() = list_type;
+      new_call.location() = location;
+      converter_.add_instruction(new_call);
+
+      // Use the temp variable as the iterable
+      iterable_expr = symbol_expr(tmp_var_symbol);
+    }
+  }
+
   // 3. Create loop variable
   std::string loop_var_name = target["id"].get<std::string>();
   symbol_id loop_var_sid = converter_.create_symbol_id();
@@ -2103,25 +2136,25 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   exprt current_element;
   if (iterable_expr.type() == list_type)
   {
-    // For lists, use list_at
-    current_element =
-      build_list_at_call(iterable_expr, symbol_expr(index_var), element);
+    // For lists, determine the actual element type from type map
+    typet actual_elem_type = loop_var_type;
 
-    // Dereference the returned pointer to get the value
-    member_exprt obj_value(
-      current_element, "value", pointer_typet(empty_typet()));
+    // Try to get the actual element type from the list's type map
+    if (iterable_expr.is_symbol())
     {
-      exprt &base = obj_value.struct_op();
-      exprt deref("dereference");
-      deref.type() = base.type().subtype();
-      deref.move_to_operands(base);
-      base.swap(deref);
+      const std::string &list_id = iterable_expr.identifier().as_string();
+      auto type_map_it = list_type_map.find(list_id);
+      if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+      {
+        // Get the element type from the first entry
+        actual_elem_type = type_map_it->second[0].second;
+      }
     }
 
-    typecast_exprt tc(obj_value, pointer_typet(loop_var_type));
-    dereference_exprt final_deref(loop_var_type);
-    final_deref.op0() = tc;
-    current_element = final_deref;
+    // Use list_at and extract_pyobject_value for consistent handling
+    current_element =
+      build_list_at_call(iterable_expr, symbol_expr(index_var), element);
+    current_element = extract_pyobject_value(current_element, actual_elem_type);
   }
   else if (iterable_expr.type().is_array() || iterable_expr.type().is_pointer())
   {

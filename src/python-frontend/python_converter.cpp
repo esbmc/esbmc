@@ -7239,3 +7239,43 @@ void python_converter::get_delete_statement(
     }
   }
 }
+
+exprt python_converter::materialize_list_function_call(
+  const exprt &expr,
+  const nlohmann::json &element,
+  codet &target_block)
+{
+  // Check if this is a function call returning a list
+  if (expr.id() != "code" || expr.get("statement") != "function_call")
+    return expr;
+
+  const code_function_callt &call = to_code_function_call(to_code(expr));
+
+  // Only handle list-returning functions
+  if (call.type() != type_handler_.get_list_type())
+    return expr;
+
+  locationt location = get_location_from_decl(element);
+
+  // Create temporary variable for the list
+  symbolt &tmp_var_symbol = create_tmp_symbol(
+    element, "$iter_temp$", call.type(), gen_zero(call.type()));
+
+  // Declare the temporary
+  code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+  tmp_var_decl.location() = location;
+  target_block.copy_to_operands(tmp_var_decl);
+
+  // Create function call with temp as LHS
+  code_function_callt new_call;
+  new_call.function() = call.function();
+  new_call.arguments() = call.arguments();
+  new_call.lhs() = symbol_expr(tmp_var_symbol);
+  new_call.type() = call.type();
+  new_call.location() = location;
+
+  target_block.copy_to_operands(new_call);
+
+  // Return reference to the temp variable
+  return symbol_expr(tmp_var_symbol);
+}
