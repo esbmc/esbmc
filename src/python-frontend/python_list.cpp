@@ -3,6 +3,7 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/string_builder.h>
 #include <util/expr.h>
 #include <util/type.h>
 #include <util/symbol.h>
@@ -717,6 +718,88 @@ exprt python_list::build_split_list(
 
   python_list list(converter, list_node);
   return list.get();
+}
+
+exprt python_list::build_split_list(
+  python_converter &converter,
+  const nlohmann::json &call_node,
+  const exprt &input_expr,
+  const std::string &separator,
+  long long count)
+{
+  // For symbolic strings, we create a runtime call to __python_str_split
+  // This function will handle the splitting at runtime with symbolic constraints
+
+  locationt location = converter.get_location_from_decl(call_node);
+
+  // Create function symbol for __python_str_split if it doesn't exist
+  const std::string func_name = "__python_str_split";
+  const symbolt *func_symbol = converter.symbol_table().find_symbol(func_name);
+
+  if (!func_symbol)
+  {
+    // Create function type: PyObject* __python_str_split(char* str, char* sep, int maxsplit)
+    code_typet func_type;
+    func_type.return_type() = pointer_typet(empty_typet()); // PyObject*
+
+    code_typet::argumentt str_arg;
+    str_arg.type() = pointer_typet(char_type());
+    func_type.arguments().push_back(str_arg);
+
+    code_typet::argumentt sep_arg;
+    sep_arg.type() = pointer_typet(char_type());
+    func_type.arguments().push_back(sep_arg);
+
+    code_typet::argumentt count_arg;
+    count_arg.type() = long_long_int_type();
+    func_type.arguments().push_back(count_arg);
+
+    symbolt new_symbol;
+    new_symbol.name = func_name;
+    new_symbol.id = func_name;
+    new_symbol.type = func_type;
+    new_symbol.mode = "Python";
+    new_symbol.module = "python";
+    new_symbol.location = location;
+    new_symbol.is_extern = true;
+
+    converter.add_symbol(new_symbol);
+  }
+
+  // Build arguments for the call
+  exprt::operandst args;
+
+  // Argument 1: input string (ensure it's a pointer)
+  exprt str_arg = input_expr;
+  if (str_arg.type().is_array())
+  {
+    // Get address of first element
+    str_arg = converter.get_string_handler().get_array_base_address(str_arg);
+  }
+  args.push_back(str_arg);
+
+  // Argument 2: separator string
+  std::string sep_to_use = separator.empty() ? "" : separator;
+  exprt sep_expr =
+    converter.get_string_builder().build_string_literal(sep_to_use);
+  if (sep_expr.type().is_array())
+  {
+    sep_expr = converter.get_string_handler().get_array_base_address(sep_expr);
+  }
+  args.push_back(sep_expr);
+
+  // Argument 3: maxsplit count
+  exprt count_expr = from_integer(count, long_long_int_type());
+  args.push_back(count_expr);
+
+  // Create function call expression
+  side_effect_expr_function_callt call_expr;
+  call_expr.function() = symbol_exprt(func_name, code_typet());
+  call_expr.arguments() = args;
+  call_expr.type() = pointer_typet(empty_typet());
+  call_expr.location() = location;
+
+  return call_expr;
 }
 
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
@@ -1909,6 +1992,39 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   // 2. Get iterable expression
   exprt iterable_expr = converter_.get_expr(iter);
 
+  // 2a. Materialize function calls that return lists
+  if (
+    iterable_expr.is_code() &&
+    iterable_expr.get("statement") == "function_call")
+  {
+    const code_function_callt &call =
+      to_code_function_call(to_code(iterable_expr));
+
+    if (call.type() == list_type)
+    {
+      // Create temporary variable for the list
+      symbolt &tmp_var_symbol = converter_.create_tmp_symbol(
+        element, "$iter_temp$", list_type, gen_zero(list_type));
+
+      // Declare the temporary
+      code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+      tmp_var_decl.location() = location;
+      converter_.add_instruction(tmp_var_decl);
+
+      // Create function call with temp as LHS
+      code_function_callt new_call;
+      new_call.function() = call.function();
+      new_call.arguments() = call.arguments();
+      new_call.lhs() = symbol_expr(tmp_var_symbol);
+      new_call.type() = list_type;
+      new_call.location() = location;
+      converter_.add_instruction(new_call);
+
+      // Use the temp variable as the iterable
+      iterable_expr = symbol_expr(tmp_var_symbol);
+    }
+  }
+
   // 3. Create loop variable
   std::string loop_var_name = target["id"].get<std::string>();
   symbol_id loop_var_sid = converter_.create_symbol_id();
@@ -2020,25 +2136,25 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   exprt current_element;
   if (iterable_expr.type() == list_type)
   {
-    // For lists, use list_at
-    current_element =
-      build_list_at_call(iterable_expr, symbol_expr(index_var), element);
+    // For lists, determine the actual element type from type map
+    typet actual_elem_type = loop_var_type;
 
-    // Dereference the returned pointer to get the value
-    member_exprt obj_value(
-      current_element, "value", pointer_typet(empty_typet()));
+    // Try to get the actual element type from the list's type map
+    if (iterable_expr.is_symbol())
     {
-      exprt &base = obj_value.struct_op();
-      exprt deref("dereference");
-      deref.type() = base.type().subtype();
-      deref.move_to_operands(base);
-      base.swap(deref);
+      const std::string &list_id = iterable_expr.identifier().as_string();
+      auto type_map_it = list_type_map.find(list_id);
+      if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+      {
+        // Get the element type from the first entry
+        actual_elem_type = type_map_it->second[0].second;
+      }
     }
 
-    typecast_exprt tc(obj_value, pointer_typet(loop_var_type));
-    dereference_exprt final_deref(loop_var_type);
-    final_deref.op0() = tc;
-    current_element = final_deref;
+    // Use list_at and extract_pyobject_value for consistent handling
+    current_element =
+      build_list_at_call(iterable_expr, symbol_expr(index_var), element);
+    current_element = extract_pyobject_value(current_element, actual_elem_type);
   }
   else if (iterable_expr.type().is_array() || iterable_expr.type().is_pointer())
   {

@@ -29,31 +29,31 @@ This creates `report-1.html`, which can be opened in any web browser.
 ### Bug Summary
 
 The report header displays:
-- **File**: The absolute path to the source file containing the violation
-- **Violation**: The exact location (function, line, column) and type of the error
+- **File**: The absolute path to the source file containing the violation.
+- **Violation**: The exact location (function, line, column) and type of the error.
 
 ### Annotated Source Code
 
 The main section shows your source code with:
-- **Line numbers** for easy reference
-- **Syntax highlighting** for keywords (supports C/C++ and Python)
-- **Interactive trace markers** showing the execution path leading to the violation
+- **Line numbers** for easy reference.
+- **Syntax highlighting** for keywords (supports C/C++ and Python).
+- **Interactive trace markers** showing the execution path leading to the violation.
 
 ### Trace Navigation
 
 Each step in the counterexample trace is displayed as a numbered marker:
-- **Yellow markers (Event)** indicate assignments, function arguments, and the final violation
-- **Gray markers (Control)** indicate assumptions and assertion checks
-- **Navigation arrows** (← →) allow jumping between trace steps
+- **Yellow markers (Event)** indicate assignments, function arguments, and the final violation.
+- **Gray markers (Control)** indicate assumptions and assertion checks.
+- **Navigation arrows** (← →) allow jumping between trace steps.
 
 ### Trace Information
 
 Each trace step displays context-specific information:
 
-- **Assumption**: "Assumption restriction"
-- **Assertion**: The assertion condition
-- **Assignment**: Variable and value
-- **Function Call**: Argument binding
+- **Assumption**: "Assumption restriction".
+- **Assertion**: The assertion condition.
+- **Assignment**: Variable and value.
+- **Function Call**: Argument binding.
 
 ## Keyboard Shortcuts
 

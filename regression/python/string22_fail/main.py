@@ -35,7 +35,6 @@ def test_empty_strings() -> None:
 
 test_empty_strings()
 
-# Test Case 4: String Concatenation and Comparison
 def test_string_concatenation() -> None:
     """Test string concatenation with comparisons"""
     part1: str = "hello"

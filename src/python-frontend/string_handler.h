@@ -288,26 +288,38 @@ public:
   /**
    * @brief Handle str.lstrip() method
    * @param str_expr String expression
+   * @param chars_arg Optional characters to strip (empty for whitespace)
    * @param location Source location
    * @return Pointer to stripped string
    */
-  exprt handle_string_lstrip(const exprt &str_expr, const locationt &location);
+  exprt handle_string_lstrip(
+    const exprt &str_expr,
+    const exprt &chars_arg,
+    const locationt &location);
 
   /**
    * @brief Handle str.strip() method
    * @param str_expr String expression
+   * @param chars_arg Optional characters to strip (empty for whitespace)
    * @param location Source location
    * @return Pointer to stripped string
    */
-  exprt handle_string_strip(const exprt &str_expr, const locationt &location);
+  exprt handle_string_strip(
+    const exprt &str_expr,
+    const exprt &chars_arg,
+    const locationt &location);
 
   /**
    * @brief Handle str.rstrip() method
    * @param str_expr String expression
+   * @param chars_arg Optional characters to strip (empty for whitespace)
    * @param location Source location
    * @return Pointer to stripped string
    */
-  exprt handle_string_rstrip(const exprt &str_expr, const locationt &location);
+  exprt handle_string_rstrip(
+    const exprt &str_expr,
+    const exprt &chars_arg,
+    const locationt &location);
 
   /**
    * @brief Handle 'in' operator for strings

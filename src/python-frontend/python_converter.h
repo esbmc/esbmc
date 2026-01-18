@@ -259,6 +259,11 @@ private:
 
   bool function_has_missing_return_paths(const nlohmann::json &function_node);
 
+  exprt materialize_list_function_call(
+    const exprt &expr,
+    const nlohmann::json &element,
+    codet &target_block);
+
   symbolt create_return_temp_variable(
     const typet &return_type,
     const locationt &location,

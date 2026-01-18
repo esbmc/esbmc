@@ -54,7 +54,6 @@ def import_module_by_name(module_name, output_dir):
     # Skip testing frameworks - they don't contain logic to verify
     if is_testing_framework(base_module):
         return None
-
     if is_imported_model(base_module):
         parts = module_name.split(".")
         model_dir = os.path.join(output_dir, "models")
@@ -87,11 +86,13 @@ def encode_bytes(value):
 
 def add_type_annotation(node):
     value_node = node.value
-    if isinstance(value_node, ast.Str):
-        value_node.esbmc_type_annotation = "str"
-    elif isinstance(value_node, ast.Bytes):
-        value_node.esbmc_type_annotation = "bytes"
-        value_node.encoded_bytes = encode_bytes(value_node.value)
+    # Python 3.8+ uses ast.Constant instead of ast.Str, ast.Num, ast.Bytes, etc.
+    if isinstance(value_node, ast.Constant):
+        if isinstance(value_node.value, str):
+            value_node.esbmc_type_annotation = "str"
+        elif isinstance(value_node.value, bytes):
+            value_node.esbmc_type_annotation = "bytes"
+            value_node.encoded_bytes = encode_bytes(value_node.value)
 
 
 def is_standard_library_file(filename):
@@ -171,10 +172,14 @@ def process_imports(node, output_dir):
 
 
     if isinstance(node, (ast.Import)):
+        module_names = []
         for alias_node in node.names:
             module_name = alias_node.name
             alias = alias_node.asname or module_name
             import_aliases[alias] = module_name
+            module_names.append(module_name)
+        if not module_names:
+            return
         imported_elements = None
     elif isinstance(node, ast.ImportFrom):
         module_name = node.module
@@ -185,38 +190,42 @@ def process_imports(node, output_dir):
             imported_elements = node.names
         if module_name:
             import_aliases[module_name] = module_name
+        module_names = [module_name] if module_name else []
+        if not module_names:
+            return
 
     # Track imports for this module
-    if module_name not in module_imports:
-        module_imports[module_name] = {'import_all': False, 'specific_names': set()}
+    for module_name in module_names:
+        if module_name not in module_imports:
+            module_imports[module_name] = {'import_all': False, 'specific_names': set()}
 
-    if imported_elements is None:
-        # This is an "import module" or "from module import *"; mark to import everything
-        module_imports[module_name]['import_all'] = True
-    else:
-        # Add specific names to the set
-        for elem in imported_elements:
-            module_imports[module_name]['specific_names'].add(elem.name)
+        if imported_elements is None:
+            # This is an "import module" or "from module import *"; mark to import everything
+            module_imports[module_name]['import_all'] = True
+        else:
+            # Add specific names to the set
+            for elem in imported_elements:
+                module_imports[module_name]['specific_names'].add(elem.name)
 
-    # Check if module is available/installed
-    if is_imported_model(module_name):
-        models_dir = os.path.join(output_dir, "models")
-        filename = os.path.join(models_dir, module_name + ".py")
-    else:
-        module = import_module_by_name(module_name, output_dir)
-        if module is None:
-            # Module doesn't need processing (e.g., typing) - don't set full_path
-            return
+        # Check if module is available/installed
+        if is_imported_model(module_name):
+            models_dir = os.path.join(output_dir, "models")
+            filename = os.path.join(models_dir, module_name + ".py")
+        else:
+            module = import_module_by_name(module_name, output_dir)
+            if module is None:
+                # Module doesn't need processing (e.g., typing) - don't set full_path
+                continue
 
-        # Check if module has __file__ attribute (built-in C extensions don't)
-        if not hasattr(module, '__file__') or module.__file__ is None:
-            # Skip built-in C extension modules (e.g., _sre, _socket, etc.)
-            return
+            # Check if module has __file__ attribute (built-in C extensions don't)
+            if not hasattr(module, '__file__') or module.__file__ is None:
+                # Skip built-in C extension modules (e.g., _sre, _socket, etc.)
+                continue
 
-        filename = module.__file__
+            filename = module.__file__
 
-    # Don't process the file here; we'll do it once after collecting all imports
-    node.full_path = filename
+        # Don't process the file here; we'll do it once after collecting all imports
+        node.full_path = filename
 
 
 def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
