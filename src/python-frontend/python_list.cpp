@@ -2075,6 +2075,11 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   index_decl.location() = location;
   converter_.add_instruction(index_decl);
 
+  // Initialize index to 0
+  code_assignt index_init(symbol_expr(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
   // 5. Get length of iterable
   exprt length_expr;
   if (iterable_expr.type() == list_type)
