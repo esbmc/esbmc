@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
 --no-standard-checks --incremental-bmc
 ^VERIFICATION SUCCESSFUL$
