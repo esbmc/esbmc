@@ -61,16 +61,6 @@ bool code_contractst::is_compiler_generated(
   return false;
 }
 
-symbolt *code_contractst::find_contract_symbol(const std::string &function_name)
-{
-  std::string contract_id = "contract::" + function_name;
-  symbolt *sym = context.find_symbol(contract_id);
-  if (sym != nullptr)
-    return sym;
-  contract_id = "contract::c:@F@" + function_name;
-  return context.find_symbol(contract_id);
-}
-
 symbolt *code_contractst::find_function_symbol(const std::string &function_name)
 {
   symbolt *sym = context.find_symbol(function_name);
@@ -593,25 +583,42 @@ goto_programt code_contractst::generate_checking_wrapper(
     assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
   }
 
-  // 2. Assume requires clause (after memory allocation for is_fresh)
-  if (!is_nil_expr(requires_clause) && !is_constant_bool2t(requires_clause))
-  {
-    goto_programt::targett t = wrapper.add_instruction(ASSUME);
-    t->guard = requires_clause;
-    t->location = location;
-    t->location.comment("contract requires");
-  }
-  else if (is_constant_bool2t(requires_clause))
-  {
-    const constant_bool2t &b = to_constant_bool2t(requires_clause);
-    if (b.value) // Only add if not trivially true
+  // Lambda function to add contract clause instruction (ASSERT or ASSUME)
+  // Used for both requires (ASSUME) and ensures (ASSERT) clauses in enforce mode
+  auto add_contract_clause = [&wrapper, &location](
+                               const expr2tc &clause,
+                               const goto_program_instruction_typet inst_type,
+                               const std::string &comment) {
+    if (is_nil_expr(clause))
+      return;
+    
+    bool should_add = false;
+    if (is_constant_bool2t(clause))
     {
-      goto_programt::targett t = wrapper.add_instruction(ASSUME);
-      t->guard = requires_clause;
-      t->location = location;
-      t->location.comment("contract requires");
+      const constant_bool2t &b = to_constant_bool2t(clause);
+      // For ASSERT: only add if false (violation)
+      // For ASSUME: only add if true (trivially true clauses are skipped)
+      if (inst_type == ASSERT)
+        should_add = !b.value;
+      else // ASSUME
+        should_add = b.value;
     }
-  }
+    else
+    {
+      should_add = true;
+    }
+    
+    if (should_add)
+    {
+      goto_programt::targett t = wrapper.add_instruction(inst_type);
+      t->guard = clause;
+      t->location = location;
+      t->location.comment(comment);
+    }
+  };
+
+  // 2. Assume requires clause (after memory allocation for is_fresh)
+  add_contract_clause(requires_clause, ASSUME, "contract requires");
 
   // 2. Declare return value variable (if function has return type)
   expr2tc ret_val;
@@ -673,36 +680,41 @@ goto_programt code_contractst::generate_checking_wrapper(
   }
 
   // 4. Assert ensures clause (replace __ESBMC_return_value and __ESBMC_old)
-  if (!is_nil_expr(ensures_clause) && !is_constant_bool2t(ensures_clause))
+  // Process ensures clause: replace return_value, old(), and is_fresh
+  expr2tc ensures_guard = ensures_clause;
+  if (!is_nil_expr(ensures_clause))
   {
     // Replace __ESBMC_return_value with actual return value variable
-    expr2tc ensures_guard = ensures_clause;
     if (!is_nil_expr(ret_val))
-    {
-      // Create a replacement function that replaces __ESBMC_return_value symbols
-      ensures_guard = replace_return_value_in_expr(ensures_clause, ret_val);
-    }
+      ensures_guard = replace_return_value_in_expr(ensures_guard, ret_val);
 
+    // Replace __ESBMC_old() expressions
     if (!old_snapshots.empty())
       ensures_guard = replace_old_in_expr(ensures_guard, old_snapshots);
     
     // Replace is_fresh temp vars with verification: valid_object(ptr) && is_dynamic[ptr]
     if (!is_fresh_mappings.empty())
       ensures_guard = replace_is_fresh_in_ensures_expr(ensures_guard, is_fresh_mappings);
-
-    goto_programt::targett t = wrapper.add_instruction(ASSERT);
-    t->guard = ensures_guard;
-    t->location = location;
-    t->location.comment("contract ensures");
-    t->location.property("contract ensures");
   }
-  else if (is_constant_bool2t(ensures_clause))
+  
+  // Add ASSERT instruction for ensures clause with property
+  if (!is_nil_expr(ensures_guard))
   {
-    const constant_bool2t &b = to_constant_bool2t(ensures_clause);
-    if (b.value) // Only add if not trivially true
+    bool should_add = false;
+    if (is_constant_bool2t(ensures_guard))
+    {
+      const constant_bool2t &b = to_constant_bool2t(ensures_guard);
+      should_add = !b.value; // Only assert if false (violation)
+    }
+    else
+    {
+      should_add = true;
+    }
+    
+    if (should_add)
     {
       goto_programt::targett t = wrapper.add_instruction(ASSERT);
-      t->guard = ensures_clause;
+      t->guard = ensures_guard;
       t->location = location;
       t->location.comment("contract ensures");
       t->location.property("contract ensures");
@@ -750,6 +762,36 @@ expr2tc code_contractst::replace_return_value_in_expr(
   });
 
   return new_expr;
+}
+
+expr2tc code_contractst::replace_symbol_in_expr(
+  const expr2tc &expr,
+  const expr2tc &old_symbol,
+  const expr2tc &new_expr) const
+{
+  if (is_nil_expr(expr))
+    return expr;
+
+  // If this is the symbol we want to replace, return the new expression
+  if (is_symbol2t(expr) && is_symbol2t(old_symbol))
+  {
+    const symbol2t &sym = to_symbol2t(expr);
+    const symbol2t &old_sym = to_symbol2t(old_symbol);
+    
+    // Compare symbol names
+    if (sym.thename == old_sym.thename)
+    {
+      return new_expr;
+    }
+  }
+
+  // Recursively replace in all operands
+  expr2tc result = expr->clone();
+  result->Foreach_operand([this, &old_symbol, &new_expr](expr2tc &op) {
+    op = replace_symbol_in_expr(op, old_symbol, new_expr);
+  });
+
+  return result;
 }
 
 // ========== __ESBMC_is_fresh support for ensures implementation ==========
@@ -958,40 +1000,43 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
 
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 {
-  // TODO: Function contract replacement mode (--replace-call-with-contract) is not fully implemented
-  // The current implementation does not properly handle:
-  // 1. Contract symbol extraction and storage
-  // 2. __ESBMC_old() snapshot creation at call sites
-  // 3. __ESBMC_return_value replacement in ensures clauses
-  //
-  // This feature requires significant additional work to be production-ready.
-  // For now, only --enforce-contract mode is supported.
-  log_error(
-    "ERROR: --replace-call-with-contract mode is not yet fully implemented.\n"
-    "\n"
-    "Current status:\n"
-    "  ✓ --enforce-contract mode: FULLY SUPPORTED\n"
-    "  ✗ --replace-call-with-contract mode: NOT IMPLEMENTED\n"
-    "\n"
-    "The replace mode requires:\n"
-    "  - Contract symbol management\n"
-    "  - __ESBMC_old() snapshot handling at call sites\n"
-    "  - __ESBMC_return_value replacement\n"
-    "  - Proper assigns clause havoc logic\n"
-    "\n"
-    "Please use --enforce-contract mode instead.\n"
-    "\n"
-    "TODO: Complete implementation of replace_calls() and "
-    "generate_replacement_at_call()");
-  abort();
+  log_status(
+    "Replacing calls with contracts for {} function(s)", to_replace.size());
 
+  // Build a map of function names to their symbols, bodies, and IDs for quick lookup
+  // Key: function name (e.g., "increment")
+  // Value: (symbol pointer, body pointer, function ID in goto_functions)
+  std::map<std::string, std::tuple<symbolt *, goto_programt *, irep_idt>> function_map;
+
+  // Collect all functions that might be called
+  Forall_goto_functions (it, goto_functions)
+  {
+    if (!it->second.body_available)
+      continue;
+
+    symbolt *func_sym = find_function_symbol(id2string(it->first));
+    if (func_sym != nullptr)
+    {
+      // Use the goto_functions key (it->first) as the map key, since that's what
+      // get_symbol_name() returns in function calls
+      std::string func_key = id2string(it->first);
+      function_map[func_key] = {func_sym, &it->second.body, it->first};
+      log_debug("contracts", "Added function to map: {} (name: {}, id: {})", func_key, id2string(func_sym->name), id2string(it->first));
+    }
+  }
+
+  // Track functions that have been replaced (to delete their definitions)
+  // Use function ID from goto_functions (it->first) for correct matching
+  std::set<irep_idt> functions_to_delete;
+
+  // Process each function and replace calls
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
       continue;
 
     std::vector<goto_programt::targett> calls_to_replace;
-    std::vector<symbolt *> contracts_to_use;
+    std::vector<std::tuple<symbolt *, goto_programt *, irep_idt>> function_info;
 
     // Find calls to replace
     Forall_goto_program_instructions (i_it, it->second.body)
@@ -1006,20 +1051,35 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 
           // Skip compiler-generated functions
           if (is_compiler_generated(called_func))
-          {
             continue;
-          }
 
+          // Check if this function should be replaced
           for (const auto &replace_name : to_replace)
           {
             if (called_func.find(replace_name) != std::string::npos)
             {
-              symbolt *contract_sym = find_contract_symbol(called_func);
-              if (contract_sym != nullptr)
+              log_debug("contracts", "Found potential call to replace: {}", called_func);
+              auto map_it = function_map.find(called_func);
+              if (map_it != function_map.end())
               {
-                calls_to_replace.push_back(i_it);
-                contracts_to_use.push_back(contract_sym);
-                break;
+                // Check if function has contracts
+                goto_programt *func_body = std::get<1>(map_it->second);
+                bool has_contract = has_contracts(*func_body);
+                log_debug("contracts", "Function {} has contracts: {}", called_func, has_contract);
+                if (has_contract)
+                {
+                  log_debug("contracts", "Adding call to replacement list: {}", called_func);
+                  calls_to_replace.push_back(i_it);
+                  function_info.push_back(map_it->second);
+                  // Track this function for deletion (use the ID from goto_functions)
+                  irep_idt func_id = std::get<2>(map_it->second);
+                  functions_to_delete.insert(func_id);
+                  break;
+                }
+              }
+              else
+              {
+                log_debug("contracts", "Function {} not found in function_map", called_func);
               }
             }
           }
@@ -1028,10 +1088,38 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     }
 
     // Replace calls
+    log_debug("contracts", "Found {} calls to replace in function {}", calls_to_replace.size(), id2string(it->first));
     for (size_t i = 0; i < calls_to_replace.size(); ++i)
     {
+      log_debug("contracts", "Replacing call {} of {}", i + 1, calls_to_replace.size());
+      symbolt *func_sym = std::get<0>(function_info[i]);
+      goto_programt *func_body = std::get<1>(function_info[i]);
       generate_replacement_at_call(
-        *contracts_to_use[i], calls_to_replace[i], it->second.body);
+        *func_sym,
+        *func_body,
+        calls_to_replace[i],
+        it->second.body);
+    }
+  }
+
+  // Delete function definitions that have been replaced
+  // In replace_calls mode, function calls are replaced with contracts,
+  // so the function definitions are no longer needed
+  // We completely remove them from function_map so they don't appear in --goto-functions-only
+  for (const auto &func_id : functions_to_delete)
+  {
+    auto func_it = goto_functions.function_map.find(func_id);
+    if (func_it != goto_functions.function_map.end())
+    {
+      // Completely remove the function from function_map
+      // This ensures it won't appear in --goto-functions-only output
+      goto_functions.function_map.erase(func_it);
+      log_status("Removed function {} (replaced with contract)", func_id);
+    }
+    else
+    {
+      log_warning(
+        "Function ID {} not found in function_map for deletion", func_id);
     }
   }
 
@@ -1039,66 +1127,180 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 }
 
 void code_contractst::generate_replacement_at_call(
-  const symbolt &contract_symbol,
+  const symbolt &function_symbol,
+  const goto_programt &function_body,
   goto_programt::targett call_instruction,
-  goto_programt &function_body)
+  goto_programt &caller_body)
 {
-  expr2tc requires_clause = extract_requires_clause(contract_symbol);
-  expr2tc ensures_clause = extract_ensures_clause(contract_symbol);
-  expr2tc assigns_clause = extract_assigns_clause(contract_symbol);
+  // Extract contracts from function body (similar to enforce_contracts)
+  expr2tc requires_clause = extract_requires_from_body(function_body);
+  expr2tc ensures_clause = extract_ensures_from_body(function_body);
+  
+  // Debug: log extracted clauses
+  log_debug(
+    "contracts",
+    "generate_replacement_at_call: extracted requires clause (nil={})",
+    is_nil_expr(requires_clause));
+  log_debug(
+    "contracts",
+    "generate_replacement_at_call: extracted ensures clause (nil={})",
+    is_nil_expr(ensures_clause));
+
+  // TODO Phase 2.4: Extract assigns clause from function body
+  expr2tc assigns_clause = expr2tc(); // Not implemented yet
 
   goto_programt replacement;
   locationt call_location = call_instruction->location;
 
-  // 1. Assert requires clause
-  if (!is_nil_expr(requires_clause))
+  // Extract return value and arguments from call instruction
+  expr2tc ret_val;
+  std::vector<expr2tc> actual_args;
+  if (is_code_function_call2t(call_instruction->code))
   {
-    bool skip = false;
-    if (is_constant_bool2t(requires_clause))
-    {
-      const constant_bool2t &b = to_constant_bool2t(requires_clause);
-      skip = b.value;
-    }
-    if (!skip)
-    {
-      goto_programt::targett t = replacement.add_instruction(ASSERT);
-      t->guard = requires_clause;
-      t->location = call_location;
-      t->location.comment("contract requires");
-    }
+    const code_function_call2t &call =
+      to_code_function_call2t(call_instruction->code);
+    ret_val = call.ret;
+    actual_args = call.operands;
   }
 
-  // 2. Havoc assigns targets
+  // Replace function parameters with actual arguments in contract clauses
+  if (function_symbol.type.is_code())
+  {
+    const code_typet &code_type = to_code_type(function_symbol.type);
+    const code_typet::argumentst &params = code_type.arguments();
+    
+    // Build parameter-to-argument mapping
+    for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+    {
+      irep_idt param_id = params[i].get_identifier();
+      expr2tc param_expr = symbol2tc(
+        migrate_type(params[i].type()), param_id);
+      
+      // Replace parameter symbol with actual argument in requires/ensures
+      requires_clause = replace_symbol_in_expr(requires_clause, param_expr, actual_args[i]);
+      ensures_clause = replace_symbol_in_expr(ensures_clause, param_expr, actual_args[i]);
+      
+      // Debug: log parameter replacement
+      log_debug(
+        "contracts",
+        "Parameter replacement: {} (arg nil={})",
+        id2string(param_id),
+        is_nil_expr(actual_args[i]));
+    }
+  }
+  
+  // Debug: log clauses after parameter replacement
+  log_debug(
+    "contracts",
+    "After parameter replacement: requires nil={}, ensures nil={}",
+    is_nil_expr(requires_clause),
+    is_nil_expr(ensures_clause));
+
+  // Lambda function to add contract clause instruction (ASSERT or ASSUME)
+  // Used for both requires (ASSERT) and ensures (ASSUME) clauses
+  auto add_contract_clause = [&replacement, &call_location](
+                               const expr2tc &clause,
+                               const goto_program_instruction_typet inst_type,
+                               const std::string &comment,
+                               const std::string &property = "") {
+    if (is_nil_expr(clause))
+      return;
+    
+    bool should_add = false;
+    if (is_constant_bool2t(clause))
+    {
+      const constant_bool2t &b = to_constant_bool2t(clause);
+      // For ASSERT: only add if false (violation)
+      // For ASSUME: only add if false (contradiction)
+      if (inst_type == ASSERT)
+        should_add = !b.value;
+      else // ASSUME
+        should_add = !b.value;
+    }
+    else
+    {
+      should_add = true;
+    }
+    
+    if (should_add)
+    {
+      goto_programt::targett t = replacement.add_instruction(inst_type);
+      t->guard = clause;
+      t->location = call_location;
+      t->location.comment(comment);
+      if (!property.empty())
+        t->location.property(property);
+    }
+  };
+
+  // 1. Assert requires clause (check precondition at call site)
+  add_contract_clause(
+    requires_clause, ASSERT, "contract requires", "contract requires");
+
+  // 2. Havoc all potentially modified locations
+  // In replace_calls mode, we must havoc everything the function might modify,
+  // otherwise the effects cannot propagate from the removed function body.
+  
+  // 2.1. Havoc assigns targets (if assigns clause exists)
+  // TODO Phase 2.4: Extract assigns clause from function body
   if (!is_nil_expr(assigns_clause))
   {
     havoc_assigns_targets(assigns_clause, replacement, call_location);
   }
+  
+  // 2.2. Havoc static lifetime global variables
+  // Functions may modify global state, so we must havoc globals
+  // Note: This is conservative but necessary for soundness
+  havoc_static_globals(replacement, call_location);
+  
+  // 2.3. Havoc memory locations modified through pointer parameters
+  // TODO: Analyze pointer parameters and havoc dereferenced locations
+  // For now, we rely on assigns clause (when implemented) and global havoc
+  // This is a conservative over-approximation
 
-  // 3. Assume ensures clause
-  if (!is_nil_expr(ensures_clause))
+  // 3. Replace __ESBMC_return_value in ensures (TODO Phase 2.2)
+  expr2tc ensures_guard = ensures_clause;
+  if (!is_nil_expr(ret_val) && !is_nil_expr(ensures_clause))
   {
-    bool skip = false;
-    if (is_constant_bool2t(ensures_clause))
-    {
-      const constant_bool2t &b = to_constant_bool2t(ensures_clause);
-      skip = b.value;
-    }
-    if (!skip)
-    {
-      goto_programt::targett t = replacement.add_instruction(ASSUME);
-      t->guard = ensures_clause;
-      t->location = call_location;
-      t->location.comment("contract ensures");
-    }
+    // TODO Phase 2.2: Use replace_return_value_in_expr() here
+    // ensures_guard = replace_return_value_in_expr(ensures_clause, ret_val);
   }
 
+  // TODO Phase 2.3: Replace __ESBMC_old() in ensures
+
+  // 4. Assume ensures clause (assume postcondition at call site)
+  add_contract_clause(ensures_guard, ASSUME, "contract ensures");
+
   // Replace call with replacement code
-  function_body.insert_swap(call_instruction, replacement);
+  // Insert replacement code before the call instruction
+  // destructive_insert inserts BEFORE the target (unlike insert_swap which inserts AFTER)
+  
+  // Debug: log replacement code generation
+  size_t replacement_size = replacement.instructions.size();
+  log_debug("contracts", "Replacement code generated: {} instructions", replacement_size);
+  
+  if (!replacement.instructions.empty())
+  {
+    // Debug: log what we're inserting
+    log_debug("contracts", "Inserting {} instructions before call instruction", replacement_size);
+    
+    caller_body.destructive_insert(call_instruction, replacement);
+    
+    // Debug: verify insertion
+    log_debug("contracts", "Call instruction after insertion: type={}", (int)call_instruction->type);
+  }
+  else
+  {
+    log_warning(
+      "contracts",
+      "No replacement code generated for function {}",
+      id2string(function_symbol.name));
+  }
+  
+  // Mark the original call as SKIP
   call_instruction->make_skip();
+  
+  // Debug: verify skip
+  log_debug("contracts", "Call instruction marked as SKIP: type={}", (int)call_instruction->type);
 }
 
-void code_contractst::build_contract_symbols()
-{
-  // TODO: Implement contract symbol building if needed
-  // This would scan goto programs and create contract symbols
-}

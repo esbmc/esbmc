@@ -79,13 +79,18 @@ public:
   void enforce_contracts(const std::set<std::string> &to_enforce);
 
   /// \brief Replace function calls with contracts
-  /// Replaces function calls with: assert requires -> havoc assigns targets -> assume ensures
+  /// Replaces function calls with contract semantics:
+  ///   1. Assert requires clause (check precondition)
+  ///   2. Havoc all potentially modified locations:
+  ///      - Assigns clause targets (if specified)
+  ///      - Static lifetime global variables (conservative)
+  ///      - Memory locations through pointer parameters (TODO)
+  ///   3. Assume ensures clause (assume postcondition)
+  /// 
+  /// CRITICAL: We must havoc everything the function might modify,
+  /// otherwise the effects cannot propagate from the removed function body.
   /// \param to_replace Set of function names to replace with contracts
   void replace_calls(const std::set<std::string> &to_replace);
-
-  /// \brief Scan all functions and create contract symbols
-  /// Scans goto programs for contract annotations and creates contract symbols
-  void build_contract_symbols();
 
   /// \brief Quick check if function has any contracts
   /// \param function_body Function goto program
@@ -101,11 +106,6 @@ private:
   /// \param function_name Function name or ID
   /// \return True if function should be skipped (destructor, constructor, etc.)
   bool is_compiler_generated(const std::string &function_name) const;
-
-  /// \brief Find contract symbol (with contract:: prefix)
-  /// \param function_name Function name
-  /// \return Pointer to contract symbol, or nullptr if not found
-  symbolt *find_contract_symbol(const std::string &function_name);
 
   /// \brief Find function symbol
   /// \param function_name Function name (can be full ID or simple name)
@@ -134,13 +134,15 @@ private:
     const std::vector<is_fresh_mapping_t> &is_fresh_mappings);
 
   /// \brief Generate replacement code at function call site
-  /// \param contract_symbol Contract symbol
+  /// \param function_symbol Function symbol being called
+  /// \param function_body Function body (to extract contracts from)
   /// \param call_instruction Function call instruction
-  /// \param function_body Function body containing the call
+  /// \param caller_body Function body containing the call
   void generate_replacement_at_call(
-    const symbolt &contract_symbol,
+    const symbolt &function_symbol,
+    const goto_programt &function_body,
     goto_programt::targett call_instruction,
-    goto_programt &function_body);
+    goto_programt &caller_body);
 
   /// \brief Extract requires clause from contract symbol
   /// \param contract_symbol Contract symbol
@@ -173,6 +175,16 @@ private:
   /// \return Expression with __ESBMC_return_value replaced
   expr2tc
   replace_return_value_in_expr(const expr2tc &expr, const expr2tc &ret_val);
+
+  /// \brief Replace a symbol in expression with another expression
+  /// \param expr Expression to replace symbols in
+  /// \param old_symbol Symbol to replace
+  /// \param new_expr Expression to replace with
+  /// \return Expression with old_symbol replaced by new_expr
+  expr2tc replace_symbol_in_expr(
+    const expr2tc &expr,
+    const expr2tc &old_symbol,
+    const expr2tc &new_expr) const;
 
   // ========== __ESBMC_old support ==========
 
