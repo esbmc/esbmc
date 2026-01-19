@@ -1,4 +1,4 @@
 CORE
 main.py
---no-standard-checks --incremental-bmc
+--no-standard-checks --unwind 9
 ^VERIFICATION SUCCESSFUL$
