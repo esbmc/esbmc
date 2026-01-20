@@ -1,4 +1,6 @@
-# C CTest Test Case Generation
+---
+title: C CTest Test Case Generation
+---
 
 ## Overview
 

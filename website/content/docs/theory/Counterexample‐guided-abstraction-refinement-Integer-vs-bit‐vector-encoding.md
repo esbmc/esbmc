@@ -1,5 +1,5 @@
 ---
-title: Counterexample Guided Abstract Refinement Integer vs Vit-Vector Encoding
+title: Counterexample Guided Abstract Refinement Integer vs Bit-Vector Encoding
 ---
 
 ### Example 1: Checking the Pythagorean Theorem

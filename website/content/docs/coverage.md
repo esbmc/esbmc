@@ -1,4 +1,7 @@
-# Coverage Analysis
+---
+title: Coverage Analysis
+weight: 10
+---
 
 ESBMC supports coverage analysis for branch, condition, and assertion coverage. This helps identify which code paths have been tested in your program.
 
