@@ -2,8 +2,6 @@
 title: Linear Temporal Logic
 ---
 
-# LTL support in ESBMC
-
 The algorithms to support LTL in ESBMC have been described in [Jeremy Morse's thesis](https://ssvlab.github.io/esbmc/papers/phd_thesis_morse.pdf). He also contributed the initial implementations, both in ESBMC, as well as in the support library ltl2c. This library is based on [ltl2ba](http://www.lsv.fr/~gastin/ltl2ba/) and was used to transform a user-defined LTL formula to a C implementation of a Büchi automaton, checking the validity of (the negation of) the formula on finite prefixes of a certain kind of omega words. See Jeremy's thesis for details.
 
 The ltl2c library has since been merged with the latest developments of ltl2ba in the [libltl2ba](https://github.com/esbmc/libltl2ba) project, among various fixes and extensions. See its [Changelog](https://github.com/esbmc/libltl2ba/blob/master/CHANGELOG) for details.
