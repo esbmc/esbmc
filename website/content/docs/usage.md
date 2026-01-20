@@ -183,6 +183,19 @@ BMC program time: 0.040s
 VERIFICATION SUCCESSFUL
 ```
 
+## Using the SMT Boolector Solver
+
+Boolector is a fast solver and is recommended. To install Boolector, use the following one-line command:
+
+```
+git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
+```
+Now rerun cmake,
+
+```
+cmake .. -DENABLE_Z3=1 -DENABLE_BOOLECTOR=1 -DBoolector_DIR=<the folder you ran the above command from>/boolector-release
+```
+
 ## Witness Generation
 
 When ESBMC refutes a property, it produces a counterexample that can be used to debug the program to find the root cause of the problem. For this purpose, ESBMC can produce the counterexample in graphml format to make its evaluation easier (e.g., by building a tool that allows graphical visualization).
@@ -351,3 +364,50 @@ Violated property:
 file file.c line 5 function main
 unwinding assertion loop
 ```
+
+## Docker Build
+
+```
+FROM node:18-slim
+
+## Install dependencies for ESBMC and other build tools
+RUN apt-get update && apt-get install -y \
+    clang-14 \
+    llvm-14 \
+    clang-tidy-14 \
+    python-is-python3 \
+    python3 \
+    git \
+    ccache \
+    unzip \
+    wget \
+    curl \
+    bison \
+    flex \
+    g++-multilib \
+    linux-libc-dev \
+    libboost-all-dev \
+    libz3-dev \
+    libclang-14-dev \
+    libclang-cpp-dev \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Keep the container running with tail -f /dev/null
+CMD ["bash", "-c", "tail -f /dev/null"]
+```
+
+Docker compose file:
+```
+version: '3.8'
+services:
+  esbmc:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile  # Assuming your Dockerfile is named `Dockerfile`
+    tty: true
+    stdin_open: true
+```
+
+The Linux/Amd64 line is very important for virtualizing Amd64. Now do docker-compose up --build. You can then follow the Linux instructions. Make -j16 works well on M2 mac's and beyond.

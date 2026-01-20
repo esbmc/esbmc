@@ -1,6 +1,6 @@
 ---
 title: GitHub Action
-weight: 11
+weight: 15
 ---
 
 The [esbmc-action](https://github.com/esbmc/esbmc-action) is a custom GitHub action which allows users to verify files on a GitHub repository using ESBMC. The user can either manually specify files to be verified, or, they can not specify any files in order to verify C and C++ files with a git diff between the two most recent commits. Note that the git diff functionality of this action relies on the user using appropriate naming conventions for their files: when using a git diff, ESBMC will only run on files that end with the '.c' or '.cpp' extension.

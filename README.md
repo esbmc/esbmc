@@ -20,17 +20,52 @@ We provide some background material/publications to help you understand what ESB
 
 Our main website is [esbmc.org](http://esbmc.org). 
 
+### Features
+
+ESBMC detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of implementation errors that can be detected include:
+ * User-specified assertion failures
+ * Out-of-bounds array access
+ * Illegal pointer dereferences, such as:
+   * Dereferencing null
+   * Performing an out-of-bounds dereference
+   * Double-free of malloc'd memory
+   * Misaligned memory access
+ * Integer overflows
+ * Undefined behavior on shift operations
+ * Floating-point for NaN
+ * Divide by zero
+ * Memory leaks
+
+Concurrent software (using the pthread API) is verified by explicitly exploring interleavings, producing one symbolic execution per interleaving. By default, pointer-safety, array-out-of-bounds, division-by-zero, and user-specified assertions will be checked for; one can also specify options to check concurrent programs for:
+ * Deadlock (only on pthread mutexes and conditional variables)
+ * Data races (i.e., competing writes)
+ * Atomicity violations at visible assignments
+ * Lock acquisition ordering
+
+By default, ESBMC performs a "lazy" depth-first search of interleavings -- it can also encode (explicitly) all interleavings into a single SMT formula.
+
+Many SMT solvers are currently supported:
+ * Z3 4.13+
+ * Bitwuzla
+ * Boolector 3.0+
+ * MathSAT
+ * CVC4
+ * CVC5
+ * Yices 2.2+
+
+In addition, ESBMC can be configured to use the SMTLIB interactive text format with a pipe to communicate with an arbitrary solver process, although there are not insignificant overheads involved.
+
 ## Installing ESBMC
 
 ### Ubuntu
 
 The easiest way to install ESBMC on Ubuntu is through our official [PPA](https://launchpad.net/~esbmc/+archive/ubuntu/esbmc), which provides releases for automatic installation:
 
-````
+```
 sudo add-apt-repository ppa:esbmc/esbmc
 sudo apt update
 sudo apt install esbmc
-````
+```
 
 This method is recommended for general users and supports Ubuntu 22.04 (Jammy) and 24.04 (Noble).
 
@@ -42,72 +77,16 @@ You can also download the latest ESBMC binary for Ubuntu and Windows from the [r
 
 See the [building instructions](https://esbmc.github.io/docs/development/building) document.
 
-## Using the SMT Boolector Solver
 
-Boolector is a fast solver and is recommended. To install Boolector, use the following one-line command:
+**We recommend using AMD64 via Docker for a fully supported version on Mac OS. We will soon remove this, as native installations on Mac OS X ARM work well too. Sample Docker-Compose and Docker files are shown below.**
 
-```
-git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
-```
-Now rerun cmake,
+## How to use ESBMC
 
-```
-cmake .. -DENABLE_Z3=1 -DENABLE_BOOLECTOR=1 -DBoolector_DIR=<the folder you ran the above command from>/boolector-release
-```
-
-#### We recommend using AMD64 via Docker for a fully supported version on Mac OS. We will soon remove this, as native installations on Mac OS X ARM work well too. Sample Docker-Compose and Docker files are shown below.
-
-```
-FROM node:18-slim
-
-## Install dependencies for ESBMC and other build tools
-RUN apt-get update && apt-get install -y \
-    clang-14 \
-    llvm-14 \
-    clang-tidy-14 \
-    python-is-python3 \
-    python3 \
-    git \
-    ccache \
-    unzip \
-    wget \
-    curl \
-    bison \
-    flex \
-    g++-multilib \
-    linux-libc-dev \
-    libboost-all-dev \
-    libz3-dev \
-    libclang-14-dev \
-    libclang-cpp-dev \
-    cmake \
-    && rm -rf /var/lib/apt/lists/*
-
-# Keep the container running with tail -f /dev/null
-CMD ["bash", "-c", "tail -f /dev/null"]
-````
-
-Docker compose file:
-````
-version: '3.8'
-services:
-  esbmc:
-    platform: linux/amd64
-    build:
-      context: .
-      dockerfile: Dockerfile  # Assuming your Dockerfile is named `Dockerfile`
-    tty: true
-    stdin_open: true
-````
-The Linux/Amd64 line is very important for virtualizing Amd64. Now do docker-compose up --build. You can then follow the Linux instructions. Make -j16 works well on M2 mac's and beyond.
-
-### How to use ESBMC
-
-#### Verifying C Programs
+### Verifying C Programs
 
 As an illustrative example to show some of the ESBMC features, consider the following C code:
 
-````C
+```C
 #include <stdlib.h>
 int *a, *b;
 int n;
@@ -131,19 +110,19 @@ int main () {
   { free(a); free(b); }
   return 0;
 }
-````
+```
 
 Here, ESBMC is invoked as follows:
 
-````
+```
 $esbmc file.c --incremental-bmc
-````
+```
 
 Where `file.c` is the C program to be checked, and --incremental-bmc selects the incremental BMC strategy. The user can choose the SMT solver, property, and verification strategy. Note that you need `math.h` installed on your system, especially if you are running a release version; build-essential typically includes `math.h`.
 
 For this particular C program, ESBMC provides the following output as the verification result:
 
-````
+```
 [Counterexample]
 
 
@@ -165,11 +144,11 @@ Violated property:
 VERIFICATION FAILED
 
 Bug found (k = 1)
-````
+```
 
 We refer the user to our [documentation webpage](https://ssvlab.github.io/esbmc/documentation.html) for further examples of the ESBMC's features.
 
-#### Verifying Python Programs
+### Verifying Python Programs
 
 ESBMC-Python supports verifying Python code with type annotations, detecting errors such as division by zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
@@ -224,104 +203,7 @@ VERIFICATION FAILED
 ESBMC-Python will parse the Python code, generate an Abstract Syntax Tree (AST), perform type inference, and translate it into the GOTO intermediate representation for symbolic execution and verification.
 For detailed information about Python support, please take a look at the [Python Frontend Documentation](https://claude.ai/chat/src/python-frontend/README.md).
 
-
-### Using Config Files
-
-ESBMC supports specifying options through TOML-formatted config files. To use a config file, export an environment variable:
-
-```sh
-export ESBMC_CONFIG_FILE="path/to/config.toml"
-```
-
-If no environment file is specified, then the default locations will be checked:
-
-* Windows: `%userprofile%\esbmc.toml`
-* UNIX: `~/.config/esbmc.toml`
-
-If nothing is found, then nothing is loaded. If you set the environment variable to the empty string, then it disables the entire config file loading process.
-
-```sh
-export ESBMC_CONFIG_FILE=""
-```
-
-This is an example of a config file:
-
-```toml
-interval-analysis = true
-goto-unwind = true
-unlimited-goto-unwind = true
-k-induction = true
-state-hashing = true
-add-symex-value-sets = true
-k-step = 2
-floatbv = true
-unlimited-k-steps = false
-max-k-step = 100
-memory-leak-check = true
-context-bound = 2
-```
-### HTML Report Generation
-
-ESBMC can generate interactive HTML reports that visualize counterexample traces, making it easier to understand and debug verification failures. Use the `--generate-html-report` flag to enable this feature.
-
-```bash
-esbmc program.c --generate-html-report
-```
-
-For detailed information about HTML reports, including keyboard shortcuts and interactive features, please see the [HTML Reports Documentation](HTML_REPORTS.md).
-
-### Coverage Analysis
-
-ESBMC supports coverage analysis to assess how adequately the test inputs cover the code. 
-
-Supported coverage modes:
-- **Branch coverage**: Verifies that all branches of conditional statements are executed
-- **Condition coverage**: Verifies each boolean sub-expression evaluates to both true and false
-- **Assertion coverage**: Verifies that all assertions in the code are reached
-Example usage:
-```bash
-esbmc program.c --branch-coverage
-
-esbmc program.py --condition-coverage
-```
-For detailed information for coverage, please see the [Coverage Documentation](COVERAGE.md)
-
-### Features
-
-ESBMC detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of implementation errors that can be detected include:
- * User-specified assertion failures
- * Out-of-bounds array access
- * Illegal pointer dereferences, such as:
-   * Dereferencing null
-   * Performing an out-of-bounds dereference
-   * Double-free of malloc'd memory
-   * Misaligned memory access
- * Integer overflows
- * Undefined behavior on shift operations
- * Floating-point for NaN
- * Divide by zero
- * Memory leaks
-
-Concurrent software (using the pthread API) is verified by explicitly exploring interleavings, producing one symbolic execution per interleaving. By default, pointer-safety, array-out-of-bounds, division-by-zero, and user-specified assertions will be checked for; one can also specify options to check concurrent programs for:
- * Deadlock (only on pthread mutexes and conditional variables)
- * Data races (i.e., competing writes)
- * Atomicity violations at visible assignments
- * Lock acquisition ordering
-
-By default, ESBMC performs a "lazy" depth-first search of interleavings -- it can also encode (explicitly) all interleavings into a single SMT formula.
-
-Many SMT solvers are currently supported:
- * Z3 4.13+
- * Bitwuzla
- * Boolector 3.0+
- * MathSAT
- * CVC4
- * CVC5
- * Yices 2.2+
-
-In addition, ESBMC can be configured to use the SMTLIB interactive text format with a pipe to communicate with an arbitrary solver process, although there are not insignificant overheads involved.
-
-### Tutorials
+## Tutorials
 
 We provide a short video that explains ESBMC: 
 
@@ -335,7 +217,7 @@ https://ssvlab.github.io/lucasccordeiro/courses/2020/01/software-security/index.
 
 This course unit introduces students to basic and advanced approaches to formally building verified trustworthy software systems, where trustworthiness comprises five attributes: *reliability*, *availability*, *safety*, *resilience*, and *security*.
 
-### Selected Publications
+## Selected Publications
 
 * Charalambous, Y., Tihanyi, N., Jain, R., Sun, Y., Ferrag, M., Cordeiro, L.: [A New Era in Software Security: Towards Self-Healing Software via Large Language Models and Formal Verification](https://arxiv.org/pdf/2305.14752.pdf). 6th ACM/IEEE International Conference on Automation of Software Test (AST), 2025. [DOI](https://doi.org/10.48550/arXiv.2305.14752)
 
@@ -365,7 +247,7 @@ This course unit introduces students to basic and advanced approaches to formall
 
 * Lucas C. Cordeiro, Bernd Fischer. [Verifying multi-threaded software using smt-based context-bounded model checking.](https://ssvlab.github.io/lucasccordeiro/papers/icse2011.pdf) In ICSE, pp. 331-340, 2011. [DOI](https://doi.org/10.1145/1985793.1985839)
 
-### Awards
+## Awards
 
 * Distinguished Paper Award at ASE'24
 * 35 awards from international competitions on software verification (SV-COMP) and testing (Test-Comp) 2012-2024 at TACAS/FASE (Strength: Bug Finding and Code Coverage).
@@ -374,7 +256,7 @@ This course unit introduces students to basic and advanced approaches to formall
 * Best Paper Award at SBESC’15
 * Distinguished Paper Award at ICSE’11
    
-### ESBMC-CHERI Video & Download
+## ESBMC-CHERI Video & Download
 
 This [video](https://youtu.be/CsWHnmU4UMs) describes how to obtain, build, and run ESBMC-CHERI on an example.
 
@@ -383,19 +265,19 @@ A pre-compiled binary for Linux is available in the pre-release
 systems/archs the [BUILDING.md](https://github.com/esbmc/esbmc/blob/cheri-clang/BUILDING.md)
 document explains the necessary installation steps.
 
-# Open source
+## Open source
 
 ESBMC is open-source software mainly distributed under the Apache License 2.0. It contains a significant amount of other people's software. However, please take a look at the COPYING file to explain who owns what and under what terms it is distributed.
 
 We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). Please file a pull request against the public GitHub repo if you'd like to submit anything. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
 
-Please review the [developer documentation](https://github.com/esbmc/esbmc/blob/master/CONTRIBUTIONS.md) if you want to contribute to ESBMC.
+Please review the [developer documentation](https://esbmc.github.io/blob/master/CONTRIBUTIONS.md) if you want to contribute to ESBMC.
 
-### Differences from CBMC
+## Differences from CBMC
 
-ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are described [here](https://github.com/esbmc/esbmc/blob/master/CBMC.md).
+ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are described [here](https://esbmc.github.io#cbmc-differences).
 
-### Acknowledgments
+## Acknowledgments
 
 ESBMC is a joint project of the Federal University of Amazonas (Brazil), the University of Manchester (UK), the University of Southampton (UK), and the University of Stellenbosch (South Africa).
 
