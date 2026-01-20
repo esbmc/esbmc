@@ -1151,10 +1151,6 @@ class Preprocessor(ast.NodeTransformer):
         if isinstance(value, ast.Constant):
             return self._infer_type_from_constant(value)
 
-        # Handle legacy AST nodes (older Python versions)
-        if isinstance(value, (ast.Str, ast.Num)):
-            return self._infer_type_from_legacy_node(value)
-
         # Handle function calls
         if isinstance(value, ast.Call):
             return self._infer_type_from_call(value)
@@ -1171,14 +1167,6 @@ class Preprocessor(ast.NodeTransformer):
             bool: 'bool'
         }
         return constant_type_map.get(type(value), 'Any')
-
-    def _infer_type_from_legacy_node(self, node):
-        """Infer type from legacy AST nodes (ast.Str, ast.Num)"""
-        if isinstance(node, ast.Str):
-            return 'str'
-        elif isinstance(node, ast.Num):
-            return 'int' if isinstance(node.n, int) else 'float'
-        return 'Any'
 
     def _infer_type_from_call(self, call_node):
         """Infer type from function call nodes"""
@@ -1458,8 +1446,7 @@ class Preprocessor(ast.NodeTransformer):
             # Only process if there are enough arguments, MacOS has different AST nodes for 'big'
             if len(node.args) > 1:
                 # Check for both ast.Str and ast.Constant
-                if (isinstance(node.args[1], ast.Str) and node.args[1].s == 'big') or \
-                   (isinstance(node.args[1], ast.Constant) and node.args[1].value == 'big'):
+                if isinstance(node.args[1], ast.Constant) and node.args[1].value == 'big':
                     node.args[1] = ast.Constant(value=True)
                 else:
                     node.args[1] = ast.Constant(value=False)
