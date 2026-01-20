@@ -71,6 +71,7 @@ static const char *expr_names[] = {
   "byte_update",
   "with",
   "member",
+  "member_ref",
   "index",
   "isnan",
   "overflow",

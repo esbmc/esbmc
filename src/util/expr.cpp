@@ -369,6 +369,7 @@ irep_idt exprt::deref = dstring("dereference");
 irep_idt exprt::i_if = dstring("if");
 irep_idt exprt::with = dstring("with");
 irep_idt exprt::member = dstring("member");
+irep_idt exprt::member_ref = dstring("member_ref");
 irep_idt exprt::isnan = dstring("isnan");
 irep_idt exprt::ieee_floateq = dstring("ieee_float_equal");
 irep_idt exprt::i_type = dstring("type");
