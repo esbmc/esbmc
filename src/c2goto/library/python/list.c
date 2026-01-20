@@ -131,9 +131,6 @@ bool __ESBMC_list_push_raw(
   size_t type_id,
   size_t type_size)
 {
-  extern void __ESBMC_assume(_Bool);
-  __ESBMC_assume(l->size < 1024);
-
   // Store the pointer directly without copying.
   PyObject *item = &l->items[l->size];
   item->value = value;
