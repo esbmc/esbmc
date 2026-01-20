@@ -1478,8 +1478,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = member2tc(type, sourcedata, expr.component_name());
     return;
   }
+  else if (expr.id() == exprt::member_ref)
+  {
+    type = migrate_type(expr.type());
 
-  if (expr.id() == exprt::index)
+    new_expr_ref = member_ref2tc(type, expr.component_name());
+  }
+  else if (expr.id() == exprt::index)
   {
     type = migrate_type(expr.type());
 
@@ -2987,6 +2992,14 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt member_name("member_name");
     member.copy_to_operands(migrate_expr_back(ref2.source_value));
     return member;
+  }
+  case expr2t::member_ref_id:
+  {
+    const member_ref2t &ref2 = to_member_ref2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt member_ref("member_ref", thetype);
+    member_ref.set("component_name", ref2.member);
+    return member_ref;
   }
   case expr2t::index_id:
   {
