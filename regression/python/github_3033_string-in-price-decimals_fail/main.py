@@ -1,6 +1,6 @@
 def validate_price(price: str) -> None:
     if "." in price:
-        decimals = len("12.345".split(".")[1])
+        decimals = len(price.split(".")[1])
     else:
         decimals = 0
     assert decimals <= 2, "O preço não pode ter mais de duas casas decimais."

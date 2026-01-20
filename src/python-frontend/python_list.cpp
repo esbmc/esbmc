@@ -733,14 +733,14 @@ exprt python_list::build_split_list(
   locationt location = converter.get_location_from_decl(call_node);
 
   // Create function symbol for __python_str_split if it doesn't exist
-  const std::string func_name = "__python_str_split";
+  const std::string func_name = "c:@F@__python_str_split";
   const symbolt *func_symbol = converter.symbol_table().find_symbol(func_name);
 
   if (!func_symbol)
   {
-    // Create function type: PyObject* __python_str_split(char* str, char* sep, int maxsplit)
+    // Create function type: PyListObject* __python_str_split(char* str, char* sep, int maxsplit)
     code_typet func_type;
-    func_type.return_type() = pointer_typet(empty_typet()); // PyObject*
+    func_type.return_type() = converter.get_type_handler().get_list_type();
 
     code_typet::argumentt str_arg;
     str_arg.type() = pointer_typet(char_type());
@@ -758,12 +758,13 @@ exprt python_list::build_split_list(
     new_symbol.name = func_name;
     new_symbol.id = func_name;
     new_symbol.type = func_type;
-    new_symbol.mode = "Python";
+    new_symbol.mode = "C";
     new_symbol.module = "python";
     new_symbol.location = location;
     new_symbol.is_extern = true;
 
     converter.add_symbol(new_symbol);
+    func_symbol = converter.symbol_table().find_symbol(func_name);
   }
 
   // Build arguments for the call
@@ -792,14 +793,29 @@ exprt python_list::build_split_list(
   exprt count_expr = from_integer(count, long_long_int_type());
   args.push_back(count_expr);
 
-  // Create function call expression
-  side_effect_expr_function_callt call_expr;
-  call_expr.function() = symbol_exprt(func_name, code_typet());
-  call_expr.arguments() = args;
-  call_expr.type() = pointer_typet(empty_typet());
-  call_expr.location() = location;
+  // Create a temp list symbol to hold the split result.
+  const typet list_type = converter.get_type_handler().get_list_type();
+  symbolt &split_list =
+    converter.create_tmp_symbol(call_node, "$split_list$", list_type, exprt());
+  code_declt split_decl(symbol_expr(split_list));
+  split_decl.location() = location;
+  converter.add_instruction(split_decl);
 
-  return call_expr;
+  // Emit the function call with lhs so the list has a stable identifier.
+  code_function_callt split_call;
+  split_call.function() = symbol_expr(*func_symbol);
+  split_call.arguments() = args;
+  split_call.lhs() = symbol_expr(split_list);
+  split_call.type() = list_type;
+  split_call.location() = location;
+  converter.add_instruction(split_call);
+
+  // Record element type as string to ensure correct comparisons on parts[i].
+  typet elem_type = converter.get_type_handler().build_array(char_type(), 0);
+  list_type_map[split_list.id.as_string()].push_back(
+    std::make_pair(std::string(), elem_type));
+
+  return symbol_expr(split_list);
 }
 
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
@@ -1258,14 +1274,25 @@ exprt python_list::handle_index_access(
               " line: " + l.get_line().as_string());
           }
 
-          // Try annotation fallback for dynamic lists or function parameters
-          const nlohmann::json list_value_node = json_utils::get_var_value(
-            list_value_["value"]["id"],
-            converter_.current_function_name(),
-            converter_.ast());
+          // Use the known element type for homogeneous dynamic lists.
+          if (!list_type_map[list_name].empty())
+          {
+            elem_type = list_type_map[list_name].back().second;
+          }
+          else if (
+            list_value_.contains("value") &&
+            list_value_["value"].contains("id") &&
+            list_value_["value"]["id"].is_string())
+          {
+            // Try annotation fallback for dynamic lists or function parameters
+            const nlohmann::json list_value_node = json_utils::get_var_value(
+              list_value_["value"]["id"],
+              converter_.current_function_name(),
+              converter_.ast());
 
-          elem_type = get_elem_type_from_annotation(
-            list_value_node, converter_.get_type_handler());
+            elem_type = get_elem_type_from_annotation(
+              list_value_node, converter_.get_type_handler());
+          }
 
           // Only throw if annotation also fails
           if (elem_type == typet())
