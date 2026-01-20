@@ -795,8 +795,8 @@ exprt python_list::build_split_list(
 
   // Create a temp list symbol to hold the split result.
   const typet list_type = converter.get_type_handler().get_list_type();
-  symbolt &split_list = converter.create_tmp_symbol(
-    call_node, "$split_list$", list_type, exprt());
+  symbolt &split_list =
+    converter.create_tmp_symbol(call_node, "$split_list$", list_type, exprt());
   code_declt split_decl(symbol_expr(split_list));
   split_decl.location() = location;
   converter.add_instruction(split_decl);
@@ -811,8 +811,7 @@ exprt python_list::build_split_list(
   converter.add_instruction(split_call);
 
   // Record element type as string to ensure correct comparisons on parts[i].
-  typet elem_type =
-    converter.get_type_handler().build_array(char_type(), 0);
+  typet elem_type = converter.get_type_handler().build_array(char_type(), 0);
   list_type_map[split_list.id.as_string()].push_back(
     std::make_pair(std::string(), elem_type));
 

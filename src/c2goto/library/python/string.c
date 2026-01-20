@@ -782,10 +782,8 @@ __ESBMC_HIDE:;
 // Python string split - splits a string by separator
 // Returns a Python list (represented as PyListObject*)
 // For ESBMC, we'll return a simple structure representing the split result
-struct __ESBMC_PyListObj *__python_str_split(
-  const char *str,
-  const char *sep,
-  long long maxsplit)
+struct __ESBMC_PyListObj *
+__python_str_split(const char *str, const char *sep, long long maxsplit)
 {
 __ESBMC_HIDE:;
   if (!str)
