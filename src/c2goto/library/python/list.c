@@ -125,21 +125,6 @@ bool __ESBMC_list_push(
   return true;
 }
 
-bool __ESBMC_list_push_raw(
-  PyListObject *l,
-  const void *value,
-  size_t type_id,
-  size_t type_size)
-{
-  // Store the pointer directly without copying.
-  PyObject *item = &l->items[l->size];
-  item->value = value;
-  item->type_id = type_id;
-  item->size = type_size;
-  l->size++;
-  return true;
-}
-
 bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
 {
   assert(l != NULL);
