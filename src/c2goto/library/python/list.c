@@ -111,9 +111,6 @@ bool __ESBMC_list_push(
   size_t type_id,
   size_t type_size)
 {
-  extern void __ESBMC_assume(_Bool);
-  __ESBMC_assume(l->size < 1024);
-
   // TODO: __ESBMC_obj_cpy
   void *copied_value = __ESBMC_copy_value(value, type_size);
 
