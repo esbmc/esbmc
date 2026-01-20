@@ -2331,6 +2331,11 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
     return src.identifier().as_string();
   }
 
+  else if (src.id() == "member_ref")
+  {
+    return to_member_ref_expr(src).get_component_name().as_string();
+  }
+
   else if (src.id() == "pointer_object")
   {
     return convert_function(src, "POINTER_OBJECT", precedence = 15);
