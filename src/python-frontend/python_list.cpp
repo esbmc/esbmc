@@ -2052,6 +2052,15 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     }
   }
 
+  // Check for empty list early
+  if (iterable_expr.type() == list_type && iterable_expr.is_symbol())
+  {
+    const std::string &list_id = iterable_expr.identifier().as_string();
+    auto type_map_it = list_type_map.find(list_id);
+    if (type_map_it == list_type_map.end() || type_map_it->second.empty())
+      return symbol_expr(result_list);
+  }
+
   // 3. Create loop variable
   std::string loop_var_name = target["id"].get<std::string>();
   symbol_id loop_var_sid = converter_.create_symbol_id();
