@@ -3310,6 +3310,11 @@ bool clang_c_convertert::get_binary_operator_expr(
     new_expr = exprt("comma", t);
     break;
 
+  case clang::BO_PtrMemI:
+  case clang::BO_PtrMemD:
+    new_expr = exprt("ptrmem", t);
+    break;
+
   default:
   {
     const clang::CompoundAssignOperator &compop =
