@@ -59,7 +59,74 @@ int main() {
     return 0;
 }
 ```
-
 ## Ensure and Requires
 
+TBD by Weiqi
 
+## Pragma Utils
+
+The verification paramters can be modified using `#pragma` keyword. The
+following constructs are made available.
+
+### Unroll
+
+Unroll can be used to set the loop unwind bound for a loop. This is equivalent
+to using `--unwindset id:bound` where `id` is the loop ID and `bound` is `N`.
+This inlining however, allows us to specify the paramter in a more stable manner
+as the `id` won't shift as the code changes. It also frees us from needing to
+specify the loop bound when invoking ESBMC.
+
+`#pragma unroll [N]` sets the next loop to be unwinded `N` times. In the
+following example, the loop will be unwound 80 times max.
+
+```c
+int main() {
+    uint x = __ESBMC_nondet_uint();
+    __ESBMC_assume(x > 50 && x < 100);
+    #pragma unroll 80
+    for (int i = x - 1; x >= 0; x--) {
+
+    }
+    assert(x < 10);
+    return 0;
+}
+```
+
+You can also use `#pragma unroll` without `N` to make the loop unroll fully in 
+the cases where `--unwind` is set. In this example, the loop will unroll fully
+regardless of the global unwind bound set.
+
+{{< callout type="warning" >}}
+Be careful that the loop you use this construct to terminates, otherwise ESBMC
+will never stop verifying it.
+{{< /callout >}}
+
+```c
+int main() {
+    uint x = __ESBMC_nondet_uint();
+    __ESBMC_assume(x > 50 && x < 100);
+    #pragma unroll
+    for (int i = x - 1; x >= 0; x--) {
+
+    }
+    assert(x < 10);
+    return 0;
+}
+```
+
+`N` can also specified as a `#define` macro, however, if a value isn't found, it
+will throw a parsing error.
+
+```c
+#define LOOP_BOUND 80
+int main() {
+    uint x = __ESBMC_nondet_uint();
+    __ESBMC_assume(x > 50 && x < 100);
+    #pragma unroll LOOP_BOUND
+    for (int i = x - 1; x >= 0; x--) {
+
+    }
+    assert(x < 10);
+    return 0;
+}
+```
