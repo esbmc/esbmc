@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <goto-programs/contracts/contracts.h>
 #include <goto-programs/remove_no_op.h>
+#include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
@@ -491,6 +492,12 @@ goto_programt code_contractst::generate_checking_wrapper(
     expr2tc old_temp_var =
       old_snapshots[i].snapshot_var; // The temp var from function body
 
+    // TODO: Fix __ESBMC_old type issue
+    // Problem: Clang frontend declares __ESBMC_old as `int __ESBMC_old(int)`, which causes
+    // implicit type conversion. For example, __ESBMC_old(global_value) where global_value
+    // is double becomes __ESBMC_old((int)global_value).
+    // Need to apply similar type resolution approach as __ESBMC_return_value.
+
     // Create a NEW snapshot variable for the wrapper
     expr2tc new_snapshot_var = create_snapshot_variable(
       original_expr, id2string(original_func.name) + "_wrapper", i);
@@ -779,6 +786,13 @@ goto_programt code_contractst::generate_checking_wrapper(
       ensures_guard = extract_struct_members_to_temps(
         ensures_guard, ret_val, wrapper, location);
     }
+  }
+  
+  // Fix type mismatches in comparison expressions involving return values
+  // This removes incorrect casts and adds correct casts for constants
+  if (!is_nil_expr(ensures_guard) && !is_nil_expr(ret_val))
+  {
+    ensures_guard = fix_comparison_types(ensures_guard, ret_val);
   }
   
   // Add ASSERT instruction for ensures clause with property
@@ -1294,6 +1308,194 @@ expr2tc code_contractst::replace_old_in_expr(
     op = replace_old_in_expr(op, snapshots);
   });
 
+  return new_expr;
+}
+
+// ========== Type fixing for return value comparisons ==========
+
+bool code_contractst::is_return_value_symbol(const symbol2t &sym) const
+{
+  std::string name = id2string(sym.thename);
+  
+  // Match various return value patterns:
+  // - "return_value"
+  // - "__ESBMC_return_value"  
+  // - "return_value$..." (with suffix)
+  // - "tag-return_value$..." (with tag prefix)
+  if (name == "return_value" || name == "__ESBMC_return_value")
+    return true;
+  
+  if (name.find("return_value") != std::string::npos)
+    return true;
+  
+  return false;
+}
+
+expr2tc code_contractst::remove_incorrect_casts(
+  const expr2tc &expr,
+  const expr2tc &ret_val) const
+{
+  if (is_nil_expr(expr) || is_nil_expr(ret_val))
+    return expr;
+  
+  // If this is a typecast on a return_value symbol, check if it's incorrect
+  if (is_typecast2t(expr))
+  {
+    const typecast2t &cast = to_typecast2t(expr);
+    
+    // Check if we're casting a return_value symbol
+    if (is_symbol2t(cast.from))
+    {
+      const symbol2t &sym = to_symbol2t(cast.from);
+      
+      if (is_return_value_symbol(sym))
+      {
+        // Compare the cast target type with ret_val's type
+        // If they don't match, the cast is incorrect and should be removed
+        if (!base_type_eq(cast.type, ret_val->type, ns))
+        {
+          log_debug(
+            "contracts",
+            "Removing incorrect cast from {} to {} (ret_val type is {})",
+            get_type_id(*cast.from->type),
+            get_type_id(*cast.type),
+            get_type_id(*ret_val->type));
+          
+          // Return the original symbol without the cast
+          return cast.from;
+        }
+      }
+    }
+  }
+  
+  // Recursively process operands
+  expr2tc new_expr = expr->clone();
+  new_expr->Foreach_operand([this, &ret_val](expr2tc &op) {
+    op = remove_incorrect_casts(op, ret_val);
+  });
+  
+  return new_expr;
+}
+
+expr2tc code_contractst::fix_comparison_types(
+  const expr2tc &expr,
+  const expr2tc &ret_val) const
+{
+  if (is_nil_expr(expr) || is_nil_expr(ret_val))
+    return expr;
+  
+  // Step 1: Remove incorrect casts on return_value
+  expr2tc cleaned_expr = remove_incorrect_casts(expr, ret_val);
+  
+  // Step 2: Fix comparison operators
+  if (is_comp_expr(cleaned_expr))
+  {
+    expr2tc new_expr = cleaned_expr->clone();
+    
+    // Get the two sides of the comparison
+    expr2tc *side1 = nullptr;
+    expr2tc *side2 = nullptr;
+    
+    if (is_lessthan2t(new_expr))
+    {
+      lessthan2t &rel = to_lessthan2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_lessthanequal2t(new_expr))
+    {
+      lessthanequal2t &rel = to_lessthanequal2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_greaterthan2t(new_expr))
+    {
+      greaterthan2t &rel = to_greaterthan2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_greaterthanequal2t(new_expr))
+    {
+      greaterthanequal2t &rel = to_greaterthanequal2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_equality2t(new_expr))
+    {
+      equality2t &rel = to_equality2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_notequal2t(new_expr))
+    {
+      notequal2t &rel = to_notequal2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    
+    if (side1 && side2)
+    {
+      // Check if one side is return_value and the other is a constant
+      bool side1_is_retval = is_symbol2t(*side1) && 
+                              is_return_value_symbol(to_symbol2t(*side1));
+      bool side2_is_retval = is_symbol2t(*side2) && 
+                              is_return_value_symbol(to_symbol2t(*side2));
+      
+      // Case 1: return_value compared with integer constant, but return_value is pointer
+      if (is_pointer_type(ret_val->type))
+      {
+        if (side1_is_retval && is_constant_int2t(*side2))
+        {
+          const constant_int2t &c = to_constant_int2t(*side2);
+          if (c.value.is_zero())
+          {
+            // Replace 0 with NULL pointer of correct type
+            *side2 = gen_zero(ret_val->type);
+            log_debug("contracts", "Fixed pointer comparison: replaced 0 with NULL");
+          }
+        }
+        else if (side2_is_retval && is_constant_int2t(*side1))
+        {
+          const constant_int2t &c = to_constant_int2t(*side1);
+          if (c.value.is_zero())
+          {
+            *side1 = gen_zero(ret_val->type);
+            log_debug("contracts", "Fixed pointer comparison: replaced 0 with NULL");
+          }
+        }
+      }
+      // Case 2: return_value is float/double, constant needs cast
+      else if (is_fractional_type(ret_val->type))
+      {
+        if (side1_is_retval && is_constant_int2t(*side2))
+        {
+          // Cast integer constant to double/float
+          *side2 = typecast2tc(ret_val->type, *side2);
+          log_debug(
+            "contracts",
+            "Fixed fractional comparison: cast constant to {}",
+            get_type_id(*ret_val->type));
+        }
+        else if (side2_is_retval && is_constant_int2t(*side1))
+        {
+          *side1 = typecast2tc(ret_val->type, *side1);
+          log_debug(
+            "contracts",
+            "Fixed fractional comparison: cast constant to {}",
+            get_type_id(*ret_val->type));
+        }
+      }
+    }
+    
+    return new_expr;
+  }
+  
+  // Recursively process other expressions
+  expr2tc new_expr = cleaned_expr->clone();
+  new_expr->Foreach_operand([this, &ret_val](expr2tc &op) {
+    op = fix_comparison_types(op, ret_val);
+  });
+  
   return new_expr;
 }
 

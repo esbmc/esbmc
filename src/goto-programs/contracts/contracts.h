@@ -233,6 +233,29 @@ private:
     const expr2tc &expr,
     const std::vector<old_snapshot_t> &snapshots) const;
 
+  // ========== Type fixing for return value comparisons ==========
+
+  /// \brief Check if a symbol represents a return value variable
+  /// \param sym Symbol to check
+  /// \return True if symbol is a return value variable (matches patterns like "return_value", "__ESBMC_return_value", etc.)
+  bool is_return_value_symbol(const symbol2t &sym) const;
+
+  /// \brief Remove incorrect typecasts on return value symbols
+  /// \param expr Expression to process
+  /// \param ret_val Return value symbol with correct type
+  /// \return Expression with incorrect casts removed
+  expr2tc remove_incorrect_casts(
+    const expr2tc &expr,
+    const expr2tc &ret_val) const;
+
+  /// \brief Fix type mismatches in comparison expressions involving return values
+  /// \param expr Expression to fix (typically an ensures guard)
+  /// \param ret_val Return value symbol with correct type
+  /// \return Expression with corrected type casts
+  expr2tc fix_comparison_types(
+    const expr2tc &expr,
+    const expr2tc &ret_val) const;
+
   // ========== __ESBMC_is_fresh support for ensures ==========
 
   /// \brief Extract is_fresh mappings from function body
