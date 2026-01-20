@@ -1,8 +1,8 @@
 ---
 title: Usage
 weight: 2
-prev: /docs/setup
-next: /docs/architecture
+# prev: /docs/setup
+# next: /docs/architecture
 ---
 
 As an illustrative example to show some of the ESBMC features concerning floating-point numbers, consider the following C code:

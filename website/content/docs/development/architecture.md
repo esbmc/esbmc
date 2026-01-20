@@ -1,6 +1,6 @@
 ---
 title: Architecture
-weight: 3
+weight: 2
 prev: /docs/usage
 ---
 

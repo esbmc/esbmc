@@ -4,6 +4,10 @@ title: HTML Report Generation
 
 ESBMC can generate interactive HTML reports that visualize counterexample traces, making it easier to understand and debug verification failures.
 
+{{< callout type="info" >}}
+ESBMC HTML Reports feature only works with C and C++.
+{{< /callout >}}
+
 ## Usage
 
 To generate an HTML report when verification fails, use the `--generate-html-report` flag as follows:

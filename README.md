@@ -20,9 +20,9 @@ We provide some background material/publications to help you understand what ESB
 
 Our main website is [esbmc.org](http://esbmc.org). 
 
-### How to build/install ESBMC
+## Installing ESBMC
 
-#### Installing via PPA (Ubuntu - Recommended)
+### Ubuntu
 
 The easiest way to install ESBMC on Ubuntu is through our official [PPA](https://launchpad.net/~esbmc/+archive/ubuntu/esbmc), which provides releases for automatic installation:
 
@@ -34,79 +34,15 @@ sudo apt install esbmc
 
 This method is recommended for general users and supports Ubuntu 22.04 (Jammy) and 24.04 (Noble).
 
-#### Ubuntu 24.04
+### GitHub Release
 
-To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
+You can also download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
 
-````
-sudo apt update
-sudo apt-get install -y clang-14 llvm-14 clang-tidy-14 python-is-python3 python3 git ccache unzip wget curl bison flex g++-multilib linux-libc-dev libboost-all-dev libz3-dev libclang-14-dev libclang-cpp-dev cmake
-git clone https://github.com/esbmc/esbmc.git
-cd esbmc
-mkdir build && cd build
-cmake .. -DENABLE_Z3=1
-make -j4
-````
+## Building ESBMC
 
-To enable Python frontend support, add the `-DENABLE_PYTHON_FRONTEND=1` flag to the cmake command and ensure you have Python 3 with the `ast2json` module installed:
+See the [building instructions](https://esbmc.github.io/docs/development/building) document.
 
-````
-pip install ast2json
-cmake .. -DENABLE_Z3=1 -DENABLE_PYTHON_FRONTEND=1
-make -j4
-````
-
-
-#### Fedora 40
-
-To compile ESBMC on Fedora 40 with the latest version of LLVM and the SMT solver Z3:
-
-```sh
-# Warning, the --allowerasing parameter will also remove incompatible packages to the packages specified below
-sudo dnf install --best --allowerasing "@Development Tools" clang llvm llvm-devel clang-tools-extra python3 git ccache unzip wget curl bison flex gcc-c++ glibc-devel glibc-devel.i686 boost-devel boost-devel.i686 z3-devel clang-devel clang-devel.i686 cmake zlib-devel libffi-devel libstdc++-devel libstdc++-devel.i686
-git clone https://github.com/esbmc/esbmc.git
-cd esbmc
-mkdir build && cd build
-CXX=g++ CC=gcc cmake .. -DENABLE_Z3=1 -DBUILD_TESTING=On -DENABLE_REGRESSION=1 -DZ3_DIR=/usr/include/z3
-make -j4
-```
-
-To build ESBMC with other operating systems and SMT solvers, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. 
-
-The user can also download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
-
-#### FreeBSD
-
-ESBMC should compile just fine in FreeBSD as long as the 32-bit libraries are enabled
-
-```sh
-pkg install git cmake python3 z3 bison flex boost-all
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz && mv clang16
-mkdir build && cd build
-cmake .. -DLLVM_DIR=../clang16 -DClang_DIR=../clang16
-make -j4
-```
-
-#### Mac OS X
-
-M1/M2/M3/M4 Macs are now supported.
-
-Given the elements of OS X, run the script. It runs on both ARM and Intel macs. You do need Homebrew installed.
-It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script also supports building the Python frontend. Note that the Python frontend is quite early in its support for Python.
-
-```
- ./build-esbmc-mac.sh
-```
-
-The raw command is provided here for your reference.
-
-```
-cmake .. -DZ3_DIR=/opt/homebrew/Cellar/z3/4.13.4 -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
-make -j8
-make install
-```
-
-### Using the SMT Boolector Solver
+## Using the SMT Boolector Solver
 
 Boolector is a fast solver and is recommended. To install Boolector, use the following one-line command:
 
