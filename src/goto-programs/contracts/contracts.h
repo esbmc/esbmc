@@ -176,6 +176,21 @@ private:
   expr2tc
   replace_return_value_in_expr(const expr2tc &expr, const expr2tc &ret_val);
 
+  /// \brief Extract struct/union member accesses to temporary variables
+  /// For struct return values, accessing members directly (ret_val.x) can cause
+  /// symbolic execution issues when ret_val's value is a 'with' expression.
+  /// This function extracts member accesses to temporary variables to avoid dereference failures.
+  /// \param expr Expression containing member accesses
+  /// \param ret_val Return value symbol (must be struct/union type)
+  /// \param wrapper GOTO program to add temporary variable declarations and assignments
+  /// \param location Source location for generated instructions
+  /// \return Expression with member accesses replaced by temporary variables
+  expr2tc extract_struct_members_to_temps(
+    const expr2tc &expr,
+    const expr2tc &ret_val,
+    goto_programt &wrapper,
+    const locationt &location);
+
   /// \brief Replace a symbol in expression with another expression
   /// \param expr Expression to replace symbols in
   /// \param old_symbol Symbol to replace

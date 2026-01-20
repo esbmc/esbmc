@@ -361,33 +361,13 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
       continue;
     }
 
-    // Remove ensures ASSUME from renamed function if it uses __ESBMC_old or __ESBMC_is_fresh
-    // (these require special handling in the wrapper)
-    bool needs_ensures_removal = false;
-    forall_goto_program_instructions (it, original_body_copy)
-    {
-      if (it->is_assign() && is_code_assign2t(it->code))
-      {
-        const code_assign2t &assign = to_code_assign2t(it->code);
-        if (is_sideeffect2t(assign.source) &&
-            to_sideeffect2t(assign.source).kind == sideeffect2t::old_snapshot)
-        {
-          needs_ensures_removal = true;
-          break;
-        }
-      }
-      
-      if (it->is_function_call() && is_code_function_call2t(it->code))
-      {
-        const code_function_call2t &call = to_code_function_call2t(it->code);
-        if (is_symbol2t(call.function) &&
-            is_fresh_function(to_symbol2t(call.function).thename.as_string()))
-        {
-          needs_ensures_removal = true;
-          break;
-        }
-      }
-    }
+    // CRITICAL: Always remove ensures ASSUME from renamed function
+    // The ensures clause is checked in the wrapper function, not in the original function body.
+    // Leaving ensures ASSUME in the original function would:
+    // 1. Make the postcondition a precondition (assume before execution)
+    // 2. Cause dereference failures for struct return values (accessing __ESBMC_return_value)
+    // Therefore, we ALWAYS remove all contract::ensures assumptions.
+    bool needs_ensures_removal = true;
 
     // Rename original function
     irep_idt original_id = func_sym->id;
@@ -783,6 +763,24 @@ goto_programt code_contractst::generate_checking_wrapper(
       ensures_guard = replace_is_fresh_in_ensures_expr(ensures_guard, is_fresh_mappings);
   }
   
+  // Extract struct member accesses to temporary variables before ASSERT
+  // This avoids symbolic execution issues with accessing members from 'with' expressions
+  if (!is_nil_expr(ensures_guard) && !is_nil_expr(ret_val))
+  {
+    log_debug(
+      "contracts",
+      "Before extract_struct_members_to_temps: ret_val type_id={}, is_struct={}, is_union={}",
+      ret_val->type ? get_type_id(*ret_val->type) : "nil",
+      ret_val->type && is_struct_type(ret_val->type),
+      ret_val->type && is_union_type(ret_val->type));
+    
+    if (is_struct_type(ret_val->type) || is_union_type(ret_val->type))
+    {
+      ensures_guard = extract_struct_members_to_temps(
+        ensures_guard, ret_val, wrapper, location);
+    }
+  }
+  
   // Add ASSERT instruction for ensures clause with property
   if (!is_nil_expr(ensures_guard))
   {
@@ -1006,6 +1004,109 @@ expr2tc code_contractst::replace_symbol_in_expr(
     op = replace_symbol_in_expr(op, old_symbol, new_expr);
   });
 
+  return result;
+}
+
+expr2tc code_contractst::extract_struct_members_to_temps(
+  const expr2tc &expr,
+  const expr2tc &ret_val,
+  goto_programt &wrapper,
+  const locationt &location)
+{
+  if (is_nil_expr(expr) || is_nil_expr(ret_val) || !is_symbol2t(ret_val))
+    return expr;
+  
+  const symbol2t &ret_sym = to_symbol2t(ret_val);
+  
+  // Map from member name to temporary variable
+  std::map<irep_idt, expr2tc> member_to_temp;
+  
+  // Recursive function to collect and replace member accesses
+  std::function<expr2tc(const expr2tc&)> process_expr = [&](const expr2tc &e) -> expr2tc {
+    if (is_nil_expr(e))
+      return e;
+    
+    // Check if this is a member access to ret_val
+    if (is_member2t(e))
+    {
+      const member2t &member = to_member2t(e);
+      
+      // Check if the source is ret_val
+      bool is_ret_val_member = false;
+      if (is_symbol2t(member.source_value))
+      {
+        const symbol2t &src_sym = to_symbol2t(member.source_value);
+        is_ret_val_member = (ret_sym.thename == src_sym.thename);
+      }
+      
+      if (is_ret_val_member)
+      {
+        // Check if we already created a temp for this member
+        auto it = member_to_temp.find(member.member);
+        if (it != member_to_temp.end())
+        {
+          return it->second;
+        }
+        
+        // Create temporary variable for this member
+        std::string temp_name = id2string(ret_sym.thename) + 
+                                "$member$" + id2string(member.member);
+        irep_idt temp_id(temp_name);
+        
+        // Create temporary variable symbol
+        symbolt temp_symbol;
+        temp_symbol.name = temp_id;
+        temp_symbol.id = temp_id;
+        temp_symbol.type = migrate_type_back(member.type);
+        temp_symbol.lvalue = true;
+        temp_symbol.static_lifetime = false;
+        temp_symbol.location = location;
+        temp_symbol.mode = "C";
+        
+        // Add to context
+        symbolt *added_symbol = context.move_symbol_to_context(temp_symbol);
+        expr2tc temp_var = symbol2tc(member.type, added_symbol->id);
+        
+        // Add DECL instruction
+        goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
+        decl_inst->code = code_decl2tc(member.type, added_symbol->id);
+        decl_inst->location = location;
+        decl_inst->location.comment("temp for struct member");
+        
+        // Add ASSIGN instruction: temp = ret_val.member
+        goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
+        assign_inst->code = code_assign2tc(temp_var, e->clone());
+        assign_inst->location = location;
+        assign_inst->location.comment("extract struct member");
+        
+        member_to_temp[member.member] = temp_var;
+        
+        log_debug(
+          "contracts",
+          "extract_struct_members_to_temps: created temp {} for member {}",
+          temp_name,
+          id2string(member.member));
+        
+        return temp_var;
+      }
+    }
+    
+    // Recursively process operands
+    expr2tc result = e->clone();
+    result->Foreach_operand([&](expr2tc &op) {
+      op = process_expr(op);
+    });
+    
+    return result;
+  };
+  
+  expr2tc result = process_expr(expr);
+  
+  log_debug(
+    "contracts",
+    "extract_struct_members_to_temps: extracted {} members",
+    member_to_temp.size());
+  
   return result;
 }
 
