@@ -8,8 +8,8 @@
  */
 typedef struct __ESBMC_PyType
 {
-  const char *tp_name;     /* Type name: "module.typename" */
-  size_t tp_basicsize;     /* Size of instance in bytes */
+  const char *tp_name; /* Type name: "module.typename" */
+  size_t tp_basicsize; /* Size of instance in bytes */
   // TODO: Extra features (vtables, constructors, members)
 } PyType;
 
@@ -26,9 +26,9 @@ typedef struct __ESBMC_PyType
  */
 typedef struct __ESBMC_PyObj
 {
-  const void *value;  /**< Pointer to object data */
-  size_t type_id;     /**< Hashed or unique type identifier */
-  size_t size;        /**< Number of bytes in value */
+  const void *value; /**< Pointer to object data */
+  size_t type_id;    /**< Hashed or unique type identifier */
+  size_t size;       /**< Number of bytes in value */
 } PyObject;
 
 /**
