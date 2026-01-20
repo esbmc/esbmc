@@ -7,4 +7,4 @@ def sieve(max: int) -> list[int]:
 
 assert sieve(1) == []
 assert sieve(2) == [2]
-assert sieve(3) == [2, 3]
+assert sieve(3) == [1, 2, 3]
