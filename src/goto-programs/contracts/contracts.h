@@ -174,7 +174,7 @@ private:
   /// \param ret_val Actual return value expression
   /// \return Expression with __ESBMC_return_value replaced
   expr2tc
-  replace_return_value_in_expr(const expr2tc &expr, const expr2tc &ret_val);
+  replace_return_value_in_expr(const expr2tc &expr, const expr2tc &ret_val) const;
 
   /// \brief Extract struct/union member accesses to temporary variables
   /// For struct return values, accessing members directly (ret_val.x) can cause
@@ -223,7 +223,7 @@ private:
   expr2tc create_snapshot_variable(
     const expr2tc &expr,
     const std::string &func_name,
-    size_t index);
+    size_t index) const;
 
   /// \brief Replace __ESBMC_old() calls with snapshot variables
   /// \param expr Expression containing old() calls
@@ -232,6 +232,39 @@ private:
   expr2tc replace_old_in_expr(
     const expr2tc &expr,
     const std::vector<old_snapshot_t> &snapshots) const;
+
+  /// \brief Collect old_snapshot assignments from function body
+  /// \param function_body GOTO program to scan for old_snapshot sideeffects
+  /// \return Vector of old_snapshot_t structures (original_expr, temp_var)
+  std::vector<old_snapshot_t> collect_old_snapshots_from_body(
+    const goto_programt &function_body) const;
+
+  /// \brief Materialize old snapshots in wrapper function (enforce-contract mode)
+  /// Creates DECL and ASSIGN instructions for snapshot variables before function call
+  /// \param old_snapshots Vector of snapshots to materialize (modified in-place)
+  /// \param wrapper GOTO program to add snapshot instructions to
+  /// \param func_name Function name for unique variable naming
+  /// \param location Source location for generated instructions
+  void materialize_old_snapshots_at_wrapper(
+    std::vector<old_snapshot_t> &old_snapshots,
+    goto_programt &wrapper,
+    const std::string &func_name,
+    const locationt &location) const;
+
+  /// \brief Materialize old snapshots at call site (replace-call mode)
+  /// Creates DECL and ASSIGN instructions for snapshot variables at call location
+  /// \param old_snapshots Vector of snapshots from function body
+  /// \param function_symbol Function symbol for parameter substitution
+  /// \param actual_args Actual arguments at call site
+  /// \param replacement GOTO program to add snapshot instructions to
+  /// \param call_location Source location for generated instructions
+  /// \return Vector of call-site snapshots (with parameter substitution applied)
+  std::vector<old_snapshot_t> materialize_old_snapshots_at_callsite(
+    const std::vector<old_snapshot_t> &old_snapshots,
+    const symbolt &function_symbol,
+    const std::vector<expr2tc> &actual_args,
+    goto_programt &replacement,
+    const locationt &call_location) const;
 
   // ========== Type fixing for return value comparisons ==========
 
@@ -261,6 +294,18 @@ private:
   /// \param expr Expression to normalize (typically an ensures guard)
   /// \return Expression with floating-point add2t replaced by ieee_add2t
   expr2tc normalize_fp_add_in_ensures(const expr2tc &expr) const;
+
+  /// \brief Normalize ensures guard expression for return value handling
+  /// This is a unified helper that applies all return_value-related transformations:
+  /// 1. Replaces __ESBMC_return_value with actual ret_val symbol
+  /// 2. Fixes type mismatches in comparisons (removes incorrect casts, adds correct casts)
+  /// 3. Normalizes floating-point operations to use IEEE semantics
+  /// \param ensures_clause Original ensures clause expression
+  /// \param ret_val Return value symbol (may be nil if function returns void)
+  /// \return Normalized ensures guard ready for ASSERT/ASSUME
+  expr2tc normalize_ensures_guard_for_return_value(
+    const expr2tc &ensures_clause,
+    const expr2tc &ret_val) const;
 
   // ========== __ESBMC_is_fresh support for ensures ==========
 

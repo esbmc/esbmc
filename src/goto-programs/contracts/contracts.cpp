@@ -458,69 +458,12 @@ goto_programt code_contractst::generate_checking_wrapper(
   // 0. Extract and create snapshots for __ESBMC_old() expressions
   // Note: __ESBMC_old() calls are converted to assignments in the function body
   // We need to find these assignments and extract the old_snapshot sideeffects
-  std::vector<old_snapshot_t> old_snapshots;
+  std::vector<old_snapshot_t> old_snapshots =
+    collect_old_snapshots_from_body(original_body);
 
-  // Scan the original function body to find old_snapshot assignments
-  {
-    const goto_programt &body = original_body;
-
-    // Scan for assignments from old_snapshot sideeffects
-    forall_goto_program_instructions (it, body)
-    {
-      if (it->is_assign() && is_code_assign2t(it->code))
-      {
-        const code_assign2t &assign = to_code_assign2t(it->code);
-        if (is_sideeffect2t(assign.source))
-        {
-          const sideeffect2t &se = to_sideeffect2t(assign.source);
-          if (se.kind == sideeffect2t::old_snapshot)
-          {
-            // Found an old_snapshot assignment!
-            // The LHS is the temporary variable, the operand is the original expression
-            old_snapshots.push_back({se.operand, assign.target});
-          }
-        }
-      }
-    }
-  }
-
-  // Now we need to generate snapshot assignments in the wrapper BEFORE calling the original function
-  // We'll update old_snapshots to contain new wrapper snapshot variables
-  for (size_t i = 0; i < old_snapshots.size(); ++i)
-  {
-    expr2tc original_expr = old_snapshots[i].original_expr;
-    expr2tc old_temp_var =
-      old_snapshots[i].snapshot_var; // The temp var from function body
-
-    // TODO: Fix __ESBMC_old type issue
-    // Problem: Clang frontend declares __ESBMC_old as `int __ESBMC_old(int)`, which causes
-    // implicit type conversion. For example, __ESBMC_old(global_value) where global_value
-    // is double becomes __ESBMC_old((int)global_value).
-    // Need to apply similar type resolution approach as __ESBMC_return_value.
-
-    // Create a NEW snapshot variable for the wrapper
-    expr2tc new_snapshot_var = create_snapshot_variable(
-      original_expr, id2string(original_func.name) + "_wrapper", i);
-
-    // Generate snapshot declaration
-    goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
-    decl_inst->code =
-      code_decl2tc(original_expr->type, to_symbol2t(new_snapshot_var).thename);
-    decl_inst->location = location;
-    decl_inst->location.comment("__ESBMC_old snapshot declaration");
-
-    // Generate snapshot assignment: new_snapshot_var = original_expr
-    goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
-    assign_inst->code = code_assign2tc(new_snapshot_var, original_expr);
-    assign_inst->location = location;
-    assign_inst->location.comment("__ESBMC_old snapshot assignment");
-
-    // Store both old and new variables in the snapshot structure
-    // We'll keep the old temp var as original_expr for matching,
-    // and new snapshot var as snapshot_var for replacement
-    old_snapshots[i].original_expr = old_temp_var;    // What to find
-    old_snapshots[i].snapshot_var = new_snapshot_var; // What to replace with
-  }
+  // Materialize snapshots in wrapper (creates DECL and ASSIGN instructions)
+  materialize_old_snapshots_at_wrapper(
+    old_snapshots, wrapper, id2string(original_func.name), location);
 
   // 1. Process __ESBMC_is_fresh in requires: allocate memory before function call
   //    (ensures clauses handle is_fresh separately via replace_is_fresh_in_ensures_expr)
@@ -748,19 +691,6 @@ goto_programt code_contractst::generate_checking_wrapper(
       ret_val && ret_val->type ? get_type_id(*ret_val->type) : "nil",
       ret_val && ret_val->type && is_symbol_type(ret_val->type));
     
-    // Replace __ESBMC_return_value with actual return value variable
-    if (!is_nil_expr(ret_val))
-    {
-      log_debug(
-        "contracts",
-        "generate_checking_wrapper: calling replace_return_value_in_expr");
-      ensures_guard = replace_return_value_in_expr(ensures_guard, ret_val);
-      log_debug(
-        "contracts",
-        "generate_checking_wrapper: replace_return_value_in_expr completed, result type_id={}",
-        ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
-    }
-
     // Replace __ESBMC_old() expressions
     if (!old_snapshots.empty())
       ensures_guard = replace_old_in_expr(ensures_guard, old_snapshots);
@@ -788,19 +718,9 @@ goto_programt code_contractst::generate_checking_wrapper(
     }
   }
   
-  // Fix type mismatches in comparison expressions involving return values
-  // This removes incorrect casts and adds correct casts for constants
-  if (!is_nil_expr(ensures_guard) && !is_nil_expr(ret_val))
-  {
-    ensures_guard = fix_comparison_types(ensures_guard, ret_val);
-  }
-  
-  // Normalize floating-point addition to use IEEE semantics (matching implementation)
-  // This ensures contracts use IEEE_ADD instead of regular + for floating-point operations
-  if (!is_nil_expr(ensures_guard))
-  {
-    ensures_guard = normalize_fp_add_in_ensures(ensures_guard);
-  }
+  // Normalize ensures guard: replace return_value, fix types, normalize floating-point
+  // This unified helper applies all return_value-related transformations
+  ensures_guard = normalize_ensures_guard_for_return_value(ensures_guard, ret_val);
   
   // Add ASSERT instruction for ensures clause with property
   if (!is_nil_expr(ensures_guard))
@@ -842,7 +762,7 @@ goto_programt code_contractst::generate_checking_wrapper(
 
 expr2tc code_contractst::replace_return_value_in_expr(
   const expr2tc &expr,
-  const expr2tc &ret_val)
+  const expr2tc &ret_val) const
 {
   if (is_nil_expr(expr))
     return expr;
@@ -1229,7 +1149,7 @@ bool code_contractst::is_old_call(const expr2tc &expr) const
 expr2tc code_contractst::create_snapshot_variable(
   const expr2tc &expr,
   const std::string &func_name,
-  size_t index)
+  size_t index) const
 {
   // Generate unique snapshot variable name
   std::string snapshot_name =
@@ -1316,6 +1236,143 @@ expr2tc code_contractst::replace_old_in_expr(
   });
 
   return new_expr;
+}
+
+// ========== Old snapshot collection and materialization helpers ==========
+
+std::vector<code_contractst::old_snapshot_t> code_contractst::collect_old_snapshots_from_body(
+  const goto_programt &function_body) const
+{
+  std::vector<code_contractst::old_snapshot_t> old_snapshots;
+
+  // Scan for assignments from old_snapshot sideeffects
+  forall_goto_program_instructions (it, function_body)
+  {
+    if (it->is_assign() && is_code_assign2t(it->code))
+    {
+      const code_assign2t &assign = to_code_assign2t(it->code);
+      if (is_sideeffect2t(assign.source))
+      {
+        const sideeffect2t &se = to_sideeffect2t(assign.source);
+        if (se.kind == sideeffect2t::old_snapshot)
+        {
+          // Found an old_snapshot assignment!
+          // The LHS is the temporary variable, the operand is the original expression
+          old_snapshots.push_back({se.operand, assign.target});
+        }
+      }
+    }
+  }
+
+  return old_snapshots;
+}
+
+void code_contractst::materialize_old_snapshots_at_wrapper(
+  std::vector<code_contractst::old_snapshot_t> &old_snapshots,
+  goto_programt &wrapper,
+  const std::string &func_name,
+  const locationt &location) const
+{
+  // Generate snapshot assignments in the wrapper BEFORE calling the original function
+  // We'll update old_snapshots to contain new wrapper snapshot variables
+  for (size_t i = 0; i < old_snapshots.size(); ++i)
+  {
+    expr2tc original_expr = old_snapshots[i].original_expr;
+    expr2tc old_temp_var = old_snapshots[i].snapshot_var; // The temp var from function body
+
+    // Create a NEW snapshot variable for the wrapper
+    expr2tc new_snapshot_var = create_snapshot_variable(
+      original_expr, func_name + "_wrapper", i);
+
+    // Generate snapshot declaration
+    goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
+    decl_inst->code =
+      code_decl2tc(original_expr->type, to_symbol2t(new_snapshot_var).thename);
+    decl_inst->location = location;
+    decl_inst->location.comment("__ESBMC_old snapshot declaration");
+
+    // Generate snapshot assignment: new_snapshot_var = original_expr
+    goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
+    assign_inst->code = code_assign2tc(new_snapshot_var, original_expr);
+    assign_inst->location = location;
+    assign_inst->location.comment("__ESBMC_old snapshot assignment");
+
+    // Store both old and new variables in the snapshot structure
+    // We'll keep the old temp var as original_expr for matching,
+    // and new snapshot var as snapshot_var for replacement
+    old_snapshots[i].original_expr = old_temp_var;    // What to find
+    old_snapshots[i].snapshot_var = new_snapshot_var; // What to replace with
+  }
+}
+
+std::vector<code_contractst::old_snapshot_t> code_contractst::materialize_old_snapshots_at_callsite(
+  const std::vector<code_contractst::old_snapshot_t> &old_snapshots,
+  const symbolt &function_symbol,
+  const std::vector<expr2tc> &actual_args,
+  goto_programt &replacement,
+  const locationt &call_location) const
+{
+  std::vector<old_snapshot_t> callsite_snapshots;
+
+  // For each old() in the original body, create a call-site snapshot:
+  //   - Evaluate the original expression with actual arguments
+  //   - Store it in a fresh snapshot variable before havoc
+  //   - Remember mapping from the original temp variable to the snapshot
+  for (size_t i = 0; i < old_snapshots.size(); ++i)
+  {
+    expr2tc original_expr = old_snapshots[i].original_expr;
+    expr2tc temp_var = old_snapshots[i].snapshot_var; // temp var from body
+
+    // Apply the same parameter substitution used for requires/ensures
+    if (function_symbol.type.is_code())
+    {
+      const code_typet &code_type = to_code_type(function_symbol.type);
+      const code_typet::argumentst &params = code_type.arguments();
+
+      for (size_t j = 0; j < params.size() && j < actual_args.size(); ++j)
+      {
+        irep_idt param_id = params[j].get_identifier();
+        expr2tc param_expr =
+          symbol2tc(migrate_type(params[j].type()), param_id);
+        original_expr =
+          replace_symbol_in_expr(original_expr, param_expr, actual_args[j]);
+      }
+    }
+
+    // Create a NEW snapshot variable for the call site
+    expr2tc snapshot_var = create_snapshot_variable(
+      original_expr, id2string(function_symbol.name) + "_call", i);
+
+    // Generate snapshot declaration at call site
+    goto_programt::targett decl_inst = replacement.add_instruction(DECL);
+    decl_inst->code = code_decl2tc(
+      original_expr->type, to_symbol2t(snapshot_var).thename);
+    decl_inst->location = call_location;
+    decl_inst->location.comment("__ESBMC_old call-site snapshot declaration");
+
+    // Generate snapshot assignment: snapshot_var = original_expr
+    goto_programt::targett assign_inst = replacement.add_instruction(ASSIGN);
+    assign_inst->code = code_assign2tc(snapshot_var, original_expr);
+    assign_inst->location = call_location;
+    assign_inst->location.comment("__ESBMC_old call-site snapshot assignment");
+
+      // Store mapping: temp var from original body -> call-site snapshot var.
+      code_contractst::old_snapshot_t snap_entry;
+    snap_entry.original_expr = temp_var;      // what to find in ensures
+    snap_entry.snapshot_var = snapshot_var;   // what to replace with
+    callsite_snapshots.push_back(snap_entry);
+  }
+
+  if (!callsite_snapshots.empty())
+  {
+    log_debug(
+      "contracts",
+      "materialize_old_snapshots_at_callsite: created {} __ESBMC_old call-site snapshot(s) for function {}",
+      callsite_snapshots.size(),
+      id2string(function_symbol.name));
+  }
+
+  return callsite_snapshots;
 }
 
 // ========== Type fixing for return value comparisons ==========
@@ -1739,6 +1796,37 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
   return expr;
 }
 
+// ========== Unified ensures guard normalization ==========
+
+expr2tc code_contractst::normalize_ensures_guard_for_return_value(
+  const expr2tc &ensures_clause,
+  const expr2tc &ret_val) const
+{
+  if (is_nil_expr(ensures_clause))
+    return ensures_clause;
+
+  expr2tc ensures_guard = ensures_clause;
+
+  // Step 1: Replace __ESBMC_return_value with actual ret_val symbol
+  if (!is_nil_expr(ret_val))
+  {
+    ensures_guard = replace_return_value_in_expr(ensures_guard, ret_val);
+  }
+
+  // Step 2: Fix type mismatches in comparison expressions involving return values
+  // This removes incorrect casts and adds correct casts for constants
+  if (!is_nil_expr(ret_val))
+  {
+    ensures_guard = fix_comparison_types(ensures_guard, ret_val);
+  }
+
+  // Step 3: Normalize floating-point addition to use IEEE semantics (matching implementation)
+  // This ensures contracts use IEEE_ADD instead of regular + for floating-point operations
+  ensures_guard = normalize_fp_add_in_ensures(ensures_guard);
+
+  return ensures_guard;
+}
+
 bool code_contractst::has_contracts(const goto_programt &function_body) const
 {
   // Quick check: scan for contract markers without extracting full clauses
@@ -1958,88 +2046,11 @@ void code_contractst::generate_replacement_at_call(
   // 1.b Create call-site snapshots for __ESBMC_old() expressions (if any)
   // This mirrors the snapshot creation in generate_checking_wrapper, but
   // moves the snapshots to the call site instead of a wrapper function.
-  std::vector<old_snapshot_t> callsite_snapshots;
-  {
-    const goto_programt &body = function_body;
-    std::vector<old_snapshot_t> old_snapshots;
-
-    // Scan the original function body to find old_snapshot assignments
-    forall_goto_program_instructions (it, body)
-    {
-      if (it->is_assign() && is_code_assign2t(it->code))
-      {
-        const code_assign2t &assign = to_code_assign2t(it->code);
-        if (is_sideeffect2t(assign.source))
-        {
-          const sideeffect2t &se = to_sideeffect2t(assign.source);
-          if (se.kind == sideeffect2t::old_snapshot)
-          {
-            // Found an old_snapshot assignment in the original body.
-            // The LHS is the temporary variable, the operand is the original expression.
-            old_snapshots.push_back({se.operand, assign.target});
-          }
-        }
-      }
-    }
-
-    // For each old() in the original body, create a call-site snapshot:
-    //   - Evaluate the original expression with actual arguments
-    //   - Store it in a fresh snapshot variable before havoc
-    //   - Remember mapping from the original temp variable to the snapshot
-    for (size_t i = 0; i < old_snapshots.size(); ++i)
-    {
-      expr2tc original_expr = old_snapshots[i].original_expr;
-      expr2tc temp_var = old_snapshots[i].snapshot_var; // temp var from body
-
-      // Apply the same parameter substitution used for requires/ensures
-      if (function_symbol.type.is_code())
-      {
-        const code_typet &code_type = to_code_type(function_symbol.type);
-        const code_typet::argumentst &params = code_type.arguments();
-
-        for (size_t j = 0; j < params.size() && j < actual_args.size(); ++j)
-        {
-          irep_idt param_id = params[j].get_identifier();
-          expr2tc param_expr =
-            symbol2tc(migrate_type(params[j].type()), param_id);
-          original_expr =
-            replace_symbol_in_expr(original_expr, param_expr, actual_args[j]);
-        }
-      }
-
-      // Create a NEW snapshot variable for the call site
-      expr2tc snapshot_var = create_snapshot_variable(
-        original_expr, id2string(function_symbol.name) + "_call", i);
-
-      // Generate snapshot declaration at call site
-      goto_programt::targett decl_inst = replacement.add_instruction(DECL);
-      decl_inst->code = code_decl2tc(
-        original_expr->type, to_symbol2t(snapshot_var).thename);
-      decl_inst->location = call_location;
-      decl_inst->location.comment("__ESBMC_old call-site snapshot declaration");
-
-      // Generate snapshot assignment: snapshot_var = original_expr
-      goto_programt::targett assign_inst = replacement.add_instruction(ASSIGN);
-      assign_inst->code = code_assign2tc(snapshot_var, original_expr);
-      assign_inst->location = call_location;
-      assign_inst->location.comment("__ESBMC_old call-site snapshot assignment");
-
-      // Store mapping: temp var from original body -> call-site snapshot var.
-      old_snapshot_t snap_entry;
-      snap_entry.original_expr = temp_var;      // what to find in ensures
-      snap_entry.snapshot_var = snapshot_var;   // what to replace with
-      callsite_snapshots.push_back(snap_entry);
-    }
-
-    if (!callsite_snapshots.empty())
-    {
-      log_debug(
-        "contracts",
-        "generate_replacement_at_call: created {} __ESBMC_old call-site snapshot(s) for function {}",
-        callsite_snapshots.size(),
-        id2string(function_symbol.name));
-    }
-  }
+  std::vector<old_snapshot_t> body_snapshots =
+    collect_old_snapshots_from_body(function_body);
+  std::vector<old_snapshot_t> callsite_snapshots =
+    materialize_old_snapshots_at_callsite(
+      body_snapshots, function_symbol, actual_args, replacement, call_location);
 
   // Lambda function to add contract clause instruction (ASSERT or ASSUME)
   // Used for both requires (ASSERT) and ensures (ASSUME) clauses
@@ -2050,23 +2061,26 @@ void code_contractst::generate_replacement_at_call(
                                const std::string &property = "") {
     if (is_nil_expr(clause))
       return;
-    
+
     bool should_add = false;
     if (is_constant_bool2t(clause))
     {
       const constant_bool2t &b = to_constant_bool2t(clause);
-      // For ASSERT: always add (unless trivially true, which we can optimize)
-      // For ASSUME: only add if true (skip trivially false assumptions)
+
+      // For ASSERT: only add if false (violation). A true constant would be
+      // a no-op assertion, so we skip it to avoid cluttering the GOTO program.
+      // For ASSUME: only add if true (skip trivially false assumptions).
       if (inst_type == ASSERT)
-        should_add = true;  // Always assert, even if true (verifier will optimize)
+        should_add = !b.value;
       else // ASSUME
-        should_add = b.value;  // Only assume if true (skip false assumptions)
+        should_add = b.value;
     }
     else
     {
-      should_add = true;  // Non-constant expressions should always be added
+      // Non-constant expressions should always be added
+      should_add = true;
     }
-    
+
     if (should_add)
     {
       goto_programt::targett t = replacement.add_instruction(inst_type);
@@ -2103,20 +2117,8 @@ void code_contractst::generate_replacement_at_call(
   // For now, we rely on assigns clause (when implemented) and global havoc
   // This is a conservative over-approximation
 
-  // 3. Replace __ESBMC_return_value in ensures
-  expr2tc ensures_guard = ensures_clause;
-  if (!is_nil_expr(ret_val) && !is_nil_expr(ensures_clause))
-  {
-    log_debug(
-      "contracts",
-      "generate_replacement_at_call: replacing __ESBMC_return_value with ret_val (type={})",
-      ret_val ? get_type_id(*ret_val->type) : "nil");
-    ensures_guard = replace_return_value_in_expr(ensures_clause, ret_val);
-    log_debug(
-      "contracts",
-      "generate_replacement_at_call: replaced __ESBMC_return_value, result type={}",
-      ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
-  }
+  // 3. Normalize ensures guard: replace return_value, fix types, normalize floating-point
+  expr2tc ensures_guard = normalize_ensures_guard_for_return_value(ensures_clause, ret_val);
 
   // 3.b Replace __ESBMC_old() occurrences in ensures using call-site snapshots
   if (!callsite_snapshots.empty() && !is_nil_expr(ensures_guard))
@@ -2132,14 +2134,8 @@ void code_contractst::generate_replacement_at_call(
       ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
   }
 
-  // Normalize floating-point addition to use IEEE semantics (matching implementation)
-  if (!is_nil_expr(ensures_guard))
-  {
-    ensures_guard = normalize_fp_add_in_ensures(ensures_guard);
-  }
-
   // 4. Assume ensures clause (assume postcondition at call site)
-  add_contract_clause(ensures_guard, ASSUME, "contract ensures");
+  add_contract_clause(ensures_guard, ASSUME, "contract ensures", "contract ensures");
 
   // Replace call with replacement code
   // Insert replacement code before the call instruction
