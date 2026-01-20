@@ -594,7 +594,7 @@ goto_programt code_contractst::generate_checking_wrapper(
     
     bool should_add = false;
     if (is_constant_bool2t(clause))
-    {
+  {
       const constant_bool2t &b = to_constant_bool2t(clause);
       // For ASSERT: only add if false (violation)
       // For ASSUME: only add if true (trivially true clauses are skipped)
@@ -626,7 +626,48 @@ goto_programt code_contractst::generate_checking_wrapper(
   if (original_func.type.is_code())
   {
     const code_typet &code_type = to_code_type(original_func.type);
-    ret_type = migrate_type(code_type.return_type());
+    typet return_type_irep1 = code_type.return_type();
+    log_debug(
+      "contracts",
+      "generate_checking_wrapper: original return_type (irep1) id={}, identifier={}",
+      return_type_irep1.id().as_string(),
+      return_type_irep1.id() == "symbol" ? return_type_irep1.identifier().as_string() : "N/A");
+    
+    // Resolve symbol_type to concrete type using ns.follow()
+    // This is critical: value set analysis cannot handle symbol_type
+    if (return_type_irep1.id() == "symbol")
+    {
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: resolving symbol_type {}",
+        return_type_irep1.identifier().as_string());
+      return_type_irep1 = ns.follow(return_type_irep1);
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: resolved to type id={}",
+        return_type_irep1.id().as_string());
+    }
+    
+    ret_type = migrate_type(return_type_irep1);
+    log_debug(
+      "contracts",
+      "generate_checking_wrapper: ret_type (irep2) type_id={}, is_symbol_type={}",
+      ret_type ? get_type_id(*ret_type) : "nil",
+      ret_type && is_symbol_type(ret_type));
+    
+    // Also resolve symbol_type2t in irep2 if needed
+    if (is_symbol_type(ret_type))
+    {
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: ret_type is symbol_type2t, resolving...");
+      ret_type = ns.follow(ret_type);
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: resolved ret_type type_id={}",
+        ret_type ? get_type_id(*ret_type) : "nil");
+    }
+    
     if (!is_nil_type(ret_type))
     {
       // Create and add symbol to symbol table
@@ -634,20 +675,50 @@ goto_programt code_contractst::generate_checking_wrapper(
       symbolt ret_val_symbol;
       ret_val_symbol.name = ret_val_id;
       ret_val_symbol.id = ret_val_id;
-      ret_val_symbol.type = code_type.return_type();
+      ret_val_symbol.type = return_type_irep1;
       ret_val_symbol.lvalue = true;
       ret_val_symbol.static_lifetime = false;
       ret_val_symbol.location = location;
       ret_val_symbol.mode = original_func.mode;
 
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: creating return_value symbol with type id={}, is_symbol={}",
+        ret_val_symbol.type.id().as_string(),
+        ret_val_symbol.type.id() == "symbol");
+
       // Add symbol to context
       symbolt *added_symbol = context.move_symbol_to_context(ret_val_symbol);
       ret_val = symbol2tc(ret_type, added_symbol->id);
+      
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: created ret_val symbol, type_id={}, is_symbol_type={}",
+        ret_val->type ? get_type_id(*ret_val->type) : "nil",
+        ret_val->type && is_symbol_type(ret_val->type));
 
       goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
       decl_inst->code = code_decl2tc(ret_type, added_symbol->id);
       decl_inst->location = location;
       decl_inst->location.comment("contract return value");
+      
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: created DECL instruction, type_id={}, is_symbol_type={}",
+        ret_type ? get_type_id(*ret_type) : "nil",
+        ret_type && is_symbol_type(ret_type));
+      
+      // Note: We don't initialize return_value here for struct/union types.
+      // The function call will assign the complete struct/union value to return_value,
+      // which will completely overwrite any member-level initialization.
+      // Initializing members individually would be redundant and can cause issues
+      // in symbolic execution when the function call overwrites the entire struct.
+      // 
+      // This aligns with the behavior in mark_decl_as_non_det.cpp which skips
+      // initialization for return_value$ prefixed variables.
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: skipping return_value initialization for struct/union type (will be assigned by function call)");
     }
   }
 
@@ -684,9 +755,24 @@ goto_programt code_contractst::generate_checking_wrapper(
   expr2tc ensures_guard = ensures_clause;
   if (!is_nil_expr(ensures_clause))
   {
+    log_debug(
+      "contracts",
+      "generate_checking_wrapper: processing ensures clause, ret_val type_id={}, is_symbol_type={}",
+      ret_val && ret_val->type ? get_type_id(*ret_val->type) : "nil",
+      ret_val && ret_val->type && is_symbol_type(ret_val->type));
+    
     // Replace __ESBMC_return_value with actual return value variable
     if (!is_nil_expr(ret_val))
+    {
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: calling replace_return_value_in_expr");
       ensures_guard = replace_return_value_in_expr(ensures_guard, ret_val);
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: replace_return_value_in_expr completed, result type_id={}",
+        ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
+    }
 
     // Replace __ESBMC_old() expressions
     if (!old_snapshots.empty())
@@ -702,7 +788,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   {
     bool should_add = false;
     if (is_constant_bool2t(ensures_guard))
-    {
+  {
       const constant_bool2t &b = to_constant_bool2t(ensures_guard);
       should_add = !b.value; // Only assert if false (violation)
     }
@@ -742,6 +828,37 @@ expr2tc code_contractst::replace_return_value_in_expr(
   if (is_nil_expr(expr))
     return expr;
 
+  // Handle address_of(index(symbol(__ESBMC_return_value))) pattern
+  // This is how __ESBMC_return_value appears in GOTO programs when declared as char[]
+  if (is_address_of2t(expr))
+  {
+    const address_of2t &addr = to_address_of2t(expr);
+    expr2tc addr_source = addr.ptr_obj;
+    
+    if (is_index2t(addr_source))
+    {
+      const index2t &index = to_index2t(addr_source);
+      expr2tc index_source = index.source_value;
+      
+      if (is_symbol2t(index_source))
+      {
+        const symbol2t &sym = to_symbol2t(index_source);
+        std::string sym_name = id2string(sym.get_symbol_name());
+        
+        if (
+          sym_name.find("__ESBMC_return_value") != std::string::npos ||
+          sym_name == "return_value")
+        {
+          // Replace &__ESBMC_return_value[0] with ret_val
+          // The original expr is address_of, so its type is pointer
+          // But ret_val is the actual return value (not a pointer)
+          // We should return ret_val directly, as it has the correct type
+          return ret_val;
+        }
+      }
+    }
+  }
+
   // If this is a symbol with name __ESBMC_return_value, replace it
   if (is_symbol2t(expr))
   {
@@ -749,9 +866,82 @@ expr2tc code_contractst::replace_return_value_in_expr(
     std::string sym_name = id2string(sym.get_symbol_name());
 
     // Check if symbol name contains __ESBMC_return_value (may have prefix)
-    if (sym_name.find("__ESBMC_return_value") != std::string::npos)
+    // Also check for "return_value" which is how it appears in GOTO programs
+    if (
+      sym_name.find("__ESBMC_return_value") != std::string::npos ||
+      sym_name == "return_value")
     {
       return ret_val;
+    }
+  }
+
+  // Handle type casting pattern: ((Type*)(&__ESBMC_return_value))->member
+  // Pattern: member(dereference(typecast(address_of(index(symbol(__ESBMC_return_value))))))
+  // or: member(dereference(typecast(address_of(symbol(__ESBMC_return_value)))))
+  if (is_member2t(expr))
+  {
+    const member2t &member = to_member2t(expr);
+    expr2tc source = member.source_value;
+    
+    // Check if source is a dereference (for -> operator)
+    expr2tc deref_source = source;
+    if (is_dereference2t(source))
+    {
+      const dereference2t &deref = to_dereference2t(source);
+      deref_source = deref.value;
+    }
+
+    // Check if deref_source (or source if no dereference) is a typecast
+    if (is_typecast2t(deref_source))
+    {
+      const typecast2t &cast = to_typecast2t(deref_source);
+      expr2tc cast_source = cast.from;
+
+      // Check if cast source is address_of
+      if (is_address_of2t(cast_source))
+      {
+        const address_of2t &addr = to_address_of2t(cast_source);
+        expr2tc addr_source = addr.ptr_obj;
+
+        // Check if address_of source is __ESBMC_return_value symbol (direct or via index)
+        expr2tc final_symbol = addr_source;
+        if (is_index2t(addr_source))
+        {
+          // Handle case: ((Type*)(&__ESBMC_return_value[0]))->member
+          const index2t &index = to_index2t(addr_source);
+          final_symbol = index.source_value;
+        }
+
+        if (is_symbol2t(final_symbol))
+        {
+          const symbol2t &sym = to_symbol2t(final_symbol);
+          std::string sym_name = id2string(sym.get_symbol_name());
+
+          if (
+            sym_name.find("__ESBMC_return_value") != std::string::npos ||
+            sym_name == "return_value")
+          {
+            // Replace the entire pattern: ((Type*)(&__ESBMC_return_value))->member
+            // with: ret_val.member (direct member access)
+            // ret_val is already the struct value, not a pointer
+            // But we need to check if ret_val is actually a struct/union type
+            if (is_struct_type(ret_val->type) || is_union_type(ret_val->type))
+            {
+              return member2tc(member.type, ret_val, member.member);
+            }
+            else
+            {
+              // If ret_val is not a struct/union, we can't create member access
+              // This shouldn't happen for struct return types, but handle it gracefully
+              log_warning(
+                "contracts",
+                "Cannot create member access: ret_val type is not struct/union (type={})",
+                get_type_id(*ret_val->type));
+              // Continue with recursive replacement
+            }
+          }
+        }
+      }
     }
   }
 
@@ -760,6 +950,31 @@ expr2tc code_contractst::replace_return_value_in_expr(
   new_expr->Foreach_operand([this, &ret_val](expr2tc &op) {
     op = replace_return_value_in_expr(op, ret_val);
   });
+
+  // After replacing __ESBMC_return_value, check if we can simplify typecasts
+  // If a typecast was added to match __ESBMC_return_value's pointer type,
+  // but __ESBMC_return_value is now replaced with ret_val (non-pointer),
+  // we may be able to remove the typecast
+  if (is_typecast2t(new_expr))
+  {
+    const typecast2t &cast = to_typecast2t(new_expr);
+    
+    // If the cast source type matches the cast target type, remove the typecast
+    if (cast.from->type == cast.type)
+    {
+      return cast.from;
+    }
+    
+    // If cast target is pointer but cast source is not, and ret_val is not a pointer,
+    // this typecast was likely added to match __ESBMC_return_value's pointer type
+    // Since we've replaced __ESBMC_return_value with ret_val, we can try to remove it
+    if (
+      is_pointer_type(cast.type) && !is_pointer_type(cast.from->type) &&
+      ret_val && !is_pointer_type(ret_val->type))
+    {
+      return cast.from;
+    }
+  }
 
   return new_expr;
 }
@@ -1069,12 +1284,12 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
                 if (has_contract)
                 {
                   log_debug("contracts", "Adding call to replacement list: {}", called_func);
-                  calls_to_replace.push_back(i_it);
+                calls_to_replace.push_back(i_it);
                   function_info.push_back(map_it->second);
                   // Track this function for deletion (use the ID from goto_functions)
                   irep_idt func_id = std::get<2>(map_it->second);
                   functions_to_delete.insert(func_id);
-                  break;
+                break;
                 }
               }
               else
@@ -1171,7 +1386,7 @@ void code_contractst::generate_replacement_at_call(
     
     // Build parameter-to-argument mapping
     for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
-    {
+  {
       irep_idt param_id = params[i].get_identifier();
       expr2tc param_expr = symbol2tc(
         migrate_type(params[i].type()), param_id);
@@ -1210,16 +1425,16 @@ void code_contractst::generate_replacement_at_call(
     if (is_constant_bool2t(clause))
     {
       const constant_bool2t &b = to_constant_bool2t(clause);
-      // For ASSERT: only add if false (violation)
-      // For ASSUME: only add if false (contradiction)
+      // For ASSERT: always add (unless trivially true, which we can optimize)
+      // For ASSUME: only add if true (skip trivially false assumptions)
       if (inst_type == ASSERT)
-        should_add = !b.value;
+        should_add = true;  // Always assert, even if true (verifier will optimize)
       else // ASSUME
-        should_add = !b.value;
+        should_add = b.value;  // Only assume if true (skip false assumptions)
     }
     else
     {
-      should_add = true;
+      should_add = true;  // Non-constant expressions should always be added
     }
     
     if (should_add)
@@ -1240,14 +1455,14 @@ void code_contractst::generate_replacement_at_call(
   // 2. Havoc all potentially modified locations
   // In replace_calls mode, we must havoc everything the function might modify,
   // otherwise the effects cannot propagate from the removed function body.
-  
+
   // 2.1. Havoc assigns targets (if assigns clause exists)
   // TODO Phase 2.4: Extract assigns clause from function body
   if (!is_nil_expr(assigns_clause))
   {
     havoc_assigns_targets(assigns_clause, replacement, call_location);
   }
-  
+
   // 2.2. Havoc static lifetime global variables
   // Functions may modify global state, so we must havoc globals
   // Note: This is conservative but necessary for soundness
@@ -1258,12 +1473,19 @@ void code_contractst::generate_replacement_at_call(
   // For now, we rely on assigns clause (when implemented) and global havoc
   // This is a conservative over-approximation
 
-  // 3. Replace __ESBMC_return_value in ensures (TODO Phase 2.2)
+  // 3. Replace __ESBMC_return_value in ensures
   expr2tc ensures_guard = ensures_clause;
   if (!is_nil_expr(ret_val) && !is_nil_expr(ensures_clause))
-  {
-    // TODO Phase 2.2: Use replace_return_value_in_expr() here
-    // ensures_guard = replace_return_value_in_expr(ensures_clause, ret_val);
+    {
+    log_debug(
+      "contracts",
+      "generate_replacement_at_call: replacing __ESBMC_return_value with ret_val (type={})",
+      ret_val ? get_type_id(*ret_val->type) : "nil");
+    ensures_guard = replace_return_value_in_expr(ensures_clause, ret_val);
+    log_debug(
+      "contracts",
+      "generate_replacement_at_call: replaced __ESBMC_return_value, result type={}",
+      ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
   }
 
   // TODO Phase 2.3: Replace __ESBMC_old() in ensures
