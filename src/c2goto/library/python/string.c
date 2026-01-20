@@ -2,26 +2,7 @@
 #include <limits.h>
 #include <stddef.h>
 #include <string.h>
-
-typedef struct __ESBMC_PyType
-{
-  const char *tp_name;
-  size_t tp_basicsize;
-} PyType;
-
-typedef struct __ESBMC_PyObj
-{
-  const void *value;
-  size_t type_id;
-  size_t size;
-} PyObject;
-
-typedef struct __ESBMC_PyListObj
-{
-  PyType *type;
-  PyObject *items;
-  size_t size;
-} PyListObject;
+#include "python_types.h"
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
