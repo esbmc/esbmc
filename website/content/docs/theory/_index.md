@@ -1,4 +1,4 @@
 ---
 title: Theory
-weight: 5
+weight: 500
 ---

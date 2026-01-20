@@ -1,6 +1,6 @@
 ---
 title: Development
-weight: 6
+weight: 140
 ---
 
 This directory contains information about developing ESBMC.
