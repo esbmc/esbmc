@@ -70,9 +70,11 @@ PyObject *__ESBMC_create_inf_obj()
 
 PyListObject *__ESBMC_list_create()
 {
+  extern void __ESBMC_assume(_Bool);
   PyListObject *l = __ESBMC_alloca(sizeof(PyListObject));
   l->type = &__ESBMC_list_type;
-  l->items = __ESBMC_create_inf_obj();
+  l->items = malloc(1024 * sizeof(PyObject));
+  __ESBMC_assume(l->items != NULL);
   l->size = 0;
   return l;
 }
@@ -111,6 +113,9 @@ bool __ESBMC_list_push(
   size_t type_id,
   size_t type_size)
 {
+  extern void __ESBMC_assume(_Bool);
+  __ESBMC_assume(l->size < 1024);
+
   // TODO: __ESBMC_obj_cpy
   void *copied_value = __ESBMC_copy_value(value, type_size);
 
@@ -122,6 +127,24 @@ bool __ESBMC_list_push(
   l->size++;
 
   // TODO: Nondeterministic failure?
+  return true;
+}
+
+bool __ESBMC_list_push_raw(
+  PyListObject *l,
+  const void *value,
+  size_t type_id,
+  size_t type_size)
+{
+  extern void __ESBMC_assume(_Bool);
+  __ESBMC_assume(l->size < 1024);
+
+  // Store the pointer directly without copying.
+  PyObject *item = &l->items[l->size];
+  item->value = value;
+  item->type_id = type_id;
+  item->size = type_size;
+  l->size++;
   return true;
 }
 
