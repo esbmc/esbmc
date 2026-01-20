@@ -1386,8 +1386,9 @@ expr2tc code_contractst::fix_comparison_types(
   
   // Step 1: Remove incorrect casts on return_value
   expr2tc cleaned_expr = remove_incorrect_casts(expr, ret_val);
+
   
-  // Step 2: Fix comparison operators
+  // Step 2: Fix comparison operators (non-recursive, only direct children)
   if (is_comp_expr(cleaned_expr))
   {
     expr2tc new_expr = cleaned_expr->clone();
@@ -1490,7 +1491,7 @@ expr2tc code_contractst::fix_comparison_types(
     return new_expr;
   }
   
-  // Recursively process other expressions
+  // For non-comparison expressions, recursively process operands
   expr2tc new_expr = cleaned_expr->clone();
   new_expr->Foreach_operand([this, &ret_val](expr2tc &op) {
     op = fix_comparison_types(op, ret_val);

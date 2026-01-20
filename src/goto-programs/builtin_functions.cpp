@@ -642,8 +642,10 @@ void goto_convertt::do_function_call_symbol(
     // __ESBMC_old(expr): captures the pre-state value of expr in ensures clauses
     // This function should only be used within __ESBMC_ensures clauses
     //
-    // Type handling: Declared as int in frontend, but at IR level we use
-    // arguments[0].type() to automatically inherit the correct type from the argument.
+    // Type handling: Declared as `int __ESBMC_old(int)` in frontend, which causes
+    // Clang to insert implicit typecasts. For example, __ESBMC_old(global_value)
+    // where global_value is double becomes __ESBMC_old((int)global_value).
+    // We need to strip this typecast and use the original expression's type.
     if (arguments.size() != 1)
     {
       log_error("`__ESBMC_old' expected to have one argument");
@@ -656,11 +658,19 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
+    // Strip typecast if present (due to int declaration in frontend)
+    exprt actual_arg = arguments[0];
+    if (actual_arg.id() == "typecast" && actual_arg.operands().size() == 1)
+    {
+      // Use the inner expression (before typecast)
+      actual_arg = actual_arg.op0();
+    }
+
     // Create a special sideeffect expression to mark this as an old() call
-    // Type is automatically inherited from the argument
-    exprt old_expr("sideeffect", arguments[0].type());
+    // Type is inherited from the actual argument (after stripping typecast)
+    exprt old_expr("sideeffect", actual_arg.type());
     old_expr.set("statement", "old_snapshot");
-    old_expr.copy_to_operands(arguments[0]);
+    old_expr.copy_to_operands(actual_arg);
     old_expr.location() = function.location();
 
     // Generate assignment: lhs = old_expr
