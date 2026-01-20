@@ -256,6 +256,12 @@ private:
     const expr2tc &expr,
     const expr2tc &ret_val) const;
 
+  /// \brief Normalize floating-point addition in contract expressions to use IEEE semantics
+  /// This ensures contracts use IEEE_ADD (matching implementation) instead of regular +
+  /// \param expr Expression to normalize (typically an ensures guard)
+  /// \return Expression with floating-point add2t replaced by ieee_add2t
+  expr2tc normalize_fp_add_in_ensures(const expr2tc &expr) const;
+
   // ========== __ESBMC_is_fresh support for ensures ==========
 
   /// \brief Extract is_fresh mappings from function body

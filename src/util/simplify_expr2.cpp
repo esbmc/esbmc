@@ -7,6 +7,15 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
 #include <util/type_byte_size.h>
+#include <unordered_set>
+
+// Lightweight structural guard for simplification re-entrancy on the same
+// expression node. This avoids infinite self-calling patterns without relying
+// on arbitrary depth limits.
+namespace
+{
+static thread_local std::unordered_set<const expr2t *> simplifying_add_nodes;
+} // namespace
 
 expr2tc expr2t::do_simplify() const
 {
@@ -446,6 +455,26 @@ static type2tc common_arith_op2_type(expr2tc &e, expr2tc &f)
 
 expr2tc add2t::do_simplify() const
 {
+  // If we are already simplifying this exact add node, abort to avoid
+  // self-recursive simplification cycles. Returning nil here tells the caller
+  // "no change", so the original expression is kept.
+  if (simplifying_add_nodes.find(this) != simplifying_add_nodes.end())
+    return expr2tc();
+
+  struct reentrancy_guard
+  {
+    const expr2t *node;
+
+    explicit reentrancy_guard(const expr2t *n) : node(n)
+    {
+      simplifying_add_nodes.insert(node);
+    }
+    ~reentrancy_guard()
+    {
+      simplifying_add_nodes.erase(node);
+    }
+  } guard(this);
+
   // x + (-x) = 0
   if (is_neg2t(side_2) && to_neg2t(side_2).value == side_1)
     return gen_zero(type);

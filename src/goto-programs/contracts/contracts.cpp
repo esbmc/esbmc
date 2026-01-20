@@ -795,6 +795,13 @@ goto_programt code_contractst::generate_checking_wrapper(
     ensures_guard = fix_comparison_types(ensures_guard, ret_val);
   }
   
+  // Normalize floating-point addition to use IEEE semantics (matching implementation)
+  // This ensures contracts use IEEE_ADD instead of regular + for floating-point operations
+  if (!is_nil_expr(ensures_guard))
+  {
+    ensures_guard = normalize_fp_add_in_ensures(ensures_guard);
+  }
+  
   // Add ASSERT instruction for ensures clause with property
   if (!is_nil_expr(ensures_guard))
   {
@@ -1338,12 +1345,13 @@ expr2tc code_contractst::remove_incorrect_casts(
   if (is_nil_expr(expr) || is_nil_expr(ret_val))
     return expr;
   
-  // If this is a typecast on a return_value symbol, check if it's incorrect
+  // NON-RECURSIVE: Only process direct typecast on return_value symbol
+  // This avoids infinite recursion and circular references
   if (is_typecast2t(expr))
   {
     const typecast2t &cast = to_typecast2t(expr);
     
-    // Check if we're casting a return_value symbol
+    // Check if we're casting a return_value symbol (directly, not nested)
     if (is_symbol2t(cast.from))
     {
       const symbol2t &sym = to_symbol2t(cast.from);
@@ -1368,13 +1376,9 @@ expr2tc code_contractst::remove_incorrect_casts(
     }
   }
   
-  // Recursively process operands
-  expr2tc new_expr = expr->clone();
-  new_expr->Foreach_operand([this, &ret_val](expr2tc &op) {
-    op = remove_incorrect_casts(op, ret_val);
-  });
-  
-  return new_expr;
+  // No recursion: return original expression unchanged
+  // The caller (fix_comparison_types) will handle nested structures explicitly
+  return expr;
 }
 
 expr2tc code_contractst::fix_comparison_types(
@@ -1384,14 +1388,14 @@ expr2tc code_contractst::fix_comparison_types(
   if (is_nil_expr(expr) || is_nil_expr(ret_val))
     return expr;
   
-  // Step 1: Remove incorrect casts on return_value
-  expr2tc cleaned_expr = remove_incorrect_casts(expr, ret_val);
-
+  // NON-RECURSIVE APPROACH: Use explicit stack-based traversal to avoid infinite loops
+  // We only need to fix comparison expressions, so we traverse the tree explicitly
+  // and only process comparison nodes and their direct children
   
-  // Step 2: Fix comparison operators (non-recursive, only direct children)
-  if (is_comp_expr(cleaned_expr))
+  // Step 1: Handle top-level comparison expressions
+  if (is_comp_expr(expr))
   {
-    expr2tc new_expr = cleaned_expr->clone();
+    expr2tc new_expr = expr->clone();
     
     // Get the two sides of the comparison
     expr2tc *side1 = nullptr;
@@ -1436,7 +1440,79 @@ expr2tc code_contractst::fix_comparison_types(
     
     if (side1 && side2)
     {
-      // Check if one side is return_value and the other is a constant
+      // Step 1a: Remove incorrect casts on direct return_value symbols
+      *side1 = remove_incorrect_casts(*side1, ret_val);
+      *side2 = remove_incorrect_casts(*side2, ret_val);
+      
+      // Step 1b: Handle nested typecasts wrapping add/sub expressions
+      // Example: (double)(old_snapshot + (signed int)return_value)
+      // Only process one level: typecast -> add/sub -> operands
+      for (expr2tc *side_ptr : {side1, side2})
+      {
+        if (is_typecast2t(*side_ptr))
+        {
+          const typecast2t &cast = to_typecast2t(*side_ptr);
+          expr2tc inner = cast.from;
+          
+          // If inner is add/sub, fix its operands (one level only)
+          if (is_add2t(inner))
+          {
+            const add2t &add = to_add2t(inner);
+            expr2tc fixed_op1 = remove_incorrect_casts(add.side_1, ret_val);
+            expr2tc fixed_op2 = remove_incorrect_casts(add.side_2, ret_val);
+            
+            // Only recreate if something changed
+            if (fixed_op1 != add.side_1 || fixed_op2 != add.side_2)
+            {
+              // For floating-point types, use IEEE addition instead of regular addition
+              // This matches how floating-point operations are compiled in the actual code
+              if (is_fractional_type(cast.type))
+              {
+                // Use IEEE floating-point addition with default rounding mode
+                expr2tc rounding_mode = symbol2tc(
+                  get_int32_type(), "c:@__ESBMC_rounding_mode");
+                expr2tc new_add = ieee_add2tc(cast.type, fixed_op1, fixed_op2, rounding_mode);
+                *side_ptr = new_add;  // No need for outer typecast, ieee_add already has correct type
+              }
+              else
+              {
+                // For non-floating-point types, use regular addition
+                type2tc add_type = inner->type;
+                if (fixed_op1->type == fixed_op2->type && fixed_op1->type == cast.type)
+                {
+                  add_type = cast.type;
+                }
+                expr2tc new_add = add2tc(add_type, fixed_op1, fixed_op2);
+                *side_ptr = typecast2tc(cast.type, new_add);
+              }
+            }
+          }
+          else if (is_sub2t(inner))
+          {
+            const sub2t &sub = to_sub2t(inner);
+            expr2tc fixed_op1 = remove_incorrect_casts(sub.side_1, ret_val);
+            expr2tc fixed_op2 = remove_incorrect_casts(sub.side_2, ret_val);
+            
+            if (fixed_op1 != sub.side_1 || fixed_op2 != sub.side_2)
+            {
+              type2tc sub_type = inner->type;
+              expr2tc new_sub = sub2tc(sub_type, fixed_op1, fixed_op2);
+              *side_ptr = typecast2tc(cast.type, new_sub);
+            }
+          }
+          else
+          {
+            // Simple typecast - fix inner expression
+            expr2tc fixed = remove_incorrect_casts(inner, ret_val);
+            if (fixed != inner)
+            {
+              *side_ptr = typecast2tc(cast.type, fixed);
+            }
+          }
+        }
+      }
+      
+      // Step 1c: Check if one side is return_value and fix type mismatches
       bool side1_is_retval = is_symbol2t(*side1) && 
                               is_return_value_symbol(to_symbol2t(*side1));
       bool side2_is_retval = is_symbol2t(*side2) && 
@@ -1450,7 +1526,6 @@ expr2tc code_contractst::fix_comparison_types(
           const constant_int2t &c = to_constant_int2t(*side2);
           if (c.value.is_zero())
           {
-            // Replace 0 with NULL pointer of correct type
             *side2 = gen_zero(ret_val->type);
             log_debug("contracts", "Fixed pointer comparison: replaced 0 with NULL");
           }
@@ -1470,7 +1545,6 @@ expr2tc code_contractst::fix_comparison_types(
       {
         if (side1_is_retval && is_constant_int2t(*side2))
         {
-          // Cast integer constant to double/float
           *side2 = typecast2tc(ret_val->type, *side2);
           log_debug(
             "contracts",
@@ -1491,13 +1565,178 @@ expr2tc code_contractst::fix_comparison_types(
     return new_expr;
   }
   
-  // For non-comparison expressions, recursively process operands
-  expr2tc new_expr = cleaned_expr->clone();
-  new_expr->Foreach_operand([this, &ret_val](expr2tc &op) {
-    op = fix_comparison_types(op, ret_val);
-  });
+  // Step 2: Handle logical operators (AND, OR) that may contain comparisons
+  // Only process one level: if this is AND/OR, process its direct operands
+  if (is_and2t(expr) || is_or2t(expr))
+  {
+    expr2tc new_expr = expr->clone();
+    bool changed = false;
+    
+    // Process each operand (but only one level deep)
+    new_expr->Foreach_operand([this, &ret_val, &changed](expr2tc &op) {
+      if (is_comp_expr(op))
+      {
+        expr2tc fixed = fix_comparison_types(op, ret_val);
+        if (fixed != op)
+        {
+          op = fixed;
+          changed = true;
+        }
+      }
+    });
+    
+    return changed ? new_expr : expr;
+  }
   
-  return new_expr;
+  // Step 3: For all other expressions, return unchanged
+  // We don't recursively process arbitrary expression trees to avoid infinite loops
+  return expr;
+}
+
+expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
+{
+  if (is_nil_expr(expr))
+    return expr;
+
+  // NON-RECURSIVE: Only process floating-point add2t expressions
+  // Convert regular floating-point addition to IEEE_ADD to match implementation semantics
+  
+  if (is_add2t(expr))
+  {
+    const add2t &add = to_add2t(expr);
+    
+    // Only convert if this is a floating-point type
+    if (is_fractional_type(add.type))
+    {
+      // Use default rounding mode symbol (same as implementation)
+      expr2tc rounding_mode = symbol2tc(
+        get_int32_type(), "c:@__ESBMC_rounding_mode");
+      
+      // Convert to IEEE floating-point addition
+      expr2tc new_expr = ieee_add2tc(add.type, add.side_1, add.side_2, rounding_mode);
+      
+      log_debug(
+        "contracts",
+        "Normalized floating-point addition to IEEE_ADD in ensures clause");
+      
+      return new_expr;
+    }
+  }
+  
+  // For non-add expressions or non-floating-point types, process operands
+  // but only one level deep to avoid recursion issues
+  if (is_and2t(expr) || is_or2t(expr))
+  {
+    expr2tc new_expr = expr->clone();
+    bool changed = false;
+    
+    new_expr->Foreach_operand([this, &changed](expr2tc &op) {
+      expr2tc normalized = normalize_fp_add_in_ensures(op);
+      if (normalized != op)
+      {
+        op = normalized;
+        changed = true;
+      }
+    });
+    
+    return changed ? new_expr : expr;
+  }
+  
+  // For comparison expressions, process both sides
+  if (is_comp_expr(expr))
+  {
+    expr2tc new_expr = expr->clone();
+    bool changed = false;
+    
+    if (is_equality2t(new_expr))
+    {
+      equality2t &rel = to_equality2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    else if (is_notequal2t(new_expr))
+    {
+      notequal2t &rel = to_notequal2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    else if (is_lessthan2t(new_expr))
+    {
+      lessthan2t &rel = to_lessthan2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    else if (is_lessthanequal2t(new_expr))
+    {
+      lessthanequal2t &rel = to_lessthanequal2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    else if (is_greaterthan2t(new_expr))
+    {
+      greaterthan2t &rel = to_greaterthan2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    else if (is_greaterthanequal2t(new_expr))
+    {
+      greaterthanequal2t &rel = to_greaterthanequal2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    
+    return changed ? new_expr : expr;
+  }
+  
+  // For typecast expressions, process the inner expression
+  if (is_typecast2t(expr))
+  {
+    const typecast2t &cast = to_typecast2t(expr);
+    expr2tc normalized = normalize_fp_add_in_ensures(cast.from);
+    if (normalized != cast.from)
+    {
+      return typecast2tc(cast.type, normalized);
+    }
+  }
+  
+  // For all other expressions, return unchanged
+  return expr;
 }
 
 bool code_contractst::has_contracts(const goto_programt &function_body) const
@@ -1711,9 +1950,96 @@ void code_contractst::generate_replacement_at_call(
   // Debug: log clauses after parameter replacement
   log_debug(
     "contracts",
-    "After parameter replacement: requires nil={}, ensures nil={}",
+    "After parameter replacement: requires nil={}, ensures nil={}, function={}",
     is_nil_expr(requires_clause),
-    is_nil_expr(ensures_clause));
+    is_nil_expr(ensures_clause),
+    id2string(function_symbol.name));
+
+  // 1.b Create call-site snapshots for __ESBMC_old() expressions (if any)
+  // This mirrors the snapshot creation in generate_checking_wrapper, but
+  // moves the snapshots to the call site instead of a wrapper function.
+  std::vector<old_snapshot_t> callsite_snapshots;
+  {
+    const goto_programt &body = function_body;
+    std::vector<old_snapshot_t> old_snapshots;
+
+    // Scan the original function body to find old_snapshot assignments
+    forall_goto_program_instructions (it, body)
+    {
+      if (it->is_assign() && is_code_assign2t(it->code))
+      {
+        const code_assign2t &assign = to_code_assign2t(it->code);
+        if (is_sideeffect2t(assign.source))
+        {
+          const sideeffect2t &se = to_sideeffect2t(assign.source);
+          if (se.kind == sideeffect2t::old_snapshot)
+          {
+            // Found an old_snapshot assignment in the original body.
+            // The LHS is the temporary variable, the operand is the original expression.
+            old_snapshots.push_back({se.operand, assign.target});
+          }
+        }
+      }
+    }
+
+    // For each old() in the original body, create a call-site snapshot:
+    //   - Evaluate the original expression with actual arguments
+    //   - Store it in a fresh snapshot variable before havoc
+    //   - Remember mapping from the original temp variable to the snapshot
+    for (size_t i = 0; i < old_snapshots.size(); ++i)
+    {
+      expr2tc original_expr = old_snapshots[i].original_expr;
+      expr2tc temp_var = old_snapshots[i].snapshot_var; // temp var from body
+
+      // Apply the same parameter substitution used for requires/ensures
+      if (function_symbol.type.is_code())
+      {
+        const code_typet &code_type = to_code_type(function_symbol.type);
+        const code_typet::argumentst &params = code_type.arguments();
+
+        for (size_t j = 0; j < params.size() && j < actual_args.size(); ++j)
+        {
+          irep_idt param_id = params[j].get_identifier();
+          expr2tc param_expr =
+            symbol2tc(migrate_type(params[j].type()), param_id);
+          original_expr =
+            replace_symbol_in_expr(original_expr, param_expr, actual_args[j]);
+        }
+      }
+
+      // Create a NEW snapshot variable for the call site
+      expr2tc snapshot_var = create_snapshot_variable(
+        original_expr, id2string(function_symbol.name) + "_call", i);
+
+      // Generate snapshot declaration at call site
+      goto_programt::targett decl_inst = replacement.add_instruction(DECL);
+      decl_inst->code = code_decl2tc(
+        original_expr->type, to_symbol2t(snapshot_var).thename);
+      decl_inst->location = call_location;
+      decl_inst->location.comment("__ESBMC_old call-site snapshot declaration");
+
+      // Generate snapshot assignment: snapshot_var = original_expr
+      goto_programt::targett assign_inst = replacement.add_instruction(ASSIGN);
+      assign_inst->code = code_assign2tc(snapshot_var, original_expr);
+      assign_inst->location = call_location;
+      assign_inst->location.comment("__ESBMC_old call-site snapshot assignment");
+
+      // Store mapping: temp var from original body -> call-site snapshot var.
+      old_snapshot_t snap_entry;
+      snap_entry.original_expr = temp_var;      // what to find in ensures
+      snap_entry.snapshot_var = snapshot_var;   // what to replace with
+      callsite_snapshots.push_back(snap_entry);
+    }
+
+    if (!callsite_snapshots.empty())
+    {
+      log_debug(
+        "contracts",
+        "generate_replacement_at_call: created {} __ESBMC_old call-site snapshot(s) for function {}",
+        callsite_snapshots.size(),
+        id2string(function_symbol.name));
+    }
+  }
 
   // Lambda function to add contract clause instruction (ASSERT or ASSUME)
   // Used for both requires (ASSERT) and ensures (ASSUME) clauses
@@ -1780,7 +2106,7 @@ void code_contractst::generate_replacement_at_call(
   // 3. Replace __ESBMC_return_value in ensures
   expr2tc ensures_guard = ensures_clause;
   if (!is_nil_expr(ret_val) && !is_nil_expr(ensures_clause))
-    {
+  {
     log_debug(
       "contracts",
       "generate_replacement_at_call: replacing __ESBMC_return_value with ret_val (type={})",
@@ -1792,7 +2118,25 @@ void code_contractst::generate_replacement_at_call(
       ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
   }
 
-  // TODO Phase 2.3: Replace __ESBMC_old() in ensures
+  // 3.b Replace __ESBMC_old() occurrences in ensures using call-site snapshots
+  if (!callsite_snapshots.empty() && !is_nil_expr(ensures_guard))
+  {
+    log_debug(
+      "contracts",
+      "generate_replacement_at_call: replacing __ESBMC_old expressions in ensures (before type={})",
+      get_type_id(*ensures_guard->type));
+    ensures_guard = replace_old_in_expr(ensures_guard, callsite_snapshots);
+    log_debug(
+      "contracts",
+      "generate_replacement_at_call: replaced __ESBMC_old expressions in ensures (after type={})",
+      ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
+  }
+
+  // Normalize floating-point addition to use IEEE semantics (matching implementation)
+  if (!is_nil_expr(ensures_guard))
+  {
+    ensures_guard = normalize_fp_add_in_ensures(ensures_guard);
+  }
 
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(ensures_guard, ASSUME, "contract ensures");
