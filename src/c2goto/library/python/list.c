@@ -70,11 +70,9 @@ PyObject *__ESBMC_create_inf_obj()
 
 PyListObject *__ESBMC_list_create()
 {
-  extern void __ESBMC_assume(_Bool);
   PyListObject *l = __ESBMC_alloca(sizeof(PyListObject));
   l->type = &__ESBMC_list_type;
-  l->items = malloc(1024 * sizeof(PyObject));
-  __ESBMC_assume(l->items != NULL);
+  l->items = __ESBMC_create_inf_obj();
   l->size = 0;
   return l;
 }
