@@ -1,4 +1,6 @@
-# HTML Report Generation
+---
+title: HTML Report Generation
+---
 
 ESBMC can generate interactive HTML reports that visualize counterexample traces, making it easier to understand and debug verification failures.
 

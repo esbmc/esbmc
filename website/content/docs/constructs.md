@@ -1,6 +1,7 @@
 ---
 title: "Constructs"
 date: 2026-01-20T13:34:16Z
+weight: 3
 draft: false
 ---
 
@@ -61,7 +62,9 @@ int main() {
 ```
 ## Ensure and Requires
 
-TBD by Weiqi
+The constructs `__ESBMC_ensure(...)`, `__ESBMC_requires(...)`, 
+`__ESBMC_return_value` and `__ESBMC_old(...)` are detailed in the 
+[Function Contracts](/docs/function-contracts) article.
 
 ## Pragma Utils
 
