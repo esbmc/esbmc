@@ -1,4 +1,6 @@
-# ESBMC PPA Maintenance Guide
+---
+title: ESBMC PPA Maintenance Guide
+---
 
 This document explains how to maintain ESBMC's Launchpad PPA (Personal Package Archive) for maintainers.
 
