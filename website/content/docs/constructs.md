@@ -19,7 +19,7 @@ SV-COMP Document: https://sv-comp.sosy-lab.org/2025/rules.php
 
 ## Non-Deterministic Functions
 
-`__ESBMC_nondet_X()` where `X` is a primitive C data type. This will mark the
+`nondet_X()` where `X` is a primitive C data type. This will mark the
 variable as non-deterministic, meaning it can have any value.
 
 In this example, ESBMC will find a verification failed outcome because `x` is
@@ -28,7 +28,7 @@ marked as being able to hold any value:
 ```c
 #include <assert.h>
 int main() {
-    uint x = __ESBMC_nondet_uint();
+    unsigned int x = nondet_uint();
     assert(x < 10);
     return 0;
 }
@@ -41,20 +41,20 @@ the benefit of not needing to use `#include <assert.h>`.
 
 ```c
 int main() {
-    uint x = __ESBMC_nondet_uint();
+    unsigned int x = nondet_uint();
     __ESBMC_assert(x < 10, "X needs to be less than 10.");
     return 0;
 }
 ```
 
-`__ESBMC_assume(...)` can be used to narrow down the possible values of `x`.
+`__ESBMC_assume(int)` can be used to narrow down the possible values of `x`.
 In this case the verification will succeed because it narrows the possible
 values of `x` to be less than 5.
 
 ```c
 #include <assert.h>
 int main() {
-    uint x = __ESBMC_nondet_uint();
+    unsigned int x = nondet_uint();
     __ESBMC_assume(x < 5);
     assert(x < 10);
     return 0;
@@ -84,13 +84,14 @@ following example, the loop will be unwound 80 times max.
 
 ```c
 int main() {
-    uint x = __ESBMC_nondet_uint();
+    unsigned int x = nondet_uint();
     __ESBMC_assume(x > 50 && x < 100);
+    unsigned int y = 0;
     #pragma unroll 80
     for (int i = x - 1; x >= 0; x--) {
-
+        y += x;
     }
-    assert(x < 10);
+    assert(y > 100);
     return 0;
 }
 ```
@@ -106,13 +107,13 @@ will never stop verifying it.
 
 ```c
 int main() {
-    uint x = __ESBMC_nondet_uint();
+    unsigned int x = nondet_uint();
     __ESBMC_assume(x > 50 && x < 100);
     #pragma unroll
     for (int i = x - 1; x >= 0; x--) {
-
+        y += x;
     }
-    assert(x < 10);
+    assert(y > 100);
     return 0;
 }
 ```
@@ -123,13 +124,13 @@ will throw a parsing error.
 ```c
 #define LOOP_BOUND 80
 int main() {
-    uint x = __ESBMC_nondet_uint();
+    unsigned int x = nondet_uint();
     __ESBMC_assume(x > 50 && x < 100);
     #pragma unroll LOOP_BOUND
     for (int i = x - 1; x >= 0; x--) {
-
+        y += x;
     }
-    assert(x < 10);
+    assert(y > 100);
     return 0;
 }
 ```
