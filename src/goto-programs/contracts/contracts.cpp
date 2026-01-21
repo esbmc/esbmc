@@ -1256,6 +1256,14 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::collect_old_snapsh
   const goto_programt &function_body) const
 {
   std::vector<code_contractst::old_snapshot_t> old_snapshots;
+  
+  // Track seen expressions to deduplicate
+  // Map: original_expr -> {first_temp_var, all_temp_vars}
+  struct expr_info {
+    expr2tc original_expr;
+    std::vector<expr2tc> temp_vars;
+  };
+  std::vector<expr_info> unique_exprs;
 
   // Scan for assignments from old_snapshot sideeffects
   forall_goto_program_instructions (it, function_body)
@@ -1269,10 +1277,51 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::collect_old_snapsh
         if (se.kind == sideeffect2t::old_snapshot)
         {
           // Found an old_snapshot assignment!
-          // The LHS is the temporary variable, the operand is the original expression
-          old_snapshots.push_back({se.operand, assign.target});
+          // The operand is the original expression, the target is the temp variable
+          expr2tc original_expr = se.operand;
+          expr2tc temp_var = assign.target;
+          
+          // Check if we've seen this expression before
+          bool found = false;
+          for (auto &info : unique_exprs)
+          {
+            if (info.original_expr == original_expr)
+            {
+              // Same expression - add this temp var to the list
+              info.temp_vars.push_back(temp_var);
+              found = true;
+              break;
+            }
+          }
+          
+          if (!found)
+          {
+            // New expression - create a new entry
+            unique_exprs.push_back({original_expr, {temp_var}});
+          }
         }
       }
+    }
+  }
+  
+  // Create one snapshot entry per unique expression, BUT create entries for ALL temp vars
+  // This ensures that all temp vars get mapped to the same wrapper snapshot later
+  for (const auto &info : unique_exprs)
+  {
+    // Add an entry for EACH temp var that references this expression
+    // They all have the same original_expr, so they'll all get mapped to the same wrapper snapshot
+    for (const auto &temp_var : info.temp_vars)
+    {
+      old_snapshots.push_back({info.original_expr, temp_var});
+    }
+    
+    // Log if there are multiple temp vars for the same expression
+    if (info.temp_vars.size() > 1)
+    {
+      log_debug(
+        "contracts",
+        "Found {} temp variables for the same __ESBMC_old expression - all will map to one snapshot",
+        info.temp_vars.size());
     }
   }
 
@@ -1287,27 +1336,57 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
 {
   // Generate snapshot assignments in the wrapper BEFORE calling the original function
   // We'll update old_snapshots to contain new wrapper snapshot variables
+  
+  // Map to track: original_expr -> wrapper_snapshot_var
+  // This ensures we only create ONE wrapper snapshot per unique expression
+  std::map<std::string, expr2tc> expr_to_wrapper_snapshot;
+  
+  size_t unique_snapshot_count = 0;
+  
   for (size_t i = 0; i < old_snapshots.size(); ++i)
   {
     expr2tc original_expr = old_snapshots[i].original_expr;
     expr2tc old_temp_var = old_snapshots[i].snapshot_var; // The temp var from function body
 
-    // Create a NEW snapshot variable for the wrapper
-    expr2tc new_snapshot_var = create_snapshot_variable(
-      original_expr, func_name + "_wrapper", i);
+    // Create a unique key for this expression (using pointer address as simple hash)
+    std::ostringstream key_stream;
+    key_stream << original_expr.get();
+    std::string expr_key = key_stream.str();
+    
+    expr2tc new_snapshot_var;
+    
+    // Check if we've already created a wrapper snapshot for this expression
+    auto it = expr_to_wrapper_snapshot.find(expr_key);
+    if (it != expr_to_wrapper_snapshot.end())
+    {
+      // Reuse existing wrapper snapshot
+      new_snapshot_var = it->second;
+      log_debug(
+        "contracts",
+        "Reusing wrapper snapshot for duplicate __ESBMC_old expression");
+    }
+    else
+    {
+      // Create a NEW snapshot variable for the wrapper
+      new_snapshot_var = create_snapshot_variable(
+        original_expr, func_name + "_wrapper", unique_snapshot_count++);
 
-    // Generate snapshot declaration
-    goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
-    decl_inst->code =
-      code_decl2tc(original_expr->type, to_symbol2t(new_snapshot_var).thename);
-    decl_inst->location = location;
-    decl_inst->location.comment("__ESBMC_old snapshot declaration");
+      // Generate snapshot declaration
+      goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
+      decl_inst->code =
+        code_decl2tc(original_expr->type, to_symbol2t(new_snapshot_var).thename);
+      decl_inst->location = location;
+      decl_inst->location.comment("__ESBMC_old snapshot declaration");
 
-    // Generate snapshot assignment: new_snapshot_var = original_expr
-    goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
-    assign_inst->code = code_assign2tc(new_snapshot_var, original_expr);
-    assign_inst->location = location;
-    assign_inst->location.comment("__ESBMC_old snapshot assignment");
+      // Generate snapshot assignment: new_snapshot_var = original_expr
+      goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
+      assign_inst->code = code_assign2tc(new_snapshot_var, original_expr);
+      assign_inst->location = location;
+      assign_inst->location.comment("__ESBMC_old snapshot assignment");
+      
+      // Remember this mapping
+      expr_to_wrapper_snapshot[expr_key] = new_snapshot_var;
+    }
 
     // Store both old and new variables in the snapshot structure
     // We'll keep the old temp var as original_expr for matching,
