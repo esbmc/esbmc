@@ -457,17 +457,27 @@ goto_programt code_contractst::generate_checking_wrapper(
   // preserve the caller's argument values. Global variables are handled by
   // unified nondet_static initialization, not per-function havoc.
 
-  // 0. Extract and create snapshots for __ESBMC_old() expressions
+  // 0. Add pointer validity assumptions FIRST (if --assume-nonnull-valid is set)
+  // This MUST come before old_snapshot materialization because old snapshots may
+  // dereference pointers (e.g., __ESBMC_old(*x)), and we need to assume pointers
+  // are valid before accessing them.
+  if (assume_nonnull_valid)
+  {
+    add_pointer_validity_assumptions(wrapper, original_func, requires_clause, location);
+  }
+
+  // 1. Extract and create snapshots for __ESBMC_old() expressions
   // Note: __ESBMC_old() calls are converted to assignments in the function body
   // We need to find these assignments and extract the old_snapshot sideeffects
   std::vector<old_snapshot_t> old_snapshots =
     collect_old_snapshots_from_body(original_body);
 
   // Materialize snapshots in wrapper (creates DECL and ASSIGN instructions)
+  // This comes AFTER pointer validity assumptions so we can safely dereference pointers
   materialize_old_snapshots_at_wrapper(
     old_snapshots, wrapper, id2string(original_func.name), location);
 
-  // 1. Process __ESBMC_is_fresh in requires: allocate memory before function call
+  // 2. Process __ESBMC_is_fresh in requires: allocate memory before function call
   //    (ensures clauses handle is_fresh separately via replace_is_fresh_in_ensures_expr)
   struct is_fresh_info {
     expr2tc ptr_arg;
@@ -548,12 +558,6 @@ goto_programt code_contractst::generate_checking_wrapper(
       t->location.comment(comment);
     }
   };
-
-  // 2. Add pointer validity assumptions (if --assume-nonnull-valid is set)
-  if (assume_nonnull_valid)
-  {
-    add_pointer_validity_assumptions(wrapper, original_func, requires_clause, location);
-  }
 
   // 3. Assume requires clause (after memory allocation for is_fresh)
   add_contract_clause(requires_clause, ASSUME, "contract requires");
@@ -2203,24 +2207,9 @@ void code_contractst::add_pointer_validity_assumptions(
       continue;
 
     // Construct "p is valid pointer" assumption
-    // For simplicity, we assume:
-    // 1. p points to a valid object (valid_object(p))
-    // 2. p is properly aligned (alignment check via pointer_offset)
-    
-    // Create valid object check: valid_object(p)
-    expr2tc valid_obj = valid_object2tc(p);
-    
-    // Create alignment check: __ESBMC_POINTER_OFFSET(p) % word_size == 0
-    // This is a simplified alignment check - assumes pointer is word-aligned
-    type2tc uint_type = get_uint_type(config.ansi_c.word_size);
-    expr2tc ptr_offset = pointer_offset2tc(uint_type, p);
-    expr2tc word_size = constant_int2tc(uint_type, BigInt(config.ansi_c.word_size / 8));
-    expr2tc mod_result = modulus2tc(uint_type, ptr_offset, word_size);
-    expr2tc zero = constant_int2tc(uint_type, BigInt(0));
-    expr2tc alignment_check = equality2tc(mod_result, zero);
-
-    // Combine checks: valid_object(p) && alignment_check
-    expr2tc validity_check = and2tc(valid_obj, alignment_check);
+    // We simply assume: p points to a valid object (valid_object(p))
+    // valid_object includes alignment checks internally
+    expr2tc validity_check = valid_object2tc(p);
 
     // Add ASSUME instruction
     auto t = wrapper.add_instruction(ASSUME);
