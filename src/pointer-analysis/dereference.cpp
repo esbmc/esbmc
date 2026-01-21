@@ -1466,6 +1466,7 @@ void dereferencet::construct_from_dyn_struct_offset(
       construct_from_array(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
     }
+#if 0
     else if (
       access_sz > field_size && type->get_width() != config.ansi_c.char_width)
     {
@@ -1476,6 +1477,7 @@ void dereferencet::construct_from_dyn_struct_offset(
       // Push nothing back, allow fall-through of the if-then-else chain to
       // resolve to a failed deref symbol.
     }
+#endif
     else if (
       alignment >= config.ansi_c.word_size &&
       it->get_width() == type->get_width())
