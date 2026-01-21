@@ -2708,7 +2708,8 @@ void esbmc_parseoptionst::process_function_contracts(
     if (!to_enforce.empty())
     {
       log_status("Enforcing contracts for {} function(s)", to_enforce.size());
-      contracts.enforce_contracts(to_enforce);
+      bool assume_nonnull_valid = cmdline.isset("assume-nonnull-valid");
+      contracts.enforce_contracts(to_enforce, assume_nonnull_valid);
     }
   }
 

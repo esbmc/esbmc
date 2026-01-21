@@ -76,7 +76,8 @@ public:
   /// Renames function F to __ESBMC_contracts_original_F and generates a new wrapper function F
   /// Wrapper function: assume requires -> call original function -> assert ensures
   /// \param to_enforce Set of function names to enforce contracts for
-  void enforce_contracts(const std::set<std::string> &to_enforce);
+  /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
+  void enforce_contracts(const std::set<std::string> &to_enforce, bool assume_nonnull_valid = false);
 
   /// \brief Replace function calls with contracts
   /// Replaces function calls with contract semantics:
@@ -124,6 +125,7 @@ private:
   /// \param original_func_id ID of the renamed original function
   /// \param original_body Original function body (before renaming)
   /// \param is_fresh_mappings Mappings for is_fresh temp variables in ensures
+  /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
   /// \return Generated wrapper function body
   goto_programt generate_checking_wrapper(
     const symbolt &original_func,
@@ -131,7 +133,8 @@ private:
     const expr2tc &ensures_clause,
     const irep_idt &original_func_id,
     const goto_programt &original_body,
-    const std::vector<is_fresh_mapping_t> &is_fresh_mappings);
+    const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
+    bool assume_nonnull_valid = false);
 
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called
@@ -350,6 +353,18 @@ private:
   /// \param dest Destination goto program (wrapper body)
   /// \param location Location information
   void havoc_static_globals(goto_programt &dest, const locationt &location);
+
+  /// \brief Add pointer validity assumptions for non-null pointer parameters
+  /// Used with --assume-nonnull-valid flag in enforce-contract mode
+  /// \param wrapper Destination goto program (wrapper body)
+  /// \param func Function symbol
+  /// \param requires_clause Requires clause expression (to check for p != NULL)
+  /// \param location Location information
+  void add_pointer_validity_assumptions(
+    goto_programt &wrapper,
+    const symbolt &func,
+    const expr2tc &requires_clause,
+    const locationt &location);
 };
 
 #endif // ESBMC_CONTRACTS_H

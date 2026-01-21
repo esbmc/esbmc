@@ -249,7 +249,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "fun"),
      "replace function calls with contract semantics (use \"*\" for all "
-     "functions)"}}},
+     "functions)"},
+    {"assume-nonnull-valid",
+     nullptr,
+     "in --enforce-contract mode, assume non-null pointer parameters are valid objects"}}},
   {"BMC",
    {{"function",
      boost::program_options::value<std::string>()->value_name("name"),

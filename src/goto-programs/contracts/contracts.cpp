@@ -304,7 +304,7 @@ void code_contractst::havoc_static_globals(
   });
 }
 
-void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
+void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce, bool assume_nonnull_valid)
 {
   for (const auto &function_name : to_enforce)
   {
@@ -421,7 +421,8 @@ void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce)
       ensures_clause,
       original_name_id,
       original_body_copy,
-      is_fresh_mappings);
+      is_fresh_mappings,
+      assume_nonnull_valid);
 
     // Create new function entry
     goto_functiont new_func;
@@ -445,7 +446,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   const expr2tc &ensures_clause,
   const irep_idt &original_func_id,
   const goto_programt &original_body,
-  const std::vector<is_fresh_mapping_t> &is_fresh_mappings)
+  const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
+  bool assume_nonnull_valid)
 {
   goto_programt wrapper;
   locationt location = original_func.location;
@@ -547,7 +549,13 @@ goto_programt code_contractst::generate_checking_wrapper(
     }
   };
 
-  // 2. Assume requires clause (after memory allocation for is_fresh)
+  // 2. Add pointer validity assumptions (if --assume-nonnull-valid is set)
+  if (assume_nonnull_valid)
+  {
+    add_pointer_validity_assumptions(wrapper, original_func, requires_clause, location);
+  }
+
+  // 3. Assume requires clause (after memory allocation for is_fresh)
   add_contract_clause(requires_clause, ASSUME, "contract requires");
 
   // 2. Declare return value variable (if function has return type)
@@ -2168,5 +2176,62 @@ void code_contractst::generate_replacement_at_call(
   
   // Debug: verify skip
   log_debug("contracts", "Call instruction marked as SKIP: type={}", (int)call_instruction->type);
+}
+
+// ========== Pointer validity assumptions support ==========
+
+void code_contractst::add_pointer_validity_assumptions(
+  goto_programt &wrapper,
+  const symbolt &func,
+  const expr2tc &requires_clause,
+  const locationt &location)
+{
+  if (!func.type.is_code())
+    return;
+
+  const code_typet &code_type = to_code_type(func.type);
+  const code_typet::argumentst &params = code_type.arguments();
+
+  for (const auto &param : params)
+  {
+    // Construct symbol p
+    type2tc param_type = migrate_type(param.type());
+    expr2tc p = symbol2tc(param_type, param.get_identifier());
+    
+    // Check if this is a pointer type
+    if (!is_pointer_type(p))
+      continue;
+
+    // Construct "p is valid pointer" assumption
+    // For simplicity, we assume:
+    // 1. p points to a valid object (valid_object(p))
+    // 2. p is properly aligned (alignment check via pointer_offset)
+    
+    // Create valid object check: valid_object(p)
+    expr2tc valid_obj = valid_object2tc(p);
+    
+    // Create alignment check: __ESBMC_POINTER_OFFSET(p) % word_size == 0
+    // This is a simplified alignment check - assumes pointer is word-aligned
+    type2tc uint_type = get_uint_type(config.ansi_c.word_size);
+    expr2tc ptr_offset = pointer_offset2tc(uint_type, p);
+    expr2tc word_size = constant_int2tc(uint_type, BigInt(config.ansi_c.word_size / 8));
+    expr2tc mod_result = modulus2tc(uint_type, ptr_offset, word_size);
+    expr2tc zero = constant_int2tc(uint_type, BigInt(0));
+    expr2tc alignment_check = equality2tc(mod_result, zero);
+
+    // Combine checks: valid_object(p) && alignment_check
+    expr2tc validity_check = and2tc(valid_obj, alignment_check);
+
+    // Add ASSUME instruction
+    auto t = wrapper.add_instruction(ASSUME);
+    t->guard = validity_check;
+    t->location = location;
+    t->location.comment("assume non-null parameter is valid");
+    
+    log_debug(
+      "contracts",
+      "add_pointer_validity_assumptions: added validity assumption for parameter {}",
+      id2string(param.get_identifier()));
+  }
 }
 
