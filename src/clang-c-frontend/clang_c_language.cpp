@@ -527,14 +527,10 @@ struct cap_info __ESBMC_cheri_info[1];
     )";
   }
 
-  // Function contract support - only add symbols when contract processing is enabled
-  // Check if enforce-contract or replace-call-with-contract options are set
-  std::string enforce_opt = config.options.get_option("enforce-contract");
-  std::string replace_opt =
-    config.options.get_option("replace-call-with-contract");
-  if (!enforce_opt.empty() || !replace_opt.empty())
-  {
-    intrinsics += R"(
+  // Function contract support
+  // Always define contract intrinsics to avoid parse errors
+  // When contract processing is disabled, these become no-ops during GOTO conversion
+  intrinsics += R"(
 /* Function contract support
  * __ESBMC_requires: precondition clause
  * __ESBMC_ensures: postcondition clause
@@ -544,6 +540,10 @@ struct cap_info __ESBMC_cheri_info[1];
  *   is determined during IR conversion based on the enclosing function's return type.
  *   For pointer return types, Clang may emit warnings but the conversion will handle
  *   the type correctly.
+ *
+ * When --enforce-contract or --replace-call-with-contract is NOT specified,
+ * these contract clauses are ignored (treated as no-ops) during GOTO conversion,
+ * allowing code with contracts to compile without parse errors.
  */
 void __ESBMC_requires(_Bool);
 void __ESBMC_ensures(_Bool);
@@ -560,8 +560,7 @@ extern int __ESBMC_return_value;
  * perform implicit conversions as needed, similar to __ESBMC_return_value.
  */
 int __ESBMC_old(int);
-    )";
-  }
+  )";
 
   return intrinsics;
 }
