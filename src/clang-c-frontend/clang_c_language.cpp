@@ -560,6 +560,21 @@ extern int __ESBMC_return_value;
  * perform implicit conversions as needed, similar to __ESBMC_return_value.
  */
 int __ESBMC_old(int);
+
+/* __ESBMC_assigns: specifies which memory locations a function may modify
+ * This is used in replace-call mode to perform precise havoc: only the
+ * variables/expressions listed in __ESBMC_assigns will be havoc'd, while
+ * all other memory locations are assumed to remain unchanged.
+ * 
+ * Usage: Place at the beginning of the function body:
+ *   void f() {
+ *     __ESBMC_assigns("x", "y", "global_var");
+ *     // ... function body
+ *   }
+ * 
+ * Phase 1 limitation: Only simple variable names are supported (no pointers/arrays).
+ */
+void __ESBMC_assigns(const char *, ...);
   )";
 
   return intrinsics;

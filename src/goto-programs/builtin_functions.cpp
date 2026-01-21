@@ -551,6 +551,13 @@ void goto_convertt::do_function_call_symbol(
   bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");
   bool is_requires = (base_name == "__ESBMC_requires");
   bool is_ensures = (base_name == "__ESBMC_ensures");
+  bool is_assigns = (base_name == "__ESBMC_assigns");
+
+  // Debug: log if we see assigns
+  if (is_assigns)
+  {
+    log_debug("builtin_functions", "Found __ESBMC_assigns call with {} arguments", arguments.size());
+  }
 
   if (is_assume || is_assert || is_loop_invariant || is_requires || is_ensures)
   {
@@ -634,6 +641,69 @@ void goto_convertt::do_function_call_symbol(
     if (lhs.is_not_nil())
     {
       log_error("{} expected not to have LHS", id2string(base_name));
+      abort();
+    }
+  }
+  else if (base_name == "__ESBMC_assigns")
+  {
+    // __ESBMC_assigns(var1, var2, ...): specifies which variables a function may modify
+    // Used in replace-call mode for precise havoc generation
+    //
+    // Phase 1: Accept variable names as string literals
+    // Example: __ESBMC_assigns("x", "y", "global_var");
+    //
+    // Strategy: Store all variable names in a single SKIP instruction with special marker
+    // The contract processing code will extract these names later
+    
+    if (arguments.empty())
+    {
+      log_error("`__ESBMC_assigns' expected to have at least one argument");
+      abort();
+    }
+
+    log_debug("builtin_functions", "Processing __ESBMC_assigns with {} arguments", arguments.size());
+
+    // Extract variable names from string literal arguments
+    std::vector<std::string> var_names;
+    for (size_t i = 0; i < arguments.size(); ++i)
+    {
+      const auto &arg = arguments[i];
+      std::string var_name;
+      get_string_constant(arg, var_name);
+      log_debug("builtin_functions", "  Argument {}: '{}'", i, var_name);
+      if (!var_name.empty())
+      {
+        var_names.push_back(var_name);
+      }
+    }
+
+    log_debug("builtin_functions", "Extracted {} variable names", var_names.size());
+
+    // Strategy: Store assigns info in an ASSUME instruction (not SKIP, which gets removed)
+    // We use ASSUME true with special comment and property field containing variable names
+    // This way the instruction won't be optimized away
+    std::string assigns_list;
+    for (size_t i = 0; i < var_names.size(); ++i)
+    {
+      if (i > 0)
+        assigns_list += ",";
+      assigns_list += var_names[i];
+    }
+    
+    // Generate ASSUME true instruction with assigns information
+    expr2tc true_guard = gen_true_expr();
+    goto_programt::targett t = dest.add_instruction(ASSUME);
+    t->guard = true_guard;
+    t->location = function.location();
+    t->location.user_provided(true);
+    t->location.comment("contract::assigns");
+    t->location.property(assigns_list);
+
+    log_debug("builtin_functions", "Created ASSUME instruction with assigns_list: '{}'", assigns_list);
+
+    if (lhs.is_not_nil())
+    {
+      log_error("__ESBMC_assigns expected not to have LHS");
       abort();
     }
   }
