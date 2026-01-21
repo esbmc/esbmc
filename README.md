@@ -77,9 +77,6 @@ You can also download the latest ESBMC binary for Ubuntu and Windows from the [r
 
 See the [building instructions](https://esbmc.github.io/docs/development/building) document.
 
-
-**We recommend using AMD64 via Docker for a fully supported version on Mac OS. We will soon remove this, as native installations on Mac OS X ARM work well too. Sample Docker-Compose and Docker files are shown below.**
-
 ## How to use ESBMC
 
 ### Verifying C Programs
