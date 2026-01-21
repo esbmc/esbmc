@@ -400,6 +400,16 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", false);
   }
 
+  // Check for conflicting strategies
+  if (cmdline.isset("k-induction") && cmdline.isset("termination"))
+  {
+    log_warning(
+      "Both --k-induction and --termination specified. "
+      "Using --k-induction (which does not include termination checking).");
+    // Optionally disable termination flag
+    options.set_option("termination", false);
+  }
+
   if (
     cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
     options.set_option("disable-inductive-step", true);
