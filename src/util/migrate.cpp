@@ -3032,6 +3032,9 @@ exprt migrate_expr_back(const expr2tc &ref)
     case sideeffect2t::old_snapshot:
       theexpr.statement("old_snapshot");
       break;
+    case sideeffect2t::assigns_target:
+      theexpr.statement("assigns_target");
+      break;
     default:
 
       log_error("Unexpected side effect type when back-converting");
