@@ -580,7 +580,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
       // Return a level0 symbol as fallback
       return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
     }
-    
+
     std::string atstr = thestr.substr(at_pos + 1, exm_pos - at_pos - 1);
     std::string exmstr = thestr.substr(exm_pos + 1, and_pos - exm_pos - 1);
 
