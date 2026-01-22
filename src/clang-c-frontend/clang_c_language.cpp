@@ -572,9 +572,16 @@ int __ESBMC_old(int);
  *     // ... function body
  *   }
  * 
+ * For pure functions (no side effects), use __ESBMC_assigns(0):
+ *   int check_property() {
+ *     __ESBMC_assigns(0);  // This function does not modify any memory
+ *     return global_x + global_y < 10;
+ *   }
+ * 
  * Note: Takes expressions (not strings) which are parsed by Clang AST and
  * stored as expression trees for delayed evaluation during replace-call.
  * Declared as `int` for C compatibility, but accepts any lvalue expression.
+ * The value 0 (or NULL) as the only argument indicates no side effects.
  */
 void __ESBMC_assigns(int, ...);
   )";

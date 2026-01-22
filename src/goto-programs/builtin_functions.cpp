@@ -654,13 +654,15 @@ void goto_convertt::do_function_call_symbol(
     // proper parameter substitution.
     //
     // Example: __ESBMC_assigns(x, node->field, arr[i].data);
+    // Special case: __ESBMC_assigns() with no arguments means function has NO side effects
+    //               (useful for pure functions that only read memory)
     //
     // Type handling: Similar to __ESBMC_old, declared as `int __ESBMC_assigns(int, ...)`
     // but Clang will insert typecasts. We strip these and preserve the original expression.
     
     if (arguments.empty())
     {
-      log_error("`__ESBMC_assigns' expected to have at least one argument");
+      log_error("`__ESBMC_assigns' expected to have at least one argument (use __ESBMC_assigns(0) for empty assigns)");
       abort();
     }
 
@@ -671,6 +673,37 @@ void goto_convertt::do_function_call_symbol(
     }
 
     log_debug("builtin_functions", "Processing __ESBMC_assigns with {} arguments", arguments.size());
+
+    // Check for empty assigns: __ESBMC_assigns(0) means no side effects
+    // This is used for pure functions that only read memory
+    if (arguments.size() == 1)
+    {
+      exprt first_arg = arguments[0];
+      // Strip typecast if present
+      if (first_arg.id() == "typecast" && first_arg.operands().size() == 1)
+      {
+        first_arg = first_arg.op0();
+      }
+      
+      // Check if it's a constant 0 or NULL
+      if (first_arg.is_zero() || 
+          (first_arg.id() == "constant" && first_arg.get("value") == "0"))
+      {
+        log_debug("builtin_functions", "__ESBMC_assigns(0) - pure function (no side effects)");
+        
+        // Generate a special marker to indicate explicit empty assigns
+        // We use an ASSERT of a true constant with a special comment marker
+        // This will be detected by extract_assigns_from_body() to distinguish
+        // "no assigns clause" from "explicit empty assigns"
+        goto_programt::targett t = dest.add_instruction(ASSERT);
+        t->guard = gen_true_expr();
+        t->location = function.location();
+        t->location.comment("contract::assigns_empty");
+        t->location.property("empty assigns marker");
+        
+        return;
+      }
+    }
 
     // For each argument, create an assignment to a "assigns_target" sideeffect
     // This stores the expression tree for later evaluation during replace-call

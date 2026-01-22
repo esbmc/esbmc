@@ -272,6 +272,24 @@ expr2tc code_contractst::extract_ensures_clause(const symbolt &contract_symbol)
   return gen_true_expr();
 }
 
+// Helper function to check if function has an explicit empty assigns clause
+// This distinguishes __ESBMC_assigns(0) from no assigns clause at all
+static bool has_empty_assigns_marker(const goto_programt &function_body)
+{
+  forall_goto_program_instructions (it, function_body)
+  {
+    if (it->is_assert())
+    {
+      std::string comment = id2string(it->location.comment());
+      if (comment == "contract::assigns_empty")
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 std::vector<expr2tc>
 code_contractst::extract_assigns_from_body(const goto_programt &function_body)
 {
@@ -2307,6 +2325,8 @@ void code_contractst::generate_replacement_at_call(
   // In replace_calls mode, we must havoc everything the function might modify,
   // otherwise the effects cannot propagate from the removed function body.
 
+  bool has_empty_assigns = has_empty_assigns_marker(function_body);
+
   if (!assigns_target_exprs.empty())
   {
     // 2.1. Precise havoc: Only havoc expressions in assigns clause
@@ -2357,9 +2377,17 @@ void code_contractst::generate_replacement_at_call(
       "Precise havoc: havoc'd {} expressions from assigns clause",
       assigns_target_exprs.size());
   }
+  else if (has_empty_assigns)
+  {
+    // 2.2. Explicit empty assigns: __ESBMC_assigns(0) was used
+    // This means the function is pure (no side effects), so don't havoc anything
+    log_debug(
+      "contracts",
+      "Empty assigns: function is pure (no side effects), no havoc");
+  }
   else
   {
-    // 2.2. Conservative havoc: No assigns clause, so havoc all globals
+    // 2.3. Conservative havoc: No assigns clause, so havoc all globals
     // This is the old behavior - safe but may introduce false positives
     havoc_static_globals(replacement, call_location);
 
