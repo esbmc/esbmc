@@ -50,15 +50,17 @@ __ESBMC_HIDE:;
 
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
+
+_Bool __ESBMC_no_abnormal_memory_leak(void);
+
 void exit(int status)
 {
 __ESBMC_HIDE:;
   __ESBMC_atexit_handler();
-  __ESBMC_memory_leak_checks();
+  if (!__ESBMC_no_abnormal_memory_leak())
+    __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
-
-_Bool __ESBMC_no_abnormal_memory_leak(void);
 
 void abort(void)
 {
