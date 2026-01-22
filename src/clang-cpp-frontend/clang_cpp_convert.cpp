@@ -1840,18 +1840,6 @@ bool clang_cpp_convertert::get_decl_ref(
 
     break;
   }
-  case clang::Decl::Field:
-  {
-    // pointer-to-member
-    const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(decl);
-
-    get_decl_name(fd, name, id);
-    if (get_type(fd.getType(), type))
-      return true;
-
-    new_expr = member_ref_exprt(name, type);
-    break;
-  }
 
   default:
   {
