@@ -603,8 +603,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   // are valid before accessing them.
   if (assume_nonnull_valid)
   {
-    add_pointer_validity_assumptions(
-      wrapper, original_func, location);
+    add_pointer_validity_assumptions(wrapper, original_func, location);
   }
 
   // 1. Extract and create snapshots for __ESBMC_old() expressions
