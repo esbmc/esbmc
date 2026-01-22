@@ -567,14 +567,16 @@ int __ESBMC_old(int);
  * all other memory locations are assumed to remain unchanged.
  * 
  * Usage: Place at the beginning of the function body:
- *   void f() {
- *     __ESBMC_assigns("x", "y", "global_var");
+ *   void f(Node *node) {
+ *     __ESBMC_assigns(x, y, global_var, node->field, arr[i].data);
  *     // ... function body
  *   }
  * 
- * Phase 1 limitation: Only simple variable names are supported (no pointers/arrays).
+ * Note: Takes expressions (not strings) which are parsed by Clang AST and
+ * stored as expression trees for delayed evaluation during replace-call.
+ * Declared as `int` for C compatibility, but accepts any lvalue expression.
  */
-void __ESBMC_assigns(const char *, ...);
+void __ESBMC_assigns(int, ...);
   )";
 
   return intrinsics;

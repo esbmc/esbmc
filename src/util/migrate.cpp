@@ -1669,6 +1669,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = sideeffect2t::old_snapshot;
       migrate_expr(expr.op0(), new_expr_ref);
     }
+    else if (expr.statement() == "assigns_target")
+    {
+      // __ESBMC_assigns() in function contracts
+      t = sideeffect2t::assigns_target;
+      migrate_expr(expr.op0(), new_expr_ref);
+    }
     else
     {
       log_error("Unexpected side-effect statement: {}", expr.statement());

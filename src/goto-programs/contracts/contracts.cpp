@@ -194,43 +194,31 @@ expr2tc code_contractst::extract_ensures_clause(const symbolt &contract_symbol)
   return gen_true_expr();
 }
 
-std::vector<std::string>
+std::vector<expr2tc>
 code_contractst::extract_assigns_from_body(const goto_programt &function_body)
 {
-  std::vector<std::string> assigns_targets;
+  std::vector<expr2tc> assigns_targets;
 
   log_debug("contracts", "extract_assigns_from_body: scanning {} instructions", 
             function_body.instructions.size());
 
-  // Scan function body for contract::assigns annotations (stored in ASSUME instructions)
+  // Scan function body for assigns_target sideeffect assignments
+  // These were created by __ESBMC_assigns() in builtin_functions.cpp
   forall_goto_program_instructions (it, function_body)
   {
-    std::string comment = id2string(it->location.comment());
-    log_debug("contracts", "  Instruction type={}, comment='{}'", (int)it->type, comment);
-    
-    // Check ASSUME instructions for assigns (not SKIP, which gets removed)
-    if (it->is_assume() && comment == "contract::assigns")
+    if (it->is_assign())
     {
-      // Extract variable names from the location's property field
-      std::string assigns_list = id2string(it->location.property());
-      log_debug("contracts", "  Found contract::assigns with property='{}'", assigns_list);
+      const code_assign2t &assign = to_code_assign2t(it->code);
       
-      // Parse comma-separated list
-      size_t start = 0;
-      while (start < assigns_list.length())
+      // Check if RHS is a sideeffect with assigns_target
+      if (is_sideeffect2t(assign.source) &&
+          to_sideeffect2t(assign.source).kind == sideeffect2t::assigns_target)
       {
-        size_t comma_pos = assigns_list.find(',', start);
-        if (comma_pos == std::string::npos)
-          comma_pos = assigns_list.length();
+        const sideeffect2t &se = to_sideeffect2t(assign.source);
+        expr2tc target_expr = se.operand;
         
-        std::string var_name = assigns_list.substr(start, comma_pos - start);
-        if (!var_name.empty())
-        {
-          assigns_targets.push_back(var_name);
-          log_debug("contracts", "    Added variable: '{}'", var_name);
-        }
-        
-        start = comma_pos + 1;
+        log_debug("contracts", "  Found assigns target expression");
+        assigns_targets.push_back(target_expr);
       }
     }
   }
@@ -2120,7 +2108,7 @@ void code_contractst::generate_replacement_at_call(
   // Extract contracts from function body (similar to enforce_contracts)
   expr2tc requires_clause = extract_requires_from_body(function_body);
   expr2tc ensures_clause = extract_ensures_from_body(function_body);
-  std::vector<std::string> assigns_targets = extract_assigns_from_body(function_body);
+  std::vector<expr2tc> assigns_target_exprs = extract_assigns_from_body(function_body);
   
   // Debug: log extracted clauses
   log_debug(
@@ -2133,8 +2121,8 @@ void code_contractst::generate_replacement_at_call(
     is_nil_expr(ensures_clause));
   log_debug(
     "contracts",
-    "generate_replacement_at_call: extracted {} assigns targets",
-    assigns_targets.size());
+    "generate_replacement_at_call: extracted {} assigns target expressions",
+    assigns_target_exprs.size());
 
   goto_programt replacement;
   locationt call_location = call_instruction->location;
@@ -2241,56 +2229,55 @@ void code_contractst::generate_replacement_at_call(
   // In replace_calls mode, we must havoc everything the function might modify,
   // otherwise the effects cannot propagate from the removed function body.
 
-  if (!assigns_targets.empty())
+  if (!assigns_target_exprs.empty())
   {
-    // 2.1. Precise havoc: Only havoc variables in assigns clause
+    // 2.1. Precise havoc: Only havoc expressions in assigns clause
     // This implements the key feature for eliminating false counterexamples
-    for (const std::string &var_name : assigns_targets)
+    // Now assigns targets are expression trees that need parameter substitution
+    for (const expr2tc &target_expr : assigns_target_exprs)
     {
-      // Look up variable in symbol table
-      // Try multiple naming schemes: direct name, c:@name, etc.
-      const symbolt *var_sym = ns.get_context().find_symbol(var_name);
+      // Substitute function parameters with actual call arguments
+      expr2tc instantiated_target = target_expr;
       
-      if (var_sym == nullptr)
+      if (function_symbol.type.is_code())
       {
-        // Try with C namespace prefix
-        std::string prefixed_name = "c:@" + var_name;
-        var_sym = ns.get_context().find_symbol(prefixed_name);
+        const code_typet &code_type = to_code_type(function_symbol.type);
+        const code_typet::argumentst &params = code_type.arguments();
+        
+        for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+        {
+          const code_typet::argumentt &param = params[i];
+          irep_idt param_id = param.get_identifier();
+          
+          if (!param_id.empty() && !is_nil_expr(actual_args[i]))
+          {
+            type2tc param_type = migrate_type(param.type());
+            expr2tc param_symbol = symbol2tc(param_type, param_id);
+            instantiated_target = replace_symbol_in_expr(instantiated_target, param_symbol, actual_args[i]);
+          }
+        }
       }
-      
-      if (var_sym == nullptr)
-      {
-        log_warning(
-          "Variable '{}' in assigns clause not found in symbol table",
-          var_name);
-        continue;
-      }
-      
-      log_debug("contracts", "Found symbol '{}' for variable '{}'", 
-                id2string(var_sym->id), var_name);
-
-      // Build LHS symbol expression
-      type2tc var_type = migrate_type(var_sym->type);
-      expr2tc lhs = symbol2tc(var_type, var_sym->id);
 
       // Skip pointer havoc in value-set mode (consistent with loop invariant)
       if (
         config.options.get_bool_option("add-symex-value-sets") &&
-        is_pointer_type(lhs))
+        is_pointer_type(instantiated_target))
         continue;
 
       // Generate nondeterministic value and create assignment
-      expr2tc rhs = gen_nondet(lhs->type);
+      expr2tc rhs = gen_nondet(instantiated_target->type);
       goto_programt::targett t = replacement.add_instruction(ASSIGN);
-      t->code = code_assign2tc(lhs, rhs);
+      t->code = code_assign2tc(instantiated_target, rhs);
       t->location = call_location;
       t->location.comment("contract havoc assigns");
+      
+      log_debug("contracts", "Havoc'd assigns target expression");
     }
 
     log_debug(
       "contracts",
-      "Precise havoc: havoc'd {} variables from assigns clause",
-      assigns_targets.size());
+      "Precise havoc: havoc'd {} expressions from assigns clause",
+      assigns_target_exprs.size());
   }
   else
   {

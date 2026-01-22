@@ -169,8 +169,8 @@ private:
 
   /// \brief Extract assigns clause from function body
   /// \param function_body Function goto program
-  /// \return Vector of variable names that can be assigned
-  std::vector<std::string> extract_assigns_from_body(const goto_programt &function_body);
+  /// \return Vector of assign target expressions from __ESBMC_assigns()
+  std::vector<expr2tc> extract_assigns_from_body(const goto_programt &function_body);
 
   /// \brief Extract assigns clause from contract symbol
   /// \param contract_symbol Contract symbol
