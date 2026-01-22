@@ -366,12 +366,10 @@ private:
   /// Used with --assume-nonnull-valid flag in enforce-contract mode
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
-  /// \param requires_clause Requires clause expression (to check for p != NULL)
   /// \param location Location information
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
-    const expr2tc &requires_clause,
     const locationt &location);
 };
 

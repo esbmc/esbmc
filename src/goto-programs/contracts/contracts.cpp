@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <goto-programs/contracts/contracts.h>
 #include <goto-programs/remove_no_op.h>
@@ -509,7 +510,6 @@ void code_contractst::enforce_contracts(
     // 1. Make the postcondition a precondition (assume before execution)
     // 2. Cause dereference failures for struct return values (accessing __ESBMC_return_value)
     // Therefore, we ALWAYS remove all contract::ensures assumptions.
-    bool needs_ensures_removal = true;
 
     // Rename original function
     irep_idt original_id = func_sym->id;
@@ -520,7 +520,6 @@ void code_contractst::enforce_contracts(
     rename_function(original_id, original_name_id);
 
     // Remove ensures ASSUME from renamed function (would force postconditions to be true)
-    if (needs_ensures_removal)
     {
       auto &renamed_func = goto_functions.function_map[original_name_id];
       goto_programt &renamed_body = renamed_func.body;
@@ -605,7 +604,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   if (assume_nonnull_valid)
   {
     add_pointer_validity_assumptions(
-      wrapper, original_func, requires_clause, location);
+      wrapper, original_func, location);
   }
 
   // 1. Extract and create snapshots for __ESBMC_old() expressions
@@ -1446,19 +1445,19 @@ code_contractst::collect_old_snapshots_from_body(
           expr2tc temp_var = assign.target;
 
           // Check if we've seen this expression before
-          bool found = false;
-          for (auto &info : unique_exprs)
-          {
-            if (info.original_expr == original_expr)
-            {
-              // Same expression - add this temp var to the list
-              info.temp_vars.push_back(temp_var);
-              found = true;
-              break;
-            }
-          }
+          auto it = std::find_if(
+            unique_exprs.begin(),
+            unique_exprs.end(),
+            [&original_expr](const expr_info &info) {
+              return info.original_expr == original_expr;
+            });
 
-          if (!found)
+          if (it != unique_exprs.end())
+          {
+            // Same expression - add this temp var to the list
+            it->temp_vars.push_back(temp_var);
+          }
+          else
           {
             // New expression - create a new entry
             unique_exprs.push_back({original_expr, {temp_var}});
@@ -2545,7 +2544,6 @@ void code_contractst::generate_replacement_at_call(
 void code_contractst::add_pointer_validity_assumptions(
   goto_programt &wrapper,
   const symbolt &func,
-  const expr2tc &requires_clause,
   const locationt &location)
 {
   if (!func.type.is_code())
