@@ -1003,7 +1003,7 @@ public:
     postincrement,
     predecrement,
     postdecrement,
-    old_snapshot, // For __ESBMC_old() in function contracts
+    old_snapshot,  // For __ESBMC_old() in function contracts
     assigns_target // For __ESBMC_assigns() in function contracts
   };
 

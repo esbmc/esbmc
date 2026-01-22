@@ -21,9 +21,8 @@ static bool is_fresh_function(const std::string &funcname)
 }
 
 /// Check if is_fresh call is in ensures clause by examining next instruction
-static bool is_fresh_in_ensures(
-  goto_programt::const_targett it,
-  const goto_programt &body)
+static bool
+is_fresh_in_ensures(goto_programt::const_targett it, const goto_programt &body)
 {
   auto next_it = it;
   ++next_it;
@@ -151,7 +150,7 @@ static expr2tc inline_temporary_variables(
   {
     const symbol2t &sym = to_symbol2t(expr);
     std::string sym_name = id2string(sym.thename);
-    
+
     // Check if this is a Clang-generated temporary variable
     // These have names like "c:@F@foo::$tmp::tmp$6" or similar patterns with "$tmp"
     // Note: We DON'T inline return_value$___ESBMC_old$X because those need to be
@@ -163,12 +162,12 @@ static expr2tc inline_temporary_variables(
       while (search_it != function_body.instructions.begin())
       {
         --search_it;
-        
+
         // Look for ASSIGN instructions: tmp$X = <expression>
         if (search_it->is_assign() && is_code_assign2t(search_it->code))
         {
           const code_assign2t &assign = to_code_assign2t(search_it->code);
-          
+
           // Check if the target matches our temporary variable
           if (is_symbol2t(assign.target))
           {
@@ -179,23 +178,27 @@ static expr2tc inline_temporary_variables(
               // Special case: if RHS is an old_snapshot sideeffect, DON'T inline further
               // We want to keep return_value$___ESBMC_old$X references so that
               // replace_old_in_expr can find them in the snapshot list
-              if (is_sideeffect2t(assign.source) &&
-                  to_sideeffect2t(assign.source).kind == sideeffect2t::old_snapshot)
+              if (
+                is_sideeffect2t(assign.source) &&
+                to_sideeffect2t(assign.source).kind ==
+                  sideeffect2t::old_snapshot)
               {
                 // Keep the temporary variable reference (don't inline the sideeffect)
                 return expr;
               }
-              
+
               // Otherwise, recursively inline the RHS
-              return inline_temporary_variables(assign.source, function_body, search_it);
+              return inline_temporary_variables(
+                assign.source, function_body, search_it);
             }
           }
         }
       }
-      
+
       // If we couldn't find the definition, just return the symbol as-is
       // This can happen for temporaries that are defined outside our search scope
-      log_warning("Could not find definition for temporary variable: {}", sym_name);
+      log_warning(
+        "Could not find definition for temporary variable: {}", sym_name);
       return expr;
     }
   }
@@ -224,7 +227,8 @@ code_contractst::extract_ensures_from_body(const goto_programt &function_body)
       {
         // Inline any Clang-generated temporary variables to get the full expression
         // This handles cases where Clang generates control flow for short-circuit evaluation
-        expr2tc inlined_guard = inline_temporary_variables(it->guard, function_body, it);
+        expr2tc inlined_guard =
+          inline_temporary_variables(it->guard, function_body, it);
         ensures_clauses.push_back(inlined_guard);
       }
     }
@@ -295,8 +299,10 @@ code_contractst::extract_assigns_from_body(const goto_programt &function_body)
 {
   std::vector<expr2tc> assigns_targets;
 
-  log_debug("contracts", "extract_assigns_from_body: scanning {} instructions", 
-            function_body.instructions.size());
+  log_debug(
+    "contracts",
+    "extract_assigns_from_body: scanning {} instructions",
+    function_body.instructions.size());
 
   // Scan function body for assigns_target sideeffect assignments
   // These were created by __ESBMC_assigns() in builtin_functions.cpp
@@ -305,21 +311,25 @@ code_contractst::extract_assigns_from_body(const goto_programt &function_body)
     if (it->is_assign())
     {
       const code_assign2t &assign = to_code_assign2t(it->code);
-      
+
       // Check if RHS is a sideeffect with assigns_target
-      if (is_sideeffect2t(assign.source) &&
-          to_sideeffect2t(assign.source).kind == sideeffect2t::assigns_target)
+      if (
+        is_sideeffect2t(assign.source) &&
+        to_sideeffect2t(assign.source).kind == sideeffect2t::assigns_target)
       {
         const sideeffect2t &se = to_sideeffect2t(assign.source);
         expr2tc target_expr = se.operand;
-        
+
         log_debug("contracts", "  Found assigns target expression");
         assigns_targets.push_back(target_expr);
       }
     }
   }
 
-  log_debug("contracts", "extract_assigns_from_body: found {} assigns targets", assigns_targets.size());
+  log_debug(
+    "contracts",
+    "extract_assigns_from_body: found {} assigns targets",
+    assigns_targets.size());
   return assigns_targets;
 }
 
@@ -433,7 +443,9 @@ void code_contractst::havoc_static_globals(
   });
 }
 
-void code_contractst::enforce_contracts(const std::set<std::string> &to_enforce, bool assume_nonnull_valid)
+void code_contractst::enforce_contracts(
+  const std::set<std::string> &to_enforce,
+  bool assume_nonnull_valid)
 {
   for (const auto &function_name : to_enforce)
   {
@@ -592,7 +604,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   // are valid before accessing them.
   if (assume_nonnull_valid)
   {
-    add_pointer_validity_assumptions(wrapper, original_func, requires_clause, location);
+    add_pointer_validity_assumptions(
+      wrapper, original_func, requires_clause, location);
   }
 
   // 1. Extract and create snapshots for __ESBMC_old() expressions
@@ -608,12 +621,13 @@ goto_programt code_contractst::generate_checking_wrapper(
 
   // 2. Process __ESBMC_is_fresh in requires: allocate memory before function call
   //    (ensures clauses handle is_fresh separately via replace_is_fresh_in_ensures_expr)
-  struct is_fresh_info {
+  struct is_fresh_info
+  {
     expr2tc ptr_arg;
     expr2tc size_expr;
   };
   std::vector<is_fresh_info> is_fresh_calls;
-  
+
   forall_goto_program_instructions (it, original_body)
   {
     if (it->is_function_call() && is_code_function_call2t(it->code))
@@ -622,8 +636,9 @@ goto_programt code_contractst::generate_checking_wrapper(
       if (is_symbol2t(call.function))
       {
         std::string funcname = to_symbol2t(call.function).thename.as_string();
-        if (is_fresh_function(funcname) && !is_fresh_in_ensures(it, original_body) &&
-            call.operands.size() >= 2)
+        if (
+          is_fresh_function(funcname) &&
+          !is_fresh_in_ensures(it, original_body) && call.operands.size() >= 2)
         {
           is_fresh_info info;
           info.ptr_arg = call.operands[0]->clone();
@@ -633,21 +648,26 @@ goto_programt code_contractst::generate_checking_wrapper(
       }
     }
   }
-  
+
   // Allocate memory for requires is_fresh calls
   for (const auto &info : is_fresh_calls)
   {
-    assert(is_pointer_type(info.ptr_arg->type) && "ptr_arg must be pointer type");
+    assert(
+      is_pointer_type(info.ptr_arg->type) && "ptr_arg must be pointer type");
     type2tc target_ptr_type = to_pointer_type(info.ptr_arg->type).subtype;
     if (is_empty_type(target_ptr_type))
       target_ptr_type = pointer_type2tc(get_empty_type());
-    
+
     expr2tc ptr_var = dereference2tc(target_ptr_type, info.ptr_arg);
     type2tc char_type = get_uint8_type();
     expr2tc malloc_expr = sideeffect2tc(
-      target_ptr_type, expr2tc(), info.size_expr, std::vector<expr2tc>(),
-      char_type, sideeffect2t::malloc);
-    
+      target_ptr_type,
+      expr2tc(),
+      info.size_expr,
+      std::vector<expr2tc>(),
+      char_type,
+      sideeffect2t::malloc);
+
     goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
     assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
     assign_inst->location = location;
@@ -662,10 +682,10 @@ goto_programt code_contractst::generate_checking_wrapper(
                                const std::string &comment) {
     if (is_nil_expr(clause))
       return;
-    
+
     bool should_add = false;
     if (is_constant_bool2t(clause))
-  {
+    {
       const constant_bool2t &b = to_constant_bool2t(clause);
       // For ASSERT: only add if false (violation)
       // For ASSUME: only add if true (trivially true clauses are skipped)
@@ -678,7 +698,7 @@ goto_programt code_contractst::generate_checking_wrapper(
     {
       should_add = true;
     }
-    
+
     if (should_add)
     {
       goto_programt::targett t = wrapper.add_instruction(inst_type);
@@ -700,10 +720,13 @@ goto_programt code_contractst::generate_checking_wrapper(
     typet return_type_irep1 = code_type.return_type();
     log_debug(
       "contracts",
-      "generate_checking_wrapper: original return_type (irep1) id={}, identifier={}",
+      "generate_checking_wrapper: original return_type (irep1) id={}, "
+      "identifier={}",
       return_type_irep1.id().as_string(),
-      return_type_irep1.id() == "symbol" ? return_type_irep1.identifier().as_string() : "N/A");
-    
+      return_type_irep1.id() == "symbol"
+        ? return_type_irep1.identifier().as_string()
+        : "N/A");
+
     // Resolve symbol_type to concrete type using ns.follow()
     // This is critical: value set analysis cannot handle symbol_type
     if (return_type_irep1.id() == "symbol")
@@ -718,14 +741,15 @@ goto_programt code_contractst::generate_checking_wrapper(
         "generate_checking_wrapper: resolved to type id={}",
         return_type_irep1.id().as_string());
     }
-    
+
     ret_type = migrate_type(return_type_irep1);
     log_debug(
       "contracts",
-      "generate_checking_wrapper: ret_type (irep2) type_id={}, is_symbol_type={}",
+      "generate_checking_wrapper: ret_type (irep2) type_id={}, "
+      "is_symbol_type={}",
       ret_type ? get_type_id(*ret_type) : "nil",
       ret_type && is_symbol_type(ret_type));
-    
+
     // Also resolve symbol_type2t in irep2 if needed
     if (is_symbol_type(ret_type))
     {
@@ -738,7 +762,7 @@ goto_programt code_contractst::generate_checking_wrapper(
         "generate_checking_wrapper: resolved ret_type type_id={}",
         ret_type ? get_type_id(*ret_type) : "nil");
     }
-    
+
     if (!is_nil_type(ret_type))
     {
       // Create and add symbol to symbol table
@@ -754,17 +778,19 @@ goto_programt code_contractst::generate_checking_wrapper(
 
       log_debug(
         "contracts",
-        "generate_checking_wrapper: creating return_value symbol with type id={}, is_symbol={}",
+        "generate_checking_wrapper: creating return_value symbol with type "
+        "id={}, is_symbol={}",
         ret_val_symbol.type.id().as_string(),
         ret_val_symbol.type.id() == "symbol");
 
       // Add symbol to context
       symbolt *added_symbol = context.move_symbol_to_context(ret_val_symbol);
       ret_val = symbol2tc(ret_type, added_symbol->id);
-      
+
       log_debug(
         "contracts",
-        "generate_checking_wrapper: created ret_val symbol, type_id={}, is_symbol_type={}",
+        "generate_checking_wrapper: created ret_val symbol, type_id={}, "
+        "is_symbol_type={}",
         ret_val->type ? get_type_id(*ret_val->type) : "nil",
         ret_val->type && is_symbol_type(ret_val->type));
 
@@ -772,24 +798,26 @@ goto_programt code_contractst::generate_checking_wrapper(
       decl_inst->code = code_decl2tc(ret_type, added_symbol->id);
       decl_inst->location = location;
       decl_inst->location.comment("contract return value");
-      
+
       log_debug(
         "contracts",
-        "generate_checking_wrapper: created DECL instruction, type_id={}, is_symbol_type={}",
+        "generate_checking_wrapper: created DECL instruction, type_id={}, "
+        "is_symbol_type={}",
         ret_type ? get_type_id(*ret_type) : "nil",
         ret_type && is_symbol_type(ret_type));
-      
+
       // Note: We don't initialize return_value here for struct/union types.
       // The function call will assign the complete struct/union value to return_value,
       // which will completely overwrite any member-level initialization.
       // Initializing members individually would be redundant and can cause issues
       // in symbolic execution when the function call overwrites the entire struct.
-      // 
+      //
       // This aligns with the behavior in mark_decl_as_non_det.cpp which skips
       // initialization for return_value$ prefixed variables.
       log_debug(
         "contracts",
-        "generate_checking_wrapper: skipping return_value initialization for struct/union type (will be assigned by function call)");
+        "generate_checking_wrapper: skipping return_value initialization for "
+        "struct/union type (will be assigned by function call)");
     }
   }
 
@@ -828,47 +856,51 @@ goto_programt code_contractst::generate_checking_wrapper(
   {
     log_debug(
       "contracts",
-      "generate_checking_wrapper: processing ensures clause, ret_val type_id={}, is_symbol_type={}",
+      "generate_checking_wrapper: processing ensures clause, ret_val "
+      "type_id={}, is_symbol_type={}",
       ret_val && ret_val->type ? get_type_id(*ret_val->type) : "nil",
       ret_val && ret_val->type && is_symbol_type(ret_val->type));
-    
+
     // Replace __ESBMC_old() expressions
     if (!old_snapshots.empty())
       ensures_guard = replace_old_in_expr(ensures_guard, old_snapshots);
-    
+
     // Replace is_fresh temp vars with verification: valid_object(ptr) && is_dynamic[ptr]
     if (!is_fresh_mappings.empty())
-      ensures_guard = replace_is_fresh_in_ensures_expr(ensures_guard, is_fresh_mappings);
+      ensures_guard =
+        replace_is_fresh_in_ensures_expr(ensures_guard, is_fresh_mappings);
   }
-  
+
   // Extract struct member accesses to temporary variables before ASSERT
   // This avoids symbolic execution issues with accessing members from 'with' expressions
   if (!is_nil_expr(ensures_guard) && !is_nil_expr(ret_val))
   {
     log_debug(
       "contracts",
-      "Before extract_struct_members_to_temps: ret_val type_id={}, is_struct={}, is_union={}",
+      "Before extract_struct_members_to_temps: ret_val type_id={}, "
+      "is_struct={}, is_union={}",
       ret_val->type ? get_type_id(*ret_val->type) : "nil",
       ret_val->type && is_struct_type(ret_val->type),
       ret_val->type && is_union_type(ret_val->type));
-    
+
     if (is_struct_type(ret_val->type) || is_union_type(ret_val->type))
     {
       ensures_guard = extract_struct_members_to_temps(
         ensures_guard, ret_val, wrapper, location);
     }
   }
-  
+
   // Normalize ensures guard: replace return_value, fix types, normalize floating-point
   // This unified helper applies all return_value-related transformations
-  ensures_guard = normalize_ensures_guard_for_return_value(ensures_guard, ret_val);
-  
+  ensures_guard =
+    normalize_ensures_guard_for_return_value(ensures_guard, ret_val);
+
   // Add ASSERT instruction for ensures clause with property
   if (!is_nil_expr(ensures_guard))
   {
     bool should_add = false;
     if (is_constant_bool2t(ensures_guard))
-  {
+    {
       const constant_bool2t &b = to_constant_bool2t(ensures_guard);
       should_add = !b.value; // Only assert if false (violation)
     }
@@ -876,7 +908,7 @@ goto_programt code_contractst::generate_checking_wrapper(
     {
       should_add = true;
     }
-    
+
     if (should_add)
     {
       goto_programt::targett t = wrapper.add_instruction(ASSERT);
@@ -914,17 +946,17 @@ expr2tc code_contractst::replace_return_value_in_expr(
   {
     const address_of2t &addr = to_address_of2t(expr);
     expr2tc addr_source = addr.ptr_obj;
-    
+
     if (is_index2t(addr_source))
     {
       const index2t &index = to_index2t(addr_source);
       expr2tc index_source = index.source_value;
-      
+
       if (is_symbol2t(index_source))
       {
         const symbol2t &sym = to_symbol2t(index_source);
         std::string sym_name = id2string(sym.get_symbol_name());
-        
+
         if (
           sym_name.find("__ESBMC_return_value") != std::string::npos ||
           sym_name == "return_value")
@@ -962,7 +994,7 @@ expr2tc code_contractst::replace_return_value_in_expr(
   {
     const member2t &member = to_member2t(expr);
     expr2tc source = member.source_value;
-    
+
     // Check if source is a dereference (for -> operator)
     expr2tc deref_source = source;
     if (is_dereference2t(source))
@@ -1015,7 +1047,8 @@ expr2tc code_contractst::replace_return_value_in_expr(
               // This shouldn't happen for struct return types, but handle it gracefully
               log_warning(
                 "contracts",
-                "Cannot create member access: ret_val type is not struct/union (type={})",
+                "Cannot create member access: ret_val type is not struct/union "
+                "(type={})",
                 get_type_id(*ret_val->type));
               // Continue with recursive replacement
             }
@@ -1038,13 +1071,13 @@ expr2tc code_contractst::replace_return_value_in_expr(
   if (is_typecast2t(new_expr))
   {
     const typecast2t &cast = to_typecast2t(new_expr);
-    
+
     // If the cast source type matches the cast target type, remove the typecast
     if (cast.from->type == cast.type)
     {
       return cast.from;
     }
-    
+
     // If cast target is pointer but cast source is not, and ret_val is not a pointer,
     // this typecast was likely added to match __ESBMC_return_value's pointer type
     // Since we've replaced __ESBMC_return_value with ret_val, we can try to remove it
@@ -1072,7 +1105,7 @@ expr2tc code_contractst::replace_symbol_in_expr(
   {
     const symbol2t &sym = to_symbol2t(expr);
     const symbol2t &old_sym = to_symbol2t(old_symbol);
-    
+
     // Compare symbol names
     if (sym.thename == old_sym.thename)
     {
@@ -1097,22 +1130,23 @@ expr2tc code_contractst::extract_struct_members_to_temps(
 {
   if (is_nil_expr(expr) || is_nil_expr(ret_val) || !is_symbol2t(ret_val))
     return expr;
-  
+
   const symbol2t &ret_sym = to_symbol2t(ret_val);
-  
+
   // Map from member name to temporary variable
   std::map<irep_idt, expr2tc> member_to_temp;
-  
+
   // Recursive function to collect and replace member accesses
-  std::function<expr2tc(const expr2tc&)> process_expr = [&](const expr2tc &e) -> expr2tc {
+  std::function<expr2tc(const expr2tc &)> process_expr =
+    [&](const expr2tc &e) -> expr2tc {
     if (is_nil_expr(e))
       return e;
-    
+
     // Check if this is a member access to ret_val
     if (is_member2t(e))
     {
       const member2t &member = to_member2t(e);
-      
+
       // Check if the source is ret_val
       bool is_ret_val_member = false;
       if (is_symbol2t(member.source_value))
@@ -1120,7 +1154,7 @@ expr2tc code_contractst::extract_struct_members_to_temps(
         const symbol2t &src_sym = to_symbol2t(member.source_value);
         is_ret_val_member = (ret_sym.thename == src_sym.thename);
       }
-      
+
       if (is_ret_val_member)
       {
         // Check if we already created a temp for this member
@@ -1129,12 +1163,12 @@ expr2tc code_contractst::extract_struct_members_to_temps(
         {
           return it->second;
         }
-        
+
         // Create temporary variable for this member
-        std::string temp_name = id2string(ret_sym.thename) + 
-                                "$member$" + id2string(member.member);
+        std::string temp_name =
+          id2string(ret_sym.thename) + "$member$" + id2string(member.member);
         irep_idt temp_id(temp_name);
-        
+
         // Create temporary variable symbol
         symbolt temp_symbol;
         temp_symbol.name = temp_id;
@@ -1144,51 +1178,49 @@ expr2tc code_contractst::extract_struct_members_to_temps(
         temp_symbol.static_lifetime = false;
         temp_symbol.location = location;
         temp_symbol.mode = "C";
-        
+
         // Add to context
         symbolt *added_symbol = context.move_symbol_to_context(temp_symbol);
         expr2tc temp_var = symbol2tc(member.type, added_symbol->id);
-        
+
         // Add DECL instruction
         goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
         decl_inst->code = code_decl2tc(member.type, added_symbol->id);
         decl_inst->location = location;
         decl_inst->location.comment("temp for struct member");
-        
+
         // Add ASSIGN instruction: temp = ret_val.member
         goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
         assign_inst->code = code_assign2tc(temp_var, e->clone());
         assign_inst->location = location;
         assign_inst->location.comment("extract struct member");
-        
+
         member_to_temp[member.member] = temp_var;
-        
+
         log_debug(
           "contracts",
           "extract_struct_members_to_temps: created temp {} for member {}",
           temp_name,
           id2string(member.member));
-        
+
         return temp_var;
       }
     }
-    
+
     // Recursively process operands
     expr2tc result = e->clone();
-    result->Foreach_operand([&](expr2tc &op) {
-      op = process_expr(op);
-    });
-    
+    result->Foreach_operand([&](expr2tc &op) { op = process_expr(op); });
+
     return result;
   };
-  
+
   expr2tc result = process_expr(expr);
-  
+
   log_debug(
     "contracts",
     "extract_struct_members_to_temps: extracted {} members",
     member_to_temp.size());
-  
+
   return result;
 }
 
@@ -1205,14 +1237,15 @@ code_contractst::extract_is_fresh_mappings_from_body(
     if (it->is_function_call() && is_code_function_call2t(it->code))
     {
       const code_function_call2t &call = to_code_function_call2t(it->code);
-      if (is_symbol2t(call.function) &&
-          is_fresh_function(to_symbol2t(call.function).thename.as_string()) &&
-          call.operands.size() >= 2 && !is_nil_expr(call.ret) &&
-          is_symbol2t(call.ret))
+      if (
+        is_symbol2t(call.function) &&
+        is_fresh_function(to_symbol2t(call.function).thename.as_string()) &&
+        call.operands.size() >= 2 && !is_nil_expr(call.ret) &&
+        is_symbol2t(call.ret))
       {
         code_contractst::is_fresh_mapping_t mapping;
         mapping.temp_var_name = to_symbol2t(call.ret).thename;
-        
+
         expr2tc ptr_arg = call.operands[0];
         if (is_pointer_type(ptr_arg->type))
         {
@@ -1246,7 +1279,7 @@ expr2tc code_contractst::replace_is_fresh_in_ensures_expr(
         // Replace with: valid_object(ptr) && is_dynamic[POINTER_OBJECT(ptr)]
         expr2tc valid_obj = valid_object2tc(mapping.ptr_expr);
         expr2tc ptr_obj = pointer_object2tc(pointer_type2(), mapping.ptr_expr);
-        
+
         const symbolt *dyn_sym = ns.lookup("c:@__ESBMC_is_dynamic");
         if (dyn_sym == nullptr)
         {
@@ -1256,7 +1289,7 @@ expr2tc code_contractst::replace_is_fresh_in_ensures_expr(
         type2tc dyn_arr_type = array_type2tc(get_bool_type(), expr2tc(), true);
         expr2tc dyn_arr = symbol2tc(dyn_arr_type, dyn_sym->id);
         expr2tc is_dynamic = index2tc(get_bool_type(), dyn_arr, ptr_obj);
-        
+
         return and2tc(valid_obj, is_dynamic);
       }
     }
@@ -1381,14 +1414,16 @@ expr2tc code_contractst::replace_old_in_expr(
 
 // ========== Old snapshot collection and materialization helpers ==========
 
-std::vector<code_contractst::old_snapshot_t> code_contractst::collect_old_snapshots_from_body(
+std::vector<code_contractst::old_snapshot_t>
+code_contractst::collect_old_snapshots_from_body(
   const goto_programt &function_body) const
 {
   std::vector<code_contractst::old_snapshot_t> old_snapshots;
-  
+
   // Track seen expressions to deduplicate
   // Map: original_expr -> {first_temp_var, all_temp_vars}
-  struct expr_info {
+  struct expr_info
+  {
     expr2tc original_expr;
     std::vector<expr2tc> temp_vars;
   };
@@ -1409,7 +1444,7 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::collect_old_snapsh
           // The operand is the original expression, the target is the temp variable
           expr2tc original_expr = se.operand;
           expr2tc temp_var = assign.target;
-          
+
           // Check if we've seen this expression before
           bool found = false;
           for (auto &info : unique_exprs)
@@ -1422,7 +1457,7 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::collect_old_snapsh
               break;
             }
           }
-          
+
           if (!found)
           {
             // New expression - create a new entry
@@ -1432,7 +1467,7 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::collect_old_snapsh
       }
     }
   }
-  
+
   // Create one snapshot entry per unique expression, BUT create entries for ALL temp vars
   // This ensures that all temp vars get mapped to the same wrapper snapshot later
   for (const auto &info : unique_exprs)
@@ -1443,13 +1478,14 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::collect_old_snapsh
     {
       old_snapshots.push_back({info.original_expr, temp_var});
     }
-    
+
     // Log if there are multiple temp vars for the same expression
     if (info.temp_vars.size() > 1)
     {
       log_debug(
         "contracts",
-        "Found {} temp variables for the same __ESBMC_old expression - all will map to one snapshot",
+        "Found {} temp variables for the same __ESBMC_old expression - all "
+        "will map to one snapshot",
         info.temp_vars.size());
     }
   }
@@ -1465,25 +1501,26 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
 {
   // Generate snapshot assignments in the wrapper BEFORE calling the original function
   // We'll update old_snapshots to contain new wrapper snapshot variables
-  
+
   // Map to track: original_expr -> wrapper_snapshot_var
   // This ensures we only create ONE wrapper snapshot per unique expression
   std::map<std::string, expr2tc> expr_to_wrapper_snapshot;
-  
+
   size_t unique_snapshot_count = 0;
-  
+
   for (size_t i = 0; i < old_snapshots.size(); ++i)
   {
     expr2tc original_expr = old_snapshots[i].original_expr;
-    expr2tc old_temp_var = old_snapshots[i].snapshot_var; // The temp var from function body
+    expr2tc old_temp_var =
+      old_snapshots[i].snapshot_var; // The temp var from function body
 
     // Create a unique key for this expression (using pointer address as simple hash)
     std::ostringstream key_stream;
     key_stream << original_expr.get();
     std::string expr_key = key_stream.str();
-    
+
     expr2tc new_snapshot_var;
-    
+
     // Check if we've already created a wrapper snapshot for this expression
     auto it = expr_to_wrapper_snapshot.find(expr_key);
     if (it != expr_to_wrapper_snapshot.end())
@@ -1502,8 +1539,8 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
 
       // Generate snapshot declaration
       goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
-      decl_inst->code =
-        code_decl2tc(original_expr->type, to_symbol2t(new_snapshot_var).thename);
+      decl_inst->code = code_decl2tc(
+        original_expr->type, to_symbol2t(new_snapshot_var).thename);
       decl_inst->location = location;
       decl_inst->location.comment("__ESBMC_old snapshot declaration");
 
@@ -1512,7 +1549,7 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
       assign_inst->code = code_assign2tc(new_snapshot_var, original_expr);
       assign_inst->location = location;
       assign_inst->location.comment("__ESBMC_old snapshot assignment");
-      
+
       // Remember this mapping
       expr_to_wrapper_snapshot[expr_key] = new_snapshot_var;
     }
@@ -1525,7 +1562,8 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
   }
 }
 
-std::vector<code_contractst::old_snapshot_t> code_contractst::materialize_old_snapshots_at_callsite(
+std::vector<code_contractst::old_snapshot_t>
+code_contractst::materialize_old_snapshots_at_callsite(
   const std::vector<code_contractst::old_snapshot_t> &old_snapshots,
   const symbolt &function_symbol,
   const std::vector<expr2tc> &actual_args,
@@ -1565,8 +1603,8 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::materialize_old_sn
 
     // Generate snapshot declaration at call site
     goto_programt::targett decl_inst = replacement.add_instruction(DECL);
-    decl_inst->code = code_decl2tc(
-      original_expr->type, to_symbol2t(snapshot_var).thename);
+    decl_inst->code =
+      code_decl2tc(original_expr->type, to_symbol2t(snapshot_var).thename);
     decl_inst->location = call_location;
     decl_inst->location.comment("__ESBMC_old call-site snapshot declaration");
 
@@ -1576,10 +1614,10 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::materialize_old_sn
     assign_inst->location = call_location;
     assign_inst->location.comment("__ESBMC_old call-site snapshot assignment");
 
-      // Store mapping: temp var from original body -> call-site snapshot var.
-      code_contractst::old_snapshot_t snap_entry;
-    snap_entry.original_expr = temp_var;      // what to find in ensures
-    snap_entry.snapshot_var = snapshot_var;   // what to replace with
+    // Store mapping: temp var from original body -> call-site snapshot var.
+    code_contractst::old_snapshot_t snap_entry;
+    snap_entry.original_expr = temp_var;    // what to find in ensures
+    snap_entry.snapshot_var = snapshot_var; // what to replace with
     callsite_snapshots.push_back(snap_entry);
   }
 
@@ -1587,7 +1625,8 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::materialize_old_sn
   {
     log_debug(
       "contracts",
-      "materialize_old_snapshots_at_callsite: created {} __ESBMC_old call-site snapshot(s) for function {}",
+      "materialize_old_snapshots_at_callsite: created {} __ESBMC_old call-site "
+      "snapshot(s) for function {}",
       callsite_snapshots.size(),
       id2string(function_symbol.name));
   }
@@ -1600,18 +1639,18 @@ std::vector<code_contractst::old_snapshot_t> code_contractst::materialize_old_sn
 bool code_contractst::is_return_value_symbol(const symbol2t &sym) const
 {
   std::string name = id2string(sym.thename);
-  
+
   // Match various return value patterns:
   // - "return_value"
-  // - "__ESBMC_return_value"  
+  // - "__ESBMC_return_value"
   // - "return_value$..." (with suffix)
   // - "tag-return_value$..." (with tag prefix)
   if (name == "return_value" || name == "__ESBMC_return_value")
     return true;
-  
+
   if (name.find("return_value") != std::string::npos)
     return true;
-  
+
   return false;
 }
 
@@ -1621,18 +1660,18 @@ expr2tc code_contractst::remove_incorrect_casts(
 {
   if (is_nil_expr(expr) || is_nil_expr(ret_val))
     return expr;
-  
+
   // NON-RECURSIVE: Only process direct typecast on return_value symbol
   // This avoids infinite recursion and circular references
   if (is_typecast2t(expr))
   {
     const typecast2t &cast = to_typecast2t(expr);
-    
+
     // Check if we're casting a return_value symbol (directly, not nested)
     if (is_symbol2t(cast.from))
     {
       const symbol2t &sym = to_symbol2t(cast.from);
-      
+
       if (is_return_value_symbol(sym))
       {
         // Compare the cast target type with ret_val's type
@@ -1645,14 +1684,14 @@ expr2tc code_contractst::remove_incorrect_casts(
             get_type_id(*cast.from->type),
             get_type_id(*cast.type),
             get_type_id(*ret_val->type));
-          
+
           // Return the original symbol without the cast
           return cast.from;
         }
       }
     }
   }
-  
+
   // No recursion: return original expression unchanged
   // The caller (fix_comparison_types) will handle nested structures explicitly
   return expr;
@@ -1664,20 +1703,20 @@ expr2tc code_contractst::fix_comparison_types(
 {
   if (is_nil_expr(expr) || is_nil_expr(ret_val))
     return expr;
-  
+
   // NON-RECURSIVE APPROACH: Use explicit stack-based traversal to avoid infinite loops
   // We only need to fix comparison expressions, so we traverse the tree explicitly
   // and only process comparison nodes and their direct children
-  
+
   // Step 1: Handle top-level comparison expressions
   if (is_comp_expr(expr))
   {
     expr2tc new_expr = expr->clone();
-    
+
     // Get the two sides of the comparison
     expr2tc *side1 = nullptr;
     expr2tc *side2 = nullptr;
-    
+
     if (is_lessthan2t(new_expr))
     {
       lessthan2t &rel = to_lessthan2t(new_expr);
@@ -1714,13 +1753,13 @@ expr2tc code_contractst::fix_comparison_types(
       side1 = &rel.side_1;
       side2 = &rel.side_2;
     }
-    
+
     if (side1 && side2)
     {
       // Step 1a: Remove incorrect casts on direct return_value symbols
       *side1 = remove_incorrect_casts(*side1, ret_val);
       *side2 = remove_incorrect_casts(*side2, ret_val);
-      
+
       // Step 1b: Handle nested typecasts wrapping add/sub expressions
       // Example: (double)(old_snapshot + (signed int)return_value)
       // Only process one level: typecast -> add/sub -> operands
@@ -1730,14 +1769,14 @@ expr2tc code_contractst::fix_comparison_types(
         {
           const typecast2t &cast = to_typecast2t(*side_ptr);
           expr2tc inner = cast.from;
-          
+
           // If inner is add/sub, fix its operands (one level only)
           if (is_add2t(inner))
           {
             const add2t &add = to_add2t(inner);
             expr2tc fixed_op1 = remove_incorrect_casts(add.side_1, ret_val);
             expr2tc fixed_op2 = remove_incorrect_casts(add.side_2, ret_val);
-            
+
             // Only recreate if something changed
             if (fixed_op1 != add.side_1 || fixed_op2 != add.side_2)
             {
@@ -1746,16 +1785,20 @@ expr2tc code_contractst::fix_comparison_types(
               if (is_fractional_type(cast.type))
               {
                 // Use IEEE floating-point addition with default rounding mode
-                expr2tc rounding_mode = symbol2tc(
-                  get_int32_type(), "c:@__ESBMC_rounding_mode");
-                expr2tc new_add = ieee_add2tc(cast.type, fixed_op1, fixed_op2, rounding_mode);
-                *side_ptr = new_add;  // No need for outer typecast, ieee_add already has correct type
+                expr2tc rounding_mode =
+                  symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+                expr2tc new_add =
+                  ieee_add2tc(cast.type, fixed_op1, fixed_op2, rounding_mode);
+                *side_ptr =
+                  new_add; // No need for outer typecast, ieee_add already has correct type
               }
               else
               {
                 // For non-floating-point types, use regular addition
                 type2tc add_type = inner->type;
-                if (fixed_op1->type == fixed_op2->type && fixed_op1->type == cast.type)
+                if (
+                  fixed_op1->type == fixed_op2->type &&
+                  fixed_op1->type == cast.type)
                 {
                   add_type = cast.type;
                 }
@@ -1769,7 +1812,7 @@ expr2tc code_contractst::fix_comparison_types(
             const sub2t &sub = to_sub2t(inner);
             expr2tc fixed_op1 = remove_incorrect_casts(sub.side_1, ret_val);
             expr2tc fixed_op2 = remove_incorrect_casts(sub.side_2, ret_val);
-            
+
             if (fixed_op1 != sub.side_1 || fixed_op2 != sub.side_2)
             {
               type2tc sub_type = inner->type;
@@ -1788,13 +1831,13 @@ expr2tc code_contractst::fix_comparison_types(
           }
         }
       }
-      
+
       // Step 1c: Check if one side is return_value and fix type mismatches
-      bool side1_is_retval = is_symbol2t(*side1) && 
-                              is_return_value_symbol(to_symbol2t(*side1));
-      bool side2_is_retval = is_symbol2t(*side2) && 
-                              is_return_value_symbol(to_symbol2t(*side2));
-      
+      bool side1_is_retval =
+        is_symbol2t(*side1) && is_return_value_symbol(to_symbol2t(*side1));
+      bool side2_is_retval =
+        is_symbol2t(*side2) && is_return_value_symbol(to_symbol2t(*side2));
+
       // Case 1: return_value compared with integer constant, but return_value is pointer
       if (is_pointer_type(ret_val->type))
       {
@@ -1804,7 +1847,8 @@ expr2tc code_contractst::fix_comparison_types(
           if (c.value.is_zero())
           {
             *side2 = gen_zero(ret_val->type);
-            log_debug("contracts", "Fixed pointer comparison: replaced 0 with NULL");
+            log_debug(
+              "contracts", "Fixed pointer comparison: replaced 0 with NULL");
           }
         }
         else if (side2_is_retval && is_constant_int2t(*side1))
@@ -1813,7 +1857,8 @@ expr2tc code_contractst::fix_comparison_types(
           if (c.value.is_zero())
           {
             *side1 = gen_zero(ret_val->type);
-            log_debug("contracts", "Fixed pointer comparison: replaced 0 with NULL");
+            log_debug(
+              "contracts", "Fixed pointer comparison: replaced 0 with NULL");
           }
         }
       }
@@ -1838,17 +1883,17 @@ expr2tc code_contractst::fix_comparison_types(
         }
       }
     }
-    
+
     return new_expr;
   }
-  
+
   // Step 2: Handle logical operators (AND, OR) that may contain comparisons
   // Only process one level: if this is AND/OR, process its direct operands
   if (is_and2t(expr) || is_or2t(expr))
   {
     expr2tc new_expr = expr->clone();
     bool changed = false;
-    
+
     // Process each operand (but only one level deep)
     new_expr->Foreach_operand([this, &ret_val, &changed](expr2tc &op) {
       if (is_comp_expr(op))
@@ -1861,10 +1906,10 @@ expr2tc code_contractst::fix_comparison_types(
         }
       }
     });
-    
+
     return changed ? new_expr : expr;
   }
-  
+
   // Step 3: For all other expressions, return unchanged
   // We don't recursively process arbitrary expression trees to avoid infinite loops
   return expr;
@@ -1877,36 +1922,37 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
 
   // NON-RECURSIVE: Only process floating-point add2t expressions
   // Convert regular floating-point addition to IEEE_ADD to match implementation semantics
-  
+
   if (is_add2t(expr))
   {
     const add2t &add = to_add2t(expr);
-    
+
     // Only convert if this is a floating-point type
     if (is_fractional_type(add.type))
     {
       // Use default rounding mode symbol (same as implementation)
-      expr2tc rounding_mode = symbol2tc(
-        get_int32_type(), "c:@__ESBMC_rounding_mode");
-      
+      expr2tc rounding_mode =
+        symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+
       // Convert to IEEE floating-point addition
-      expr2tc new_expr = ieee_add2tc(add.type, add.side_1, add.side_2, rounding_mode);
-      
+      expr2tc new_expr =
+        ieee_add2tc(add.type, add.side_1, add.side_2, rounding_mode);
+
       log_debug(
         "contracts",
         "Normalized floating-point addition to IEEE_ADD in ensures clause");
-      
+
       return new_expr;
     }
   }
-  
+
   // For non-add expressions or non-floating-point types, process operands
   // but only one level deep to avoid recursion issues
   if (is_and2t(expr) || is_or2t(expr))
   {
     expr2tc new_expr = expr->clone();
     bool changed = false;
-    
+
     new_expr->Foreach_operand([this, &changed](expr2tc &op) {
       expr2tc normalized = normalize_fp_add_in_ensures(op);
       if (normalized != op)
@@ -1915,16 +1961,16 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
         changed = true;
       }
     });
-    
+
     return changed ? new_expr : expr;
   }
-  
+
   // For comparison expressions, process both sides
   if (is_comp_expr(expr))
   {
     expr2tc new_expr = expr->clone();
     bool changed = false;
-    
+
     if (is_equality2t(new_expr))
     {
       equality2t &rel = to_equality2t(new_expr);
@@ -1997,10 +2043,10 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
         changed = true;
       }
     }
-    
+
     return changed ? new_expr : expr;
   }
-  
+
   // For typecast expressions, process the inner expression
   if (is_typecast2t(expr))
   {
@@ -2011,7 +2057,7 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
       return typecast2tc(cast.type, normalized);
     }
   }
-  
+
   // For all other expressions, return unchanged
   return expr;
 }
@@ -2056,9 +2102,9 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
     if (it->is_assume())
     {
       std::string comment = id2string(it->location.comment());
-      if (comment == "contract::requires" || 
-          comment == "contract::ensures" ||
-          comment == "contract::assigns")
+      if (
+        comment == "contract::requires" || comment == "contract::ensures" ||
+        comment == "contract::assigns")
       {
         return true;
       }
@@ -2075,7 +2121,8 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
   // Build a map of function names to their symbols, bodies, and IDs for quick lookup
   // Key: function name (e.g., "increment")
   // Value: (symbol pointer, body pointer, function ID in goto_functions)
-  std::map<std::string, std::tuple<symbolt *, goto_programt *, irep_idt>> function_map;
+  std::map<std::string, std::tuple<symbolt *, goto_programt *, irep_idt>>
+    function_map;
 
   // Collect all functions that might be called
   Forall_goto_functions (it, goto_functions)
@@ -2090,7 +2137,12 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
       // get_symbol_name() returns in function calls
       std::string func_key = id2string(it->first);
       function_map[func_key] = {func_sym, &it->second.body, it->first};
-      log_debug("contracts", "Added function to map: {} (name: {}, id: {})", func_key, id2string(func_sym->name), id2string(it->first));
+      log_debug(
+        "contracts",
+        "Added function to map: {} (name: {}, id: {})",
+        func_key,
+        id2string(func_sym->name),
+        id2string(it->first));
     }
   }
 
@@ -2127,28 +2179,41 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
           {
             if (called_func.find(replace_name) != std::string::npos)
             {
-              log_debug("contracts", "Found potential call to replace: {}", called_func);
+              log_debug(
+                "contracts",
+                "Found potential call to replace: {}",
+                called_func);
               auto map_it = function_map.find(called_func);
               if (map_it != function_map.end())
               {
                 // Check if function has contracts
                 goto_programt *func_body = std::get<1>(map_it->second);
                 bool has_contract = has_contracts(*func_body);
-                log_debug("contracts", "Function {} has contracts: {}", called_func, has_contract);
+                log_debug(
+                  "contracts",
+                  "Function {} has contracts: {}",
+                  called_func,
+                  has_contract);
                 if (has_contract)
                 {
-                  log_debug("contracts", "Adding call to replacement list: {}", called_func);
-                calls_to_replace.push_back(i_it);
+                  log_debug(
+                    "contracts",
+                    "Adding call to replacement list: {}",
+                    called_func);
+                  calls_to_replace.push_back(i_it);
                   function_info.push_back(map_it->second);
                   // Track this function for deletion (use the ID from goto_functions)
                   irep_idt func_id = std::get<2>(map_it->second);
                   functions_to_delete.insert(func_id);
-                break;
+                  break;
                 }
               }
               else
               {
-                log_debug("contracts", "Function {} not found in function_map", called_func);
+                log_debug(
+                  "contracts",
+                  "Function {} not found in function_map",
+                  called_func);
               }
             }
           }
@@ -2157,17 +2222,19 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     }
 
     // Replace calls
-    log_debug("contracts", "Found {} calls to replace in function {}", calls_to_replace.size(), id2string(it->first));
+    log_debug(
+      "contracts",
+      "Found {} calls to replace in function {}",
+      calls_to_replace.size(),
+      id2string(it->first));
     for (size_t i = 0; i < calls_to_replace.size(); ++i)
     {
-      log_debug("contracts", "Replacing call {} of {}", i + 1, calls_to_replace.size());
+      log_debug(
+        "contracts", "Replacing call {} of {}", i + 1, calls_to_replace.size());
       symbolt *func_sym = std::get<0>(function_info[i]);
       goto_programt *func_body = std::get<1>(function_info[i]);
       generate_replacement_at_call(
-        *func_sym,
-        *func_body,
-        calls_to_replace[i],
-        it->second.body);
+        *func_sym, *func_body, calls_to_replace[i], it->second.body);
     }
   }
 
@@ -2204,8 +2271,9 @@ void code_contractst::generate_replacement_at_call(
   // Extract contracts from function body (similar to enforce_contracts)
   expr2tc requires_clause = extract_requires_from_body(function_body);
   expr2tc ensures_clause = extract_ensures_from_body(function_body);
-  std::vector<expr2tc> assigns_target_exprs = extract_assigns_from_body(function_body);
-  
+  std::vector<expr2tc> assigns_target_exprs =
+    extract_assigns_from_body(function_body);
+
   // Debug: log extracted clauses
   log_debug(
     "contracts",
@@ -2239,18 +2307,19 @@ void code_contractst::generate_replacement_at_call(
   {
     const code_typet &code_type = to_code_type(function_symbol.type);
     const code_typet::argumentst &params = code_type.arguments();
-    
+
     // Build parameter-to-argument mapping
     for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
-  {
+    {
       irep_idt param_id = params[i].get_identifier();
-      expr2tc param_expr = symbol2tc(
-        migrate_type(params[i].type()), param_id);
-      
+      expr2tc param_expr = symbol2tc(migrate_type(params[i].type()), param_id);
+
       // Replace parameter symbol with actual argument in requires/ensures
-      requires_clause = replace_symbol_in_expr(requires_clause, param_expr, actual_args[i]);
-      ensures_clause = replace_symbol_in_expr(ensures_clause, param_expr, actual_args[i]);
-      
+      requires_clause =
+        replace_symbol_in_expr(requires_clause, param_expr, actual_args[i]);
+      ensures_clause =
+        replace_symbol_in_expr(ensures_clause, param_expr, actual_args[i]);
+
       // Debug: log parameter replacement
       log_debug(
         "contracts",
@@ -2259,7 +2328,7 @@ void code_contractst::generate_replacement_at_call(
         is_nil_expr(actual_args[i]));
     }
   }
-  
+
   // Debug: log clauses after parameter replacement
   log_debug(
     "contracts",
@@ -2336,22 +2405,23 @@ void code_contractst::generate_replacement_at_call(
     {
       // Substitute function parameters with actual call arguments
       expr2tc instantiated_target = target_expr;
-      
+
       if (function_symbol.type.is_code())
       {
         const code_typet &code_type = to_code_type(function_symbol.type);
         const code_typet::argumentst &params = code_type.arguments();
-        
+
         for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
         {
           const code_typet::argumentt &param = params[i];
           irep_idt param_id = param.get_identifier();
-          
+
           if (!param_id.empty() && !is_nil_expr(actual_args[i]))
           {
             type2tc param_type = migrate_type(param.type());
             expr2tc param_symbol = symbol2tc(param_type, param_id);
-            instantiated_target = replace_symbol_in_expr(instantiated_target, param_symbol, actual_args[i]);
+            instantiated_target = replace_symbol_in_expr(
+              instantiated_target, param_symbol, actual_args[i]);
           }
         }
       }
@@ -2368,7 +2438,7 @@ void code_contractst::generate_replacement_at_call(
       t->code = code_assign2tc(instantiated_target, rhs);
       t->location = call_location;
       t->location.comment("contract havoc assigns");
-      
+
       log_debug("contracts", "Havoc'd assigns target expression");
     }
 
@@ -2395,49 +2465,62 @@ void code_contractst::generate_replacement_at_call(
       "contracts",
       "Conservative havoc: no assigns clause, havoc'd all static globals");
   }
-  
+
   // 2.3. Havoc memory locations modified through pointer parameters
   // TODO: Analyze pointer parameters and havoc dereferenced locations
   // For now, we rely on assigns clause and conservative global havoc
   // This is a conservative over-approximation
 
   // 3. Normalize ensures guard: replace return_value, fix types, normalize floating-point
-  expr2tc ensures_guard = normalize_ensures_guard_for_return_value(ensures_clause, ret_val);
+  expr2tc ensures_guard =
+    normalize_ensures_guard_for_return_value(ensures_clause, ret_val);
 
   // 3.b Replace __ESBMC_old() occurrences in ensures using call-site snapshots
   if (!callsite_snapshots.empty() && !is_nil_expr(ensures_guard))
   {
     log_debug(
       "contracts",
-      "generate_replacement_at_call: replacing __ESBMC_old expressions in ensures (before type={})",
+      "generate_replacement_at_call: replacing __ESBMC_old expressions in "
+      "ensures (before type={})",
       get_type_id(*ensures_guard->type));
     ensures_guard = replace_old_in_expr(ensures_guard, callsite_snapshots);
     log_debug(
       "contracts",
-      "generate_replacement_at_call: replaced __ESBMC_old expressions in ensures (after type={})",
+      "generate_replacement_at_call: replaced __ESBMC_old expressions in "
+      "ensures (after type={})",
       ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
   }
 
   // 4. Assume ensures clause (assume postcondition at call site)
-  add_contract_clause(ensures_guard, ASSUME, "contract ensures", "contract ensures");
+  add_contract_clause(
+    ensures_guard, ASSUME, "contract ensures", "contract ensures");
 
   // Replace call with replacement code
   // Insert replacement code before the call instruction
   // destructive_insert inserts BEFORE the target (unlike insert_swap which inserts AFTER)
-  
+
   // Debug: log replacement code generation
   size_t replacement_size = replacement.instructions.size();
-  log_debug("contracts", "Replacement code generated: {} instructions", replacement_size);
-  
+  log_debug(
+    "contracts",
+    "Replacement code generated: {} instructions",
+    replacement_size);
+
   if (!replacement.instructions.empty())
   {
     // Debug: log what we're inserting
-    log_debug("contracts", "Inserting {} instructions before call instruction", replacement_size);
-    
+    log_debug(
+      "contracts",
+      "Inserting {} instructions before call instruction",
+      replacement_size);
+
     caller_body.destructive_insert(call_instruction, replacement);
-    
+
     // Debug: verify insertion
-    log_debug("contracts", "Call instruction after insertion: type={}", (int)call_instruction->type);
+    log_debug(
+      "contracts",
+      "Call instruction after insertion: type={}",
+      (int)call_instruction->type);
   }
   else
   {
@@ -2446,12 +2529,15 @@ void code_contractst::generate_replacement_at_call(
       "No replacement code generated for function {}",
       id2string(function_symbol.name));
   }
-  
+
   // Mark the original call as SKIP
   call_instruction->make_skip();
-  
+
   // Debug: verify skip
-  log_debug("contracts", "Call instruction marked as SKIP: type={}", (int)call_instruction->type);
+  log_debug(
+    "contracts",
+    "Call instruction marked as SKIP: type={}",
+    (int)call_instruction->type);
 }
 
 // ========== Pointer validity assumptions support ==========
@@ -2473,7 +2559,7 @@ void code_contractst::add_pointer_validity_assumptions(
     // Construct symbol p
     type2tc param_type = migrate_type(param.type());
     expr2tc p = symbol2tc(param_type, param.get_identifier());
-    
+
     // Check if this is a pointer type
     if (!is_pointer_type(p))
       continue;
@@ -2488,11 +2574,11 @@ void code_contractst::add_pointer_validity_assumptions(
     t->guard = validity_check;
     t->location = location;
     t->location.comment("assume non-null parameter is valid");
-    
+
     log_debug(
       "contracts",
-      "add_pointer_validity_assumptions: added validity assumption for parameter {}",
+      "add_pointer_validity_assumptions: added validity assumption for "
+      "parameter {}",
       id2string(param.get_identifier()));
   }
 }
-

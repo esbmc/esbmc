@@ -556,7 +556,10 @@ void goto_convertt::do_function_call_symbol(
   // Debug: log if we see assigns
   if (is_assigns)
   {
-    log_debug("builtin_functions", "Found __ESBMC_assigns call with {} arguments", arguments.size());
+    log_debug(
+      "builtin_functions",
+      "Found __ESBMC_assigns call with {} arguments",
+      arguments.size());
   }
 
   if (is_assume || is_assert || is_loop_invariant || is_requires || is_ensures)
@@ -659,10 +662,12 @@ void goto_convertt::do_function_call_symbol(
     //
     // Type handling: Similar to __ESBMC_old, declared as `int __ESBMC_assigns(int, ...)`
     // but Clang will insert typecasts. We strip these and preserve the original expression.
-    
+
     if (arguments.empty())
     {
-      log_error("`__ESBMC_assigns' expected to have at least one argument (use __ESBMC_assigns(0) for empty assigns)");
+      log_error(
+        "`__ESBMC_assigns' expected to have at least one argument (use "
+        "__ESBMC_assigns(0) for empty assigns)");
       abort();
     }
 
@@ -672,7 +677,10 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    log_debug("builtin_functions", "Processing __ESBMC_assigns with {} arguments", arguments.size());
+    log_debug(
+      "builtin_functions",
+      "Processing __ESBMC_assigns with {} arguments",
+      arguments.size());
 
     // Check for empty assigns: __ESBMC_assigns(0) means no side effects
     // This is used for pure functions that only read memory
@@ -684,13 +692,16 @@ void goto_convertt::do_function_call_symbol(
       {
         first_arg = first_arg.op0();
       }
-      
+
       // Check if it's a constant 0 or NULL
-      if (first_arg.is_zero() || 
-          (first_arg.id() == "constant" && first_arg.get("value") == "0"))
+      if (
+        first_arg.is_zero() ||
+        (first_arg.id() == "constant" && first_arg.get("value") == "0"))
       {
-        log_debug("builtin_functions", "__ESBMC_assigns(0) - pure function (no side effects)");
-        
+        log_debug(
+          "builtin_functions",
+          "__ESBMC_assigns(0) - pure function (no side effects)");
+
         // Generate a special marker to indicate explicit empty assigns
         // We use an ASSERT of a true constant with a special comment marker
         // This will be detected by extract_assigns_from_body() to distinguish
@@ -700,7 +711,7 @@ void goto_convertt::do_function_call_symbol(
         t->location = function.location();
         t->location.comment("contract::assigns_empty");
         t->location.property("empty assigns marker");
-        
+
         return;
       }
     }
@@ -710,14 +721,15 @@ void goto_convertt::do_function_call_symbol(
     for (size_t i = 0; i < arguments.size(); ++i)
     {
       exprt actual_arg = arguments[i];
-      
+
       // Strip typecast if present (due to int declaration in frontend)
       if (actual_arg.id() == "typecast" && actual_arg.operands().size() == 1)
       {
         actual_arg = actual_arg.op0();
       }
 
-      log_debug("builtin_functions", "  Assigns target {}: {}", i, actual_arg.pretty());
+      log_debug(
+        "builtin_functions", "  Assigns target {}: {}", i, actual_arg.pretty());
 
       // Create a sideeffect expression to mark this as an assigns target
       // Type is inherited from the actual argument (after stripping typecast)

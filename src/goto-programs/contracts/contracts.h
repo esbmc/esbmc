@@ -63,8 +63,9 @@ public:
   /// \brief Structure to store is_fresh mapping information
   struct is_fresh_mapping_t
   {
-    irep_idt temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
-    expr2tc ptr_expr;        ///< Pointer expression (dereferenced from &ptr)
+    irep_idt
+      temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
+    expr2tc ptr_expr; ///< Pointer expression (dereferenced from &ptr)
   };
 
   code_contractst(
@@ -77,7 +78,9 @@ public:
   /// Wrapper function: assume requires -> call original function -> assert ensures
   /// \param to_enforce Set of function names to enforce contracts for
   /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
-  void enforce_contracts(const std::set<std::string> &to_enforce, bool assume_nonnull_valid = false);
+  void enforce_contracts(
+    const std::set<std::string> &to_enforce,
+    bool assume_nonnull_valid = false);
 
   /// \brief Replace function calls with contracts
   /// Replaces function calls with contract semantics:
@@ -87,7 +90,7 @@ public:
   ///      - Static lifetime global variables (conservative)
   ///      - Memory locations through pointer parameters (TODO)
   ///   3. Assume ensures clause (assume postcondition)
-  /// 
+  ///
   /// CRITICAL: We must havoc everything the function might modify,
   /// otherwise the effects cannot propagate from the removed function body.
   /// \param to_replace Set of function names to replace with contracts
@@ -170,7 +173,8 @@ private:
   /// \brief Extract assigns clause from function body
   /// \param function_body Function goto program
   /// \return Vector of assign target expressions from __ESBMC_assigns()
-  std::vector<expr2tc> extract_assigns_from_body(const goto_programt &function_body);
+  std::vector<expr2tc>
+  extract_assigns_from_body(const goto_programt &function_body);
 
   /// \brief Extract assigns clause from contract symbol
   /// \param contract_symbol Contract symbol
@@ -181,8 +185,9 @@ private:
   /// \param expr Expression to replace symbols in
   /// \param ret_val Actual return value expression
   /// \return Expression with __ESBMC_return_value replaced
-  expr2tc
-  replace_return_value_in_expr(const expr2tc &expr, const expr2tc &ret_val) const;
+  expr2tc replace_return_value_in_expr(
+    const expr2tc &expr,
+    const expr2tc &ret_val) const;
 
   /// \brief Extract struct/union member accesses to temporary variables
   /// For struct return values, accessing members directly (ret_val.x) can cause
@@ -244,8 +249,8 @@ private:
   /// \brief Collect old_snapshot assignments from function body
   /// \param function_body GOTO program to scan for old_snapshot sideeffects
   /// \return Vector of old_snapshot_t structures (original_expr, temp_var)
-  std::vector<old_snapshot_t> collect_old_snapshots_from_body(
-    const goto_programt &function_body) const;
+  std::vector<old_snapshot_t>
+  collect_old_snapshots_from_body(const goto_programt &function_body) const;
 
   /// \brief Materialize old snapshots in wrapper function (enforce-contract mode)
   /// Creates DECL and ASSIGN instructions for snapshot variables before function call
@@ -285,17 +290,15 @@ private:
   /// \param expr Expression to process
   /// \param ret_val Return value symbol with correct type
   /// \return Expression with incorrect casts removed
-  expr2tc remove_incorrect_casts(
-    const expr2tc &expr,
-    const expr2tc &ret_val) const;
+  expr2tc
+  remove_incorrect_casts(const expr2tc &expr, const expr2tc &ret_val) const;
 
   /// \brief Fix type mismatches in comparison expressions involving return values
   /// \param expr Expression to fix (typically an ensures guard)
   /// \param ret_val Return value symbol with correct type
   /// \return Expression with corrected type casts
-  expr2tc fix_comparison_types(
-    const expr2tc &expr,
-    const expr2tc &ret_val) const;
+  expr2tc
+  fix_comparison_types(const expr2tc &expr, const expr2tc &ret_val) const;
 
   /// \brief Normalize floating-point addition in contract expressions to use IEEE semantics
   /// This ensures contracts use IEEE_ADD (matching implementation) instead of regular +

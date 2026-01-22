@@ -252,7 +252,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "functions)"},
     {"assume-nonnull-valid",
      nullptr,
-     "in --enforce-contract mode, assume non-null pointer parameters are valid objects"}}},
+     "in --enforce-contract mode, assume non-null pointer parameters are valid "
+     "objects"}}},
   {"BMC",
    {{"function",
      boost::program_options::value<std::string>()->value_name("name"),
