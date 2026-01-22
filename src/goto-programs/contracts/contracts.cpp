@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <cstdlib>
 #include <goto-programs/contracts/contracts.h>
 #include <goto-programs/remove_no_op.h>
