@@ -1,5 +1,5 @@
 def validate_no_empty_parts(price: str) -> None:
-    parts = "12.34".split(".")
+    parts = price.split(".")
     i = 0
     while i < len(parts):
         if parts[i] == "":

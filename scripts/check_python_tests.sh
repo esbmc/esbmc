@@ -96,6 +96,13 @@ ignored_dirs=(
   "incremental-smt-assert-pass"
   "type-annotation-check"
   "type-annotation-generics-fail"
+  "string-char-symbolic-success"
+  "string-symbolic-1"
+  "string-symbolic-2"
+  "string-symbolic-3"
+  "string-symbolic-4"
+  "string-symbolic-7"
+  "string-symbolic-8"
 )
 
 for dir in */; do

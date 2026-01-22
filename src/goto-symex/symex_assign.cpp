@@ -1,4 +1,5 @@
 #include <cassert>
+#include <climits>
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
@@ -101,6 +102,7 @@ goto_symext::goto_symext(
   }
 
   // Build mapping: global_loop_id -> (function_name, per-function loop index)
+  // Also populate unwind_set from #pragma unroll annotations
   for (const auto &func_pair : _goto_functions.function_map)
   {
     unsigned loop_index = 0;
@@ -111,6 +113,23 @@ goto_symext::goto_symext(
         loop_id_to_func_index[instruction.loop_number] =
           std::make_pair(func_pair.first.as_string(), loop_index);
         loop_index++;
+
+        // Handle #pragma unroll annotations
+        // pragma_unroll_count: 0 = not specified, UINT_MAX = unlimited, else = specific count
+        if (instruction.pragma_unroll_count > 0)
+        {
+          if (instruction.pragma_unroll_count == UINT_MAX)
+          {
+            // #pragma unroll (no N) - unlimited unrolling (0 means no limit in ESBMC)
+            unwind_set[instruction.loop_number] = 0;
+          }
+          else
+          {
+            // #pragma unroll N - use specified count
+            unwind_set[instruction.loop_number] =
+              BigInt(instruction.pragma_unroll_count);
+          }
+        }
       }
     }
   }
