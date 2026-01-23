@@ -136,9 +136,9 @@ code_contractst::extract_requires_from_body(const goto_programt &function_body)
 // Helper structure to track assignments to a variable
 struct var_assignment_info
 {
-  expr2tc value;                      // The assigned value
+  expr2tc value;                         // The assigned value
   goto_programt::const_targett location; // Where the assignment is
-  expr2tc condition;                  // Condition under which this assignment happens (if any)
+  expr2tc condition; // Condition under which this assignment happens (if any)
 };
 
 // Helper function to find all assignments to a variable that can reach a given point
@@ -256,7 +256,8 @@ static expr2tc inline_temporary_variables(
       //
       // We need to find the non-trivial assignment (the one that's not just 0 or 1)
       expr2tc best_value;
-      goto_programt::const_targett best_location = function_body.instructions.end();
+      goto_programt::const_targett best_location =
+        function_body.instructions.end();
 
       for (const auto &assign : assignments)
       {
@@ -298,7 +299,8 @@ static expr2tc inline_temporary_variables(
       }
 
       // Recursively inline the best value
-      return inline_temporary_variables(best_value, function_body, best_location);
+      return inline_temporary_variables(
+        best_value, function_body, best_location);
     }
   }
 
