@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--replace-call-with-contract "*"
+^VERIFICATION FAILED$

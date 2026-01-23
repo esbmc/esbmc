@@ -1,8 +1,0 @@
-KNOWNBUG
-main.c
---replace-call-with-contract "*"
-^VERIFICATION FAILED$
-# KNOWNBUG: System-level verification with assigns clauses causes over-approximation.
-# Entire arrays are havoc'd even when only specific elements are modified.
-# Requires dynamic frame conditions to havoc only actually-modified locations.
-

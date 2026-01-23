@@ -1,7 +1,0 @@
-KNOWNBUG
-main.c
---replace-call-with-contract "*"
-^VERIFICATION FAILED$
-# KNOWNBUG: Functions depending on global array state cannot be verified in isolation.
-# Requires dynamic frame conditions to track which array elements were actually modified.
-
