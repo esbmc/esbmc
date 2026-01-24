@@ -54,7 +54,6 @@ __ESBMC_HIDE:;
 
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
-
 void exit(int status)
 {
 __ESBMC_HIDE:;

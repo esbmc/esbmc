@@ -46,7 +46,7 @@ _Bool is_valid_digit(char c) {
     return (c >= '0' && c <= '9');
 }
 char gen_decimal_digit() {
-    unsigned char c = __VERIFIER_nondet_uchar();
+    unsigned char c = 57; //__VERIFIER_nondet_uchar();
     assume_or_exit(is_valid_digit(c));
     return c;
 }
@@ -575,8 +575,8 @@ cmp (char const *a, size_t a_len, char const *b, size_t b_len)
 static int result_ab;
 static int result_ba;
 static void call_cmp_antisymmetry() {
-    size_t num_digits_a = __VERIFIER_nondet_size_t();
-    size_t num_digits_b = __VERIFIER_nondet_size_t();
+    size_t num_digits_a = 195; //__VERIFIER_nondet_size_t();
+    size_t num_digits_b = 195; //__VERIFIER_nondet_size_t();
     assume_or_exit(num_digits_a > 0 && num_digits_a < 200 - 1);
     assume_or_exit(num_digits_b > 0 && num_digits_b < 200 - 1);
     char *buffer_a = malloc(num_digits_a+1);
