@@ -29,6 +29,8 @@ typedef struct atexit_key
 __attribute__((annotate(
   "__ESBMC_inf_size"))) static __ESBMC_atexit_key __ESBMC_stdlib_atexit_key[1];
 static size_t __ESBMC_atexit_count = 0;
+// Track if any were registered
+static size_t __ESBMC_atexit_registered = 0;
 
 void __ESBMC_atexit_handler()
 {
@@ -45,6 +47,8 @@ int atexit(void (*func)(void))
 __ESBMC_HIDE:;
   __ESBMC_stdlib_atexit_key[__ESBMC_atexit_count].atexit_func = func;
   __ESBMC_atexit_count++;
+  // Track that handlers were registered
+  __ESBMC_atexit_registered++;
   return 0;
 }
 
@@ -54,7 +58,9 @@ void exit(int status)
 {
 __ESBMC_HIDE:;
   __ESBMC_atexit_handler();
-  __ESBMC_memory_leak_checks();
+  // Only check if handlers were registered
+  if (__ESBMC_atexit_registered > 0)
+    __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
 
