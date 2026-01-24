@@ -593,9 +593,6 @@ static void call_cmp_antisymmetry() {
     buffer_b[num_digits_b] = '\0';
     result_ab = cmp(buffer_a, num_digits_a, buffer_b, num_digits_b);
     result_ba = cmp(buffer_b, num_digits_b, buffer_a, num_digits_a);
-    // Add cleanup
-    free(buffer_a);
-    free(buffer_b);
 }
 static void postcond_cmp_antisymmetry() {
     if (result_ab < 0) {
