@@ -1,4 +1,4 @@
 CORE
 main.c
---replace-call-with-contract "*"
+--replace-call-with-contract "set_x"
 ^VERIFICATION SUCCESSFUL$

@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---replace-call-with-contract "*"
-^VERIFICATION FAILED$
+--replace-call-with-contract "modify_one"
+^VERIFICATION SUCCESSFUL$

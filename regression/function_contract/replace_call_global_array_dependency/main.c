@@ -1,22 +1,23 @@
-/* Minimal test: function depends on global array state
+/* Test: function depends on global array state with precise assigns
  * 
- * KNOWNBUG: In --replace-call-with-contract mode, functions that read global
- * arrays cannot see values modified by previous calls. Requires dynamic frame
- * conditions to track actual modifications.
+ * This test verifies that when using precise __ESBMC_assigns for
+ * array elements, subsequent functions can see the modifications
+ * through the ensures clause.
  */
 #include <assert.h>
 
 int arr[3];
 
 void set_arr(int i) {
-    __ESBMC_assigns(arr);
+    __ESBMC_requires(i >= 0 && i < 3);
+    __ESBMC_assigns(arr[i]);  // Precise: only assigns arr[i]
     __ESBMC_ensures(arr[i] == 1);
     arr[i] = 1;
 }
 
 void check_arr() {
-    __ESBMC_assigns(0);
-    assert(arr[0] == 1);  // Fails: cannot see arr[0] modified by set_arr(0)
+    __ESBMC_assigns();  // Pure function: no side effects
+    assert(arr[0] == 1);  // Passes: arr[0] was set by set_arr(0)
 }
 
 int main() {

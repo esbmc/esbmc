@@ -560,29 +560,31 @@ extern int __ESBMC_return_value;
  */
 int __ESBMC_old(int);
 
-/* __ESBMC_assigns: specifies which memory locations a function may modify
- * This is used in replace-call mode to perform precise havoc: only the
- * variables/expressions listed in __ESBMC_assigns will be havoc'd, while
- * all other memory locations are assumed to remain unchanged.
+/* __ESBMC_assigns: specifies memory locations a function may modify
+ * This is used in replace-call mode for havoc generation.
  * 
- * Usage: Place at the beginning of the function body:
- *   void f(Node *node) {
- *     __ESBMC_assigns(x, y, global_var, node->field, arr[i].data);
- *     // ... function body
- *   }
+ * Unified interface for all assignable locations:
+ *   __ESBMC_assigns(arr);        // havoc entire array
+ *   __ESBMC_assigns(arr[i]);     // havoc only arr[i]
+ *   __ESBMC_assigns(x);          // havoc scalar variable x
+ *   __ESBMC_assigns(node->field);// havoc only node->field
+ *   __ESBMC_assigns(x, y, z);    // multiple targets
  * 
- * For pure functions (no side effects), use __ESBMC_assigns(0):
- *   int check_property() {
- *     __ESBMC_assigns(0);  // This function does not modify any memory
- *     return global_x + global_y < 10;
- *   }
+ * For pure functions (no side effects), use empty assigns:
+ *   __ESBMC_assigns();           // function has no side effects
  * 
- * Note: Takes expressions (not strings) which are parsed by Clang AST and
- * stored as expression trees for delayed evaluation during replace-call.
- * Declared as `int` for C compatibility, but accepts any lvalue expression.
- * The value 0 (or NULL) as the only argument indicates no side effects.
+ * Implementation: Uses address-of to accept any lvalue expression.
+ * The backend unwraps address_of to recover the original expression.
  */
-void __ESBMC_assigns(int, ...);
+void __ESBMC_assigns_impl(const void *, ...);
+#define __ESBMC_assigns_0() __ESBMC_assigns_impl((void*)0)
+#define __ESBMC_assigns_1(a) __ESBMC_assigns_impl(&(a))
+#define __ESBMC_assigns_2(a,b) __ESBMC_assigns_impl(&(a),&(b))
+#define __ESBMC_assigns_3(a,b,c) __ESBMC_assigns_impl(&(a),&(b),&(c))
+#define __ESBMC_assigns_4(a,b,c,d) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d))
+#define __ESBMC_assigns_5(a,b,c,d,e) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d),&(e))
+#define __ESBMC_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_assigns_##N
+#define __ESBMC_assigns(...) __ESBMC_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
     )";
   }
 

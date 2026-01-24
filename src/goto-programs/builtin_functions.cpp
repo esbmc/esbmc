@@ -647,21 +647,18 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
   }
-  else if (base_name == "__ESBMC_assigns")
+  else if (base_name == "__ESBMC_assigns_impl")
   {
-    // __ESBMC_assigns(expr1, expr2, ...): specifies which memory locations a function may modify
-    // Used in replace-call mode for precise havoc generation
+    // __ESBMC_assigns_impl(&expr1, &expr2, ...): unified assigns clause handler
     //
-    // Strategy: For each argument expression, create an ASSIGN to a sideeffect "assigns_target"
-    // This stores the expression tree, which will be evaluated later during replace-call with
-    // proper parameter substitution.
+    // The macro __ESBMC_assigns(x) expands to __ESBMC_assigns_impl(&(x))
+    // This allows accepting any lvalue expression (scalars, arrays, struct fields, etc.)
     //
-    // Example: __ESBMC_assigns(x, node->field, arr[i].data);
-    // Special case: __ESBMC_assigns() with no arguments means function has NO side effects
-    //               (useful for pure functions that only read memory)
+    // Strategy: For each argument, unwrap the address_of to get the original expression,
+    // then create an ASSIGN to a sideeffect "assigns_target". This stores the expression
+    // tree for later evaluation during replace-call with proper parameter substitution.
     //
-    // Type handling: Similar to __ESBMC_old, declared as `int __ESBMC_assigns(int, ...)`
-    // but Clang will insert typecasts. We strip these and preserve the original expression.
+    // Special case: __ESBMC_assigns(0) means function has NO side effects
 
     if (arguments.empty())
     {
@@ -683,7 +680,8 @@ void goto_convertt::do_function_call_symbol(
       arguments.size());
 
     // Check for empty assigns: __ESBMC_assigns(0) means no side effects
-    // This is used for pure functions that only read memory
+    // When user writes __ESBMC_assigns(0), macro expands to __ESBMC_assigns_impl(&(0))
+    // But &(0) is invalid, so we check for address_of(constant 0) pattern
     if (arguments.size() == 1)
     {
       exprt first_arg = arguments[0];
@@ -693,7 +691,8 @@ void goto_convertt::do_function_call_symbol(
         first_arg = first_arg.op0();
       }
 
-      // Check if it's a constant 0 or NULL
+      // Check if it's &(0) which would be address_of(constant 0) - but this is invalid C
+      // So also check for direct 0/NULL passed (shouldn't happen with macro, but be safe)
       if (
         first_arg.is_zero() ||
         (first_arg.id() == "constant" && first_arg.get("value") == "0"))
@@ -703,9 +702,6 @@ void goto_convertt::do_function_call_symbol(
           "__ESBMC_assigns(0) - pure function (no side effects)");
 
         // Generate a special marker to indicate explicit empty assigns
-        // We use an ASSERT of a true constant with a special comment marker
-        // This will be detected by extract_assigns_from_body() to distinguish
-        // "no assigns clause" from "explicit empty assigns"
         goto_programt::targett t = dest.add_instruction(ASSERT);
         t->guard = gen_true_expr();
         t->location = function.location();
@@ -716,16 +712,32 @@ void goto_convertt::do_function_call_symbol(
       }
     }
 
-    // For each argument, create an assignment to a "assigns_target" sideeffect
-    // This stores the expression tree for later evaluation during replace-call
+    // For each argument, unwrap address_of and create an assigns_target sideeffect
     for (size_t i = 0; i < arguments.size(); ++i)
     {
       exprt actual_arg = arguments[i];
 
-      // Strip typecast if present (due to int declaration in frontend)
+      // Strip typecast if present
       if (actual_arg.id() == "typecast" && actual_arg.operands().size() == 1)
       {
         actual_arg = actual_arg.op0();
+      }
+
+      // Unwrap the address_of from macro expansion: &(expr) -> expr
+      if (actual_arg.id() == "address_of" && actual_arg.operands().size() == 1)
+      {
+        actual_arg = actual_arg.op0();
+        log_debug(
+          "builtin_functions", 
+          "  Unwrapped address_of for assigns target {}: {}", 
+          i, actual_arg.pretty());
+      }
+      else
+      {
+        // This shouldn't happen if using the macro correctly
+        log_warning(
+          "__ESBMC_assigns: unexpected argument form. "
+          "Please use __ESBMC_assigns(expr) where expr is an lvalue.");
       }
 
       log_debug(

@@ -83,7 +83,7 @@ void execute_time_step(int time) {
 // then it does NOT execute at time t+1"
 // expect=false means we EXPECT this to be violated
 void check_property() {
-    __ESBMC_assigns(0);  // Pure function, no side effects
+    __ESBMC_assigns();  // Pure function, no side effects
     // Add ensures to help verification
     __ESBMC_ensures(true);  // Always true, helps ESBMC understand this is a pure check
     

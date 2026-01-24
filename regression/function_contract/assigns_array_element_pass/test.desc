@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract "set_element"
+^VERIFICATION SUCCESSFUL$
