@@ -4,8 +4,10 @@
 char *bindtextdomain(const char *domainname, const char *dirname)
 {
 __ESBMC_HIDE:;
-  __ESBMC_assert(domainname != NULL, "bindtextdomain called with NULL domainname");
-  __ESBMC_assert(*domainname != '\0', "bindtextdomain called with empty domainname");
+  __ESBMC_assert(
+    domainname != NULL, "bindtextdomain called with NULL domainname");
+  __ESBMC_assert(
+    *domainname != '\0', "bindtextdomain called with empty domainname");
 
   // If dirname is NULL, query current binding
   if (dirname == NULL)
@@ -16,7 +18,7 @@ __ESBMC_HIDE:;
 
   // Non-deterministically model success or failure
   _Bool success = nondet_bool();
-  
+
   if (!success)
     return NULL;
 
@@ -34,11 +36,12 @@ __ESBMC_HIDE:;
     return current_domain;
   }
 
-  __ESBMC_assert(*domainname != '\0', "textdomain called with empty domainname");
+  __ESBMC_assert(
+    *domainname != '\0', "textdomain called with empty domainname");
 
   // Non-deterministically model success or failure
   _Bool success = nondet_bool();
-  
+
   if (!success)
     return NULL;
 

@@ -13,7 +13,7 @@ __ESBMC_HIDE:;
 
   // Non-deterministically model success or failure
   _Bool success = nondet_bool();
-  
+
   if (!success)
     return NULL;
 
@@ -22,6 +22,6 @@ __ESBMC_HIDE:;
   size_t len;
   __ESBMC_assume(len > 0 && len < 32);
   result_locale[len] = '\0';
-  
+
   return result_locale;
 }
