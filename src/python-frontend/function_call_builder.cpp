@@ -285,14 +285,14 @@ symbol_id function_call_builder::build_function_id() const
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
+      symbol_id var_sid(
+        python_file, current_class_name, current_function_name);
+      var_sid.set_object(arg["id"].get<std::string>());
+      symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+
       // Check if this is a tuple by looking up the variable's type
       if (var_type == "tuple" || var_type.empty())
       {
-        symbol_id var_sid(
-          python_file, current_class_name, current_function_name);
-        var_sid.set_object(arg["id"].get<std::string>());
-        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-
         if (var_symbol && var_symbol->type.id() == "struct")
         {
           const struct_typet &struct_type = to_struct_type(var_symbol->type);
@@ -324,6 +324,22 @@ symbol_id function_call_builder::build_function_id() const
       {
         func_name = kGetObjectSize;
       }
+      else if (var_type.empty() && var_symbol)
+      {
+        typet actual_type = var_symbol->type;
+        if (actual_type.is_pointer())
+          actual_type = actual_type.subtype();
+        if (actual_type.id() == "symbol")
+          actual_type = converter_.ns.follow(actual_type);
+
+        if (actual_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(actual_type);
+          std::string tag = struct_type.tag().as_string();
+          if (tag.find("__ESBMC_PyListObj") != std::string::npos)
+            func_name = kGetObjectSize;
+        }
+      }
       else if (var_type == "str" || var_type.empty())
       {
         // For string types (including optional strings), always use strlen
@@ -331,11 +347,6 @@ symbol_id function_call_builder::build_function_id() const
         func_name = kStrlen;
 
         // Check if this is a single character by looking up the variable
-        symbol_id var_sid(
-          python_file, current_class_name, current_function_name);
-        var_sid.set_object(arg["id"].get<std::string>());
-        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-
         if (
           var_symbol && var_symbol->value.is_constant() &&
           (var_symbol->value.type().is_unsignedbv() ||
