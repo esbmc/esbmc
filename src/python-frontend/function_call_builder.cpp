@@ -285,8 +285,7 @@ symbol_id function_call_builder::build_function_id() const
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
-      symbol_id var_sid(
-        python_file, current_class_name, current_function_name);
+      symbol_id var_sid(python_file, current_class_name, current_function_name);
       var_sid.set_object(arg["id"].get<std::string>());
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
