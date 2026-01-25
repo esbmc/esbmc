@@ -153,11 +153,29 @@ Below is an overview of ESBMC-Python's key capabilities:
       - Works with both string literals and string variables
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
     - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
+    - **removeprefix() method**: Removes a matching prefix (e.g., `"prefix_value".removeprefix("prefix_")` returns `"value"`).
+    - **removesuffix() method**: Removes a matching suffix (e.g., `"value_suffix".removesuffix("_suffix")` returns `"value"`).
     - **lstrip() method**: Removes leading whitespace characters from strings (e.g., `"  hello".lstrip()` returns `"hello"`).
     - **rstrip() method**: Removes trailing whitespace characters from strings (e.g., `"hi  ".rstrip()` returns `"hi"`).
     - **strip() method**: Removes leading and trailing whitespace characters from strings (e.g., `"  hi  ".strip()` returns `"hi"`).
+    - **split() method**: Splits strings into lists with optional separators and maxsplit.
+    - **splitlines() method**: Splits strings on line boundaries (e.g., `"a\\nb".splitlines()` returns `["a", "b"]`).
+    - **partition() method**: Splits into a 3-tuple (before, sep, after) (e.g., `"a=b".partition("=")` returns `("a", "=", "b")`).
+    - **join() method**: Joins a list of strings with a separator (e.g., `" ".join(["a", "b"])` returns `"a b"`).
     - **isspace() method**: Returns `True` if all characters in the string are whitespace characters and the string is non-empty, `False` otherwise.
+    - **isalpha() method**: Returns `True` if all characters are alphabetic and the string is non-empty.
+    - **isdigit() method**: Returns `True` if all characters are digits and the string is non-empty.
+    - **islower() method**: Returns `True` if all cased characters are lowercase and the string is non-empty.
+    - **capitalize() method**: Capitalizes the first character and lowercases the rest (e.g., `"hello".capitalize()` returns `"Hello"`).
+    - **title() method**: Title-cases words (e.g., `"hello world".title()` returns `"Hello World"`).
+    - **swapcase() method**: Swaps the case of each character (e.g., `"AbC".swapcase()` returns `"aBc"`).
+    - **casefold() method**: Aggressive lowercase for caseless matching (e.g., `"Sample".casefold()` returns `"sample"`).
+    - **lower() method**: Converts all characters to lowercase (e.g., `"HI".lower()` returns `"hi"`).
     - **rfind() method**: Returns the highest index of a substring, or -1 if not found (e.g., `"banana".rfind("na")` returns `4`).
+    - **find() method**: Returns the lowest index of a substring, or -1 if not found.
+    - **index() method**: Returns the lowest index of a substring, raises `ValueError` if not found.
+    - **count() method**: Counts non-overlapping occurrences of a substring.
+    - **replace() method**: Replaces occurrences of a substring, with optional count.
     - **find()/rfind() with range**: Optional `start` and `end` arguments are supported (e.g., `"banana".rfind("na", 0, 4)` returns `2`).
     - **upper() method**: Converts all characters to uppercase (e.g., `"hi".upper()` returns `"HI"`).
     - **String Slicing**: Comprehensive support for Python's slice notation on strings:
