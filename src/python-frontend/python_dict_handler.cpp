@@ -471,7 +471,8 @@ exprt python_dict_handler::handle_dict_subscript(
   if (element_type.is_symbol())
   {
     const symbol_typet &sym_type = to_symbol_type(element_type);
-    const symbolt *elem_sym = symbol_table_.find_symbol(sym_type.get_identifier());
+    const symbolt *elem_sym =
+      symbol_table_.find_symbol(sym_type.get_identifier());
     if (elem_sym)
       element_type = elem_sym->type;
   }
