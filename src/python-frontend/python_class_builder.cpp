@@ -48,7 +48,7 @@ bool python_class_builder::get_bases(struct_typet &st)
     if (
       type_utils::is_builtin_type(base) ||
       type_utils::is_consensus_type(base) ||
-      type_utils::is_typing_special_form(base))
+      type_utils::is_typeddict(base))
       continue;
 
     has_ud = true;
@@ -197,13 +197,13 @@ void python_class_builder::gen_ctor(bool has_ud_base, struct_typet &st)
   st.methods().emplace_back(ctor.name, ctor.type);
 }
 
-// Check if any base class is a typing module special form (e.g., TypedDict)
+// Check if any base class is TypedDict
 bool python_class_builder::is_typeddict_class() const
 {
   for (const auto &bfull : pc_.bases())
   {
     std::string base = leaf(bfull);
-    if (type_utils::is_typing_special_form(base))
+    if (type_utils::is_typeddict(base))
       return true;
   }
   return false;

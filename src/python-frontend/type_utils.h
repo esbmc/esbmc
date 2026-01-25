@@ -81,20 +81,18 @@ public:
   }
 
   /**
-   * @brief Check if a name is a typing module special form
+   * @brief Check if a name is TypedDict from typing module
    *
-   * These are special constructs from Python's typing module that should
-   * not be treated as user-defined base classes. When a class inherits
-   * from these, the class should be converted to its underlying type.
+   * TypedDict is a special construct that should not be treated as a
+   * user-defined base class. Classes inheriting from TypedDict are
+   * converted to dict type (matching Python's runtime behavior).
    *
    * @param name The base class name to check
-   * @return true if it's a typing module special form
+   * @return true if it's TypedDict
    */
-  static bool is_typing_special_form(const std::string &name)
+  static bool is_typeddict(const std::string &name)
   {
-    return (
-      name == "TypedDict" || name == "NamedTuple" || name == "Protocol" ||
-      name == "Generic" || name == "TypeVar" || name == "NewType");
+    return name == "TypedDict";
   }
 
   static bool is_consensus_func(const std::string &name)

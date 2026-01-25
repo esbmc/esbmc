@@ -37,6 +37,6 @@ private:
 
   void gen_ctor(bool has_ud_base, struct_typet &st);
 
-  /// Check if this class inherits from TypedDict or other typing special forms
+  /// Check if this class inherits from TypedDict
   bool is_typeddict_class() const;
 };
