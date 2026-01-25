@@ -466,11 +466,20 @@ exprt python_dict_handler::handle_dict_subscript(
   converter_.add_instruction(at_call);
 
   // Extract obj->value (void* pointing to actual data)
-  member_exprt obj_value(
-    dereference_exprt(
-      symbol_expr(obj_var), type_handler_.get_list_element_type()),
-    "value",
-    pointer_typet(empty_typet()));
+  // Resolve symbol type to actual struct type before dereferencing
+  typet element_type = type_handler_.get_list_element_type();
+  if (element_type.is_symbol())
+  {
+    const symbol_typet &sym_type = to_symbol_type(element_type);
+    const symbolt *elem_sym = symbol_table_.find_symbol(sym_type.get_identifier());
+    if (elem_sym)
+      element_type = elem_sym->type;
+  }
+
+  // Create dereference and explicitly set its type
+  dereference_exprt deref_obj(symbol_expr(obj_var), element_type);
+  deref_obj.type() = element_type;
+  member_exprt obj_value(deref_obj, "value", pointer_typet(empty_typet()));
 
   // Handle dict types
   if (!resolved_type.is_nil() && is_dict_type(resolved_type))
