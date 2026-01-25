@@ -1,4 +1,4 @@
 CORE
 main.c
---no-unwinding-assertions
+--memory-leak-check
 ^VERIFICATION SUCCESSFUL$

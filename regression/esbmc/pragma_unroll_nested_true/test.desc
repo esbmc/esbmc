@@ -2,3 +2,4 @@ CORE
 main.c
 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$
+Not unwinding loop 2 iteration 3
