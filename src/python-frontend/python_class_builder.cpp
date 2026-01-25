@@ -46,7 +46,8 @@ bool python_class_builder::get_bases(struct_typet &st)
   {
     std::string base = leaf(bfull);
     if (
-      type_utils::is_builtin_type(base) || type_utils::is_consensus_type(base) ||
+      type_utils::is_builtin_type(base) ||
+      type_utils::is_consensus_type(base) ||
       type_utils::is_typing_special_form(base))
       continue;
 
