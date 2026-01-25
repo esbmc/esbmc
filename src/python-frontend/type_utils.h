@@ -80,6 +80,23 @@ public:
       name == "GeneralizedIndex");
   }
 
+  /**
+   * @brief Check if a name is a typing module special form
+   *
+   * These are special constructs from Python's typing module that should
+   * not be treated as user-defined base classes. When a class inherits
+   * from these, the class should be converted to its underlying type.
+   *
+   * @param name The base class name to check
+   * @return true if it's a typing module special form
+   */
+  static bool is_typing_special_form(const std::string &name)
+  {
+    return (
+      name == "TypedDict" || name == "NamedTuple" || name == "Protocol" ||
+      name == "Generic" || name == "TypeVar" || name == "NewType");
+  }
+
   static bool is_consensus_func(const std::string &name)
   {
     return consensus_func_to_type().find(name) !=
