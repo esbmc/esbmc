@@ -9,8 +9,10 @@ class Tuple:
 class IO:
     pass
 
+
 class BinaryIO(IO):
     pass
+
 
 class TextIO(IO):
     pass
