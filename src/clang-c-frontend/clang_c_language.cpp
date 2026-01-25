@@ -456,6 +456,8 @@ _Bool __VERIFIER_nondet_bool();
 float __VERIFIER_nondet_float();
 double __VERIFIER_nondet_double();
 
+void __VERIFIER_nondet_memory(void *, __SIZE_TYPE__);
+
 void __VERIFIER_error();
 void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
