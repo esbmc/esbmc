@@ -1,4 +1,4 @@
 CORE
 main.c
---no-unwinding-assertions
+--incremental-bmc
 ^VERIFICATION SUCCESSFUL$
