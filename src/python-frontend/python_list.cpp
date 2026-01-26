@@ -2440,8 +2440,6 @@ typet python_list::check_homogeneous_list_types(
     {
       throw std::runtime_error(
         "Type mismatch in " + func_name + "() call: list contains mixed types. "
-        "Element 0 has type '" + elem_type.pretty_name().as_string() + "', but element " +
-        std::to_string(i) + " has type '" + current_elem_type.pretty_name().as_string() + "'. "
         "ESBMC currently requires all elements to have the same type for " + func_name + "()."
       );
     }
