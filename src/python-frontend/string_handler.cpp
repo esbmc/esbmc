@@ -54,27 +54,6 @@ static bool try_extract_const_string(
   return false;
 }
 
-static bool get_constant_int(const exprt &expr, long long &out)
-{
-  if (expr.is_nil())
-    return false;
-  BigInt tmp;
-  if (!to_integer(expr, tmp))
-    return false;
-  out = tmp.to_int64();
-  return true;
-}
-
-static char to_lower_char(char c)
-{
-  return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-}
-
-static char to_upper_char(char c)
-{
-  return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-}
-
 static std::string format_value_from_json(
   const nlohmann::json &arg,
   python_converter &converter)
