@@ -1,6 +1,7 @@
 #include <python-frontend/char_utils.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_list.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string_builder.h>
@@ -17,6 +18,7 @@
 #include <util/type.h>
 
 #include <cmath>
+#include <cctype>
 #include <cstring>
 #include <iomanip>
 #include <limits>
@@ -1948,6 +1950,640 @@ exprt string_handler::handle_string_replace(
   replace_call.type() = pointer_typet(char_type());
 
   return replace_call;
+}
+
+namespace
+{
+static bool try_extract_const_string(
+  string_handler &handler,
+  const exprt &expr,
+  std::string &out)
+{
+  exprt tmp = expr;
+  exprt str_expr = handler.ensure_null_terminated_string(tmp);
+  if (
+    str_expr.is_symbol() ||
+    (str_expr.type().is_array() && !str_expr.operands().empty()))
+  {
+    out = handler.extract_string_from_array_operands(str_expr);
+    return true;
+  }
+  return false;
+}
+
+static bool get_constant_int(const exprt &expr, long long &out)
+{
+  if (expr.is_nil())
+    return false;
+  BigInt tmp;
+  if (!to_integer(expr, tmp))
+    return false;
+  out = tmp.to_int64();
+  return true;
+}
+
+static char to_lower_char(char c)
+{
+  return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+}
+
+static char to_upper_char(char c)
+{
+  return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+}
+} // namespace
+
+exprt string_handler::handle_string_capitalize(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("capitalize() requires constant string");
+
+  if (!input.empty())
+  {
+    input[0] = to_upper_char(input[0]);
+    for (size_t i = 1; i < input.size(); ++i)
+      input[i] = to_lower_char(input[i]);
+  }
+
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for capitalize()");
+
+  exprt result = string_builder_->build_string_literal(input);
+  result.location() = location;
+  return result;
+}
+
+exprt string_handler::handle_string_title(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("title() requires constant string");
+
+  bool new_word = true;
+  for (char &ch : input)
+  {
+    if (std::isalpha(static_cast<unsigned char>(ch)))
+    {
+      ch = new_word ? to_upper_char(ch) : to_lower_char(ch);
+      new_word = false;
+    }
+    else
+    {
+      new_word = !std::isalnum(static_cast<unsigned char>(ch));
+    }
+  }
+
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for title()");
+
+  exprt result = string_builder_->build_string_literal(input);
+  result.location() = location;
+  return result;
+}
+
+exprt string_handler::handle_string_swapcase(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("swapcase() requires constant string");
+
+  for (char &ch : input)
+  {
+    unsigned char uch = static_cast<unsigned char>(ch);
+    if (std::islower(uch))
+      ch = to_upper_char(ch);
+    else if (std::isupper(uch))
+      ch = to_lower_char(ch);
+  }
+
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for swapcase()");
+
+  exprt result = string_builder_->build_string_literal(input);
+  result.location() = location;
+  return result;
+}
+
+exprt string_handler::handle_string_casefold(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("casefold() requires constant string");
+
+  for (char &ch : input)
+    ch = to_lower_char(ch);
+
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for casefold()");
+
+  exprt result = string_builder_->build_string_literal(input);
+  result.location() = location;
+  return result;
+}
+
+exprt string_handler::handle_string_count(
+  const exprt &string_obj,
+  const exprt &sub_arg,
+  const exprt &start_arg,
+  const exprt &end_arg,
+  const locationt &location)
+{
+  std::string input;
+  std::string sub;
+  if (
+    !try_extract_const_string(*this, string_obj, input) ||
+    !try_extract_const_string(*this, sub_arg, sub))
+  {
+    throw std::runtime_error("count() requires constant strings");
+  }
+
+  long long start = 0;
+  long long end = static_cast<long long>(input.size());
+  long long tmp = 0;
+  if (get_constant_int(start_arg, tmp))
+    start = tmp;
+  if (get_constant_int(end_arg, tmp))
+    end = tmp;
+
+  if (start < 0)
+    start = static_cast<long long>(input.size()) + start;
+  if (end < 0)
+    end = static_cast<long long>(input.size()) + end;
+
+  if (start < 0)
+    start = 0;
+  if (end < 0)
+    end = 0;
+  if (start > static_cast<long long>(input.size()))
+    start = static_cast<long long>(input.size());
+  if (end > static_cast<long long>(input.size()))
+    end = static_cast<long long>(input.size());
+  if (end < start)
+    end = start;
+
+  long long count = 0;
+  if (sub.empty())
+  {
+    count = (end - start) + 1;
+  }
+  else
+  {
+    size_t pos = static_cast<size_t>(start);
+    size_t limit = static_cast<size_t>(end);
+    while (pos <= limit && pos + sub.size() <= limit)
+    {
+      size_t found = input.find(sub, pos);
+      if (found == std::string::npos || found + sub.size() > limit)
+        break;
+      ++count;
+      pos = found + sub.size();
+    }
+  }
+
+  exprt result = from_integer(count, long_long_int_type());
+  result.location() = location;
+  return result;
+}
+
+exprt string_handler::handle_string_removeprefix(
+  const exprt &string_obj,
+  const exprt &prefix_arg,
+  const locationt &location)
+{
+  std::string input;
+  std::string prefix;
+  if (
+    !try_extract_const_string(*this, string_obj, input) ||
+    !try_extract_const_string(*this, prefix_arg, prefix))
+  {
+    throw std::runtime_error("removeprefix() requires constant strings");
+  }
+
+  if (!prefix.empty() && input.rfind(prefix, 0) == 0)
+    input = input.substr(prefix.size());
+
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for removeprefix()");
+
+  exprt result = string_builder_->build_string_literal(input);
+  result.location() = location;
+  return result;
+}
+
+exprt string_handler::handle_string_removesuffix(
+  const exprt &string_obj,
+  const exprt &suffix_arg,
+  const locationt &location)
+{
+  std::string input;
+  std::string suffix;
+  if (
+    !try_extract_const_string(*this, string_obj, input) ||
+    !try_extract_const_string(*this, suffix_arg, suffix))
+  {
+    throw std::runtime_error("removesuffix() requires constant strings");
+  }
+
+  if (
+    !suffix.empty() && input.size() >= suffix.size() &&
+    input.compare(input.size() - suffix.size(), suffix.size(), suffix) == 0)
+  {
+    input.resize(input.size() - suffix.size());
+  }
+
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for removesuffix()");
+
+  exprt result = string_builder_->build_string_literal(input);
+  result.location() = location;
+  return result;
+}
+
+exprt string_handler::handle_string_splitlines(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("splitlines() requires constant string");
+
+  std::vector<std::string> parts;
+  size_t start = 0;
+  for (size_t i = 0; i < input.size(); ++i)
+  {
+    if (input[i] == '\n' || input[i] == '\r')
+    {
+      parts.push_back(input.substr(start, i - start));
+      if (input[i] == '\r' && (i + 1) < input.size() && input[i + 1] == '\n')
+        ++i;
+      start = i + 1;
+    }
+  }
+  if (start < input.size())
+    parts.push_back(input.substr(start));
+
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+  converter_.copy_location_fields_from_decl(call, list_node);
+
+  for (const auto &part : parts)
+  {
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = part;
+    converter_.copy_location_fields_from_decl(call, elem);
+    list_node["elts"].push_back(elem);
+  }
+
+  python_list list(converter_, list_node);
+  exprt result = list.get();
+  result.location() = location;
+  return result;
+}
+
+exprt string_handler::handle_string_partition(
+  const exprt &string_obj,
+  const exprt &sep_arg,
+  const locationt &location)
+{
+  std::string input;
+  std::string sep;
+  if (
+    !try_extract_const_string(*this, string_obj, input) ||
+    !try_extract_const_string(*this, sep_arg, sep))
+  {
+    throw std::runtime_error("partition() requires constant strings");
+  }
+  if (sep.empty())
+    throw std::runtime_error("partition() separator cannot be empty");
+
+  std::string before;
+  std::string after;
+  std::string mid;
+  size_t pos = input.find(sep);
+  if (pos == std::string::npos)
+  {
+    before = input;
+    mid = "";
+    after = "";
+  }
+  else
+  {
+    before = input.substr(0, pos);
+    mid = sep;
+    after = input.substr(pos + sep.size());
+  }
+
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for partition()");
+
+  exprt before_expr = string_builder_->build_string_literal(before);
+  exprt mid_expr = string_builder_->build_string_literal(mid);
+  exprt after_expr = string_builder_->build_string_literal(after);
+
+  struct_typet tuple_type;
+  tuple_type.components().push_back(
+    struct_typet::componentt("element_0", before_expr.type()));
+  tuple_type.components().push_back(
+    struct_typet::componentt("element_1", mid_expr.type()));
+  tuple_type.components().push_back(
+    struct_typet::componentt("element_2", after_expr.type()));
+
+  struct_exprt tuple_expr(tuple_type);
+  tuple_expr.operands() = {before_expr, mid_expr, after_expr};
+  tuple_expr.location() = location;
+  return tuple_expr;
+}
+
+exprt string_handler::handle_string_isalnum(
+  const exprt &string_obj,
+  [[maybe_unused]] const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("isalnum() requires constant string");
+  if (input.empty())
+    return from_integer(0, bool_type());
+
+  for (char ch : input)
+  {
+    if (!std::isalnum(static_cast<unsigned char>(ch)))
+      return from_integer(0, bool_type());
+  }
+  return from_integer(1, bool_type());
+}
+
+exprt string_handler::handle_string_isupper(
+  const exprt &string_obj,
+  [[maybe_unused]] const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("isupper() requires constant string");
+  bool has_cased = false;
+  for (char ch : input)
+  {
+    unsigned char uch = static_cast<unsigned char>(ch);
+    if (std::islower(uch))
+      return from_integer(0, bool_type());
+    if (std::isupper(uch))
+      has_cased = true;
+  }
+  return from_integer(has_cased ? 1 : 0, bool_type());
+}
+
+exprt string_handler::handle_string_isnumeric(
+  const exprt &string_obj,
+  [[maybe_unused]] const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("isnumeric() requires constant string");
+  if (input.empty())
+    return from_integer(0, bool_type());
+
+  for (char ch : input)
+  {
+    if (!std::isdigit(static_cast<unsigned char>(ch)))
+      return from_integer(0, bool_type());
+  }
+  return from_integer(1, bool_type());
+}
+
+exprt string_handler::handle_string_isidentifier(
+  const exprt &string_obj,
+  [[maybe_unused]] const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("isidentifier() requires constant string");
+  if (input.empty())
+    return from_integer(0, bool_type());
+
+  unsigned char first = static_cast<unsigned char>(input[0]);
+  if (!(std::isalpha(first) || input[0] == '_'))
+    return from_integer(0, bool_type());
+  for (size_t i = 1; i < input.size(); ++i)
+  {
+    unsigned char ch = static_cast<unsigned char>(input[i]);
+    if (!(std::isalnum(ch) || input[i] == '_'))
+      return from_integer(0, bool_type());
+  }
+  return from_integer(1, bool_type());
+}
+
+exprt string_handler::handle_string_center(
+  const exprt &string_obj,
+  const exprt &width_arg,
+  const exprt &fill_arg,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("center() requires constant string");
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for center()");
+
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
+    throw std::runtime_error("center() requires constant width");
+
+  char fill = ' ';
+  if (!fill_arg.is_nil())
+  {
+    std::string fill_str;
+    if (
+      !try_extract_const_string(*this, fill_arg, fill_str) ||
+      fill_str.size() != 1)
+    {
+      throw std::runtime_error("center() fillchar must be a single character");
+    }
+    fill = fill_str[0];
+  }
+
+  if (width <= static_cast<long long>(input.size()))
+    return string_builder_->build_string_literal(input);
+
+  long long pad = width - static_cast<long long>(input.size());
+  long long left = pad / 2;
+  long long right = pad - left;
+  std::string result(static_cast<size_t>(left), fill);
+  result += input;
+  result.append(static_cast<size_t>(right), fill);
+
+  exprt out = string_builder_->build_string_literal(result);
+  out.location() = location;
+  return out;
+}
+
+exprt string_handler::handle_string_ljust(
+  const exprt &string_obj,
+  const exprt &width_arg,
+  const exprt &fill_arg,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("ljust() requires constant string");
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for ljust()");
+
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
+    throw std::runtime_error("ljust() requires constant width");
+
+  char fill = ' ';
+  if (!fill_arg.is_nil())
+  {
+    std::string fill_str;
+    if (
+      !try_extract_const_string(*this, fill_arg, fill_str) ||
+      fill_str.size() != 1)
+    {
+      throw std::runtime_error("ljust() fillchar must be a single character");
+    }
+    fill = fill_str[0];
+  }
+
+  if (width <= static_cast<long long>(input.size()))
+    return string_builder_->build_string_literal(input);
+
+  std::string result = input;
+  result.append(static_cast<size_t>(width - input.size()), fill);
+  exprt out = string_builder_->build_string_literal(result);
+  out.location() = location;
+  return out;
+}
+
+exprt string_handler::handle_string_rjust(
+  const exprt &string_obj,
+  const exprt &width_arg,
+  const exprt &fill_arg,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("rjust() requires constant string");
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for rjust()");
+
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
+    throw std::runtime_error("rjust() requires constant width");
+
+  char fill = ' ';
+  if (!fill_arg.is_nil())
+  {
+    std::string fill_str;
+    if (
+      !try_extract_const_string(*this, fill_arg, fill_str) ||
+      fill_str.size() != 1)
+    {
+      throw std::runtime_error("rjust() fillchar must be a single character");
+    }
+    fill = fill_str[0];
+  }
+
+  if (width <= static_cast<long long>(input.size()))
+    return string_builder_->build_string_literal(input);
+
+  std::string result(static_cast<size_t>(width - input.size()), fill);
+  result += input;
+  exprt out = string_builder_->build_string_literal(result);
+  out.location() = location;
+  return out;
+}
+
+exprt string_handler::handle_string_zfill(
+  const exprt &string_obj,
+  const exprt &width_arg,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("zfill() requires constant string");
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for zfill()");
+
+  long long width = 0;
+  if (!get_constant_int(width_arg, width))
+    throw std::runtime_error("zfill() requires constant width");
+
+  if (width <= static_cast<long long>(input.size()))
+    return string_builder_->build_string_literal(input);
+
+  size_t pad = static_cast<size_t>(width - input.size());
+  std::string result;
+  if (!input.empty() && (input[0] == '+' || input[0] == '-'))
+  {
+    result.push_back(input[0]);
+    result.append(pad, '0');
+    result.append(input.substr(1));
+  }
+  else
+  {
+    result.append(pad, '0');
+    result.append(input);
+  }
+
+  exprt out = string_builder_->build_string_literal(result);
+  out.location() = location;
+  return out;
+}
+
+exprt string_handler::handle_string_expandtabs(
+  const exprt &string_obj,
+  const exprt &tabsize_arg,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string(*this, string_obj, input))
+    throw std::runtime_error("expandtabs() requires constant string");
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for expandtabs()");
+
+  long long tabsize = 8;
+  long long tmp = 0;
+  if (get_constant_int(tabsize_arg, tmp))
+    tabsize = tmp;
+  if (tabsize < 0)
+    tabsize = 0;
+
+  std::string result;
+  size_t column = 0;
+  for (char ch : input)
+  {
+    if (ch == '\t')
+    {
+      size_t spaces =
+        tabsize == 0 ? 0 : (tabsize - (column % static_cast<size_t>(tabsize)));
+      result.append(spaces, ' ');
+      column += spaces;
+    }
+    else
+    {
+      result.push_back(ch);
+      if (ch == '\n' || ch == '\r')
+        column = 0;
+      else
+        ++column;
+    }
+  }
+
+  exprt out = string_builder_->build_string_literal(result);
+  out.location() = location;
+  return out;
 }
 
 bool string_handler::extract_constant_string(
