@@ -16,10 +16,12 @@ def all(iterable: list[Any]) -> bool:
         i = i + 1
     return True
 
+
 # NOTE:
 # These implementations intentionally duplicate code instead of using helpers.
 # Flat functions generate simpler GOTO/SSA and verify faster in ESBMC.
 # Do not refactor into higher-order or generic helpers.
+
 
 def max(iterable: list[int]) -> int:
     """Return the maximum element from an iterable of integers."""
