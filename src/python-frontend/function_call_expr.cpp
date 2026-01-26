@@ -1454,7 +1454,16 @@ std::string function_call_expr::get_object_name() const
 bool function_call_expr::is_min_max_call() const
 {
   const std::string &func_name = function_id_.get_function();
-  return func_name == "min" || func_name == "max";
+  bool is_min_or_max = (func_name == "min" || func_name == "max");
+
+  if (!is_min_or_max)
+    return false;
+
+  const auto &args = call_["args"];
+
+  // Only handle two-argument case: min(a, b) or max(a, b)
+  // Single argument case falls through to general handler
+  return (args.size() == 2);
 }
 
 exprt function_call_expr::handle_min_max(
@@ -2088,6 +2097,33 @@ exprt function_call_expr::handle_general_function_call()
 {
   auto &symbol_table = converter_.symbol_table();
 
+  // Handle single-argument min/max by dispatching to typed builtins
+  const std::string &func_name = function_id_.get_function();
+  std::string actual_func_name = func_name;
+
+  if ((func_name == "min" || func_name == "max") && call_["args"].size() == 1)
+  {
+    exprt list_arg = converter_.get_expr(call_["args"][0]);
+    typet elem_type;
+    if (list_arg.is_symbol())
+    {
+      const std::string &list_id = list_arg.identifier().as_string();
+      // Check that all elements have the same type and get the common type
+      elem_type = python_list::check_homogeneous_list_types(list_id, func_name);
+    }
+    // Dispatch to typed builtin based on element type
+    if (!elem_type.is_nil())
+    {
+      if (elem_type.is_floatbv())
+        actual_func_name += "_float";
+      else if (
+        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
+        (elem_type.is_array() && elem_type.subtype() == char_type()))
+        actual_func_name += "_str";
+      // Integer types use base name without suffix
+    }
+  }
+
   // Get object symbol
   symbolt *obj_symbol = nullptr;
   symbol_id obj_symbol_id = converter_.create_symbol_id();
@@ -2099,8 +2135,17 @@ exprt function_call_expr::handle_general_function_call()
     obj_symbol = symbol_table.find_symbol(obj_symbol_id.to_string());
   }
 
-  // Get function symbol id
-  const std::string &func_symbol_id = function_id_.to_string();
+  // Get function symbol id - use actual_func_name for typed dispatch
+  std::string func_symbol_id;
+  if (actual_func_name != func_name)
+  {
+    symbol_id modified_function_id = function_id_;
+    modified_function_id.set_function(actual_func_name);
+    func_symbol_id = modified_function_id.to_string();
+  }
+  else
+    func_symbol_id = function_id_.to_string();
+
   assert(!func_symbol_id.empty());
 
   // Find function symbol
