@@ -3667,6 +3667,13 @@ bool python_converter::handle_unpacking_assignment(
   // Handle different unpacking types
   if (rhs.type().id() == "struct")
   {
+    // Check if it's a tuple (now represented as a list)
+    if (tuple_handler_->is_tuple_type(rhs.type()))
+    {
+      tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+      return true;
+    }
+    // Otherwise, handle as regular struct unpacking
     tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
     return true;
   }
@@ -3678,6 +3685,14 @@ bool python_converter::handle_unpacking_assignment(
   else if (rhs.type().is_pointer())
   {
     const auto &value_node = ast_node["value"];
+
+    // Check if RHS is a tuple variable (represented as a list)
+    if (value_node["_type"] == "Name" || tuple_handler_->is_tuple_type(rhs.type().subtype()))
+    {
+      tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+      return true;
+    }
+
     if (value_node["_type"] == "List")
     {
       handle_list_literal_unpacking(ast_node, target, target_block);

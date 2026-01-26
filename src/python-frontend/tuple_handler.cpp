@@ -2,6 +2,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/python_list.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/std_code.h>
@@ -17,30 +18,16 @@ tuple_handler::tuple_handler(
 std::string
 tuple_handler::build_tuple_tag(const std::vector<typet> &element_types) const
 {
-  std::string tag_name = "tag-tuple";
-  for (const auto &type : element_types)
-  {
-    tag_name += "_" + type.to_string();
-  }
-  return tag_name;
+  // Not used in list-based implementation
+  return "tag-tuple";
 }
 
 struct_typet tuple_handler::create_tuple_struct_type(
   const std::vector<typet> &element_types) const
 {
+  // Not used in list-based implementation
   struct_typet tuple_type;
-
-  // Add components for each element
-  for (size_t i = 0; i < element_types.size(); i++)
-  {
-    std::string comp_name = "element_" + std::to_string(i);
-    struct_typet::componentt comp(comp_name, comp_name, element_types[i]);
-    tuple_type.components().push_back(comp);
-  }
-
-  // Set the tag to ensure type identity
-  tuple_type.tag(build_tuple_tag(element_types));
-
+  tuple_type.tag("tag-tuple");
   return tuple_type;
 }
 
@@ -49,46 +36,27 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   assert(element.contains("_type") && element["_type"] == "Tuple");
   assert(element.contains("elts"));
 
-  const nlohmann::json &elts = element["elts"];
+  // Represent tuple as a list internally
+  // Create a modified JSON node that looks like a List instead of Tuple
+  nlohmann::json list_node = element;
+  list_node["_type"] = "List";
 
-  // Process each element and collect expressions
-  std::vector<exprt> element_exprs;
-  std::vector<typet> element_types;
-  element_exprs.reserve(elts.size());
-  element_types.reserve(elts.size());
-
-  // First pass: get all expressions to determine types
-  for (size_t i = 0; i < elts.size(); i++)
-  {
-    exprt elem_expr = converter_.get_expr(elts[i]);
-    element_exprs.push_back(elem_expr);
-    element_types.push_back(elem_expr.type());
-  }
-
-  // Create struct type for the tuple
-  struct_typet tuple_type = create_tuple_struct_type(element_types);
-
-  // Create struct expression with tuple type
-  struct_exprt tuple_expr(tuple_type);
-  tuple_expr.operands() = element_exprs;
-
-  // Set location information
-  if (element.contains("lineno"))
-  {
-    locationt loc = converter_.get_location_from_decl(element);
-    tuple_expr.location() = loc;
-  }
-
-  return tuple_expr;
+  // Use python_list to create the actual list expression
+  python_list tuple_as_list(converter_, list_node);
+  return tuple_as_list.get();
 }
 
 bool tuple_handler::is_tuple_type(const typet &type) const
 {
+  // Tuples are represented as lists, so check for list type
   if (!type.is_struct())
     return false;
 
   const struct_typet &struct_type = to_struct_type(type);
-  return struct_type.tag().as_string().find("tag-tuple") == 0;
+  std::string tag = struct_type.tag().as_string();
+
+  // Accept both tuple and list types since they're now unified
+  return tag.find("tag-dynamic_list") == 0 || tag.find("tag-tuple") == 0;
 }
 
 exprt tuple_handler::handle_tuple_subscript(
@@ -96,53 +64,9 @@ exprt tuple_handler::handle_tuple_subscript(
   const nlohmann::json &slice,
   const nlohmann::json &element)
 {
-  assert(array.type().is_struct());
-  const struct_typet &tuple_type = to_struct_type(array.type());
-
-  // Verify it's a tuple
-  if (!is_tuple_type(tuple_type))
-  {
-    throw std::runtime_error(
-      "Subscript on non-tuple struct type: " + tuple_type.tag().as_string());
-  }
-
-  // Convert subscript to member access
-  exprt index_expr = converter_.get_expr(slice);
-
-  // Index must be a constant for struct member access
-  if (!index_expr.is_constant())
-  {
-    throw std::runtime_error(
-      "Tuple subscript with non-constant index is not supported");
-  }
-
-  const constant_exprt &const_index = to_constant_expr(index_expr);
-  BigInt index_val = binary2integer(const_index.value().c_str(), false);
-
-  // Convert BigInt to size_t for array indexing
-  size_t idx = index_val.to_int64();
-
-  // Check bounds
-  if (index_val < 0 || idx >= tuple_type.components().size())
-  {
-    throw std::runtime_error(
-      "Tuple index " + integer2string(index_val) + " out of range (size: " +
-      std::to_string(tuple_type.components().size()) + ")");
-  }
-
-  // Create member access expression: t[0] -> t.element_0
-  std::string member_name = "element_" + integer2string(index_val);
-  const struct_typet::componentt &comp = tuple_type.components()[idx];
-
-  exprt result = member_exprt(array, member_name, comp.type());
-
-  if (element.contains("lineno"))
-  {
-    locationt loc = converter_.get_location_from_decl(element);
-    result.location() = loc;
-  }
-
-  return result;
+  // Delegate to python_list's index method
+  python_list tuple_as_list(converter_, element);
+  return tuple_as_list.index(array, slice);
 }
 
 exprt tuple_handler::prepare_rhs_for_unpacking(
@@ -150,8 +74,6 @@ exprt tuple_handler::prepare_rhs_for_unpacking(
   exprt &rhs,
   codet &target_block)
 {
-  // If RHS is a function call, we need to create a temporary variable first
-  // because we can't do member access on a side effect expression
   if (rhs.is_function_call() || rhs.id() == "sideeffect")
   {
     locationt loc = converter_.get_location_from_decl(ast_node);
@@ -202,25 +124,12 @@ void tuple_handler::handle_tuple_unpacking(
   exprt &rhs,
   codet &target_block)
 {
-  const struct_typet &tuple_type = to_struct_type(rhs.type());
-
-  // Verify it's a tuple
-  if (!is_tuple_type(tuple_type))
-  {
-    throw std::runtime_error(
-      "Cannot unpack non-tuple type: " + tuple_type.tag().as_string());
-  }
-
   const auto &targets = target["elts"];
 
-  if (targets.size() != tuple_type.components().size())
-  {
-    throw std::runtime_error(
-      "Cannot unpack tuple: expected " + std::to_string(targets.size()) +
-      " values, got " + std::to_string(tuple_type.components().size()));
-  }
+  // Use list indexing to unpack tuple elements
+  python_list tuple_as_list(converter_, ast_node);
 
-  // Create assignments: x = temp.element_0, y = temp.element_1, ...
+  // Create assignments: x = tuple[0], y = tuple[1], ...
   for (size_t i = 0; i < targets.size(); i++)
   {
     if (targets[i]["_type"] != "Name")
@@ -236,30 +145,31 @@ void tuple_handler::handle_tuple_unpacking(
 
     symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
+    // Create index expression for tuple[i]
+    nlohmann::json index_node;
+    index_node["_type"] = "Constant";
+    index_node["value"] = i;
+
+    exprt indexed_value = tuple_as_list.index(rhs, index_node);
+
     if (!var_symbol)
     {
       locationt loc = converter_.get_location_from_decl(targets[i]);
-      const typet &elem_type = tuple_type.components()[i].type();
 
       symbolt new_symbol = converter_.create_symbol(
         loc.get_file().as_string(),
         var_name,
         var_sid.to_string(),
         loc,
-        elem_type);
+        indexed_value.type());
       new_symbol.lvalue = true;
       new_symbol.file_local = true;
       new_symbol.is_extern = false;
       var_symbol = converter_.symbol_table().move_symbol_to_context(new_symbol);
     }
 
-    // Create member access: temp.element_i
-    std::string member_name = "element_" + std::to_string(i);
-    member_exprt member_access(
-      rhs, member_name, tuple_type.components()[i].type());
-
     // Create assignment
-    code_assignt assign(symbol_expr(*var_symbol), member_access);
+    code_assignt assign(symbol_expr(*var_symbol), indexed_value);
     assign.location() = converter_.get_location_from_decl(ast_node);
     target_block.copy_to_operands(assign);
   }
@@ -268,32 +178,9 @@ void tuple_handler::handle_tuple_unpacking(
 typet tuple_handler::get_tuple_type_from_annotation(
   const nlohmann::json &annotation_node)
 {
-  assert(
-    annotation_node["_type"] == "Subscript" &&
-    (annotation_node["value"]["id"] == "tuple" ||
-     annotation_node["value"]["id"] == "Tuple"));
-
-  struct_typet tuple_type;
-  const auto &slice = annotation_node["slice"];
-
-  // Build tag name matching the pattern used in get_tuple_expr
-  std::vector<typet> element_types;
-
-  if (slice.contains("elts"))
-  {
-    // Multiple element types: tuple[int, str, float]
-    const auto &elts = slice["elts"];
-    for (size_t i = 0; i < elts.size(); i++)
-    {
-      typet elem_type;
-      if (elts[i].contains("id"))
-        elem_type = type_handler_.get_typet(elts[i]["id"].get<std::string>());
-      else
-        elem_type = type_handler_.get_typet(elts[i]);
-
-      element_types.push_back(elem_type);
-    }
-  }
-
-  return create_tuple_struct_type(element_types);
+  // Return list type since tuples are represented as lists
+  // The actual type will be determined dynamically when the tuple is created
+  struct_typet list_type;
+  list_type.tag("tag-dynamic_list");
+  return list_type;
 }
