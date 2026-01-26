@@ -16,20 +16,6 @@ tuple_handler::tuple_handler(
 {
 }
 
-std::string
-tuple_handler::build_tuple_tag(const std::vector<typet> &element_types) const
-{
-  return "tag-tuple";
-}
-
-struct_typet tuple_handler::create_tuple_struct_type(
-  const std::vector<typet> &element_types) const
-{
-  struct_typet tuple_type;
-  tuple_type.tag("tag-tuple");
-  return tuple_type;
-}
-
 exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
 {
   assert(element.contains("_type") && element["_type"] == "Tuple");
@@ -48,15 +34,15 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
 
 bool tuple_handler::is_tuple_type(const typet &type) const
 {
-  // Tuples are represented as lists, so check for list type
+  // Tuples are represented as lists (PyListObj*)
   if (!type.is_struct())
     return false;
 
   const struct_typet &struct_type = to_struct_type(type);
   std::string tag = struct_type.tag().as_string();
 
-  // Accept both tuple and list types since they're now unified
-  return tag.find("tag-dynamic_list") == 0 || tag.find("tag-tuple") == 0;
+  // Check for PyListObj type (which represents both lists and tuples)
+  return tag.find("__ESBMC_PyListObj") != std::string::npos;
 }
 
 exprt tuple_handler::handle_tuple_subscript(
