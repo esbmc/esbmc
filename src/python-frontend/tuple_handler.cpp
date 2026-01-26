@@ -19,14 +19,12 @@ tuple_handler::tuple_handler(
 std::string
 tuple_handler::build_tuple_tag(const std::vector<typet> &element_types) const
 {
-  // Not used in list-based implementation
   return "tag-tuple";
 }
 
 struct_typet tuple_handler::create_tuple_struct_type(
   const std::vector<typet> &element_types) const
 {
-  // Not used in list-based implementation
   struct_typet tuple_type;
   tuple_type.tag("tag-tuple");
   return tuple_type;
@@ -66,7 +64,6 @@ exprt tuple_handler::handle_tuple_subscript(
   const nlohmann::json &slice,
   const nlohmann::json &element)
 {
-  // Create a dummy list-like structure for the context
   nlohmann::json list_context = element;
 
   // If this is a subscript operation on a tuple, modify the context
@@ -107,6 +104,8 @@ exprt tuple_handler::prepare_rhs_for_unpacking(
   exprt &rhs,
   codet &target_block)
 {
+  // If RHS is a function call, we need to create a temporary variable first
+  // because we can't do member access on a side effect expression
   if (rhs.is_function_call() || rhs.id() == "sideeffect")
   {
     locationt loc = converter_.get_location_from_decl(ast_node);
