@@ -6,7 +6,6 @@ Source: https://github.com/esbmc/esbmc
 Files: *
 Copyright: 2008-2025 ESBMC Development Team
 License: Apache-2.0 AND BSD-4-Clause
-
 Comment:
  ESBMC contains software from numerous different sources, and the licensing
  situation is complex. ESBMC is based on CBMC (BSD 4-clause license), and
@@ -36,6 +35,15 @@ License: BSD-3-Clause AND ISC
 Files: cpp/parse.cpp
 Copyright: 1997-2001 Shigeru Chiba, Tokyo Institute of Technology
 License: MIT
+
+Files: debian/embedded-libs/ast2json-0.4/*
+Copyright: Laurent Peuch
+License: BSD-3-Clause
+Comment:
+ This is a bundled third-party library required for ESBMC Python frontend.
+ The library is embedded in debian/embedded-libs/ to comply with Debian
+ Policy (no network access during build). See debian/README.embedded-libs
+ for details on how to prepare this directory.
 
 License: Apache-2.0
  Licensed under the Apache License, Version 2.0 (the "License");
@@ -147,6 +155,10 @@ License: BSD-3-Clause
  .
  On Debian systems, the complete text of the BSD 3-clause license can be
  found in "/usr/share/common-licenses/BSD-3-Clause".
+ .
+ Note: The ast2json library (debian/embedded-libs/ast2json-0.4/) also uses
+ BSD-3-Clause license. See the Files: debian/embedded-libs/ast2json-0.4/*
+ section above.
 
 License: ISC
  Permission to use, copy, modify, and/or distribute this software for any

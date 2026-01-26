@@ -1,0 +1,53 @@
+Embedded Third-Party Libraries for Debian/Ubuntu Packaging
+==========================================================
+
+This directory (`debian/embedded-libs/`) contains third-party Python libraries
+that are required for building ESBMC but are not available in Ubuntu/Debian
+official repositories. These libraries are bundled here to comply with Debian
+Policy, which requires that package builds must not access external networks.
+
+Current Embedded Libraries
+--------------------------
+
+* **ast2json-0.4**: Python library for converting Python AST to JSON
+  - Source: https://pypi.org/project/ast2json/
+  - License: BSD-3-Clause (see debian/copyright for details)
+  - Required for: ESBMC Python frontend
+
+How to Prepare Embedded Libraries
+----------------------------------
+
+Before building the Debian package, you need to download and extract the
+required libraries:
+
+1. Download ast2json source distribution:
+   ```bash
+   pip3 download --no-deps --no-binary :all: ast2json -d /tmp
+   ```
+
+2. Extract to debian/embedded-libs/:
+   ```bash
+   mkdir -p debian/embedded-libs
+   tar -xzf /tmp/ast2json-*.tar.gz -C debian/embedded-libs/
+   ```
+
+3. Verify the structure:
+   ```bash
+   ls -la debian/embedded-libs/ast2json-*/
+   ```
+
+Note: This directory is excluded from git (see .gitignore) because it contains
+third-party source code. Each maintainer should prepare it locally before
+building packages.
+
+License Compliance
+------------------
+
+All embedded libraries must have compatible licenses. The ast2json library
+uses the BSD-3-Clause license, which is compatible with ESBMC's Apache-2.0
+license.
+
+For license details, see:
+- debian/copyright (for ESBMC's license)
+- debian/embedded-libs/ast2json-0.4/PKG-INFO (for ast2json license)
+

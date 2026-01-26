@@ -31,3 +31,7 @@ src/CPackConfig.cmake
 src/CPackSourceConfig.cmake
 *.orig.tar.gz
 *.orig.tar.xz
+
+# Debian packaging: embedded third-party libraries
+# These are downloaded during package preparation, not committed to repo
+debian/embedded-libs/

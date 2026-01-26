@@ -15,7 +15,12 @@ override_dh_auto_clean:
 	find . -name "ac_config.h" -delete 2>/dev/null || true
 
 override_dh_auto_configure:
-	pip3 install --user ast2json || true
+	# Install bundled ast2json from debian/embedded-libs to avoid network
+	# access during build (required by Debian Policy)
+	if [ -d debian/embedded-libs/ast2json-0.4 ]; then \
+		cd debian/embedded-libs/ast2json-0.4 && \
+		python3 setup.py install --user --prefix= || true; \
+	fi
 	dh_auto_configure -- \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DBUILD_STATIC=OFF \
