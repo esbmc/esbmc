@@ -1324,18 +1324,20 @@ void schedule_execution_statet::claim(
   const expr2tc &expr,
   const std::string &msg)
 {
-  unsigned int tmp_total, tmp_remaining;
+  unsigned int tmp_total, tmp_remaining, tmp_simplified;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
-
+  tmp_simplified = simplified_claims;
   execution_statet::claim(expr, msg);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;
+  tmp_simplified = simplified_claims - tmp_simplified;
 
   *ptotal_claims += tmp_total;
   *premaining_claims += tmp_remaining;
+  *psimplified_claims += tmp_simplified;
 }
 
 execution_statet::state_hashing_level2t::state_hashing_level2t(

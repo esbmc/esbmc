@@ -8,5 +8,7 @@ new_unit_test(ireptest "irep.test.cpp" "util_esbmc;irep2;bigint")
 new_unit_test(filesystemtest "filesystem.test.cpp" "filesystem")
 new_unit_test(ieeefloattest "ieee_float.test.cpp" "util_esbmc;bigint")
 new_unit_test(string_containertest "string_container.test.cpp" "string_container")
+new_unit_test(usr_utilstest "usr_utils.test.cpp" "usr_utils")
+new_unit_test(simplify2ttest "simplify2t.test.cpp" "util_esbmc;irep2;bigint")
 # Running the fuzzer normally would overflow the /tmp with files.
 new_fast_fuzz_test(filesystemfuzz "filesystem.fuzz.cpp" "filesystem")

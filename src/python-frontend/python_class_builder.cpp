@@ -46,7 +46,8 @@ bool python_class_builder::get_bases(struct_typet &st)
   {
     std::string base = leaf(bfull);
     if (
-      type_utils::is_builtin_type(base) || type_utils::is_consensus_type(base))
+      type_utils::is_builtin_type(base) ||
+      type_utils::is_consensus_type(base) || type_utils::is_typeddict(base))
       continue;
 
     has_ud = true;
@@ -67,6 +68,16 @@ bool python_class_builder::get_bases(struct_typet &st)
  * into ESBMC symbols. Recursively processes referenced classes. */
 void python_class_builder::get_members(struct_typet &st, codet &out)
 {
+  std::string saved_class_name = conv_.current_class_name_;
+  if (conv_.current_class_name_.empty())
+  {
+    // Extract class name from struct tag (e.g., "tag-int" -> "int")
+    std::string class_name = st.tag().as_string();
+    if (class_name.starts_with("tag-"))
+      class_name = class_name.substr(4);
+    conv_.current_class_name_ = class_name;
+  }
+
   for (const auto &n : cls_.at("body"))
   {
     const std::string kind = n.value("_type", "");
@@ -76,26 +87,57 @@ void python_class_builder::get_members(struct_typet &st, codet &out)
       if (mname == "__init__")
         mname = conv_.current_class_name_;
 
-      conv_.current_func_name_ = mname;
+      // For class methods, we don't want the hierarchical path
+      // Just the simple method name
+      std::string saved_func_name = conv_.current_func_name_;
+      conv_.current_func_name_ = "";
+
       conv_.get_function_definition(n);
 
-      exprt me = symbol_expr(
-        *conv_.symbol_table_.find_symbol(conv_.create_symbol_id().to_string()));
-      st.methods().emplace_back(me.name(), me.type());
-      conv_.current_func_name_.clear();
+      std::string saved_func_for_lookup = conv_.current_func_name_;
+      conv_.current_func_name_ = mname; // Apenas o nome simples
+      symbol_id method_sid = conv_.create_symbol_id();
+      conv_.current_func_name_ = saved_func_for_lookup;
+
+      symbolt *method_symbol =
+        conv_.symbol_table_.find_symbol(method_sid.to_string());
+
+      try
+      {
+        exprt me = symbol_expr(*method_symbol);
+        st.methods().emplace_back(me.name(), me.type());
+      }
+      catch (const std::exception &e)
+      {
+        log_error(
+          "Exception creating symbol_expr for {}: {}",
+          method_sid.to_string(),
+          e.what());
+        conv_.current_func_name_ = saved_func_name;
+        continue;
+      }
+
+      conv_.current_func_name_ = saved_func_name;
     }
     else if (kind == "AnnAssign")
     {
       // class-level annotated attribute
-      const std::string &ann = n["annotation"]["id"];
-      if (!conv_.symbol_table_.find_symbol("tag-" + ann))
+      // Check if annotation is a simple Name node with an "id" field
+      // Complex types like Dict[str, Any] are Subscript nodes without direct "id"
+      if (
+        n.contains("annotation") && n["annotation"].contains("id") &&
+        n["annotation"]["id"].is_string())
       {
-        auto ref = json_utils::find_class((*conv_.ast_json)["body"], ann);
-        if (!ref.empty())
+        const std::string ann = n["annotation"]["id"].get<std::string>();
+        if (!conv_.symbol_table_.find_symbol("tag-" + ann))
         {
-          auto save = conv_.current_class_name_;
-          python_class_builder(conv_, ref).build(out); // recursive conversion
-          conv_.current_class_name_ = save;
+          auto ref = json_utils::find_class((*conv_.ast_json)["body"], ann);
+          if (!ref.empty())
+          {
+            auto save = conv_.current_class_name_;
+            python_class_builder(conv_, ref).build(out); // recursive conversion
+            conv_.current_class_name_ = save;
+          }
         }
       }
       conv_.get_var_assign(n, out);
@@ -108,6 +150,7 @@ void python_class_builder::get_members(struct_typet &st, codet &out)
       sym->static_lifetime = true;
     }
   }
+  conv_.current_class_name_ = saved_class_name;
 }
 
 /* Extracts instance attributes assigned to self (e.g., self.x = ...)
@@ -153,6 +196,18 @@ void python_class_builder::gen_ctor(bool has_ud_base, struct_typet &st)
   st.methods().emplace_back(ctor.name, ctor.type);
 }
 
+// Check if any base class is TypedDict
+bool python_class_builder::is_typeddict_class() const
+{
+  for (const auto &bfull : pc_.bases())
+  {
+    std::string base = leaf(bfull);
+    if (type_utils::is_typeddict(base))
+      return true;
+  }
+  return false;
+}
+
 // Main entry point: converts a Python class node into an ESBMC struct type
 // and populates the symbol table with all members and metadata.
 void python_class_builder::build(codet &out)
@@ -166,6 +221,19 @@ void python_class_builder::build(codet &out)
     return;
 
   sym->type.remove(irept::a_incomplete);
+
+  // Handle TypedDict classes: they should be treated as dict types
+  // TypedDict provides type hints for dictionaries but at runtime
+  // they are just regular dicts
+  if (is_typeddict_class())
+  {
+    // Create a dict type alias for this TypedDict class
+    // The dict handler provides the canonical dict struct type
+    typet dict_type = conv_.get_dict_handler()->get_dict_struct_type();
+    sym->type = dict_type;
+    conv_.current_class_name_.clear();
+    return;
+  }
 
   // Create struct type for this class
   struct_typet st;

@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwindset 2:2 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

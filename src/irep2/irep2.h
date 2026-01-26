@@ -132,8 +132,9 @@
   BOOST_PP_LIST_CONS(forall,                                                   \
   BOOST_PP_LIST_CONS(exists,                                                   \
   BOOST_PP_LIST_CONS(isinstance,                                               \
+  BOOST_PP_LIST_CONS(hasattr,                                                  \
   BOOST_PP_LIST_CONS(isnone,                                                   \
-  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 // clang-format on
 
 // Even crazier forward decls,

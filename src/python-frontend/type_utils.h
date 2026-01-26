@@ -65,11 +65,11 @@ public:
     return (
       name == "int" || name == "float" || name == "bool" || name == "str" ||
       name == "chr" || name == "hex" || name == "oct" || name == "ord" ||
-      name == "abs" || name == "tuple" || name == "list" || name == "dict" ||
-      name == "set" || name == "frozenset" || name == "bytes" ||
-      name == "set" || name == "bytearray" || name == "range" ||
-      name == "complex" || name == "type" || name == "object" ||
-      name == "None" || name == "divmod");
+      name == "tuple" || name == "list" || name == "dict" || name == "set" ||
+      name == "frozenset" || name == "bytes" || name == "set" ||
+      name == "bytearray" || name == "range" || name == "complex" ||
+      name == "type" || name == "object" || name == "abs" || name == "None" ||
+      name == "divmod");
   }
 
   static bool is_consensus_type(const std::string &name)
@@ -78,6 +78,21 @@ public:
       name == "uint64" || name == "uint256" || name == "Epoch" ||
       name == "Gwei" || name == "BLSFieldElement" || name == "Slot" ||
       name == "GeneralizedIndex");
+  }
+
+  /**
+   * @brief Check if a name is TypedDict from typing module
+   *
+   * TypedDict is a special construct that should not be treated as a
+   * user-defined base class. Classes inheriting from TypedDict are
+   * converted to dict type (matching Python's runtime behavior).
+   *
+   * @param name The base class name to check
+   * @return true if it's TypedDict
+   */
+  static bool is_typeddict(const std::string &name)
+  {
+    return name == "TypedDict";
   }
 
   static bool is_consensus_func(const std::string &name)
@@ -98,7 +113,7 @@ public:
     return (
       name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_" ||
       name == "bit_length" || name == "from_bytes" || name == "to_bytes" ||
-      name == "randint" || name == "random");
+      name == "randint" || name == "random" || name == "all");
   }
 
   static bool is_python_exceptions(const std::string &name)

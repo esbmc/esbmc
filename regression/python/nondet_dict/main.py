@@ -1,6 +1,14 @@
+import random
+
+x = random.randint(0, 100)
+y = random.randint(0, 100)
+z = random.randint(0, 100)
+
 def foo() -> dict:
-  d = {"a": 1, "b": 2, "c": 3} 
+  d = {"a": x, "b": y, "c": z} 
   return d
 
 my_dict:dict = foo()
-assert (my_dict["a"] == 1)
+assert (my_dict["a"] == x)
+assert (my_dict["b"] == y)
+assert (my_dict["c"] == z)

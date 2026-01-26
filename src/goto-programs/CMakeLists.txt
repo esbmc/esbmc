@@ -10,7 +10,8 @@ add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
   goto_program_serialization.cpp goto_function_serialization.cpp
   read_bin_goto_object.cpp goto_program_irep.cpp format_strings.cpp
   loop_numbers.cpp goto_loops.cpp write_goto_binary.cpp
-  goto_k_induction.cpp loopst.cpp goto_coverage.cpp goto_coverage_rm.cpp goto_cfg.cpp goto_loop_invariant.cpp)
+  goto_k_induction.cpp loopst.cpp goto_coverage.cpp goto_coverage_rm.cpp goto_cfg.cpp goto_loop_invariant.cpp
+  contracts/contracts.cpp)
 add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp assign_params_as_non_det.cpp)
 
 if(ENABLE_GOTO_CONTRACTOR)
@@ -30,4 +31,4 @@ target_include_directories(gotoalgorithms
 )
 target_compile_definitions(gotoprograms PUBLIC BOOST_ALL_NO_LIB)
 
-target_link_libraries(gotoprograms pointeranalysis bigint)
+target_link_libraries(gotoprograms pointeranalysis bigint usr_utils)

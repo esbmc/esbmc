@@ -36,6 +36,14 @@ public:
     return function_id_;
   }
 
+  /*
+   * Removes temporary $ctor_self$ parameters from constructor call arguments.
+   * Used when constructors are passed as arguments (e.g., foo(Positive(2))).
+   * The correct self parameter will be added by goto_sideeffects later.
+   */
+  static exprt::operandst
+  strip_ctor_self_parameters(const exprt::operandst &args);
+
 private:
   /*
    * Validates that function call arguments match expected parameter types.
@@ -217,6 +225,10 @@ private:
    * Returns cpp-throw
    */
   exprt gen_exception_raise(std::string exc, std::string message) const;
+
+  // Dict method detection and handling
+  bool is_dict_method_call() const;
+  exprt handle_dict_method() const;
 
   // List method detection and handling
   bool is_list_method_call() const;

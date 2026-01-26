@@ -47,6 +47,39 @@ public:
 
   void convert();
 
+  // Accessors for handlers
+  void set_converting_rhs(bool value)
+  {
+    is_converting_rhs = value;
+  }
+  void set_current_lhs(exprt *value)
+  {
+    current_lhs = value;
+  }
+  symbolt *add_symbol_and_get_ptr(symbolt &symbol)
+  {
+    return symbol_table_.move_symbol_to_context(symbol);
+  }
+
+  exprt create_lhs_expression(
+    const nlohmann::json &target,
+    symbolt *lhs_symbol,
+    const locationt &location);
+
+  const std::string &get_current_func_name() const
+  {
+    return current_func_name_;
+  }
+  const nlohmann::json &get_ast_json() const
+  {
+    return *ast_json;
+  }
+  exprt get_expr(const nlohmann::json &element);
+  std::string get_op(const std::string &op, const typet &type) const;
+  typet get_type_from_annotation(
+    const nlohmann::json &annotation_node,
+    const nlohmann::json &element);
+
   string_builder &get_string_builder();
 
   python_dict_handler *get_dict_handler()
@@ -145,33 +178,17 @@ public:
 
   exprt get_literal(const nlohmann::json &element);
 
-  exprt get_expr(const nlohmann::json &element);
+  locationt get_location_from_decl(const nlohmann::json &element) const;
 
-  locationt get_location_from_decl(const nlohmann::json &element);
+  void copy_location_fields_from_decl(
+    const nlohmann::json &from,
+    nlohmann::json &to) const;
 
   exprt handle_string_comparison(
     const std::string &op,
     exprt &lhs,
     exprt &rhs,
     const nlohmann::json &element);
-
-  /**
-   * @brief Resolves dictionary subscript types for binary operations.
-   *
-   * When comparing dictionary values with primitive types (int, bool, float),
-   * the dict subscript initially returns a char* pointer. This method detects
-   * such cases and re-fetches the dictionary value with the correct expected type.
-   *
-   * @param left The left operand JSON AST node.
-   * @param right The right operand JSON AST node.
-   * @param lhs The left operand expression (may be modified).
-   * @param rhs The right operand expression (may be modified).
-   */
-  void resolve_dict_subscript_types(
-    const nlohmann::json &left,
-    const nlohmann::json &right,
-    exprt &lhs,
-    exprt &rhs);
 
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
@@ -182,6 +199,7 @@ private:
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
+  friend class string_handler;
   friend class tuple_handler;
   friend class python_typechecking;
   friend class python_class_builder;
@@ -241,9 +259,10 @@ private:
 
   bool function_has_missing_return_paths(const nlohmann::json &function_node);
 
-  typet get_type_from_annotation(
-    const nlohmann::json &annotation_node,
-    const nlohmann::json &element);
+  exprt materialize_list_function_call(
+    const exprt &expr,
+    const nlohmann::json &element,
+    codet &target_block);
 
   symbolt create_return_temp_variable(
     const typet &return_type,
@@ -355,9 +374,6 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
-  exprt
-  handle_single_char_comparison(const std::string &op, exprt &lhs, exprt &rhs);
-
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);
@@ -466,11 +482,6 @@ private:
     const nlohmann::json &target,
     codet &target_block);
 
-  exprt create_lhs_expression(
-    const nlohmann::json &target,
-    symbolt *lhs_symbol,
-    const locationt &location);
-
   void handle_assignment_type_adjustments(
     symbolt *lhs_symbol,
     exprt &lhs,
@@ -482,52 +493,6 @@ private:
   // =========================================================================
   // Dictionary assignment helper methods
   // =========================================================================
-
-  /**
-   * @brief Handles dictionary subscript assignment (dict[key] = value).
-   *
-   * Detects and processes assignments where the target is a dictionary subscript
-   * expression, delegating to the dict_handler for the actual assignment.
-   *
-   * @param ast_node The assignment AST node.
-   * @param target The assignment target (Subscript node).
-   * @param target_block The code block to add generated code to.
-   * @return true if this was a dict subscript assignment and was handled.
-   */
-  bool handle_dict_subscript_assignment(
-    const nlohmann::json &ast_node,
-    const nlohmann::json &target,
-    codet &target_block);
-
-  /**
-   * @brief Handles dictionary literal assignment to a typed variable.
-   *
-   * Processes assignments where the RHS is a dictionary literal ({...}),
-   * creating the dict structure and initializing it from the literal.
-   *
-   * @param ast_node The assignment AST node.
-   * @param lhs The left-hand side expression.
-   * @return true if this was a dict literal assignment and was handled.
-   */
-  bool handle_dict_literal_assignment(
-    const nlohmann::json &ast_node,
-    const exprt &lhs);
-
-  /**
-   * @brief Handles unannotated dictionary literal assignment.
-   *
-   * For Assign nodes (not AnnAssign) where the RHS is a dict literal and
-   * no symbol exists yet, creates the symbol with dict type and initializes it.
-   *
-   * @param ast_node The assignment AST node.
-   * @param target The assignment target node.
-   * @param sid The symbol ID for the variable.
-   * @return true if this was an unannotated dict literal and was handled.
-   */
-  bool handle_unannotated_dict_literal(
-    const nlohmann::json &ast_node,
-    const nlohmann::json &target,
-    const symbol_id &sid);
 
   /**
    * @brief Gets RHS expression with dict subscript type resolution.
@@ -746,34 +711,6 @@ private:
     const nlohmann::json &element);
 
   /**
-   * @brief Handles set-related binary operations.
-   *
-   * Processes set difference, intersection, and union operations.
-   * Sets are internally represented as lists with unique elements.
-   * Materializes function call results into temporary variables when needed.
-   *
-   * Supported operations:
-   * - Sub (-)    : Set difference (elements in lhs but not in rhs)
-   * - BitAnd (&) : Set intersection (elements in both lhs and rhs)
-   * - BitOr (|)  : Set union (elements in either lhs or rhs, without duplicates)
-   *
-   * @param op The operator string ("Sub", "BitAnd", or "BitOr").
-   * @param lhs The left operand expression (may be modified to resolve function calls).
-   * @param rhs The right operand expression (may be modified to resolve function calls).
-   * @param left The left operand JSON AST node (unused, kept for consistency).
-   * @param right The right operand JSON AST node (unused, kept for consistency).
-   * @param element The full binary operation JSON AST node for location information.
-   * @return The result expression representing the new set, or nil_exprt if not a set operation.
-   */
-  exprt handle_set_operations(
-    const std::string &op,
-    exprt &lhs,
-    exprt &rhs,
-    const nlohmann::json &left,
-    const nlohmann::json &right,
-    const nlohmann::json &element);
-
-  /**
    * @brief Handles type mismatches in relational operations.
    *
    * Processes single-character comparisons and float-vs-string comparisons.
@@ -838,20 +775,10 @@ private:
   // String method helpers
   // =========================================================================
 
-  exprt handle_str_join(const nlohmann::json &call_json);
-
   exprt handle_string_type_mismatch(
     const exprt &lhs,
     const exprt &rhs,
     const std::string &op);
-
-  // Create character comparison expression from preprocessed operands
-  exprt create_char_comparison_expr(
-    const std::string &op,
-    const exprt &lhs_char_value,
-    const exprt &rhs_char_value,
-    const exprt &lhs_source,
-    const exprt &rhs_source) const;
 
   void process_forward_reference(
     const nlohmann::json &annotation,
@@ -907,6 +834,7 @@ private:
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;
   bool is_right = false;
+  std::vector<std::string> scope_stack_;
 
   exprt extract_type_from_boolean_op(const exprt &bool_op);
 

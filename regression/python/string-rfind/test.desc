@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 7 --smt-during-symex --smt-symex-guard --z3
+^VERIFICATION SUCCESSFUL$

@@ -2386,6 +2386,11 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
     return convert_function(src, "ISINSTANCE", precedence = 15);
   }
 
+  else if (src.id() == "hasattr")
+  {
+    return convert_function(src, "HASATTR", precedence = 15);
+  }
+
   else if (src.id() == "isnone")
   {
     return convert_function(src, "ISNONE", precedence = 15);

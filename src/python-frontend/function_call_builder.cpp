@@ -2,12 +2,44 @@
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy_call_expr.h>
+#include <python-frontend/python_list.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
+#include <util/message.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <climits>
+
+bool function_call_builder::is_nondet_str_call(const nlohmann::json &node) const
+{
+  return node.contains("_type") && node["_type"] == "Call" &&
+         node.contains("func") && node["func"].contains("_type") &&
+         node["func"]["_type"] == "Name" && node["func"].contains("id") &&
+         node["func"]["id"] == "nondet_str";
+}
+
+bool function_call_builder::is_symbolic_string(const nlohmann::json &node) const
+{
+  if (is_nondet_str_call(node))
+    return true;
+
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  {
+    const std::string var_name = node["id"].get<std::string>();
+    nlohmann::json var_value = json_utils::get_var_value(
+      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
+
+    if (
+      !var_value.empty() && var_value.contains("value") &&
+      is_nondet_str_call(var_value["value"]))
+      return true;
+  }
+
+  return false;
+}
 
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
@@ -88,11 +120,11 @@ symbol_id function_call_builder::build_function_id() const
     if (func_json["value"]["_type"] == "Attribute")
     {
       /* Handle nested attribute chains (e.g., self.f.foo(), a.b.c.method())
-       * 
+       *
        * When calling a method through an attribute chain, we need to determine
        * the class type of the intermediate object. For example, in self.f.foo(),
        * we need to know that 'f' has type Foo to correctly resolve Foo.foo().
-       * 
+       *
        * Strategy: Recursively walk the attribute chain from left to right,
        * resolving each component's type by looking up struct members in the
        * symbol table, until we reach the final object whose class we need.
@@ -189,6 +221,8 @@ symbol_id function_call_builder::build_function_id() const
     else if (func_json["value"]["_type"] == "Call")
     {
       obj_name = func_json["value"]["func"]["id"];
+      if (obj_name == "nondet_str")
+        obj_name = "str";
       if (obj_name == "super")
       {
         symbolt *base_class_func = converter_.find_function_in_base_classes(
@@ -251,14 +285,13 @@ symbol_id function_call_builder::build_function_id() const
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
+      symbol_id var_sid(python_file, current_class_name, current_function_name);
+      var_sid.set_object(arg["id"].get<std::string>());
+      symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+
       // Check if this is a tuple by looking up the variable's type
       if (var_type == "tuple" || var_type.empty())
       {
-        symbol_id var_sid(
-          python_file, current_class_name, current_function_name);
-        var_sid.set_object(arg["id"].get<std::string>());
-        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-
         if (var_symbol && var_symbol->type.id() == "struct")
         {
           const struct_typet &struct_type = to_struct_type(var_symbol->type);
@@ -286,9 +319,25 @@ symbol_id function_call_builder::build_function_id() const
       }
       else if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
-        var_type == "set")
+        var_type == "set" || var_type == "Sequence")
       {
         func_name = kGetObjectSize;
+      }
+      else if (var_type.empty() && var_symbol)
+      {
+        typet actual_type = var_symbol->type;
+        if (actual_type.is_pointer())
+          actual_type = actual_type.subtype();
+        if (actual_type.id() == "symbol")
+          actual_type = converter_.ns.follow(actual_type);
+
+        if (actual_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(actual_type);
+          std::string tag = struct_type.tag().as_string();
+          if (tag.find("__ESBMC_PyListObj") != std::string::npos)
+            func_name = kGetObjectSize;
+        }
       }
       else if (var_type == "str" || var_type.empty())
       {
@@ -297,11 +346,6 @@ symbol_id function_call_builder::build_function_id() const
         func_name = kStrlen;
 
         // Check if this is a single character by looking up the variable
-        symbol_id var_sid(
-          python_file, current_class_name, current_function_name);
-        var_sid.set_object(arg["id"].get<std::string>());
-        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-
         if (
           var_symbol && var_symbol->value.is_constant() &&
           (var_symbol->value.type().is_unsignedbv() ||
@@ -384,6 +428,34 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   function_id.set_function(func_name);
+
+  // Check if this is a nested function call
+  if (func_type == "Name" && !current_function_name.empty())
+  {
+    // Self-recursive call (e.g., bar() inside foo@F@bar)
+    if (current_function_name.ends_with("@F@" + func_name))
+    {
+      function_id.set_function(current_function_name);
+      return function_id;
+    }
+
+    // Walk nesting chain from deepest to shallowest
+    for (std::string ctx = current_function_name; !ctx.empty();)
+    {
+      std::string nested_id = ctx + "@F@" + func_name;
+      symbol_id sid(python_file, current_class_name, nested_id);
+
+      if (converter_.symbol_table().find_symbol(sid.to_string()))
+      {
+        function_id.set_function(nested_id);
+        return function_id;
+      }
+
+      size_t pos = ctx.rfind("@F@");
+      ctx = (pos != std::string::npos) ? ctx.substr(0, pos) : "";
+    }
+  }
+
   return function_id;
 }
 
@@ -424,8 +496,39 @@ exprt function_call_builder::build() const
     const auto &arg = call_["args"][0];
     exprt obj_expr = converter_.get_expr(arg);
 
-    // Get the keys member from the dictionary struct
-    typet keys_type = pointer_typet(struct_typet()); // Type of the keys pointer
+    // Check actual type: could be dict or list (e.g., from d.keys())
+    typet actual_type = obj_expr.type();
+    if (actual_type.is_pointer())
+      actual_type = actual_type.subtype();
+    if (actual_type.id() == "symbol")
+      actual_type = converter_.ns.follow(actual_type);
+
+    // If it's actually a list, call list_size directly
+    if (actual_type.is_struct())
+    {
+      const struct_typet &struct_type = to_struct_type(actual_type);
+      std::string tag = struct_type.tag().as_string();
+      if (tag.find("__ESBMC_PyListObj") != std::string::npos)
+      {
+        // It's a list, not a dict: call list_size on it directly
+        code_typet list_size_type;
+        list_size_type.return_type() = size_type();
+        code_typet::argumentt arg_type;
+        arg_type.type() = pointer_typet(struct_type);
+        list_size_type.arguments().push_back(arg_type);
+
+        symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
+
+        side_effect_expr_function_callt call_expr(size_type());
+        call_expr.function() = list_size_func;
+        call_expr.arguments().push_back(obj_expr);
+
+        return call_expr;
+      }
+    }
+
+    // It's genuinely a dict: get the keys member
+    typet keys_type = pointer_typet(struct_typet());
     member_exprt keys_member(obj_expr, "keys", keys_type);
 
     // Create the list_get_size function symbol
@@ -453,6 +556,8 @@ exprt function_call_builder::build() const
       throw std::runtime_error("__ESBMC_assume requires one boolean argument");
 
     exprt condition = converter_.get_expr(call_["args"][0]);
+    if (!condition.type().is_bool())
+      condition = typecast_exprt(condition, bool_type());
 
     // Create code_assume statement
     codet assume_code("assume");
@@ -550,6 +655,89 @@ exprt function_call_builder::build() const
       return converter_.get_string_handler().handle_string_lower(obj_expr, loc);
     }
 
+    if (method_name == "rfind")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() < 1 || call_["args"].size() > 3)
+        throw std::runtime_error("rfind() requires one to three arguments");
+
+      exprt find_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+
+      if (call_["args"].size() == 1)
+      {
+        return converter_.get_string_handler().handle_string_rfind(
+          obj_expr, find_arg, loc);
+      }
+
+      exprt start_arg = converter_.get_expr(call_["args"][1]);
+      exprt end_arg = from_integer(INT_MIN, int_type());
+      if (call_["args"].size() == 3)
+        end_arg = converter_.get_expr(call_["args"][2]);
+
+      return converter_.get_string_handler().handle_string_rfind_range(
+        obj_expr, find_arg, start_arg, end_arg, loc);
+    }
+    if (method_name == "upper")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("upper() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_upper(obj_expr, loc);
+    }
+    if (method_name == "index")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() < 1 || call_["args"].size() > 3)
+        throw std::runtime_error("index() requires one to three arguments");
+
+      exprt find_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+
+      if (call_["args"].size() == 1)
+      {
+        return converter_.get_string_handler().handle_string_index(
+          call_, obj_expr, find_arg, loc);
+      }
+
+      exprt start_arg = converter_.get_expr(call_["args"][1]);
+      exprt end_arg = from_integer(INT_MIN, int_type());
+      if (call_["args"].size() == 3)
+        end_arg = converter_.get_expr(call_["args"][2]);
+
+      return converter_.get_string_handler().handle_string_index_range(
+        call_, obj_expr, find_arg, start_arg, end_arg, loc);
+    }
+
+    if (method_name == "find")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() < 1 || call_["args"].size() > 3)
+        throw std::runtime_error("find() requires one to three arguments");
+
+      exprt find_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+
+      if (call_["args"].size() == 1)
+      {
+        return converter_.get_string_handler().handle_string_find(
+          obj_expr, find_arg, loc);
+      }
+
+      exprt start_arg = converter_.get_expr(call_["args"][1]);
+      exprt end_arg = from_integer(INT_MIN, int_type());
+      if (call_["args"].size() == 3)
+        end_arg = converter_.get_expr(call_["args"][2]);
+
+      return converter_.get_string_handler().handle_string_find_range(
+        obj_expr, find_arg, start_arg, end_arg, loc);
+    }
+
     if (method_name == "isalpha")
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
@@ -588,13 +776,181 @@ exprt function_call_builder::build() const
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
 
-      // lstrip() takes optional chars argument, but we only support no arguments
+      // lstrip() takes optional chars argument
+      exprt chars_arg = nil_exprt();
       if (!call_["args"].empty())
-        throw std::runtime_error("lstrip() with arguments not yet supported");
+        chars_arg = converter_.get_expr(call_["args"][0]);
 
       locationt loc = converter_.get_location_from_decl(call_);
       return converter_.get_string_handler().handle_string_lstrip(
-        obj_expr, loc);
+        obj_expr, chars_arg, loc);
+    }
+
+    if (method_name == "rstrip")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      // rstrip() takes optional chars argument
+      exprt chars_arg = nil_exprt();
+      if (!call_["args"].empty())
+        chars_arg = converter_.get_expr(call_["args"][0]);
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_rstrip(
+        obj_expr, chars_arg, loc);
+    }
+
+    if (method_name == "strip")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      // strip() takes optional chars argument
+      exprt chars_arg = nil_exprt();
+      if (!call_["args"].empty())
+        chars_arg = converter_.get_expr(call_["args"][0]);
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_strip(
+        obj_expr, chars_arg, loc);
+    }
+
+    if (method_name == "replace")
+    {
+      if (call_["args"].size() != 2 && call_["args"].size() != 3)
+        throw std::runtime_error(
+          "replace() requires two or three arguments in minimal support");
+
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      exprt old_arg = converter_.get_expr(call_["args"][0]);
+      exprt new_arg = converter_.get_expr(call_["args"][1]);
+
+      exprt count_expr = from_integer(-1, int_type());
+      if (call_["args"].size() == 3)
+      {
+        long long count_value = 0;
+        if (!json_utils::extract_constant_integer(
+              call_["args"][2],
+              converter_.get_current_func_name(),
+              converter_.get_ast_json(),
+              count_value))
+        {
+          throw std::runtime_error(
+            "replace() only supports constant count in minimal support");
+        }
+        count_expr = from_integer(count_value, int_type());
+      }
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_replace(
+        obj_expr, old_arg, new_arg, count_expr, loc);
+    }
+
+    if (method_name == "split")
+    {
+      if (call_["args"].size() > 2)
+        throw std::runtime_error(
+          "split() requires zero, one, or two arguments in minimal support");
+
+      auto is_none_literal = [](const nlohmann::json &node) {
+        if (
+          node.contains("_type") && node["_type"] == "Constant" &&
+          node.contains("value") && node["value"].is_null())
+        {
+          return true;
+        }
+        if (
+          node.contains("_type") && node["_type"] == "Name" &&
+          node.contains("id") && node["id"].is_string() && node["id"] == "None")
+        {
+          return true;
+        }
+        return false;
+      };
+
+      auto find_keyword =
+        [&](const std::string &name) -> const nlohmann::json * {
+        if (!call_.contains("keywords") || !call_["keywords"].is_array())
+          return nullptr;
+        for (const auto &kw : call_["keywords"])
+        {
+          if (
+            kw.contains("arg") && kw["arg"].is_string() && kw["arg"] == name &&
+            kw.contains("value"))
+          {
+            return &kw["value"];
+          }
+        }
+        return nullptr;
+      };
+
+      std::string separator;
+      if (call_["args"].empty())
+      {
+        const nlohmann::json *sep_kw = find_keyword("sep");
+        if (sep_kw == nullptr || is_none_literal(*sep_kw))
+          separator = "";
+        else if (!string_handler::extract_constant_string(
+                   *sep_kw, converter_, separator))
+        {
+          // If separator is not constant, use empty string (whitespace split)
+          separator = "";
+        }
+      }
+      else if (is_none_literal(call_["args"][0]))
+      {
+        separator = "";
+      }
+      else
+      {
+        if (!string_handler::extract_constant_string(
+              call_["args"][0], converter_, separator))
+        {
+          // If separator is not constant, use empty string (whitespace split)
+          separator = "";
+        }
+      }
+
+      long long count = -1;
+      const nlohmann::json *count_node = nullptr;
+      if (call_["args"].size() == 2)
+      {
+        count_node = &call_["args"][1];
+      }
+      else
+      {
+        const nlohmann::json *count_kw = find_keyword("maxsplit");
+        if (count_kw != nullptr)
+          count_node = count_kw;
+      }
+
+      if (count_node != nullptr)
+      {
+        if (!json_utils::extract_constant_integer(
+              *count_node,
+              converter_.get_current_func_name(),
+              converter_.get_ast_json(),
+              count))
+        {
+          // If count is not constant, use -1 (split all)
+          count = -1;
+        }
+      }
+
+      std::string input;
+      if (!string_handler::extract_constant_string(
+            call_["func"]["value"], converter_, input))
+      {
+        // For symbolic strings, we need to handle split() differently
+        // For now, we'll try to extract the expression and work with it
+        exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+        // Build split result with symbolic string
+        return python_list::build_split_list(
+          converter_, call_, obj_expr, separator, count);
+      }
+
+      return python_list::build_split_list(
+        converter_, call_, input, separator, count);
     }
   }
 

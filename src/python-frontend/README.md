@@ -153,8 +153,31 @@ Below is an overview of ESBMC-Python's key capabilities:
       - Works with both string literals and string variables
     - **startswith() method**: Supports prefix checking for strings (e.g., `"foo".startswith("f")` returns True).
     - **endswith() method**: Supports suffix checking for strings (e.g., `"foo".endswith("oo")` returns True).
+    - **removeprefix() method**: Removes a matching prefix (e.g., `"prefix_value".removeprefix("prefix_")` returns `"value"`).
+    - **removesuffix() method**: Removes a matching suffix (e.g., `"value_suffix".removesuffix("_suffix")` returns `"value"`).
     - **lstrip() method**: Removes leading whitespace characters from strings (e.g., `"  hello".lstrip()` returns `"hello"`).
+    - **rstrip() method**: Removes trailing whitespace characters from strings (e.g., `"hi  ".rstrip()` returns `"hi"`).
+    - **strip() method**: Removes leading and trailing whitespace characters from strings (e.g., `"  hi  ".strip()` returns `"hi"`).
+    - **split() method**: Splits strings into lists with optional separators and maxsplit.
+    - **splitlines() method**: Splits strings on line boundaries (e.g., `"a\\nb".splitlines()` returns `["a", "b"]`).
+    - **partition() method**: Splits into a 3-tuple (before, sep, after) (e.g., `"a=b".partition("=")` returns `("a", "=", "b")`).
+    - **join() method**: Joins a list of strings with a separator (e.g., `" ".join(["a", "b"])` returns `"a b"`).
     - **isspace() method**: Returns `True` if all characters in the string are whitespace characters and the string is non-empty, `False` otherwise.
+    - **isalpha() method**: Returns `True` if all characters are alphabetic and the string is non-empty.
+    - **isdigit() method**: Returns `True` if all characters are digits and the string is non-empty.
+    - **islower() method**: Returns `True` if all cased characters are lowercase and the string is non-empty.
+    - **capitalize() method**: Capitalizes the first character and lowercases the rest (e.g., `"hello".capitalize()` returns `"Hello"`).
+    - **title() method**: Title-cases words (e.g., `"hello world".title()` returns `"Hello World"`).
+    - **swapcase() method**: Swaps the case of each character (e.g., `"AbC".swapcase()` returns `"aBc"`).
+    - **casefold() method**: Aggressive lowercase for caseless matching (e.g., `"Sample".casefold()` returns `"sample"`).
+    - **lower() method**: Converts all characters to lowercase (e.g., `"HI".lower()` returns `"hi"`).
+    - **rfind() method**: Returns the highest index of a substring, or -1 if not found (e.g., `"banana".rfind("na")` returns `4`).
+    - **find() method**: Returns the lowest index of a substring, or -1 if not found.
+    - **index() method**: Returns the lowest index of a substring, raises `ValueError` if not found.
+    - **count() method**: Counts non-overlapping occurrences of a substring.
+    - **replace() method**: Replaces occurrences of a substring, with optional count.
+    - **find()/rfind() with range**: Optional `start` and `end` arguments are supported (e.g., `"banana".rfind("na", 0, 4)` returns `2`).
+    - **upper() method**: Converts all characters to uppercase (e.g., `"hi".upper()` returns `"HI"`).
     - **String Slicing**: Comprehensive support for Python's slice notation on strings:
       - **Basic Slicing**: `string[start:end]` returns a substring from index `start` to `end-1`.
       - **Omitted Bounds**: Supports slices with omitted start (`string[:end]`) or end (`string[start:]`) indices.
@@ -206,7 +229,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Recursion**: Supports and verifies recursive functions.
 - **Imports**: Handles import styles and validates their usage.
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
-- **Built-in Functions**: 
+- **Built-in Functions**:
   - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `divmod`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
@@ -318,7 +341,7 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
 - **Exception Raising**: Supports raise statements with exception instantiation and custom error messages.
 
 ### Strict Type Checking
-ESBMC-Python provides an optional strict type-checking mode that enforces type compatibility for function arguments at verification time. 
+ESBMC-Python provides an optional strict type-checking mode that enforces type compatibility for function arguments at verification time.
 - **Command-Line Option**:
   - **--strict-types**: Enables strict type checking for function arguments during verification. When this flag is provided, ESBMC validates that all arguments passed to functions match their declared parameter types.
 - **Behavior**:
@@ -548,10 +571,10 @@ def safe_divide(a: int, b: int) -> int:
 def test_exception_handling() -> None:
     # Normal case
     assert safe_divide(10, 2) == 5
-    
+
     # Division by zero case
     assert safe_divide(10, 0) == -1
-    
+
     # This assertion will fail - demonstrating ESBMC can verify exception paths
     assert safe_divide(8, 0) == 0  # Should be -1, not 0
 
@@ -604,7 +627,7 @@ def access_list_element(index: int) -> int:
 def test_bounds() -> None:
     # Valid access
     assert access_list_element(2) == 30
-    
+
     # This will trigger a bounds violation
     result = access_list_element(10)  # Index out of bounds
     assert result == 0
@@ -653,19 +676,19 @@ def test_math_functions() -> None:
     # Test floor and ceil functions
     assert math.floor(3.7) == 3
     assert math.ceil(3.2) == 4
-    
+
     # Test combinatorial function
     assert math.comb(5, 2) == 10  # C(5,2) = 5!/(2!*3!) = 10
-    
+
     # Test symmetry property of combinations
     n = 6
     k = 2
     assert math.comb(n, k) == math.comb(n, n - k)
-    
+
     # Test special value detection
     nan_value = float('nan')
     inf_value = float('inf')
-    
+
     assert math.isnan(nan_value) == True
     assert math.isinf(inf_value) == True
     assert math.isnan(5.0) == False
@@ -989,27 +1012,27 @@ def analyze_paths(x: int) -> str:
 
 def test_reachability() -> None:
     x: int = nondet_int()
-    
+
     # Cover: Can x be greater than 100?
     __ESBMC_cover(x > 100)
-    
+
     # Cover: Can x be in the medium range?
     __ESBMC_cover(50 < x <= 100)
-    
+
     # Add constraint: x must be positive
     __ESBMC_assume(x > 0)
-    
+
     # Cover: Can x still be negative?
     __ESBMC_cover(x < 0)
-    
+
     # Cover: Can x be positive?
     __ESBMC_cover(x > 0)
-    
+
     result = analyze_paths(x)
-    
+
     # Cover: Can we reach the "high" path?
     __ESBMC_cover(result == "high")
-    
+
     # Cover: Can we reach the "zero_or_negative" path?
     __ESBMC_cover(result == "zero_or_negative")
 
@@ -1017,12 +1040,12 @@ def test_dead_code_detection() -> None:
     """Using cover to identify unreachable code"""
     value: int = nondet_int()
     __ESBMC_assume(value >= 0)
-    
+
     if value < 0:
         # This is dead code
         __ESBMC_cover(True)
         print("This branch is unreachable")
-    
+
     if value >= 0:
         # This is reachable code
         __ESBMC_cover(True)
@@ -1146,10 +1169,10 @@ Violated property:
 
 This verification focuses on common numerical operations provided by Numpy, particularly:
 
-- N-dimensional array computations  
-- Broadcasting behavior  
-- Mathematical functions (e.g., `np.add`, `np.multiply`, `np.power`)  
-- Precision-sensitive operations (e.g., `np.exp`, `np.sin`, `np.arccos`)  
+- N-dimensional array computations
+- Broadcasting behavior
+- Mathematical functions (e.g., `np.add`, `np.multiply`, `np.power`)
+- Precision-sensitive operations (e.g., `np.exp`, `np.sin`, `np.arccos`)
 
 ### Why It Matters
 
@@ -1157,10 +1180,10 @@ While Python and Numpy silently handle overflows or undefined behavior at runtim
 
 As highlighted by **Harzevili et al., 2023**, common issues in ML-related libraries include:
 
-- Integer overflows and underflows  
-- Division by zero  
-- Precision errors due to rounding or limited bit-width  
-- Out-of-bounds access in arrays  
+- Integer overflows and underflows
+- Division by zero
+- Precision errors due to rounding or limited bit-width
+- Out-of-bounds access in arrays
 
 ## Verifying Numpy Programs with ESBMC
 
@@ -1221,7 +1244,7 @@ Type: <class 'numpy.int32'>
 Correctly overflowed: True
 ````
 
-**Explanation:**  
+**Explanation:**
 
 ESBMC performs bit-precise analysis and treats signed overflow as undefined or erroneous, unlike NumPy’s permissive semantics.
 
@@ -1299,7 +1322,7 @@ VERIFICATION FAILED
 Bug found (k = 1)
 ```
 
-**Explanation:**  
+**Explanation:**
 This highlights a potential bug: `n // x` is unsafe if `x == 0`.
 
 ---
@@ -1315,7 +1338,7 @@ This highlights a potential bug: `n // x` is unsafe if `x == 0`.
 
 ## ESBMC – NumPy Math Library Mapping
 
-Here, we document the mapping between ESBMC's math library implementations and their NumPy equivalents. 
+Here, we document the mapping between ESBMC's math library implementations and their NumPy equivalents.
 
 These mappings help test and verify floating-point behavior consistently across C and Python environments.
 
@@ -1380,8 +1403,8 @@ Reference: https://numpy.org/doc/stable/reference/routines.math.html
 
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
 
-Harzevili et al. (2023).  
-*Characterizing and Understanding Software Security Vulnerabilities in Machine Learning Libraries.*  
+Harzevili et al. (2023).
+*Characterizing and Understanding Software Security Vulnerabilities in Machine Learning Libraries.*
 [arXiv:2303.06502](https://arxiv.org/abs/2303.06502)
 
 *NumPy Mathematical functions*

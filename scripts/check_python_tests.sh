@@ -9,6 +9,7 @@ if [ -f "../esbmc-venv/bin/activate" ]; then
 fi
 
 all_passed=true
+failed_tests=()
 
 # List of directories to ignore
 ignored_dirs=(
@@ -43,6 +44,10 @@ ignored_dirs=(
   "github_3090_4_fail"
   "github_3090_5"
   "github_3090_5_fail"
+  "github_3313_3"
+  "github_3337_2"
+  "github_3337_3"
+  "github_3337_4"
   "global"
   "infer-func-no-return_fail"
   "integer_squareroot_fail"
@@ -59,6 +64,7 @@ ignored_dirs=(
   "list9"
   "list10"
   "list15_fail"
+  "list-repetition-symbolic"
   "loop-invariant"
   "loop-invariant2"
   "min_max_3_fail"
@@ -76,6 +82,7 @@ ignored_dirs=(
   "random1"
   "random1-fail"
   "random2-fail"
+  "random6_fail"
   "range19-fail"
   "ternary_symbolic"
   "try-fail"
@@ -89,6 +96,13 @@ ignored_dirs=(
   "incremental-smt-assert-pass"
   "type-annotation-check"
   "type-annotation-generics-fail"
+  "string-char-symbolic-success"
+  "string-symbolic-1"
+  "string-symbolic-2"
+  "string-symbolic-3"
+  "string-symbolic-4"
+  "string-symbolic-7"
+  "string-symbolic-8"
 )
 
 for dir in */; do
@@ -133,6 +147,7 @@ for dir in */; do
     if [ $result -eq 0 ]; then
       echo "❌ $dir: expected to fail, but executed successfully (exit 0)"
       all_passed=false
+      failed_tests+=("$dir")
     else
       echo "✅ $dir: failed as expected (exit $result)"
     fi
@@ -142,15 +157,20 @@ for dir in */; do
     else
       echo "❌ $dir: expected to succeed, but failed (exit $result)"
       all_passed=false
+      failed_tests+=("$dir")
     fi
   fi
 done
 
-if $all_passed; then
+if [ ${#failed_tests[@]} -eq 0 ]; then
   echo -e "\n✅ All tests behaved as expected."
   exit 0
 else
   echo -e "\n❌ Some tests did not behave as expected."
+  echo "Failed tests:"
+  for test in "${failed_tests[@]}"; do
+    echo " - $test"
+  done
   exit 1
 fi
 

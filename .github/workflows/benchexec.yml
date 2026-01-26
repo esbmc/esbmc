@@ -96,13 +96,18 @@ on:
         - MemSafety-Huawei-Concurrency-Challenges
         - NoOverflows-Huawei-Concurrency-Challenges
       cpachecker:
-            description: "Run CPAChecker for violation witness validation"
-            required: true
-            type: boolean
+        description: "Run CPAChecker for witness validation"
+        required: true
+        type: boolean
+      witness:
+        type: choice
+        description: Benchexec witness run mode
+        options:
+        - Full
+        - Correctness
+        - Violation
 
 jobs:
-
-
   build-unix:
     uses: ./.github/workflows/build.yml
     with:
@@ -177,22 +182,26 @@ jobs:
       - name: Run Validation (Full)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/witness.sh -f
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Run Validation (RunSet)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'RunSet' }}
         run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Run Validation (Task)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'Task' }}
         run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Move output
         if: ${{ inputs.cpachecker == true }}
         run: mv $HOME/witness-output.zip ./witness-output.zip      
       - name: Show summary (CPAChecker)
         if: ${{ inputs.cpachecker == true }}
-        run: tail $HOME/witness-output/*results*.txt
+        run: tail -v $HOME/witness-output/*results*.txt | sed -E 's|^==> .*/([^/.]+)\..* <==$|==> \1 <==|'
       - uses: actions/upload-artifact@v4
         if: ${{ inputs.cpachecker == true }}
         with:
           name: witness-result
           path: witness-output.zip
-
-      

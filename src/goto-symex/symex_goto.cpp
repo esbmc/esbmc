@@ -55,6 +55,19 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool forward =
     cur_state->source.pc->location_number < goto_target->location_number;
 
+  if (
+    options.get_option("witness-output-yaml") != "" && forward &&
+    !is_constant(old_guard) &&
+    !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
+  {
+    target->branching(
+      cur_state->guard.as_expr(),
+      new_guard,
+      cur_state->source,
+      cur_state->top().hidden,
+      first_loop);
+  }
+
   if (new_guard_false)
   {
     // reset unwinding counter
@@ -442,6 +455,16 @@ bool goto_symext::get_unwind(
   unsigned id = source.pc->loop_number;
   BigInt this_loop_max_unwind = max_unwind;
 
+  // Check for function-specific unwind bound
+  if (loop_id_to_func_index.count(id) != 0)
+  {
+    const auto &[func_name, loop_index] = loop_id_to_func_index[id];
+    auto unwind_key = std::make_pair(func_name, loop_index);
+    if (unwind_func_set.count(unwind_key) != 0)
+      this_loop_max_unwind = unwind_func_set[unwind_key];
+  }
+
+  // Loop-specific bound overrides function-specific bound
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
 

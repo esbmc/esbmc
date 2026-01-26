@@ -14,6 +14,7 @@ class Preprocessor(ast.NodeTransformer):
         self.helper_functions_added = False  # Track if helper functions have been added
         self.functionKwonlyParams = {}
         self.listcomp_counter = 0  # Counter for list comprehension temporaries
+        self.variable_annotations = {}  # Store full AST annotations
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -264,14 +265,49 @@ class Preprocessor(ast.NodeTransformer):
         node = self.generic_visit(node)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
+        node.test = self._transform_list_truthiness(node.test, node)
         if prefix:
             return prefix + [node]
         return node
+
+    def _transform_list_truthiness(self, test_expr, source_node):
+        """
+        Transform list truthiness checks to explicit len() > 0 checks.
+        Converts: while xs: -> while len(xs) > 0:
+        """
+        # Only transform if the test is a simple Name node referring to a list
+        if not isinstance(test_expr, ast.Name):
+            return test_expr
+
+        var_name = test_expr.id
+        var_type = self.known_variable_types.get(var_name)
+
+        # Check if this is a list type
+        if var_type != 'list':
+            return test_expr
+
+        # Create: len(xs) > 0
+        len_call = ast.Call(
+            func=self.create_name_node('len', ast.Load(), source_node),
+            args=[self.create_name_node(var_name, ast.Load(), source_node)],
+            keywords=[]
+        )
+        self.ensure_all_locations(len_call, source_node)
+
+        comparison = ast.Compare(
+            left=len_call,
+            ops=[ast.Gt()],
+            comparators=[self.create_constant_node(0, source_node)]
+        )
+        self.ensure_all_locations(comparison, source_node)
+
+        return comparison
 
     def visit_While(self, node):
         node = self.generic_visit(node)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
+        node.test = self._transform_list_truthiness(node.test, node)
         if prefix:
             return prefix + [node]
         return node
@@ -314,6 +350,48 @@ class Preprocessor(ast.NodeTransformer):
 
     def _get_element_type_from_container(self, container_type, iterable_node=None):
         """Get the element type from a container type with better inference"""
+        # 1. Handle method calls such as d.keys(), d.values()
+        if isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute):
+            method_name = iterable_node.func.attr
+
+            if method_name in ['keys', 'values']:
+                # Get the base object (e.g., 'd' in d.keys())
+                if isinstance(iterable_node.func.value, ast.Name):
+                    dict_var_name = iterable_node.func.value.id
+
+                    # Look up the dict's annotation
+                    if hasattr(self, 'variable_annotations') and dict_var_name in self.variable_annotations:
+                        dict_annotation = self.variable_annotations[dict_var_name]
+
+                        # Extract key/value types from dict[K, V]
+                        if isinstance(dict_annotation, ast.Subscript):
+                            if isinstance(dict_annotation.slice, ast.Tuple):
+                                key_type = dict_annotation.slice.elts[0]
+                                value_type = dict_annotation.slice.elts[1]
+
+                                if method_name == 'keys':
+                                    if isinstance(key_type, ast.Name):
+                                        return key_type.id
+                                elif method_name == 'values':
+                                    if isinstance(value_type, ast.Name):
+                                        return value_type.id
+
+        # 2. Handle direct dict iteration: for k in d:
+        if isinstance(iterable_node, ast.Name):
+            var_name = iterable_node.id
+
+            if hasattr(self, 'variable_annotations') and var_name in self.variable_annotations:
+                annotation = self.variable_annotations[var_name]
+
+                # Check if it's a dict annotation
+                if isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name):
+                    if annotation.value.id == 'dict':
+                        # Extract key type from dict[K, V]
+                        if isinstance(annotation.slice, ast.Tuple) and len(annotation.slice.elts) >= 1:
+                            key_type = annotation.slice.elts[0]
+                            if isinstance(key_type, ast.Name):
+                                return key_type.id
+
         if container_type == 'str':
             return 'str'
         elif isinstance(iterable_node, ast.List) and iterable_node.elts:
@@ -322,6 +400,22 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(first_elem, ast.Constant):
                 return type(first_elem.value).__name__
         elif container_type in ['list', 'tuple']:
+            # Try to extract element type from generic annotation
+            if isinstance(iterable_node, ast.Name) and hasattr(self, 'variable_annotations'):
+                var_name = iterable_node.id
+                if var_name in self.variable_annotations:
+                    annotation = self.variable_annotations[var_name]
+                    # Extract element type from Subscript such as list[dict] or list[dict[str, str]]
+                    if isinstance(annotation, ast.Subscript):
+                        element_annotation = annotation.slice
+                        # Handle simple Name: list[dict] -> 'dict'
+                        if isinstance(element_annotation, ast.Name):
+                            return element_annotation.id
+                        # Handle nested Subscript: list[dict[str, str]] -> 'dict'
+                        elif isinstance(element_annotation, ast.Subscript):
+                            # Extract base type from nested subscript
+                            if isinstance(element_annotation.value, ast.Name):
+                                return element_annotation.value.id
             return 'Any'
         return 'Any'
 
@@ -824,6 +918,27 @@ class Preprocessor(ast.NodeTransformer):
         # Determine annotation type based on the iterable value
         annotation_id = self._get_iterable_type_annotation(node.iter)
 
+        # Get element type for proper annotation
+        element_type = self._get_element_type_from_container(annotation_id, node.iter)
+
+        # Handle dict iteration
+        if annotation_id in ['dict', 'Dict']:
+            # Transform: for k in d: into for k in d.keys():
+            if isinstance(node.iter, ast.Name):
+                # Create d.keys() call
+                keys_call = ast.Call(
+                    func=ast.Attribute(
+                        value=node.iter,
+                        attr='keys',
+                        ctx=ast.Load()
+                    ),
+                    args=[],
+                    keywords=[]
+                )
+                self.ensure_all_locations(keys_call, node)
+                node.iter = keys_call
+                annotation_id = 'list'  # d.keys() returns list
+
         # Determine iterator variable name and whether to create ESBMC_iter
         if isinstance(node.iter, ast.Name):
             # For any Name reference (parameter or variable), use it directly
@@ -833,7 +948,7 @@ class Preprocessor(ast.NodeTransformer):
         else:
             # For other iterables (literals, calls, expressions), create ESBMC_iter copy
             iter_var_name = f'{iter_var_base}_{loop_id}'
-            iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name)
+            iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name, element_type)
             setup_statements = [iter_assign]
 
         # Create common setup statements (index and length) with unique names
@@ -846,7 +961,7 @@ class Preprocessor(ast.NodeTransformer):
 
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name,
-                                                annotation_id, index_var)
+                                                annotation_id, index_var, element_type)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
@@ -861,13 +976,24 @@ class Preprocessor(ast.NodeTransformer):
 
         return result
 
-    def _create_iter_assignment(self, node, annotation_id, iter_var_name):
-        """Create ESBMC_iter assignment with custom name."""
-        iter_target = self.create_name_node(iter_var_name, ast.Store(), node)
-        str_annotation = self.create_name_node(annotation_id, ast.Load(), node)
+    def _create_iter_assignment(self, node, annotation_id, iter_var_name, element_type):
+        """Create assignment for iterator variable with proper type annotation."""
+        # Create proper list[T] annotation instead of just 'list'
+        if element_type and element_type != 'Any':
+            # Create Subscript: list[element_type]
+            iter_annotation = ast.Subscript(
+                value=ast.Name(id='list', ctx=ast.Load()),
+                slice=ast.Name(id=element_type, ctx=ast.Load()),
+                ctx=ast.Load()
+            )
+        else:
+            # Fallback to simple 'list' if we can't infer element type
+            iter_annotation = ast.Name(id=annotation_id, ctx=ast.Load())
+
+        # Create: ESBMC_iter_N: list[element_type] = <iterable>
         iter_assign = ast.AnnAssign(
-            target=iter_target,
-            annotation=str_annotation,
+            target=ast.Name(id=iter_var_name, ctx=ast.Store()),
+            annotation=iter_annotation,
             value=node.iter,
             simple=1
         )
@@ -893,17 +1019,10 @@ class Preprocessor(ast.NodeTransformer):
         length_target = self.create_name_node(length_var, ast.Store(), node)
         int_annotation = self.create_name_node('int', ast.Load(), node)
 
-        # Determine annotation type
-        annotation_id = self._get_iterable_type_annotation(node.iter)
-
-        # For list/set/dict types (pointers), use __ESBMC_get_object_size
-        # For strings (arrays), use len()
-        if annotation_id in ['list', 'set', 'dict']:
-            # Use __ESBMC_get_object_size for pointer-based collections
-            len_func = self.create_name_node('__ESBMC_get_object_size', ast.Load(), node)
-        else:
-            # Use len() for strings and other types
-            len_func = self.create_name_node('len', ast.Load(), node)
+        # The function_call_builder will map len() to either:
+        # - strlen(): string types
+        # - __ESBMC_get_object_size(): list/dict/set/sequence types
+        len_func = self.create_name_node('len', ast.Load(), node)
 
         iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
@@ -928,25 +1047,43 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(while_cond, node)
         return while_cond
 
-    def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id, index_var='ESBMC_index'):
-        """Create the complete loop body with custom index variable name."""
-        # Item assignment
-        item_assign = self._create_item_assignment(node, target_var_name, iter_var_name,
-                                                annotation_id, index_var)
+    def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id, index_var, element_type):
+        """Create the body of the while loop with proper type annotations."""
+        # Create target variable annotation
+        if element_type and element_type != 'Any':
+            target_annotation = ast.Name(id=element_type, ctx=ast.Load())
+        else:
+            target_annotation = ast.Name(id='Any', ctx=ast.Load())
 
-        # Index increment
-        index_increment = self._create_index_increment(node, index_var)
+        # Create: target: element_type = iter_var[index]
+        target_assign = ast.AnnAssign(
+            target=ast.Name(id=target_var_name, ctx=ast.Store()),
+            annotation=target_annotation,
+            value=ast.Subscript(
+                value=ast.Name(id=iter_var_name, ctx=ast.Load()),
+                slice=ast.Name(id=index_var, ctx=ast.Load()),
+                ctx=ast.Load()
+            ),
+            simple=1
+        )
+        self.ensure_all_locations(target_assign, node)
 
-        # Transform original body
-        transformed_original_body = []
-        for statement in node.body:
-            transformed_statement = self.visit(statement)
-            if isinstance(transformed_statement, list):
-                transformed_original_body.extend(transformed_statement)
-            else:
-                transformed_original_body.append(transformed_statement)
+        # Create: index += 1
+        index_increment = ast.AnnAssign(
+            target=ast.Name(id=index_var, ctx=ast.Store()),
+            annotation=ast.Name(id='int', ctx=ast.Load()),
+            value=ast.BinOp(
+                left=ast.Name(id=index_var, ctx=ast.Load()),
+                op=ast.Add(),
+                right=ast.Constant(value=1)
+            ),
+            simple=1
+        )
+        self.ensure_all_locations(index_increment, node)
 
-        return [item_assign, index_increment] + transformed_original_body
+        # Combine with original body
+        return [target_assign, index_increment] + node.body
+
 
     def _create_item_assignment(self, node, target_var_name, iter_var_name, annotation_id, index_var='ESBMC_index'):
         """Create assignment to get current item from iterable with custom index variable."""
@@ -955,7 +1092,7 @@ class Preprocessor(ast.NodeTransformer):
         index_slice = self.create_name_node(index_var, ast.Load(), node)
         subscript = ast.Subscript(value=iter_value, slice=index_slice, ctx=ast.Load())
         self.ensure_all_locations(subscript, node)
-        element_type = self._get_element_type_from_container(annotation_id)
+        element_type = self._get_element_type_from_container(annotation_id, node.iter)
         item_annotation = self.create_name_node(element_type, ast.Load(), node)
         item_assign = ast.AnnAssign(
             target=item_target,
@@ -1006,13 +1143,13 @@ class Preprocessor(ast.NodeTransformer):
         if value_type in node_type_map:
             return node_type_map[value_type]
 
+        # Handle subscript operations (e.g., d["key"], lst[0])
+        if isinstance(value, ast.Subscript):
+            return self._infer_type_from_subscript(value)
+
         # Handle constant values
         if isinstance(value, ast.Constant):
             return self._infer_type_from_constant(value)
-
-        # Handle legacy AST nodes (older Python versions)
-        if isinstance(value, (ast.Str, ast.Num)):
-            return self._infer_type_from_legacy_node(value)
 
         # Handle function calls
         if isinstance(value, ast.Call):
@@ -1030,14 +1167,6 @@ class Preprocessor(ast.NodeTransformer):
             bool: 'bool'
         }
         return constant_type_map.get(type(value), 'Any')
-
-    def _infer_type_from_legacy_node(self, node):
-        """Infer type from legacy AST nodes (ast.Str, ast.Num)"""
-        if isinstance(node, ast.Str):
-            return 'str'
-        elif isinstance(node, ast.Num):
-            return 'int' if isinstance(node.n, int) else 'float'
-        return 'Any'
 
     def _infer_type_from_call(self, call_node):
         """Infer type from function call nodes"""
@@ -1104,6 +1233,91 @@ class Preprocessor(ast.NodeTransformer):
 
         return assignments
 
+    def _create_annotation_node_from_value(self, value):
+        """Create an annotation AST node from a value node for storage"""
+        if isinstance(value, ast.List):
+            return self._create_list_annotation(value)
+        elif isinstance(value, ast.Dict):
+            return self._create_dict_annotation(value)
+        elif isinstance(value, ast.Subscript):
+            return self._create_subscript_annotation(value)
+        return None
+
+    def _create_list_annotation(self, list_node):
+        """Create list[T] annotation from a list literal"""
+        if list_node.elts:
+            elem_type = self._infer_type_from_value(list_node.elts[0])
+            if elem_type and elem_type != 'Any':
+                return ast.Subscript(
+                    value=ast.Name(id='list', ctx=ast.Load()),
+                    slice=ast.Name(id=elem_type, ctx=ast.Load()),
+                    ctx=ast.Load()
+                )
+        return ast.Name(id='list', ctx=ast.Load())
+
+    def _create_dict_annotation(self, dict_node):
+        """Create dict[K, V] annotation from a dict literal"""
+        if not dict_node.keys or not dict_node.values:
+            return ast.Name(id='dict', ctx=ast.Load())
+
+        key_type = self._infer_dict_key_type(dict_node.keys[0])
+        value_annotation = self._infer_dict_value_annotation(dict_node.values[0])
+
+        if key_type != 'Any' and value_annotation:
+            return ast.Subscript(
+                value=ast.Name(id='dict', ctx=ast.Load()),
+                slice=ast.Tuple(
+                    elts=[
+                        ast.Name(id=key_type, ctx=ast.Load()),
+                        value_annotation
+                    ],
+                    ctx=ast.Load()
+                ),
+                ctx=ast.Load()
+            )
+
+        return ast.Name(id='dict', ctx=ast.Load())
+
+    def _infer_dict_key_type(self, key_node):
+        """Infer key type from dict literal's first key"""
+        if isinstance(key_node, ast.Constant):
+            if isinstance(key_node.value, str):
+                return 'str'
+            elif isinstance(key_node.value, int):
+                return 'int'
+        return 'Any'
+
+    def _infer_dict_value_annotation(self, value_node):
+        """Infer value annotation from dict literal's first value"""
+        if isinstance(value_node, ast.List):
+            return self._create_list_annotation(value_node)
+        elif isinstance(value_node, ast.Dict):
+            return self._create_annotation_node_from_value(value_node)
+        elif isinstance(value_node, ast.Constant):
+            const_type = type(value_node.value).__name__
+            return ast.Name(id=const_type, ctx=ast.Load())
+        return None
+
+    def _create_subscript_annotation(self, subscript_node):
+        """Extract annotation from subscript operation (e.g., d["key"])"""
+        if not isinstance(subscript_node.value, ast.Name):
+            return None
+
+        base_var = subscript_node.value.id
+
+        if not (hasattr(self, 'variable_annotations') and base_var in self.variable_annotations):
+            return None
+
+        base_annotation = self.variable_annotations[base_var]
+
+        # Extract value type from dict[K, V] annotation
+        if isinstance(base_annotation, ast.Subscript):
+            if isinstance(base_annotation.value, ast.Name) and base_annotation.value.id == 'dict':
+                if isinstance(base_annotation.slice, ast.Tuple) and len(base_annotation.slice.elts) == 2:
+                    return base_annotation.slice.elts[1]
+
+        return None
+
     def visit_Assign(self, node):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
@@ -1131,8 +1345,13 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(target, (ast.Tuple, ast.List)):
                 return self._handle_tuple_unpacking(target, node.value, node)
             else:
-                # Simple assignment - just track the type
+                # Simple assignment - track the type
                 self._update_variable_types_simple(target, node.value)
+                # Also store annotation node if we can infer it
+                if isinstance(target, ast.Name):
+                    annotation_node = self._create_annotation_node_from_value(node.value)
+                    if annotation_node:
+                        self.variable_annotations[target.id] = annotation_node
                 return node
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
@@ -1177,8 +1396,46 @@ class Preprocessor(ast.NodeTransformer):
             var_name = node.target.id
             var_type = self._extract_type_from_annotation(node.annotation)
             self.known_variable_types[var_name] = var_type
+            # Store full annotation for generic type extraction
+            self.variable_annotations[var_name] = node.annotation
 
         return node
+
+    def _as_load_target(self, target, source_node):
+        """Create a Load-context version of an AugAssign target."""
+        # Mirror the target with a Load context so it can be read on the RHS.
+        if isinstance(target, ast.Name):
+            load_target = ast.Name(id=target.id, ctx=ast.Load())
+        elif isinstance(target, ast.Subscript):
+            # Reuse the same container/index with a Load context.
+            load_target = ast.Subscript(value=target.value, slice=target.slice, ctx=ast.Load())
+        elif isinstance(target, ast.Attribute):
+            # Preserve attribute access while switching to a Load context.
+            load_target = ast.Attribute(value=target.value, attr=target.attr, ctx=ast.Load())
+        else:
+            load_target = target
+        return self.ensure_all_locations(load_target, source_node)
+
+    def visit_AugAssign(self, node):
+        """Lower augmented assignment into a simple assignment."""
+        # Transform children first so nested expressions are already lowered.
+        node = self.generic_visit(node)
+
+        # Only lower subscript targets; other augmented assignments are handled downstream.
+        if not isinstance(node.target, ast.Subscript):
+            return node
+
+        # Convert "target op= value" into "target = target op value".
+        load_target = self._as_load_target(node.target, node)
+        # Build the RHS binary operation using the original operator.
+        binop = ast.BinOp(left=load_target, op=node.op, right=node.value)
+        # Replace the augmented assignment with a plain assignment statement.
+        assign = ast.Assign(targets=[node.target], value=binop)
+        # Keep location metadata so downstream diagnostics point to the original line.
+        self._copy_location_info(node, assign)
+        self.ensure_all_locations(assign, node)
+        ast.fix_missing_locations(assign)
+        return assign
 
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
@@ -1189,8 +1446,7 @@ class Preprocessor(ast.NodeTransformer):
             # Only process if there are enough arguments, MacOS has different AST nodes for 'big'
             if len(node.args) > 1:
                 # Check for both ast.Str and ast.Constant
-                if (isinstance(node.args[1], ast.Str) and node.args[1].s == 'big') or \
-                   (isinstance(node.args[1], ast.Constant) and node.args[1].value == 'big'):
+                if isinstance(node.args[1], ast.Constant) and node.args[1].value == 'big':
                     node.args[1] = ast.Constant(value=True)
                 else:
                     node.args[1] = ast.Constant(value=False)
@@ -1368,3 +1624,41 @@ class Preprocessor(ast.NodeTransformer):
 
         self.current_class_name = old_class_name
         return node
+
+    def _infer_type_from_subscript(self, subscript_node):
+        """Infer type from subscript operations like d["key"] or lst[0]"""
+        # Get the base object being subscripted
+        if not isinstance(subscript_node.value, ast.Name):
+            return 'Any'
+
+        base_var = subscript_node.value.id
+
+        # Look up the base variable's annotation
+        if not hasattr(self, 'variable_annotations') or base_var not in self.variable_annotations:
+            return 'Any'
+
+        annotation = self.variable_annotations[base_var]
+
+        # Handle dict[K, V] -> return V (value type)
+        if isinstance(annotation, ast.Subscript):
+            if isinstance(annotation.value, ast.Name) and annotation.value.id == 'dict':
+                # For dict[K, V], the slice is a Tuple with 2 elements
+                if isinstance(annotation.slice, ast.Tuple) and len(annotation.slice.elts) == 2:
+                    value_type_annotation = annotation.slice.elts[1]
+                    return self._extract_full_type_string(value_type_annotation)
+            # Handle list[T] or tuple[T] -> return T (element type)
+            elif isinstance(annotation.value, ast.Name) and annotation.value.id in ['list', 'tuple']:
+                return self._extract_full_type_string(annotation.slice)
+
+        return 'Any'
+
+    def _extract_full_type_string(self, type_node):
+        """Extract full type string from an annotation node (e.g., 'list[dict]' from nested Subscript)"""
+        if isinstance(type_node, ast.Name):
+            return type_node.id
+        elif isinstance(type_node, ast.Subscript):
+            # For nested types such as list[dict[str, str]], return the full generic type
+            base_type = type_node.value.id if isinstance(type_node.value, ast.Name) else 'Any'
+            # For now, just return the base type (e.g., 'list' from list[dict])
+            return base_type
+        return 'Any'

@@ -206,6 +206,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"generate-testcase",
      NULL,
      "if a solution is found, generates a testcase in XML"},
+    {"generate-pytest-testcase",
+     NULL,
+     "if a solution is found, generates a pytest testcase for Python programs"},
+    {"generate-ctest-testcase",
+     NULL,
+     "if a solution is found, generates CTest testcases for C programs"},
     {"generate-html-report",
      NULL,
      "if a violation is found, generates a HTML report"},
@@ -234,6 +240,16 @@ const struct group_opt_templ all_cmd_options[] = {
 #endif
     {"funsigned-char", NULL, "make \"char\" unsigned by default"},
     {"fms-extensions", NULL, "enable microsoft C extensions"}}},
+  {"Function Contracts",
+   {{"enforce-contract",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "fun"),
+     "wrap function to check its contract (use \"*\" for all functions)"},
+    {"replace-call-with-contract",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "fun"),
+     "replace function calls with contract semantics (use \"*\" for all "
+     "functions)"}}},
   {"BMC",
    {{"function",
      boost::program_options::value<std::string>()->value_name("name"),
@@ -253,6 +269,15 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unwindset",
      boost::program_options::value<std::string>()->value_name("L:nr,..."),
      "unwind loop L with nr times (use --show-loops to get the loops info)"},
+    {"unwindsetname",
+     boost::program_options::value<std::string>()->value_name(
+       "name:idx:nr,..."),
+     "unwind loop idx (0-indexed) in function name with nr times.\n"
+     "\tSyntax: func, N@ns@func, S@Class@method, file.c@func,\n"
+     "\t        N@ns@S@Class@method, file.c@N@ns@S@Class@method\n"
+     "\tAlso accepts Clang USR format (e.g., c:@F@func# or c:file.c@F@func#)\n"
+     "\tExample: --unwindsetname compute:0:10,N@math@sum:1:5\n"
+     "\tUse --show-loops to see available functions and loop indices"},
     {"no-unwinding-assertions", NULL, "do not generate unwinding assertions"},
     {"no-remove-unreachable",
      NULL,

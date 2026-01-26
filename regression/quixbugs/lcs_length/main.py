@@ -20,3 +20,4 @@ assert lcs_length("physics", "physics") == 7
 assert lcs_length("space age", "pace a") == 6
 assert lcs_length("flippy", "floppy") == 3
 assert lcs_length("acbdegcedbg", "begcfeubk") == 3
+

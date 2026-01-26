@@ -89,12 +89,16 @@ public:
     symex_resultt(
       std::shared_ptr<symex_targett> t,
       unsigned int claims,
-      unsigned int remain)
-      : target(std::move(t)), total_claims(claims), remaining_claims(remain){};
-
+      unsigned int remain,
+      unsigned int simplified)
+      : target(std::move(t)),
+        total_claims(claims),
+        remaining_claims(remain),
+        simplified_claims(simplified){};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
+    unsigned int simplified_claims;
   };
 
   // Macros
@@ -862,6 +866,22 @@ protected:
     const bool hidden);
 
   /**
+   *  Perform assignment to a union.
+   *
+   *  @param lhs Symbol to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to symbol
+   *  @param guard Guard; intent unknown
+   */
+  void symex_assign_union(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guardt &guard,
+    const bool hidden);
+
+  /**
    *  Perform assignment to an extract irep.
    *
    *  Currently these extract assignments can crop up when we're assigning into
@@ -1097,10 +1117,17 @@ protected:
   unsigned total_claims;
   /** Number of assertions remaining to be discharged. */
   unsigned remaining_claims;
+  /** Number of assertions that were trivially verified. */
+  unsigned simplified_claims;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */
   std::map<unsigned, BigInt> unwind_set;
+  /** Unwind bounds by function name and per-function loop index (0-indexed),
+   *  (function name, loop index) -> max unwinds. */
+  std::map<std::pair<std::string, unsigned>, BigInt> unwind_func_set;
+  /** Mapping global loop ID -> (function name, per-function loop index). */
+  std::map<unsigned, std::pair<std::string, unsigned>> loop_id_to_func_index;
   /** Global maximum number of unwinds. */
   BigInt max_unwind;
   /** Whether constant propagation is to be enabled. */

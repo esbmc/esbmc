@@ -39,12 +39,14 @@ ubuntu_setup () {
     # Tested on ubuntu 22.04
     PKGS="\
         python-is-python3 csmith python3 \
-        git ccache unzip wget curl libcsmith-dev gperf \
+        git unzip wget curl libcsmith-dev gperf \
         cmake bison flex g++-multilib linux-libc-dev \
-        libboost-all-dev ninja-build python3-setuptools \
-        libtinfo-dev pkg-config python3-pip python3-toml \
+        libboost-date-time-dev libboost-program-options-dev \
+        libboost-iostreams-dev libboost-system-dev \
+        libboost-filesystem-dev ninja-build python3-setuptools \
+        libtinfo-dev python3-pip python3-toml \
         openjdk-11-jdk tar xz-utils \
-    "    
+    "
     if [ -z "$STATIC" ]; then STATIC=ON; fi
     if [ $STATIC = OFF ]; then
         PKGS="$PKGS \
@@ -239,7 +241,15 @@ do
           -DENABLE_GOTO_CONTRACTOR=OFF \
           -DACADEMIC_BUILD=ON"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
-    x) BASE_ARGS="$BASE_ARGS -DESBMC_CHERI=ON" ;;
+    x) BASE_ARGS="\
+          $BASE_ARGS \
+          -DENABLE_SOLIDITY_FRONTEND=OFF \
+          -DENABLE_JIMPLE_FRONTEND=OFF \
+          -DENABLE_PYTHON_FRONTEND=OFF \
+          -DESBMC_CHERI=ON"
+        SOLVER_FLAGS="\
+          -DENABLE_BOOLECTOR=On \
+          -DENABLE_Z3=On" ;;
     *) exit 1 ;;
     esac
 done
@@ -253,7 +263,7 @@ fi
 OS=`uname`
 
 # Create build directory
-mkdir build && cd build || exit $?
+mkdir -p build && cd build || exit $?
 
 case $OS in
   'Linux')

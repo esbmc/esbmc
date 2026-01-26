@@ -22,6 +22,25 @@
  * Dictionary values are stored as PyObject instances with type information
  * (type_id) that allows runtime type identification for proper value extraction.
  *
+ * @section nested_dict_support Nested Dictionary Support
+ *
+ * Nested dictionaries (e.g., `dict[int, dict[int, int]]`) require special
+ * handling because dict structs contain pointer fields. Instead of copying
+ * the entire nested dict struct, we store a **pointer** to the dict.
+ *
+ * **Memory Model:**
+ * @code
+ * Parent Dict:
+ *   values_list -> [ptr1, ptr2, ...]
+ *                   ↓
+ *               [Points to nested dict struct]
+ * @endcode
+ *
+ * **Type Safety:**
+ * Each nested dict type gets a unique hash based on its full type structure,
+ * ensuring `dict[int, dict[int, int]]` has a different hash than
+ * `dict[str, dict[str, str]]`. This prevents type confusion during retrieval.
+ *
  * @section supported_types Supported Value Types
  *
  * The handler supports dictionaries with values of the following types:
@@ -29,6 +48,8 @@
  * - Integers (signed/unsigned bitvectors)
  * - Booleans
  * - Floating-point numbers
+ * - Lists
+ * - Nested dictionaries (with pointer-based storage)
  *
  * @section usage Usage Example
  *
@@ -37,6 +58,11 @@
  * config: dict = {'port': 8080, 'debug': True}
  * x = config['port']
  * assert config['debug'] == True
+ *
+ * // Nested dict example:
+ * nested: dict[int, dict[int, int]] = {1: {3: 4}}
+ * value = nested[1][3]
+ * assert value == 4
  * @endcode
  *
  * @see python_converter
@@ -46,6 +72,8 @@
 
 #ifndef PYTHON_DICT_HANDLER_H
 #define PYTHON_DICT_HANDLER_H
+
+#include <python-frontend/symbol_id.h>
 
 #include <util/std_types.h>
 #include <util/std_code.h>
@@ -57,6 +85,7 @@
 class python_converter;
 class type_handler;
 class contextt;
+class symbolt;
 
 /**
  * @class python_dict_handler
@@ -68,6 +97,14 @@ class contextt;
  *
  * The handler works in conjunction with python_converter to process
  * dictionary-related AST nodes from the Python frontend.
+ *
+ * **Key Features:**
+ * - Dictionary literal creation
+ * - Subscript access with type-safe value retrieval
+ * - Dictionary mutation (assignment, deletion)
+ * - Membership testing (`in` / `not in`)
+ * - Nested dictionary support with proper reference semantics
+ * - Type resolution for dictionary subscripts
  */
 class python_dict_handler
 {
@@ -96,14 +133,16 @@ public:
   bool is_dict_literal(const nlohmann::json &element) const;
 
   /**
-   * @brief Creates a marker expression for a dictionary literal.
+   * @brief Creates a dictionary literal expression.
    *
-   * Returns a placeholder expression that indicates a dictionary literal
-   * needs to be created. The actual initialization is deferred to
-   * create_dict_from_literal() during assignment handling.
+   * Returns a symbol expression for a dictionary literal. For nested
+   * dictionaries, this creates a temporary variable to ensure the dict
+   * exists as a concrete symbol that can be referenced via pointer.
+   *
+   * The actual initialization is performed by create_dict_from_literal().
    *
    * @param element The JSON AST node containing the dictionary literal.
-   * @return An expression representing the dictionary literal marker.
+   * @return A symbol expression representing the initialized dictionary.
    * @throws std::runtime_error if the element is not a dictionary literal.
    */
   exprt get_dict_literal(const nlohmann::json &element);
@@ -114,7 +153,15 @@ public:
    * Generates the GOTO instructions to:
    * 1. Create empty keys and values lists
    * 2. Push all key-value pairs from the literal
+   *    - For nested dicts: stores pointer to dict (reference semantics)
+   *    - For regular values: stores value directly (value semantics)
    * 3. Assign the lists to the target dictionary struct
+   *
+   * **Nested Dictionary Handling:**
+   * When a value is a nested dict, the implementation:
+   * - Creates a pointer to the dict struct
+   * - Generates a unique type hash for the specific dict type
+   * - Stores the pointer (8 bytes) instead of copying the struct
    *
    * @param element The JSON AST node containing the dictionary literal.
    * @param target_symbol The LHS expression (dictionary variable) to assign to.
@@ -132,16 +179,25 @@ public:
    * 2. Retrieve the value at that index from the values list
    * 3. Extract and cast the value based on the expected type
    *
+   * **Type-Safe Retrieval:**
+   * - For nested dicts: reconstructs dict reference from stored pointer
+   * - For primitive types: casts void* to appropriate type
+   * - Uses expected_type to ensure correct casting
+   *
    * @param dict_expr The expression representing the dictionary.
    * @param slice_node The JSON AST node for the subscript key.
    * @param expected_type The expected type of the value (used for proper
    *        type casting). If not specified, defaults to string (char*).
-   *        Supported types: signedbv, unsignedbv, bool, floatbv, string.
+   *        Supported types: signedbv, unsignedbv, bool, floatbv, string,
+   *        list, and nested dict types.
    * @return An expression representing the accessed value, properly typed.
    *
    * @note When comparing dictionary values with primitive types (int, bool,
    *       float), the caller should pass the comparison operand's type as
    *       expected_type to ensure proper value extraction.
+   *
+   * @note For nested dicts, the expected_type must be the complete dict type.
+   *       This enables type-safe retrieval with proper hash validation.
    */
   exprt handle_dict_subscript(
     const exprt &dict_expr,
@@ -151,9 +207,12 @@ public:
   /**
    * @brief Handles dictionary subscript assignment (e.g., `dict['key'] = value`).
    *
-   * Generates GOTO instructions to add a new key-value pair to the dictionary.
-   * Note: This implementation appends new entries; it does not update existing
-   * keys (simplified semantics for verification purposes).
+   * Generates GOTO instructions to update or insert a key-value pair:
+   * - If key exists: updates the existing value at that index
+   * - If key doesn't exist: appends new key-value pair
+   *
+   * This provides proper Python dictionary semantics where assignment
+   * either updates or creates entries.
    *
    * @param dict_expr The expression representing the dictionary.
    * @param slice_node The JSON AST node for the subscript key.
@@ -189,6 +248,14 @@ public:
   /**
    * @brief Handles dictionary key deletion (e.g., `del dict['key']`).
    *
+   * Generates GOTO instructions to:
+   * - Check if key exists (membership test)
+   * - If exists: find index and remove from both keys and values lists
+   * - If not exists: raise KeyError exception
+   *
+   * This provides proper Python semantics where deleting a non-existent
+   * key raises an error.
+   *
    * @param dict_expr The expression representing the dictionary.
    * @param slice_node The JSON AST node for the key to delete.
    * @param target_block The code block to append generated instructions to.
@@ -212,9 +279,136 @@ public:
    * Returns the struct type used to represent Python dictionaries.
    * If the type doesn't exist in the symbol table, it is created and added.
    *
+   * The dict struct contains:
+   * - `keys`: PyListObject* - list of dictionary keys
+   * - `values`: PyListObject* - list of dictionary values
+   *
    * @return The struct_typet representing Python dictionaries.
    */
   struct_typet get_dict_struct_type();
+
+  /**
+   * @brief Resolve dictionary subscript types for comparisons
+   *
+   * When comparing dict[key] with primitives, this method ensures both
+   * operands have compatible types by dereferencing dict subscripts.
+   *
+   * Handles three cases:
+   * 1. LHS is dict subscript, RHS is primitive
+   * 2. RHS is dict subscript, LHS is primitive  
+   * 3. Both are dict subscripts
+   *
+   * @param left Left JSON AST node
+   * @param right Right JSON AST node
+   * @param lhs Left operand expression (modified in place)
+   * @param rhs Right operand expression (modified in place)
+   */
+  void resolve_dict_subscript_types(
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    exprt &lhs,
+    exprt &rhs);
+
+  /**
+   * @brief Extract value type from dict type annotation
+   *
+   * For annotations like `dict[K, V]`, extracts the value type V.
+   *
+   * @param annotation_node The annotation AST node (Subscript with slice)
+   * @return The value type, or empty_typet if cannot be determined
+   */
+  typet
+  get_dict_value_type_from_annotation(const nlohmann::json &annotation_node);
+
+  /**
+   * @brief Resolve expected type for dict subscript using variable annotation
+   *
+   * Looks up the dict variable's annotation to determine what type
+   * the subscript operation should return.
+   *
+   * @param dict_expr The dictionary expression (must be a symbol)
+   * @return The expected value type from annotation, or empty_typet
+   */
+  typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
+
+  /**
+   * @brief Check and handle dictionary subscript assignment
+   * 
+   * Checks if the target is a dictionary subscript and handles the assignment
+   * @param converter Reference to python_converter
+   * @param ast_node Assignment AST node
+   * @param target Target subscript node
+   * @param target_block Code block to append instructions
+   * @return true if handled, false otherwise
+   */
+  bool handle_subscript_assignment_check(
+    python_converter &converter,
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
+  /**
+   * @brief Check and handle dictionary literal assignment
+   * 
+   * @param converter Reference to python_converter
+   * @param ast_node Assignment AST node
+   * @param lhs Left-hand side expression
+   * @return true if handled, false otherwise
+   */
+  bool handle_literal_assignment_check(
+    python_converter &converter,
+    const nlohmann::json &ast_node,
+    const exprt &lhs);
+
+  /**
+   * @brief Check and handle unannotated dictionary literal
+   * 
+   * @param converter Reference to python_converter
+   * @param ast_node Assignment AST node
+   * @param target Target node
+   * @param sid Symbol identifier
+   * @return true if handled, false otherwise
+   */
+  bool handle_unannotated_literal_check(
+    python_converter &converter,
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const symbol_id &sid);
+
+  /**
+   * @brief Handles dict.get() method calls
+   * 
+   * Implements Python's dict.get(key, default=None) semantics:
+   * - Returns value if key exists
+   * - Returns default (or None) if key doesn't exist
+   * 
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node containing arguments
+   * @return Expression representing the result (value or default)
+   */
+  exprt
+  handle_dict_get(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Compares two dictionaries for equality or inequality
+   *
+   * Implements Python's dictionary comparison semantics by performing
+   * order-independent content comparison:
+   * - Calls __ESBMC_dict_eq which checks if all key-value pairs in lhs
+   *   exist in rhs with matching values (regardless of insertion order)
+   * - Returns true only if both dictionaries have the same keys and
+   *   corresponding values are equal
+   *
+   * This correctly handles cases such as {"a": 1, "b": 2} == {"b": 2, "a": 1}
+   *
+   * Supports both == (Eq) and != (NotEq) operators.
+   *
+   * @param lhs Left-hand side dictionary expression
+   * @param rhs Right-hand side dictionary expression
+   * @param op Comparison operator ("Eq" or "NotEq")
+   * @return Boolean expression representing the comparison result
+   */
+  exprt compare(const exprt &lhs, const exprt &rhs, const std::string &op);
 
 private:
   /// Reference to the main Python converter
@@ -236,6 +430,72 @@ private:
    * @return The expression representing the key.
    */
   exprt get_key_expr(const nlohmann::json &slice_node);
+
+  /**
+   * @brief Generate a unique type hash for nested dictionary types
+   * Creates a stable hash based on the full type structure including key/value types.
+   * This ensures type safety when retrieving nested dicts from the generic list.
+   * @param dict_type The dictionary type to hash
+   * @return A unique hash value for this specific dict type
+   */
+  static size_t generate_nested_dict_type_hash(const typet &dict_type);
+
+  /**
+   * @brief Safely cast void* through pointer_type to dict pointer type
+   * Performs the multi-step casting required to convert stored pointer
+   * values back to typed dict pointers.
+   * @param node AST node for context
+   * @param obj_value The void* value from storage
+   * @param target_ptr_type The target pointer type
+   * @param location Source location
+   * @return Expression of target_ptr_type
+   */
+  exprt safe_cast_to_dict_pointer(
+    const nlohmann::json &node,
+    const exprt &obj_value,
+    const typet &target_ptr_type,
+    const locationt &location);
+
+  /**
+   * @brief Store a nested dictionary value in the values list
+   * @param element AST node for the dict element
+   * @param values_list Symbol for the values list
+   * @param value_expr Expression for the nested dict
+   * @param location Source location
+   */
+  void store_nested_dict_value(
+    const nlohmann::json &element,
+    const symbolt &values_list,
+    const exprt &value_expr,
+    const locationt &location);
+
+  /**
+   * @brief Retrieve a nested dictionary from the values list
+   * @param slice_node AST node for the slice operation
+   * @param obj_value The stored pointer value
+   * @param expected_type The expected dict type
+   * @param location Source location
+   * @return Expression referencing the dict struct
+   */
+  exprt retrieve_nested_dict_value(
+    const nlohmann::json &slice_node,
+    const exprt &obj_value,
+    const typet &expected_type,
+    const locationt &location);
+
+  /**
+   * @brief Generate a unique dictionary name based on source location
+   * 
+   * Creates deterministic names using file, line, and column information.
+   * Falls back to JSON node hash if location is unavailable.
+   * 
+   * @param element The JSON AST node for the dictionary
+   * @param location The source location
+   * @return A unique dictionary identifier
+   */
+  std::string generate_unique_dict_name(
+    const nlohmann::json &element,
+    const locationt &location) const;
 };
 
 #endif // PYTHON_DICT_HANDLER_H

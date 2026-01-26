@@ -15,13 +15,13 @@ if(ENABLE_PYTHON_FRONTEND)
 # Install Jira package with pip before running tests (needed by regression/python/try-fail)
 # Use --break-system-packages for externally-managed Python environments (PEP 668)
 execute_process(
-    COMMAND ${Python_EXECUTABLE} -m pip install --user --break-system-packages jira
+    COMMAND ${Python_EXECUTABLE} -m pip install --break-system-packages jira
     RESULT_VARIABLE pip_result
 )
 if(pip_result)
     # Fallback: try without --break-system-packages (for older Python or non-externally-managed)
     execute_process(
-        COMMAND ${Python_EXECUTABLE} -m pip install --user jira
+        COMMAND ${Python_EXECUTABLE} -m pip install jira
     )
 endif()
 endif()
@@ -60,6 +60,9 @@ endfunction()
 
 function(add_esbmc_regression folder modes)
     SUBDIRLIST(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
+    if(${folder} STREQUAL "quixbugs")
+        list(REMOVE_ITEM SUBDIRS bucketsort)
+    endif()
     foreach(test ${SUBDIRS})
         add_esbmc_regression_test(${folder} "${modes}" ${test})
     endforeach()
@@ -138,6 +141,7 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/try_catch
                       esbmc-cpp/functional
                       esbmc-cpp/bitset
+                      esbmc-cpp/unwindsetname
                       )
 # list of C++11 test suites
 set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
@@ -164,6 +168,9 @@ set(REGRESSIONS_CPP17 esbmc-cpp17/cpp
 
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
+
+# enable test case geeneration
+set(TEST_GENERATION witnesses/test_case_generation)
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
@@ -196,6 +203,7 @@ if(APPLE)
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${TEST_GENERATION}
                     ltl
                     goto-transcoder
                     loop-invariants
@@ -261,11 +269,13 @@ else()
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${TEST_GENERATION}
                     ltl
                     goto-coverage
                     goto-transcoder
                     parallel-solving
                     loop-invariants
+                    function_contract
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

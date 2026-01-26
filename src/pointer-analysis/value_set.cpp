@@ -327,6 +327,20 @@ void value_sett::get_value_set_rec(
     return;
   }
 
+  // Handle constant arrays being indexed (e.g., function pointer dispatch tables)
+  if (is_constant_array_of2t(expr) || is_constant_array2t(expr))
+  {
+    if (!suffix.empty() && suffix[0] == '[')
+    {
+      std::string remaining_suffix = suffix.substr(2); // Remove "[]" prefix
+      expr->foreach_operand(
+        [this, &dest, &remaining_suffix, &original_type](const expr2tc &e) {
+          get_value_set_rec(e, dest, remaining_suffix, original_type);
+        });
+      return;
+    }
+  }
+
   if (is_constant_expr(expr))
   {
     if (under_deref)

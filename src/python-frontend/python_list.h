@@ -29,6 +29,20 @@ public:
   {
   }
 
+  static exprt build_split_list(
+    python_converter &converter,
+    const nlohmann::json &call_node,
+    const std::string &input,
+    const std::string &separator,
+    long long count);
+
+  static exprt build_split_list(
+    python_converter &converter,
+    const nlohmann::json &call_node,
+    const exprt &input_expr,
+    const std::string &separator,
+    long long count);
+
   exprt get();
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
@@ -95,6 +109,34 @@ public:
    */
   static typet
   get_list_element_type(const std::string &list_id, size_t index = 0);
+
+  /**
+   * @brief Convert generator expressions and list comprehensions to lists
+   * @param element The GeneratorExp or ListComp AST node
+   * @return Expression representing the materialized list
+   */
+  exprt handle_comprehension(const nlohmann::json &element);
+
+  /**
+   * @brief Build a list pop operation
+   * @param list The list symbol to pop from
+   * @param index The index to pop (default -1 for last element)
+   * @param element The AST node for location information
+   * @return Expression representing the popped value
+   */
+  exprt build_pop_list_call(
+    const symbolt &list,
+    const exprt &index,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Extract and dereference value from a PyObject* expression
+   * @param pyobject_expr Expression representing PyObject* (from list_at or list_pop)
+   * @param elem_type The expected element type
+   * @return Properly cast and dereferenced value expression
+   */
+  exprt
+  extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
 
 private:
   friend class python_dict_handler;
