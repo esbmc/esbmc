@@ -521,6 +521,14 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.format() method (minimal support, constant-only)
+   */
+  exprt handle_string_format(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const locationt &location);
+
+  /**
    * @brief Handle str.partition() method (constant-only support)
    */
   exprt handle_string_partition(
@@ -597,6 +605,14 @@ public:
   exprt handle_string_expandtabs(
     const exprt &string_obj,
     const exprt &tabsize_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.format_map() method (minimal support, constant-only)
+   */
+  exprt handle_string_format_map(
+    const nlohmann::json &call,
+    const exprt &string_obj,
     const locationt &location);
 
   /**
