@@ -143,7 +143,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc member = ptr.member_pointer;
 
     cur_state->rename(member);
-    
+
     if (is_member_ref2t(member))
     {
       const member_ref2t &ref = to_member_ref2t(member);
