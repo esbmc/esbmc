@@ -135,4 +135,27 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     convert_capability_member(expr, size.value, irep_idt("top"), ns);
   }
+  else if (is_ptr_mem2t(expr))
+  {
+    const ptr_mem2t &ptr = to_ptr_mem2t(expr);
+
+    expr2tc source = ptr.source_value;
+    expr2tc member = ptr.member_pointer;
+
+    cur_state->rename(member);
+    
+    if (is_member_ref2t(member))
+    {
+      const member_ref2t &ref = to_member_ref2t(member);
+
+      // give the pm = &S::x and s.*pm
+      // convert the s.*pm into s.x
+      expr = member2tc(to_pointer_type(ref.type).subtype, source, ref.member);
+    }
+    else
+    {
+      log_error("pointer-to-member: constant propagation failed");
+      abort();
+    }
+  }
 }
