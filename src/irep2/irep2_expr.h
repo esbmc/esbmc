@@ -872,11 +872,14 @@ public:
   expr2tc member_pointer;
 
   // Type mangling:
-  typedef esbmct::field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::source_value>
-    source_value_field;
-  typedef esbmct::field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::member_pointer>
-    member_pointer_field;
-  typedef esbmct::expr2t_traits<source_value_field, member_pointer_field> traits;
+  typedef esbmct::
+    field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::source_value>
+      source_value_field;
+  typedef esbmct::
+    field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::member_pointer>
+      member_pointer_field;
+  typedef esbmct::expr2t_traits<source_value_field, member_pointer_field>
+    traits;
 };
 
 class index_data : public datatype_ops
