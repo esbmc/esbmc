@@ -466,9 +466,8 @@ public:
   /**
    * @brief Handle str.capitalize() method
    */
-  exprt handle_string_capitalize(
-    const exprt &string_obj,
-    const locationt &location);
+  exprt
+  handle_string_capitalize(const exprt &string_obj, const locationt &location);
 
   /**
    * @brief Handle str.title() method
@@ -532,24 +531,21 @@ public:
   /**
    * @brief Handle str.isalnum() method
    */
-  exprt
-  handle_string_isalnum(
+  exprt handle_string_isalnum(
     const exprt &string_obj,
     [[maybe_unused]] const locationt &location);
 
   /**
    * @brief Handle str.isupper() method
    */
-  exprt
-  handle_string_isupper(
+  exprt handle_string_isupper(
     const exprt &string_obj,
     [[maybe_unused]] const locationt &location);
 
   /**
    * @brief Handle str.isnumeric() method
    */
-  exprt
-  handle_string_isnumeric(
+  exprt handle_string_isnumeric(
     const exprt &string_obj,
     [[maybe_unused]] const locationt &location);
 
