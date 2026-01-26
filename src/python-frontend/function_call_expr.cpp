@@ -2105,13 +2105,12 @@ exprt function_call_expr::handle_general_function_call()
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
-
     if (list_arg.is_symbol())
     {
       const std::string &list_id = list_arg.identifier().as_string();
-      elem_type = python_list::get_list_element_type(list_id, 0);
+      // Check that all elements have the same type and get the common type
+      elem_type = python_list::check_homogeneous_list_types(list_id, func_name);
     }
-
     // Dispatch to typed builtin based on element type
     if (!elem_type.is_nil())
     {

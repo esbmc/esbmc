@@ -2414,3 +2414,38 @@ exprt python_list::extract_pyobject_value(
     return deref;
   }
 }
+
+typet python_list::check_homogeneous_list_types(
+  const std::string &list_id,
+  const std::string &func_name)
+{
+  auto it = list_type_map.find(list_id);
+
+  if (it == list_type_map.end() || it->second.empty())
+    return typet();
+
+  const TypeInfo &type_info = it->second;
+  size_t list_size = type_info.size();
+
+  // Get the first element's type
+  typet elem_type = type_info[0].second;
+
+  // Check all other elements have the same type
+  for (size_t i = 1; i < list_size; i++)
+  {
+    const typet &current_elem_type = type_info[i].second;
+
+    // Compare types
+    if (elem_type != current_elem_type)
+    {
+      throw std::runtime_error(
+        "Type mismatch in " + func_name + "() call: list contains mixed types. "
+        "Element 0 has type '" + elem_type.pretty_name().as_string() + "', but element " +
+        std::to_string(i) + " has type '" + current_elem_type.pretty_name().as_string() + "'. "
+        "ESBMC currently requires all elements to have the same type for " + func_name + "()."
+      );
+    }
+  }
+
+  return elem_type;
+}
