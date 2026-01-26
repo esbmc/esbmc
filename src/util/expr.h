@@ -239,6 +239,7 @@ public:
   static irep_idt with;
   static irep_idt member;
   static irep_idt member_ref;
+  static irep_idt ptr_mem;
   static irep_idt isnan;
   static irep_idt ieee_floateq;
   static irep_idt i_type;
