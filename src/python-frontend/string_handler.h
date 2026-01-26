@@ -464,6 +464,146 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.capitalize() method
+   */
+  exprt handle_string_capitalize(
+    const exprt &string_obj,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.title() method
+   */
+  exprt handle_string_title(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.swapcase() method
+   */
+  exprt
+  handle_string_swapcase(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.casefold() method
+   */
+  exprt
+  handle_string_casefold(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.count() method (constant-only support)
+   */
+  exprt handle_string_count(
+    const exprt &string_obj,
+    const exprt &sub_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.removeprefix() method
+   */
+  exprt handle_string_removeprefix(
+    const exprt &string_obj,
+    const exprt &prefix_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.removesuffix() method
+   */
+  exprt handle_string_removesuffix(
+    const exprt &string_obj,
+    const exprt &suffix_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.splitlines() method (constant-only support)
+   */
+  exprt handle_string_splitlines(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.partition() method (constant-only support)
+   */
+  exprt handle_string_partition(
+    const exprt &string_obj,
+    const exprt &sep_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.isalnum() method
+   */
+  exprt
+  handle_string_isalnum(
+    const exprt &string_obj,
+    [[maybe_unused]] const locationt &location);
+
+  /**
+   * @brief Handle str.isupper() method
+   */
+  exprt
+  handle_string_isupper(
+    const exprt &string_obj,
+    [[maybe_unused]] const locationt &location);
+
+  /**
+   * @brief Handle str.isnumeric() method
+   */
+  exprt
+  handle_string_isnumeric(
+    const exprt &string_obj,
+    [[maybe_unused]] const locationt &location);
+
+  /**
+   * @brief Handle str.isidentifier() method
+   */
+  exprt handle_string_isidentifier(
+    const exprt &string_obj,
+    [[maybe_unused]] const locationt &location);
+
+  /**
+   * @brief Handle str.center() method (constant-only support)
+   */
+  exprt handle_string_center(
+    const exprt &string_obj,
+    const exprt &width_arg,
+    const exprt &fill_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.ljust() method (constant-only support)
+   */
+  exprt handle_string_ljust(
+    const exprt &string_obj,
+    const exprt &width_arg,
+    const exprt &fill_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rjust() method (constant-only support)
+   */
+  exprt handle_string_rjust(
+    const exprt &string_obj,
+    const exprt &width_arg,
+    const exprt &fill_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.zfill() method (constant-only support)
+   */
+  exprt handle_string_zfill(
+    const exprt &string_obj,
+    const exprt &width_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.expandtabs() method (constant-only support)
+   */
+  exprt handle_string_expandtabs(
+    const exprt &string_obj,
+    const exprt &tabsize_arg,
+    const locationt &location);
+
+  /**
    * @brief Extract a constant string from the AST node (literal or const var)
    * @param node JSON node to inspect
    * @param converter Converter used to resolve Name references
