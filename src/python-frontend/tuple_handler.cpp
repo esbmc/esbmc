@@ -1,3 +1,4 @@
+#include <python-frontend/json_utils.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type_handler.h>
@@ -36,14 +37,15 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   assert(element.contains("_type") && element["_type"] == "Tuple");
   assert(element.contains("elts"));
 
-  // Represent tuple as a list internally
-  // Create a modified JSON node that looks like a List instead of Tuple
+  const nlohmann::json &elts = element["elts"];
+
   nlohmann::json list_node = element;
   list_node["_type"] = "List";
 
-  // Use python_list to create the actual list expression
   python_list tuple_as_list(converter_, list_node);
-  return tuple_as_list.get();
+  exprt result = tuple_as_list.get();
+
+  return result;
 }
 
 bool tuple_handler::is_tuple_type(const typet &type) const
@@ -64,8 +66,39 @@ exprt tuple_handler::handle_tuple_subscript(
   const nlohmann::json &slice,
   const nlohmann::json &element)
 {
-  // Delegate to python_list's index method
-  python_list tuple_as_list(converter_, element);
+  // Create a dummy list-like structure for the context
+  nlohmann::json list_context = element;
+
+  // If this is a subscript operation on a tuple, modify the context
+  // to make it look like a list for negative index conversion
+  if (list_context.contains("value") && list_context["value"].contains("_type"))
+  {
+    // Check if the value references a tuple
+    if (list_context["value"]["_type"] == "Name")
+    {
+      // This is a variable reference such as t[0]
+      // We need to find the original definition and check if it's a tuple
+      std::string var_name = list_context["value"]["id"].get<std::string>();
+
+      // Try to find the variable declaration
+      nlohmann::json var_decl = json_utils::find_var_decl(
+        var_name,
+        converter_.current_function_name(),
+        converter_.ast());
+
+      // If it's a tuple declaration, convert it to look like a list
+      if (!var_decl.is_null() && var_decl.contains("value") &&
+          var_decl["value"].contains("_type") &&
+          var_decl["value"]["_type"] == "Tuple")
+      {
+        // Create a modified version where the type is "List"
+        list_context = var_decl;
+        list_context["value"]["_type"] = "List";
+      }
+    }
+  }
+
+  python_list tuple_as_list(converter_, list_context);
   return tuple_as_list.index(array, slice);
 }
 
