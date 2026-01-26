@@ -307,6 +307,33 @@ symbol_id function_call_builder::build_function_id() const
             return function_id;
           }
         }
+
+        // Check if this is a tuple represented as a list (PyListObj*)
+        if (var_symbol)
+        {
+          typet actual_type = var_symbol->type;
+          if (actual_type.is_pointer())
+            actual_type = actual_type.subtype();
+          if (actual_type.id() == "symbol")
+            actual_type = converter_.ns.follow(actual_type);
+
+          if (actual_type.is_struct())
+          {
+            const struct_typet &struct_type = to_struct_type(actual_type);
+            std::string tag = struct_type.tag().as_string();
+
+            // Check if it's a list (tuples are lists)
+            if (tag.find("__ESBMC_PyListObj") != std::string::npos)
+            {
+              // It's a list/tuple - use list_size
+              func_name = kGetObjectSize;
+              function_id.clear();
+              function_id.set_prefix("c:");
+              function_id.set_function(func_name);
+              return function_id;
+            }
+          }
+        }
       }
       if (var_type == "dict")
       {
