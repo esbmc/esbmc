@@ -2439,9 +2439,10 @@ typet python_list::check_homogeneous_list_types(
     if (elem_type != current_elem_type)
     {
       throw std::runtime_error(
-        "Type mismatch in " + func_name + "() call: list contains mixed types. "
-        "ESBMC currently requires all elements to have the same type for " + func_name + "()."
-      );
+        "Type mismatch in " + func_name +
+        "() call: list contains mixed types. "
+        "ESBMC currently requires all elements to have the same type for " +
+        func_name + "().");
     }
   }
 
