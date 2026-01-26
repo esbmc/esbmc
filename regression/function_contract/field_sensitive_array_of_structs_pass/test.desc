@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract "update_reading"
+^VERIFICATION SUCCESSFUL$

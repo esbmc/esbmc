@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract "i2c_write" --replace-call-with-contract "i2c_read"
+^VERIFICATION SUCCESSFUL$

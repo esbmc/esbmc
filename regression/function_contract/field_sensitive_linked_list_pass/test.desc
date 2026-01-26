@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract "node_set_data"
+^VERIFICATION SUCCESSFUL$
