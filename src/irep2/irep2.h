@@ -86,6 +86,7 @@
   BOOST_PP_LIST_CONS(with,                                                     \
   BOOST_PP_LIST_CONS(member,                                                   \
   BOOST_PP_LIST_CONS(member_ref,                                               \
+  BOOST_PP_LIST_CONS(ptr_mem,                                                  \
   BOOST_PP_LIST_CONS(index,                                                    \
   BOOST_PP_LIST_CONS(isnan,                                                    \
   BOOST_PP_LIST_CONS(overflow,                                                 \
@@ -135,7 +136,7 @@
   BOOST_PP_LIST_CONS(isinstance,                                               \
   BOOST_PP_LIST_CONS(hasattr,                                                  \
   BOOST_PP_LIST_CONS(isnone,                                                   \
-  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 // clang-format on
 
 // Even crazier forward decls,

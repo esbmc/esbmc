@@ -27,6 +27,7 @@ expr_typedefs4(byte_update, byte_update_data);
 expr_typedefs3(with, with_data);
 expr_typedefs2(member, member_data);
 expr_typedefs2(member_ref, member_ref_data);
+expr_typedefs2(ptr_mem, ptr_mem_data);
 expr_typedefs2(index, index_data);
 expr_typedefs2(overflow_cast, overflow_cast_data);
 expr_typedefs3(dynamic_object, dynamic_object_data);
