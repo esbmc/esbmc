@@ -1478,21 +1478,26 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = member2tc(type, sourcedata, expr.component_name());
     return;
   }
-  else if (expr.id() == exprt::member_ref)
+
+  if (expr.id() == exprt::member_ref)
   {
     type = migrate_type(expr.type());
 
     new_expr_ref = member_ref2tc(type, expr.component_name());
+    return;
   }
-  else if (expr.id() == exprt::ptr_mem)
+
+  if (expr.id() == exprt::ptr_mem)
   {
     type = migrate_type(expr.type());
     expr2tc source, pointer;
     convert_operand_pair(expr, source, pointer);
 
     new_expr_ref = ptr_mem2tc(type, source, pointer);
+    return;
   }
-  else if (expr.id() == exprt::index)
+
+  if (expr.id() == exprt::index)
   {
     type = migrate_type(expr.type());
 
@@ -3015,7 +3020,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt ptrmem("ptr_mem", thetype);
     ptrmem.copy_to_operands(
-      migrate_expr_back(ref2.source_value), migrate_expr_back(ref2.member_pointer));
+      migrate_expr_back(ref2.source_value),
+      migrate_expr_back(ref2.member_pointer));
     return ptrmem;
   }
   case expr2t::index_id:
