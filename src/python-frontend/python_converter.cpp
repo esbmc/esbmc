@@ -3646,8 +3646,6 @@ std::string python_converter::infer_type_from_any_annotation(
   return lhs_type;
 }
 
-// (type assertion helpers moved to python_typechecking)
-
 bool python_converter::handle_unpacking_assignment(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
