@@ -29,7 +29,40 @@ esbmc (8.0.0+fix1-1) noble; urgency=medium
   * Add clang and libclang-common runtime dependencies for C/C++ verification
     (clang binary and headers are needed at runtime to parse C/C++ code)
 
- -- Weiqi Wang <lukewang19@icloud.com>  Mon, 26 Jan 2026 10:50:06 +0000
+ -- Weiqi Wang <lukewang19@icloud.com>  Mon, 26 Jan 2026 12:55:50 +0000
+
+esbmc (8.0.0+fix1-1) unstable; urgency=medium
+
+  * Merge latest changes from master branch (ESBMC v8.0.0)
+  * Update orig.tar.gz to match merged master branch
+  * ESBMC v8.0 release
+  * This major release of ESBMC v8.0 delivers Python frontend enhancements
+    with comprehensive type system improvements, advanced string handling,
+    and dictionary support. The release includes improvements in verification
+    capabilities, simplifier optimizations, support for witness validation,
+    and enhanced C/C++ verification.
+  * Python Frontend: Type system enhancements (Union types, TypedDict,
+    Literal, improved type inference), comprehensive dictionary support,
+    extensive string operations (split, join, replace, upper, lower, strip,
+    etc.), list and collection operations, set operations, tuple support,
+    built-in functions (all, any, divmod, chr, int), class and object
+    support, nested functions, import system improvements, math module
+    support, exception handling, non-deterministic values, and code quality
+    improvements.
+  * C/C++ Verification: Function contract support, operational models
+    improvements, C++23 support updates, pointer analysis fixes, and
+    optimizations.
+  * Verification Features: Correctness witness validation, loop handling
+    improvements, coverage and testing enhancements, simplifier enhancements,
+    and SMT backend improvements.
+  * Build System: Boost 1.90 compatibility, fmt usage updates, CHERI build
+    process simplification, and various build fixes.
+  * Infrastructure: CI improvements, documentation consolidation, website
+    implementation, and testing infrastructure enhancements.
+  * Add clang and libclang-common runtime dependencies for C/C++ verification
+    (clang binary and headers are needed at runtime to parse C/C++ code)
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Mon, 26 Jan 2026 12:55:50 +0000
 
 esbmc (8.0.0+fix1-1~jammy1) jammy; urgency=medium
 
