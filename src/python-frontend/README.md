@@ -185,7 +185,8 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **index() method**: Returns the lowest index of a substring, raises `ValueError` if not found.
     - **count() method**: Counts non-overlapping occurrences of a substring.
     - **replace() method**: Replaces occurrences of a substring, with optional count.
-    - **format() method**: Minimal support for `{}` placeholders with constant arguments (e.g., `"{} {}".format("a", "b")` returns `"a b"`).
+    - **format() method**: Minimal support for `{}`/`{0}`/`{name}` placeholders with constant arguments (e.g., `"{} {}".format("a", "b")` returns `"a b"`).
+    - **format_map() method**: Minimal support for named placeholders with constant dicts (e.g., `"{x}".format_map({"x": 1})` returns `"1"`).
     - **find()/rfind() with range**: Optional `start` and `end` arguments are supported (e.g., `"banana".rfind("na", 0, 4)` returns `2`).
     - **upper() method**: Converts all characters to uppercase (e.g., `"hi".upper()` returns `"HI"`).
     - **String Slicing**: Comprehensive support for Python's slice notation on strings:
