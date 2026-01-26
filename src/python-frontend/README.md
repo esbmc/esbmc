@@ -162,10 +162,19 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **splitlines() method**: Splits strings on line boundaries (e.g., `"a\\nb".splitlines()` returns `["a", "b"]`).
     - **partition() method**: Splits into a 3-tuple (before, sep, after) (e.g., `"a=b".partition("=")` returns `("a", "=", "b")`).
     - **join() method**: Joins a list of strings with a separator (e.g., `" ".join(["a", "b"])` returns `"a b"`).
+    - **center() method**: Centers text with padding (e.g., `"x".center(3)` returns `" x "`).
+    - **ljust() method**: Left-justifies with padding (e.g., `"x".ljust(3)` returns `"x  "`).
+    - **rjust() method**: Right-justifies with padding (e.g., `"x".rjust(3)` returns `"  x"`).
+    - **zfill() method**: Pads numeric strings with zeros (e.g., `"7".zfill(3)` returns `"007"`).
+    - **expandtabs() method**: Expands tab characters to spaces (e.g., `"a\\tb".expandtabs(4)` returns `"a   b"`).
     - **isspace() method**: Returns `True` if all characters in the string are whitespace characters and the string is non-empty, `False` otherwise.
     - **isalpha() method**: Returns `True` if all characters are alphabetic and the string is non-empty.
     - **isdigit() method**: Returns `True` if all characters are digits and the string is non-empty.
     - **islower() method**: Returns `True` if all cased characters are lowercase and the string is non-empty.
+    - **isalnum() method**: Returns `True` if all characters are alphanumeric and the string is non-empty.
+    - **isupper() method**: Returns `True` if all cased characters are uppercase and the string is non-empty.
+    - **isnumeric() method**: Returns `True` if all characters are numeric and the string is non-empty.
+    - **isidentifier() method**: Returns `True` if the string is a valid Python identifier.
     - **capitalize() method**: Capitalizes the first character and lowercases the rest (e.g., `"hello".capitalize()` returns `"Hello"`).
     - **title() method**: Title-cases words (e.g., `"hello world".title()` returns `"Hello World"`).
     - **swapcase() method**: Swaps the case of each character (e.g., `"AbC".swapcase()` returns `"aBc"`).
