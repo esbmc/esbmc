@@ -138,6 +138,18 @@ public:
   exprt
   extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
 
+public:
+  /**
+   * @brief Check if all elements in a list have the same type
+   * @param list_id The list identifier
+   * @param func_name The function name (for error messages)
+   * @return The common element type if all types match, empty typet() otherwise
+   * @throws std::runtime_error if mixed types are detected
+   */
+  static typet check_homogeneous_list_types(
+    const std::string &list_id,
+    const std::string &func_name);
+
 private:
   friend class python_dict_handler;
 
