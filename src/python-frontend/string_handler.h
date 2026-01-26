@@ -608,6 +608,14 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.format_map() method (minimal support, constant-only)
+   */
+  exprt handle_string_format_map(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const locationt &location);
+
+  /**
    * @brief Extract a constant string from the AST node (literal or const var)
    * @param node JSON node to inspect
    * @param converter Converter used to resolve Name references

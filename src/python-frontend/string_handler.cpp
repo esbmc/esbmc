@@ -74,6 +74,36 @@ static char to_upper_char(char c)
 {
   return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 }
+
+static std::string format_value_from_json(
+  const nlohmann::json &arg,
+  python_converter &converter)
+{
+  std::string value;
+  if (arg.contains("_type") && arg["_type"] == "Constant")
+  {
+    if (arg["value"].is_null())
+      return "None";
+    if (arg["value"].is_string())
+      return arg["value"].get<std::string>();
+    if (arg["value"].is_boolean())
+      return arg["value"].get<bool>() ? "True" : "False";
+    if (arg["value"].is_number_integer())
+      return std::to_string(arg["value"].get<long long>());
+    if (arg["value"].is_number_float())
+    {
+      std::ostringstream oss;
+      oss << arg["value"].get<double>();
+      return oss.str();
+    }
+    throw std::runtime_error("format() unsupported constant type");
+  }
+
+  if (string_handler::extract_constant_string(arg, converter, value))
+    return value;
+
+  throw std::runtime_error("format() requires constant arguments");
+}
 } // namespace
 
 BigInt string_handler::get_string_size(const exprt &expr)
@@ -2255,9 +2285,6 @@ exprt string_handler::handle_string_format(
   const exprt &string_obj,
   const locationt &location)
 {
-  if (call.contains("keywords") && !call["keywords"].empty())
-    throw std::runtime_error("format() keywords are not supported");
-
   std::string format_str;
   if (!try_extract_const_string(*this, string_obj, format_str))
     throw std::runtime_error("format() requires constant format string");
@@ -2267,29 +2294,21 @@ exprt string_handler::handle_string_format(
   {
     for (const auto &arg : call["args"])
     {
-      std::string value;
-      if (arg.contains("_type") && arg["_type"] == "Constant")
-      {
-        if (arg["value"].is_string())
-          value = arg["value"].get<std::string>();
-        else if (arg["value"].is_boolean())
-          value = arg["value"].get<bool>() ? "True" : "False";
-        else if (arg["value"].is_number_integer())
-          value = std::to_string(arg["value"].get<long long>());
-        else if (arg["value"].is_number_float())
-        {
-          std::ostringstream oss;
-          oss << arg["value"].get<double>();
-          value = oss.str();
-        }
-        else
-          throw std::runtime_error("format() unsupported constant type");
-      }
-      else if (!extract_constant_string(arg, converter_, value))
-      {
-        throw std::runtime_error("format() requires constant arguments");
-      }
-      args.push_back(value);
+      args.push_back(format_value_from_json(arg, converter_));
+    }
+  }
+
+  std::unordered_map<std::string, std::string> keywords;
+  if (call.contains("keywords") && call["keywords"].is_array())
+  {
+    for (const auto &kw : call["keywords"])
+    {
+      if (!kw.contains("arg") || kw["arg"].is_null())
+        throw std::runtime_error("format() kwargs are not supported");
+      std::string key = kw["arg"].get<std::string>();
+      if (!kw.contains("value"))
+        throw std::runtime_error("format() keyword missing value");
+      keywords.emplace(key, format_value_from_json(kw["value"], converter_));
     }
   }
 
@@ -2313,13 +2332,41 @@ exprt string_handler::handle_string_format(
       if (end == std::string::npos)
         throw std::runtime_error("format() unmatched '{'");
 
-      if (end != i + 1)
-        throw std::runtime_error("format() only supports {} placeholders");
+      std::string field = format_str.substr(i + 1, end - (i + 1));
+      if (field.empty())
+      {
+        if (arg_index >= args.size())
+          throw std::runtime_error("format() missing arguments");
+        result += args[arg_index++];
+      }
+      else
+      {
+        bool all_digits = true;
+        for (char fc : field)
+        {
+          if (!std::isdigit(static_cast<unsigned char>(fc)))
+          {
+            all_digits = false;
+            break;
+          }
+        }
 
-      if (arg_index >= args.size())
-        throw std::runtime_error("format() missing arguments");
+        if (all_digits)
+        {
+          size_t idx = static_cast<size_t>(std::stoull(field));
+          if (idx >= args.size())
+            throw std::runtime_error("format() argument index out of range");
+          result += args[idx];
+        }
+        else
+        {
+          auto it = keywords.find(field);
+          if (it == keywords.end())
+            throw std::runtime_error("format() missing keyword argument");
+          result += it->second;
+        }
+      }
 
-      result += args[arg_index++];
       i = end + 1;
       continue;
     }
@@ -2674,6 +2721,85 @@ exprt string_handler::handle_string_expandtabs(
         ++column;
     }
   }
+  exprt out = string_builder_->build_string_literal(result);
+  out.location() = location;
+  return out;
+}
+
+exprt string_handler::handle_string_format_map(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const locationt &location)
+{
+  if (!call.contains("args") || call["args"].size() != 1)
+    throw std::runtime_error("format_map() requires one argument");
+
+  std::string format_str;
+  if (!try_extract_const_string(*this, string_obj, format_str))
+    throw std::runtime_error("format_map() requires constant format string");
+
+  const auto &mapping = call["args"][0];
+  if (!mapping.contains("_type") || mapping["_type"] != "Dict")
+    throw std::runtime_error("format_map() requires constant dict");
+
+  std::unordered_map<std::string, std::string> values;
+  const auto &keys = mapping["keys"];
+  const auto &vals = mapping["values"];
+  for (size_t i = 0; i < keys.size(); ++i)
+  {
+    std::string key;
+    if (!extract_constant_string(keys[i], converter_, key))
+      throw std::runtime_error("format_map() keys must be constant strings");
+    values.emplace(key, format_value_from_json(vals[i], converter_));
+  }
+
+  std::string result;
+  result.reserve(format_str.size());
+
+  for (size_t i = 0; i < format_str.size();)
+  {
+    char ch = format_str[i];
+    if (ch == '{')
+    {
+      if ((i + 1) < format_str.size() && format_str[i + 1] == '{')
+      {
+        result.push_back('{');
+        i += 2;
+        continue;
+      }
+
+      size_t end = format_str.find('}', i + 1);
+      if (end == std::string::npos)
+        throw std::runtime_error("format_map() unmatched '{'");
+
+      std::string field = format_str.substr(i + 1, end - (i + 1));
+      if (field.empty())
+        throw std::runtime_error("format_map() requires named fields");
+
+      auto it = values.find(field);
+      if (it == values.end())
+        throw std::runtime_error("format_map() missing key");
+      result += it->second;
+      i = end + 1;
+      continue;
+    }
+    if (ch == '}')
+    {
+      if ((i + 1) < format_str.size() && format_str[i + 1] == '}')
+      {
+        result.push_back('}');
+        i += 2;
+        continue;
+      }
+      throw std::runtime_error("format_map() unmatched '}'");
+    }
+
+    result.push_back(ch);
+    ++i;
+  }
+
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for format_map()");
   exprt out = string_builder_->build_string_literal(result);
   out.location() = location;
   return out;
