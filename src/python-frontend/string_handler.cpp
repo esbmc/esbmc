@@ -37,6 +37,45 @@ string_handler::string_handler(
 {
 }
 
+namespace
+{
+static bool try_extract_const_string(
+  string_handler &handler,
+  const exprt &expr,
+  std::string &out)
+{
+  exprt tmp = expr;
+  exprt str_expr = handler.ensure_null_terminated_string(tmp);
+  if (str_expr.is_symbol() || str_expr.type().is_array())
+  {
+    out = handler.extract_string_from_array_operands(str_expr);
+    return true;
+  }
+  return false;
+}
+
+static bool get_constant_int(const exprt &expr, long long &out)
+{
+  if (expr.is_nil())
+    return false;
+  BigInt tmp;
+  if (!to_integer(expr, tmp))
+    return false;
+  out = tmp.to_int64();
+  return true;
+}
+
+static char to_lower_char(char c)
+{
+  return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+}
+
+static char to_upper_char(char c)
+{
+  return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+}
+} // namespace
+
 BigInt string_handler::get_string_size(const exprt &expr)
 {
   if (!expr.type().is_array())
@@ -1952,47 +1991,6 @@ exprt string_handler::handle_string_replace(
   return replace_call;
 }
 
-namespace
-{
-static bool try_extract_const_string(
-  string_handler &handler,
-  const exprt &expr,
-  std::string &out)
-{
-  exprt tmp = expr;
-  exprt str_expr = handler.ensure_null_terminated_string(tmp);
-  if (
-    str_expr.is_symbol() ||
-    (str_expr.type().is_array() && !str_expr.operands().empty()))
-  {
-    out = handler.extract_string_from_array_operands(str_expr);
-    return true;
-  }
-  return false;
-}
-
-static bool get_constant_int(const exprt &expr, long long &out)
-{
-  if (expr.is_nil())
-    return false;
-  BigInt tmp;
-  if (!to_integer(expr, tmp))
-    return false;
-  out = tmp.to_int64();
-  return true;
-}
-
-static char to_lower_char(char c)
-{
-  return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-}
-
-static char to_upper_char(char c)
-{
-  return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-}
-} // namespace
-
 exprt string_handler::handle_string_capitalize(
   const exprt &string_obj,
   const locationt &location)
@@ -2250,6 +2248,102 @@ exprt string_handler::handle_string_splitlines(
   exprt result = list.get();
   result.location() = location;
   return result;
+}
+
+exprt string_handler::handle_string_format(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const locationt &location)
+{
+  if (call.contains("keywords") && !call["keywords"].empty())
+    throw std::runtime_error("format() keywords are not supported");
+
+  std::string format_str;
+  if (!try_extract_const_string(*this, string_obj, format_str))
+    throw std::runtime_error("format() requires constant format string");
+
+  std::vector<std::string> args;
+  if (call.contains("args") && call["args"].is_array())
+  {
+    for (const auto &arg : call["args"])
+    {
+      std::string value;
+      if (arg.contains("_type") && arg["_type"] == "Constant")
+      {
+        if (arg["value"].is_string())
+          value = arg["value"].get<std::string>();
+        else if (arg["value"].is_boolean())
+          value = arg["value"].get<bool>() ? "True" : "False";
+        else if (arg["value"].is_number_integer())
+          value = std::to_string(arg["value"].get<long long>());
+        else if (arg["value"].is_number_float())
+        {
+          std::ostringstream oss;
+          oss << arg["value"].get<double>();
+          value = oss.str();
+        }
+        else
+          throw std::runtime_error("format() unsupported constant type");
+      }
+      else if (!extract_constant_string(arg, converter_, value))
+      {
+        throw std::runtime_error("format() requires constant arguments");
+      }
+      args.push_back(value);
+    }
+  }
+
+  std::string result;
+  result.reserve(format_str.size());
+  size_t arg_index = 0;
+
+  for (size_t i = 0; i < format_str.size();)
+  {
+    char ch = format_str[i];
+    if (ch == '{')
+    {
+      if ((i + 1) < format_str.size() && format_str[i + 1] == '{')
+      {
+        result.push_back('{');
+        i += 2;
+        continue;
+      }
+
+      size_t end = format_str.find('}', i + 1);
+      if (end == std::string::npos)
+        throw std::runtime_error("format() unmatched '{'");
+
+      if (end != i + 1)
+        throw std::runtime_error("format() only supports {} placeholders");
+
+      if (arg_index >= args.size())
+        throw std::runtime_error("format() missing arguments");
+
+      result += args[arg_index++];
+      i = end + 1;
+      continue;
+    }
+    if (ch == '}')
+    {
+      if ((i + 1) < format_str.size() && format_str[i + 1] == '}')
+      {
+        result.push_back('}');
+        i += 2;
+        continue;
+      }
+      throw std::runtime_error("format() unmatched '}'");
+    }
+
+    result.push_back(ch);
+    ++i;
+  }
+
+  if (!string_builder_)
+    throw std::runtime_error("string_builder not set for format()");
+
+  exprt out = string_builder_->build_string_literal(result);
+  out.location() = location;
+  return out;
 }
 
 exprt string_handler::handle_string_partition(
@@ -2580,7 +2674,6 @@ exprt string_handler::handle_string_expandtabs(
         ++column;
     }
   }
-
   exprt out = string_builder_->build_string_literal(result);
   out.location() = location;
   return out;

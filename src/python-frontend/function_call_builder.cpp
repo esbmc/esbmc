@@ -1087,6 +1087,13 @@ exprt function_call_builder::build() const
         obj_expr, sep_arg, loc);
     }
 
+    if (method_name == "format")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_format(
+        call_, obj_expr, loc);
+    }
     if (method_name == "split")
     {
       if (call_["args"].size() > 2)
