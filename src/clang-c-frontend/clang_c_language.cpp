@@ -390,6 +390,14 @@ __SIZE_TYPE__ __ESBMC_alloc_size[1];
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
+// Contract predicate: indicates that a pointer points to freshly allocated memory
+// Signature: __ESBMC_is_fresh(void **ptr, size_t size)
+// - ptr: Address of the pointer variable (semantically void**, declared as void* to avoid Clang USR issues)
+// - size: Size in bytes of the memory region
+// Returns: true when memory is successfully allocated (in contract enforcement mode)
+// Note: Used in requires clauses to specify fresh memory allocation requirements
+_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
+
 _Bool __ESBMC_is_little_endian();
 
 int __ESBMC_rounding_mode = 0;
@@ -522,7 +530,6 @@ struct cap_info __ESBMC_cheri_info[1];
   }
 
   // Function contract support - only add symbols when contract processing is enabled
-  // Check if enforce-contract or replace-call-with-contract options are set
   std::string enforce_opt = config.options.get_option("enforce-contract");
   std::string replace_opt =
     config.options.get_option("replace-call-with-contract");
@@ -554,6 +561,32 @@ extern int __ESBMC_return_value;
  * perform implicit conversions as needed, similar to __ESBMC_return_value.
  */
 int __ESBMC_old(int);
+
+/* __ESBMC_assigns: specifies memory locations a function may modify
+ * This is used in replace-call mode for havoc generation.
+ * 
+ * Unified interface for all assignable locations:
+ *   __ESBMC_assigns(arr);        // havoc entire array
+ *   __ESBMC_assigns(arr[i]);     // havoc only arr[i]
+ *   __ESBMC_assigns(x);          // havoc scalar variable x
+ *   __ESBMC_assigns(node->field);// havoc only node->field
+ *   __ESBMC_assigns(x, y, z);    // multiple targets
+ * 
+ * For pure functions (no side effects), use empty assigns:
+ *   __ESBMC_assigns();           // function has no side effects
+ * 
+ * Implementation: Uses address-of to accept any lvalue expression.
+ * The backend unwraps address_of to recover the original expression.
+ */
+void __ESBMC_assigns_impl(const void *, ...);
+#define __ESBMC_assigns_0() __ESBMC_assigns_impl((void*)0)
+#define __ESBMC_assigns_1(a) __ESBMC_assigns_impl(&(a))
+#define __ESBMC_assigns_2(a,b) __ESBMC_assigns_impl(&(a),&(b))
+#define __ESBMC_assigns_3(a,b,c) __ESBMC_assigns_impl(&(a),&(b),&(c))
+#define __ESBMC_assigns_4(a,b,c,d) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d))
+#define __ESBMC_assigns_5(a,b,c,d,e) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d),&(e))
+#define __ESBMC_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_assigns_##N
+#define __ESBMC_assigns(...) __ESBMC_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
     )";
   }
 
