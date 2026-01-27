@@ -705,8 +705,10 @@ AssertionType goto_tracet::get_assertion_type() const
           return AssertionType::OVERFLOW_CHECK;
         if (comment.starts_with("NaN on ieee_div"))
           return AssertionType::NAN_CHECK;
-        if (comment.starts_with("undefined behavior"))
+        if (comment.starts_with("undefined behavior") || comment.starts_with("Type annotation check"))
           return AssertionType::OTHER;
+        if (comment.starts_with("Same object violation"))
+	  return AssertionType::POINTER_CHECK;
         log_status("Assertion: {}", comment);
       }
       break;
