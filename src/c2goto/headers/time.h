@@ -8,11 +8,13 @@ __ESBMC_C_CPP_BEGIN
 
 #ifndef __time_t_defined
 #define __time_t_defined 1
+#define _TIME_T /* macOS guard */
 typedef long time_t;
 #endif
 
 #ifndef __clock_t_defined
 #define __clock_t_defined 1
+#define _CLOCK_T /* macOS guard */
 typedef long clock_t;
 #endif
 
