@@ -336,7 +336,7 @@ static expr2tc try_reconstruct_short_circuit(
   //   a is true → result = 1 (const). So: result = a || b
   //
   // For AND: IF !(a) GOTO fallback → guard=!(a), fall-through=expr(b)
-  //   Fall-through condition = !(guard) = a  
+  //   Fall-through condition = !(guard) = a
   //   a is true → result = b (expr). So: result = a && b
   //
   // In both cases, the "left condition" is the negation of the GOTO guard.
@@ -452,8 +452,8 @@ static expr2tc inline_temporary_variables(
       // expression instead of just picking one branch.
       //
       // First, try to reconstruct the short-circuit pattern (OR/AND):
-      expr2tc reconstructed = try_reconstruct_short_circuit(
-        assignments, function_body);
+      expr2tc reconstructed =
+        try_reconstruct_short_circuit(assignments, function_body);
 
       if (!is_nil_expr(reconstructed))
       {
@@ -2517,7 +2517,8 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 
   // Collect all functions that have contracts and match to_replace patterns
   // Also build a set of function keys that are candidates for replacement
-  std::set<std::string> replaceable_funcs; // function keys that have contracts and match
+  std::set<std::string>
+    replaceable_funcs; // function keys that have contracts and match
 
   Forall_goto_functions (it, goto_functions)
   {
@@ -2558,7 +2559,8 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
   // This preserves the precision of the parent function's control flow while
   // using sub-function contracts for modular reasoning.
 
-  std::set<std::string> parent_funcs; // functions that call other replaceable functions
+  std::set<std::string>
+    parent_funcs; // functions that call other replaceable functions
 
   for (const auto &func_key : replaceable_funcs)
   {
@@ -2849,7 +2851,8 @@ void code_contractst::generate_replacement_at_call(
   // the function is called, preventing over-approximation.
   // Convert targett to const_targett for extract_call_site_condition
   goto_programt::const_targett const_call_instruction = call_instruction;
-  expr2tc call_site_condition = extract_call_site_condition(const_call_instruction, caller_body);
+  expr2tc call_site_condition =
+    extract_call_site_condition(const_call_instruction, caller_body);
   if (!is_true(call_site_condition))
   {
     // Merge call site condition with requires clause
@@ -3053,9 +3056,7 @@ expr2tc code_contractst::extract_call_site_condition(
     return gen_true_expr();
 
   // Otherwise, return the guard condition
-  log_debug(
-    "contracts",
-    "Extracted call site condition (not true)");
+  log_debug("contracts", "Extracted call site condition (not true)");
   return call_guard;
 }
 
