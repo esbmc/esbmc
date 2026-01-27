@@ -117,11 +117,13 @@ exprt tuple_handler::handle_tuple_subscript(
     const constant_exprt &const_index = to_constant_expr(index_expr);
     index_val = binary2integer(const_index.value().c_str(), false);
   }
-  else if (index_expr.id() == "unary-" && index_expr.operands().size() == 1 &&
-           index_expr.operands()[0].is_constant())
+  else if (
+    index_expr.id() == "unary-" && index_expr.operands().size() == 1 &&
+    index_expr.operands()[0].is_constant())
   {
     // Handle negative indices such as -1, -2
-    const constant_exprt &const_operand = to_constant_expr(index_expr.operands()[0]);
+    const constant_exprt &const_operand =
+      to_constant_expr(index_expr.operands()[0]);
     BigInt positive_val = binary2integer(const_operand.value().c_str(), false);
     index_val = -positive_val;
   }
@@ -144,8 +146,7 @@ exprt tuple_handler::handle_tuple_subscript(
   if (index_val < 0 || idx >= tuple_size)
   {
     throw std::runtime_error(
-      "Tuple index out of range (size: " +
-      std::to_string(tuple_size) + ")");
+      "Tuple index out of range (size: " + std::to_string(tuple_size) + ")");
   }
 
   // Create member access expression: t[0] -> t.element_0
