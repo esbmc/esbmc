@@ -562,6 +562,8 @@ void show_goto_trace(
   bool cex_only = config.options.get_bool_option("cex-only");
   bool simplify_trace = config.options.get_bool_option("simplify-trace");
 
+  goto_trace.get_assertion_type();
+
   for (const auto &step : goto_trace.steps)
   {
     // we only care about the counter example, which is only triggered by assert steps. Ignore all other steps.
@@ -663,3 +665,48 @@ void show_goto_trace(
     }
   }
 }
+
+AssertionType goto_tracet::get_assertion_type() const
+{
+  for (const auto &step : steps)
+
+  {
+    switch (step.type)
+    {
+    case goto_trace_stept::ASSERT:
+      if (!step.guard)
+      {
+        // Failed assertion
+	if (step.pc->location.user_provided())
+	  return AssertionType::USER_ASSERTION;
+	const auto &comment = step.pc->location.comment().as_string();;
+	if (comment.empty()) // unwinding assertion
+	  return AssertionType::INTRINSIC;
+	if (comment.starts_with("array bounds violated:"))
+	  return AssertionType::BOUNDS_CHECK;
+	if (comment.starts_with("R/W data race") || comment.starts_with("W/W data race"))
+	  return AssertionType::DATA_RACE_CHECK;
+	if (comment.starts_with("VLA array size"))
+	  return AssertionType::VLA_CHECK;
+	if (comment.starts_with("contract ensures") || comment.starts_with("loop invariant"))
+	  return AssertionType::INTRINSIC;
+	if (comment.starts_with("atomicity violation on assignment"))
+	  return AssertionType::ATOMICITY_CHECK;
+	if (comment.starts_with("division by zero"))
+	  return AssertionType::DIV_BY_ZERO_CHECK;
+	if (comment.starts_with("arithmetic overflow") || comment.starts_with("Cast arithmetic overflow"))
+	  return AssertionType::OVERFLOW_CHECK;
+	if (comment.starts_with("NaN on ieee_div"))
+	  return AssertionType::NAN_CHECK;
+	if (comment.starts_with("undefined behavior"))
+	  return AssertionType::OTHER;
+	log_status("Assertion: {}", comment);
+      }        
+      break;
+    default:
+      continue;
+    }
+  }
+  log_error("Unclassified assertion");
+  abort();
+}  
