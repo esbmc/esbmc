@@ -111,8 +111,8 @@ public:
 
   void output(const class namespacet &ns, std::ostream &out) const;
 
-  // Get type of violation class  
-  AssertionType get_assertion_type() const;    
+  // Get type of violation class
+  AssertionType get_assertion_type() const;
 };
 
 void show_goto_trace_gui(
