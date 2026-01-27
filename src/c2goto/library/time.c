@@ -177,8 +177,8 @@ __ESBMC_HIDE:;
 }
 
 /* ── strftime ── */
-size_t strftime(char *s, size_t maxsize, const char *format,
-                const struct tm *timeptr)
+size_t
+strftime(char *s, size_t maxsize, const char *format, const struct tm *timeptr)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(format != NULL, "strftime format must not be NULL");
