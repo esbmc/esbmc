@@ -85,6 +85,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_vector_type(expr))
     return true;
 
+  if (is_member_ref2t(expr))
+    return true;
+
   // It's fine to constant propagate something that's absent.
   if (is_nil_expr(expr))
     return true;

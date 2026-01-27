@@ -451,6 +451,13 @@ void goto_symext::symex_assign_symbol(
   if (is_index2t(new_lhs))
     cur_state->rename(to_index2t(new_lhs).index);
 
+  if (is_member_ref2t(rhs))
+    // In pointer-to-member, the following assignment will occur:
+    // int S::* pm = &S::x;
+    // This assignment is static and we do not need to generate an SSA for it,
+    // we can simply skip it - constant propagation can handle it.
+    return;
+
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 

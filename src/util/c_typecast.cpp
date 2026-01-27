@@ -666,6 +666,17 @@ void c_typecastt::implicit_typecast_followed(
       return; // ok
     }
 
+    if (dest_type.find("to-member").is_not_nil())
+    {
+      if (src_type != dest_type)
+      {
+        // pointe-to-member
+        // TODO: take inheritance into account
+        expr = member_ref_exprt(expr.op0().identifier(), expr.type());
+      }
+      return;
+    }
+
     if (
       src_type.id() == "pointer" || src_type.is_array() ||
       src_type.id() == "incomplete_array")
