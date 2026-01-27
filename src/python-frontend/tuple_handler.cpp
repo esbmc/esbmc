@@ -144,10 +144,9 @@ void tuple_handler::handle_tuple_unpacking(
 {
   const auto &targets = target["elts"];
 
-  // Use list indexing to unpack tuple elements
-  python_list tuple_as_list(converter_, ast_node);
+  // Check if RHS is a struct-based tuple (e.g., from divmod)
+  bool is_struct_tuple = rhs.type().is_struct();
 
-  // Create assignments: x = tuple[0], y = tuple[1], ...
   for (size_t i = 0; i < targets.size(); i++)
   {
     if (targets[i]["_type"] != "Name")
@@ -163,12 +162,45 @@ void tuple_handler::handle_tuple_unpacking(
 
     symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
-    // Create index expression for tuple[i]
-    nlohmann::json index_node;
-    index_node["_type"] = "Constant";
-    index_node["value"] = i;
+    // Get element from tuple
+    exprt indexed_value;
+    if (is_struct_tuple)
+    {
+      // For struct-based tuples, use member access
+      std::string member_name = "element_" + std::to_string(i);
+      const struct_typet &struct_type = to_struct_type(rhs.type());
 
-    exprt indexed_value = tuple_as_list.index(rhs, index_node);
+      // Find the component
+      const struct_typet::componentt *comp = nullptr;
+      for (const auto &component : struct_type.components())
+      {
+        if (component.name() == member_name)
+        {
+          comp = &component;
+          break;
+        }
+      }
+
+      if (!comp)
+      {
+        throw std::runtime_error(
+          "Tuple element " + member_name + " not found in struct");
+      }
+
+      // Create member access expression
+      indexed_value = exprt("member", comp->type());
+      indexed_value.set("component_name", member_name);
+      indexed_value.copy_to_operands(rhs);
+    }
+    else
+    {
+      // For list-based tuples, use array indexing
+      python_list tuple_as_list(converter_, ast_node);
+      nlohmann::json index_node;
+      index_node["_type"] = "Constant";
+      index_node["value"] = i;
+      indexed_value = tuple_as_list.index(rhs, index_node);
+    }
 
     if (!var_symbol)
     {
