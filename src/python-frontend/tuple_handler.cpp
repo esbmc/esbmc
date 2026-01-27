@@ -65,14 +65,13 @@ exprt tuple_handler::handle_tuple_subscript(
 
       // Try to find the variable declaration
       nlohmann::json var_decl = json_utils::find_var_decl(
-        var_name,
-        converter_.current_function_name(),
-        converter_.ast());
+        var_name, converter_.current_function_name(), converter_.ast());
 
       // If it's a tuple declaration, convert it to look like a list
-      if (!var_decl.is_null() && var_decl.contains("value") &&
-          var_decl["value"].contains("_type") &&
-          var_decl["value"]["_type"] == "Tuple")
+      if (
+        !var_decl.is_null() && var_decl.contains("value") &&
+        var_decl["value"].contains("_type") &&
+        var_decl["value"]["_type"] == "Tuple")
       {
         // Create a modified version where the type is "List"
         list_context = var_decl;

@@ -1166,8 +1166,9 @@ exprt python_list::handle_index_access(
   // Handle negative indices
   if (slice_node.contains("op") && slice_node["op"]["_type"] == "USub")
   {
-    if (list_node.is_null() || 
-        (list_node["value"]["_type"] != "List" && list_node["value"]["_type"] != "Tuple"))
+    if (
+      list_node.is_null() || (list_node["value"]["_type"] != "List" &&
+                              list_node["value"]["_type"] != "Tuple"))
     {
       BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
       v *= -1;

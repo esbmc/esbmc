@@ -3670,7 +3670,8 @@ bool python_converter::handle_unpacking_assignment(
     // Check if it's a tuple (now represented as a list)
     if (tuple_handler_->is_tuple_type(rhs.type()))
     {
-      tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+      tuple_handler_->handle_tuple_unpacking(
+        ast_node, target, rhs, target_block);
       return true;
     }
     // Otherwise, handle as regular struct unpacking
@@ -3687,9 +3688,12 @@ bool python_converter::handle_unpacking_assignment(
     const auto &value_node = ast_node["value"];
 
     // Check if RHS is a tuple variable (represented as a list)
-    if (value_node["_type"] == "Name" || tuple_handler_->is_tuple_type(rhs.type().subtype()))
+    if (
+      value_node["_type"] == "Name" ||
+      tuple_handler_->is_tuple_type(rhs.type().subtype()))
     {
-      tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+      tuple_handler_->handle_tuple_unpacking(
+        ast_node, target, rhs, target_block);
       return true;
     }
 
