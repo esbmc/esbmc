@@ -32,9 +32,9 @@ __ESBMC_C_CPP_BEGIN
 #define NULL 0
 #endif
 
-/* Forward declaration required because the type is used in pthread function
- * parameters below. */
-struct timespec;
+/* Full definition required because the type is used in pthread function
+ * parameters below and user code may use it as a complete type. */
+#include <time.h>
 
 typedef int32_t __clockid_t;
 
