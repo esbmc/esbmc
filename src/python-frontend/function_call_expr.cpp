@@ -1516,12 +1516,14 @@ exprt function_call_expr::handle_min_max(
           throw std::runtime_error(func_name + "() arg is an empty sequence");
 
         // Start with first element: result = t.element_0
-        exprt result = member_exprt(arg, components[0].get_name(), components[0].type());
+        exprt result =
+          member_exprt(arg, components[0].get_name(), components[0].type());
 
         // Compare with remaining elements
         for (size_t i = 1; i < components.size(); ++i)
         {
-          member_exprt elem(arg, components[i].get_name(), components[i].type());
+          member_exprt elem(
+            arg, components[i].get_name(), components[i].type());
 
           // Create comparison: elem < result (for min) or elem > result (for max)
           exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
