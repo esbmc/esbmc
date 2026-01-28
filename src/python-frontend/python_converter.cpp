@@ -758,6 +758,87 @@ exprt python_converter::handle_string_comparison(
     string_handler_.is_zero_length_array(resolved_rhs))
     return gen_boolean(op == "Eq");
 
+  // Fast-path for comparisons against single-character string literals.
+  // This avoids introducing strcmp() calls that can inflate branch coverage counts.
+  if (op == "Eq" || op == "NotEq")
+  {
+    auto extract_single_char = [&](const exprt &expr, char &ch) -> bool {
+      const exprt *candidate = &expr;
+      if (
+        expr.id() == "address_of" && expr.operands().size() == 1 &&
+        expr.op0().type().is_array())
+      {
+        candidate = &expr.op0();
+      }
+
+      if (!candidate->type().is_array())
+        return false;
+
+      if (candidate->type().subtype() != char_type())
+        return false;
+
+      const std::string value =
+        string_handler_.extract_string_from_array_operands(*candidate);
+      if (value.size() != 1)
+        return false;
+
+      ch = value[0];
+      return true;
+    };
+
+    auto char_at_index = [&](const exprt &expr, int idx) -> exprt {
+      exprt index = from_integer(idx, index_type());
+      if (expr.type().is_array())
+        return index_exprt(expr, index, char_type());
+
+      exprt ptr = expr;
+      if (!ptr.type().is_pointer())
+        ptr = address_of_exprt(expr);
+
+      plus_exprt ptr_plus(ptr, index);
+      ptr_plus.type() = ptr.type();
+      return dereference_exprt(ptr_plus, char_type());
+    };
+
+    char literal_char = 0;
+    bool lhs_is_char_literal = extract_single_char(resolved_lhs, literal_char);
+    bool rhs_is_char_literal = extract_single_char(resolved_rhs, literal_char);
+
+    if (
+      lhs_is_char_literal ^ rhs_is_char_literal &&
+      (type_utils::is_string_type(resolved_lhs.type()) ||
+       type_utils::is_string_type(resolved_rhs.type())))
+    {
+      const exprt &str_expr =
+        lhs_is_char_literal ? resolved_rhs : resolved_lhs;
+      exprt first_char = char_at_index(str_expr, 0);
+      exprt second_char = char_at_index(str_expr, 1);
+
+      exprt lit = from_integer(
+        static_cast<unsigned char>(literal_char), char_type());
+      exprt zero = from_integer(0, char_type());
+
+      exprt first_eq("=", bool_type());
+      first_eq.copy_to_operands(first_char, lit);
+      exprt second_eq("=", bool_type());
+      second_eq.copy_to_operands(second_char, zero);
+
+      exprt both_eq("and", bool_type());
+      both_eq.copy_to_operands(first_eq, second_eq);
+
+      if (op == "NotEq")
+      {
+        exprt not_expr("not", bool_type());
+        not_expr.copy_to_operands(both_eq);
+        not_expr.location() = get_location_from_decl(element);
+        return not_expr;
+      }
+
+      both_eq.location() = get_location_from_decl(element);
+      return both_eq;
+    }
+  }
+
   // Try constant comparisons
   exprt constant_result =
     compare_constants_internal(op, resolved_lhs, resolved_rhs);
