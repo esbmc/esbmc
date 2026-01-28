@@ -809,13 +809,12 @@ exprt python_converter::handle_string_comparison(
       (type_utils::is_string_type(resolved_lhs.type()) ||
        type_utils::is_string_type(resolved_rhs.type())))
     {
-      const exprt &str_expr =
-        lhs_is_char_literal ? resolved_rhs : resolved_lhs;
+      const exprt &str_expr = lhs_is_char_literal ? resolved_rhs : resolved_lhs;
       exprt first_char = char_at_index(str_expr, 0);
       exprt second_char = char_at_index(str_expr, 1);
 
-      exprt lit = from_integer(
-        static_cast<unsigned char>(literal_char), char_type());
+      exprt lit =
+        from_integer(static_cast<unsigned char>(literal_char), char_type());
       exprt zero = from_integer(0, char_type());
 
       exprt first_eq("=", bool_type());
@@ -1662,8 +1661,8 @@ exprt python_converter::handle_relational_type_mismatches(
 
     // If both operands are strings (including char pointers), skip single-char comparison
     // and let the string comparison path handle it (strcmp).
-    bool both_strings =
-      type_utils::is_string_type(lhs.type()) && type_utils::is_string_type(rhs.type());
+    bool both_strings = type_utils::is_string_type(lhs.type()) &&
+                        type_utils::is_string_type(rhs.type());
 
     if (!both_arrays && !both_strings)
     {
@@ -6505,7 +6504,9 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     {
       std::string exc_name;
       // Try to extract the exception name from different AST shapes
-      if (element["exc"].contains("func") && element["exc"]["func"].contains("id"))
+      if (
+        element["exc"].contains("func") &&
+        element["exc"]["func"].contains("id"))
         exc_name = element["exc"]["func"]["id"].get<std::string>();
       else if (element["exc"].contains("id"))
         exc_name = element["exc"]["id"].get<std::string>();
@@ -6519,7 +6520,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
       if (exc_name == "AssertionError")
       {
-        code_assertt assert_code{ false_exprt() };
+        code_assertt assert_code{false_exprt()};
         assert_code.location() = location;
         if (
           element["exc"].contains("args") && !element["exc"]["args"].empty() &&
