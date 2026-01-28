@@ -1579,7 +1579,12 @@ exprt python_converter::handle_relational_type_mismatches(
     // Todo: we should change the all expression to a correct format in future.
     bool both_arrays = lhs.type().is_array() && rhs.type().is_array();
 
-    if (!both_arrays)
+    // If both operands are strings (including char pointers), skip single-char comparison
+    // and let the string comparison path handle it (strcmp).
+    bool both_strings =
+      type_utils::is_string_type(lhs.type()) && type_utils::is_string_type(rhs.type());
+
+    if (!both_arrays && !both_strings)
     {
       exprt char_comp_result =
         string_handler_.handle_single_char_comparison(op, lhs, rhs);
@@ -6417,13 +6422,38 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::RAISE:
     {
-      typet type = type_handler_.get_typet(
-        element["exc"]["func"]["id"].get<std::string>());
+      std::string exc_name;
+      // Try to extract the exception name from different AST shapes
+      if (element["exc"].contains("func") && element["exc"]["func"].contains("id"))
+        exc_name = element["exc"]["func"]["id"].get<std::string>();
+      else if (element["exc"].contains("id"))
+        exc_name = element["exc"]["id"].get<std::string>();
+      else if (element["exc"].is_string())
+        exc_name = element["exc"].get<std::string>();
+      else
+        exc_name = ""; // fallback
+
       locationt location = get_location_from_decl(element);
+      typet type = type_handler_.get_typet(exc_name);
+
+      if (exc_name == "AssertionError")
+      {
+        code_assertt assert_code{ false_exprt() };
+        assert_code.location() = location;
+        if (
+          element["exc"].contains("args") && !element["exc"]["args"].empty() &&
+          !element["exc"]["args"][0].is_null())
+        {
+          const std::string msg =
+            string_handler_.process_format_spec(element["exc"]["args"][0]);
+          assert_code.location().comment(msg);
+        }
+        block.move_to_operands(assert_code);
+        break;
+      }
 
       exprt raise;
-      if (type_utils::is_python_exceptions(
-            element["exc"]["func"]["id"].get<std::string>()))
+      if (type_utils::is_python_exceptions(exc_name))
       {
         // Construct a constant struct to throw:
         // raise { .message=&"Error message" }
@@ -6454,7 +6484,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         raise = tmp;
       }
 
-      exprt side = side_effect_exprt("cpp-throw", type);
+      side_effect_exprt side("cpp-throw", type);
       side.location() = location;
       side.move_to_operands(raise);
 
