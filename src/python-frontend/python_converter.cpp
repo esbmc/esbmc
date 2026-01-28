@@ -1304,6 +1304,10 @@ exprt python_converter::handle_membership_operator(
     {
       return dict_handler_->handle_dict_membership(lhs, rhs, invert);
     }
+
+    if (tag.starts_with("tag-tuple"))
+      return tuple_handler_->handle_tuple_membership(lhs, rhs, invert);
+
   }
 
   typet list_type = type_handler_.get_list_type();
