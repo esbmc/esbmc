@@ -37,6 +37,8 @@ ignored_dirs=(
   "function-option-fail"
   "github_2843_fail"
   "github_2843_4_fail"
+  "github_2908_1"
+  "github_2908_2"
   "github_2993_fail"
   "github_2993_2_fail"
   "github_3012_3_fail"
