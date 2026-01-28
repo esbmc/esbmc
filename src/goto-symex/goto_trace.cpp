@@ -679,10 +679,23 @@ AssertionType goto_tracet::get_assertion_type() const
         // Failed assertion
         if (step.pc->location.user_provided())
           return AssertionType::USER_ASSERTION;
-        const auto &comment = step.pc->location.comment().as_string();
-        ;
-        if (comment.empty()) // unwinding assertion
+
+        const std::string &comment = step.comment;
+        if (
+          comment.starts_with("unwinding assertion") ||
+          comment.starts_with("reachability: unreachable code reached"))
           return AssertionType::INTRINSIC;
+
+        if (comment.starts_with("dereference failure"))
+          return AssertionType::POINTER_CHECK;
+
+        if (
+          comment.starts_with("Stack limit") ||
+          comment.starts_with("__builtin_clzll:") ||
+          comment.starts_with("function call:") ||
+          comment.starts_with("printf"))
+          return AssertionType::OTHER;
+
         if (comment.starts_with("array bounds violated:"))
           return AssertionType::BOUNDS_CHECK;
         if (
@@ -711,13 +724,13 @@ AssertionType goto_tracet::get_assertion_type() const
           return AssertionType::OTHER;
         if (comment.starts_with("Same object violation"))
           return AssertionType::POINTER_CHECK;
-        log_status("Assertion: {}", comment);
       }
       break;
     default:
       continue;
     }
   }
+  log_error("Assertion: {}", comment);
   log_error("Unclassified assertion");
   abort();
 }
