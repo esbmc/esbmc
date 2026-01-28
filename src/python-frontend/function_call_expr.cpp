@@ -1507,7 +1507,7 @@ exprt function_call_expr::handle_min_max(
 
       // Check if this is a tuple by examining the tag
       std::string tag = struct_type.tag().as_string();
-      if (tag.find("tag-tuple") == 0)
+      if (tag.starts_with("tag-tuple"))
       {
         // Handle tuple directly by building comparison chain
         const auto &components = struct_type.components();
