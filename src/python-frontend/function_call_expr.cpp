@@ -1461,9 +1461,27 @@ bool function_call_expr::is_min_max_call() const
 
   const auto &args = call_["args"];
 
-  // Only handle two-argument case: min(a, b) or max(a, b)
-  // Single argument case falls through to general handler
-  return (args.size() == 2);
+  // Handle two-argument case: min(a, b) or max(a, b)
+  if (args.size() == 2)
+    return true;
+
+  // Handle single-argument case if it's a tuple
+  if (args.size() == 1)
+  {
+    exprt arg = converter_.get_expr(args[0]);
+    const typet &arg_type = converter_.ns.follow(arg.type());
+
+    // Check if it's a tuple (struct with tag-tuple prefix)
+    if (arg_type.id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(arg_type);
+      std::string tag = struct_type.tag().as_string();
+      return tag.starts_with("tag-tuple");
+    }
+  }
+
+  // Single argument that's not a tuple falls through to general handler (for lists)
+  return false;
 }
 
 exprt function_call_expr::handle_min_max(
@@ -1477,8 +1495,50 @@ exprt function_call_expr::handle_min_max(
       func_name + " expected at least 1 argument, got 0");
 
   if (args.size() == 1)
-    throw std::runtime_error(
-      func_name + "() with single iterable argument not yet supported");
+  {
+    // Single iterable argument case: min(iterable) or max(iterable)
+    exprt arg = converter_.get_expr(args[0]);
+    const typet &arg_type = converter_.ns.follow(arg.type());
+
+    // Check if it's a tuple (struct type with element_N components)
+    if (arg_type.id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(arg_type);
+
+      // Check if this is a tuple by examining the tag
+      std::string tag = struct_type.tag().as_string();
+      if (tag.starts_with("tag-tuple"))
+      {
+        // Handle tuple directly by building comparison chain
+        const auto &components = struct_type.components();
+
+        if (components.empty())
+          throw std::runtime_error(func_name + "() arg is an empty sequence");
+
+        // Start with first element: result = t.element_0
+        exprt result =
+          member_exprt(arg, components[0].get_name(), components[0].type());
+
+        // Compare with remaining elements
+        for (size_t i = 1; i < components.size(); ++i)
+        {
+          member_exprt elem(
+            arg, components[i].get_name(), components[i].type());
+
+          // Create comparison: elem < result (for min) or elem > result (for max)
+          exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
+          condition.copy_to_operands(elem, result);
+
+          // result = (elem < result) ? elem : result
+          if_exprt update(condition, elem, result);
+          update.type() = components[i].type();
+          result = update;
+        }
+
+        return result;
+      }
+    }
+  }
 
   if (args.size() > 2)
     throw std::runtime_error(
