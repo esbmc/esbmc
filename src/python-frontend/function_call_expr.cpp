@@ -1476,7 +1476,7 @@ bool function_call_expr::is_min_max_call() const
     {
       const struct_typet &struct_type = to_struct_type(arg_type);
       std::string tag = struct_type.tag().as_string();
-      return tag.find("tag-tuple") == 0;
+      return tag.starts_with("tag-tuple");
     }
   }
 
