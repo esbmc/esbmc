@@ -1958,13 +1958,10 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     {
       // For unions from byte arrays, read the first member at offset
       const union_type2t &uniontype = to_union_type(type);
-      if (!uniontype.members.empty())
-      {
-        expr2tc target = value; // The byte array
-        expr2tc union_offs = offs;
-        simplify(union_offs);
-        build_reference_rec(
-          target, union_offs, uniontype.members[0], tmp, mode);
+      expr2tc target = value; // The byte array
+      expr2tc union_offs = offs;
+      simplify(union_offs);
+      build_reference_rec(target, union_offs, uniontype.members[0], tmp, mode);
 
       std::vector<expr2tc> members = {target};
       expr2tc the_union =
