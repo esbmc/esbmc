@@ -8,6 +8,7 @@
 #include <python-frontend/python_class_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_typechecking.h>
 #include <python-frontend/string_builder.h>
@@ -2738,101 +2739,7 @@ symbolt &python_converter::create_tmp_symbol(
 
 exprt python_converter::get_lambda_expr(const nlohmann::json &element)
 {
-  // Generate unique lambda name
-  static int lambda_counter = 0;
-  std::string lambda_name = "lam" + std::to_string(++lambda_counter);
-
-  locationt location = get_location_from_decl(element);
-
-  // Save current context and set lambda context
-  std::string old_func_name = current_func_name_;
-  current_func_name_ = lambda_name;
-
-  // Create function type with proper return type detection
-  code_typet lambda_type;
-  typet return_type = double_type();
-  // TODO: Try to infer better return type from the body if possible
-  if (element.contains("body"))
-    current_element_type = return_type;
-  lambda_type.return_type() = return_type;
-
-  std::string module_name = location.get_file().as_string();
-  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
-
-  // Process arguments and create parameter symbols
-  if (element.contains("args") && element["args"].contains("args"))
-  {
-    for (const auto &arg : element["args"]["args"])
-    {
-      std::string arg_name = arg["arg"].get<std::string>();
-
-      // Determine parameter type
-      // TODO: try to infer from usage or default to double
-      typet param_type = double_type();
-
-      // Create function argument
-      code_typet::argumentt argument;
-      argument.type() = param_type;
-      argument.cmt_base_name(arg_name);
-
-      std::string param_id = lambda_id + "@" + arg_name;
-      argument.cmt_identifier(param_id);
-      argument.location() = location;
-      lambda_type.arguments().push_back(argument);
-
-      // Create parameter symbol with all necessary fields
-      symbolt param_symbol;
-      param_symbol.id = param_id;
-      param_symbol.name = arg_name;
-      param_symbol.type = param_type;
-      param_symbol.location = location;
-      param_symbol.mode = "Python";
-      param_symbol.module = module_name;
-      param_symbol.lvalue = true;
-      param_symbol.is_parameter = true;
-      param_symbol.file_local = true;
-      param_symbol.static_lifetime = false;
-      param_symbol.is_extern = false;
-      symbol_table_.add(param_symbol);
-    }
-  }
-
-  // Create lambda function symbol
-  symbolt lambda_symbol;
-  lambda_symbol.id = lambda_id;
-  lambda_symbol.name = lambda_name;
-  lambda_symbol.type = lambda_type;
-  lambda_symbol.location = location;
-  lambda_symbol.mode = "Python";
-  lambda_symbol.module = module_name;
-  lambda_symbol.lvalue = true;
-  lambda_symbol.is_extern = false;
-  lambda_symbol.file_local = false;
-  lambda_symbol.static_lifetime = false;
-
-  symbolt *added_symbol = symbol_table_.move_symbol_to_context(lambda_symbol);
-
-  // Process lambda body
-  if (element.contains("body"))
-  {
-    code_blockt lambda_block;
-
-    // Process the body expression
-    exprt body_expr = get_expr(element["body"]);
-
-    // Create return statement
-    code_returnt return_stmt;
-    return_stmt.return_value() = body_expr;
-    return_stmt.location() = location;
-
-    lambda_block.copy_to_operands(return_stmt);
-    added_symbol->value = lambda_block;
-  }
-
-  // Restore context
-  current_func_name_ = old_func_name;
-
-  return symbol_expr(*added_symbol);
+  return lambda_handler_->get_lambda_expr(element);
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
@@ -3459,27 +3366,10 @@ void python_converter::handle_assignment_type_adjustments(
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
   // Handle lambda assignments
-  if (
-    ast_node.contains("value") && ast_node["value"].contains("_type") &&
-    ast_node["value"]["_type"] == "Lambda" && rhs.is_symbol())
+  if (lambda_handler_->is_lambda_assignment(ast_node) && rhs.is_symbol())
   {
-    const symbolt *lambda_func_symbol =
-      symbol_table_.find_symbol(rhs.identifier());
-    if (lambda_func_symbol && lhs_symbol)
-    {
-      if (lambda_func_symbol->type.is_code())
-      {
-        typet func_ptr_type = gen_pointer_type(lambda_func_symbol->type);
-        lhs_symbol->type = func_ptr_type;
-        lhs.type() = func_ptr_type;
-        rhs = address_of_exprt(rhs);
-      }
-      else
-      {
-        throw std::runtime_error(
-          "Lambda function symbol does not have code type");
-      }
-    }
+    lambda_handler_->handle_lambda_assignment(lhs_symbol, lhs, rhs);
+    return;
   }
   // Handle tuple assignments with generic tuple annotation
   else if (
@@ -6670,7 +6560,8 @@ python_converter::python_converter(
     math_handler_(*this, symbol_table_, type_handler_),
     tuple_handler_(new tuple_handler(*this, type_handler_)),
     dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_)),
-    typechecker_(new python_typechecking(*this))
+    typechecker_(new python_typechecking(*this)),
+    lambda_handler_(new python_lambda(*this, _context, type_handler_))
 {
 }
 
@@ -6680,6 +6571,7 @@ python_converter::~python_converter()
   delete tuple_handler_;
   delete dict_handler_;
   delete typechecker_;
+  delete lambda_handler_;
 }
 
 python_typechecking &python_converter::get_typechecker()

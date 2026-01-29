@@ -27,6 +27,7 @@ class module_locator;
 class tuple_handler;
 class python_typechecking;
 class python_class_builder;
+class python_lambda;
 
 /**
  * @class python_converter
@@ -55,6 +56,14 @@ public:
   void set_current_lhs(exprt *value)
   {
     current_lhs = value;
+  }
+  void set_current_func_name(const std::string &name)
+  {
+    current_func_name_ = name;
+  }
+  void set_current_element_type(const typet &type)
+  {
+    current_element_type = type;
   }
   symbolt *add_symbol_and_get_ptr(symbolt &symbol)
   {
@@ -818,6 +827,7 @@ private:
   python_math math_handler_;
   tuple_handler *tuple_handler_;
   python_dict_handler *dict_handler_;
+  python_lambda *lambda_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
