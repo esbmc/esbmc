@@ -827,6 +827,7 @@ private:
   python_math math_handler_;
   tuple_handler *tuple_handler_;
   python_dict_handler *dict_handler_;
+  python_typechecking *typechecker_ = nullptr;
   python_lambda *lambda_handler_;
 
   bool is_converting_lhs = false;
@@ -847,6 +848,4 @@ private:
   std::vector<std::string> scope_stack_;
 
   exprt extract_type_from_boolean_op(const exprt &bool_op);
-
-  python_typechecking *typechecker_ = nullptr;
 };
