@@ -720,7 +720,8 @@ AssertionType goto_tracet::get_assertion_type() const
           return AssertionType::NAN_CHECK;
         if (
           comment.starts_with("undefined behavior") ||
-          comment.starts_with("Type annotation check") || comment.starts_with("Assertion: Throwing an exception"))
+          comment.starts_with("Type annotation check") ||
+          comment.starts_with("Assertion: Throwing an exception"))
           return AssertionType::OTHER;
         if (comment.starts_with("Same object violation"))
           return AssertionType::POINTER_CHECK;
