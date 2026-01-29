@@ -1304,6 +1304,32 @@ exprt python_converter::handle_membership_operator(
     {
       return dict_handler_->handle_dict_membership(lhs, rhs, invert);
     }
+
+    if (tag.starts_with("tag-tuple"))
+    {
+      // Check if this is a tuple of strings: if so, delegate to string handler
+      const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
+      bool is_string_tuple = true;
+
+      for (const auto &comp : struct_type.components())
+      {
+        if (!comp.type().is_array() && !comp.type().is_pointer())
+        {
+          is_string_tuple = false;
+          break;
+        }
+      }
+
+      // If tuple contains strings and lhs is a string, use string handler
+      if (is_string_tuple && (lhs.type().is_pointer() || lhs.type().is_array()))
+      {
+        exprt membership_expr =
+          string_handler_.handle_string_membership(lhs, rhs, element);
+        return invert ? not_exprt(membership_expr) : membership_expr;
+      }
+
+      return tuple_handler_->handle_tuple_membership(lhs, rhs, invert);
+    }
   }
 
   typet list_type = type_handler_.get_list_type();
