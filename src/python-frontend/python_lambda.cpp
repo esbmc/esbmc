@@ -12,9 +12,7 @@ python_lambda::python_lambda(
   python_converter &converter,
   contextt &context,
   type_handler &type_handler)
-  : converter_(converter),
-    context_(context),
-    type_handler_(type_handler)
+  : converter_(converter), context_(context), type_handler_(type_handler)
 {
 }
 
@@ -25,8 +23,7 @@ std::string python_lambda::generate_unique_lambda_name()
 
 bool python_lambda::is_lambda_assignment(const nlohmann::json &ast_node) const
 {
-  return ast_node.contains("value") && 
-         ast_node["value"].contains("_type") &&
+  return ast_node.contains("value") && ast_node["value"].contains("_type") &&
          ast_node["value"]["_type"] == "Lambda";
 }
 
@@ -38,13 +35,11 @@ void python_lambda::handle_lambda_assignment(
   if (!lhs_symbol || !rhs.is_symbol())
     return;
 
-  const symbolt *lambda_func_symbol =
-    context_.find_symbol(rhs.identifier());
+  const symbolt *lambda_func_symbol = context_.find_symbol(rhs.identifier());
 
   if (!lambda_func_symbol || !lambda_func_symbol->type.is_code())
   {
-    throw std::runtime_error(
-      "Lambda function symbol does not have code type");
+    throw std::runtime_error("Lambda function symbol does not have code type");
   }
 
   // Create function pointer type
@@ -65,17 +60,16 @@ typet python_lambda::infer_lambda_return_type(
     std::string body_type = body_node["_type"].get<std::string>();
 
     // String concatenation (BinOp with Add and string constant)
-    if (body_type == "BinOp" &&
-        body_node.contains("op") &&
-        body_node["op"].contains("_type") &&
-        body_node["op"]["_type"] == "Add")
+    if (
+      body_type == "BinOp" && body_node.contains("op") &&
+      body_node["op"].contains("_type") && body_node["op"]["_type"] == "Add")
     {
       // Check if the right operand is a string constant
-      if (body_node.contains("right") &&
-          body_node["right"].contains("_type") &&
-          body_node["right"]["_type"] == "Constant" &&
-          body_node["right"].contains("value") &&
-          body_node["right"]["value"].is_string())
+      if (
+        body_node.contains("right") && body_node["right"].contains("_type") &&
+        body_node["right"]["_type"] == "Constant" &&
+        body_node["right"].contains("value") &&
+        body_node["right"]["value"].is_string())
       {
         return gen_pointer_type(signed_char_type());
       }
@@ -157,8 +151,8 @@ void python_lambda::process_lambda_parameters(
       param_type,
       location,
       module_name,
-      true,  // file_local
-      true   // is_parameter
+      true, // file_local
+      true  // is_parameter
     );
 
     context_.add(param_symbol);
@@ -213,7 +207,8 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
 
   // Process lambda parameters
   if (element.contains("args"))
-    process_lambda_parameters(element["args"], lambda_type, lambda_id, location);
+    process_lambda_parameters(
+      element["args"], lambda_type, lambda_id, location);
 
   // Create lambda function symbol
   symbolt lambda_symbol = create_symbol(
@@ -222,8 +217,8 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
     lambda_type,
     location,
     module_name,
-    false,  // file_local
-    false   // is_parameter
+    false, // file_local
+    false  // is_parameter
   );
 
   symbolt *added_symbol = context_.move_symbol_to_context(lambda_symbol);

@@ -24,10 +24,7 @@ public:
   bool is_lambda_assignment(const nlohmann::json &ast_node) const;
 
   // Handle lambda assignment type adjustments
-  void handle_lambda_assignment(
-    symbolt *lhs_symbol,
-    exprt &lhs,
-    exprt &rhs);
+  void handle_lambda_assignment(symbolt *lhs_symbol, exprt &lhs, exprt &rhs);
 
 private:
   python_converter &converter_;
