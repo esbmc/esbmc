@@ -51,6 +51,15 @@ private:
   typet infer_lambda_return_type(const nlohmann::json &body_node);
 
   std::string generate_unique_lambda_name();
+
+  symbolt create_symbol(
+    const std::string &id,
+    const std::string &name,
+    const typet &type,
+    const locationt &location,
+    const std::string &module_name,
+    bool file_local,
+    bool is_parameter = false);
 };
 
 #endif // ESBMC_PYTHON_LAMBDA_H
