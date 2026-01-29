@@ -329,7 +329,8 @@ exprt tuple_handler::handle_tuple_membership(
   if (!is_tuple_type(tuple_type))
   {
     throw std::runtime_error(
-      "Membership test on non-tuple struct type: " + tuple_type.tag().as_string());
+      "Membership test on non-tuple struct type: " +
+      tuple_type.tag().as_string());
   }
 
   const auto &components = tuple_type.components();

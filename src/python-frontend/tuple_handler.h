@@ -91,10 +91,8 @@ public:
    * @param invert Whether this is "not in" operation
    * @return exprt Boolean expression representing membership test
    */
-  exprt handle_tuple_membership(
-    const exprt &lhs,
-    const exprt &rhs,
-    bool invert) const;
+  exprt handle_tuple_membership(const exprt &lhs, const exprt &rhs, bool invert)
+    const;
 
 private:
   /**
