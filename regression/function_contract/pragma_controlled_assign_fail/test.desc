@@ -1,0 +1,4 @@
+CORE
+main.c
+--auto-havoc-pragma-contract --no-pointer-check --parallel-solving --multi-property --loop-invariant
+^VERIFICATION FAILED$

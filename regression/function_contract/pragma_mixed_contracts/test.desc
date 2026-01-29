@@ -1,0 +1,4 @@
+CORE
+main.c
+--auto-havoc-pragma-contract 
+^VERIFICATION SUCCESSFUL$

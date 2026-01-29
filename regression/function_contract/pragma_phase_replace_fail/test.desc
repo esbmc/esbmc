@@ -1,0 +1,5 @@
+CORE
+main.c
+--auto-havoc-pragma-contract --no-pointer-check
+^VERIFICATION FAILED$
+contract requires \(replace\)
