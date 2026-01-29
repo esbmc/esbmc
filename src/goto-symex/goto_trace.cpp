@@ -731,7 +731,7 @@ AssertionType goto_tracet::get_assertion_type() const
       continue;
     }
   }
-  
+
   log_error("Unclassified assertion");
   abort();
 }
