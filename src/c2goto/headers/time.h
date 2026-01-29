@@ -9,10 +9,11 @@ __ESBMC_C_CPP_BEGIN
 #ifndef __time_t_defined
 #define __time_t_defined 1
 #define _TIME_T /* macOS guard */
-/* On Windows, time_t is already defined as __time64_t (long long) by
-   corecrt.h, which is pulled in transitively via #include_next <stddef.h>.
-   Redefining it as long would conflict since long is 32-bit on Windows. */
-#ifndef _WIN32
+/* On Windows, time_t is __time64_t (long long) because long is 32-bit.
+   On Unix-like systems, time_t is typically long (which is 64-bit on LP64). */
+#ifdef _WIN32
+typedef long long time_t;
+#else
 typedef long time_t;
 #endif
 #endif
