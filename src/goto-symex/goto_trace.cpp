@@ -724,13 +724,14 @@ AssertionType goto_tracet::get_assertion_type() const
           return AssertionType::OTHER;
         if (comment.starts_with("Same object violation"))
           return AssertionType::POINTER_CHECK;
+        log_error("Assertion: {}", comment);
       }
       break;
     default:
       continue;
     }
   }
-  log_error("Assertion: {}", comment);
+  
   log_error("Unclassified assertion");
   abort();
 }
