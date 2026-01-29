@@ -57,10 +57,32 @@ void python_lambda::handle_lambda_assignment(
 }
 
 typet python_lambda::infer_lambda_return_type(
-  const nlohmann::json &body_node)
+  [[maybe_unused]] const nlohmann::json &body_node)
 {
-  // TODO: Implement more sophisticated type inference
-  // For now, default to double for numeric expressions
+  // Check if body is a string operation
+  if (body_node.contains("_type"))
+  {
+    std::string body_type = body_node["_type"].get<std::string>();
+
+    // String concatenation (BinOp with Add and string constant)
+    if (body_type == "BinOp" &&
+        body_node.contains("op") &&
+        body_node["op"].contains("_type") &&
+        body_node["op"]["_type"] == "Add")
+    {
+      // Check if the right operand is a string constant
+      if (body_node.contains("right") &&
+          body_node["right"].contains("_type") &&
+          body_node["right"]["_type"] == "Constant" &&
+          body_node["right"].contains("value") &&
+          body_node["right"]["value"].is_string())
+      {
+        return gen_pointer_type(signed_char_type());
+      }
+    }
+  }
+
+  // Default to double for numeric expressions
   return double_type();
 }
 
@@ -104,9 +126,19 @@ void python_lambda::process_lambda_parameters(
   {
     std::string arg_name = arg["arg"].get<std::string>();
 
-    // Determine parameter type
-    // TODO: Try to infer from usage or annotation
+    // Determine parameter type from annotation or infer from return type
     typet param_type = double_type();
+
+    // Check for type annotation
+    if (arg.contains("annotation") && !arg["annotation"].is_null())
+    {
+      std::string annotation = arg["annotation"].get<std::string>();
+      if (annotation == "str")
+        param_type = gen_pointer_type(signed_char_type());
+    }
+    // If lambda returns string, assume string parameters
+    else if (lambda_type.return_type().is_pointer())
+      param_type = gen_pointer_type(signed_char_type());
 
     // Create function argument
     code_typet::argumentt argument;
