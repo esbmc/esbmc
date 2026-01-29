@@ -64,6 +64,31 @@ typet python_lambda::infer_lambda_return_type(
   return double_type();
 }
 
+symbolt python_lambda::create_symbol(
+  const std::string &id,
+  const std::string &name,
+  const typet &type,
+  const locationt &location,
+  const std::string &module_name,
+  bool file_local,
+  bool is_parameter)
+{
+  symbolt symbol;
+  symbol.id = id;
+  symbol.name = name;
+  symbol.type = type;
+  symbol.location = location;
+  symbol.mode = "Python";
+  symbol.module = module_name;
+  symbol.lvalue = true;
+  symbol.is_parameter = is_parameter;
+  symbol.file_local = file_local;
+  symbol.static_lifetime = false;
+  symbol.is_extern = false;
+
+  return symbol;
+}
+
 void python_lambda::process_lambda_parameters(
   const nlohmann::json &args_node,
   code_typet &lambda_type,
@@ -94,18 +119,15 @@ void python_lambda::process_lambda_parameters(
     lambda_type.arguments().push_back(argument);
 
     // Create parameter symbol
-    symbolt param_symbol;
-    param_symbol.id = param_id;
-    param_symbol.name = arg_name;
-    param_symbol.type = param_type;
-    param_symbol.location = location;
-    param_symbol.mode = "Python";
-    param_symbol.module = module_name;
-    param_symbol.lvalue = true;
-    param_symbol.is_parameter = true;
-    param_symbol.file_local = true;
-    param_symbol.static_lifetime = false;
-    param_symbol.is_extern = false;
+    symbolt param_symbol = create_symbol(
+      param_id,
+      arg_name,
+      param_type,
+      location,
+      module_name,
+      true,  // file_local
+      true   // is_parameter
+    );
 
     context_.add(param_symbol);
   }
@@ -162,17 +184,15 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
     process_lambda_parameters(element["args"], lambda_type, lambda_id, location);
 
   // Create lambda function symbol
-  symbolt lambda_symbol;
-  lambda_symbol.id = lambda_id;
-  lambda_symbol.name = lambda_name;
-  lambda_symbol.type = lambda_type;
-  lambda_symbol.location = location;
-  lambda_symbol.mode = "Python";
-  lambda_symbol.module = module_name;
-  lambda_symbol.lvalue = true;
-  lambda_symbol.is_extern = false;
-  lambda_symbol.file_local = false;
-  lambda_symbol.static_lifetime = false;
+  symbolt lambda_symbol = create_symbol(
+    lambda_id,
+    lambda_name,
+    lambda_type,
+    location,
+    module_name,
+    false,  // file_local
+    false   // is_parameter
+  );
 
   symbolt *added_symbol = context_.move_symbol_to_context(lambda_symbol);
   assert(added_symbol);
