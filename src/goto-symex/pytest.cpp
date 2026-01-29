@@ -116,6 +116,10 @@ std::string pytest_generator::extract_function_name(
     "__ESBMC_main",
     "python_user_main",
     "python_init",
+    // nondet helper functions
+    "nondet_list",
+    "nondet_dict",
+    "_nondet_size",
   };
 
   std::string best_candidate;
@@ -139,7 +143,8 @@ std::string pytest_generator::extract_function_name(
       // Skip internal functions
       if (
         has_prefix(full_func, "python_") || has_prefix(full_func, "__ESBMC_") ||
-        has_prefix(full_func, "__VERIFIER_"))
+        has_prefix(full_func, "__VERIFIER_") ||
+        has_prefix(func_to_check, "nondet_") || func_to_check == "_nondet_size")
         continue;
 
       // Skip C library functions
@@ -583,6 +588,17 @@ void pytest_generator::collect(
   std::vector<std::string> current_param_names;
   std::unordered_set<std::string> seen_nondets;
 
+  // Track nondet_list/nondet_dict components for building composite values
+  // We collect size values and element values separately, then combine them
+  std::vector<std::pair<std::string, BigInt>>
+    list_sizes; // (nondet_symbol, size_value)
+  std::vector<std::pair<std::string, std::string>>
+    list_elems; // (nondet_symbol, elem_value_str)
+  std::vector<std::pair<std::string, std::string>>
+    dict_keys; // (nondet_symbol, key_value_str)
+  std::vector<std::pair<std::string, std::string>>
+    dict_values; // (nondet_symbol, value_value_str)
+
   // Extract function name if not already set
   std::string extracted_func_name;
   if (function_name.empty())
@@ -609,49 +625,87 @@ void pytest_generator::collect(
         var_name = clean_variable_name(lhs_sym.get_symbol_name());
       }
 
-      // Skip variables from internal helper functions (nondet_list, nondet_dict implementations)
-      // But ONLY skip internal implementation variables like 'elem_type', 'size', 'i', 'result'
+      // Track nondet_list/nondet_dict internal variables to build composite values
+      // We need to collect size, elem_type, key_type, value_type to reconstruct lists/dicts
+      bool is_list_size = false;
+      bool is_list_elem = false;
+      bool is_dict_key = false;
+      bool is_dict_value = false;
+
       if (SSA_step.source.pc->location.function() != "")
       {
         std::string func_name =
           SSA_step.source.pc->location.function().as_string();
 
-        // Check if we're inside an internal function - be specific to avoid matching user functions
-        // Only match if the function name IS exactly "nondet_list", "nondet_dict", "_nondet_size"
-        // or ends with these names (to handle C++ mangling)
-        bool in_internal_func = false;
-        if (
-          func_name == "nondet_list" || func_name == "nondet_dict" ||
-          func_name == "_nondet_size")
-          in_internal_func = true;
+        // Check if we're inside an internal function
+        bool in_nondet_size = false;
+        bool in_nondet_list = false;
+        bool in_nondet_dict = false;
+
+        if (func_name == "_nondet_size")
+          in_nondet_size = true;
+        else if (func_name == "nondet_list")
+          in_nondet_list = true;
+        else if (func_name == "nondet_dict")
+          in_nondet_dict = true;
         else
         {
-          // Check for mangled names that end with these function names
-          // e.g., "python::nondet_list" or "c::nondet_list"
+          // Check for mangled names
           size_t sep_pos = func_name.rfind("::");
           if (sep_pos != std::string::npos)
           {
             std::string base_name = func_name.substr(sep_pos + 2);
-            if (
-              base_name == "nondet_list" || base_name == "nondet_dict" ||
-              base_name == "_nondet_size")
-              in_internal_func = true;
+            if (base_name == "_nondet_size")
+              in_nondet_size = true;
+            else if (base_name == "nondet_list")
+              in_nondet_list = true;
+            else if (base_name == "nondet_dict")
+              in_nondet_dict = true;
           }
         }
 
-        if (in_internal_func)
+        // Track the role of internal variables
+        // Check based on function context first
+        if (in_nondet_size && var_name == "size")
         {
-          // Skip only internal implementation variables
-          // Keep variables that look like user variables (not matching internal names)
-          if (
-            var_name == "elem_type" || var_name == "size" || var_name == "i" ||
-            var_name == "result" || var_name == "key_type" ||
-            var_name == "value_type")
-          {
-            continue; // Skip this assignment - it's internal implementation
-          }
-          // If it's a different name, it might be a user variable, continue processing
+          is_list_size = true;
+          // Don't skip - we need to collect this
         }
+        else if (in_nondet_list && var_name == "elem_type")
+        {
+          is_list_elem = true;
+          // Don't skip - we need to collect this
+        }
+        else if (in_nondet_dict)
+        {
+          if (var_name == "key_type")
+            is_dict_key = true;
+          else if (var_name == "value_type")
+            is_dict_value = true;
+          // Don't skip - we need to collect these
+        }
+
+        // Skip only loop counters and result variables (not nondet values)
+        if (
+          (in_nondet_list || in_nondet_dict || in_nondet_size) &&
+          (var_name == "i" || var_name == "result"))
+        {
+          continue;
+        }
+      }
+
+      // Also check variable names outside internal functions
+      // This handles cases where user passes nondet_int() as argument:
+      // e.g., nondet_dict(2, key_type=nondet_int(), value_type=nondet_int())
+      // In this case, the nondet assignment happens in user code, not in nondet_dict
+      if (!is_list_size && !is_list_elem && !is_dict_key && !is_dict_value)
+      {
+        if (var_name == "key_type")
+          is_dict_key = true;
+        else if (var_name == "value_type")
+          is_dict_value = true;
+        else if (var_name == "elem_type")
+          is_list_elem = true;
       }
 
       // Check if this is a nondet assignment
@@ -663,18 +717,36 @@ void pytest_generator::collect(
       if (!has_prefix(sym.thename.as_string(), "nondet$"))
         continue;
 
-      if (seen_nondets.count(sym.thename.as_string()))
+      // For dict/list components, allow duplicate nondet symbols
+      // (key_type and value_type may share the same nondet symbol due to solver optimization)
+      bool is_component =
+        is_list_size || is_list_elem || is_dict_key || is_dict_value;
+
+      if (seen_nondets.count(sym.thename.as_string()) && !is_component)
         continue;
 
-      seen_nondets.insert(sym.thename.as_string());
-      found_nondets++;
+      if (!seen_nondets.count(sym.thename.as_string()))
+      {
+        seen_nondets.insert(sym.thename.as_string());
+        found_nondets++;
+      }
 
       // Get concrete value
       auto concrete_value = smt_conv.get(nondet_expr);
       std::string value_str;
 
       if (is_constant_int2t(concrete_value))
-        value_str = integer2string(to_constant_int2t(concrete_value).value);
+      {
+        BigInt int_value = to_constant_int2t(concrete_value).value;
+        value_str = integer2string(int_value);
+
+        // If this is a list/dict size, store it for later use
+        if (is_list_size)
+        {
+          list_sizes.push_back({sym.thename.as_string(), int_value});
+          continue; // Don't add as regular param - will be combined later
+        }
+      }
       else if (is_constant_floatbv2t(concrete_value))
       {
         std::string c_float =
@@ -711,6 +783,23 @@ void pytest_generator::collect(
       else
         continue; // Skip unsupported types
 
+      // Store list/dict element values for later combination
+      if (is_list_elem)
+      {
+        list_elems.push_back({sym.thename.as_string(), value_str});
+        continue; // Don't add as regular param - will be combined later
+      }
+      if (is_dict_key)
+      {
+        dict_keys.push_back({sym.thename.as_string(), value_str});
+        continue;
+      }
+      if (is_dict_value)
+      {
+        dict_values.push_back({sym.thename.as_string(), value_str});
+        continue;
+      }
+
       // Handle duplicate parameter names by adding numeric suffix
       std::string final_var_name = var_name;
       if (
@@ -744,6 +833,88 @@ void pytest_generator::collect(
       current_params.push_back(value_str);
       current_param_names.push_back(final_var_name);
     }
+  }
+
+  // Build composite list values from collected size and element values
+  // Each (size, elem) pair creates a list: [elem] * size
+  for (size_t i = 0; i < list_sizes.size() && i < list_elems.size(); ++i)
+  {
+    BigInt size = list_sizes[i].second;
+    const std::string &elem = list_elems[i].second;
+
+    // Build Python list representation
+    std::string list_str = "[";
+    int64_t size_val = size.to_int64();
+    if (size_val < 0)
+      size_val = 0;
+    if (size_val > 100)
+      size_val = 100; // Cap at reasonable size
+
+    for (int64_t j = 0; j < size_val; ++j)
+    {
+      if (j > 0)
+        list_str += ", ";
+      list_str += elem;
+    }
+    list_str += "]";
+
+    // Use "list" + index as parameter name
+    std::string param_name = "list" + std::to_string(i);
+    current_params.push_back(list_str);
+    current_param_names.push_back(param_name);
+  }
+
+  // Build composite dict values from collected key and value values
+  // Note: nondet_dict in Python generates only ONE key-value pair (same key/value repeated)
+  if (!dict_keys.empty())
+  {
+    // Use value if available, otherwise use key as value (they often share the same nondet)
+    std::string key_val = dict_keys[0].second;
+    std::string value_val =
+      !dict_values.empty() ? dict_values[0].second : key_val;
+
+    std::string dict_str = "{" + key_val + ": " + value_val + "}";
+    current_params.push_back(dict_str);
+    current_param_names.push_back("dict0");
+  }
+  else if (!dict_values.empty())
+  {
+    // Only values, no keys - use value as key too
+    std::string dict_str =
+      "{" + dict_values[0].second + ": " + dict_values[0].second + "}";
+    current_params.push_back(dict_str);
+    current_param_names.push_back("dict0");
+  }
+
+  // Handle orphan list sizes (build list with default element 0)
+  for (size_t i = list_elems.size(); i < list_sizes.size(); ++i)
+  {
+    BigInt size = list_sizes[i].second;
+    int64_t size_val = size.to_int64();
+    if (size_val < 0)
+      size_val = 0;
+    if (size_val > 100)
+      size_val = 100;
+
+    std::string list_str = "[";
+    for (int64_t j = 0; j < size_val; ++j)
+    {
+      if (j > 0)
+        list_str += ", ";
+      list_str += "0"; // default element
+    }
+    list_str += "]";
+
+    current_params.push_back(list_str);
+    current_param_names.push_back("list" + std::to_string(i));
+  }
+
+  // Handle orphan list elems (build single-element list)
+  for (size_t i = list_sizes.size(); i < list_elems.size(); ++i)
+  {
+    std::string list_str = "[" + list_elems[i].second + "]";
+    current_params.push_back(list_str);
+    current_param_names.push_back("list" + std::to_string(i));
   }
 
   // Store collected data if we found any nondet values
@@ -874,6 +1045,12 @@ void pytest_generator::generate_single(
   std::vector<std::string> current_params;
   std::vector<std::string> current_param_names;
 
+  // Track nondet_list/nondet_dict components for building composite values
+  std::vector<std::pair<std::string, BigInt>> list_sizes;
+  std::vector<std::pair<std::string, std::string>> list_elems;
+  std::vector<std::pair<std::string, std::string>> dict_keys;
+  std::vector<std::pair<std::string, std::string>> dict_values;
+
   // Extract function name
   std::string func_name = extract_function_name(target, smt_conv);
   if (func_name.empty())
@@ -895,49 +1072,80 @@ void pytest_generator::generate_single(
         var_name = clean_variable_name(lhs_sym.get_symbol_name());
       }
 
-      // Skip variables from internal helper functions (nondet_list, nondet_dict implementations)
-      // But ONLY skip internal implementation variables like 'elem_type', 'size', 'i', 'result'
+      // Track nondet_list/nondet_dict internal variables to build composite values
+      bool is_list_size = false;
+      bool is_list_elem = false;
+      bool is_dict_key = false;
+      bool is_dict_value = false;
+
       if (SSA_step.source.pc->location.function() != "")
       {
-        std::string func_name =
+        std::string inner_func_name =
           SSA_step.source.pc->location.function().as_string();
 
-        // Check if we're inside an internal function - be specific to avoid matching user functions
-        // Only match if the function name IS exactly "nondet_list", "nondet_dict", "_nondet_size"
-        // or ends with these names (to handle C++ mangling)
-        bool in_internal_func = false;
-        if (
-          func_name == "nondet_list" || func_name == "nondet_dict" ||
-          func_name == "_nondet_size")
-          in_internal_func = true;
+        // Check if we're inside an internal function
+        bool in_nondet_size = false;
+        bool in_nondet_list = false;
+        bool in_nondet_dict = false;
+
+        if (inner_func_name == "_nondet_size")
+          in_nondet_size = true;
+        else if (inner_func_name == "nondet_list")
+          in_nondet_list = true;
+        else if (inner_func_name == "nondet_dict")
+          in_nondet_dict = true;
         else
         {
-          // Check for mangled names that end with these function names
-          // e.g., "python::nondet_list" or "c::nondet_list"
-          size_t sep_pos = func_name.rfind("::");
+          // Check for mangled names
+          size_t sep_pos = inner_func_name.rfind("::");
           if (sep_pos != std::string::npos)
           {
-            std::string base_name = func_name.substr(sep_pos + 2);
-            if (
-              base_name == "nondet_list" || base_name == "nondet_dict" ||
-              base_name == "_nondet_size")
-              in_internal_func = true;
+            std::string base_name = inner_func_name.substr(sep_pos + 2);
+            if (base_name == "_nondet_size")
+              in_nondet_size = true;
+            else if (base_name == "nondet_list")
+              in_nondet_list = true;
+            else if (base_name == "nondet_dict")
+              in_nondet_dict = true;
           }
         }
 
-        if (in_internal_func)
+        // Track the role of internal variables
+        if (in_nondet_size && var_name == "size")
         {
-          // Skip only internal implementation variables
-          // Keep variables that look like user variables (not matching internal names)
-          if (
-            var_name == "elem_type" || var_name == "size" || var_name == "i" ||
-            var_name == "result" || var_name == "key_type" ||
-            var_name == "value_type")
-          {
-            continue; // Skip this assignment - it's internal implementation
-          }
-          // If it's a different name, it might be a user variable, continue processing
+          is_list_size = true;
         }
+        else if (in_nondet_list && var_name == "elem_type")
+        {
+          is_list_elem = true;
+        }
+        else if (in_nondet_dict)
+        {
+          if (var_name == "key_type")
+            is_dict_key = true;
+          else if (var_name == "value_type")
+            is_dict_value = true;
+        }
+
+        // Skip only loop counters and result variables
+        if (
+          (in_nondet_list || in_nondet_dict || in_nondet_size) &&
+          (var_name == "i" || var_name == "result"))
+        {
+          continue;
+        }
+      }
+
+      // Also check variable names outside internal functions
+      // This handles cases where user passes nondet_int() as argument
+      if (!is_list_size && !is_list_elem && !is_dict_key && !is_dict_value)
+      {
+        if (var_name == "key_type")
+          is_dict_key = true;
+        else if (var_name == "value_type")
+          is_dict_value = true;
+        else if (var_name == "elem_type")
+          is_list_elem = true;
       }
 
       // Check if this is a nondet assignment
@@ -949,18 +1157,33 @@ void pytest_generator::generate_single(
       if (!has_prefix(sym.thename.as_string(), "nondet$"))
         continue;
 
-      // Skip if we've already processed this nondet symbol
-      if (seen_nondets.count(sym.thename.as_string()))
+      // For dict/list components, allow duplicate nondet symbols
+      // (key_type and value_type may share the same nondet symbol due to solver optimization)
+      bool is_component =
+        is_list_size || is_list_elem || is_dict_key || is_dict_value;
+
+      if (seen_nondets.count(sym.thename.as_string()) && !is_component)
         continue;
 
-      seen_nondets.insert(sym.thename.as_string());
+      if (!seen_nondets.count(sym.thename.as_string()))
+        seen_nondets.insert(sym.thename.as_string());
 
       // Get the concrete value from the solver
       auto concrete_value = smt_conv.get(nondet_expr);
 
       std::string value_str;
       if (is_constant_int2t(concrete_value))
-        value_str = integer2string(to_constant_int2t(concrete_value).value);
+      {
+        BigInt int_value = to_constant_int2t(concrete_value).value;
+        value_str = integer2string(int_value);
+
+        // If this is a list/dict size, store it for later use
+        if (is_list_size)
+        {
+          list_sizes.push_back({sym.thename.as_string(), int_value});
+          continue;
+        }
+      }
       else if (is_constant_floatbv2t(concrete_value))
       {
         std::string c_float =
@@ -997,6 +1220,23 @@ void pytest_generator::generate_single(
       else
         value_str = "None"; // Unsupported type
 
+      // Store list/dict element values for later combination
+      if (is_list_elem)
+      {
+        list_elems.push_back({sym.thename.as_string(), value_str});
+        continue;
+      }
+      if (is_dict_key)
+      {
+        dict_keys.push_back({sym.thename.as_string(), value_str});
+        continue;
+      }
+      if (is_dict_value)
+      {
+        dict_values.push_back({sym.thename.as_string(), value_str});
+        continue;
+      }
+
       // Handle duplicate parameter names by adding numeric suffix
       std::string final_var_name = var_name;
       if (
@@ -1030,6 +1270,86 @@ void pytest_generator::generate_single(
       current_params.push_back(value_str);
       current_param_names.push_back(final_var_name);
     }
+  }
+
+  // Build composite list values from collected size and element values
+  for (size_t i = 0; i < list_sizes.size() && i < list_elems.size(); ++i)
+  {
+    BigInt size = list_sizes[i].second;
+    const std::string &elem = list_elems[i].second;
+
+    // Build Python list representation
+    std::string list_str = "[";
+    int64_t size_val = size.to_int64();
+    if (size_val < 0)
+      size_val = 0;
+    if (size_val > 100)
+      size_val = 100; // Cap at reasonable size
+
+    for (int64_t j = 0; j < size_val; ++j)
+    {
+      if (j > 0)
+        list_str += ", ";
+      list_str += elem;
+    }
+    list_str += "]";
+
+    std::string param_name = "list" + std::to_string(i);
+    current_params.push_back(list_str);
+    current_param_names.push_back(param_name);
+  }
+
+  // Build composite dict values
+  // Note: nondet_dict produces only ONE key-value pair
+  if (!dict_keys.empty())
+  {
+    // Use value if available, otherwise use key as value (they often share the same nondet)
+    std::string key_val = dict_keys[0].second;
+    std::string value_val =
+      !dict_values.empty() ? dict_values[0].second : key_val;
+
+    std::string dict_str = "{" + key_val + ": " + value_val + "}";
+    current_params.push_back(dict_str);
+    current_param_names.push_back("dict0");
+  }
+  else if (!dict_values.empty())
+  {
+    // Only values, no keys - use value as key too
+    std::string dict_str =
+      "{" + dict_values[0].second + ": " + dict_values[0].second + "}";
+    current_params.push_back(dict_str);
+    current_param_names.push_back("dict0");
+  }
+
+  // Handle orphan list sizes (build list with default element 0)
+  for (size_t i = list_elems.size(); i < list_sizes.size(); ++i)
+  {
+    BigInt size = list_sizes[i].second;
+    int64_t size_val = size.to_int64();
+    if (size_val < 0)
+      size_val = 0;
+    if (size_val > 100)
+      size_val = 100;
+
+    std::string list_str = "[";
+    for (int64_t j = 0; j < size_val; ++j)
+    {
+      if (j > 0)
+        list_str += ", ";
+      list_str += "0"; // default element
+    }
+    list_str += "]";
+
+    current_params.push_back(list_str);
+    current_param_names.push_back("list" + std::to_string(i));
+  }
+
+  // Handle orphan list elems (build single-element list)
+  for (size_t i = list_sizes.size(); i < list_elems.size(); ++i)
+  {
+    std::string list_str = "[" + list_elems[i].second + "]";
+    current_params.push_back(list_str);
+    current_param_names.push_back("list" + std::to_string(i));
   }
 
   // If no nondets found, nothing to generate
