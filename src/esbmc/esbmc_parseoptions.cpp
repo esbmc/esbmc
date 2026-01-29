@@ -2055,8 +2055,19 @@ bool esbmc_parseoptionst::process_goto_program(
     // Process function contracts if enabled
     bool has_enforce = cmdline.isset("enforce-contract");
     bool has_replace = cmdline.isset("replace-call-with-contract");
-    if (has_enforce || has_replace)
+    bool has_auto_havoc = cmdline.isset("auto-havoc-pragma-contract");
+    
+    if (has_auto_havoc)
+    {
+      // Auto-havoc mode: automatically process functions with #pragma contract
+      log_status("Processing functions with #pragma contract");
+      code_contractst contracts(goto_functions, context, ns);
+      contracts.auto_havoc_pragma_contracts();
+    }
+    else if (has_enforce || has_replace)
+    {
       process_function_contracts(goto_functions, has_replace, has_enforce);
+    }
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);

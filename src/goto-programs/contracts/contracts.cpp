@@ -107,12 +107,13 @@ code_contractst::extract_requires_from_body(const goto_programt &function_body)
   std::vector<expr2tc> requires_clauses;
 
   // Scan function body for contract::requires annotations
+  // Also accept "contract requires (enforce)" from wrapper functions
   forall_goto_program_instructions (it, function_body)
   {
     if (it->is_assume())
     {
       std::string comment = id2string(it->location.comment());
-      if (comment == "contract::requires")
+      if (is_requires_comment(comment))
       {
         requires_clauses.push_back(it->guard);
       }
@@ -529,12 +530,13 @@ code_contractst::extract_ensures_from_body(const goto_programt &function_body)
   std::vector<expr2tc> ensures_clauses;
 
   // Scan function body for contract::ensures annotations
+  // Also accept "contract ensures (enforce)" from wrapper functions (which use ASSERT)
   forall_goto_program_instructions (it, function_body)
   {
-    if (it->is_assume())
+    if (it->is_assume() || it->is_assert())
     {
       std::string comment = id2string(it->location.comment());
-      if (comment == "contract::ensures")
+      if (is_ensures_comment(comment))
       {
         // Inline any Clang-generated temporary variables to get the full expression
         // This handles cases where Clang generates control flow for short-circuit evaluation
@@ -867,13 +869,16 @@ void code_contractst::enforce_contracts(
 
     rename_function(original_id, original_name_id);
 
-    // Remove ensures ASSUME from renamed function (would force postconditions to be true)
+    // Remove contract clauses from renamed function
+    // - ensures ASSUME (would force postconditions to be true)
+    // - requires ASSUME (already checked in wrapper)
+    // - assigns side effects (already extracted for havoc)
     // We need to properly update GOTO targets before removing instructions
     {
       auto &renamed_func = goto_functions.function_map[original_name_id];
       goto_programt &renamed_body = renamed_func.body;
 
-      // Collect all ensures instructions to remove
+      // Collect all contract instructions to remove
       std::set<goto_programt::targett> instructions_to_remove;
       for (auto it = renamed_body.instructions.begin();
            it != renamed_body.instructions.end();
@@ -882,9 +887,23 @@ void code_contractst::enforce_contracts(
         if (it->is_assume())
         {
           std::string comment = id2string(it->location.comment());
-          if (comment == "contract::ensures")
+          if (is_contract_comment(comment))
           {
             instructions_to_remove.insert(it);
+          }
+        }
+        // Also remove function call instructions to __ESBMC_assigns
+        else if (it->is_function_call() && is_code_function_call2t(it->code))
+        {
+          const code_function_call2t &call = to_code_function_call2t(it->code);
+          if (is_symbol2t(call.function))
+          {
+            std::string func_name = 
+              id2string(to_symbol2t(call.function).get_symbol_name());
+            if (func_name.find("__ESBMC_assigns") != std::string::npos)
+            {
+              instructions_to_remove.insert(it);
+            }
           }
         }
       }
@@ -1087,7 +1106,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   };
 
   // 3. Assume requires clause (after memory allocation for is_fresh)
-  add_contract_clause(requires_clause, ASSUME, "contract requires");
+  add_contract_clause(requires_clause, ASSUME, "contract requires (enforce)");
 
   // 2. Declare return value variable (if function has return type)
   expr2tc ret_val;
@@ -1292,8 +1311,7 @@ goto_programt code_contractst::generate_checking_wrapper(
       goto_programt::targett t = wrapper.add_instruction(ASSERT);
       t->guard = ensures_guard;
       t->location = location;
-      t->location.comment("contract ensures");
-      t->location.property("contract ensures");
+      t->location.comment("contract ensures (enforce)");  // Mark as enforce phase
     }
   }
 
@@ -2419,13 +2437,11 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
   // Quick check: scan for contract markers without extracting full clauses
   forall_goto_program_instructions (it, function_body)
   {
-    // Check ASSUME instructions for requires/ensures/assigns
-    if (it->is_assume())
+    // Check ASSUME/ASSERT instructions for requires/ensures/assigns/assigns_empty
+    if (it->is_assume() || it->is_assert())
     {
       std::string comment = id2string(it->location.comment());
-      if (
-        comment == "contract::requires" || comment == "contract::ensures" ||
-        comment == "contract::assigns")
+      if (is_contract_comment(comment))
       {
         return true;
       }
@@ -2461,7 +2477,7 @@ static bool matches_replace_pattern(
   return false;
 }
 
-void code_contractst::replace_calls(const std::set<std::string> &to_replace)
+void code_contractst::replace_calls(const std::set<std::string> &to_replace, bool remove_functions)
 {
   log_status(
     "Replacing calls with contracts for {} function(s)", to_replace.size());
@@ -2675,19 +2691,31 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
   // Delete only LEAF function definitions (they've been fully replaced with contracts).
   // Parent functions are kept - they'll be inlined normally with their sub-calls
   // already replaced by contracts.
-  for (const auto &func_id : functions_to_delete)
+  // NOTE: If remove_functions is false (e.g., in auto-havoc mode), we keep the
+  // wrapper functions so that enforce-phase checks are still verified.
+  if (remove_functions)
   {
-    auto func_it = goto_functions.function_map.find(func_id);
-    if (func_it != goto_functions.function_map.end())
+    for (const auto &func_id : functions_to_delete)
     {
-      goto_functions.function_map.erase(func_it);
-      log_status("Removed function {} (replaced with contract)", func_id);
+      auto func_it = goto_functions.function_map.find(func_id);
+      if (func_it != goto_functions.function_map.end())
+      {
+        goto_functions.function_map.erase(func_it);
+        log_status("Removed function {} (replaced with contract)", func_id);
+      }
+      else
+      {
+        log_warning(
+          "Function ID {} not found in function_map for deletion", func_id);
+      }
     }
-    else
-    {
-      log_warning(
-        "Function ID {} not found in function_map for deletion", func_id);
-    }
+  }
+  else
+  {
+    log_debug(
+      "contracts",
+      "Keeping {} function(s) for enforce-phase verification",
+      functions_to_delete.size());
   }
 
   goto_functions.update();
@@ -2847,7 +2875,7 @@ void code_contractst::generate_replacement_at_call(
 
   // 1. Assert requires clause (check precondition at call site)
   add_contract_clause(
-    requires_clause, ASSERT, "contract requires", "contract requires");
+    requires_clause, ASSERT, "contract requires (replace)");
 
   // 2. Havoc all potentially modified locations
   // In replace_calls mode, we must havoc everything the function might modify,
@@ -2965,7 +2993,7 @@ void code_contractst::generate_replacement_at_call(
 
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
-    ensures_guard, ASSUME, "contract ensures", "contract ensures");
+    ensures_guard, ASSUME, "contract ensures (replace)");
 
   // Replace call with replacement code
   // Insert replacement code before the call instruction
@@ -3071,4 +3099,319 @@ void code_contractst::add_pointer_validity_assumptions(
       "parameter {}",
       id2string(param.get_identifier()));
   }
+}
+
+bool code_contractst::has_pragma_contract(const symbolt &function_symbol) const
+{
+  // Check if the function has a #pragma contract annotation
+  // We look for a special marker in the function's properties or comments
+  std::string comment = id2string(function_symbol.location.comment());
+  
+  // Check if the comment contains "pragma contract"
+  if (comment.find("pragma contract") != std::string::npos)
+    return true;
+  
+  // Check if the function symbol has the pragma_contract flag set
+  if (function_symbol.location.get_bool(irep_namet("pragma_contract")))
+    return true;
+  
+  return false;
+}
+
+void code_contractst::insert_enforce_verification_calls(
+  const std::set<std::string> &functions_with_pragma)
+{
+  // Find main function
+  auto main_it = goto_functions.function_map.find("main");
+  if (main_it == goto_functions.function_map.end())
+  {
+    auto c_main_it = goto_functions.function_map.find("c:@F@main");
+    if (c_main_it == goto_functions.function_map.end())
+    {
+      log_warning("main function not found, cannot insert enforce verification calls");
+      return;
+    }
+    main_it = c_main_it;
+  }
+  
+  goto_programt &main_body = main_it->second.body;
+  
+  // Find the first non-declaration instruction in main
+  auto insert_point = main_body.instructions.begin();
+  while (insert_point != main_body.instructions.end() &&
+         insert_point->is_decl())
+  {
+    ++insert_point;
+  }
+  
+  if (insert_point == main_body.instructions.end())
+  {
+    log_warning("Cannot find insertion point in main");
+    return;
+  }
+  
+  locationt loc = insert_point->location;
+  
+  // Create the verification code:
+  // if (NONDET()) {
+  //   // Call each wrapper with nondet args
+  //   wrapper1(nondet_args...);
+  //   wrapper2(nondet_args...);
+  //   ...
+  //   return 0;
+  // }
+  // // Original main continues...
+  
+  goto_programt verification_code;
+  
+  // Lambda: Create nondet expression of given type
+  auto create_nondet = [](const type2tc &type) -> expr2tc {
+    return sideeffect2tc(
+      type,
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::nondet);
+  };
+  
+  // Lambda: Generate nondet arguments for function
+  auto generate_nondet_args = [&create_nondet](
+    const code_typet &code_type) -> std::vector<expr2tc> 
+  {
+    std::vector<expr2tc> args;
+    for (const auto &param : code_type.arguments())
+    {
+      type2tc param_type = migrate_type(param.type());
+      args.push_back(create_nondet(param_type));
+    }
+    return args;
+  };
+  
+  // Lambda: Create function call instruction
+  auto create_function_call_inst = [](
+    goto_programt &dest,
+    const std::string &func_name,
+    const symbolt &func_sym,
+    const std::vector<expr2tc> &args,
+    const locationt &location) -> goto_programt::targett
+  {
+    type2tc func_type = migrate_type(func_sym.type);
+    expr2tc func_symbol = symbol2tc(func_type, func_name);
+    expr2tc call_expr = code_function_call2tc(expr2tc(), func_symbol, args);
+    
+    goto_programt::targett call_inst = dest.add_instruction(FUNCTION_CALL);
+    call_inst->code = call_expr;
+    call_inst->location = location;
+    call_inst->location.comment("Enforce-phase: verify wrapper with nondet args");
+    
+    return call_inst;
+  };
+  
+  // 1. Create NONDET() condition
+  expr2tc nondet_choice = create_nondet(get_bool_type());
+  
+  // 2. Create IF-GOTO: if (!nondet_choice) goto skip_enforce
+  goto_programt::targett if_inst = verification_code.add_instruction(GOTO);
+  if_inst->guard = not2tc(nondet_choice);
+  if_inst->location = loc;
+  if_inst->location.comment("Skip enforce-phase if NONDET=false");
+  
+  // 3. For each pragma function, call its wrapper with nondet arguments
+  for (const auto &func_name : functions_with_pragma)
+  {
+    symbolt *func_sym = find_function_symbol(func_name);
+    if (!func_sym || !func_sym->type.is_code())
+      continue;
+    
+    const code_typet &code_type = to_code_type(func_sym->type);
+    auto args = generate_nondet_args(code_type);
+    create_function_call_inst(verification_code, func_name, *func_sym, args, loc);
+    
+    log_debug("contracts", "Added enforce verification call for {}", func_name);
+  }
+  
+  // 4. Add RETURN 0 to exit after enforce verification
+  type2tc int_type = get_int_type(config.ansi_c.int_width);
+  expr2tc zero = constant_int2tc(int_type, BigInt(0));
+  goto_programt::targett return_inst = verification_code.add_instruction(RETURN);
+  return_inst->code = code_return2tc(zero);
+  return_inst->location = loc;
+  return_inst->location.comment("Exit after enforce-phase verification");
+  
+  // 5. Add skip_enforce label (target of the IF-GOTO)
+  goto_programt::targett skip_label = verification_code.add_instruction(SKIP);
+  skip_label->location = loc;
+  skip_label->location.comment("Continue with replace-phase verification (original main)");
+  
+  // Set the GOTO target
+  if_inst->targets.clear();
+  if_inst->targets.push_back(skip_label);
+  
+  // 6. Insert the verification code at the beginning of main
+  main_body.destructive_insert(insert_point, verification_code);
+  
+  goto_functions.update();
+  
+  log_status("Inserted {} enforce-phase verification calls into main",
+    functions_with_pragma.size());
+  log_status("Symex will explore two paths: enforce-phase and replace-phase");
+}
+
+
+
+void code_contractst::auto_havoc_pragma_contracts()
+{
+  log_status("Auto-havoc mode: scanning for functions with #pragma contract");
+  
+  std::set<std::string> functions_with_pragma;
+  
+  // Step 1: Scan all functions to find those with #pragma contract marker
+  Forall_goto_functions (it, goto_functions)
+  {
+    if (!it->second.body_available)
+      continue;
+    
+    symbolt *func_sym = find_function_symbol(id2string(it->first));
+    if (func_sym == nullptr)
+      continue;
+    
+    // Skip compiler-generated functions
+    if (is_compiler_generated(id2string(it->first)))
+      continue;
+    
+    // Check if function has #pragma contract marker
+    if (has_pragma_contract(*func_sym))
+    {
+      std::string func_name = id2string(it->first);
+      functions_with_pragma.insert(func_name);
+      log_status("Found function with #pragma contract: {}", func_name);
+    }
+  }
+  
+  if (functions_with_pragma.empty())
+  {
+    log_status("No functions with #pragma contract found");
+    return;
+  }
+  
+  log_status(
+    "Found {} function(s) with #pragma contract", functions_with_pragma.size());
+  
+  // Step 2: For each function with #pragma contract, inject default conservative contracts
+  // if they don't already have explicit contracts
+  for (const auto &func_name : functions_with_pragma)
+  {
+    auto func_it = goto_functions.function_map.find(func_name);
+    if (
+      func_it == goto_functions.function_map.end() ||
+      !func_it->second.body_available)
+      continue;
+    
+    goto_programt &func_body = func_it->second.body;
+    
+    // Check if function already has contracts
+    if (has_contracts(func_body))
+    {
+      log_debug(
+        "contracts",
+        "Function {} already has explicit contracts, skipping injection",
+        func_name);
+      continue;
+    }
+    
+    // Inject default conservative contracts: require(true) and ensure(true)
+    log_status("Injecting default conservative contracts for {}", func_name);
+    
+    // Add require(true) at the beginning
+    expr2tc true_expr = gen_true_expr();
+    auto require_inst = func_body.instructions.begin();
+    
+    goto_programt temp_prog;
+    auto t_req = temp_prog.add_instruction(ASSUME);
+    t_req->guard = true_expr;
+    t_req->location = require_inst->location;
+    t_req->location.comment(contract_comments::REQUIRES);
+    
+    func_body.instructions.insert(require_inst, *t_req);
+    
+    // Add ensure(true) before each return statement
+    // NOTE: The location will show as "at return statement" in error traces,
+    // which corresponds to the auto-injected default postcondition.
+    Forall_goto_program_instructions (ins_it, func_body)
+    {
+      if (ins_it->is_return())
+      {
+        goto_programt temp_prog2;
+        auto t_ens = temp_prog2.add_instruction(ASSUME);
+        t_ens->guard = true_expr;
+        t_ens->location = ins_it->location;
+        t_ens->location.comment(contract_comments::ENSURES);  // Marker for auto-injected ensure
+        
+        func_body.instructions.insert(ins_it, *t_ens);
+      }
+    }
+    
+    log_debug(
+      "contracts",
+      "Injected default contracts (require(true), ensure(true)) for {}",
+      func_name);
+  }
+  
+  // Step 3: Apply replace_calls FIRST (before enforce_contracts).
+  // We must replace call sites while the original function bodies still exist:
+  // they contain __ESBMC_assigns / contract clauses. After enforce_contracts,
+  // the original name points to the wrapper (no assigns_target in wrapper body),
+  // so replace_calls would wrongly use conservative havoc for all.
+  replace_calls(functions_with_pragma, false);  // Keep function defs for enforce
+
+  // Step 4: Apply enforce_contracts to verify each function independently.
+  // After this, original names point to wrappers; replace-phase call sites
+  // were already replaced in Step 3, so only enforce-phase will call wrappers.
+  log_status(
+    "Enforcing contracts for {} function(s) with #pragma contract",
+    functions_with_pragma.size());
+  // Default to assume_nonnull_valid for enforce phase to avoid spurious failures
+  // when wrapper is called with nondet pointer (e.g. NULL) at enforce verification.
+  enforce_contracts(functions_with_pragma, true);
+
+  // Step 5: Insert NONDET branches in main to trigger enforce-phase verification
+  // This creates two verification paths:
+  //   Path 1 (NONDET=true): Call wrappers with nondet args → verify ASSERT ensures (enforce)
+  //   Path 2 (NONDET=false): Execute original main → verify ASSERT requires (replace)
+  log_status("Inserting enforce-phase verification calls into main");
+  insert_enforce_verification_calls(functions_with_pragma);
+
+  log_status(
+    "Auto-havoc pragma contract completed; enforce- and replace-phase verified in "
+    "parallel (use --parallel-solving)");
+}
+
+// ========== Contract Comment Helper Methods ==========
+
+bool code_contractst::is_requires_comment(const std::string &comment)
+{
+  return comment == contract_comments::REQUIRES ||
+         comment == contract_comments::REQUIRES_ENFORCE ||
+         comment == contract_comments::REQUIRES_REPLACE;
+}
+
+bool code_contractst::is_ensures_comment(const std::string &comment)
+{
+  return comment == contract_comments::ENSURES ||
+         comment == contract_comments::ENSURES_ENFORCE ||
+         comment == contract_comments::ENSURES_REPLACE;
+}
+
+bool code_contractst::is_assigns_comment(const std::string &comment)
+{
+  return comment == contract_comments::ASSIGNS ||
+         comment == contract_comments::ASSIGNS_EMPTY;
+}
+
+bool code_contractst::is_contract_comment(const std::string &comment)
+{
+  return is_requires_comment(comment) ||
+         is_ensures_comment(comment) ||
+         is_assigns_comment(comment);
 }

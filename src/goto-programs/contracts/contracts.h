@@ -94,12 +94,63 @@ public:
   /// CRITICAL: We must havoc everything the function might modify,
   /// otherwise the effects cannot propagate from the removed function body.
   /// \param to_replace Set of function names to replace with contracts
-  void replace_calls(const std::set<std::string> &to_replace);
+  /// \param remove_functions If true, delete function definitions after replacement (default: true)
+  void replace_calls(const std::set<std::string> &to_replace, bool remove_functions = true);
+
+  /// \brief Automatically apply conservative havoc to functions with #pragma contract
+  /// This method:
+  ///   1. Identifies functions marked with #pragma contract annotation
+  ///   2. Injects default conservative contracts (require(true), ensure(true)) if needed
+  ///   3. Applies replace_calls to replace call sites with contract semantics
+  ///   4. Applies enforce_contracts to verify each function independently
+  ///
+  /// The conservative havoc approach provides over-approximation:
+  /// - May produce false counterexamples (safe but imprecise)
+  /// - Useful for modular verification without explicit contract specifications
+  void auto_havoc_pragma_contracts();
 
   /// \brief Quick check if function has any contracts
   /// \param function_body Function goto program
   /// \return True if function has any contract clauses
   bool has_contracts(const goto_programt &function_body) const;
+
+  /// \brief Insert enforce-phase verification calls into main using NONDET branches
+  /// This creates two verification paths in main:
+  ///   - Path 1: Call wrappers with nondet args (verify enforce phase)
+  ///   - Path 2: Execute original main (verify replace phase)
+  /// \param functions_with_pragma Set of function names with pragma contracts
+  void insert_enforce_verification_calls(
+    const std::set<std::string> &functions_with_pragma);
+
+  /// \brief Check if function has #pragma contract annotation
+  /// \param function_symbol Function symbol to check
+  /// \return True if function has #pragma contract marker
+  bool has_pragma_contract(const symbolt &function_symbol) const;
+
+  // ========== Contract Comment String Constants ==========
+  // Centralized contract marker strings to avoid duplication and typos
+  struct contract_comments {
+    static constexpr const char* REQUIRES = "contract::requires";
+    static constexpr const char* REQUIRES_ENFORCE = "contract requires (enforce)";
+    static constexpr const char* REQUIRES_REPLACE = "contract requires (replace)";
+    static constexpr const char* ENSURES = "contract::ensures";
+    static constexpr const char* ENSURES_ENFORCE = "contract ensures (enforce)";
+    static constexpr const char* ENSURES_REPLACE = "contract ensures (replace)";
+    static constexpr const char* ASSIGNS = "contract::assigns";
+    static constexpr const char* ASSIGNS_EMPTY = "contract::assigns_empty";
+  };
+
+  /// \brief Check if comment string matches any requires marker
+  static bool is_requires_comment(const std::string &comment);
+  
+  /// \brief Check if comment string matches any ensures marker
+  static bool is_ensures_comment(const std::string &comment);
+  
+  /// \brief Check if comment string matches any assigns marker
+  static bool is_assigns_comment(const std::string &comment);
+  
+  /// \brief Check if comment string matches any contract marker
+  static bool is_contract_comment(const std::string &comment);
 
 private:
   goto_functionst &goto_functions;

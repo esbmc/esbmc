@@ -647,9 +647,11 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
   }
-  else if (base_name == "__ESBMC_assigns_impl")
+  else if (base_name == "__ESBMC_assigns_impl" || base_name == "__ESBMC_assigns")
   {
     // __ESBMC_assigns_impl(&expr1, &expr2, ...): unified assigns clause handler
+    // __ESBMC_assigns(expr1, ...): same semantics; some frontends emit this name
+    //   with raw lvalues (no &), so we wrap in address_of to match _impl form.
     //
     // The macro __ESBMC_assigns(x) expands to __ESBMC_assigns_impl(&(x))
     // This allows accepting any lvalue expression (scalars, arrays, struct fields, etc.)
@@ -674,17 +676,28 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
+    // Normalize: __ESBMC_assigns(x) has args (x); _impl has (&x). Use same list.
+    exprt::operandst args_storage;
+    const exprt::operandst *args_ptr = &arguments;
+    if (base_name == "__ESBMC_assigns")
+    {
+      for (const auto &a : arguments)
+        args_storage.push_back(gen_address_of(a));
+      args_ptr = &args_storage;
+    }
+    const exprt::operandst &args = *args_ptr;
+
     log_debug(
       "builtin_functions",
       "Processing __ESBMC_assigns with {} arguments",
-      arguments.size());
+      args.size());
 
     // Check for empty assigns: __ESBMC_assigns(0) means no side effects
     // When user writes __ESBMC_assigns(0), macro expands to __ESBMC_assigns_impl(&(0))
     // But &(0) is invalid, so we check for address_of(constant 0) pattern
-    if (arguments.size() == 1)
+    if (args.size() == 1)
     {
-      exprt first_arg = arguments[0];
+      exprt first_arg = args[0];
       // Strip typecast if present
       if (first_arg.id() == "typecast" && first_arg.operands().size() == 1)
       {
@@ -713,9 +726,9 @@ void goto_convertt::do_function_call_symbol(
     }
 
     // For each argument, unwrap address_of and create an assigns_target sideeffect
-    for (size_t i = 0; i < arguments.size(); ++i)
+    for (size_t i = 0; i < args.size(); ++i)
     {
-      exprt actual_arg = arguments[i];
+      exprt actual_arg = args[i];
 
       // Strip typecast if present
       if (actual_arg.id() == "typecast" && actual_arg.operands().size() == 1)

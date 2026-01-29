@@ -42,7 +42,12 @@ class FieldDecl;
 class MemberExpr;
 class EnumConstantDecl;
 class APValue;
+class FileID;
 } // namespace clang
+
+#include <unordered_map>
+#include <vector>
+#include <string>
 
 std::string
 getFullyQualifiedName(const clang::QualType &, const clang::ASTContext &);
@@ -95,6 +100,12 @@ protected:
   clang::SourceManager *sm;
 
   const clang::FunctionDecl *current_functionDecl;
+
+  // Cache for source file lines (performance optimization for #pragma contract detection)
+  // Key: FileID (from clang::SourceManager)
+  // Value: Vector of lines in that file
+  // This avoids re-parsing the same file for every function declaration
+  mutable std::unordered_map<unsigned, std::vector<std::string>> file_lines_cache_;
 
   bool convert_builtin_types();
   bool convert_top_level_decl();
@@ -339,6 +350,21 @@ protected:
     const clang::Decl &d,
     std::string &name,
     std::string &id) const;
+
+  /**
+   * @brief Get cached source file lines for performance
+   * 
+   * This method caches the parsed lines of source files to avoid
+   * re-reading and parsing the same file multiple times when checking
+   * for #pragma contract annotations.
+   * 
+   * @param fid Clang FileID
+   * @param SM Source Manager
+   * @return Reference to cached vector of lines (empty if file can't be read)
+   */
+  const std::vector<std::string>& get_cached_file_lines(
+    const clang::FileID &fid,
+    clang::SourceManager &SM) const;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
