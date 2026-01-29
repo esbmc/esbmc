@@ -70,8 +70,11 @@ def test_classify_number(n):
 
 ### Running the Tests
 After ESBMC has generated the pytest test cases, you should remove the nondeterministic input lines
-from the original program, such as `classify_number(__VERIFIER_nondet_int())`. These calls are required only during the
+from the original program, such as `classify_number(__VERIFIER_nondet_int())` These calls are required only during the
 verification phase and are no longer needed (cause errors) when running the generated pytest tests.
+For `nondet_dict()` and `nondet_list()`, You need to assign it to a variable first, and then pass that variable into the function.
+Example: `x = nondet_list() classify_number(x)`. For more details, see `nondet.py`.
+
 
 ```bash
 # Run the generated tests
@@ -133,6 +136,8 @@ TOTAL           10      0      8      0   100%
 - `__VERIFIER_nondet_bool()` → Python True/False
 - `__VERIFIER_nondet_float()` → Python float
 - `__VERIFIER_nondet_str()` → Python string
+- `nondet_list()` → Python list
+- `nondet_dict()` → Python dict
 
 ## Example: Multiple Parameters
 
