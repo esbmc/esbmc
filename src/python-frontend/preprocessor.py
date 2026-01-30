@@ -334,6 +334,9 @@ class Preprocessor(ast.NodeTransformer):
         """Get the appropriate type annotation for an iterable"""
         if isinstance(iterable, ast.Constant) and isinstance(iterable.value, str):
             return 'str'
+        elif isinstance(iterable, ast.Call) and isinstance(iterable.func, ast.Attribute):
+            if iterable.func.attr == 'split':
+                return 'list'
         elif isinstance(iterable, ast.List):
             return 'list'
         elif isinstance(iterable, ast.Tuple):
@@ -350,6 +353,11 @@ class Preprocessor(ast.NodeTransformer):
 
     def _get_element_type_from_container(self, container_type, iterable_node=None):
         """Get the element type from a container type with better inference"""
+        # Handle split() calls: result is list[str]
+        if isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute):
+            if iterable_node.func.attr == 'split':
+                return 'str'
+
         # 1. Handle method calls such as d.keys(), d.values()
         if isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute):
             method_name = iterable_node.func.attr
