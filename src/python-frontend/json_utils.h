@@ -182,7 +182,8 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
   auto is_main_guard = [&](const JsonType &node) -> bool {
     if (
-      !node.contains("_type") || node["_type"] != "If" || !node.contains("test"))
+      !node.contains("_type") || node["_type"] != "If" ||
+      !node.contains("test"))
       return false;
 
     const auto &test = node["test"];
@@ -243,8 +244,9 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
       if (!found.empty())
         return found;
 
-      if (if_node.contains("orelse") && if_node["orelse"].is_array() &&
-          !if_node["orelse"].empty())
+      if (
+        if_node.contains("orelse") && if_node["orelse"].is_array() &&
+        !if_node["orelse"].empty())
       {
         JsonType orelse_block;
         orelse_block["body"] = if_node["orelse"];
@@ -254,8 +256,9 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
       return JsonType();
     };
 
-    if (element.contains("_type") && element["_type"] == "If" &&
-        element.contains("body") && element["body"].is_array())
+    if (
+      element.contains("_type") && element["_type"] == "If" &&
+      element.contains("body") && element["body"].is_array())
     {
       if (is_main_guard(element))
       {

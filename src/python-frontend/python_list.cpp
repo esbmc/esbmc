@@ -1521,8 +1521,8 @@ exprt python_list::handle_index_access(
           list_var_name, converter_.current_function_name(), converter_.ast());
         if (!list_var_decl.is_null() && list_var_decl.contains("annotation"))
         {
-          typet annotated_elem =
-            get_elem_type_from_annotation(list_var_decl, converter_.get_type_handler());
+          typet annotated_elem = get_elem_type_from_annotation(
+            list_var_decl, converter_.get_type_handler());
           if (annotated_elem != typet())
             elem_type = annotated_elem;
         }
@@ -1537,7 +1537,6 @@ exprt python_list::handle_index_access(
       throw std::runtime_error(
         "Invalid list access: could not resolve position or element type");
     }
-
 
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
@@ -2177,8 +2176,8 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   if (
     iter.contains("_type") && iter["_type"] == "Call" &&
     iter.contains("func") && iter["func"].contains("_type") &&
-    iter["func"]["_type"] == "Attribute" &&
-    iter["func"].contains("attr") && iter["func"]["attr"] == "split")
+    iter["func"]["_type"] == "Attribute" && iter["func"].contains("attr") &&
+    iter["func"]["attr"] == "split")
   {
     iter_is_split = true;
     loop_var_type = pointer_typet(char_type());
@@ -2342,12 +2341,11 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   code_blockt *saved_block = converter_.current_block;
   converter_.current_block = &loop_body;
 
-
   // Evaluate element expression - temporaries go to loop_body
   exprt element_expr = converter_.get_expr(elt);
   if (
-    elt.contains("_type") && elt["_type"] == "Name" &&
-    elt.contains("id") && elt["id"] == loop_var_name)
+    elt.contains("_type") && elt["_type"] == "Name" && elt.contains("id") &&
+    elt["id"] == loop_var_name)
   {
     element_expr = current_element;
   }
@@ -2356,7 +2354,8 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     !type_utils::is_string_type(element_expr.type()))
   {
     element_expr =
-      converter_.get_string_builder().ensure_null_terminated_string(element_expr);
+      converter_.get_string_builder().ensure_null_terminated_string(
+        element_expr);
   }
   if (
     iter_is_split && element_expr.type().is_array() &&
@@ -2366,8 +2365,9 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     if (arr_type.size().is_constant())
     {
       BigInt size_int;
-      if (!to_integer(to_constant_expr(arr_type.size()), size_int) &&
-          size_int == BigInt(1))
+      if (
+        !to_integer(to_constant_expr(arr_type.size()), size_int) &&
+        size_int == BigInt(1))
       {
         typet fixed_type =
           converter_.get_type_handler().build_array(char_type(), 2);
@@ -2386,8 +2386,7 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     (element_expr.type().subtype().is_nil() ||
      element_expr.type().subtype().id() == "empty"))
   {
-    element_expr =
-      typecast_exprt(element_expr, pointer_typet(char_type()));
+    element_expr = typecast_exprt(element_expr, pointer_typet(char_type()));
   }
 
   // Build push call - temporaries also go to loop_body

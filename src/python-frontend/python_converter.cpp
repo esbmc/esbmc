@@ -1663,28 +1663,31 @@ exprt python_converter::handle_list_operations(
         ? &element["comparators"][0]
         : nullptr;
 
-    if (left_node && right_node &&
-        (is_list_literal(*left_node) || is_list_literal(*right_node)))
+    if (
+      left_node && right_node &&
+      (is_list_literal(*left_node) || is_list_literal(*right_node)))
     {
       const nlohmann::json &lit_node =
         is_list_literal(*left_node) ? *left_node : *right_node;
       const nlohmann::json &other_node =
         is_list_literal(*left_node) ? *right_node : *left_node;
-      const exprt &other_list =
-        is_list_literal(*left_node) ? rhs : lhs;
+      const exprt &other_list = is_list_literal(*left_node) ? rhs : lhs;
 
       auto is_parse_nested_call =
         [](const nlohmann::json &node, std::string &arg_out) -> bool {
         if (!node.contains("_type") || node["_type"] != "Call")
           return false;
-        if (!node.contains("func") || !node["func"].contains("_type") ||
-            node["func"]["_type"] != "Name")
+        if (
+          !node.contains("func") || !node["func"].contains("_type") ||
+          node["func"]["_type"] != "Name")
           return false;
-        if (!node["func"].contains("id") ||
-            node["func"]["id"] != "parse_nested_parens")
+        if (
+          !node["func"].contains("id") ||
+          node["func"]["id"] != "parse_nested_parens")
           return false;
-        if (!node.contains("args") || !node["args"].is_array() ||
-            node["args"].empty())
+        if (
+          !node.contains("args") || !node["args"].is_array() ||
+          node["args"].empty())
           return false;
         const auto &arg0 = node["args"][0];
         if (
@@ -1758,12 +1761,13 @@ exprt python_converter::handle_list_operations(
       if (extract_literal_int_list(lit_node, literal_vals))
       {
         bool has_parse_call = is_parse_nested_call(other_node, parse_arg);
-        if (!has_parse_call && other_node.contains("_type") &&
-            other_node["_type"] == "Name" && other_node.contains("id"))
+        if (
+          !has_parse_call && other_node.contains("_type") &&
+          other_node["_type"] == "Name" && other_node.contains("id"))
         {
           const std::string var_name = other_node["id"].get<std::string>();
-          nlohmann::json var_decl = json_utils::find_var_decl(
-            var_name, current_function_name(), ast());
+          nlohmann::json var_decl =
+            json_utils::find_var_decl(var_name, current_function_name(), ast());
           if (
             !var_decl.is_null() && var_decl.contains("value") &&
             var_decl["value"].is_object())
@@ -2394,8 +2398,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
   // Compile-time evaluation for parse_nested_parens on constant strings.
   if (
-    element["func"]["_type"] == "Name" &&
-    element["func"].contains("id") &&
+    element["func"]["_type"] == "Name" && element["func"].contains("id") &&
     element["func"]["id"] == "parse_nested_parens" &&
     element.contains("args") && element["args"].is_array() &&
     !element["args"].empty())
@@ -3199,7 +3202,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         auto index_it = param_it->second.find(var_name);
         if (index_it != param_it->second.end())
         {
-          auto const_it = function_constant_string_args_.find(current_func_name_);
+          auto const_it =
+            function_constant_string_args_.find(current_func_name_);
           if (const_it != function_constant_string_args_.end())
           {
             size_t idx = index_it->second;
@@ -3208,8 +3212,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               const auto &info = const_it->second[idx];
               if (info.has_value && !info.conflict)
               {
-                expr =
-                  get_string_builder().build_string_literal(info.value);
+                expr = get_string_builder().build_string_literal(info.value);
                 break;
               }
             }
