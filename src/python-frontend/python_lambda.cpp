@@ -109,6 +109,7 @@ void python_lambda::process_lambda_parameters(
   const nlohmann::json &args_node,
   code_typet &lambda_type,
   const std::string &lambda_id,
+  const std::string &param_scope_id,
   const locationt &location)
 {
   if (!args_node.contains("args") || !args_node["args"].is_array())
@@ -139,7 +140,8 @@ void python_lambda::process_lambda_parameters(
     argument.type() = param_type;
     argument.cmt_base_name(arg_name);
 
-    std::string param_id = lambda_id + "@" + arg_name;
+    // Use param_scope_id for parameter symbols to enable closure access
+    std::string param_id = param_scope_id + "@" + arg_name;
     argument.cmt_identifier(param_id);
     argument.location() = location;
     lambda_type.arguments().push_back(argument);
@@ -186,9 +188,25 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   locationt location = converter_.get_location_from_decl(element);
   std::string module_name = location.get_file().as_string();
 
-  // Save and set lambda context
-  std::string old_func_name = converter_.get_current_func_name();
-  converter_.set_current_func_name(lambda_name);
+  // Save the original function context
+  std::string old_func = converter_.get_current_func_name();
+
+  // Determine if we're in a lambda (function name starts with "lam")
+  bool in_lambda = (old_func.find("lam") == 0);
+
+  // Determine the scope for parameters: use first lambda's scope for all nested lambdas
+  std::string param_scope;
+  if (in_lambda)
+  {
+    // Nested lambda: use parent lambda's scope for all parameters
+    param_scope = old_func;
+  }
+  else
+  {
+    // Top-level lambda: use this lambda's name as the scope
+    param_scope = lambda_name;
+    converter_.set_current_func_name(lambda_name);
+  }
 
   // Create function type with inferred return type
   code_typet lambda_type;
@@ -202,13 +220,16 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
 
   lambda_type.return_type() = return_type;
 
-  // Build lambda identifier
+  // Lambda function symbol is always top-level: py:module@F@lambda_name
   std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
+
+  // Parameters are created in param_scope (shared for nested lambdas)
+  std::string param_scope_id = "py:" + module_name + "@F@" + param_scope;
 
   // Process lambda parameters
   if (element.contains("args"))
     process_lambda_parameters(
-      element["args"], lambda_type, lambda_id, location);
+      element["args"], lambda_type, lambda_id, param_scope_id, location);
 
   // Create lambda function symbol
   symbolt lambda_symbol = create_symbol(
@@ -231,8 +252,9 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
     added_symbol->value = lambda_body;
   }
 
-  // Restore context
-  converter_.set_current_func_name(old_func_name);
+  // Restore context only if we changed it (top-level lambda only)
+  if (!in_lambda)
+    converter_.set_current_func_name(old_func);
 
   return symbol_expr(*added_symbol);
 }
