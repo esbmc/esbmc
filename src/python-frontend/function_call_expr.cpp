@@ -1771,6 +1771,63 @@ exprt function_call_expr::handle_list_append() const
   // Get the value to append
   exprt value_to_append = converter_.get_expr(args[0]);
 
+  // If value_to_append is a function call, materialize its return value
+  bool is_func_call = (value_to_append.is_code() &&
+                       value_to_append.get("statement") == "function_call") ||
+                      (value_to_append.id() == "sideeffect" &&
+                       value_to_append.get("statement") == "function_call");
+
+  if (is_func_call)
+  {
+    exprt func_expr;
+    exprt::operandst func_args;
+    typet ret_type;
+
+    if (value_to_append.is_code())
+    {
+      const code_function_callt &call =
+        to_code_function_call(to_code(value_to_append));
+      func_expr = call.function();
+      func_args = call.arguments();
+      ret_type = call.type();
+    }
+    else
+    {
+      // side_effect_expr_function_callt
+      const side_effect_expr_function_callt &call =
+        to_side_effect_expr_function_call(value_to_append);
+      func_expr = call.function();
+      func_args = call.arguments();
+      ret_type = call.type();
+    }
+
+    if (ret_type.is_nil() || ret_type.is_empty())
+    {
+      log_warning(
+        "list.append with function call: unknown return type, assuming int");
+      ret_type = int_type();
+    }
+
+    symbolt &tmp_var = converter_.create_tmp_symbol(
+      call_, "$append_ret$", ret_type, gen_zero(ret_type));
+
+    code_declt tmp_decl(symbol_expr(tmp_var));
+    tmp_decl.location() = converter_.get_location_from_decl(call_);
+    converter_.current_block->copy_to_operands(tmp_decl);
+
+    // Create function call with lhs
+    code_function_callt new_call;
+    new_call.function() = func_expr;
+    new_call.arguments() = func_args;
+    new_call.lhs() = symbol_expr(tmp_var);
+    new_call.type() = ret_type;
+    new_call.location() = converter_.get_location_from_decl(call_);
+    converter_.current_block->copy_to_operands(new_call);
+
+    // Replace value_to_append with the temporary variable
+    value_to_append = symbol_expr(tmp_var);
+  }
+
   if (
     value_to_append.type().is_array() &&
     value_to_append.type().subtype() == char_type())
