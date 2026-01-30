@@ -24,8 +24,36 @@ typedef long time_t;
 typedef long clock_t;
 #endif
 
+#ifndef __clockid_t_defined
+#define __clockid_t_defined 1
+typedef int clockid_t;
+#endif
+
+#ifndef __timer_t_defined
+#define __timer_t_defined 1
+typedef void *timer_t;
+#endif
+
+#ifndef __pid_t_defined
+#define __pid_t_defined 1
+typedef int pid_t;
+#endif
+
 #define CLOCKS_PER_SEC 1000000L
 #define TIME_UTC 1
+
+/* POSIX clock IDs */
+#define CLOCK_REALTIME 0
+#define CLOCK_MONOTONIC 1
+#define CLOCK_PROCESS_CPUTIME_ID 2
+#define CLOCK_THREAD_CPUTIME_ID 3
+#define CLOCK_MONOTONIC_RAW 4
+#define CLOCK_REALTIME_COARSE 5
+#define CLOCK_MONOTONIC_COARSE 6
+#define CLOCK_BOOTTIME 7
+
+/* Flags for clock_nanosleep and timer_settime */
+#define TIMER_ABSTIME 1
 
 #ifndef NULL
 #  ifdef __cplusplus
@@ -41,6 +69,15 @@ struct timespec
 {
   time_t tv_sec;
   long tv_nsec;
+};
+#endif
+
+#ifndef _STRUCT_ITIMERSPEC
+#define _STRUCT_ITIMERSPEC 1
+struct itimerspec
+{
+  struct timespec it_interval;
+  struct timespec it_value;
 };
 #endif
 
@@ -76,9 +113,50 @@ struct tm *gmtime_r(const time_t *timer, struct tm *buf);
 char *asctime(const struct tm *timeptr);
 char *ctime(const time_t *timer);
 
+/* POSIX reentrant versions */
+char *asctime_r(const struct tm *timeptr, char *buf);
+char *ctime_r(const time_t *timer, char *buf);
+
 size_t strftime(char *s, size_t maxsize, const char *format,
                 const struct tm *timeptr);
 
+/* POSIX string parsing */
+char *strptime(const char *s, const char *format, struct tm *tm);
+
 int timespec_get(struct timespec *ts, int base);
+
+/* POSIX clock functions */
+int clock_getres(clockid_t clk_id, struct timespec *res);
+int clock_gettime(clockid_t clk_id, struct timespec *tp);
+int clock_settime(clockid_t clk_id, const struct timespec *tp);
+int clock_nanosleep(clockid_t clk_id, int flags, const struct timespec *request,
+                    struct timespec *remain);
+
+/* POSIX sleep functions */
+int nanosleep(const struct timespec *req, struct timespec *rem);
+
+/* POSIX timers */
+struct sigevent; /* Forward declaration from signal.h */
+int timer_create(clockid_t clockid, struct sigevent *sevp, timer_t *timerid);
+int timer_delete(timer_t timerid);
+int timer_settime(timer_t timerid, int flags, const struct itimerspec *new_value,
+                  struct itimerspec *old_value);
+int timer_gettime(timer_t timerid, struct itimerspec *curr_value);
+int timer_getoverrun(timer_t timerid);
+
+/* POSIX clock CPU-time */
+int clock_getcpuclockid(pid_t pid, clockid_t *clock_id);
+
+/* POSIX timezone functions */
+void tzset(void);
+
+/* POSIX getdate (XSI) */
+struct tm *getdate(const char *string);
+extern int getdate_err;
+
+/* POSIX timezone variables */
+extern int daylight;
+extern long timezone;
+extern char *tzname[2];
 
 __ESBMC_C_CPP_END
