@@ -532,8 +532,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if (no_value_check_extern && !symbol.is_extern)
   {
     log_error(
-      "__ESBMC_EXTERN_NOVAL can only be used on extern variables: '{}'",
-      name);
+      "__ESBMC_EXTERN_NOVAL can only be used on extern variables: '{}'", name);
     return true;
   }
 
