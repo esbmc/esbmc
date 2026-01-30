@@ -1454,7 +1454,34 @@ std::string function_call_expr::get_object_name() const
 bool function_call_expr::is_min_max_call() const
 {
   const std::string &func_name = function_id_.get_function();
-  return func_name == "min" || func_name == "max";
+  bool is_min_or_max = (func_name == "min" || func_name == "max");
+
+  if (!is_min_or_max)
+    return false;
+
+  const auto &args = call_["args"];
+
+  // Handle two-argument case: min(a, b) or max(a, b)
+  if (args.size() == 2)
+    return true;
+
+  // Handle single-argument case if it's a tuple
+  if (args.size() == 1)
+  {
+    exprt arg = converter_.get_expr(args[0]);
+    const typet &arg_type = converter_.ns.follow(arg.type());
+
+    // Check if it's a tuple (struct with tag-tuple prefix)
+    if (arg_type.id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(arg_type);
+      std::string tag = struct_type.tag().as_string();
+      return tag.starts_with("tag-tuple");
+    }
+  }
+
+  // Single argument that's not a tuple falls through to general handler (for lists)
+  return false;
 }
 
 exprt function_call_expr::handle_min_max(
@@ -1468,8 +1495,50 @@ exprt function_call_expr::handle_min_max(
       func_name + " expected at least 1 argument, got 0");
 
   if (args.size() == 1)
-    throw std::runtime_error(
-      func_name + "() with single iterable argument not yet supported");
+  {
+    // Single iterable argument case: min(iterable) or max(iterable)
+    exprt arg = converter_.get_expr(args[0]);
+    const typet &arg_type = converter_.ns.follow(arg.type());
+
+    // Check if it's a tuple (struct type with element_N components)
+    if (arg_type.id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(arg_type);
+
+      // Check if this is a tuple by examining the tag
+      std::string tag = struct_type.tag().as_string();
+      if (tag.starts_with("tag-tuple"))
+      {
+        // Handle tuple directly by building comparison chain
+        const auto &components = struct_type.components();
+
+        if (components.empty())
+          throw std::runtime_error(func_name + "() arg is an empty sequence");
+
+        // Start with first element: result = t.element_0
+        exprt result =
+          member_exprt(arg, components[0].get_name(), components[0].type());
+
+        // Compare with remaining elements
+        for (size_t i = 1; i < components.size(); ++i)
+        {
+          member_exprt elem(
+            arg, components[i].get_name(), components[i].type());
+
+          // Create comparison: elem < result (for min) or elem > result (for max)
+          exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
+          condition.copy_to_operands(elem, result);
+
+          // result = (elem < result) ? elem : result
+          if_exprt update(condition, elem, result);
+          update.type() = components[i].type();
+          result = update;
+        }
+
+        return result;
+      }
+    }
+  }
 
   if (args.size() > 2)
     throw std::runtime_error(
@@ -2146,6 +2215,33 @@ exprt function_call_expr::handle_general_function_call()
 {
   auto &symbol_table = converter_.symbol_table();
 
+  // Handle single-argument min/max by dispatching to typed builtins
+  const std::string &func_name = function_id_.get_function();
+  std::string actual_func_name = func_name;
+
+  if ((func_name == "min" || func_name == "max") && call_["args"].size() == 1)
+  {
+    exprt list_arg = converter_.get_expr(call_["args"][0]);
+    typet elem_type;
+    if (list_arg.is_symbol())
+    {
+      const std::string &list_id = list_arg.identifier().as_string();
+      // Check that all elements have the same type and get the common type
+      elem_type = python_list::check_homogeneous_list_types(list_id, func_name);
+    }
+    // Dispatch to typed builtin based on element type
+    if (!elem_type.is_nil())
+    {
+      if (elem_type.is_floatbv())
+        actual_func_name += "_float";
+      else if (
+        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
+        (elem_type.is_array() && elem_type.subtype() == char_type()))
+        actual_func_name += "_str";
+      // Integer types use base name without suffix
+    }
+  }
+
   // Get object symbol
   symbolt *obj_symbol = nullptr;
   symbol_id obj_symbol_id = converter_.create_symbol_id();
@@ -2157,8 +2253,17 @@ exprt function_call_expr::handle_general_function_call()
     obj_symbol = symbol_table.find_symbol(obj_symbol_id.to_string());
   }
 
-  // Get function symbol id
-  const std::string &func_symbol_id = function_id_.to_string();
+  // Get function symbol id - use actual_func_name for typed dispatch
+  std::string func_symbol_id;
+  if (actual_func_name != func_name)
+  {
+    symbol_id modified_function_id = function_id_;
+    modified_function_id.set_function(actual_func_name);
+    func_symbol_id = modified_function_id.to_string();
+  }
+  else
+    func_symbol_id = function_id_.to_string();
+
   assert(!func_symbol_id.empty());
 
   // Find function symbol

@@ -8,6 +8,7 @@
 #include <python-frontend/python_class_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_typechecking.h>
 #include <python-frontend/string_builder.h>
@@ -758,6 +759,86 @@ exprt python_converter::handle_string_comparison(
     string_handler_.is_zero_length_array(resolved_rhs))
     return gen_boolean(op == "Eq");
 
+  // Fast-path for comparisons against single-character string literals.
+  // This avoids introducing strcmp() calls that can inflate branch coverage counts.
+  if (op == "Eq" || op == "NotEq")
+  {
+    auto extract_single_char = [&](const exprt &expr, char &ch) -> bool {
+      const exprt *candidate = &expr;
+      if (
+        expr.id() == "address_of" && expr.operands().size() == 1 &&
+        expr.op0().type().is_array())
+      {
+        candidate = &expr.op0();
+      }
+
+      if (!candidate->type().is_array())
+        return false;
+
+      if (candidate->type().subtype() != char_type())
+        return false;
+
+      const std::string value =
+        string_handler_.extract_string_from_array_operands(*candidate);
+      if (value.size() != 1)
+        return false;
+
+      ch = value[0];
+      return true;
+    };
+
+    auto char_at_index = [&](const exprt &expr, int idx) -> exprt {
+      exprt index = from_integer(idx, index_type());
+      if (expr.type().is_array())
+        return index_exprt(expr, index, char_type());
+
+      exprt ptr = expr;
+      if (!ptr.type().is_pointer())
+        ptr = address_of_exprt(expr);
+
+      plus_exprt ptr_plus(ptr, index);
+      ptr_plus.type() = ptr.type();
+      return dereference_exprt(ptr_plus, char_type());
+    };
+
+    char literal_char = 0;
+    bool lhs_is_char_literal = extract_single_char(resolved_lhs, literal_char);
+    bool rhs_is_char_literal = extract_single_char(resolved_rhs, literal_char);
+
+    if (
+      lhs_is_char_literal ^ rhs_is_char_literal &&
+      (type_utils::is_string_type(resolved_lhs.type()) ||
+       type_utils::is_string_type(resolved_rhs.type())))
+    {
+      const exprt &str_expr = lhs_is_char_literal ? resolved_rhs : resolved_lhs;
+      exprt first_char = char_at_index(str_expr, 0);
+      exprt second_char = char_at_index(str_expr, 1);
+
+      exprt lit =
+        from_integer(static_cast<unsigned char>(literal_char), char_type());
+      exprt zero = from_integer(0, char_type());
+
+      exprt first_eq("=", bool_type());
+      first_eq.copy_to_operands(first_char, lit);
+      exprt second_eq("=", bool_type());
+      second_eq.copy_to_operands(second_char, zero);
+
+      exprt both_eq("and", bool_type());
+      both_eq.copy_to_operands(first_eq, second_eq);
+
+      if (op == "NotEq")
+      {
+        exprt not_expr("not", bool_type());
+        not_expr.copy_to_operands(both_eq);
+        not_expr.location() = get_location_from_decl(element);
+        return not_expr;
+      }
+
+      both_eq.location() = get_location_from_decl(element);
+      return both_eq;
+    }
+  }
+
   // Try constant comparisons
   exprt constant_result =
     compare_constants_internal(op, resolved_lhs, resolved_rhs);
@@ -1224,6 +1305,32 @@ exprt python_converter::handle_membership_operator(
     {
       return dict_handler_->handle_dict_membership(lhs, rhs, invert);
     }
+
+    if (tag.starts_with("tag-tuple"))
+    {
+      // Check if this is a tuple of strings: if so, delegate to string handler
+      const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
+      bool is_string_tuple = true;
+
+      for (const auto &comp : struct_type.components())
+      {
+        if (!comp.type().is_array() && !comp.type().is_pointer())
+        {
+          is_string_tuple = false;
+          break;
+        }
+      }
+
+      // If tuple contains strings and lhs is a string, use string handler
+      if (is_string_tuple && (lhs.type().is_pointer() || lhs.type().is_array()))
+      {
+        exprt membership_expr =
+          string_handler_.handle_string_membership(lhs, rhs, element);
+        return invert ? not_exprt(membership_expr) : membership_expr;
+      }
+
+      return tuple_handler_->handle_tuple_membership(lhs, rhs, invert);
+    }
   }
 
   typet list_type = type_handler_.get_list_type();
@@ -1579,7 +1686,12 @@ exprt python_converter::handle_relational_type_mismatches(
     // Todo: we should change the all expression to a correct format in future.
     bool both_arrays = lhs.type().is_array() && rhs.type().is_array();
 
-    if (!both_arrays)
+    // If both operands are strings (including char pointers), skip single-char comparison
+    // and let the string comparison path handle it (strcmp).
+    bool both_strings = type_utils::is_string_type(lhs.type()) &&
+                        type_utils::is_string_type(rhs.type());
+
+    if (!both_arrays && !both_strings)
     {
       exprt char_comp_result =
         string_handler_.handle_single_char_comparison(op, lhs, rhs);
@@ -2627,101 +2739,7 @@ symbolt &python_converter::create_tmp_symbol(
 
 exprt python_converter::get_lambda_expr(const nlohmann::json &element)
 {
-  // Generate unique lambda name
-  static int lambda_counter = 0;
-  std::string lambda_name = "lam" + std::to_string(++lambda_counter);
-
-  locationt location = get_location_from_decl(element);
-
-  // Save current context and set lambda context
-  std::string old_func_name = current_func_name_;
-  current_func_name_ = lambda_name;
-
-  // Create function type with proper return type detection
-  code_typet lambda_type;
-  typet return_type = double_type();
-  // TODO: Try to infer better return type from the body if possible
-  if (element.contains("body"))
-    current_element_type = return_type;
-  lambda_type.return_type() = return_type;
-
-  std::string module_name = location.get_file().as_string();
-  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
-
-  // Process arguments and create parameter symbols
-  if (element.contains("args") && element["args"].contains("args"))
-  {
-    for (const auto &arg : element["args"]["args"])
-    {
-      std::string arg_name = arg["arg"].get<std::string>();
-
-      // Determine parameter type
-      // TODO: try to infer from usage or default to double
-      typet param_type = double_type();
-
-      // Create function argument
-      code_typet::argumentt argument;
-      argument.type() = param_type;
-      argument.cmt_base_name(arg_name);
-
-      std::string param_id = lambda_id + "@" + arg_name;
-      argument.cmt_identifier(param_id);
-      argument.location() = location;
-      lambda_type.arguments().push_back(argument);
-
-      // Create parameter symbol with all necessary fields
-      symbolt param_symbol;
-      param_symbol.id = param_id;
-      param_symbol.name = arg_name;
-      param_symbol.type = param_type;
-      param_symbol.location = location;
-      param_symbol.mode = "Python";
-      param_symbol.module = module_name;
-      param_symbol.lvalue = true;
-      param_symbol.is_parameter = true;
-      param_symbol.file_local = true;
-      param_symbol.static_lifetime = false;
-      param_symbol.is_extern = false;
-      symbol_table_.add(param_symbol);
-    }
-  }
-
-  // Create lambda function symbol
-  symbolt lambda_symbol;
-  lambda_symbol.id = lambda_id;
-  lambda_symbol.name = lambda_name;
-  lambda_symbol.type = lambda_type;
-  lambda_symbol.location = location;
-  lambda_symbol.mode = "Python";
-  lambda_symbol.module = module_name;
-  lambda_symbol.lvalue = true;
-  lambda_symbol.is_extern = false;
-  lambda_symbol.file_local = false;
-  lambda_symbol.static_lifetime = false;
-
-  symbolt *added_symbol = symbol_table_.move_symbol_to_context(lambda_symbol);
-
-  // Process lambda body
-  if (element.contains("body"))
-  {
-    code_blockt lambda_block;
-
-    // Process the body expression
-    exprt body_expr = get_expr(element["body"]);
-
-    // Create return statement
-    code_returnt return_stmt;
-    return_stmt.return_value() = body_expr;
-    return_stmt.location() = location;
-
-    lambda_block.copy_to_operands(return_stmt);
-    added_symbol->value = lambda_block;
-  }
-
-  // Restore context
-  current_func_name_ = old_func_name;
-
-  return symbol_expr(*added_symbol);
+  return lambda_handler_->get_lambda_expr(element);
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
@@ -3348,27 +3366,10 @@ void python_converter::handle_assignment_type_adjustments(
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
   // Handle lambda assignments
-  if (
-    ast_node.contains("value") && ast_node["value"].contains("_type") &&
-    ast_node["value"]["_type"] == "Lambda" && rhs.is_symbol())
+  if (lambda_handler_->is_lambda_assignment(ast_node) && rhs.is_symbol())
   {
-    const symbolt *lambda_func_symbol =
-      symbol_table_.find_symbol(rhs.identifier());
-    if (lambda_func_symbol && lhs_symbol)
-    {
-      if (lambda_func_symbol->type.is_code())
-      {
-        typet func_ptr_type = gen_pointer_type(lambda_func_symbol->type);
-        lhs_symbol->type = func_ptr_type;
-        lhs.type() = func_ptr_type;
-        rhs = address_of_exprt(rhs);
-      }
-      else
-      {
-        throw std::runtime_error(
-          "Lambda function symbol does not have code type");
-      }
-    }
+    lambda_handler_->handle_lambda_assignment(lhs_symbol, lhs, rhs);
+    return;
   }
   // Handle tuple assignments with generic tuple annotation
   else if (
@@ -3645,8 +3646,6 @@ std::string python_converter::infer_type_from_any_annotation(
 
   return lhs_type;
 }
-
-// (type assertion helpers moved to python_typechecking)
 
 bool python_converter::handle_unpacking_assignment(
   const nlohmann::json &ast_node,
@@ -6419,13 +6418,40 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::RAISE:
     {
-      typet type = type_handler_.get_typet(
-        element["exc"]["func"]["id"].get<std::string>());
+      std::string exc_name;
+      // Try to extract the exception name from different AST shapes
+      if (
+        element["exc"].contains("func") &&
+        element["exc"]["func"].contains("id"))
+        exc_name = element["exc"]["func"]["id"].get<std::string>();
+      else if (element["exc"].contains("id"))
+        exc_name = element["exc"]["id"].get<std::string>();
+      else if (element["exc"].is_string())
+        exc_name = element["exc"].get<std::string>();
+      else
+        exc_name = ""; // fallback
+
       locationt location = get_location_from_decl(element);
+      typet type = type_handler_.get_typet(exc_name);
+
+      if (exc_name == "AssertionError")
+      {
+        code_assertt assert_code{false_exprt()};
+        assert_code.location() = location;
+        if (
+          element["exc"].contains("args") && !element["exc"]["args"].empty() &&
+          !element["exc"]["args"][0].is_null())
+        {
+          const std::string msg =
+            string_handler_.process_format_spec(element["exc"]["args"][0]);
+          assert_code.location().comment(msg);
+        }
+        block.move_to_operands(assert_code);
+        break;
+      }
 
       exprt raise;
-      if (type_utils::is_python_exceptions(
-            element["exc"]["func"]["id"].get<std::string>()))
+      if (type_utils::is_python_exceptions(exc_name))
       {
         // Construct a constant struct to throw:
         // raise { .message=&"Error message" }
@@ -6456,7 +6482,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         raise = tmp;
       }
 
-      exprt side = side_effect_exprt("cpp-throw", type);
+      side_effect_exprt side("cpp-throw", type);
       side.location() = location;
       side.move_to_operands(raise);
 
@@ -6534,7 +6560,8 @@ python_converter::python_converter(
     math_handler_(*this, symbol_table_, type_handler_),
     tuple_handler_(new tuple_handler(*this, type_handler_)),
     dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_)),
-    typechecker_(new python_typechecking(*this))
+    typechecker_(new python_typechecking(*this)),
+    lambda_handler_(new python_lambda(*this, _context, type_handler_))
 {
 }
 
@@ -6544,6 +6571,7 @@ python_converter::~python_converter()
   delete tuple_handler_;
   delete dict_handler_;
   delete typechecker_;
+  delete lambda_handler_;
 }
 
 python_typechecking &python_converter::get_typechecker()

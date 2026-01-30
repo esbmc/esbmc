@@ -84,6 +84,16 @@ public:
     exprt &rhs,
     codet &target_block);
 
+  /**
+   * @brief Handle tuple membership test (e.g., x in tuple)
+   * @param lhs The element to search for
+   * @param rhs The tuple to search in
+   * @param invert Whether this is "not in" operation
+   * @return exprt Boolean expression representing membership test
+   */
+  exprt handle_tuple_membership(const exprt &lhs, const exprt &rhs, bool invert)
+    const;
+
 private:
   /**
    * @brief Build a unique tag name for a tuple based on element types

@@ -21,6 +21,7 @@ extern "C"
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
+#include <util/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <util/expr_util.h>
@@ -94,10 +95,8 @@ struct resultt
 void timeout_handler(int)
 {
   log_error("Timed out");
-  // Unfortunately some highly useful pieces of code hook themselves into
-  // aexit and attempt to free some memory. That doesn't really make sense to
-  // occur on exit, but more importantly doesn't mix well with signal handlers,
-  // and results in the allocator locking against itself. So use _exit instead
+  file_operations::cleanup_registered_tmps();
+  // Use _exit to avoid atexit handlers that may deadlock the allocator
   _exit(1);
 }
 #endif
