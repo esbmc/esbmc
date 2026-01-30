@@ -108,7 +108,7 @@ symbolt python_lambda::create_symbol(
 void python_lambda::process_lambda_parameters(
   const nlohmann::json &args_node,
   code_typet &lambda_type,
-  const std::string &lambda_id,
+  [[maybe_unused]] const std::string &lambda_id,
   const std::string &param_scope_id,
   const locationt &location)
 {
