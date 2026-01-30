@@ -1772,11 +1772,10 @@ exprt function_call_expr::handle_list_append() const
   exprt value_to_append = converter_.get_expr(args[0]);
 
   // If value_to_append is a function call, materialize its return value
-  bool is_func_call =
-    (value_to_append.is_code() &&
-     value_to_append.get("statement") == "function_call") ||
-    (value_to_append.id() == "sideeffect" &&
-     value_to_append.get("statement") == "function_call");
+  bool is_func_call = (value_to_append.is_code() &&
+                       value_to_append.get("statement") == "function_call") ||
+                      (value_to_append.id() == "sideeffect" &&
+                       value_to_append.get("statement") == "function_call");
 
   if (is_func_call)
   {
