@@ -134,3 +134,45 @@ int main() {
     return 0;
 }
 ```
+
+## Variable Attributes
+
+### __ESBMC_EXTERN_NOVAL
+
+`__ESBMC_EXTERN_NOVAL` is an attribute macro used to prevent ESBMC from assigning
+a non-deterministic value to an extern variable. By default, ESBMC treats extern
+variables as having any possible value (non-deterministic), since their actual
+definition may exist in another translation unit that ESBMC cannot see.
+
+When you know that an extern variable will have a specific value at runtime
+(because its definition exists elsewhere in your codebase), you can use this
+attribute to tell ESBMC to leave the variable's value as-is rather than making
+it non-deterministic.
+
+{{< callout type="warning" >}}
+This attribute can only be used on extern variables. Using it on non-extern
+variables will result in a compilation error.
+{{< /callout >}}
+
+**Example:**
+
+```c
+// Declaration with __ESBMC_EXTERN_NOVAL
+__ESBMC_EXTERN_NOVAL extern int counter;
+
+// Definition (simulates separate translation unit)
+int counter = 42;
+
+int main() {
+    // Without __ESBMC_EXTERN_NOVAL, this assertion could fail
+    // because ESBMC would treat counter as non-deterministic.
+    // With the attribute, ESBMC uses the defined value (42).
+    __ESBMC_assert(counter == 42, "Counter should have defined value");
+    return 0;
+}
+```
+
+**Use cases:**
+- Verifying code that uses POSIX global variables (e.g., `errno`, `timezone`, `daylight`)
+- Multi-file projects where extern declarations reference variables defined elsewhere
+- Library headers that declare extern variables with known definitions
