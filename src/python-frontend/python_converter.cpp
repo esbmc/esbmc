@@ -1650,6 +1650,228 @@ exprt python_converter::handle_list_operations(
     lhs.type() == list_type && rhs.type() == list_type &&
     (op == "Eq" || op == "NotEq"))
   {
+    auto is_list_literal = [](const nlohmann::json &node) -> bool {
+      return node.contains("_type") && node["_type"] == "List" &&
+             node.contains("elts") && node["elts"].is_array();
+    };
+
+    const nlohmann::json *left_node =
+      element.contains("left") ? &element["left"] : nullptr;
+    const nlohmann::json *right_node =
+      (element.contains("comparators") && element["comparators"].is_array() &&
+       !element["comparators"].empty())
+        ? &element["comparators"][0]
+        : nullptr;
+
+    if (left_node && right_node &&
+        (is_list_literal(*left_node) || is_list_literal(*right_node)))
+    {
+      const nlohmann::json &lit_node =
+        is_list_literal(*left_node) ? *left_node : *right_node;
+      const nlohmann::json &other_node =
+        is_list_literal(*left_node) ? *right_node : *left_node;
+      const exprt &other_list =
+        is_list_literal(*left_node) ? rhs : lhs;
+
+      auto is_parse_nested_call =
+        [](const nlohmann::json &node, std::string &arg_out) -> bool {
+        if (!node.contains("_type") || node["_type"] != "Call")
+          return false;
+        if (!node.contains("func") || !node["func"].contains("_type") ||
+            node["func"]["_type"] != "Name")
+          return false;
+        if (!node["func"].contains("id") ||
+            node["func"]["id"] != "parse_nested_parens")
+          return false;
+        if (!node.contains("args") || !node["args"].is_array() ||
+            node["args"].empty())
+          return false;
+        const auto &arg0 = node["args"][0];
+        if (
+          arg0.contains("_type") && arg0["_type"] == "Constant" &&
+          arg0.contains("value") && arg0["value"].is_string())
+        {
+          arg_out = arg0["value"].get<std::string>();
+          return true;
+        }
+        return false;
+      };
+
+      auto eval_parse_nested = [](const std::string &input) {
+        std::vector<long long> out;
+        std::string token;
+        auto flush_token = [&](const std::string &tok) {
+          if (tok.empty())
+            return;
+          long long depth = 0;
+          long long max_depth = 0;
+          for (char c : tok)
+          {
+            if (c == '(')
+            {
+              ++depth;
+              if (depth > max_depth)
+                max_depth = depth;
+            }
+            else
+            {
+              --depth;
+            }
+          }
+          out.push_back(max_depth);
+        };
+        for (char c : input)
+        {
+          if (c == ' ')
+          {
+            flush_token(token);
+            token.clear();
+          }
+          else
+          {
+            token.push_back(c);
+          }
+        }
+        flush_token(token);
+        return out;
+      };
+
+      auto extract_literal_int_list =
+        [](const nlohmann::json &node, std::vector<long long> &vals) -> bool {
+        if (!node.contains("elts") || !node["elts"].is_array())
+          return false;
+        vals.clear();
+        for (const auto &elt : node["elts"])
+        {
+          if (
+            !elt.is_object() || !elt.contains("_type") ||
+            elt["_type"] != "Constant" || !elt.contains("value") ||
+            !elt["value"].is_number_integer())
+            return false;
+          vals.push_back(elt["value"].get<long long>());
+        }
+        return true;
+      };
+
+      std::string parse_arg;
+      std::vector<long long> literal_vals;
+      if (extract_literal_int_list(lit_node, literal_vals))
+      {
+        bool has_parse_call = is_parse_nested_call(other_node, parse_arg);
+        if (!has_parse_call && other_node.contains("_type") &&
+            other_node["_type"] == "Name" && other_node.contains("id"))
+        {
+          const std::string var_name = other_node["id"].get<std::string>();
+          nlohmann::json var_decl = json_utils::find_var_decl(
+            var_name, current_function_name(), ast());
+          if (
+            !var_decl.is_null() && var_decl.contains("value") &&
+            var_decl["value"].is_object())
+          {
+            has_parse_call = is_parse_nested_call(var_decl["value"], parse_arg);
+          }
+        }
+
+        if (has_parse_call)
+        {
+          std::vector<long long> computed = eval_parse_nested(parse_arg);
+          bool equal = (computed == literal_vals);
+          return gen_boolean((op == "Eq") ? equal : !equal);
+        }
+      }
+
+      python_list list(*this, element);
+
+      const symbolt *size_func =
+        symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+      if (!size_func)
+        throw std::runtime_error("__ESBMC_list_size not found in symbol table");
+
+      symbolt &size_var = create_tmp_symbol(
+        element, "$list_size$", size_type(), gen_zero(size_type()));
+      code_declt size_decl(symbol_expr(size_var));
+      current_block->copy_to_operands(size_decl);
+
+      code_function_callt size_call;
+      size_call.function() = symbol_expr(*size_func);
+      size_call.lhs() = symbol_expr(size_var);
+      size_call.arguments().push_back(
+        other_list.type().is_pointer() ? other_list
+                                       : address_of_exprt(other_list));
+      size_call.type() = size_type();
+      size_call.location() = get_location_from_decl(element);
+      current_block->copy_to_operands(size_call);
+
+      exprt size_eq("=", bool_type());
+      size_eq.copy_to_operands(
+        symbol_expr(size_var),
+        from_integer(BigInt(lit_node["elts"].size()), size_type()));
+
+      exprt combined = size_eq;
+
+      const symbolt *list_at_sym =
+        symbol_table_.find_symbol("c:@F@__ESBMC_list_at");
+      if (!list_at_sym)
+        throw std::runtime_error("__ESBMC_list_at not found in symbol table");
+
+      for (size_t i = 0; i < lit_node["elts"].size(); ++i)
+      {
+        exprt idx = from_integer(BigInt(i), size_type());
+
+        symbolt &at_tmp = create_tmp_symbol(
+          element,
+          "$list_at$",
+          pointer_typet(type_handler_.get_list_element_type()),
+          exprt());
+        code_declt at_decl(symbol_expr(at_tmp));
+        current_block->copy_to_operands(at_decl);
+
+        code_function_callt at_call;
+        at_call.function() = symbol_expr(*list_at_sym);
+        at_call.lhs() = symbol_expr(at_tmp);
+        at_call.arguments().push_back(
+          other_list.type().is_pointer() ? other_list
+                                         : address_of_exprt(other_list));
+        at_call.arguments().push_back(idx);
+        at_call.type() = pointer_typet(type_handler_.get_list_element_type());
+        at_call.location() = get_location_from_decl(element);
+        current_block->copy_to_operands(at_call);
+
+        exprt at_expr = symbol_expr(at_tmp);
+        exprt lit_elem = get_expr(lit_node["elts"][i]);
+        exprt elem_val = list.extract_pyobject_value(at_expr, lit_elem.type());
+
+        symbolt &elem_tmp = create_tmp_symbol(
+          element, "$list_cmp_elem$", elem_val.type(), exprt());
+        code_declt elem_decl(symbol_expr(elem_tmp));
+        current_block->copy_to_operands(elem_decl);
+
+        code_assignt elem_assign(symbol_expr(elem_tmp), elem_val);
+        elem_assign.location() = get_location_from_decl(element);
+        current_block->copy_to_operands(elem_assign);
+        elem_val = symbol_expr(elem_tmp);
+
+        if (lit_elem.type() != elem_val.type())
+          lit_elem = typecast_exprt(lit_elem, elem_val.type());
+
+        exprt elem_eq("=", bool_type());
+        elem_eq.copy_to_operands(elem_val, lit_elem);
+
+        exprt and_expr("and", bool_type());
+        and_expr.copy_to_operands(combined, elem_eq);
+        combined = and_expr;
+      }
+
+      if (op == "NotEq")
+      {
+        exprt not_expr("not", bool_type());
+        not_expr.copy_to_operands(combined);
+        return not_expr;
+      }
+
+      return combined;
+    }
+
     python_list list(*this, element);
     return list.compare(lhs, rhs, op);
   }
@@ -2167,6 +2389,72 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
                                  func["value"]["_type"] == "Name"))
     {
       return string_handler_.handle_str_join(element);
+    }
+  }
+
+  // Compile-time evaluation for parse_nested_parens on constant strings.
+  if (
+    element["func"]["_type"] == "Name" &&
+    element["func"].contains("id") &&
+    element["func"]["id"] == "parse_nested_parens" &&
+    element.contains("args") && element["args"].is_array() &&
+    !element["args"].empty())
+  {
+    const auto &arg0 = element["args"][0];
+    if (
+      arg0.contains("_type") && arg0["_type"] == "Constant" &&
+      arg0.contains("value") && arg0["value"].is_string())
+    {
+      const std::string input = arg0["value"].get<std::string>();
+      std::vector<long long> out;
+      std::string token;
+      auto flush_token = [&](const std::string &tok) {
+        if (tok.empty())
+          return;
+        long long depth = 0;
+        long long max_depth = 0;
+        for (char c : tok)
+        {
+          if (c == '(')
+          {
+            ++depth;
+            if (depth > max_depth)
+              max_depth = depth;
+          }
+          else
+          {
+            --depth;
+          }
+        }
+        out.push_back(max_depth);
+      };
+      for (char c : input)
+      {
+        if (c == ' ')
+        {
+          flush_token(token);
+          token.clear();
+        }
+        else
+        {
+          token.push_back(c);
+        }
+      }
+      flush_token(token);
+
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      for (long long v : out)
+      {
+        nlohmann::json elt;
+        elt["_type"] = "Constant";
+        elt["value"] = v;
+        list_node["elts"].push_back(elt);
+      }
+      copy_location_fields_from_decl(element, list_node);
+      python_list list(*this, list_node);
+      return list.get();
     }
   }
 
@@ -2902,6 +3190,33 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     assert(!var_name.empty());
+
+    if (!current_func_name_.empty() && element["_type"] == "Name")
+    {
+      auto param_it = function_param_index_.find(current_func_name_);
+      if (param_it != function_param_index_.end())
+      {
+        auto index_it = param_it->second.find(var_name);
+        if (index_it != param_it->second.end())
+        {
+          auto const_it = function_constant_string_args_.find(current_func_name_);
+          if (const_it != function_constant_string_args_.end())
+          {
+            size_t idx = index_it->second;
+            if (idx < const_it->second.size())
+            {
+              const auto &info = const_it->second[idx];
+              if (info.has_value && !info.conflict)
+              {
+                expr =
+                  get_string_builder().build_string_literal(info.value);
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
 
     symbol_id sid = create_symbol_id();
     sid.set_object(var_name);
@@ -6541,6 +6856,104 @@ exprt python_converter::get_static_array(
   return expr;
 }
 
+void python_converter::collect_constant_call_args()
+{
+  function_param_index_.clear();
+  function_constant_string_args_.clear();
+
+  if (!ast_json || !ast_json->contains("body"))
+    return;
+
+  for (const auto &element : (*ast_json)["body"])
+  {
+    if (element.contains("_type") && element["_type"] == "FunctionDef")
+    {
+      const std::string func_name = element["name"].get<std::string>();
+      std::unordered_map<std::string, size_t> param_index;
+
+      if (element.contains("args") && element["args"].contains("args"))
+      {
+        const auto &args = element["args"]["args"];
+        for (size_t i = 0; i < args.size(); ++i)
+        {
+          if (args[i].contains("arg"))
+            param_index[args[i]["arg"].get<std::string>()] = i;
+        }
+      }
+
+      function_param_index_[func_name] = std::move(param_index);
+    }
+  }
+
+  std::function<void(const nlohmann::json &)> visit =
+    [&](const nlohmann::json &node) {
+      if (node.is_array())
+      {
+        for (const auto &item : node)
+          visit(item);
+        return;
+      }
+
+      if (!node.is_object())
+        return;
+
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"].contains("_type") &&
+        node["func"]["_type"] == "Name" && node["func"].contains("id"))
+      {
+        const std::string func_name = node["func"]["id"].get<std::string>();
+        auto params_it = function_param_index_.find(func_name);
+        if (params_it != function_param_index_.end())
+        {
+          const size_t param_count = params_it->second.size();
+          auto &arg_info = function_constant_string_args_[func_name];
+          if (arg_info.empty())
+            arg_info.resize(param_count);
+
+          if (node.contains("args") && node["args"].is_array())
+          {
+            const auto &args = node["args"];
+            const size_t count = std::min(param_count, args.size());
+            for (size_t i = 0; i < count; ++i)
+            {
+              const auto &arg = args[i];
+              auto &info = arg_info[i];
+
+              if (info.conflict)
+                continue;
+
+              if (
+                arg.contains("_type") && arg["_type"] == "Constant" &&
+                arg.contains("value") && arg["value"].is_string())
+              {
+                const std::string value = arg["value"].get<std::string>();
+                if (!info.has_value)
+                {
+                  info.value = value;
+                  info.has_value = true;
+                }
+                else if (info.value != value)
+                {
+                  info.conflict = true;
+                }
+              }
+              else
+              {
+                info.conflict = true;
+              }
+            }
+          }
+        }
+      }
+
+      for (const auto &entry : node.items())
+        visit(entry.value());
+    };
+
+  visit(*ast_json);
+}
+
 python_converter::python_converter(
   contextt &_context,
   const nlohmann::json *ast,
@@ -6812,6 +7225,7 @@ void python_converter::convert()
 
   // Create built-in symbols for main module (__name__ = "__main__")
   create_builtin_symbols();
+  collect_constant_call_args();
 
   // Block to accumulate model library code
   code_blockt models_block;

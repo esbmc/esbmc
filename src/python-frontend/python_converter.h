@@ -14,6 +14,7 @@
 #include <util/symbol_generator.h>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <utility>
 
 class codet;
@@ -330,6 +331,8 @@ private:
 
   exprt get_static_array(const nlohmann::json &arr, const typet &shape);
 
+  void collect_constant_call_args();
+
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
 
   symbol_id create_symbol_id() const;
@@ -472,6 +475,18 @@ private:
     bool is_negated,
     code_blockt &block,
     const std::function<void(code_assertt &)> &attach_assert_message);
+
+  struct constant_arg_infot
+  {
+    bool has_value = false;
+    bool conflict = false;
+    std::string value;
+  };
+
+  std::unordered_map<std::string, std::unordered_map<std::string, size_t>>
+    function_param_index_;
+  std::unordered_map<std::string, std::vector<constant_arg_infot>>
+    function_constant_string_args_;
 
   // =========================================================================
   // Helper methods for get_var_assign
