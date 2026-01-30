@@ -16,6 +16,7 @@ add_library(pythonfrontend STATIC
             python_class.cpp
             python_class_builder.cpp
             python_dict_handler.cpp
+            python_lambda.cpp
             python_list.cpp
             python_math.cpp
             python_set.cpp
