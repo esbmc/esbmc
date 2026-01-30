@@ -1734,7 +1734,11 @@ exprt function_call_expr::handle_list_append() const
     }
 
     if (ret_type.is_nil() || ret_type.is_empty())
-      ret_type = int_type(); // fallback for untyped functions
+    {
+      log_warning(
+        "list.append with function call: unknown return type, assuming int");
+      ret_type = int_type();
+    }
 
     symbolt &tmp_var = converter_.create_tmp_symbol(
       call_, "$append_ret$", ret_type, gen_zero(ret_type));
