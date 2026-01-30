@@ -4,6 +4,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/string_builder.h>
+#include <python-frontend/type_utils.h>
 #include <util/expr.h>
 #include <util/type.h>
 #include <util/symbol.h>
@@ -14,6 +15,7 @@
 #include <util/mp_arith.h>
 #include <util/python_types.h>
 #include <util/symbolic_types.h>
+#include <util/string_constant.h>
 #include <string>
 #include <functional>
 
@@ -90,7 +92,19 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 {
   const type_handler type_handler_ = converter_.get_type_handler();
   locationt location = converter_.get_location_from_decl(op);
-  const std::string elem_type_name = type_handler_.type_to_string(elem.type());
+  std::string elem_type_name = type_handler_.type_to_string(elem.type());
+  if (
+    (elem.type().is_array() && elem.type().subtype() == char_type()) ||
+    (elem.type().is_pointer() && elem.type().subtype() == char_type()))
+  {
+    // Normalize string element types so list equality can detect them reliably.
+    elem_type_name = "str";
+  }
+  if (elem_type_name.empty())
+  {
+    // Avoid treating unknown element types as lists in list_eq.
+    elem_type_name = "unknown";
+  }
 
   // Create type name as null-terminated char array
   const typet type_name_type =
@@ -727,6 +741,50 @@ exprt python_list::build_split_list(
   const std::string &separator,
   long long count)
 {
+  std::function<bool(const exprt &, std::string &)> try_extract_constant_input;
+  try_extract_constant_input =
+    [&](const exprt &expr, std::string &out) -> bool {
+    if (expr.id() == "string-constant")
+    {
+      out = to_string_constant(expr).mb_value().as_string();
+      return true;
+    }
+
+    if (expr.type().is_array() && !expr.operands().empty())
+    {
+      bool all_constants = true;
+      for (const auto &op : expr.operands())
+      {
+        if (!op.is_constant())
+        {
+          all_constants = false;
+          break;
+        }
+      }
+      if (all_constants)
+      {
+        out = converter.get_string_handler().extract_string_from_array_operands(
+          expr);
+        return true;
+      }
+    }
+
+    if (expr.id() == "symbol")
+    {
+      const symbolt *sym =
+        converter.symbol_table().find_symbol(expr.identifier());
+      if (sym && sym->value.is_not_nil())
+        return try_extract_constant_input(sym->value, out);
+    }
+
+    return false;
+  };
+
+  std::string literal_input;
+  if (try_extract_constant_input(input_expr, literal_input))
+    return build_split_list(
+      converter, call_node, literal_input, separator, count);
+
   // For symbolic strings, we create a runtime call to __python_str_split
   // This function will handle the splitting at runtime with symbolic constraints
 
@@ -1451,11 +1509,35 @@ exprt python_list::handle_index_access(
       }
     }
 
+    if (
+      elem_type.is_pointer() &&
+      (elem_type.subtype().is_nil() || elem_type.subtype().id() == "empty"))
+    {
+      if (array.is_symbol())
+      {
+        std::string list_var_name = json_utils::extract_var_name_from_symbol_id(
+          array.identifier().as_string());
+        nlohmann::json list_var_decl = json_utils::find_var_decl(
+          list_var_name, converter_.current_function_name(), converter_.ast());
+        if (!list_var_decl.is_null() && list_var_decl.contains("annotation"))
+        {
+          typet annotated_elem =
+            get_elem_type_from_annotation(list_var_decl, converter_.get_type_handler());
+          if (annotated_elem != typet())
+            elem_type = annotated_elem;
+        }
+      }
+    }
+
+    if (type_utils::is_string_type(elem_type) && elem_type.is_pointer())
+      elem_type = converter_.get_type_handler().get_typet(std::string("str"));
+
     if (pos_expr == exprt() || elem_type == typet())
     {
       throw std::runtime_error(
         "Invalid list access: could not resolve position or element type");
     }
+
 
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
@@ -1532,8 +1614,10 @@ exprt python_list::compare(
 
   // Compute list type_id for nested list detection
   const typet &list_type = l1.type();
-  const std::string list_type_name =
+  std::string list_type_name =
     converter_.get_type_handler().type_to_string(list_type);
+  if (list_type_name.empty())
+    list_type_name = "list";
   constant_exprt list_type_id(size_type());
   list_type_id.set_value(integer2binary(
     std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
@@ -2067,6 +2151,7 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
 
   // Infer loop variable type from iterable
   typet loop_var_type;
+  bool handled_iterable_type = false;
   if (iterable_expr.type() == list_type)
   {
     // For list iteration, we need to determine the element type from type_map
@@ -2082,13 +2167,32 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
         loop_var_type = type_map_it->second[0].second;
       }
     }
+
+    if (loop_var_type.is_array() && loop_var_type.subtype() == char_type())
+      loop_var_type = pointer_typet(char_type());
+
+    handled_iterable_type = true;
   }
-  else if (iterable_expr.type().is_array())
-    loop_var_type = iterable_expr.type().subtype();
-  else if (iterable_expr.type().is_pointer())
-    loop_var_type = iterable_expr.type().subtype();
-  else
-    loop_var_type = any_type();
+  bool iter_is_split = false;
+  if (
+    iter.contains("_type") && iter["_type"] == "Call" &&
+    iter.contains("func") && iter["func"].contains("_type") &&
+    iter["func"]["_type"] == "Attribute" &&
+    iter["func"].contains("attr") && iter["func"]["attr"] == "split")
+  {
+    iter_is_split = true;
+    loop_var_type = pointer_typet(char_type());
+  }
+
+  if (!handled_iterable_type)
+  {
+    if (iterable_expr.type().is_array())
+      loop_var_type = iterable_expr.type().subtype();
+    else if (iterable_expr.type().is_pointer())
+      loop_var_type = iterable_expr.type().subtype();
+    else
+      loop_var_type = any_type();
+  }
 
   symbolt loop_var_symbol = converter_.create_symbol(
     location.get_file().as_string(),
@@ -2208,6 +2312,9 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     // Use list_at and extract_pyobject_value for consistent handling
     current_element =
       build_list_at_call(iterable_expr, symbol_expr(index_var), element);
+    if (iter_is_split)
+      actual_elem_type =
+        converter_.get_type_handler().get_typet(std::string("str"));
     current_element = extract_pyobject_value(current_element, actual_elem_type);
   }
   else if (iterable_expr.type().is_array() || iterable_expr.type().is_pointer())
@@ -2235,8 +2342,53 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   code_blockt *saved_block = converter_.current_block;
   converter_.current_block = &loop_body;
 
+
   // Evaluate element expression - temporaries go to loop_body
   exprt element_expr = converter_.get_expr(elt);
+  if (
+    elt.contains("_type") && elt["_type"] == "Name" &&
+    elt.contains("id") && elt["id"] == loop_var_name)
+  {
+    element_expr = current_element;
+  }
+  if (
+    (iter_is_split || type_utils::is_string_type(loop_var_type)) &&
+    !type_utils::is_string_type(element_expr.type()))
+  {
+    element_expr =
+      converter_.get_string_builder().ensure_null_terminated_string(element_expr);
+  }
+  if (
+    iter_is_split && element_expr.type().is_array() &&
+    element_expr.type().subtype() == char_type())
+  {
+    const array_typet &arr_type = to_array_type(element_expr.type());
+    if (arr_type.size().is_constant())
+    {
+      BigInt size_int;
+      if (!to_integer(to_constant_expr(arr_type.size()), size_int) &&
+          size_int == BigInt(1))
+      {
+        typet fixed_type =
+          converter_.get_type_handler().build_array(char_type(), 2);
+        exprt fixed = gen_zero(fixed_type);
+        index_exprt first_char(
+          element_expr, from_integer(0, index_type()), char_type());
+        fixed.operands().at(0) = first_char;
+        fixed.operands().at(1) =
+          converter_.get_string_builder().make_null_terminator();
+        element_expr = fixed;
+      }
+    }
+  }
+  if (
+    iter_is_split && element_expr.type().is_pointer() &&
+    (element_expr.type().subtype().is_nil() ||
+     element_expr.type().subtype().id() == "empty"))
+  {
+    element_expr =
+      typecast_exprt(element_expr, pointer_typet(char_type()));
+  }
 
   // Build push call - temporaries also go to loop_body
   exprt push_call = build_push_list_call(result_list, element, element_expr);
@@ -2246,8 +2398,11 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   converter_.current_block = saved_block;
 
   // Update type map
+  typet elem_type = element_expr.type();
+  if (type_utils::is_string_type(elem_type))
+    elem_type = converter_.get_type_handler().get_typet(std::string("str"));
   list_type_map[result_list_id].push_back(
-    std::make_pair(element_expr.identifier().as_string(), element_expr.type()));
+    std::make_pair(element_expr.identifier().as_string(), elem_type));
 
   // If we had filter conditions, wrap append in if statement
   if (generator.contains("ifs") && !generator["ifs"].empty())
@@ -2395,19 +2550,24 @@ exprt python_list::extract_pyobject_value(
     return tc;
   }
 
-  // For char* strings and None (_Bool*), the void* already contains the pointer value
-  // For all other types, the void* contains a pointer to the value
-  if (
-    elem_type.is_pointer() &&
-    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
+  // For char* strings, list storage keeps a copy of the pointer value.
+  // We must dereference once to recover the original pointer.
+  if (elem_type.is_pointer() && elem_type.subtype() == char_type())
   {
-    // String and None case: cast void* directly to the pointer type (no dereference needed)
+    typecast_exprt tc(obj_value, pointer_typet(elem_type));
+    dereference_exprt deref(elem_type);
+    deref.op0() = tc;
+    return deref;
+  }
+  else if (elem_type.is_pointer() && elem_type.subtype() == bool_type())
+  {
+    // None case: keep NULL semantics (no dereference).
     typecast_exprt tc(obj_value, elem_type);
     return tc;
   }
   else
   {
-    // All other types: cast void* to pointer-to-type, then dereference
+    // All other types: cast void* to pointer-to-type, then dereference.
     typecast_exprt tc(obj_value, pointer_typet(elem_type));
     dereference_exprt deref(elem_type);
     deref.op0() = tc;

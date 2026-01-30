@@ -180,7 +180,48 @@ get_object_alias(const JsonType &ast, const std::string &obj_name)
 template <typename JsonType>
 const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
-  for (auto &element : block["body"])
+  auto is_main_guard = [&](const JsonType &node) -> bool {
+    if (
+      !node.contains("_type") || node["_type"] != "If" || !node.contains("test"))
+      return false;
+
+    const auto &test = node["test"];
+    if (
+      !test.contains("_type") || test["_type"] != "Compare" ||
+      !test.contains("left") || !test.contains("comparators") ||
+      !test.contains("ops") || !test["comparators"].is_array() ||
+      test["comparators"].empty())
+      return false;
+
+    const auto &left = test["left"];
+    if (
+      !left.contains("_type") || left["_type"] != "Name" ||
+      !left.contains("id") || left["id"] != "__name__")
+      return false;
+
+    const auto &ops = test["ops"];
+    if (!ops.is_array() || ops.empty())
+      return false;
+
+    bool eq_op = false;
+    if (ops[0].is_object() && ops[0].contains("_type"))
+      eq_op = ops[0]["_type"] == "Eq";
+    else if (ops[0].is_string())
+      eq_op = ops[0] == "Eq";
+
+    if (!eq_op)
+      return false;
+
+    const auto &comp = test["comparators"][0];
+    if (
+      !comp.contains("_type") || comp["_type"] != "Constant" ||
+      !comp.contains("value") || !comp["value"].is_string())
+      return false;
+
+    return comp["value"] == "__main__";
+  };
+
+  for (const auto &element : block["body"])
   {
     // Check for annotated assignment (AnnAssign)
     if (
@@ -196,6 +237,39 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
       element["targets"][0].contains("id") &&
       element["targets"][0]["id"] == var_name)
       return element;
+
+    auto search_if_body = [&](const JsonType &if_node) -> JsonType {
+      JsonType found = get_var_node(var_name, if_node);
+      if (!found.empty())
+        return found;
+
+      if (if_node.contains("orelse") && if_node["orelse"].is_array() &&
+          !if_node["orelse"].empty())
+      {
+        JsonType orelse_block;
+        orelse_block["body"] = if_node["orelse"];
+        return get_var_node(var_name, orelse_block);
+      }
+
+      return JsonType();
+    };
+
+    if (element.contains("_type") && element["_type"] == "If" &&
+        element.contains("body") && element["body"].is_array())
+    {
+      if (is_main_guard(element))
+      {
+        JsonType found = search_if_body(element);
+        if (!found.empty())
+          return found;
+      }
+      else
+      {
+        JsonType found = search_if_body(element);
+        if (!found.empty())
+          return found;
+      }
+    }
   }
 
   if (block.contains("args"))
