@@ -1,5 +1,5 @@
 def test() -> None:
-    outer:int = lambda x: (lambda y: x + y)
-    inner:int = outer(5)
+    outer = lambda x: (lambda y: x + y)
+    inner = outer(5)
 
 test()
