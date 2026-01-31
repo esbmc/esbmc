@@ -39,6 +39,7 @@ private:
     const nlohmann::json &args_node,
     code_typet &lambda_type,
     const std::string &lambda_id,
+    const std::string &param_scope_id,
     const locationt &location);
 
   exprt process_lambda_body(
