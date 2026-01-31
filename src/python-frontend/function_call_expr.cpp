@@ -1501,7 +1501,7 @@ exprt function_call_expr::handle_min_max(
     const typet &arg_type = converter_.ns.follow(arg.type());
 
     // Check if it's a tuple (struct type with element_N components)
-    if (arg_type.id() == "struct")
+    if (arg_type.is_struct())
     {
       const struct_typet &struct_type = to_struct_type(arg_type);
 
