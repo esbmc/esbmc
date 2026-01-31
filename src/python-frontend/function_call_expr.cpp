@@ -2218,8 +2218,7 @@ exprt function_call_expr::handle_general_function_call()
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
 
-  if ((func_name == "min" || func_name == "max") && call_["args"].size() == 1)
-  {
+  if ((func_name == "min" || func_name == "max" || func_name == "sorted") && call_["args"].size() == 1)  {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
     if (list_arg.is_symbol())
