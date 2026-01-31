@@ -1,4 +1,0 @@
-CORE
-main.c
---replace-call-with-contract "modify_point"
-^VERIFICATION SUCCESSFUL$

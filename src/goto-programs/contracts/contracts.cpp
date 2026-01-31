@@ -186,206 +186,6 @@ static std::vector<var_assignment_info> find_all_assignments(
   return assignments;
 }
 
-/// Helper: check if an assignment value is a trivial boolean constant (0/1/false/true)
-static bool is_trivial_bool_constant(const expr2tc &value, bool &const_val)
-{
-  if (is_constant_bool2t(value))
-  {
-    const_val = to_constant_bool2t(value).value;
-    return true;
-  }
-  if (is_constant_int2t(value))
-  {
-    auto v = to_constant_int2t(value).value;
-    if (v == 0 || v == 1)
-    {
-      const_val = (v == 1);
-      return true;
-    }
-  }
-  return false;
-}
-
-/// Try to reconstruct a short-circuit boolean expression from the GOTO program.
-///
-/// Clang compiles `a || b` as:
-///   IF !(a) GOTO fallback     // if left is false, compute right
-///   tmp = 1                   // left is true, short-circuit: result = true
-///   GOTO end
-///   fallback: tmp = b         // compute right side
-///   end: USE tmp
-///
-/// And `a && b` as:
-///   IF (a) GOTO compute_b     // if left is true, compute right
-///   tmp = 0                   // left is false, short-circuit: result = false
-///   GOTO end
-///   compute_b: tmp = b        // compute right side
-///   end: USE tmp
-///
-/// find_all_assignments returns assignments in reverse order (last first).
-/// For `a || b`: [b, 1, NONDET]  (b first because it's closest to USE)
-/// For `a && b`: [b, 0, NONDET]  (b first because it's closest to USE)
-///
-/// We detect these patterns by:
-/// 1. Filtering out the NONDET initializer
-/// 2. Looking for exactly one trivial constant (0 or 1) and one non-trivial expression
-/// 3. Finding the GOTO instruction between the two assignments to extract the condition
-/// 4. Reconstructing: if const=1 → cond || expr; if const=0 → cond && expr
-static expr2tc try_reconstruct_short_circuit(
-  const std::vector<var_assignment_info> &assignments,
-  const goto_programt &function_body)
-{
-  // Filter out NONDET initializers and collect real assignments
-  struct real_assign_t
-  {
-    expr2tc value;
-    goto_programt::const_targett location;
-    bool is_trivial;
-    bool trivial_val; // only valid if is_trivial
-  };
-  std::vector<real_assign_t> real_assigns;
-
-  for (const auto &a : assignments)
-  {
-    // Skip NONDET assignments (Clang initializer)
-    if (is_sideeffect2t(a.value))
-    {
-      const sideeffect2t &se = to_sideeffect2t(a.value);
-      if (se.kind == sideeffect2t::nondet)
-        continue;
-    }
-
-    real_assign_t ra;
-    ra.value = a.value;
-    ra.location = a.location;
-    ra.is_trivial = is_trivial_bool_constant(a.value, ra.trivial_val);
-    real_assigns.push_back(ra);
-  }
-
-  // We need exactly 2 real assignments: one trivial constant and one expression
-  if (real_assigns.size() != 2)
-    return expr2tc(); // cannot reconstruct
-
-  const real_assign_t *const_assign = nullptr;
-  const real_assign_t *expr_assign = nullptr;
-
-  for (const auto &ra : real_assigns)
-  {
-    if (ra.is_trivial)
-      const_assign = &ra;
-    else
-      expr_assign = &ra;
-  }
-
-  if (!const_assign || !expr_assign)
-    return expr2tc(); // both trivial or both non-trivial
-
-  // Find the conditional GOTO that controls the short-circuit branching.
-  //
-  // Clang generates two layouts for short-circuit evaluation:
-  //
-  // OR pattern (`a || b`):
-  //   IF !(a) THEN GOTO fallback    // guard = !(a)
-  //   ASSIGN tmp = 1                // const (short-circuit true)
-  //   GOTO end
-  //   fallback: ASSIGN tmp = b      // expr
-  //   end: USE tmp
-  //
-  // AND pattern (`a && b`):
-  //   IF !(a) THEN GOTO fallback    // guard = !(a)
-  //   ... (compute b) ...
-  //   ASSIGN tmp = b                // expr
-  //   GOTO end
-  //   fallback: ASSIGN tmp = 0      // const (short-circuit false)
-  //   end: USE tmp
-  //
-  // The conditional GOTO is always before the EARLIER assignment (in program order).
-  // In find_all_assignments' reverse order, the earlier assignment has the higher index.
-  // So real_assigns[1] is earlier than real_assigns[0] (reverse order).
-
-  // Determine which assignment is earlier in the program.
-  // real_assigns are in reverse order: [0] is late (closer to USE), [1] is early.
-  const real_assign_t *earlier_assign = &real_assigns[1];
-
-  // Search backwards from the earlier assignment to find the conditional GOTO.
-  // We may need to skip past other instructions (including assignments and
-  // declarations of OTHER variables that are part of the computation).
-  expr2tc goto_condition;
-  goto_programt::const_targett search = earlier_assign->location;
-  // Limit search to avoid scanning the entire function
-  int search_limit = 200;
-  while (search != function_body.instructions.begin() && search_limit-- > 0)
-  {
-    --search;
-    if (search->is_goto() && !is_true(search->guard))
-    {
-      goto_condition = search->guard;
-      break;
-    }
-  }
-
-  if (is_nil_expr(goto_condition))
-    return expr2tc(); // could not find the conditional GOTO
-
-  // Reconstruct the boolean expression.
-  // The GOTO guard is the condition under which execution JUMPS (skips the fall-through path).
-  // The fall-through path is the earlier assignment.
-  //
-  // For OR: IF !(a) GOTO fallback → guard=!(a), fall-through=const(1)
-  //   Fall-through condition (NOT taken) = !(guard) = a
-  //   a is true → result = 1 (const). So: result = a || b
-  //
-  // For AND: IF !(a) GOTO fallback → guard=!(a), fall-through=expr(b)
-  //   Fall-through condition = !(guard) = a  
-  //   a is true → result = b (expr). So: result = a && b
-  //
-  // In both cases, the "left condition" is the negation of the GOTO guard.
-  // - If the earlier (fall-through) assignment is the CONST → it's OR
-  // - If the earlier (fall-through) assignment is the EXPR → it's AND
-
-  expr2tc left_cond;
-  if (is_not2t(goto_condition))
-    left_cond = to_not2t(goto_condition).value;
-  else
-    left_cond = not2tc(goto_condition);
-
-  if (earlier_assign == const_assign)
-  {
-    // Fall-through is const → short-circuit pattern
-    if (const_assign->trivial_val)
-    {
-      // const = true on fall-through → OR: left_cond || expr
-      return or2tc(left_cond, expr_assign->value);
-    }
-    else
-    {
-      // const = false on fall-through → this is unusual; treat as !left_cond && expr
-      // (i.e., when left_cond is true, result is false → !left_cond && expr)
-      return and2tc(not2tc(left_cond), expr_assign->value);
-    }
-  }
-  else
-  {
-    // Fall-through is expr → the GOTO skips to const
-    if (const_assign->trivial_val)
-    {
-      // Unusual case: GOTO leads to const=true, fall-through is expr
-      // guard true → GOTO to const(true) → result = true
-      // guard false → fall-through to expr → result = expr
-      // Result: !left_cond || expr (where left_cond = !guard)
-      return or2tc(not2tc(left_cond), expr_assign->value);
-    }
-    else
-    {
-      // GOTO leads to const=false, fall-through is expr
-      // guard true → GOTO → result = false
-      // guard false → fall-through → result = expr
-      // result = !guard && expr = left_cond && expr
-      return and2tc(left_cond, expr_assign->value);
-    }
-  }
-}
-
 // Helper function to inline temporary variables generated by Clang for short-circuit evaluation
 // When ensures contains complex expressions like (a && b) || (c && d) with __ESBMC_old calls,
 // Clang generates control flow with temporary variables (tmp$1, tmp$2, etc).
@@ -446,25 +246,15 @@ static expr2tc inline_temporary_variables(
           assign.value, function_body, assign.location);
       }
 
-      // Multiple assignments - this happens with short-circuit evaluation.
-      // Clang compiles `a || b` and `a && b` using conditional control flow
-      // with temporary variables. We need to reconstruct the original boolean
-      // expression instead of just picking one branch.
+      // Multiple assignments - this happens with conditional control flow
+      // For short-circuit evaluation, Clang typically generates:
+      //   if (!cond) goto fallback
+      //   tmp = complex_expr
+      //   goto end
+      //   fallback: tmp = 0  (or 1)
+      //   end: use tmp
       //
-      // First, try to reconstruct the short-circuit pattern (OR/AND):
-      expr2tc reconstructed = try_reconstruct_short_circuit(
-        assignments, function_body);
-
-      if (!is_nil_expr(reconstructed))
-      {
-        // Successfully reconstructed the boolean expression.
-        // Recursively inline any temporaries in the reconstructed expression.
-        return inline_temporary_variables(
-          reconstructed, function_body, assume_location);
-      }
-
-      // Fallback: could not reconstruct short-circuit pattern.
-      // Use the old heuristic: pick the first non-trivial assignment.
+      // We need to find the non-trivial assignment (the one that's not just 0 or 1)
       expr2tc best_value;
       goto_programt::const_targett best_location =
         function_body.instructions.end();
@@ -2491,19 +2281,6 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
   return false;
 }
 
-/// Helper: check if a function name matches any pattern in to_replace
-static bool matches_replace_pattern(
-  const std::string &func_name,
-  const std::set<std::string> &to_replace)
-{
-  for (const auto &pattern : to_replace)
-  {
-    if (pattern == "*" || func_name.find(pattern) != std::string::npos)
-      return true;
-  }
-  return false;
-}
-
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 {
   log_status(
@@ -2515,10 +2292,7 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
   std::map<std::string, std::tuple<symbolt *, goto_programt *, irep_idt>>
     function_map;
 
-  // Collect all functions that have contracts and match to_replace patterns
-  // Also build a set of function keys that are candidates for replacement
-  std::set<std::string> replaceable_funcs; // function keys that have contracts and match
-
+  // Collect all functions that might be called
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
@@ -2527,6 +2301,8 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     symbolt *func_sym = find_function_symbol(id2string(it->first));
     if (func_sym != nullptr)
     {
+      // Use the goto_functions key (it->first) as the map key, since that's what
+      // get_symbol_name() returns in function calls
       std::string func_key = id2string(it->first);
       function_map[func_key] = {func_sym, &it->second.body, it->first};
       log_debug(
@@ -2535,83 +2311,11 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
         func_key,
         id2string(func_sym->name),
         id2string(it->first));
-
-      // Check if this function is a candidate for replacement
-      if (
-        matches_replace_pattern(func_key, to_replace) &&
-        has_contracts(it->second.body))
-      {
-        replaceable_funcs.insert(func_key);
-      }
     }
   }
 
-  // --- Hierarchical replacement: build call graph among replaceable functions ---
-  // A function is a "leaf" if it does NOT call any other replaceable function.
-  // A function is a "parent" if it calls at least one other replaceable function.
-  //
-  // Strategy:
-  //   - Leaf functions: replace their call sites with contract (havoc + assume)
-  //   - Parent functions: keep their function body, but replace internal sub-calls
-  //     with contracts. The parent function remains available for normal inlining.
-  //
-  // This preserves the precision of the parent function's control flow while
-  // using sub-function contracts for modular reasoning.
-
-  std::set<std::string> parent_funcs; // functions that call other replaceable functions
-
-  for (const auto &func_key : replaceable_funcs)
-  {
-    auto map_it = function_map.find(func_key);
-    if (map_it == function_map.end())
-      continue;
-    goto_programt *func_body = std::get<1>(map_it->second);
-
-    // Scan function body for calls to other replaceable functions
-    forall_goto_program_instructions (i_it, *func_body)
-    {
-      if (i_it->is_function_call() && is_code_function_call2t(i_it->code))
-      {
-        const code_function_call2t &call = to_code_function_call2t(i_it->code);
-        if (is_symbol2t(call.function))
-        {
-          std::string called_name =
-            id2string(to_symbol2t(call.function).get_symbol_name());
-          if (is_compiler_generated(called_name))
-            continue;
-          if (replaceable_funcs.count(called_name) && called_name != func_key)
-          {
-            parent_funcs.insert(func_key);
-            log_debug(
-              "contracts",
-              "Function {} calls replaceable function {} -> marking as parent",
-              func_key,
-              called_name);
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  // Leaf functions = replaceable but not parent
-  std::set<std::string> leaf_funcs;
-  for (const auto &f : replaceable_funcs)
-  {
-    if (!parent_funcs.count(f))
-      leaf_funcs.insert(f);
-  }
-
-  log_status(
-    "Hierarchical replacement: {} leaf function(s), {} parent function(s)",
-    leaf_funcs.size(),
-    parent_funcs.size());
-  for (const auto &f : leaf_funcs)
-    log_debug("contracts", "  Leaf: {}", f);
-  for (const auto &f : parent_funcs)
-    log_debug("contracts", "  Parent (kept, sub-calls replaced): {}", f);
-
-  // Track functions that have been fully replaced (to delete their definitions)
+  // Track functions that have been replaced (to delete their definitions)
+  // Use function ID from goto_functions (it->first) for correct matching
   std::set<irep_idt> functions_to_delete;
 
   // Process each function and replace calls
@@ -2620,12 +2324,10 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     if (!it->second.body_available)
       continue;
 
-    std::string current_func = id2string(it->first);
-
     std::vector<goto_programt::targett> calls_to_replace;
-    std::vector<std::tuple<symbolt *, goto_programt *, irep_idt>> func_info_vec;
+    std::vector<std::tuple<symbolt *, goto_programt *, irep_idt>> function_info;
 
-    // Find calls to replace in this function's body
+    // Find calls to replace
     Forall_goto_program_instructions (i_it, it->second.body)
     {
       if (i_it->is_function_call() && is_code_function_call2t(i_it->code))
@@ -2636,45 +2338,50 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
           const symbol2t &func_sym = to_symbol2t(call.function);
           std::string called_func = id2string(func_sym.get_symbol_name());
 
+          // Skip compiler-generated functions
           if (is_compiler_generated(called_func))
             continue;
 
-          // Determine if we should replace this call:
-          // 1. If current function is a parent: only replace calls to LEAF functions
-          //    (replace sub-calls but keep the parent's own control flow)
-          // 2. If current function is NOT a parent (e.g., main):
-          //    replace calls to LEAF functions with contract
-          //    (parent functions are NOT replaced - they'll be inlined normally)
-          bool should_replace = false;
-
-          if (leaf_funcs.count(called_func))
+          // Check if this function should be replaced
+          for (const auto &replace_name : to_replace)
           {
-            // Always replace calls to leaf functions
-            should_replace = true;
-          }
-          // Note: calls to parent functions from main/other contexts are NOT replaced.
-          // Parent functions keep their body and will be inlined by ESBMC's normal
-          // function call handling. Their internal sub-calls have already been
-          // replaced with contracts above.
-
-          if (should_replace)
-          {
-            auto map_it = function_map.find(called_func);
-            if (map_it != function_map.end())
+            if (called_func.find(replace_name) != std::string::npos)
             {
-              goto_programt *func_body = std::get<1>(map_it->second);
-              if (has_contracts(*func_body))
+              log_debug(
+                "contracts",
+                "Found potential call to replace: {}",
+                called_func);
+              auto map_it = function_map.find(called_func);
+              if (map_it != function_map.end())
+              {
+                // Check if function has contracts
+                goto_programt *func_body = std::get<1>(map_it->second);
+                bool has_contract = has_contracts(*func_body);
+                log_debug(
+                  "contracts",
+                  "Function {} has contracts: {}",
+                  called_func,
+                  has_contract);
+                if (has_contract)
+                {
+                  log_debug(
+                    "contracts",
+                    "Adding call to replacement list: {}",
+                    called_func);
+                  calls_to_replace.push_back(i_it);
+                  function_info.push_back(map_it->second);
+                  // Track this function for deletion (use the ID from goto_functions)
+                  irep_idt func_id = std::get<2>(map_it->second);
+                  functions_to_delete.insert(func_id);
+                  break;
+                }
+              }
+              else
               {
                 log_debug(
                   "contracts",
-                  "In {}: replacing call to leaf function {}",
-                  current_func,
+                  "Function {} not found in function_map",
                   called_func);
-                calls_to_replace.push_back(i_it);
-                func_info_vec.push_back(map_it->second);
-                // Only leaf functions get deleted
-                irep_idt func_id = std::get<2>(map_it->second);
-                functions_to_delete.insert(func_id);
               }
             }
           }
@@ -2687,26 +2394,29 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
       "contracts",
       "Found {} calls to replace in function {}",
       calls_to_replace.size(),
-      current_func);
+      id2string(it->first));
     for (size_t i = 0; i < calls_to_replace.size(); ++i)
     {
       log_debug(
         "contracts", "Replacing call {} of {}", i + 1, calls_to_replace.size());
-      symbolt *func_sym = std::get<0>(func_info_vec[i]);
-      goto_programt *func_body = std::get<1>(func_info_vec[i]);
+      symbolt *func_sym = std::get<0>(function_info[i]);
+      goto_programt *func_body = std::get<1>(function_info[i]);
       generate_replacement_at_call(
         *func_sym, *func_body, calls_to_replace[i], it->second.body);
     }
   }
 
-  // Delete only LEAF function definitions (they've been fully replaced with contracts).
-  // Parent functions are kept - they'll be inlined normally with their sub-calls
-  // already replaced by contracts.
+  // Delete function definitions that have been replaced
+  // In replace_calls mode, function calls are replaced with contracts,
+  // so the function definitions are no longer needed
+  // We completely remove them from function_map so they don't appear in --goto-functions-only
   for (const auto &func_id : functions_to_delete)
   {
     auto func_it = goto_functions.function_map.find(func_id);
     if (func_it != goto_functions.function_map.end())
     {
+      // Completely remove the function from function_map
+      // This ensures it won't appear in --goto-functions-only output
       goto_functions.function_map.erase(func_it);
       log_status("Removed function {} (replaced with contract)", func_id);
     }
@@ -2843,33 +2553,6 @@ void code_contractst::generate_replacement_at_call(
         t->location.property(property);
     }
   };
-
-  // 0. Extract call site condition and enhance requires clause
-  // This preserves the control flow context (e.g., if conditions) in which
-  // the function is called, preventing over-approximation.
-  // Convert targett to const_targett for extract_call_site_condition
-  goto_programt::const_targett const_call_instruction = call_instruction;
-  expr2tc call_site_condition = extract_call_site_condition(const_call_instruction, caller_body);
-  if (!is_true(call_site_condition))
-  {
-    // Merge call site condition with requires clause
-    if (is_nil_expr(requires_clause) || is_true(requires_clause))
-    {
-      // If requires is nil or true, use call site condition as requires
-      requires_clause = call_site_condition;
-      log_debug(
-        "contracts",
-        "Enhanced requires with call site condition (requires was nil/true)");
-    }
-    else
-    {
-      // Combine requires and call site condition with AND
-      requires_clause = and2tc(requires_clause, call_site_condition);
-      log_debug(
-        "contracts",
-        "Enhanced requires with call site condition (combined with AND)");
-    }
-  }
 
   // 1. Assert requires clause (check precondition at call site)
   add_contract_clause(
@@ -3036,27 +2719,6 @@ void code_contractst::generate_replacement_at_call(
     "contracts",
     "Call instruction marked as SKIP: type={}",
     (int)call_instruction->type);
-}
-
-expr2tc code_contractst::extract_call_site_condition(
-  goto_programt::const_targett call_instruction,
-  const goto_programt & /* caller_body */) const
-{
-  // Extract the guard condition from the call instruction
-  // In goto programs, each instruction has a guard field that represents
-  // the condition under which the instruction executes.
-  // If the call is inside an if statement, the guard will be the if condition.
-  expr2tc call_guard = call_instruction->guard;
-
-  // If guard is true (unconditional), return true expression
-  if (is_true(call_guard))
-    return gen_true_expr();
-
-  // Otherwise, return the guard condition
-  log_debug(
-    "contracts",
-    "Extracted call site condition (not true)");
-  return call_guard;
 }
 
 // ========== Pointer validity assumptions support ==========

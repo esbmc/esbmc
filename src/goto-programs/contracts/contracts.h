@@ -150,16 +150,6 @@ private:
     goto_programt::targett call_instruction,
     goto_programt &caller_body);
 
-  /// \brief Extract call site condition from goto program
-  /// Extracts the guard condition that must hold for the call instruction to execute.
-  /// This includes conditions from if statements, loops, and other control flow constructs.
-  /// \param call_instruction Function call instruction
-  /// \param caller_body Function body containing the call
-  /// \return Guard condition expression, or true_exprt() if unconditional
-  expr2tc extract_call_site_condition(
-    goto_programt::const_targett call_instruction,
-    const goto_programt &caller_body) const;
-
   /// \brief Extract requires clause from contract symbol
   /// \param contract_symbol Contract symbol
   /// \return Requires expression, or true_exprt() if not present
