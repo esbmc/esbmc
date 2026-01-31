@@ -28,7 +28,6 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/symbolic_types.h>
-#include <sstream>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -626,68 +625,23 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
-const std::vector<std::string>& clang_c_convertert::get_cached_file_lines(
-  const clang::FileID &fid,
-  clang::SourceManager &SM) const
-{
-  // Use FileID's hash value as cache key
-  unsigned fid_hash = fid.getHashValue();
-  
-  auto it = file_lines_cache_.find(fid_hash);
-  if (it != file_lines_cache_.end())
-  {
-    // Cache hit - return cached lines
-    return it->second;
-  }
-  
-  // Cache miss - parse file and cache the result
-  std::vector<std::string> lines;
-  
-  bool invalid = false;
-  llvm::StringRef buffer = SM.getBufferData(fid, &invalid);
-  
-  if (!invalid && !buffer.empty())
-  {
-    // Parse buffer into lines efficiently
-    const char *data = buffer.data();
-    size_t size = buffer.size();
-    
-    std::string current_line;
-    current_line.reserve(128); // Reserve reasonable default
-    
-    for (size_t i = 0; i < size; ++i)
-    {
-      char c = data[i];
-      if (c == '\n')
-      {
-        lines.push_back(std::move(current_line));
-        current_line.clear();
-        current_line.reserve(128);
-      }
-      else if (c != '\r') // Skip carriage returns
-      {
-        current_line.push_back(c);
-      }
-    }
-    
-    // Add last line if it doesn't end with newline
-    if (!current_line.empty())
-    {
-      lines.push_back(std::move(current_line));
-    }
-  }
-  
-  // Insert into cache and return reference
-  return file_lines_cache_[fid_hash] = std::move(lines);
-}
-
 bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
-  // Don't convert templated functions, it should only be converted in
-  // get_function_template
-  if (fd.getTemplatedKind() == clang::FunctionDecl::TK_FunctionTemplate)
+  // If the function is not defined but this is not the definition, skip it
+  if (fd.isDefined() && !fd.isThisDeclarationADefinition())
+  {
+    // Continue for virtual method as we need its type to make virtual function table
+    if (!is_fd_virtual_or_overriding(fd))
+      return false;
+  }
+
+  // per https://eel.is/c++draft/dcl.spec.auto#general-14 return types of template functions are
+  // only deduced when they are instantiated (i.e. used).
+  // We skip all functions with undeduced return types as they should always be unused anyway
+  // and the rest of esbmc can't handle undeduced types.
+  if (fd.getReturnType()->isUndeducedType())
     return false;
 
   // Save old_functionDecl, to be restored at the end of this method
@@ -735,80 +689,6 @@ bool clang_c_convertert::get_function(
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
   symbolt &added_symbol = *context.move_symbol_to_context(symbol);
-
-  // Check for #pragma contract annotation or comment marker
-  // Lambda: Check for annotate attribute
-  auto check_annotate_attr = [&fd]() -> bool {
-    if (!fd.hasAttrs())
-      return false;
-    
-    for (auto const &attr : fd.getAttrs())
-    {
-      if (const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
-      {
-        const std::string &annotation = a->getAnnotation().str();
-        if (annotation == "pragma_contract" || annotation == "contract")
-          return true;
-      }
-    }
-    return false;
-  };
-  
-  // Lambda: Trim whitespace from string
-  auto trim_whitespace = [](const std::string &str) -> std::string {
-    size_t start = str.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos)
-      return "";
-    size_t end = str.find_last_not_of(" \t\r\n");
-    return str.substr(start, end - start + 1);
-  };
-  
-  // Lambda: Check if line starts with #pragma contract
-  auto is_pragma_contract_line = [&trim_whitespace](const std::string &line) -> bool {
-    std::string trimmed = trim_whitespace(line);
-    return trimmed.find("#pragma contract") == 0 || 
-           trimmed.find("# pragma contract") == 0;
-  };
-  
-  bool has_pragma_contract = check_annotate_attr();
-  
-  // Method 2: Check for #pragma contract in the line immediately before function
-  // This uses cached file lines for performance (avoids re-parsing files)
-  if (!has_pragma_contract && ASTContext)
-  {
-    clang::SourceLocation loc = fd.getBeginLoc();
-    if (loc.isValid())
-    {
-      clang::SourceManager &SM = ASTContext->getSourceManager();
-      clang::PresumedLoc PLoc = SM.getPresumedLoc(loc);
-      
-      if (PLoc.isValid() && PLoc.getLine() > 1)
-      {
-        unsigned funcLine = PLoc.getLine();
-        clang::FileID FID = SM.getFileID(loc);
-        
-        // Use cached file lines (performance optimization)
-        const std::vector<std::string> &lines = get_cached_file_lines(FID, SM);
-        
-        // Check if previous line contains #pragma contract
-        // Lines are 1-indexed, vector is 0-indexed
-        if (funcLine >= 2 && funcLine - 1 <= lines.size())
-        {
-          const std::string &prev_line = lines[funcLine - 2];
-          if (is_pragma_contract_line(prev_line))
-          {
-            has_pragma_contract = true;
-          }
-        }
-      }
-    }
-  }
-  
-  if (has_pragma_contract)
-  {
-    // Mark this function symbol with pragma_contract flag
-    added_symbol.location.set("pragma_contract", true);
-  }
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
