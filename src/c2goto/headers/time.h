@@ -152,11 +152,11 @@ void tzset(void);
 
 /* POSIX getdate (XSI) */
 struct tm *getdate(const char *string);
-extern int getdate_err;
+__ESBMC_EXTERN_NOVAL extern int getdate_err;
 
 /* POSIX timezone variables */
-extern int daylight;
-extern long timezone;
-extern char *tzname[2];
+__ESBMC_EXTERN_NOVAL extern int daylight;
+__ESBMC_EXTERN_NOVAL extern long timezone;
+__ESBMC_EXTERN_NOVAL extern char *tzname[2];
 
 __ESBMC_C_CPP_END

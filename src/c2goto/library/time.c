@@ -411,12 +411,12 @@ __ESBMC_HIDE:;
 }
 
 /* ── POSIX timezone variables ── */
-int daylight;
-long timezone;
-char *tzname[2];
+int daylight = 0;
+long timezone = 0;
+char *tzname[2] = {0, 0};
 
 /* ── getdate error variable ── */
-int getdate_err;
+int getdate_err = 0;
 
 /* ── Static buffer for getdate ── */
 static struct tm __esbmc_getdate_buf;
