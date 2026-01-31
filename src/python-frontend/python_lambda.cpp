@@ -51,6 +51,51 @@ void python_lambda::handle_lambda_assignment(
   rhs = address_of_exprt(rhs);
 }
 
+static bool is_param_used_as_string(
+  const nlohmann::json &body_node,
+  const std::string &param_name)
+{
+  if (!body_node.contains("_type"))
+    return false;
+
+  std::string body_type = body_node["_type"].get<std::string>();
+
+  // Check if param is in string concatenation: param + "string" or "string" + param
+  if (body_type == "BinOp" && body_node.contains("op") &&
+      body_node["op"].contains("_type") && body_node["op"]["_type"] == "Add")
+  {
+    auto is_string_literal = [](const nlohmann::json &node) {
+      return node.contains("_type") && node["_type"] == "Constant" &&
+             node.contains("value") && node["value"].is_string();
+    };
+
+    auto is_param = [&](const nlohmann::json &node) {
+      return node.contains("_type") && node["_type"] == "Name" &&
+             node.contains("id") && node["id"] == param_name;
+    };
+
+    if (body_node.contains("left") && body_node.contains("right"))
+    {
+      if ((is_param(body_node["left"]) && is_string_literal(body_node["right"])) ||
+          (is_string_literal(body_node["left"]) && is_param(body_node["right"])))
+        return true;
+    }
+  }
+
+  // Check IfExp branches recursively
+  if (body_type == "IfExp")
+  {
+    if (body_node.contains("body") &&
+        is_param_used_as_string(body_node["body"], param_name))
+      return true;
+    if (body_node.contains("orelse") &&
+        is_param_used_as_string(body_node["orelse"], param_name))
+      return true;
+  }
+
+  return false;
+}
+
 typet python_lambda::infer_lambda_return_type(
   [[maybe_unused]] const nlohmann::json &body_node)
 {
@@ -70,6 +115,40 @@ typet python_lambda::infer_lambda_return_type(
         body_node["right"]["_type"] == "Constant" &&
         body_node["right"].contains("value") &&
         body_node["right"]["value"].is_string())
+      {
+        return gen_pointer_type(signed_char_type());
+      }
+    }
+
+    // Handle IfExp (ternary expressions)
+    if (body_type == "IfExp")
+    {
+      // Recursively check if any branch contains a string literal
+      std::function<bool(const nlohmann::json&)> has_string_literal =
+        [&](const nlohmann::json& node) -> bool {
+        if (!node.contains("_type"))
+          return false;
+
+        std::string node_type = node["_type"].get<std::string>();
+
+        // Direct string constant
+        if (node_type == "Constant" && node.contains("value") &&
+            node["value"].is_string())
+          return true;
+
+        // Nested IfExp - check recursively
+        if (node_type == "IfExp")
+        {
+          return (node.contains("body") && has_string_literal(node["body"])) ||
+                 (node.contains("orelse") && has_string_literal(node["orelse"]));
+        }
+
+        return false;
+      };
+
+      // If any branch has a string literal, return string pointer type
+      if ((body_node.contains("body") && has_string_literal(body_node["body"])) ||
+          (body_node.contains("orelse") && has_string_literal(body_node["orelse"])))
       {
         return gen_pointer_type(signed_char_type());
       }
@@ -110,7 +189,8 @@ void python_lambda::process_lambda_parameters(
   code_typet &lambda_type,
   [[maybe_unused]] const std::string &lambda_id,
   const std::string &param_scope_id,
-  const locationt &location)
+  const locationt &location,
+  const nlohmann::json &body_node)
 {
   if (!args_node.contains("args") || !args_node["args"].is_array())
     return;
@@ -121,7 +201,7 @@ void python_lambda::process_lambda_parameters(
   {
     std::string arg_name = arg["arg"].get<std::string>();
 
-    // Determine parameter type from annotation or infer from return type
+    // Determine parameter type from annotation or infer from usage
     typet param_type = double_type();
 
     // Check for type annotation
@@ -131,9 +211,11 @@ void python_lambda::process_lambda_parameters(
       if (annotation == "str")
         param_type = gen_pointer_type(signed_char_type());
     }
-    // If lambda returns string, assume string parameters
-    else if (lambda_type.return_type().is_pointer())
+    // Infer from usage in lambda body
+    else if (is_param_used_as_string(body_node, arg_name))
+    {
       param_type = gen_pointer_type(signed_char_type());
+    }
 
     // Create function argument
     code_typet::argumentt argument;
@@ -226,10 +308,11 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   // Parameters are created in param_scope (shared for nested lambdas)
   std::string param_scope_id = "py:" + module_name + "@F@" + param_scope;
 
-  // Process lambda parameters
+  // Process lambda parameters: pass body for type inference
   if (element.contains("args"))
     process_lambda_parameters(
-      element["args"], lambda_type, lambda_id, param_scope_id, location);
+      element["args"], lambda_type, lambda_id, param_scope_id, location,
+      element.contains("body") ? element["body"] : nlohmann::json());
 
   // Create lambda function symbol
   symbolt lambda_symbol = create_symbol(
