@@ -728,10 +728,9 @@ void goto_convertt::do_function_call_symbol(
       {
         actual_arg = actual_arg.op0();
         log_debug(
-          "builtin_functions",
-          "  Unwrapped address_of for assigns target {}: {}",
-          i,
-          actual_arg.pretty());
+          "builtin_functions", 
+          "  Unwrapped address_of for assigns target {}: {}", 
+          i, actual_arg.pretty());
       }
       else
       {
