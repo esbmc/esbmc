@@ -613,8 +613,13 @@ void code_contractst::enforce_contracts(
       continue;
     }
 
-    // Quick check: skip if function has no contracts (avoids expensive full scan)
-    if (!has_contracts(func_it->second.body))
+    // Quick check: skip if function has no contracts and no annotation
+    // Functions can have contracts via:
+    // 1. Explicit contract clauses in body (__ESBMC_requires, __ESBMC_ensures, __ESBMC_assigns)
+    // 2. __attribute__((annotate("__ESBMC_contract"))) annotation (defaults to requires(true), ensures(true))
+    bool has_explicit_contracts = has_contracts(func_it->second.body);
+    bool has_annotation = is_annotated_contract_function(*func_sym);
+    if (!has_explicit_contracts && !has_annotation)
     {
       continue;
     }
@@ -627,7 +632,8 @@ void code_contractst::enforce_contracts(
     expr2tc requires_clause = extract_requires_from_body(original_body_copy);
     expr2tc ensures_clause = extract_ensures_from_body(original_body_copy);
 
-    // Skip if no contracts found (should not happen after has_contracts check, but double-check)
+    // Skip if no contracts found and no annotation
+    // For annotated functions, we use default contracts (requires(true), ensures(true))
     // A contract exists if it's not a constant bool, or if it's a constant false
     // (gen_true_expr() is returned when no contract is found)
     bool has_requires = !is_constant_bool2t(requires_clause) ||
@@ -637,7 +643,9 @@ void code_contractst::enforce_contracts(
                        (is_constant_bool2t(ensures_clause) &&
                         !to_constant_bool2t(ensures_clause).value);
 
-    if (!has_requires && !has_ensures)
+    // For annotated functions without explicit contracts, use default true/true
+    // This allows the function to be processed with default contract semantics
+    if (!has_requires && !has_ensures && !has_annotation)
     {
       continue;
     }
@@ -2281,6 +2289,14 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
   return false;
 }
 
+bool code_contractst::is_annotated_contract_function(
+  const symbolt &func_sym) const
+{
+  // Check if function type has #annotated_contract attribute set
+  // This is set in clang_c_convert.cpp when parsing __attribute__((annotate("__ESBMC_contract")))
+  return func_sym.type.get_bool("#annotated_contract");
+}
+
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 {
   log_status(
@@ -2354,9 +2370,12 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
               auto map_it = function_map.find(called_func);
               if (map_it != function_map.end())
               {
-                // Check if function has contracts
+                // Check if function has contracts (explicit or via annotation)
+                symbolt *sym = std::get<0>(map_it->second);
                 goto_programt *func_body = std::get<1>(map_it->second);
-                bool has_contract = has_contracts(*func_body);
+                bool has_contract =
+                  has_contracts(*func_body) ||
+                  (sym && is_annotated_contract_function(*sym));
                 log_debug(
                   "contracts",
                   "Function {} has contracts: {}",

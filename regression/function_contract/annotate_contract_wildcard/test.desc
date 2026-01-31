@@ -1,0 +1,6 @@
+CORE
+main.c
+--enforce-contract "*" --no-bounds-check --no-div-by-zero-check
+^VERIFICATION SUCCESSFUL$
+Enforced contract for function.*increment
+Enforced contract for function.*set_value

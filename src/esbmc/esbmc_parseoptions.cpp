@@ -2668,24 +2668,43 @@ void esbmc_parseoptionst::process_function_contracts(
   namespacet ns(context);
   code_contractst contracts(goto_functions, context, ns);
 
+  // Reference to context for use in lambda
+  contextt &ctx = context;
+
   // Lambda function to collect all functions with contracts
-  // TODO: Consider adding a field in goto_functions to track this
-  auto collect_functions_with_contracts = [&contracts, &goto_functions]() {
-    std::set<std::string> result;
-    forall_goto_functions (it, goto_functions)
-    {
-      if (it->second.body_available && contracts.has_contracts(it->second.body))
+  // This includes functions with:
+  // 1. Explicit contract clauses (__ESBMC_requires, __ESBMC_ensures, __ESBMC_assigns)
+  // 2. __attribute__((annotate("__ESBMC_contract"))) annotation
+  auto collect_functions_with_contracts =
+    [&contracts, &goto_functions, &ctx]() {
+      std::set<std::string> result;
+      forall_goto_functions (it, goto_functions)
       {
+        if (!it->second.body_available)
+          continue;
+
         std::string func_name = id2string(it->first);
         // Skip compiler-generated functions
         if (
           func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
           continue;
-        result.insert(func_name);
+
+        // Check for explicit contract clauses in function body
+        if (contracts.has_contracts(it->second.body))
+        {
+          result.insert(func_name);
+          continue;
+        }
+
+        // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
+        symbolt *func_sym = ctx.find_symbol(it->first);
+        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+        {
+          result.insert(func_name);
+        }
       }
-    }
-    return result;
-  };
+      return result;
+    };
 
   // Lambda function to process function list (handles "*" wildcard)
   auto process_function_list = [&collect_functions_with_contracts](

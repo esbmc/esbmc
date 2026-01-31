@@ -101,6 +101,11 @@ public:
   /// \return True if function has any contract clauses
   bool has_contracts(const goto_programt &function_body) const;
 
+  /// \brief Check if function is marked with __attribute__((annotate("__ESBMC_contract")))
+  /// \param func_sym Function symbol to check
+  /// \return True if function has the contract annotation
+  bool is_annotated_contract_function(const symbolt &func_sym) const;
+
 private:
   goto_functionst &goto_functions;
   contextt &context;
