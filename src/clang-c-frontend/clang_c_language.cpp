@@ -415,6 +415,10 @@ void __ESBMC_pthread_end_main_hook(void);
 // We need this here or it won't be pulled from the C library
 void __ESBMC_atexit_handler(void);
 
+// Mark extern variables to have no initial value (nil)
+// Use when the actual definition exists in another translation unit
+#define __ESBMC_EXTERN_NOVAL __attribute__((annotate("__ESBMC_extern_noval")))
+
 // Define a macro to generate overflow result structures and function declarations
 #define DEFINE_ESBMC_OVERFLOW_TYPE(type)              \
   typedef struct {                                          \
