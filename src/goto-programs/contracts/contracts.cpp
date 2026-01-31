@@ -2074,8 +2074,10 @@ expr2tc code_contractst::remove_incorrect_casts(
 
 /// Helper: extract mutable pointers to side_1 and side_2 of any comparison
 /// expression.  Returns false if the expression is not a comparison.
-static bool
-get_comparison_sides(expr2tc &expr, expr2tc *&side1, expr2tc *&side2)
+static bool get_comparison_sides(
+  expr2tc &expr,
+  expr2tc *&side1,
+  expr2tc *&side2)
 {
   side1 = side2 = nullptr;
   if (is_lessthan2t(expr))
