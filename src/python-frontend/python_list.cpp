@@ -2430,12 +2430,22 @@ typet python_list::check_homogeneous_list_types(
   // Get the first element's type
   typet elem_type = type_info[0].second;
 
+  // Check whether a type is a string type (char array or char pointer)
+  auto is_string_type = [](const typet &t) -> bool {
+    return (t.is_array() && t.subtype() == char_type()) ||
+           (t.is_pointer() && t.subtype() == char_type());
+  };
+
   // Check all other elements have the same type
   for (size_t i = 1; i < list_size; i++)
   {
     const typet &current_elem_type = type_info[i].second;
 
-    // Compare types
+    // For string types, all char arrays and char pointers are considered compatible
+    if (is_string_type(elem_type) && is_string_type(current_elem_type))
+      continue;
+
+    // For non-string types, require exact match
     if (elem_type != current_elem_type)
     {
       throw std::runtime_error(

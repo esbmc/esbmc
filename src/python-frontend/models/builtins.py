@@ -142,6 +142,7 @@ def min_str(iterable: list[str]) -> str:
 #         i = i + 1
 #     return False
 
+
 def sorted(iterable: list[int]) -> list[int]:
     """Return a new sorted list from the items in iterable."""
     # Create a copy of the list
