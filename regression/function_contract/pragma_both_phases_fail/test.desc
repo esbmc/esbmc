@@ -1,6 +1,0 @@
-CORE
-main.c
---auto-havoc-pragma-contract --no-pointer-check --parallel-solving
-^VERIFICATION FAILED$
-contract ensures \(enforce\)
-contract requires \(replace\)

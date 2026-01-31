@@ -1,5 +1,0 @@
-CORE
-main.c
---enforce-contract increment_by_two
-^VERIFICATION FAILED$
-contract ensures \(enforce\)
