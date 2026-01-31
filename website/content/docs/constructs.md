@@ -62,9 +62,13 @@ int main() {
 ```
 ## Ensure and Requires
 
-The constructs `__ESBMC_ensure(...)`, `__ESBMC_requires(...)`, 
-`__ESBMC_return_value` and `__ESBMC_old(...)` are detailed in the 
+The constructs `__ESBMC_ensure(...)`, `__ESBMC_requires(...)`,
+`__ESBMC_return_value` and `__ESBMC_old(...)` are detailed in the
 [Function Contracts](/docs/function-contracts) article.
+
+## Extern No Value
+
+The `__ESBMC_EXTERN_NOVAL` attribute is used for extern declarations in operational model headers. See the [Operational Models](/docs/development/om/internal-c-and-cpp-operational-models/#the-__esbmc_extern_noval-attribute) documentation for details.
 
 ## Pragma Utils
 
