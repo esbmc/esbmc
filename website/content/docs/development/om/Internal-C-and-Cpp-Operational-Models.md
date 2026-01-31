@@ -53,20 +53,6 @@ either a pre-compiled version if the translation parameters match (e.g., `--32 -
 or, as a fallback if no matching pre-compiled version has been bundled,
 the bundled sources of the operational models are extracted to a temporary directory and translated using the Clang frontend.
 
-# The `__ESBMC_EXTERN_NOVAL` Attribute
-
-When ESBMC processes a header with `extern int var;`, it assigns a nondeterministic value to that symbol. When the operational model library (which defines `int var = 0;`) is linked via `c_link`, there can be a conflict between the nondet value and the actual definition. Use `__ESBMC_EXTERN_NOVAL` on extern declarations in operational model headers to leave the value as nil, allowing `c_link` to properly apply the library definition:
-
-```c
-// In operational model header (e.g., time.h)
-__ESBMC_EXTERN_NOVAL extern int daylight;
-
-// In operational model library (e.g., time.c)
-int daylight = 0;
-```
-
-This attribute is only needed for operational model headers. For regular user code where files are passed together on the command line, symbol definitions properly override extern declarations during normal linking.
-
 # Updated libc and libm build process: 
 [PR 602](https://github.com/esbmc/esbmc/pull/602) updated the internal libraries build process. The new build process is different from the snapshot version in the previous section. We now bundle the libraries in a way more like the standard C library releases( e.g. [glibc](https://sourceware.org/git/?p=glibc.git) ): Libraries in `src/c2goto/library/` are bundled in `libc` and those in `src/c2goto/library/libm` are bundled in `libm` - this is more like the standard C libraries as pointed by "LIBRARY_PATH", you may want to check `libc.a` and `libm.a` in `/usr/lib/x86_64-linux-gnu/` or something similar. 
 
