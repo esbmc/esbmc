@@ -1881,10 +1881,8 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
   // We'll update old_snapshots to contain new wrapper snapshot variables
 
   // Map to track: original_expr -> wrapper_snapshot_var
-  // This ensures we only create ONE wrapper snapshot per unique expression.
-  // Uses expr2tc semantic comparison (operator< / operator==) instead of
-  // raw pointer addresses, so structurally equal expressions share a snapshot.
-  std::map<expr2tc, expr2tc> expr_to_wrapper_snapshot;
+  // This ensures we only create ONE wrapper snapshot per unique expression
+  std::map<std::string, expr2tc> expr_to_wrapper_snapshot;
 
   size_t unique_snapshot_count = 0;
 
@@ -1894,10 +1892,15 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
     expr2tc old_temp_var =
       old_snapshots[i].snapshot_var; // The temp var from function body
 
+    // Create a unique key for this expression (using pointer address as simple hash)
+    std::ostringstream key_stream;
+    key_stream << original_expr.get();
+    std::string expr_key = key_stream.str();
+
     expr2tc new_snapshot_var;
 
     // Check if we've already created a wrapper snapshot for this expression
-    auto it = expr_to_wrapper_snapshot.find(original_expr);
+    auto it = expr_to_wrapper_snapshot.find(expr_key);
     if (it != expr_to_wrapper_snapshot.end())
     {
       // Reuse existing wrapper snapshot
@@ -1926,7 +1929,7 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
       assign_inst->location.comment("__ESBMC_old snapshot assignment");
 
       // Remember this mapping
-      expr_to_wrapper_snapshot[original_expr] = new_snapshot_var;
+      expr_to_wrapper_snapshot[expr_key] = new_snapshot_var;
     }
 
     // Store both old and new variables in the snapshot structure
@@ -2072,53 +2075,6 @@ expr2tc code_contractst::remove_incorrect_casts(
   return expr;
 }
 
-/// Helper: extract mutable pointers to side_1 and side_2 of any comparison
-/// expression.  Returns false if the expression is not a comparison.
-static bool get_comparison_sides(
-  expr2tc &expr,
-  expr2tc *&side1,
-  expr2tc *&side2)
-{
-  side1 = side2 = nullptr;
-  if (is_lessthan2t(expr))
-  {
-    auto &r = to_lessthan2t(expr);
-    side1 = &r.side_1;
-    side2 = &r.side_2;
-  }
-  else if (is_lessthanequal2t(expr))
-  {
-    auto &r = to_lessthanequal2t(expr);
-    side1 = &r.side_1;
-    side2 = &r.side_2;
-  }
-  else if (is_greaterthan2t(expr))
-  {
-    auto &r = to_greaterthan2t(expr);
-    side1 = &r.side_1;
-    side2 = &r.side_2;
-  }
-  else if (is_greaterthanequal2t(expr))
-  {
-    auto &r = to_greaterthanequal2t(expr);
-    side1 = &r.side_1;
-    side2 = &r.side_2;
-  }
-  else if (is_equality2t(expr))
-  {
-    auto &r = to_equality2t(expr);
-    side1 = &r.side_1;
-    side2 = &r.side_2;
-  }
-  else if (is_notequal2t(expr))
-  {
-    auto &r = to_notequal2t(expr);
-    side1 = &r.side_1;
-    side2 = &r.side_2;
-  }
-  return side1 != nullptr;
-}
-
 expr2tc code_contractst::fix_comparison_types(
   const expr2tc &expr,
   const expr2tc &ret_val) const
@@ -2138,7 +2094,43 @@ expr2tc code_contractst::fix_comparison_types(
     // Get the two sides of the comparison
     expr2tc *side1 = nullptr;
     expr2tc *side2 = nullptr;
-    get_comparison_sides(new_expr, side1, side2);
+
+    if (is_lessthan2t(new_expr))
+    {
+      lessthan2t &rel = to_lessthan2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_lessthanequal2t(new_expr))
+    {
+      lessthanequal2t &rel = to_lessthanequal2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_greaterthan2t(new_expr))
+    {
+      greaterthan2t &rel = to_greaterthan2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_greaterthanequal2t(new_expr))
+    {
+      greaterthanequal2t &rel = to_greaterthanequal2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_equality2t(new_expr))
+    {
+      equality2t &rel = to_equality2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
+    else if (is_notequal2t(new_expr))
+    {
+      notequal2t &rel = to_notequal2t(new_expr);
+      side1 = &rel.side_1;
+      side2 = &rel.side_2;
+    }
 
     if (side1 && side2)
     {
@@ -2355,19 +2347,82 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
   if (is_comp_expr(expr))
   {
     expr2tc new_expr = expr->clone();
-    expr2tc *s1 = nullptr, *s2 = nullptr;
-    if (get_comparison_sides(new_expr, s1, s2))
+    bool changed = false;
+
+    if (is_equality2t(new_expr))
     {
-      expr2tc norm1 = normalize_fp_add_in_ensures(*s1);
-      expr2tc norm2 = normalize_fp_add_in_ensures(*s2);
-      if (norm1 != *s1 || norm2 != *s2)
+      equality2t &rel = to_equality2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
       {
-        *s1 = norm1;
-        *s2 = norm2;
-        return new_expr;
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
       }
     }
-    return expr;
+    else if (is_notequal2t(new_expr))
+    {
+      notequal2t &rel = to_notequal2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    else if (is_lessthan2t(new_expr))
+    {
+      lessthan2t &rel = to_lessthan2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    else if (is_lessthanequal2t(new_expr))
+    {
+      lessthanequal2t &rel = to_lessthanequal2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    else if (is_greaterthan2t(new_expr))
+    {
+      greaterthan2t &rel = to_greaterthan2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+    else if (is_greaterthanequal2t(new_expr))
+    {
+      greaterthanequal2t &rel = to_greaterthanequal2t(new_expr);
+      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
+      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      {
+        rel.side_1 = norm1;
+        rel.side_2 = norm2;
+        changed = true;
+      }
+    }
+
+    return changed ? new_expr : expr;
   }
 
   // For typecast expressions, process the inner expression
@@ -2436,28 +2491,14 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
   return false;
 }
 
-/// Helper: check if a function name matches any pattern in to_replace.
-/// Matching rules:
-///   - "*" matches everything
-///   - Otherwise, exact match against func_name or its unqualified tail
-///     (the part after the last "@"), e.g. pattern "foo" matches "c:@F@foo"
+/// Helper: check if a function name matches any pattern in to_replace
 static bool matches_replace_pattern(
   const std::string &func_name,
   const std::set<std::string> &to_replace)
 {
   for (const auto &pattern : to_replace)
   {
-    if (pattern == "*")
-      return true;
-
-    // Exact match on full qualified name (e.g. "c:@F@foo")
-    if (func_name == pattern)
-      return true;
-
-    // Match unqualified name: extract the part after the last '@'
-    // e.g. "c:@F@foo" → "foo"
-    auto pos = func_name.rfind('@');
-    if (pos != std::string::npos && func_name.substr(pos + 1) == pattern)
+    if (pattern == "*" || func_name.find(pattern) != std::string::npos)
       return true;
   }
   return false;
@@ -2571,20 +2612,6 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     log_debug("contracts", "  Leaf: {}", f);
   for (const auto &f : parent_funcs)
     log_debug("contracts", "  Parent (kept, sub-calls replaced): {}", f);
-
-  // Warn about mutual recursion: if all replaceable functions are parents
-  // (no leaves), none of them will be replaced with contracts.  This is
-  // safe (conservative) but probably not what the user intended.
-  if (!replaceable_funcs.empty() && leaf_funcs.empty())
-  {
-    log_warning(
-      "All {} replaceable function(s) call other replaceable functions "
-      "(possible mutual recursion). None will be replaced with contracts. "
-      "Consider specifying individual functions instead of \"*\".",
-      replaceable_funcs.size());
-    for (const auto &f : parent_funcs)
-      log_warning("  Unreplaced: {}", f);
-  }
 
   // Track functions that have been fully replaced (to delete their definitions)
   std::set<irep_idt> functions_to_delete;
