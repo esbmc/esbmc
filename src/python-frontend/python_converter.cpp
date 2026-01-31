@@ -1898,8 +1898,10 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   if (!unary_sub.type().is_nil() && !unary_sub.type().is_empty())
   {
     std::string op = element["op"]["_type"].get<std::string>();
-    if (op == "USub" || op == "UAdd")  // Unary minus/plus
-      if (unary_sub.type().is_floatbv() || type_utils::is_integer_type(unary_sub.type()))
+    if (op == "USub" || op == "UAdd") // Unary minus/plus
+      if (
+        unary_sub.type().is_floatbv() ||
+        type_utils::is_integer_type(unary_sub.type()))
         type = unary_sub.type();
   }
 
