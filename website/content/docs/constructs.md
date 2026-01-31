@@ -5,7 +5,7 @@ weight: 3
 draft: false
 ---
 
-This page outlines the verification constructs that ESBMC supports. These can be
+This page describes the verification constructs that ESBMC supports. These can be
 used in harness files to aid with the verification of ESBMC.
 
 {{< callout type="info" >}}
