@@ -1894,6 +1894,15 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   // Get the operand expression
   exprt unary_sub = get_expr(element["operand"]);
 
+  // Use operand's exact type to preserve metadata
+  if (!unary_sub.type().is_nil() && !unary_sub.type().is_empty())
+  {
+    std::string op = element["op"]["_type"].get<std::string>();
+    if (op == "USub" || op == "UAdd")  // Unary minus/plus
+      if (unary_sub.type().is_floatbv() || type_utils::is_integer_type(unary_sub.type()))
+        type = unary_sub.type();
+  }
+
   // Handle 'not' operator on dictionary types: convert to emptiness check
   std::string op = element["op"]["_type"].get<std::string>();
   if (op == "Not" && dict_handler_->is_dict_type(unary_sub.type()))
