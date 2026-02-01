@@ -278,7 +278,9 @@ private:
           if (param["annotation"].contains("id"))
             current_type = param["annotation"]["id"];
           // Check if it's a generic container without element type
-          if (current_type == "list" || current_type == "dict" || current_type == "set")
+          if (
+            current_type == "list" || current_type == "dict" ||
+            current_type == "set")
           {
             has_partial_annotation = true;
             needs_inference = true; // Try to refine with element type
@@ -516,15 +518,18 @@ private:
         // Handle simple type annotations like int, str (Name nodes)
         else if (var_node["annotation"].contains("id"))
         {
-          std::string base_type = var_node["annotation"]["id"].template get<std::string>();
+          std::string base_type =
+            var_node["annotation"]["id"].template get<std::string>();
           // If annotation is just "list"/"dict"/"set" without element type, try to infer from value
           if (
-            (base_type == "list" || base_type == "dict" || base_type == "set") &&
+            (base_type == "list" || base_type == "dict" ||
+             base_type == "set") &&
             var_node.contains("value") && !var_node["value"].is_null())
           {
             if (base_type == "list" && var_node["value"]["_type"] == "List")
             {
-              std::string full_type = get_list_type_from_literal(var_node["value"]);
+              std::string full_type =
+                get_list_type_from_literal(var_node["value"]);
               if (!full_type.empty())
                 return full_type;
             }
