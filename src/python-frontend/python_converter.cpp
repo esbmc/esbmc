@@ -2942,8 +2942,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (!current_func_name_.empty())
         {
           // Variable referenced inside a function
-          error_msg << "Variable '" << var_name << "' is not defined in function '"
-                    << current_func_name_ << "'";
+          error_msg << "Variable '" << var_name
+                    << "' is not defined in function '" << current_func_name_
+                    << "'";
           if (!location.get_line().empty())
             error_msg << " at line " << location.get_line();
           error_msg << ".";
