@@ -141,3 +141,82 @@ def min_str(iterable: list[str]) -> str:
 #             return True
 #         i = i + 1
 #     return False
+
+
+def sorted(iterable: list[int]) -> list[int]:
+    """Return a new sorted list from the items in iterable."""
+    # Create a copy of the list
+    result: list[int] = []
+    i: int = 0
+    length: int = len(iterable)
+
+    # Copy all elements
+    while i < length:
+        result.append(iterable[i])
+        i = i + 1
+
+    # Bubble sort (simple and verifier-friendly)
+    n: int = len(result)
+    i = 0
+    while i < n:
+        j: int = 0
+        while j < n - 1 - i:
+            if result[j] > result[j + 1]:
+                # Swap
+                temp: int = result[j]
+                result[j] = result[j + 1]
+                result[j + 1] = temp
+            j = j + 1
+        i = i + 1
+
+    return result
+
+
+def sorted_float(iterable: list[float]) -> list[float]:
+    """Return a new sorted list from the items in iterable."""
+    result: list[float] = []
+    i: int = 0
+    length: int = len(iterable)
+
+    while i < length:
+        result.append(iterable[i])
+        i = i + 1
+
+    n: int = len(result)
+    i = 0
+    while i < n:
+        j: int = 0
+        while j < n - 1 - i:
+            if result[j] > result[j + 1]:
+                temp: float = result[j]
+                result[j] = result[j + 1]
+                result[j + 1] = temp
+            j = j + 1
+        i = i + 1
+
+    return result
+
+
+def sorted_str(iterable: list[str]) -> list[str]:
+    """Return a new sorted list from the items in iterable."""
+    result: list[str] = []
+    i: int = 0
+    length: int = len(iterable)
+
+    while i < length:
+        result.append(iterable[i])
+        i = i + 1
+
+    n: int = len(result)
+    i = 0
+    while i < n:
+        j: int = 0
+        while j < n - 1 - i:
+            if result[j] > result[j + 1]:
+                temp: str = result[j]
+                result[j] = result[j + 1]
+                result[j + 1] = temp
+            j = j + 1
+        i = i + 1
+
+    return result
