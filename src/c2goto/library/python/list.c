@@ -15,20 +15,18 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   if (a == b)
     return true;
   // Direct comparison for common sizes - no loop needed
+  // Python frontend maps: int/float -> 8 bytes, bool -> 1 byte
   if (size == 8)
     return *(const uint64_t *)a == *(const uint64_t *)b;
-  if (size == 4)
-    return *(const uint32_t *)a == *(const uint32_t *)b;
-  if (size == 2)
-    return *(const uint16_t *)a == *(const uint16_t *)b;
   if (size == 1)
     return *(const uint8_t *)a == *(const uint8_t *)b;
   // Fallback for larger/unusual sizes
   return memcmp(a, b, size) == 0;
 }
 
-// Maximum nesting depth to prevent state explosion
-#define __ESBMC_LIST_MAX_DEPTH 4
+// Default maximum nesting depth to prevent state explosion during symbolic execution.
+// This can be overridden via --python-list-compare-depth option.
+#define __ESBMC_LIST_DEFAULT_DEPTH 4
 
 PyObject *__ESBMC_create_inf_obj()
 {
@@ -102,7 +100,8 @@ bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
 bool __ESBMC_list_eq(
   const PyListObject *l1,
   const PyListObject *l2,
-  size_t list_type_id)
+  size_t list_type_id,
+  size_t max_depth)
 {
   // Quick checks
   if (!l1 || !l2)
@@ -112,11 +111,16 @@ bool __ESBMC_list_eq(
   if (l1->size != l2->size)
     return false;
 
+  // Use max_depth or default if 0
+  const size_t depth_limit =
+    max_depth > 0 ? max_depth : __ESBMC_LIST_DEFAULT_DEPTH;
+
   // Use explicit stack to avoid recursive function calls
   // This prevents state explosion from recursive unrolling
-  const PyListObject *stack_a[__ESBMC_LIST_MAX_DEPTH];
-  const PyListObject *stack_b[__ESBMC_LIST_MAX_DEPTH];
-  size_t stack_idx[__ESBMC_LIST_MAX_DEPTH];
+  // Stack size uses a reasonable upper bound; actual depth is controlled by depth_limit
+  const PyListObject *stack_a[16];
+  const PyListObject *stack_b[16];
+  size_t stack_idx[16];
   int top = 0;
 
   // Initialize with first list pair
@@ -171,15 +175,24 @@ bool __ESBMC_list_eq(
       if (nested_a->size != nested_b->size)
         return false;
 
-      // Push nested comparison onto stack if within depth limit
-      if (top < __ESBMC_LIST_MAX_DEPTH)
+      // Check depth limit and report if exceeded
+      if ((size_t)top >= depth_limit)
       {
-        stack_a[top] = nested_a;
-        stack_b[top] = nested_b;
-        stack_idx[top] = 0;
-        top++;
+        // List depth unwinding assertion: similar to loop unwinding assertions.
+        // If this fires, increase depth with --python-list-compare-depth option.
+        __ESBMC_assert(
+          0,
+          "list comparison depth limit exceeded "
+          "(use --python-list-compare-depth to increase)");
+        // Note: return is needed to stop symbolic execution on this path
+        return false;
       }
-      // At max depth with matching sizes: assume equal (sound over-approximation)
+
+      // Push nested comparison onto stack
+      stack_a[top] = nested_a;
+      stack_b[top] = nested_b;
+      stack_idx[top] = 0;
+      top++;
     }
     else
     {
