@@ -5540,6 +5540,21 @@ void python_converter::validate_return_paths(
   function_body.copy_to_operands(missing_return_assert);
 }
 
+typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
+{
+  for (const auto &stmt : body)
+  {
+    if (stmt["_type"] == "Return" && !stmt["value"].is_null())
+    {
+      // If returning a tuple, infer its type
+      if (stmt["value"]["_type"] == "Tuple")
+        return tuple_handler_->get_tuple_expr(stmt["value"]).type();
+    }
+  }
+
+  return empty_typet();
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -5677,6 +5692,17 @@ void python_converter::get_function_definition(
 
   // Process function body
   exprt function_body = get_block(function_node["body"]);
+
+  // If return type is empty/unannotated, try to infer from return statements
+  if (type.return_type().is_empty())
+  {
+    typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    if (!inferred_type.is_empty())
+    {
+      type.return_type() = inferred_type;
+      added_symbol->type = type; // Update the symbol's type
+    }
+  }
 
   // Inject runtime checks for annotated parameters
   if (type_assertions_enabled())
