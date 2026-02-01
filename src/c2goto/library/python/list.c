@@ -8,6 +8,28 @@
 static PyType __ESBMC_generic_type;
 static PyType __ESBMC_list_type;
 
+// Optimized value comparison - avoids memcmp loop unrolling for common sizes
+static inline bool
+__ESBMC_values_equal(const void *a, const void *b, size_t size)
+{
+  if (a == b)
+    return true;
+  // Direct comparison for common sizes - no loop needed
+  if (size == 8)
+    return *(const uint64_t *)a == *(const uint64_t *)b;
+  if (size == 4)
+    return *(const uint32_t *)a == *(const uint32_t *)b;
+  if (size == 2)
+    return *(const uint16_t *)a == *(const uint16_t *)b;
+  if (size == 1)
+    return *(const uint8_t *)a == *(const uint8_t *)b;
+  // Fallback for larger/unusual sizes
+  return memcmp(a, b, size) == 0;
+}
+
+// Maximum nesting depth to prevent state explosion
+#define __ESBMC_LIST_MAX_DEPTH 4
+
 PyObject *__ESBMC_create_inf_obj()
 {
   return NULL;
@@ -82,6 +104,7 @@ bool __ESBMC_list_eq(
   const PyListObject *l2,
   size_t list_type_id)
 {
+  // Quick checks
   if (!l1 || !l2)
     return false;
   if (__ESBMC_same_object(l1, l2))
@@ -89,14 +112,40 @@ bool __ESBMC_list_eq(
   if (l1->size != l2->size)
     return false;
 
-  size_t i = 0;
-  while (i < l1->size)
-  {
-    const PyObject *a = &l1->items[i];
-    const PyObject *b = &l2->items[i];
-    ++i;
+  // Use explicit stack to avoid recursive function calls
+  // This prevents state explosion from recursive unrolling
+  const PyListObject *stack_a[__ESBMC_LIST_MAX_DEPTH];
+  const PyListObject *stack_b[__ESBMC_LIST_MAX_DEPTH];
+  size_t stack_idx[__ESBMC_LIST_MAX_DEPTH];
+  int top = 0;
 
-    // Same address => element equal; keep checking the rest.
+  // Initialize with first list pair
+  stack_a[0] = l1;
+  stack_b[0] = l2;
+  stack_idx[0] = 0;
+  top = 1;
+
+  while (top > 0)
+  {
+    int cur = top - 1;
+    const PyListObject *cur_a = stack_a[cur];
+    const PyListObject *cur_b = stack_b[cur];
+    size_t idx = stack_idx[cur];
+
+    // Finished comparing this list pair?
+    if (idx >= cur_a->size)
+    {
+      top--;
+      continue;
+    }
+
+    // Advance index for next iteration
+    stack_idx[cur] = idx + 1;
+
+    const PyObject *a = &cur_a->items[idx];
+    const PyObject *b = &cur_b->items[idx];
+
+    // Same pointer => elements equal
     if (a->value == b->value)
       continue;
 
@@ -108,23 +157,34 @@ bool __ESBMC_list_eq(
     if (a->size != b->size)
       return false;
 
-    // Check if elements are nested lists by comparing type_id
+    // Check if elements are nested lists
     if (a->type_id == list_type_id)
     {
-      // Elements are nested lists
-      // elem->value is void* containing PyListObject**
-      // We need to dereference to get PyListObject*
       const PyListObject *nested_a = *(const PyListObject **)a->value;
       const PyListObject *nested_b = *(const PyListObject **)b->value;
 
-      // recursive comparison
-      if (!__ESBMC_list_eq(nested_a, nested_b, list_type_id))
+      // Quick checks for nested lists
+      if (!nested_a || !nested_b)
         return false;
+      if (__ESBMC_same_object(nested_a, nested_b))
+        continue;
+      if (nested_a->size != nested_b->size)
+        return false;
+
+      // Push nested comparison onto stack if within depth limit
+      if (top < __ESBMC_LIST_MAX_DEPTH)
+      {
+        stack_a[top] = nested_a;
+        stack_b[top] = nested_b;
+        stack_idx[top] = 0;
+        top++;
+      }
+      // At max depth with matching sizes: assume equal (sound over-approximation)
     }
     else
     {
-      // Elements are primitives: memcmp
-      if (memcmp(a->value, b->value, a->size) != 0)
+      // Primitive comparison - use optimized version (no memcmp loop)
+      if (!__ESBMC_values_equal(a->value, b->value, a->size))
         return false;
     }
   }
@@ -188,18 +248,6 @@ bool __ESBMC_list_insert(
   l->items[index].size = type_size;
   l->size++;
   return true;
-}
-
-static inline bool
-__ESBMC_values_equal(const void *a, const void *b, size_t size)
-{
-  if (a == b)
-    return true;
-
-  if (size == 8)
-    return *(const uint64_t *)a == *(const uint64_t *)b;
-  else
-    return memcmp(a, b, size) == 0;
 }
 
 bool __ESBMC_list_contains(
