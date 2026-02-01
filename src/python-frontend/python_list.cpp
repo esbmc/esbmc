@@ -23,7 +23,8 @@ static const int DEFAULT_LIST_COMPARE_DEPTH = 4;
 
 static int get_list_compare_depth()
 {
-  std::string opt_value = config.options.get_option("python-list-compare-depth");
+  std::string opt_value =
+    config.options.get_option("python-list-compare-depth");
   if (!opt_value.empty())
   {
     try
@@ -1568,7 +1569,8 @@ exprt python_list::compare(
   // Get max depth from configuration option
   int max_depth = get_list_compare_depth();
   constant_exprt max_depth_expr(size_type());
-  max_depth_expr.set_value(integer2binary(max_depth, config.ansi_c.address_width));
+  max_depth_expr.set_value(
+    integer2binary(max_depth, config.ansi_c.address_width));
 
   code_function_callt list_eq_func_call;
   list_eq_func_call.function() = symbol_expr(*list_eq_func_sym);
@@ -1576,7 +1578,7 @@ exprt python_list::compare(
   // passing arguments
   list_eq_func_call.arguments().push_back(symbol_expr(*lhs_symbol)); // l1
   list_eq_func_call.arguments().push_back(symbol_expr(*rhs_symbol)); // l2
-  list_eq_func_call.arguments().push_back(list_type_id); // list_type_id
+  list_eq_func_call.arguments().push_back(list_type_id);   // list_type_id
   list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
