@@ -638,11 +638,6 @@ public:
     return get_bool(a_cmt_volatile);
   }
 
-  inline bool zero_initializer() const
-  {
-    return get_bool(a_zero_initializer);
-  }
-
   inline void arguments(const irept &val)
   {
     set(s_arguments, val);
@@ -1038,11 +1033,6 @@ public:
     set(a_cmt_volatile, val);
   }
 
-  inline void zero_initializer(bool val)
-  {
-    set(a_zero_initializer, val);
-  }
-
   inline void components(const irept &val)
   {
     set(s_components, val);
@@ -1289,7 +1279,7 @@ public:
   static const irep_idt a_is_type, a_cmt_lvalue;
   static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
-  static const irep_idt a_zero_initializer, a_restricted, a_flavor;
+  static const irep_idt a_restricted, a_flavor;
   static const irep_idt a_cmt_active, a_code, a_component, a_c_sizeof_type;
   static const irep_idt a_end_location, a_guard, a_label, a_lhs, a_location;
   static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;

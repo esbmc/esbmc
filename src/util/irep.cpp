@@ -542,7 +542,6 @@ const irep_idt irept::a_theorem = dstring("theorem");
 const irep_idt irept::a_cmt_unsigned = dstring("#unsigned");
 const irep_idt irept::a_user_provided = dstring("user-provided");
 const irep_idt irept::a_cmt_volatile = dstring("#volatile");
-const irep_idt irept::a_zero_initializer = dstring("#zero_initializer");
 const irep_idt irept::a_flavor = dstring("flavor");
 const irep_idt irept::a_cmt_active = dstring("#active");
 const irep_idt irept::a_code = dstring("code");

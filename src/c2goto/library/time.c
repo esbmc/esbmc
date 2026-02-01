@@ -411,7 +411,7 @@ __ESBMC_HIDE:;
 }
 
 /* ── POSIX timezone variables ── */
-int daylight = 0;
+int daylight/* = 0*/;
 long timezone = 0;
 char *tzname[2] = {0, 0};
 

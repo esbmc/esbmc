@@ -103,7 +103,6 @@ add_global_static_variable(contextt &ctx, const typet t, std::string name)
   symbol.is_extern = false;
   symbol.file_local = false;
   symbol.value = gen_zero(t, true);
-  symbol.value.zero_initializer(true);
 
   symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
   code_declt decl(symbol_expr(added_symbol));

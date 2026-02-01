@@ -818,7 +818,6 @@ bool solidity_convertert::populate_auxilary_vars()
     s.lvalue = true;
     symbolt &sym = *move_symbol_to_context(s);
     sym.value = gen_zero(get_complete_type(_t, ns), true);
-    sym.value.zero_initializer(true);
 
     // f: initialize_bind_list
     std::string fname, fid;
@@ -1430,7 +1429,6 @@ bool solidity_convertert::get_var_decl(
   {
     // for both state and non-state variables, set default value as zero
     symbol.value = gen_zero(get_complete_type(t, ns), true);
-    symbol.value.zero_initializer(true);
   }
 
   // 6. add symbol into the context
@@ -1461,9 +1459,9 @@ bool solidity_convertert::get_var_decl(
   exprt val;
   if (t_sol_type == "ARRAY" || t_sol_type == "ARRAY_LITERAL")
   {
-    /** 
+    /**
       uint[2] z;            // uint *z = (uint *)calloc(2, sizeof(uint));
-      
+
                             // uint tmp1[2] = {1,2}; // populated into sym tab, not a real statement
       uint[2] zz = [1,2];   // uint *zz = (uint *)_ESBMC_arrcpy(tmp1, 2, 2, sizeof(uint));
 
@@ -1563,9 +1561,9 @@ bool solidity_convertert::get_var_decl(
     }
     else if (val.is_symbol())
     {
-      /** 
+      /**
       uint[] zzz;           // uint* zzz; // will not reach here actually
-                            // 
+                            //
       uint[] zzzz = [1,2];  // memcpy(zzzz, tmp2, 2*sizeof(uint));
                             // uint* zzzzz = 0;
       uint[] zzzzzz = zzz;  // memcpy(zzzzzz, zzz, zzz.size * sizeof(uint));
@@ -2180,7 +2178,7 @@ void solidity_convertert::add_enum_member_val(nlohmann::json &ast_node)
 {
   /*
   "nodeType": "EnumDefinition",
-  "members": 
+  "members":
     [
       {
           "id": 2,
@@ -2333,7 +2331,7 @@ void solidity_convertert::add_inherit_label(
 
 /*
   prefix:
-    c_: current contract, we need to merged the inherited contract nodes to it 
+    c_: current contract, we need to merged the inherited contract nodes to it
     i_: inherited contract
 */
 void solidity_convertert::merge_inheritance_ast(
@@ -2589,7 +2587,7 @@ void solidity_convertert::convert_unboundcall_nondet(
     static Base instance;
     void test()
     {
-      instance.doSomething(); // 
+      instance.doSomething(); //
     }
     void doSomething()
     {
@@ -2929,7 +2927,7 @@ bool solidity_convertert::move_initializer_to_ctor(
       exprt _assign;
       if (
         lhs.type().get("#sol_type") == "STRING" &&
-        rhs.get("#zero_initializer") != "1" && rhs.id() != "string-constant")
+        rhs.id() != "string-constant")
       {
         // p = NULL;
         // _str_assign(&p, "hello");
@@ -2942,8 +2940,7 @@ bool solidity_convertert::move_initializer_to_ctor(
         _assign = side_effect_exprt("assign", comp.type());
         _assign.location() = sym.location;
         assert(current_contract != nullptr);
-        if (rhs.get("#zero_initializer") != "1")
-          convert_type_expr(ns, rhs, comp, current_contract);
+        convert_type_expr(ns, rhs, comp, current_contract);
         _assign.copy_to_operands(lhs, rhs);
       }
       convert_expression_to_code(_assign);
@@ -3044,7 +3041,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
           constructor() Base1() Base2() {}
         }
 
-      E.g. 
+      E.g.
         contract DD is BB(3)
       Result ctor symbol table:
         Symbol......: c:@S@DD@F@DD#
@@ -3052,12 +3049,12 @@ bool solidity_convertert::move_inheritance_to_ctor(
         Base name...: DD
         Mode........: C++
         Type........: constructor  (struct DD *)
-        Value.......: 
+        Value.......:
         {
           BB((struct BB *)this, 3);
         }
       However, since the c++ frontend is broken(esbmc/issues/1866),
-      we convert it as 
+      we convert it as
         function ctor()
         {
           // create temporary object
@@ -4464,18 +4461,18 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 
 /**
      * @brief Populate the out parameter with the expression based on
-     * the solidity expression grammar. 
-     * 
+     * the solidity expression grammar.
+     *
      * More specifically, parse each expression in the AST json and
      * convert it to a exprt ("new_expr"). The expression may have sub-expression
-     * 
+     *
      * !Always check if the expression is a Literal before calling get_expr
      * !Unless you are 100% sure it will not be a constant
-     * 
+     *
      * This function is called throught two paths:
      * 1. get_non_function_decl => get_var_decl => get_expr
      * 2. get_non_function_decl => get_function_definition => get_statement => get_expr
-     * 
+     *
      * @param expr The expression that is to be converted to the IR
      * @param literal_type Type information ast to create the the literal
      * type in the IR (only needed for when the expression is a literal).
@@ -4981,7 +4978,7 @@ bool solidity_convertert::get_expr(
       we assume there are three types of tuple expr:
       0. dump: (x,y);
       1. fixed: (x,y) = (y,x);
-      2. function-related: 
+      2. function-related:
           2.1. (x,y) = func();
           2.2. return (x,y);
 
@@ -5016,7 +5013,7 @@ bool solidity_convertert::get_expr(
            make the function return void instead, and create a struct type
         2. when parsing the return statement, if the return value is a tuple,
            create a struct type instance, do assignments,  and return empty;
-        3. when the lhs is tuple and rhs is func_call, get_tuple_instance_expr based 
+        3. when the lhs is tuple and rhs is func_call, get_tuple_instance_expr based
            on the func_call, and do case 1.
         e.g.
         function test() returns (uint, uint)
@@ -6691,14 +6688,14 @@ bool solidity_convertert::get_binary_operator_expr(
     }
     else if (rt_sol == "DYNARRAY")
     {
-      /* e.g. 
+      /* e.g.
         int[] public data1;
         int[] memory ac;
         ac = new int[](10);
         data1 = ac;  // target
 
-      we convert it as 
-        data1 = _ESBMC_arrcpy(ac, get_array_size(ac), type_size); 
+      we convert it as
+        data1 = _ESBMC_arrcpy(ac, get_array_size(ac), type_size);
       */
 
       // get size
@@ -6722,7 +6719,7 @@ bool solidity_convertert::get_binary_operator_expr(
     }
     else if (rt_sol == "ARRAY_CALLOC")
     {
-      /* e.g. 
+      /* e.g.
         int[] memory ac;
         ac = new int[](10);
       */
@@ -7602,7 +7599,7 @@ bool solidity_convertert::get_esbmc_builtin_ref(
 
 /*
   check if it's a solidity built-in function
-  - if so, get the function definition reference, assign to new_expr and return false  
+  - if so, get the function definition reference, assign to new_expr and return false
   - if not, return true
 */
 bool solidity_convertert::get_sol_builtin_ref(
@@ -8076,7 +8073,7 @@ bool solidity_convertert::get_type_description(
             "typeIdentifier": "t_array$_t_array$_t_int256_$4_storage_$dyn_storage_ptr",
             "typeString": "int256[4][]"
         }
-    convert it to: 
+    convert it to:
 
     pointer
     * subtype: array
@@ -8610,7 +8607,6 @@ bool solidity_convertert::get_tuple_instance(
   symbol.file_local = true;
 
   symbol.value = gen_zero(get_complete_type(t, ns), true);
-  symbol.value.zero_initializer(true);
   symbolt &added_symbol = *move_symbol_to_context(symbol);
   new_expr = symbol_expr(added_symbol);
   new_expr.identifier(id);
@@ -8686,7 +8682,7 @@ bool solidity_convertert::get_tuple_instance_name(
 }
 
 /*
-  obtain the corresponding tuple struct instance from the symbol table 
+  obtain the corresponding tuple struct instance from the symbol table
   based on the function definition json
 */
 bool solidity_convertert::get_tuple_function_ref(
@@ -9102,7 +9098,7 @@ bool solidity_convertert::has_contract_bytes(const nlohmann::json &node)
   return false;
 }
 
-/* 
+/*
   Create an auxiliary variable if the input is not already a symbol.
   This is necessary when taking the address of a non-symbol expression
   (e.g. function calls, literals) for use in function calls like:
@@ -9294,7 +9290,7 @@ bool solidity_convertert::get_new_mapping_index_access(
           DECL temp = map_uint_get(&array, pos);  <-- move to front block
           temp += 2;
           map_uint_set(&array, pos, temp);  <-- move to back block
-          (map_generic_set(&array, pos, temp, sizeof(temp));) 
+          (map_generic_set(&array, pos, temp, sizeof(temp));)
     */
     std::string aux_name, aux_id;
     get_aux_var(aux_name, aux_id);
@@ -9393,7 +9389,7 @@ void solidity_convertert::get_mapping_struct_function(
   {
   __ESBMC_HIDE:;
     struct A *ap = (struct A *)map_get_generic(m, k);
-    return ap ? *ap : (struct A){0}; 
+    return ap ? *ap : (struct A){0};
   }
   */
   side_effect_expr_function_callt call;
@@ -9637,7 +9633,7 @@ bool solidity_convertert::get_elementary_type_name_bytesn(
   typet &out)
 {
   /*
-    bytes1 has size of 8 bits (possible values 0x00 to 0xff), 
+    bytes1 has size of 8 bits (possible values 0x00 to 0xff),
     which you can implicitly convert to uint8 (unsigned integer of size 8 bits) but not to int8
   */
   const unsigned int byte_num = SolidityGrammar::bytesn_type_name_to_size(type);
@@ -11182,17 +11178,17 @@ bool solidity_convertert::get_library_function_call(
   return false;
 }
 
-/** 
+/**
     * call to a non-library function:
     *   this.func(); // func(&this)
     * @param decl_ref: the function declaration node
     * @param caller: the function caller node which contains the arguments
     TODO: if the paramenter is a 'memory' type, we need to create
     a copy. E.g. string memory x => char *x => char * x_cpy
-    this could be done by memcpy. However, for dyn_array, we do not have 
+    this could be done by memcpy. However, for dyn_array, we do not have
     the size info. Thus in the future we need to convert the dyn array to
     a struct which record both array and size. This will also help us to support
-    array.length, .push and .pop 
+    array.length, .push and .pop
 **/
 bool solidity_convertert::get_non_library_function_call(
   const nlohmann::json &decl_ref,
@@ -11355,7 +11351,7 @@ void solidity_convertert::extract_new_contracts()
   }
 }
 
-/** 
+/**
  return the new-object expression
  basically we need to
  - get the ctor call expr
@@ -12704,11 +12700,11 @@ bool solidity_convertert::get_empty_array_ref(
 
 /*
   perform multi-transaction verification
-  the idea is to verify the assertions that must be held 
+  the idea is to verify the assertions that must be held
   in any function calling order.
   convert the verifying contract to a "sol_main" function, e.g.
 
-  Contract Base             
+  Contract Base
   {
       constrcutor(){}
       function A(){}
@@ -12727,9 +12723,9 @@ bool solidity_convertert::get_empty_array_ref(
     }
   }
 
-  Additionally, we need to handle the inheritance. Theoretically, we need to merge (i.e. create a copy) the public and internal state variables and functions inside Base contracts into the Derive contract. However, in practice we do not need to do so. Instead, we 
-    - call the constructors based on the linearizedBaseList 
-    - add the inherited public function call to the if-body 
+  Additionally, we need to handle the inheritance. Theoretically, we need to merge (i.e. create a copy) the public and internal state variables and functions inside Base contracts into the Derive contract. However, in practice we do not need to do so. Instead, we
+    - call the constructors based on the linearizedBaseList
+    - add the inherited public function call to the if-body
 
 */
 bool solidity_convertert::multi_transaction_verification(
@@ -13649,7 +13645,7 @@ bool solidity_convertert::assign_param_nondet(
             ==>
             if(nondet_bool())
             {
-              __ESBMC_Object_m.run(_ESBMC_Object_Base) 
+              __ESBMC_Object_m.run(_ESBMC_Object_Base)
               / / where its cname = ["Base", "Derive"]
             }
           */

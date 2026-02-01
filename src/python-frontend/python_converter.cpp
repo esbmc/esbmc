@@ -4284,7 +4284,6 @@ void python_converter::get_var_assign(
   else
   {
     lhs_symbol->value = gen_zero(current_element_type, true);
-    lhs_symbol->value.zero_initializer(true);
 
     code_declt decl(symbol_expr(*lhs_symbol));
     decl.location() = location_begin;
@@ -6641,7 +6640,6 @@ static void add_global_static_variable(
   symbol.is_extern = false;
   symbol.file_local = false;
   symbol.value = gen_zero(t, true);
-  symbol.value.zero_initializer(true);
 
   symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
   assert(added_symbol);

@@ -307,9 +307,13 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 
     // care about initializers
 
-    if (!new_symbol.value.is_nil() && !new_symbol.value.zero_initializer())
+    if (!new_symbol.value.is_nil())
     {
-      if (in_context.value.is_nil() || in_context.value.zero_initializer())
+      if (in_context.value.is_nil())
+      {
+        in_context.value.swap(new_symbol.value);
+      }
+      else if (in_context.is_extern && !new_symbol.value.is_extern())
       {
         in_context.value.swap(new_symbol.value);
       }
@@ -355,7 +359,7 @@ void c_linkt::typecheck()
 {
   new_context.Foreach_operand([this](symbolt &s) {
     // First, if the symbol is extern, then check whether it can be merged
-    extern_fixup(s);
+    // extern_fixup(s);
     // build module clash table
     if (s.file_local && known_modules.find(s.module) != known_modules.end())
     {

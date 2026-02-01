@@ -267,7 +267,11 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       static_cast<const clang::BuiltinTemplateDecl &>(decl);
     if (
       btd.getBuiltinTemplateKind() !=
-      clang::BuiltinTemplateKind::BTK__make_integer_seq)
+        clang::BuiltinTemplateKind::BTK__make_integer_seq &&
+      btd.getBuiltinTemplateKind() !=
+        clang::BuiltinTemplateKind::BTK__builtin_common_type &&
+      btd.getBuiltinTemplateKind() !=
+        clang::BuiltinTemplateKind::BTK__type_pack_element)
     {
       log_error(
         "Unsupported builtin template kind id: {}",
@@ -536,7 +540,6 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     else
     {
       symbol.value = gen_zero(get_complete_type(t, ns), true);
-      symbol.value.zero_initializer(true);
     }
   }
 
