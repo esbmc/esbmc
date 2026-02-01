@@ -267,24 +267,52 @@ private:
       {
         Json &param = params[i];
 
-        // Skip if parameter is already annotated
+        // Check if parameter needs type inference or refinement
+        bool needs_inference = false;
+        bool has_partial_annotation = false;
+        std::string current_type;
+
         if (param.contains("annotation") && !param["annotation"].is_null())
-          continue;
+        {
+          // Extract current annotation
+          if (param["annotation"].contains("id"))
+            current_type = param["annotation"]["id"];
+          // Check if it's a generic container without element type
+          if (current_type == "list" || current_type == "dict" || current_type == "set")
+          {
+            has_partial_annotation = true;
+            needs_inference = true; // Try to refine with element type
+          }
+          else
+            continue; // Fully annotated, skip
+        }
+        else
+          needs_inference = true; // No annotation at all
 
         std::string inferred_type;
 
         // Try to infer type from function calls if available
-        if (!function_calls.empty())
+        if (needs_inference && !function_calls.empty())
           inferred_type = infer_parameter_type_from_calls(i, function_calls);
 
-        // If inference failed or no calls found, use Any only for stub functions
-        if (inferred_type.empty() && !has_meaningful_body)
-          inferred_type = "Any"; // Default fallback for stub functions
-
-        if (!inferred_type.empty())
+        // Apply inference results
+        if (has_partial_annotation)
         {
-          // Add annotation to parameter
-          add_parameter_annotation(param, inferred_type);
+          // Refine partial annotation with inferred element type
+          if (!inferred_type.empty() && inferred_type != current_type)
+            add_parameter_annotation(param, inferred_type);
+        }
+        else
+        {
+          // Handle completely unannotated parameters
+          if (inferred_type.empty() && !has_meaningful_body)
+            inferred_type = "Any"; // Default fallback for stub functions
+
+          if (!inferred_type.empty())
+          {
+            // Add annotation to parameter
+            add_parameter_annotation(param, inferred_type);
+          }
         }
       }
     }
@@ -488,7 +516,20 @@ private:
         // Handle simple type annotations like int, str (Name nodes)
         else if (var_node["annotation"].contains("id"))
         {
-          return var_node["annotation"]["id"];
+          std::string base_type = var_node["annotation"]["id"].template get<std::string>();
+          // If annotation is just "list"/"dict"/"set" without element type, try to infer from value
+          if (
+            (base_type == "list" || base_type == "dict" || base_type == "set") &&
+            var_node.contains("value") && !var_node["value"].is_null())
+          {
+            if (base_type == "list" && var_node["value"]["_type"] == "List")
+            {
+              std::string full_type = get_list_type_from_literal(var_node["value"]);
+              if (!full_type.empty())
+                return full_type;
+            }
+          }
+          return base_type;
         }
       }
     }
