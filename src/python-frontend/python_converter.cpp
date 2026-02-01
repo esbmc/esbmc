@@ -2937,7 +2937,26 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       if (!symbol)
       {
-        log_error("Symbol not found {}", sid_str);
+        locationt location = get_location_from_decl(element);
+        std::ostringstream error_msg;
+        if (!current_func_name_.empty())
+        {
+          // Variable referenced inside a function
+          error_msg << "Variable '" << var_name << "' is not defined in function '"
+                    << current_func_name_ << "'";
+          if (!location.get_line().empty())
+            error_msg << " at line " << location.get_line();
+          error_msg << ".";
+        }
+        else
+        {
+          // Variable referenced at global scope
+          error_msg << "Variable '" << var_name << "' is not defined";
+          if (!location.get_line().empty())
+            error_msg << " at line " << location.get_line();
+          error_msg << ".";
+        }
+        log_error("{}", error_msg.str());
         abort();
       }
     }
