@@ -28,6 +28,10 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
 // This can be overridden via --python-list-compare-depth option.
 #define __ESBMC_LIST_DEFAULT_DEPTH 4
 
+// Maximum physical stack size for list comparison (prevents buffer overflow).
+// Set to 64 to allow users to increase depth without hitting buffer limits.
+#define __ESBMC_LIST_MAX_STACK 64
+
 PyObject *__ESBMC_create_inf_obj()
 {
   return NULL;
@@ -111,16 +115,16 @@ bool __ESBMC_list_eq(
   if (l1->size != l2->size)
     return false;
 
-  // Use max_depth or default if 0
-  const size_t depth_limit =
-    max_depth > 0 ? max_depth : __ESBMC_LIST_DEFAULT_DEPTH;
+  // Use max_depth or default if 0, but cap at physical stack size
+  size_t depth_limit = max_depth > 0 ? max_depth : __ESBMC_LIST_DEFAULT_DEPTH;
+  if (depth_limit > __ESBMC_LIST_MAX_STACK)
+    depth_limit = __ESBMC_LIST_MAX_STACK;
 
   // Use explicit stack to avoid recursive function calls
   // This prevents state explosion from recursive unrolling
-  // Stack size uses a reasonable upper bound; actual depth is controlled by depth_limit
-  const PyListObject *stack_a[16];
-  const PyListObject *stack_b[16];
-  size_t stack_idx[16];
+  const PyListObject *stack_a[__ESBMC_LIST_MAX_STACK];
+  const PyListObject *stack_b[__ESBMC_LIST_MAX_STACK];
+  size_t stack_idx[__ESBMC_LIST_MAX_STACK];
   int top = 0;
 
   // Initialize with first list pair
