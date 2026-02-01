@@ -450,6 +450,15 @@ private:
         }
       }
 
+      // If still not found in local/parent scope, check global scope
+      if (!has_annotation)
+      {
+        var_node = find_annotated_assign(var_name, ast_["body"]);
+        has_annotation = !var_node.empty() &&
+                        var_node.contains("annotation") &&
+                        !var_node["annotation"].is_null();
+      }
+
       // Extract type from the found variable node
       if (
         !var_node.empty() && var_node.contains("annotation") &&
