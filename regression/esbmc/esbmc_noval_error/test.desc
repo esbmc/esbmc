@@ -1,4 +1,0 @@
-CORE
-main.c
-
-^ERROR: __ESBMC_EXTERN_NOVAL can only be used on extern variables
