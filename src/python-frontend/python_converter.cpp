@@ -2213,7 +2213,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // does not preserve the full code_typet (return type + arguments).
       bool resolved = false;
       if (
-        var_symbol->value.id() == "address_of" &&
+        var_symbol->value.is_address_of() &&
         !var_symbol->value.operands().empty() &&
         var_symbol->value.operands()[0].is_symbol())
       {
