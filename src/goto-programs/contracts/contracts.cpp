@@ -254,53 +254,67 @@ static expr2tc inline_temporary_variables(
       //   fallback: tmp = 0  (or 1)
       //   end: use tmp
       //
-      // We need to find the non-trivial assignment (the one that's not just 0 or 1)
+      // For OR expressions like (A && B) || (C && D), Clang generates:
+      //   tmp$7 = NONDET      (initialization)
+      //   tmp$7 = 1           (when first branch succeeds - short circuit)
+      //   tmp$7 = tmp$6 ? 1:0 (when first branch fails, use second branch result)
+      //
+      // We need to find the meaningful assignment that captures the full expression.
+      // Skip: NONDET (initialization), constants 0/1 (short-circuit markers)
+      // Keep: expressions that reference other temporaries (these capture the logic)
       expr2tc best_value;
       goto_programt::const_targett best_location =
         function_body.instructions.end();
 
       for (const auto &assign : assignments)
       {
+        // Skip NONDET (initialization)
+        if (
+          is_sideeffect2t(assign.value) &&
+          to_sideeffect2t(assign.value).kind == sideeffect2t::nondet)
+        {
+          continue;
+        }
+
         // Skip trivial constant assignments (0, 1, false, true)
-        bool is_trivial_constant = false;
+        // These are short-circuit markers, not the actual expression
         if (is_constant_bool2t(assign.value))
         {
-          is_trivial_constant = true;
+          continue;
         }
-        else if (is_constant_int2t(assign.value))
+        if (is_constant_int2t(assign.value))
         {
           auto val = to_constant_int2t(assign.value).value;
           if (val == 0 || val == 1)
-            is_trivial_constant = true;
+            continue;
         }
 
-        if (!is_trivial_constant)
+        // Special case: if RHS is an old_snapshot sideeffect, DON'T inline further
+        if (
+          is_sideeffect2t(assign.value) &&
+          to_sideeffect2t(assign.value).kind == sideeffect2t::old_snapshot)
         {
-          // Found a non-trivial assignment - use this one
-          // Special case: if RHS is an old_snapshot sideeffect, DON'T inline further
-          if (
-            is_sideeffect2t(assign.value) &&
-            to_sideeffect2t(assign.value).kind == sideeffect2t::old_snapshot)
-          {
-            return expr;
-          }
-
-          best_value = assign.value;
-          best_location = assign.location;
-          break;
+          return expr;
         }
+
+        // Found a meaningful assignment (references another temp or is a complex expr)
+        best_value = assign.value;
+        best_location = assign.location;
+        break;
       }
 
       if (is_nil_expr(best_value))
       {
-        // All assignments are trivial constants - just use the first one
-        best_value = assignments[0].value;
-        best_location = assignments[0].location;
+        // All assignments were trivial - this shouldn't happen for valid ensures
+        // Fall back to returning the original expression
+        log_warning(
+          "Could not find meaningful assignment for temporary variable: {}",
+          sym_name);
+        return expr;
       }
 
       // Recursively inline the best value
-      return inline_temporary_variables(
-        best_value, function_body, best_location);
+      return inline_temporary_variables(best_value, function_body, best_location);
     }
   }
 
@@ -1679,8 +1693,10 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
   // We'll update old_snapshots to contain new wrapper snapshot variables
 
   // Map to track: original_expr -> wrapper_snapshot_var
-  // This ensures we only create ONE wrapper snapshot per unique expression
-  std::map<std::string, expr2tc> expr_to_wrapper_snapshot;
+  // This ensures we only create ONE wrapper snapshot per unique expression.
+  // Uses expr2tc semantic comparison (operator< / operator==) instead of
+  // raw pointer addresses, so structurally equal expressions share a snapshot.
+  std::map<expr2tc, expr2tc> expr_to_wrapper_snapshot;
 
   size_t unique_snapshot_count = 0;
 
@@ -1690,15 +1706,10 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
     expr2tc old_temp_var =
       old_snapshots[i].snapshot_var; // The temp var from function body
 
-    // Create a unique key for this expression (using pointer address as simple hash)
-    std::ostringstream key_stream;
-    key_stream << original_expr.get();
-    std::string expr_key = key_stream.str();
-
     expr2tc new_snapshot_var;
 
     // Check if we've already created a wrapper snapshot for this expression
-    auto it = expr_to_wrapper_snapshot.find(expr_key);
+    auto it = expr_to_wrapper_snapshot.find(original_expr);
     if (it != expr_to_wrapper_snapshot.end())
     {
       // Reuse existing wrapper snapshot
@@ -1727,7 +1738,7 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
       assign_inst->location.comment("__ESBMC_old snapshot assignment");
 
       // Remember this mapping
-      expr_to_wrapper_snapshot[expr_key] = new_snapshot_var;
+      expr_to_wrapper_snapshot[original_expr] = new_snapshot_var;
     }
 
     // Store both old and new variables in the snapshot structure
@@ -1873,6 +1884,53 @@ expr2tc code_contractst::remove_incorrect_casts(
   return expr;
 }
 
+/// Helper: extract mutable pointers to side_1 and side_2 of any comparison
+/// expression.  Returns false if the expression is not a comparison.
+static bool get_comparison_sides(
+  expr2tc &expr,
+  expr2tc *&side1,
+  expr2tc *&side2)
+{
+  side1 = side2 = nullptr;
+  if (is_lessthan2t(expr))
+  {
+    auto &r = to_lessthan2t(expr);
+    side1 = &r.side_1;
+    side2 = &r.side_2;
+  }
+  else if (is_lessthanequal2t(expr))
+  {
+    auto &r = to_lessthanequal2t(expr);
+    side1 = &r.side_1;
+    side2 = &r.side_2;
+  }
+  else if (is_greaterthan2t(expr))
+  {
+    auto &r = to_greaterthan2t(expr);
+    side1 = &r.side_1;
+    side2 = &r.side_2;
+  }
+  else if (is_greaterthanequal2t(expr))
+  {
+    auto &r = to_greaterthanequal2t(expr);
+    side1 = &r.side_1;
+    side2 = &r.side_2;
+  }
+  else if (is_equality2t(expr))
+  {
+    auto &r = to_equality2t(expr);
+    side1 = &r.side_1;
+    side2 = &r.side_2;
+  }
+  else if (is_notequal2t(expr))
+  {
+    auto &r = to_notequal2t(expr);
+    side1 = &r.side_1;
+    side2 = &r.side_2;
+  }
+  return side1 != nullptr;
+}
+
 expr2tc code_contractst::fix_comparison_types(
   const expr2tc &expr,
   const expr2tc &ret_val) const
@@ -1892,43 +1950,7 @@ expr2tc code_contractst::fix_comparison_types(
     // Get the two sides of the comparison
     expr2tc *side1 = nullptr;
     expr2tc *side2 = nullptr;
-
-    if (is_lessthan2t(new_expr))
-    {
-      lessthan2t &rel = to_lessthan2t(new_expr);
-      side1 = &rel.side_1;
-      side2 = &rel.side_2;
-    }
-    else if (is_lessthanequal2t(new_expr))
-    {
-      lessthanequal2t &rel = to_lessthanequal2t(new_expr);
-      side1 = &rel.side_1;
-      side2 = &rel.side_2;
-    }
-    else if (is_greaterthan2t(new_expr))
-    {
-      greaterthan2t &rel = to_greaterthan2t(new_expr);
-      side1 = &rel.side_1;
-      side2 = &rel.side_2;
-    }
-    else if (is_greaterthanequal2t(new_expr))
-    {
-      greaterthanequal2t &rel = to_greaterthanequal2t(new_expr);
-      side1 = &rel.side_1;
-      side2 = &rel.side_2;
-    }
-    else if (is_equality2t(new_expr))
-    {
-      equality2t &rel = to_equality2t(new_expr);
-      side1 = &rel.side_1;
-      side2 = &rel.side_2;
-    }
-    else if (is_notequal2t(new_expr))
-    {
-      notequal2t &rel = to_notequal2t(new_expr);
-      side1 = &rel.side_1;
-      side2 = &rel.side_2;
-    }
+    get_comparison_sides(new_expr, side1, side2);
 
     if (side1 && side2)
     {
@@ -2146,80 +2168,18 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
   {
     expr2tc new_expr = expr->clone();
     bool changed = false;
-
-    if (is_equality2t(new_expr))
+    expr2tc *s1 = nullptr, *s2 = nullptr;
+    if (get_comparison_sides(new_expr, s1, s2))
     {
-      equality2t &rel = to_equality2t(new_expr);
-      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
-      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
-      if (norm1 != rel.side_1 || norm2 != rel.side_2)
+      expr2tc norm1 = normalize_fp_add_in_ensures(*s1);
+      expr2tc norm2 = normalize_fp_add_in_ensures(*s2);
+      if (norm1 != *s1 || norm2 != *s2)
       {
-        rel.side_1 = norm1;
-        rel.side_2 = norm2;
+        *s1 = norm1;
+        *s2 = norm2;
         changed = true;
       }
     }
-    else if (is_notequal2t(new_expr))
-    {
-      notequal2t &rel = to_notequal2t(new_expr);
-      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
-      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
-      if (norm1 != rel.side_1 || norm2 != rel.side_2)
-      {
-        rel.side_1 = norm1;
-        rel.side_2 = norm2;
-        changed = true;
-      }
-    }
-    else if (is_lessthan2t(new_expr))
-    {
-      lessthan2t &rel = to_lessthan2t(new_expr);
-      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
-      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
-      if (norm1 != rel.side_1 || norm2 != rel.side_2)
-      {
-        rel.side_1 = norm1;
-        rel.side_2 = norm2;
-        changed = true;
-      }
-    }
-    else if (is_lessthanequal2t(new_expr))
-    {
-      lessthanequal2t &rel = to_lessthanequal2t(new_expr);
-      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
-      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
-      if (norm1 != rel.side_1 || norm2 != rel.side_2)
-      {
-        rel.side_1 = norm1;
-        rel.side_2 = norm2;
-        changed = true;
-      }
-    }
-    else if (is_greaterthan2t(new_expr))
-    {
-      greaterthan2t &rel = to_greaterthan2t(new_expr);
-      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
-      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
-      if (norm1 != rel.side_1 || norm2 != rel.side_2)
-      {
-        rel.side_1 = norm1;
-        rel.side_2 = norm2;
-        changed = true;
-      }
-    }
-    else if (is_greaterthanequal2t(new_expr))
-    {
-      greaterthanequal2t &rel = to_greaterthanequal2t(new_expr);
-      expr2tc norm1 = normalize_fp_add_in_ensures(rel.side_1);
-      expr2tc norm2 = normalize_fp_add_in_ensures(rel.side_2);
-      if (norm1 != rel.side_1 || norm2 != rel.side_2)
-      {
-        rel.side_1 = norm1;
-        rel.side_2 = norm2;
-        changed = true;
-      }
-    }
-
     return changed ? new_expr : expr;
   }
 
@@ -2289,12 +2249,57 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
   return false;
 }
 
+/// Helper: check if a function name matches any pattern in to_replace.
+/// Matching rules:
+///   - "*" matches everything
+///   - Otherwise, exact match against func_name or its unqualified tail
+///     (the part after the last "@"), e.g. pattern "foo" matches "c:@F@foo"
+static bool matches_replace_pattern(
+  const std::string &func_name,
+  const std::set<std::string> &to_replace)
+{
+  for (const auto &pattern : to_replace)
+  {
+    if (pattern == "*")
+      return true;
+    // Exact match on full qualified name (e.g. "c:@F@foo")
+    if (func_name == pattern)
+      return true;
+    // Match unqualified name: extract the part after the last '@'
+    // e.g. "c:@F@foo" → "foo"
+    auto pos = func_name.rfind('@');
+    if (pos != std::string::npos && func_name.substr(pos + 1) == pattern)
+      return true;
+  }
+  return false;
+}
+
 bool code_contractst::is_annotated_contract_function(
   const symbolt &func_sym) const
 {
   // Check if function type has #annotated_contract attribute set
   // This is set in clang_c_convert.cpp when parsing __attribute__((annotate("__ESBMC_contract")))
   return func_sym.type.get_bool("#annotated_contract");
+}
+
+/// Helper: returns true if function body contains a call to any function in
+/// replaceable_names (by get_symbol_name(), e.g. "c:@F@foo").
+static bool body_calls_any_of(
+  const goto_programt &body,
+  const std::set<std::string> &replaceable_names)
+{
+  forall_goto_program_instructions (it, body)
+  {
+    if (!it->is_function_call() || !is_code_function_call2t(it->code))
+      continue;
+    const code_function_call2t &call = to_code_function_call2t(it->code);
+    if (!is_symbol2t(call.function))
+      continue;
+    std::string called = id2string(to_symbol2t(call.function).get_symbol_name());
+    if (replaceable_names.count(called) != 0)
+      return true;
+  }
+  return false;
 }
 
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
@@ -2330,11 +2335,60 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     }
   }
 
-  // Track functions that have been replaced (to delete their definitions)
-  // Use function ID from goto_functions (it->first) for correct matching
+  // Replaceable = match to_replace and have contracts. Leaf = replaceable and
+  // do not call any other replaceable. Parent = replaceable and call at least
+  // one other replaceable. We only replace calls to leaves and only delete
+  // leaf definitions; parents keep their body (with inner calls to leaves
+  // replaced).
+  std::set<std::string> replaceable_funcs;
+  for (const auto &kv : function_map)
+  {
+    const std::string &func_key = kv.first;
+    symbolt *sym = std::get<0>(kv.second);
+    goto_programt *body = std::get<1>(kv.second);
+    if (!matches_replace_pattern(func_key, to_replace))
+      continue;
+    if (!has_contracts(*body) && !(sym && is_annotated_contract_function(*sym)))
+      continue;
+    replaceable_funcs.insert(func_key);
+  }
+
+  std::set<std::string> leaf_funcs;
+  std::set<std::string> parent_funcs;
+  for (const std::string &f : replaceable_funcs)
+  {
+    auto it = function_map.find(f);
+    if (it == function_map.end())
+      continue;
+    goto_programt *body = std::get<1>(it->second);
+    if (body_calls_any_of(*body, replaceable_funcs))
+      parent_funcs.insert(f);
+    else
+      leaf_funcs.insert(f);
+  }
+
+  for (const auto &f : leaf_funcs)
+    log_debug("contracts", "  Leaf (replaced, definition removed): {}", f);
+  for (const auto &f : parent_funcs)
+    log_debug("contracts", "  Parent (kept, sub-calls replaced): {}", f);
+
+  // Warn about mutual recursion: if all replaceable functions are parents
+  // (no leaves), none of them will be replaced with contracts.
+  if (!replaceable_funcs.empty() && leaf_funcs.empty())
+  {
+    log_warning(
+      "All {} replaceable function(s) call other replaceable functions "
+      "(possible mutual recursion). None will be replaced with contracts. "
+      "Consider specifying individual functions instead of \"*\".",
+      replaceable_funcs.size());
+    for (const auto &f : parent_funcs)
+      log_warning("  Unreplaced: {}", f);
+  }
+
+  // Track functions to delete: only leaf definitions
   std::set<irep_idt> functions_to_delete;
 
-  // Process each function and replace calls
+  // Process each function and replace calls (only to leaf functions)
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
@@ -2343,7 +2397,7 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     std::vector<goto_programt::targett> calls_to_replace;
     std::vector<std::tuple<symbolt *, goto_programt *, irep_idt>> function_info;
 
-    // Find calls to replace
+    // Find calls to replace: only replace calls to leaf functions
     Forall_goto_program_instructions (i_it, it->second.body)
     {
       if (i_it->is_function_call() && is_code_function_call2t(i_it->code))
@@ -2358,51 +2412,21 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
           if (is_compiler_generated(called_func))
             continue;
 
-          // Check if this function should be replaced
-          for (const auto &replace_name : to_replace)
+          // Only replace calls to leaf functions (not parents)
+          if (leaf_funcs.count(called_func) == 0)
+            continue;
+
+          auto map_it = function_map.find(called_func);
+          if (map_it != function_map.end())
           {
-            if (called_func.find(replace_name) != std::string::npos)
-            {
-              log_debug(
-                "contracts",
-                "Found potential call to replace: {}",
-                called_func);
-              auto map_it = function_map.find(called_func);
-              if (map_it != function_map.end())
-              {
-                // Check if function has contracts (explicit or via annotation)
-                symbolt *sym = std::get<0>(map_it->second);
-                goto_programt *func_body = std::get<1>(map_it->second);
-                bool has_contract =
-                  has_contracts(*func_body) ||
-                  (sym && is_annotated_contract_function(*sym));
-                log_debug(
-                  "contracts",
-                  "Function {} has contracts: {}",
-                  called_func,
-                  has_contract);
-                if (has_contract)
-                {
-                  log_debug(
-                    "contracts",
-                    "Adding call to replacement list: {}",
-                    called_func);
-                  calls_to_replace.push_back(i_it);
-                  function_info.push_back(map_it->second);
-                  // Track this function for deletion (use the ID from goto_functions)
-                  irep_idt func_id = std::get<2>(map_it->second);
-                  functions_to_delete.insert(func_id);
-                  break;
-                }
-              }
-              else
-              {
-                log_debug(
-                  "contracts",
-                  "Function {} not found in function_map",
-                  called_func);
-              }
-            }
+            log_debug(
+              "contracts",
+              "Found call to replace (leaf): {}",
+              called_func);
+            calls_to_replace.push_back(i_it);
+            function_info.push_back(map_it->second);
+            irep_idt func_id = std::get<2>(map_it->second);
+            functions_to_delete.insert(func_id);
           }
         }
       }
@@ -2425,17 +2449,12 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     }
   }
 
-  // Delete function definitions that have been replaced
-  // In replace_calls mode, function calls are replaced with contracts,
-  // so the function definitions are no longer needed
-  // We completely remove them from function_map so they don't appear in --goto-functions-only
+  // Delete only leaf function definitions (parents keep their body)
   for (const auto &func_id : functions_to_delete)
   {
     auto func_it = goto_functions.function_map.find(func_id);
     if (func_it != goto_functions.function_map.end())
     {
-      // Completely remove the function from function_map
-      // This ensures it won't appear in --goto-functions-only output
       goto_functions.function_map.erase(func_it);
       log_status("Removed function {} (replaced with contract)", func_id);
     }

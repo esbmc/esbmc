@@ -563,8 +563,24 @@ extern int __ESBMC_return_value;
  * Note: Declared as returning int, but at IR level the actual return type
  * is automatically inherited from the argument type. C's type system will
  * perform implicit conversions as needed, similar to __ESBMC_return_value.
+ *
+ * IMPORTANT: When using __ESBMC_old in complex boolean expressions with
+ * && and ||, C's short-circuit evaluation may cause issues. Use bitwise
+ * operators & and | instead, or use the __ESBMC_and/__ESBMC_or macros:
+ *   __ESBMC_ensures((a > 0) & (b == __ESBMC_old(b)));  // OK: no short-circuit
+ *   __ESBMC_ensures(__ESBMC_and(a > 0, b == __ESBMC_old(b)));  // Also OK
  */
 int __ESBMC_old(int);
+
+/* Helper macros for ensures clauses that avoid short-circuit evaluation.
+ * Use these instead of && and || when __ESBMC_old is involved:
+ *   __ESBMC_ensures(__ESBMC_and(cond1, cond2));        // instead of cond1 && cond2
+ *   __ESBMC_ensures(__ESBMC_or(cond1, cond2));         // instead of cond1 || cond2
+ *   __ESBMC_ensures(__ESBMC_implies(pre, post));       // instead of !pre || post
+ */
+#define __ESBMC_and(a, b) ((a) & (b))
+#define __ESBMC_or(a, b) ((a) | (b))
+#define __ESBMC_implies(a, b) ((!(a)) | (b))
 
 /* __ESBMC_assigns: specifies memory locations a function may modify
  * This is used in replace-call mode for havoc generation.
