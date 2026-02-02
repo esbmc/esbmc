@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 9
-^VERIFICATION SUCCESSFUL$
+
+^ERROR\: Variable \'l\' is not defined in function \'max\' at line 4.$
