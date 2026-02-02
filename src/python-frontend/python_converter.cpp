@@ -1894,6 +1894,17 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   // Get the operand expression
   exprt unary_sub = get_expr(element["operand"]);
 
+  // Use operand's exact type to preserve metadata
+  if (!unary_sub.type().is_nil() && !unary_sub.type().is_empty())
+  {
+    std::string op = element["op"]["_type"].get<std::string>();
+    if (op == "USub" || op == "UAdd") // Unary minus/plus
+      if (
+        unary_sub.type().is_floatbv() ||
+        type_utils::is_integer_type(unary_sub.type()))
+        type = unary_sub.type();
+  }
+
   // Handle 'not' operator on dictionary types: convert to emptiness check
   std::string op = element["op"]["_type"].get<std::string>();
   if (op == "Not" && dict_handler_->is_dict_type(unary_sub.type()))
@@ -2926,7 +2937,27 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       if (!symbol)
       {
-        log_error("Symbol not found {}", sid_str);
+        locationt location = get_location_from_decl(element);
+        std::ostringstream error_msg;
+        if (!current_func_name_.empty())
+        {
+          // Variable referenced inside a function
+          error_msg << "Variable '" << var_name
+                    << "' is not defined in function '" << current_func_name_
+                    << "'";
+          if (!location.get_line().empty())
+            error_msg << " at line " << location.get_line();
+          error_msg << ".";
+        }
+        else
+        {
+          // Variable referenced at global scope
+          error_msg << "Variable '" << var_name << "' is not defined";
+          if (!location.get_line().empty())
+            error_msg << " at line " << location.get_line();
+          error_msg << ".";
+        }
+        log_error("{}", error_msg.str());
         abort();
       }
     }
@@ -5529,6 +5560,21 @@ void python_converter::validate_return_paths(
   function_body.copy_to_operands(missing_return_assert);
 }
 
+typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
+{
+  for (const auto &stmt : body)
+  {
+    if (stmt["_type"] == "Return" && !stmt["value"].is_null())
+    {
+      // If returning a tuple, infer its type
+      if (stmt["value"]["_type"] == "Tuple")
+        return tuple_handler_->get_tuple_expr(stmt["value"]).type();
+    }
+  }
+
+  return empty_typet();
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -5666,6 +5712,17 @@ void python_converter::get_function_definition(
 
   // Process function body
   exprt function_body = get_block(function_node["body"]);
+
+  // If return type is empty/unannotated, try to infer from return statements
+  if (type.return_type().is_empty())
+  {
+    typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    if (!inferred_type.is_empty())
+    {
+      type.return_type() = inferred_type;
+      added_symbol->type = type; // Update the symbol's type
+    }
+  }
 
   // Inject runtime checks for annotated parameters
   if (type_assertions_enabled())

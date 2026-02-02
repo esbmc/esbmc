@@ -460,8 +460,6 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
   // Check if we annotated it to have an infinity size
   bool no_slice = false;
-  bool no_value = false;
-  bool no_value_check_extern = false;
   if (vd.hasAttrs())
   {
     for (auto const &attr : vd.getAttrs())
@@ -476,14 +474,6 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         }
         else if (name == "__ESBMC_no_slice")
           no_slice = true;
-        else if (name == "__ESBMC_extern_noval")
-        {
-          no_value = true;
-          // Only validate for non-inherited annotations
-          // Inherited annotations were already validated on the original decl
-          if (!attr->isInherited())
-            no_value_check_extern = true;
-        }
       }
       else if (attr->getKind() == clang::attr::Aligned)
       {
@@ -528,14 +518,6 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
   symbol.is_thread_local = vd.getTLSKind() != clang::VarDecl::TLS_None;
 
-  // __ESBMC_EXTERN_NOVAL can only be used on extern variables
-  if (no_value_check_extern && !symbol.is_extern)
-  {
-    log_error(
-      "__ESBMC_EXTERN_NOVAL can only be used on extern variables: '{}'", name);
-    return true;
-  }
-
   if (
     symbol.static_lifetime &&
     (!vd.hasInit() || is_aggregate_type(vd.getType())))
@@ -545,11 +527,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    if (no_value)
-    {
-      // __ESBMC_extern_noval: Leave value as nil - definition exists elsewhere
-    }
-    else if (symbol.is_extern)
+    if (symbol.is_extern)
     {
       exprt value = exprt("sideeffect", get_complete_type(t, ns));
       value.statement("nondet");
