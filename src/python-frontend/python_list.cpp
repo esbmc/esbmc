@@ -14,8 +14,31 @@
 #include <util/mp_arith.h>
 #include <util/python_types.h>
 #include <util/symbolic_types.h>
+#include <util/config.h>
 #include <string>
 #include <functional>
+
+// Default depth for list comparison if option not set
+static const int DEFAULT_LIST_COMPARE_DEPTH = 4;
+
+static int get_list_compare_depth()
+{
+  std::string opt_value =
+    config.options.get_option("python-list-compare-depth");
+  if (!opt_value.empty())
+  {
+    try
+    {
+      int depth = std::stoi(opt_value);
+      if (depth > 0)
+        return depth;
+    }
+    catch (...)
+    {
+    }
+  }
+  return DEFAULT_LIST_COMPARE_DEPTH;
+}
 
 // Extract element type from annotation
 static typet get_elem_type_from_annotation(
@@ -1543,13 +1566,20 @@ exprt python_list::compare(
   code_declt eq_ret_decl(symbol_expr(eq_ret));
   converter_.add_instruction(eq_ret_decl);
 
+  // Get max depth from configuration option
+  int max_depth = get_list_compare_depth();
+  constant_exprt max_depth_expr(size_type());
+  max_depth_expr.set_value(
+    integer2binary(max_depth, config.ansi_c.address_width));
+
   code_function_callt list_eq_func_call;
   list_eq_func_call.function() = symbol_expr(*list_eq_func_sym);
   list_eq_func_call.lhs() = symbol_expr(eq_ret);
   // passing arguments
   list_eq_func_call.arguments().push_back(symbol_expr(*lhs_symbol)); // l1
   list_eq_func_call.arguments().push_back(symbol_expr(*rhs_symbol)); // l2
-  list_eq_func_call.arguments().push_back(list_type_id); // list_type_id
+  list_eq_func_call.arguments().push_back(list_type_id);   // list_type_id
+  list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
