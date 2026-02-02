@@ -4,4 +4,4 @@ def apply(f, x):
 def square(n):
     return n * n
 
-apply(square, 5)   # 25
+assert apply(square, 5) == 25
