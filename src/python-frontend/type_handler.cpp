@@ -298,6 +298,15 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "Optional")
     return pointer_type();
 
+  // Callable: represents function/callable types
+  // Return a pointer to a generic code type (function pointer)
+  if (ast_type == "Callable")
+  {
+    code_typet code_type;
+    code_type.return_type() = empty_typet();
+    return pointer_typet(code_type);
+  }
+
   // Python float type: IEEE 754 double-precision mapping
   // Python floats are implemented using C double (IEEE 754 double-precision)
   // as per Python documentation. This ensures proper precision, range, and
