@@ -2230,8 +2230,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // Try to get return type from the pointer's subtype
       if (!resolved && var_symbol->type.subtype().is_code())
       {
-        const code_typet &func_type =
-          to_code_type(var_symbol->type.subtype());
+        const code_typet &func_type = to_code_type(var_symbol->type.subtype());
         call.type() = func_type.return_type();
       }
 
@@ -2961,7 +2960,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (!is_class_attr && element["_type"] == "Name")
         {
           symbol_id func_sid(current_python_file, "", var_name);
-          symbolt *func_symbol = symbol_table_.find_symbol(func_sid.to_string());
+          symbolt *func_symbol =
+            symbol_table_.find_symbol(func_sid.to_string());
           if (func_symbol && func_symbol->type.is_code())
           {
             expr = symbol_expr(*func_symbol);
@@ -3428,8 +3428,9 @@ void python_converter::handle_assignment_type_adjustments(
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
   // Handle assignment of function to function pointer variable
-  if (lhs.type().is_pointer() && lhs.type().subtype().is_code() &&
-      rhs.type().is_code() && rhs.is_symbol())
+  if (
+    lhs.type().is_pointer() && lhs.type().subtype().is_code() &&
+    rhs.type().is_code() && rhs.is_symbol())
   {
     rhs = address_of_exprt(rhs);
     if (lhs_symbol && !is_ctor_call)
