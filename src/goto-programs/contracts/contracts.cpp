@@ -314,7 +314,8 @@ static expr2tc inline_temporary_variables(
       }
 
       // Recursively inline the best value
-      return inline_temporary_variables(best_value, function_body, best_location);
+      return inline_temporary_variables(
+        best_value, function_body, best_location);
     }
   }
 
@@ -1886,10 +1887,8 @@ expr2tc code_contractst::remove_incorrect_casts(
 
 /// Helper: extract mutable pointers to side_1 and side_2 of any comparison
 /// expression.  Returns false if the expression is not a comparison.
-static bool get_comparison_sides(
-  expr2tc &expr,
-  expr2tc *&side1,
-  expr2tc *&side2)
+static bool
+get_comparison_sides(expr2tc &expr, expr2tc *&side1, expr2tc *&side2)
 {
   side1 = side2 = nullptr;
   if (is_lessthan2t(expr))
@@ -2295,7 +2294,8 @@ static bool body_calls_any_of(
     const code_function_call2t &call = to_code_function_call2t(it->code);
     if (!is_symbol2t(call.function))
       continue;
-    std::string called = id2string(to_symbol2t(call.function).get_symbol_name());
+    std::string called =
+      id2string(to_symbol2t(call.function).get_symbol_name());
     if (replaceable_names.count(called) != 0)
       return true;
   }
@@ -2420,9 +2420,7 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
           if (map_it != function_map.end())
           {
             log_debug(
-              "contracts",
-              "Found call to replace (leaf): {}",
-              called_func);
+              "contracts", "Found call to replace (leaf): {}", called_func);
             calls_to_replace.push_back(i_it);
             function_info.push_back(map_it->second);
             irep_idt func_id = std::get<2>(map_it->second);
