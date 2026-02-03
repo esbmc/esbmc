@@ -1,4 +1,4 @@
 KNOWNBUG
 main.py
 
-^AttributeError: 'C' object has no attribute 'a'$
+^ERROR\: Attribute \"a\" not found$
