@@ -2208,8 +2208,27 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       exprt func_ptr_expr = symbol_expr(*var_symbol);
       call.function() = func_ptr_expr;
 
-      // Set return type
-      if (var_symbol->type.subtype().is_code())
+      // Resolve return type from the concrete target function stored in
+      // the symbol's value (address_of(func)), because gen_pointer_type
+      // does not preserve the full code_typet (return type + arguments).
+      bool resolved = false;
+      if (
+        var_symbol->value.is_address_of() &&
+        !var_symbol->value.operands().empty() &&
+        var_symbol->value.operands()[0].is_symbol())
+      {
+        const symbolt *target_func = symbol_table_.find_symbol(
+          var_symbol->value.operands()[0].identifier());
+        if (target_func && target_func->type.is_code())
+        {
+          const code_typet &func_type = to_code_type(target_func->type);
+          call.type() = func_type.return_type();
+          resolved = true;
+        }
+      }
+
+      // Try to get return type from the pointer's subtype
+      if (!resolved && var_symbol->type.subtype().is_code())
       {
         const code_typet &func_type = to_code_type(var_symbol->type.subtype());
         call.type() = func_type.return_type();
@@ -2937,7 +2956,39 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       if (!symbol)
       {
-        log_error("Symbol not found {}", sid_str);
+        // Check if this Name refers to a function
+        if (!is_class_attr && element["_type"] == "Name")
+        {
+          symbol_id func_sid(current_python_file, "", var_name);
+          symbolt *func_symbol =
+            symbol_table_.find_symbol(func_sid.to_string());
+          if (func_symbol && func_symbol->type.is_code())
+          {
+            expr = symbol_expr(*func_symbol);
+            break;
+          }
+        }
+        locationt location = get_location_from_decl(element);
+        std::ostringstream error_msg;
+        if (!current_func_name_.empty())
+        {
+          // Variable referenced inside a function
+          error_msg << "Variable '" << var_name
+                    << "' is not defined in function '" << current_func_name_
+                    << "'";
+          if (!location.get_line().empty())
+            error_msg << " at line " << location.get_line();
+          error_msg << ".";
+        }
+        else
+        {
+          // Variable referenced at global scope
+          error_msg << "Variable '" << var_name << "' is not defined";
+          if (!location.get_line().empty())
+            error_msg << " at line " << location.get_line();
+          error_msg << ".";
+        }
+        log_error("{}", error_msg.str());
         abort();
       }
     }
@@ -3375,6 +3426,17 @@ void python_converter::handle_assignment_type_adjustments(
 {
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
+
+  // Handle assignment of function to function pointer variable
+  if (
+    lhs.type().is_pointer() && lhs.type().subtype().is_code() &&
+    rhs.type().is_code() && rhs.is_symbol())
+  {
+    rhs = address_of_exprt(rhs);
+    if (lhs_symbol && !is_ctor_call)
+      lhs_symbol->value = rhs;
+    return;
+  }
 
   // Handle lambda assignments
   if (lambda_handler_->is_lambda_assignment(ast_node) && rhs.is_symbol())
@@ -5540,6 +5602,21 @@ void python_converter::validate_return_paths(
   function_body.copy_to_operands(missing_return_assert);
 }
 
+typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
+{
+  for (const auto &stmt : body)
+  {
+    if (stmt["_type"] == "Return" && !stmt["value"].is_null())
+    {
+      // If returning a tuple, infer its type
+      if (stmt["value"]["_type"] == "Tuple")
+        return tuple_handler_->get_tuple_expr(stmt["value"]).type();
+    }
+  }
+
+  return empty_typet();
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -5677,6 +5754,17 @@ void python_converter::get_function_definition(
 
   // Process function body
   exprt function_body = get_block(function_node["body"]);
+
+  // If return type is empty/unannotated, try to infer from return statements
+  if (type.return_type().is_empty())
+  {
+    typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    if (!inferred_type.is_empty())
+    {
+      type.return_type() = inferred_type;
+      added_symbol->type = type; // Update the symbol's type
+    }
+  }
 
   // Inject runtime checks for annotated parameters
   if (type_assertions_enabled())

@@ -1,0 +1,5 @@
+THOROUGH
+main.py
+--unwind 10 --python-list-compare-depth 2
+^VERIFICATION FAILED$
+--python-list-compare-depth to increase

@@ -780,6 +780,15 @@ private:
   void
   promote_ieee_operands(exprt &bin_expr, const exprt &lhs, const exprt &rhs);
 
+  /**
+   * @brief Infers function return type from return statements in the body.
+   *
+   * @param body The JSON AST node representing the function body statements.
+   * @return The inferred return type (struct_typet for tuples), or empty_typet
+   *         if no inferrable return type is found.
+   */
+  typet infer_return_type_from_body(const nlohmann::json &body);
+
   // =========================================================================
   // String method helpers
   // =========================================================================

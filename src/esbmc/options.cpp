@@ -82,6 +82,9 @@ const struct group_opt_templ all_cmd_options[] = {
      {"nondet-str-length",
       boost::program_options::value<int>()->default_value(16)->value_name("nr"),
       "set maximum length for non-deterministic strings (default is 16)"},
+     {"python-list-compare-depth",
+      boost::program_options::value<int>()->default_value(4)->value_name("nr"),
+      "set maximum nesting depth for Python list comparison (default is 4)"},
    }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
