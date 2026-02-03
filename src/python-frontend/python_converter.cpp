@@ -3792,9 +3792,13 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   {
     inferred_type = any_type();
   }
-  else if (value_type == "Call" || value_type == "BoolOp")
+  else
   {
-    // Convert RHS first to get its type
+    // Evaluate the RHS for any expression type (Call, BoolOp, Attribute,
+    // Name, BinOp, Subscript, …) so that its type can be inferred.
+    // If the expression is itself invalid — e.g. accessing a non-existent
+    // attribute — get_expr will raise the correct, precise error at the
+    // point of access rather than the misleading "Type undefined" later.
     is_converting_rhs = true;
     exprt rhs_expr = get_expr(ast_node["value"]);
     is_converting_rhs = false;
@@ -3802,10 +3806,6 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     inferred_type = rhs_expr.type();
     if (inferred_type.is_empty())
       inferred_type = any_type();
-  }
-  else
-  {
-    return nullptr;
   }
 
   symbolt symbol =

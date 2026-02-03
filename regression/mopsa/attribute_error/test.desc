@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
 
 ^ERROR\: Attribute \"a\" not found$
