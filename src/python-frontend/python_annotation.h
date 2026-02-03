@@ -2174,7 +2174,26 @@ private:
     }
 
     if (obj_node.empty())
+    {
+      // Check if obj is a class name
+      Json class_node = json_utils::find_class(ast_["body"], obj);
+      if (!class_node.empty())
+      {
+        const std::string &method_name = call["func"]["attr"];
+        // Find the method in the class body
+        for (const Json &member : class_node["body"])
+        {
+          if (member["_type"] == "FunctionDef" && member["name"] == method_name)
+          {
+            std::string inferred_type =
+              infer_from_return_statements(member["body"], method_name);
+            if (!inferred_type.empty())
+              return inferred_type;
+          }
+        }
+      }
       throw std::runtime_error("Object \"" + obj + "\" not found.");
+    }
 
     std::string obj_type;
     if (

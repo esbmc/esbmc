@@ -3,4 +3,4 @@ class C:
     return 2
 
 res = C.f()
-assert res == 2
+assert res == 1
