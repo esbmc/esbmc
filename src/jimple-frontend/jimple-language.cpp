@@ -111,7 +111,6 @@ add_global_static_variable(contextt &ctx, const typet t, std::string name)
 
 void jimple_languaget::add_intrinsics(contextt &context)
 {
-
 }
 
 void jimple_languaget::setup_main(contextt &context)

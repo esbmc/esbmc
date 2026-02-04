@@ -449,27 +449,26 @@ void add_cprover_library(contextt &context, const languaget *language)
   // library. Only when linking to the libc library, we know that all unresolved extern symbols (those whose
   // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
   // those and initialize the extern variables to nondet.
-  context.Foreach_operand(
-    [&context](symbolt &s)
+  context.Foreach_operand([&context](symbolt &s) {
+    if (s.is_extern && !s.type.is_code())
     {
-      if (s.is_extern && !s.type.is_code())
+      if (s.value.is_nil())
       {
-        if (s.value.is_nil())
-        {
-          log_warning(
-            "extern variable with id {} not found, initializing value to nondet! This code would not compile with an actual compiler.",
-            s.id);
-          exprt value =
-            exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
-          value.statement("nondet");
-          s.value = value;
-        }
-        else
-        {
-          log_error("extern variable with id {} is not nil.", s.id);
-          s.dump();
-          abort();
-        }
+        log_warning(
+          "extern variable with id {} not found, initializing value to nondet! "
+          "This code would not compile with an actual compiler.",
+          s.id);
+        exprt value =
+          exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
+        value.statement("nondet");
+        s.value = value;
       }
-    });
+      else
+      {
+        log_error("extern variable with id {} is not nil.", s.id);
+        s.dump();
+        abort();
+      }
+    }
+  });
 }
