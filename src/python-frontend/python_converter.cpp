@@ -6571,14 +6571,27 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         // FUNCTION_CALL:  MyException(&return_value, &"message");
         // Throw MyException return_value;
         raise = get_expr(element["exc"]);
-        code_function_callt call =
-          to_code_function_call(convert_expression_to_code(raise));
-        side_effect_expr_function_callt tmp;
-        tmp.function() = call.function();
-        tmp.arguments() = call.arguments();
-        tmp.type() = type;
-        tmp.location() = location;
-        raise = tmp;
+        // Check if this is a constructor call
+        if (raise.is_code() && raise.get("statement") == "function_call")
+        {
+          code_function_callt call =
+            to_code_function_call(convert_expression_to_code(raise));
+          side_effect_expr_function_callt tmp;
+          tmp.function() = call.function();
+          tmp.arguments() = call.arguments();
+          tmp.type() = type;
+          tmp.location() = location;
+          raise = tmp;
+        }
+        else
+        {
+          // Use a generic type if no specific type was found
+          if (type.is_empty())
+            type = any_type();
+          // Typecast to match throw type
+          if (raise.type() != type)
+            raise = typecast_exprt(raise, type);
+        }
       }
 
       side_effect_exprt side("cpp-throw", type);
