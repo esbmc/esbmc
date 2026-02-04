@@ -2997,10 +2997,10 @@ class ptr_mem2t : public ptr_mem_expr_methods
 {
 public:
   /** Primary constructor.
-   *  @param type Type of extracted member.
-   *  @param memb Name of member to extract.  */
-  ptr_mem2t(const type2tc &type, const expr2tc &source, const expr2tc &p)
-    : ptr_mem_expr_methods(type, ptr_mem_id, source, p)
+   *  @param source Data structure to extract from.
+   *  @param pointer Pointer to member.  */
+  ptr_mem2t(const type2tc &type, const expr2tc &source, const expr2tc &pointer)
+    : ptr_mem_expr_methods(type, ptr_mem_id, source, pointer)
   {
   }
   ptr_mem2t(const ptr_mem2t &ref) = default;
