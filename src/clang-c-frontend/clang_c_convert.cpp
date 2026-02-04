@@ -509,7 +509,10 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.lvalue = true;
   symbol.static_lifetime =
     (vd.getStorageClass() == clang::SC_Static) || vd.hasGlobalStorage();
-  symbol.is_extern = vd.hasExternalStorage();
+  // extern variables with initializers are no longer considered extern
+  // in the resulting object file by at least gcc.
+  // See TC linking-8 or try readelf -s on main_init_extern.o
+  symbol.is_extern = vd.hasExternalStorage() && !vd.hasInit();
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
   symbol.is_thread_local = vd.getTLSKind() != clang::VarDecl::TLS_None;
