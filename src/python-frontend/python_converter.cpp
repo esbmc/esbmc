@@ -2208,8 +2208,27 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       exprt func_ptr_expr = symbol_expr(*var_symbol);
       call.function() = func_ptr_expr;
 
-      // Set return type
-      if (var_symbol->type.subtype().is_code())
+      // Resolve return type from the concrete target function stored in
+      // the symbol's value (address_of(func)), because gen_pointer_type
+      // does not preserve the full code_typet (return type + arguments).
+      bool resolved = false;
+      if (
+        var_symbol->value.is_address_of() &&
+        !var_symbol->value.operands().empty() &&
+        var_symbol->value.operands()[0].is_symbol())
+      {
+        const symbolt *target_func = symbol_table_.find_symbol(
+          var_symbol->value.operands()[0].identifier());
+        if (target_func && target_func->type.is_code())
+        {
+          const code_typet &func_type = to_code_type(target_func->type);
+          call.type() = func_type.return_type();
+          resolved = true;
+        }
+      }
+
+      // Try to get return type from the pointer's subtype
+      if (!resolved && var_symbol->type.subtype().is_code())
       {
         const code_typet &func_type = to_code_type(var_symbol->type.subtype());
         call.type() = func_type.return_type();
@@ -2937,6 +2956,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       if (!symbol)
       {
+        // Check if this Name refers to a function
+        if (!is_class_attr && element["_type"] == "Name")
+        {
+          symbol_id func_sid(current_python_file, "", var_name);
+          symbolt *func_symbol =
+            symbol_table_.find_symbol(func_sid.to_string());
+          if (func_symbol && func_symbol->type.is_code())
+          {
+            expr = symbol_expr(*func_symbol);
+            break;
+          }
+        }
         locationt location = get_location_from_decl(element);
         std::ostringstream error_msg;
         if (!current_func_name_.empty())
@@ -3396,6 +3427,17 @@ void python_converter::handle_assignment_type_adjustments(
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
+  // Handle assignment of function to function pointer variable
+  if (
+    lhs.type().is_pointer() && lhs.type().subtype().is_code() &&
+    rhs.type().is_code() && rhs.is_symbol())
+  {
+    rhs = address_of_exprt(rhs);
+    if (lhs_symbol && !is_ctor_call)
+      lhs_symbol->value = rhs;
+    return;
+  }
+
   // Handle lambda assignments
   if (lambda_handler_->is_lambda_assignment(ast_node) && rhs.is_symbol())
   {
@@ -3750,9 +3792,13 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   {
     inferred_type = any_type();
   }
-  else if (value_type == "Call" || value_type == "BoolOp")
+  else
   {
-    // Convert RHS first to get its type
+    // Evaluate the RHS for any expression type (Call, BoolOp, Attribute,
+    // Name, BinOp, Subscript, …) so that its type can be inferred.
+    // If the expression is itself invalid — e.g. accessing a non-existent
+    // attribute — get_expr will raise the correct, precise error at the
+    // point of access rather than the misleading "Type undefined" later.
     is_converting_rhs = true;
     exprt rhs_expr = get_expr(ast_node["value"]);
     is_converting_rhs = false;
@@ -3760,10 +3806,6 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     inferred_type = rhs_expr.type();
     if (inferred_type.is_empty())
       inferred_type = any_type();
-  }
-  else
-  {
-    return nullptr;
   }
 
   symbolt symbol =
@@ -6529,14 +6571,27 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         // FUNCTION_CALL:  MyException(&return_value, &"message");
         // Throw MyException return_value;
         raise = get_expr(element["exc"]);
-        code_function_callt call =
-          to_code_function_call(convert_expression_to_code(raise));
-        side_effect_expr_function_callt tmp;
-        tmp.function() = call.function();
-        tmp.arguments() = call.arguments();
-        tmp.type() = type;
-        tmp.location() = location;
-        raise = tmp;
+        // Check if this is a constructor call
+        if (raise.is_code() && raise.get("statement") == "function_call")
+        {
+          code_function_callt call =
+            to_code_function_call(convert_expression_to_code(raise));
+          side_effect_expr_function_callt tmp;
+          tmp.function() = call.function();
+          tmp.arguments() = call.arguments();
+          tmp.type() = type;
+          tmp.location() = location;
+          raise = tmp;
+        }
+        else
+        {
+          // Use a generic type if no specific type was found
+          if (type.is_empty())
+            type = any_type();
+          // Typecast to match throw type
+          if (raise.type() != type)
+            raise = typecast_exprt(raise, type);
+        }
       }
 
       side_effect_exprt side("cpp-throw", type);
