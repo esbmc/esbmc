@@ -158,6 +158,7 @@ bool clang_c_maint::clang_main()
       const symbolt &argv_symbol = *ns.lookup("argv'");
 
       exprt one = from_integer(1, argc_symbol.type);
+      exprt zero = from_integer(0, argc_symbol.type);
 
       exprt add("+", uint_type());
       add.copy_to_operands(symbol_expr(argc_symbol), one); // argc + 1
@@ -215,6 +216,57 @@ bool clang_c_maint::clang_main()
       // rather than load irep2 with additional baggage.
       init_code.copy_to_operands(
         code_assignt(symbol_expr(argv_symbol), null_array));
+
+      // C standard guarantees for argv
+      // C standard: argv[argc] must be NULL (sentinel value)
+      index_exprt argv_argc_index(
+        symbol_expr(argv_symbol),
+        symbol_expr(argc_symbol),
+        argv_symbol.type.subtype());
+
+      exprt argv_argc_is_null("=", bool_type());
+      argv_argc_is_null.copy_to_operands(argv_argc_index, null);
+
+      init_code.copy_to_operands(code_assumet(argv_argc_is_null));
+
+      // C standard: argv[0] must be non-NULL (program name always exists)
+      index_exprt argv_0_index(
+        symbol_expr(argv_symbol),
+        zero,
+        argv_symbol.type.subtype());
+
+      exprt argv_0_not_null("not", bool_type());
+      exprt argv_0_is_null("=", bool_type());
+      argv_0_is_null.copy_to_operands(argv_0_index, null);
+      argv_0_not_null.copy_to_operands(argv_0_is_null);
+
+      init_code.copy_to_operands(code_assumet(argv_0_not_null));
+
+      // C standard: argv[i] != NULL for all 0 <= i < argc
+      // Handle common cases up to argv[10]
+      for (int i = 1; i <= 10; i++)
+      {
+        exprt idx = from_integer(i, argc_symbol.type);
+
+        // (i < argc) => (argv[i] != NULL)
+        exprt i_lt_argc("<", bool_type());
+        i_lt_argc.copy_to_operands(idx, symbol_expr(argc_symbol));
+
+        index_exprt argv_i_index(
+          symbol_expr(argv_symbol),
+          idx,
+          argv_symbol.type.subtype());
+
+        exprt argv_i_not_null("not", bool_type());
+        exprt argv_i_is_null("=", bool_type());
+        argv_i_is_null.copy_to_operands(argv_i_index, null);
+        argv_i_not_null.copy_to_operands(argv_i_is_null);
+
+        exprt implies("=>", bool_type());
+        implies.copy_to_operands(i_lt_argc, argv_i_not_null);
+
+        init_code.copy_to_operands(code_assumet(implies));
+      }
 
       exprt::operandst &operands = call.arguments();
 
