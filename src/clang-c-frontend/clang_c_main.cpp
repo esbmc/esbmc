@@ -194,27 +194,21 @@ bool clang_c_maint::clang_main()
 
       init_code.copy_to_operands(code_assumet(le));
 
-      // assign argv = { NULL };
-      // Adjust __ESBMC_alloc_size as argv is handled as dynamic array
-      exprt dynamic_size("dynamic_size", size_type());
-      dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
-      init_code.copy_to_operands(code_assignt(dynamic_size, mult));
-
+      // assign argv[argc] to NULL
       constant_exprt null(
         irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
 
-      // Define an array type
-      array_typet argv_type(argv_symbol.type.subtype(), dynamic_size);
+      exprt index_expr("index", argv_symbol.type.subtype());
 
-      // Create an array filled with NULL (no explicit size)
-      array_of_exprt null_array(null, argv_type);
+      index_exprt argv_index(
+        symbol_expr(argv_symbol),
+        symbol_expr(argc_symbol),
+        argv_symbol.type.subtype());
 
-      // Assign the initialized array to argv_symbol
       // disable bounds check on that one
-      // Logic to perform this ^ moved into goto_check and dereference,
-      // rather than load irep2 with additional baggage.
-      init_code.copy_to_operands(
-        code_assignt(symbol_expr(argv_symbol), null_array));
+      // Logic to perform this ^ moved into goto_check, rather than load
+      // irep2 with additional baggage.
+      init_code.copy_to_operands(code_assignt(argv_index, null));
 
       exprt::operandst &operands = call.arguments();
 
