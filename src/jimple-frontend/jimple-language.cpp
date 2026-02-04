@@ -111,14 +111,7 @@ add_global_static_variable(contextt &ctx, const typet t, std::string name)
 
 void jimple_languaget::add_intrinsics(contextt &context)
 {
-  auto type1 = array_typet(bool_type(), exprt("infinity"));
-  add_global_static_variable(context, type1, "__ESBMC_alloc");
-  add_global_static_variable(context, type1, "__ESBMC_is_dynamic");
 
-  auto type2 = array_typet(size_type(), exprt("infinity"));
-  add_global_static_variable(context, type2, "__ESBMC_alloc_size");
-
-  add_global_static_variable(context, int_type(), "__ESBMC_rounding_mode");
 }
 
 void jimple_languaget::setup_main(contextt &context)
