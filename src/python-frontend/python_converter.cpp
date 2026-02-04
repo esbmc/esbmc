@@ -6844,7 +6844,6 @@ void python_converter::load_c_intrisics(code_blockt &block)
 
   auto type1 = array_typet(bool_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type1, "__ESBMC_alloc");
-  add_global_static_variable(symbol_table_, type1, "__ESBMC_deallocated");
   add_global_static_variable(symbol_table_, type1, "__ESBMC_is_dynamic");
 
   auto type2 = array_typet(size_type(), exprt("infinity"));
