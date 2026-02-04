@@ -515,7 +515,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.is_thread_local = vd.getTLSKind() != clang::VarDecl::TLS_None;
 
   if (
-    symbol.static_lifetime &&
+    symbol.static_lifetime && !symbol.is_extern &&
     (!vd.hasInit() || is_aggregate_type(vd.getType())))
   {
     // the type might contains symbolic types,
@@ -523,17 +523,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    if (symbol.is_extern)
-    {
-      exprt value = exprt("sideeffect", get_complete_type(t, ns));
-      value.statement("nondet");
-      symbol.value = value;
-    }
-    else
-    {
-      symbol.value = gen_zero(get_complete_type(t, ns), true);
-      symbol.value.zero_initializer(true);
-    }
+    symbol.value = gen_zero(get_complete_type(t, ns), true);
+    symbol.value.zero_initializer(true);
   }
 
   symbolt *added_symbol = nullptr;
