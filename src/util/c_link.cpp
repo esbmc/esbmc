@@ -53,18 +53,6 @@ public:
 
   void typecheck() override;
 
-  /**
-   * @brief Merges extern symbols from old contexts
-   *
-   * Checks whether a non-extern new_context symbol
-   * was an extern symbol in a previous context.
-   *
-   * If it was, then merge it.
-   *
-   * @param s
-   */
-  void extern_fixup(symbolt &s);
-
 protected:
   void duplicate(symbolt &in_context, symbolt &new_symbol);
   void duplicate_type(symbolt &in_context, symbolt &new_symbol);
@@ -305,48 +293,26 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       }
     }
 
-    // care about initializers
-
-    if (!new_symbol.value.is_nil() && !new_symbol.value.zero_initializer())
+    if (in_context.is_extern)
     {
-      if (in_context.value.is_nil() || in_context.value.zero_initializer())
+      if (new_symbol.is_extern)
+      {
+        // do nothing if both symbols are extern
+      }
+      else
       {
         in_context.value.swap(new_symbol.value);
-      }
-      else if (!base_type_eq(in_context.value, new_symbol.value, ns))
-      {
-        log_error(
-          "conflicting initializers for variable '{}'\n"
-          "  {}:{}:{}: old value in module {}: {}\n"
-          "  {}:{}:{}: new value in module {}: {}",
-          in_context.name,
-          in_context.location.file().c_str(),
-          in_context.location.line().c_str(),
-          in_context.location.column().c_str(),
-          in_context.module,
-          to_string(in_context.value),
-          new_symbol.location.file().c_str(),
-          new_symbol.location.line().c_str(),
-          new_symbol.location.column().c_str(),
-          new_symbol.module,
-          to_string(new_symbol.value));
-        abort();
+        in_context.is_extern = false;
       }
     }
-  }
-}
-
-void c_linkt::extern_fixup(symbolt &s)
-{
-  if (!s.is_extern)
-  {
-    // If the previous context had it
-    auto prev = context.find_symbol(s.id);
-    if (prev)
+    else
     {
-      // If current context is not extern and previous was
-      if (!s.is_extern && prev->is_extern)
-        prev->swap(s);
+      log_error(
+        "duplicate_symbol: in_context is not extern, never seen in tests, "
+        "aborting.");
+      in_context.dump();
+      new_symbol.dump();
+      abort();
     }
   }
 }
@@ -354,8 +320,6 @@ void c_linkt::extern_fixup(symbolt &s)
 void c_linkt::typecheck()
 {
   new_context.Foreach_operand([this](symbolt &s) {
-    // First, if the symbol is extern, then check whether it can be merged
-    extern_fixup(s);
     // build module clash table
     if (s.file_local && known_modules.find(s.module) != known_modules.end())
     {
