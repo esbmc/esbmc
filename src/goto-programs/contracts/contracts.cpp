@@ -2297,7 +2297,6 @@ bool code_contractst::is_annotated_contract_function(
   return func_sym.type.get_bool("#annotated_contract");
 }
 
-
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 {
   log_status(
