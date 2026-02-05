@@ -2737,7 +2737,12 @@ void esbmc_parseoptionst::process_function_contracts(
     {
       log_status("Enforcing contracts for {} function(s)", to_enforce.size());
       bool assume_nonnull_valid = cmdline.isset("assume-nonnull-valid");
-      contracts.enforce_contracts(to_enforce, assume_nonnull_valid);
+      // Pass --function entry point so enforce wrapper can add pointer validity
+      // assumptions for the harness-called function (which receives nil args)
+      std::string entry_function =
+        cmdline.isset("function") ? cmdline.getval("function") : "";
+      contracts.enforce_contracts(
+        to_enforce, assume_nonnull_valid, entry_function);
     }
   }
 

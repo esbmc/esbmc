@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract node_reaction --replace-call-with-contract source_reaction_in --replace-call-with-contract source_startup --replace-call-with-contract source_reaction_start --no-align-check --unwind 12
+^VERIFICATION SUCCESSFUL$

@@ -78,9 +78,13 @@ public:
   /// Wrapper function: assume requires -> call original function -> assert ensures
   /// \param to_enforce Set of function names to enforce contracts for
   /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
+  /// \param entry_function The --function entry point name (empty if using main).
+  ///        When a function is the entry point AND called from the harness with nil arguments,
+  ///        pointer parameters need valid_object assumptions for correct ensures checking.
   void enforce_contracts(
     const std::set<std::string> &to_enforce,
-    bool assume_nonnull_valid = false);
+    bool assume_nonnull_valid = false,
+    const std::string &entry_function = "");
 
   /// \brief Replace function calls with contracts
   /// Replaces function calls with contract semantics:

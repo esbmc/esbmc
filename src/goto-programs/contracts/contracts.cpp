@@ -599,7 +599,8 @@ void code_contractst::havoc_static_globals(
 
 void code_contractst::enforce_contracts(
   const std::set<std::string> &to_enforce,
-  bool assume_nonnull_valid)
+  bool assume_nonnull_valid,
+  const std::string &entry_function)
 {
   for (const auto &function_name : to_enforce)
   {
@@ -747,6 +748,14 @@ void code_contractst::enforce_contracts(
     std::vector<code_contractst::is_fresh_mapping_t> is_fresh_mappings =
       extract_is_fresh_mappings_from_body(original_body_copy);
 
+    // Determine if this function needs pointer validity assumptions.
+    // When --function is used, the harness passes nil for pointer parameters,
+    // so the wrapper must assume they point to valid memory for correct
+    // ensures checking. When called from main() with real arguments, this
+    // is not needed (and would mask real bugs in ensures checking).
+    bool needs_ptr_validity = assume_nonnull_valid ||
+      (!entry_function.empty() && function_name == entry_function);
+
     // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
       *func_sym,
@@ -755,7 +764,7 @@ void code_contractst::enforce_contracts(
       original_name_id,
       original_body_copy,
       is_fresh_mappings,
-      assume_nonnull_valid);
+      needs_ptr_validity);
 
     // Create new function entry
     goto_functiont new_func;
@@ -790,10 +799,16 @@ goto_programt code_contractst::generate_checking_wrapper(
   // preserve the caller's argument values. Global variables are handled by
   // unified nondet_static initialization, not per-function havoc.
 
-  // 0. Add pointer validity assumptions FIRST (if --assume-nonnull-valid is set)
+  // 0. Add pointer validity assumptions FIRST (if needed)
   // This MUST come before old_snapshot materialization because old snapshots may
   // dereference pointers (e.g., __ESBMC_old(*x)), and we need to assume pointers
   // are valid before accessing them.
+  //
+  // This is needed in two cases:
+  //   (a) --assume-nonnull-valid is explicitly set by the user
+  //   (b) The function is the --function entry point, where the harness passes
+  //       nil/nondet pointers. Without valid_object, ensures dereferences resolve
+  //       to symex::invalid_object, causing spurious verification failures.
   if (assume_nonnull_valid)
   {
     add_pointer_validity_assumptions(wrapper, original_func, location);
@@ -2335,11 +2350,8 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     }
   }
 
-  // Replaceable = match to_replace and have contracts. Leaf = replaceable and
-  // do not call any other replaceable. Parent = replaceable and call at least
-  // one other replaceable. We only replace calls to leaves and only delete
-  // leaf definitions; parents keep their body (with inner calls to leaves
-  // replaced).
+  // Collect all replaceable functions: those that match the replace pattern
+  // AND have contracts (either explicit clauses or annotated).
   std::set<std::string> replaceable_funcs;
   for (const auto &kv : function_map)
   {
@@ -2353,42 +2365,19 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     replaceable_funcs.insert(func_key);
   }
 
-  std::set<std::string> leaf_funcs;
-  std::set<std::string> parent_funcs;
-  for (const std::string &f : replaceable_funcs)
-  {
-    auto it = function_map.find(f);
-    if (it == function_map.end())
-      continue;
-    goto_programt *body = std::get<1>(it->second);
-    if (body_calls_any_of(*body, replaceable_funcs))
-      parent_funcs.insert(f);
-    else
-      leaf_funcs.insert(f);
-  }
+  for (const auto &f : replaceable_funcs)
+    log_debug("contracts", "  Replaceable: {}", f);
 
-  for (const auto &f : leaf_funcs)
-    log_debug("contracts", "  Leaf (replaced, definition removed): {}", f);
-  for (const auto &f : parent_funcs)
-    log_debug("contracts", "  Parent (kept, sub-calls replaced): {}", f);
-
-  // Warn about mutual recursion: if all replaceable functions are parents
-  // (no leaves), none of them will be replaced with contracts.
-  if (!replaceable_funcs.empty() && leaf_funcs.empty())
-  {
-    log_warning(
-      "All {} replaceable function(s) call other replaceable functions "
-      "(possible mutual recursion). None will be replaced with contracts. "
-      "Consider specifying individual functions instead of \"*\".",
-      replaceable_funcs.size());
-    for (const auto &f : parent_funcs)
-      log_warning("  Unreplaced: {}", f);
-  }
-
-  // Track functions to delete: only leaf definitions
+  // Track functions to delete after replacement
   std::set<irep_idt> functions_to_delete;
 
-  // Process each function and replace calls (only to leaf functions)
+  // Replace ALL calls to replaceable functions, regardless of whether
+  // the callee itself calls other replaceable functions.
+  // This implements true hierarchical contract replacement:
+  //   - Every call to a replaceable function is replaced with its contract
+  //     (assert requires → havoc assigns → assume ensures)
+  //   - The function definition is removed after replacement
+  //   - The caller only sees the contract abstraction, not the function body
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
@@ -2397,7 +2386,6 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     std::vector<goto_programt::targett> calls_to_replace;
     std::vector<std::tuple<symbolt *, goto_programt *, irep_idt>> function_info;
 
-    // Find calls to replace: only replace calls to leaf functions
     Forall_goto_program_instructions (i_it, it->second.body)
     {
       if (i_it->is_function_call() && is_code_function_call2t(i_it->code))
@@ -2412,15 +2400,15 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
           if (is_compiler_generated(called_func))
             continue;
 
-          // Only replace calls to leaf functions (not parents)
-          if (leaf_funcs.count(called_func) == 0)
+          // Replace calls to ALL replaceable functions
+          if (replaceable_funcs.count(called_func) == 0)
             continue;
 
           auto map_it = function_map.find(called_func);
           if (map_it != function_map.end())
           {
             log_debug(
-              "contracts", "Found call to replace (leaf): {}", called_func);
+              "contracts", "Found call to replace: {}", called_func);
             calls_to_replace.push_back(i_it);
             function_info.push_back(map_it->second);
             irep_idt func_id = std::get<2>(map_it->second);
@@ -2447,7 +2435,7 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
     }
   }
 
-  // Delete only leaf function definitions (parents keep their body)
+  // Delete all replaced function definitions
   for (const auto &func_id : functions_to_delete)
   {
     auto func_it = goto_functions.function_map.find(func_id);
