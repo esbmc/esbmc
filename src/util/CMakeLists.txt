@@ -48,7 +48,7 @@ target_include_directories(util_esbmc
         lib
         )
 
-target_compile_definitions(util_esbmc PUBLIC BOOST_ALL_NO_LIB)
-target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt string_container ${Boost_LIBRARIES})
+target_compile_definitions(util_esbmc PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
+target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt string_container yaml-cpp::yaml-cpp ${Boost_LIBRARIES})
 
 target_link_libraries(algorithms gotoprograms)
