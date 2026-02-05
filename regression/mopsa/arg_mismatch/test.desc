@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^TypeError\: f\(\) missing 1 required positional argument\: \'x\'$

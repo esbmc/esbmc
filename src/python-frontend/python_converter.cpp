@@ -3792,9 +3792,13 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   {
     inferred_type = any_type();
   }
-  else if (value_type == "Call" || value_type == "BoolOp")
+  else
   {
-    // Convert RHS first to get its type
+    // Evaluate the RHS for any expression type (Call, BoolOp, Attribute,
+    // Name, BinOp, Subscript, …) so that its type can be inferred.
+    // If the expression is itself invalid — e.g. accessing a non-existent
+    // attribute — get_expr will raise the correct, precise error at the
+    // point of access rather than the misleading "Type undefined" later.
     is_converting_rhs = true;
     exprt rhs_expr = get_expr(ast_node["value"]);
     is_converting_rhs = false;
@@ -3802,10 +3806,6 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     inferred_type = rhs_expr.type();
     if (inferred_type.is_empty())
       inferred_type = any_type();
-  }
-  else
-  {
-    return nullptr;
   }
 
   symbolt symbol =
@@ -6571,14 +6571,27 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         // FUNCTION_CALL:  MyException(&return_value, &"message");
         // Throw MyException return_value;
         raise = get_expr(element["exc"]);
-        code_function_callt call =
-          to_code_function_call(convert_expression_to_code(raise));
-        side_effect_expr_function_callt tmp;
-        tmp.function() = call.function();
-        tmp.arguments() = call.arguments();
-        tmp.type() = type;
-        tmp.location() = location;
-        raise = tmp;
+        // Check if this is a constructor call
+        if (raise.is_code() && raise.get("statement") == "function_call")
+        {
+          code_function_callt call =
+            to_code_function_call(convert_expression_to_code(raise));
+          side_effect_expr_function_callt tmp;
+          tmp.function() = call.function();
+          tmp.arguments() = call.arguments();
+          tmp.type() = type;
+          tmp.location() = location;
+          raise = tmp;
+        }
+        else
+        {
+          // Use a generic type if no specific type was found
+          if (type.is_empty())
+            type = any_type();
+          // Typecast to match throw type
+          if (raise.type() != type)
+            raise = typecast_exprt(raise, type);
+        }
       }
 
       side_effect_exprt side("cpp-throw", type);
