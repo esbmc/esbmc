@@ -2297,26 +2297,6 @@ bool code_contractst::is_annotated_contract_function(
   return func_sym.type.get_bool("#annotated_contract");
 }
 
-/// Helper: returns true if function body contains a call to any function in
-/// replaceable_names (by get_symbol_name(), e.g. "c:@F@foo").
-static bool body_calls_any_of(
-  const goto_programt &body,
-  const std::set<std::string> &replaceable_names)
-{
-  forall_goto_program_instructions (it, body)
-  {
-    if (!it->is_function_call() || !is_code_function_call2t(it->code))
-      continue;
-    const code_function_call2t &call = to_code_function_call2t(it->code);
-    if (!is_symbol2t(call.function))
-      continue;
-    std::string called =
-      id2string(to_symbol2t(call.function).get_symbol_name());
-    if (replaceable_names.count(called) != 0)
-      return true;
-  }
-  return false;
-}
 
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 {
