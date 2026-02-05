@@ -37,7 +37,7 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         string_constant.cpp c_types.cpp python_types.cpp ieee_float.cpp c_qualifiers.cpp
         c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp destructor.cpp
         c_expr2string.cpp cpp_expr2string.cpp type2name.cpp
-        message.cpp encoding.cpp expr.cpp irep.cpp type.cpp
+        message.cpp encoding.cpp expr.cpp irep.cpp type.cpp yaml_parser.cpp
         )
 
 # Boost is needed by anything that touches irep2
