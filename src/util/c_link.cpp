@@ -60,7 +60,6 @@ protected:
   void move(symbolt &new_symbol);
 
   // overload to use language specific syntax
-  std::string to_string(const exprt &expr);
   std::string to_string(const typet &type);
 
   contextt &context;
@@ -75,11 +74,6 @@ protected:
 
   unsigned type_counter;
 };
-
-std::string c_linkt::to_string(const exprt &expr)
-{
-  return c_expr2string(expr, ns);
-}
 
 std::string c_linkt::to_string(const typet &type)
 {
