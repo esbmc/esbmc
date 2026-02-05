@@ -753,7 +753,8 @@ void code_contractst::enforce_contracts(
     // so the wrapper must assume they point to valid memory for correct
     // ensures checking. When called from main() with real arguments, this
     // is not needed (and would mask real bugs in ensures checking).
-    bool needs_ptr_validity = assume_nonnull_valid ||
+    bool needs_ptr_validity =
+      assume_nonnull_valid ||
       (!entry_function.empty() && function_name == entry_function);
 
     // Generate wrapper function, passing the original body
@@ -2407,8 +2408,7 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
           auto map_it = function_map.find(called_func);
           if (map_it != function_map.end())
           {
-            log_debug(
-              "contracts", "Found call to replace: {}", called_func);
+            log_debug("contracts", "Found call to replace: {}", called_func);
             calls_to_replace.push_back(i_it);
             function_info.push_back(map_it->second);
             irep_idt func_id = std::get<2>(map_it->second);
