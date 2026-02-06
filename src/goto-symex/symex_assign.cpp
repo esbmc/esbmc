@@ -122,12 +122,24 @@ goto_symext::goto_symext(
           {
             // #pragma unroll (no N) - unlimited unrolling (0 means no limit in ESBMC)
             unwind_set[instruction.loop_number] = 0;
+            log_status(
+              "[pragma_unroll] symex_assign.cpp:{} loop {} (func {}) -> unlimited unwind (from #pragma unroll)",
+              __LINE__,
+              instruction.loop_number,
+              func_pair.first);
           }
           else
           {
             // #pragma unroll N - use specified count
             unwind_set[instruction.loop_number] =
               BigInt(instruction.pragma_unroll_count);
+            log_status(
+              "[pragma_unroll] symex_assign.cpp:{} loop {} (func {}) -> unwind_set={} (from #pragma unroll {})",
+              __LINE__,
+              instruction.loop_number,
+              func_pair.first,
+              instruction.pragma_unroll_count,
+              instruction.pragma_unroll_count);
           }
         }
       }

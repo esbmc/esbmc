@@ -466,7 +466,15 @@ bool goto_symext::get_unwind(
 
   // Loop-specific bound overrides function-specific bound
   if (unwind_set.count(id) != 0)
+  {
     this_loop_max_unwind = unwind_set[id];
+    log_status(
+      "[pragma_unroll] symex_goto.cpp:{} loop {} using unwind_set limit={}, current unwind={}",
+      __LINE__,
+      id,
+      integer2string(this_loop_max_unwind),
+      integer2string(unwind));
+  }
 
   bool stop_unwind =
     this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;

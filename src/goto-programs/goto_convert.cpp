@@ -1263,7 +1263,13 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
 
   // Propagate pragma unroll count
   if (!code.get("#pragma_unroll").empty())
+  {
     y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
+    log_status(
+      "[pragma_unroll] goto_convert.cpp:{} (for-loop): propagated pragma_unroll_count={} to backward goto",
+      __LINE__,
+      y->pragma_unroll_count);
+  }
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
@@ -1330,7 +1336,13 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 
   // Propagate pragma unroll count
   if (!code.get("#pragma_unroll").empty())
+  {
     y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
+    log_status(
+      "[pragma_unroll] goto_convert.cpp:{} (while-loop): propagated pragma_unroll_count={} to backward goto",
+      __LINE__,
+      y->pragma_unroll_count);
+  }
 
   dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_x);
@@ -1400,7 +1412,13 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
 
   // Propagate pragma unroll count
   if (!code.get("#pragma_unroll").empty())
+  {
     y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
+    log_status(
+      "[pragma_unroll] goto_convert.cpp:{} (do-while): propagated pragma_unroll_count={} to backward goto",
+      __LINE__,
+      y->pragma_unroll_count);
+  }
 
   dest.destructive_append(tmp_w);
   dest.destructive_append(sideeffects);
