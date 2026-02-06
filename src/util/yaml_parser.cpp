@@ -58,9 +58,9 @@ invariant yaml_parser::parse_invariant(const YAML::Node &node) const
   {
     if (loc["file_name"])
       info.file = loc["file_name"].as<std::string>();
-    if (loc["line"])  
-      info.line = BigInt(loc["line"].as<std::string>().c_str(), 10);  
-    if (loc["column"])  
+    if (loc["line"])
+      info.line = BigInt(loc["line"].as<std::string>().c_str(), 10);
+    if (loc["column"])
       info.column = BigInt(loc["column"].as<std::string>().c_str(), 10);
 
     if (loc["function"])
