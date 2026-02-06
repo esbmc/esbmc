@@ -260,21 +260,16 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::Typedef:
     break;
 
+  // We pretty much ignore this information, clang does the expansion for us.
+  // Will keep the warning just in case we eventually make a nondet use.
   case clang::Decl::BuiltinTemplate:
   {
-    // expanded by clang itself
+    // expanded by clang itself (e.g. make_seq<int,5> ==> [0,1,2,3,4])
     const clang::BuiltinTemplateDecl &btd =
       static_cast<const clang::BuiltinTemplateDecl &>(decl);
-    if (
-      btd.getBuiltinTemplateKind() !=
-      clang::BuiltinTemplateKind::BTK__make_integer_seq)
-    {
-      log_error(
+    log_debug("[CPP]",
         "Unsupported builtin template kind id: {}",
         (int)btd.getBuiltinTemplateKind());
-      abort();
-    }
-
     break;
   }
   default:
