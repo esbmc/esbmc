@@ -1,7 +1,7 @@
 #include "config_file.h"
 
 #include <boost/program_options/option.hpp>
-#include <stdexcept>
+#include <cstdlib>
 #include <string>
 #include <set>
 #include <fmt/core.h>
@@ -46,8 +46,8 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
   }
   catch (const toml::parse_error &err)
   {
-    throw std::runtime_error(
-      fmt::format("config: error parsing TOML file: {}", err.what()));
+    log_error("config: error parsing TOML file: {}", err.what());
+    abort();
   }
 
   // Get all the long option names and use those as allowed options.
@@ -94,13 +94,16 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       case toml::node_type::string:
       {
         if (bool_flag_options.count(key_name))
-          throw std::runtime_error(fmt::format(
+        {
+          log_error(
             "config: key '{}' is a boolean flag but got string value \"{}\""
             " (use {} = true instead of {} = \"true\")",
             key_name,
             value_node->as_string()->get(),
             key_name,
-            key_name));
+            key_name);
+          abort();
+        }
 
         add_option(key_name, value_node->as_string()->get(), true);
         break;
@@ -139,10 +142,11 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       case toml::node_type::time:
       case toml::node_type::date_time:
       case toml::node_type::none:
-        throw std::runtime_error(fmt::format(
+        log_error(
           "config: invalid key type: {}: {}",
           key_name,
-          toml_type_to_string(*value_node)));
+          toml_type_to_string(*value_node));
+        abort();
       };
     }
   }

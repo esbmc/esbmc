@@ -75,14 +75,6 @@ TEST_CASE_METHOD(
     check_option(options.options[2], "name", "999");
   }
 
-  SECTION("String value for bool flag throws")
-  {
-    std::istringstream iss("flag-option = \"true\"");
-    REQUIRE_THROWS_WITH(
-      parse_toml_file(iss, *desc),
-      Catch::Matchers::Contains("use flag-option = true instead of flag-option = \"true\""));
-  }
-
   SECTION("Bool flag with true value is loaded")
   {
     std::istringstream iss("flag-option = true");
