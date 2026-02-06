@@ -79,15 +79,16 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
     {
       auto value_node = tbl.get(key_name);
 
-      auto add_option = [&](const std::string &key, const std::string &val,
-                            bool quote = false) {
-        if (quote)
-          log_status("[CONFIG] loaded {} = \"{}\"", key, val);
-        else
-          log_status("[CONFIG] loaded {} = {}", key, val);
-        result.options.push_back(boost::program_options::option(
-          key, std::vector<std::string>(1, val)));
-      };
+      auto add_option =
+        [&](
+          const std::string &key, const std::string &val, bool quote = false) {
+          if (quote)
+            log_status("[CONFIG] loaded {} = \"{}\"", key, val);
+          else
+            log_status("[CONFIG] loaded {} = {}", key, val);
+          result.options.push_back(boost::program_options::option(
+            key, std::vector<std::string>(1, val)));
+        };
 
       switch (value_node->type())
       {
@@ -116,8 +117,7 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       case toml::node_type::floating_point:
       {
         add_option(
-          key_name,
-          std::to_string(value_node->as_floating_point()->get()));
+          key_name, std::to_string(value_node->as_floating_point()->get()));
         break;
       }
       case toml::node_type::boolean:
