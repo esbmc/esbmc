@@ -123,7 +123,8 @@ goto_symext::goto_symext(
             // #pragma unroll (no N) - unlimited unrolling (0 means no limit in ESBMC)
             unwind_set[instruction.loop_number] = 0;
             log_status(
-              "Applying #pragma unroll (unlimited) to loop {} in file {} line {} column {} function {}",
+              "Applying #pragma unroll (unlimited) to loop {} in file {} line "
+              "{} column {} function {}",
               instruction.loop_number,
               instruction.location.get_file(),
               instruction.location.get_line(),
@@ -136,7 +137,8 @@ goto_symext::goto_symext(
             unwind_set[instruction.loop_number] =
               BigInt(instruction.pragma_unroll_count);
             log_status(
-              "Applying #pragma unroll {} to loop {} in file {} line {} column {} function {}",
+              "Applying #pragma unroll {} to loop {} in file {} line {} column "
+              "{} function {}",
               instruction.pragma_unroll_count,
               instruction.loop_number,
               instruction.location.get_file(),
