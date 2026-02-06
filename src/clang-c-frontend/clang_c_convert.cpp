@@ -267,9 +267,10 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     // expanded by clang itself (e.g. make_seq<int,5> ==> [0,1,2,3,4])
     const clang::BuiltinTemplateDecl &btd =
       static_cast<const clang::BuiltinTemplateDecl &>(decl);
-    log_debug("[CPP]",
-        "Unsupported builtin template kind id: {}",
-        (int)btd.getBuiltinTemplateKind());
+    log_debug(
+      "[CPP]",
+      "Unsupported builtin template kind id: {}",
+      (int)btd.getBuiltinTemplateKind());
     break;
   }
   default:
