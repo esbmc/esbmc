@@ -2183,8 +2183,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
   // Compile-time evaluation for parse_nested_parens on constant strings.
   if (
-    element["func"]["_type"] == "Name" &&
-    element["func"].contains("id") &&
+    element["func"]["_type"] == "Name" && element["func"].contains("id") &&
     element["func"]["id"] == "parse_nested_parens" &&
     element.contains("args") && element["args"].is_array() &&
     element["args"].size() == 1 &&
