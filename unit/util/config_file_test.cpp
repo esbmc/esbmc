@@ -21,7 +21,9 @@ struct TestFixture
       "context-bound,c",
       po::value<int>()->default_value(2),
       "Bound by x context")(
-      "name,v", po::value<std::string>()->default_value("test"), "name");
+      "name,v", po::value<std::string>()->default_value("test"), "name")(
+      "flag-option,f", po::bool_switch(), "A boolean flag")(
+      "threshold,t", po::value<double>()->default_value(0.5), "A float value");
   }
 
   ~TestFixture()
@@ -71,5 +73,57 @@ TEST_CASE_METHOD(
     check_option(options.options[1], "floatbv", "");
     // unlimited-k-steps will not be added because it is false
     check_option(options.options[2], "name", "999");
+  }
+
+  SECTION("String value for bool flag throws")
+  {
+    std::istringstream iss("flag-option = \"true\"");
+    REQUIRE_THROWS_WITH(
+      parse_toml_file(iss, *desc),
+      Catch::Matchers::Contains("use flag-option = true instead of flag-option = \"true\""));
+  }
+
+  SECTION("Bool flag with true value is loaded")
+  {
+    std::istringstream iss("flag-option = true");
+    boost::program_options::basic_parsed_options<char> options =
+      parse_toml_file(iss, *desc);
+    REQUIRE(options.options.size() == 1);
+    check_option(options.options[0], "flag-option", "");
+  }
+
+  SECTION("Bool flag with false value is omitted")
+  {
+    std::istringstream iss("flag-option = false");
+    boost::program_options::basic_parsed_options<char> options =
+      parse_toml_file(iss, *desc);
+    REQUIRE(options.options.size() == 0);
+  }
+
+  SECTION("Integer value for bool flag is passed through")
+  {
+    std::istringstream iss("flag-option = 1");
+    boost::program_options::basic_parsed_options<char> options =
+      parse_toml_file(iss, *desc);
+    REQUIRE(options.options.size() == 1);
+    check_option(options.options[0], "flag-option", "1");
+  }
+
+  SECTION("Float value for bool flag is passed through")
+  {
+    std::istringstream iss("flag-option = 1.0");
+    boost::program_options::basic_parsed_options<char> options =
+      parse_toml_file(iss, *desc);
+    REQUIRE(options.options.size() == 1);
+    check_option(options.options[0], "flag-option", "1.000000");
+  }
+
+  SECTION("Load float values")
+  {
+    std::istringstream iss("threshold = 3.14");
+    boost::program_options::basic_parsed_options<char> options =
+      parse_toml_file(iss, *desc);
+    REQUIRE(options.options.size() == 1);
+    check_option(options.options[0], "threshold", "3.140000");
   }
 }

@@ -47,7 +47,7 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
   catch (const toml::parse_error &err)
   {
     throw std::runtime_error(
-      fmt::format("Config: error parsing TOML file: {}", err.what()));
+      fmt::format("config: error parsing TOML file: {}", err.what()));
   }
 
   // Get all the long option names and use those as allowed options.
@@ -78,6 +78,17 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
     if (tbl.contains(key_name))
     {
       auto value_node = tbl.get(key_name);
+
+      auto add_option = [&](const std::string &key, const std::string &val,
+                            bool quote = false) {
+        if (quote)
+          log_status("[CONFIG] loaded {} = \"{}\"", key, val);
+        else
+          log_status("[CONFIG] loaded {} = {}", key, val);
+        result.options.push_back(boost::program_options::option(
+          key, std::vector<std::string>(1, val)));
+      };
+
       switch (value_node->type())
       {
       case toml::node_type::string:
@@ -91,30 +102,19 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
             key_name,
             key_name));
 
-        const auto value = value_node->as_string()->get();
-        log_status("[CONFIG] loaded {} = \"{}\"", key_name, value);
-        const auto option = boost::program_options::option(
-          key_name, std::vector<std::string>(1, value));
-        result.options.push_back(option);
+        add_option(key_name, value_node->as_string()->get(), true);
         break;
       }
       case toml::node_type::integer:
       {
-        const auto value = std::to_string(value_node->as_integer()->get());
-        log_status("[CONFIG] loaded {} = {}", key_name, value);
-        const auto option = boost::program_options::option(
-          key_name, std::vector<std::string>(1, value));
-        result.options.push_back(option);
+        add_option(key_name, std::to_string(value_node->as_integer()->get()));
         break;
       }
       case toml::node_type::floating_point:
       {
-        const auto value =
-          std::to_string(value_node->as_floating_point()->get());
-        log_status("[CONFIG] loaded {} = {}", key_name, value);
-        const auto option = boost::program_options::option(
-          key_name, std::vector<std::string>(1, value));
-        result.options.push_back(option);
+        add_option(
+          key_name,
+          std::to_string(value_node->as_floating_point()->get()));
         break;
       }
       case toml::node_type::boolean:
@@ -127,10 +127,8 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
         // Also they are added as blank strings!
         if (value)
         {
-          const auto option = boost::program_options::option(
-            key_name, std::vector<std::string>(1, ""));
-
-          result.options.push_back(option);
+          result.options.push_back(boost::program_options::option(
+            key_name, std::vector<std::string>(1, "")));
         }
         break;
       }
@@ -145,7 +143,6 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
           "config: invalid key type: {}: {}",
           key_name,
           toml_type_to_string(*value_node)));
-        break;
       };
     }
   }
