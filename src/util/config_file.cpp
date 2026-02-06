@@ -5,6 +5,7 @@
 #include <string>
 #include <set>
 #include <fmt/core.h>
+#include <util/message.h>
 
 #include "lib/toml.hpp"
 
@@ -50,7 +51,9 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
   }
 
   // Get all the long option names and use those as allowed options.
+  // Also track which options are boolean flags (zero-token options).
   std::set<std::string> allowed_options;
+  std::set<std::string> bool_flag_options;
   const std::vector<
     boost::shared_ptr<boost::program_options::option_description>> &options =
     desc.options();
@@ -64,6 +67,8 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
         "configuration files"));
 
     allowed_options.insert(d.long_name());
+    if (d.semantic()->max_tokens() == 0)
+      bool_flag_options.insert(d.long_name());
   }
 
   // Parser return char strings
@@ -77,8 +82,17 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       {
       case toml::node_type::string:
       {
+        if (bool_flag_options.count(key_name))
+          throw std::runtime_error(fmt::format(
+            "config: key '{}' is a boolean flag but got string value \"{}\""
+            " (use {} = true instead of {} = \"true\")",
+            key_name,
+            value_node->as_string()->get(),
+            key_name,
+            key_name));
+
         const auto value = value_node->as_string()->get();
-        // For some reason takes it in as an array of values.
+        log_status("[CONFIG] loaded {} = \"{}\"", key_name, value);
         const auto option = boost::program_options::option(
           key_name, std::vector<std::string>(1, value));
         result.options.push_back(option);
@@ -87,7 +101,7 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       case toml::node_type::integer:
       {
         const auto value = std::to_string(value_node->as_integer()->get());
-        // For some reason takes it in as an array of values.
+        log_status("[CONFIG] loaded {} = {}", key_name, value);
         const auto option = boost::program_options::option(
           key_name, std::vector<std::string>(1, value));
         result.options.push_back(option);
@@ -97,7 +111,7 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       {
         const auto value =
           std::to_string(value_node->as_floating_point()->get());
-        // For some reason takes it in as an array of values.
+        log_status("[CONFIG] loaded {} = {}", key_name, value);
         const auto option = boost::program_options::option(
           key_name, std::vector<std::string>(1, value));
         result.options.push_back(option);
@@ -106,6 +120,8 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       case toml::node_type::boolean:
       {
         const auto value = value_node->as_boolean()->get();
+        log_status(
+          "[CONFIG] loaded {} = {}", key_name, value ? "true" : "false");
         // Boolean flags are handled in this codebase as flags, so only add if
         // true. For context: cmdlinet::isset
         // Also they are added as blank strings!
