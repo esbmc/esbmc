@@ -1,0 +1,5 @@
+CORE
+../linking-common/main_uninit.c
+-DEXPECTED_VALUE=0
+
+^VERIFICATION SUCCESSFUL$

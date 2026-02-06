@@ -1232,8 +1232,7 @@ Being a variable means that malloc'd items of data can be treated like any other
 piece of data in ESBMC. The complexity occurs when we have to perform assertions
 and checks to see whether or not pointers have been freed or point in bounds.
 A series of arrays of data are used to model that information. These are
-\url{__ESBMC_alloc}, \url{__ESBMC_deallocated},
-\url{__ESBMC_is_dynamic} and \url{__ESBMC_alloc_size}.
+\url{__ESBMC_alloc}, \url{__ESBMC_is_dynamic} and \url{__ESBMC_alloc_size}.
 The index of the array is the pointer object ID number, see the section on
 SMT encoding. Here, the boolean arrays \url{alloc} and \url{deallocated}
 store whether or not the pointer is valid and has been deallocated,
