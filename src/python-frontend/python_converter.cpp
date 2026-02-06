@@ -6835,36 +6835,17 @@ static void add_global_static_variable(
   assert(added_symbol);
 }
 
-void python_converter::load_c_intrisics(code_blockt &block)
+void python_converter::load_c_intrisics(code_blockt &)
 {
   // Add symbols required by the C models
-
-  add_global_static_variable(
-    symbol_table_, int_type(), "__ESBMC_rounding_mode");
+  // __ESBMC_rounding_mode is pulled in indirectly via fesetround in cprover_library.cpp
 
   auto type1 = array_typet(bool_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type1, "__ESBMC_alloc");
-  add_global_static_variable(symbol_table_, type1, "__ESBMC_deallocated");
   add_global_static_variable(symbol_table_, type1, "__ESBMC_is_dynamic");
 
   auto type2 = array_typet(size_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
-
-  // Initialize intrinsic variables to match C frontend behavior
-  locationt location;
-  location.set_file("esbmc_intrinsics.h");
-
-  // ASSIGN __ESBMC_rounding_mode = 0;
-  symbol_exprt rounding_symbol("c:@__ESBMC_rounding_mode", int_type());
-  code_assignt rounding_assign(rounding_symbol, gen_zero(int_type()));
-  rounding_assign.location() = location;
-  block.copy_to_operands(rounding_assign);
-
-  // TODO: Consider initializing other intrinsic variables if needed:
-  // - __ESBMC_alloc
-  // - __ESBMC_deallocated
-  // - __ESBMC_is_dynamic
-  // - __ESBMC_alloc_size
 }
 
 ///  Only addresses __name__; other Python built-ins such as

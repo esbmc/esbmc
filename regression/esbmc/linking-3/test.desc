@@ -1,0 +1,4 @@
+CORE
+../linking-common/main_uninit_extern.c
+-DEXPECTED_VALUE=-1
+^VERIFICATION FAILED$
