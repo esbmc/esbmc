@@ -5,11 +5,11 @@ weight: 3
 draft: false
 ---
 
-This page describes the verification constructs that ESBMC supports. These can be
+This page describes the verification constructs supported by ESBMC. These can be
 used in harness files to aid with the verification of ESBMC.
 
 {{< callout type="info" >}}
-ESBMC is compatible with the SV-COMP constructs as well. They can be used
+ESBMC is also compatible with the SV-COMP constructs. They can be used
 instead of these constructs. However, the ESBMC constructs are more powerful.
 It is recommended to use the ESBMC constructs if you're planning to verify your
 code with only ESBMC.
@@ -48,7 +48,7 @@ int main() {
 ```
 
 `__ESBMC_assume(int)` can be used to narrow down the possible values of `x`.
-In this case the verification will succeed because it narrows the possible
+In this case, the verification will succeed because it narrows the possible
 values of `x` to be less than 5.
 
 ```c
@@ -75,11 +75,11 @@ following constructs are made available.
 
 Unroll can be used to set the loop unwind bound for a loop. This is equivalent
 to using `--unwindset id:bound` where `id` is the loop ID and `bound` is `N`.
-This inlining however, allows us to specify the paramter in a more stable manner
+This inlining, however, allows us to specify the parameter in a more stable manner
 as the `id` won't shift as the code changes. It also frees us from needing to
 specify the loop bound when invoking ESBMC.
 
-`#pragma unroll [N]` sets the next loop to be unwinded `N` times. In the
+`#pragma unroll [N]` sets the next loop to be unwound `N` times. In the
 following example, the loop will be unwound 80 times max.
 
 ```c
@@ -101,7 +101,7 @@ the cases where `--unwind` is set. In this example, the loop will unroll fully
 regardless of the global unwind bound set.
 
 {{< callout type="warning" >}}
-Be careful that the loop you use this construct to terminates, otherwise ESBMC
+Be careful that the loop you use this construct to terminate, otherwise ESBMC
 will never stop verifying it.
 {{< /callout >}}
 
@@ -118,7 +118,7 @@ int main() {
 }
 ```
 
-`N` can also specified as a `#define` macro, however, if a value isn't found, it
+`N` can also be specified as a `#define` macro; however, if a value isn't found, it
 will throw a parsing error.
 
 ```c
