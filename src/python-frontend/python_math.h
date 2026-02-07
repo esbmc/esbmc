@@ -172,6 +172,46 @@ public:
    */
   exprt handle_sqrt(exprt operand, const nlohmann::json &element);
 
+    /**
+   * @brief Handle sine function (math.sin)
+   *
+   * Implements Python's math.sin() function by creating a call to C's sin().
+   * Always returns a float (double) result representing the sine of the angle
+   * in radians.
+   *
+   * @param operand The angle in radians (promoted to float if needed)
+   * @param element JSON AST node for location information
+   * @return Function call expression to sin()
+   * @throws std::runtime_error if sin symbol not found in symbol table
+   *
+   * Examples:
+   *   math.sin(0) -> 0.0
+   *   math.sin(math.pi/2) -> 1.0
+   *   math.sin(math.pi) -> 0.0 (approximately)
+   *   math.sin(-math.pi/2) -> -1.0
+   */
+  exprt handle_sin(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle cosine function (math.cos)
+   *
+   * Implements Python's math.cos() function by creating a call to C's cos().
+   * Always returns a float (double) result representing the cosine of the angle
+   * in radians.
+   *
+   * @param operand The angle in radians (promoted to float if needed)
+   * @param element JSON AST node for location information
+   * @return Function call expression to cos()
+   * @throws std::runtime_error if cos symbol not found in symbol table
+   *
+   * Examples:
+   *   math.cos(0) -> 1.0
+   *   math.cos(math.pi/2) -> 0.0 (approximately)
+   *   math.cos(math.pi) -> -1.0
+   *   math.cos(2*math.pi) -> 1.0
+   */
+  exprt handle_cos(exprt operand, const nlohmann::json &element);
+
   /**
    * @brief Handle divmod() built-in function
    * 
