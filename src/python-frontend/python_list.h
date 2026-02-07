@@ -149,6 +149,20 @@ public:
     const std::string &list_id,
     const std::string &func_name);
 
+  /**
+   * @brief Create a list from a range() call
+   * @param converter The python converter instance
+   * @param range_args The arguments to range() (1-3 arguments: stop, or start+stop, or start+stop+step)
+   * @param element The AST node for location information
+   * @return Expression representing the list [start, start+step, ..., stop-1]
+   * @throws std::runtime_error if range parameters are invalid or too large
+   */
+
+  static exprt build_list_from_range(
+    python_converter &converter,
+    const nlohmann::json &range_args,
+    const nlohmann::json &element);
+
 private:
   friend class python_dict_handler;
 

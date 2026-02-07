@@ -2488,3 +2488,100 @@ typet python_list::check_homogeneous_list_types(
 
   return elem_type;
 }
+
+exprt python_list::build_list_from_range(
+  python_converter &converter,
+  const nlohmann::json &range_args,
+  const nlohmann::json &element)
+{
+  // Validate argument count
+  if (range_args.empty() || range_args.size() > 3)
+    throw std::runtime_error("range() takes 1 to 3 arguments");
+
+  // Extract constant integer or return nullptr
+  auto extract_constant = [&](const nlohmann::json &arg) -> std::optional<long long> {
+    exprt expr = converter.get_expr(arg);
+    if (expr.is_constant())
+      return binary2integer(expr.value().as_string(), expr.type().is_signedbv()).to_int64();
+    return std::nullopt;
+  };
+
+  // Extract all arguments
+  std::optional<long long> arg0 = extract_constant(range_args[0]);
+  std::optional<long long> arg1 = range_args.size() > 1 ? extract_constant(range_args[1]) : std::nullopt;
+  std::optional<long long> arg2 = range_args.size() > 2 ? extract_constant(range_args[2]) : std::nullopt;
+
+  // If any argument is non-constant, return empty list
+  if (!arg0.has_value() ||
+      (range_args.size() > 1 && !arg1.has_value()) ||
+      (range_args.size() > 2 && !arg2.has_value()))
+  {
+    nlohmann::json empty_list_node;
+    empty_list_node["_type"] = "List";
+    empty_list_node["elts"] = nlohmann::json::array();
+    converter.copy_location_fields_from_decl(element, empty_list_node);
+    python_list list(converter, empty_list_node);
+    return list.get();
+  }
+
+  // Determine start, stop, step based on argument count
+  long long start, stop, step;
+  if (range_args.size() == 1)
+  {
+    start = 0;
+    stop = arg0.value();
+    step = 1;
+  }
+  else if (range_args.size() == 2)
+  {
+    start = arg0.value();
+    stop = arg1.value();
+    step = 1;
+  }
+  else // size == 3
+  {
+    start = arg0.value();
+    stop = arg1.value();
+    step = arg2.value();
+  }
+
+  // Validate step
+  if (step == 0)
+    throw std::runtime_error("range() step argument must not be zero");
+
+  // Calculate range size
+  long long range_size = 0;
+  if (step > 0)
+    range_size = std::max(0LL, (stop - start + step - 1) / step);
+  else
+    range_size = std::max(0LL, (stop - start + step + 1) / step);
+
+  // Limit range expansion to prevent excessive memory usage
+  const long long MAX_RANGE_SIZE = 10000;
+  if (range_size > MAX_RANGE_SIZE)
+  {
+    throw std::runtime_error(
+      "range() size too large for expansion: " +
+      std::to_string(range_size) + " elements (max: " +
+      std::to_string(MAX_RANGE_SIZE) + ")");
+  }
+
+  // Build the list of elements
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+
+  // Generate list elements
+  for (long long i = start; (step > 0) ? (i < stop) : (i > stop); i += step)
+  {
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = i;
+    converter.copy_location_fields_from_decl(element, elem);
+    list_node["elts"].push_back(elem);
+  }
+
+  converter.copy_location_fields_from_decl(element, list_node);
+  python_list list(converter, list_node);
+  return list.get();
+}
