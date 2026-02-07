@@ -1084,3 +1084,33 @@ __ESBMC_HIDE:;
   buffer[pos] = '\0';
   return buffer;
 }
+
+// Python string join - combines a list of strings with a separator
+char *__python_str_join(const PyListObject *list, const char *sep)
+{
+__ESBMC_HIDE:;
+  if (!list)
+    return (char *)0;
+
+  if (!sep)
+    sep = "";
+
+  // Start with empty string buffer
+  char *result = __python_str_concat("", "");
+
+  for (size_t i = 0; i < list->size; ++i)
+  {
+    const PyObject *item = &list->items[i];
+    const char *part = "";
+
+    if (item && item->value)
+      part = (const char *)item->value;
+
+    if (i > 0)
+      result = __python_str_concat(result, sep);
+
+    result = __python_str_concat(result, part);
+  }
+
+  return result;
+}
