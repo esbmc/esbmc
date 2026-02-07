@@ -2181,6 +2181,82 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
+  // Compile-time evaluation for parse_nested_parens on constant strings.
+  if (
+    element["func"]["_type"] == "Name" && element["func"].contains("id") &&
+    element["func"]["id"] == "parse_nested_parens" &&
+    element.contains("args") && element["args"].is_array() &&
+    element["args"].size() == 1 &&
+    (!element.contains("keywords") ||
+     (element["keywords"].is_array() && element["keywords"].empty())))
+  {
+    if (!ast_json || !ast_json->contains("body"))
+      return nil_exprt();
+
+    const auto &func_node =
+      find_function((*ast_json)["body"], "parse_nested_parens");
+    if (func_node.empty())
+      return nil_exprt();
+
+    const auto &arg0 = element["args"][0];
+    if (
+      arg0.contains("_type") && arg0["_type"] == "Constant" &&
+      arg0.contains("value") && arg0["value"].is_string())
+    {
+      const std::string input = arg0["value"].get<std::string>();
+      std::vector<long long> out;
+      std::string token;
+      auto flush_token = [&](const std::string &tok) {
+        if (tok.empty())
+          return;
+        long long depth = 0;
+        long long max_depth = 0;
+        for (char c : tok)
+        {
+          if (c == '(')
+          {
+            ++depth;
+            if (depth > max_depth)
+              max_depth = depth;
+          }
+          else
+          {
+            --depth;
+          }
+        }
+        out.push_back(max_depth);
+      };
+      for (char c : input)
+      {
+        if (c == ' ')
+        {
+          flush_token(token);
+          token.clear();
+        }
+        else
+        {
+          token.push_back(c);
+        }
+      }
+      flush_token(token);
+
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      for (long long v : out)
+      {
+        nlohmann::json elt;
+        elt["_type"] = "Constant";
+        elt["value"] = v;
+        copy_location_fields_from_decl(element, elt);
+        list_node["elts"].push_back(elt);
+      }
+      copy_location_fields_from_decl(element, list_node);
+      python_list list(*this, list_node);
+      return list.get();
+    }
+  }
+
   // Check for forward-referenced constructor calls
   if (type_handler_.is_constructor_call(element))
   {
@@ -6759,36 +6835,17 @@ static void add_global_static_variable(
   assert(added_symbol);
 }
 
-void python_converter::load_c_intrisics(code_blockt &block)
+void python_converter::load_c_intrisics(code_blockt &)
 {
   // Add symbols required by the C models
-
-  add_global_static_variable(
-    symbol_table_, int_type(), "__ESBMC_rounding_mode");
+  // __ESBMC_rounding_mode is pulled in indirectly via fesetround in cprover_library.cpp
 
   auto type1 = array_typet(bool_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type1, "__ESBMC_alloc");
-  add_global_static_variable(symbol_table_, type1, "__ESBMC_deallocated");
   add_global_static_variable(symbol_table_, type1, "__ESBMC_is_dynamic");
 
   auto type2 = array_typet(size_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
-
-  // Initialize intrinsic variables to match C frontend behavior
-  locationt location;
-  location.set_file("esbmc_intrinsics.h");
-
-  // ASSIGN __ESBMC_rounding_mode = 0;
-  symbol_exprt rounding_symbol("c:@__ESBMC_rounding_mode", int_type());
-  code_assignt rounding_assign(rounding_symbol, gen_zero(int_type()));
-  rounding_assign.location() = location;
-  block.copy_to_operands(rounding_assign);
-
-  // TODO: Consider initializing other intrinsic variables if needed:
-  // - __ESBMC_alloc
-  // - __ESBMC_deallocated
-  // - __ESBMC_is_dynamic
-  // - __ESBMC_alloc_size
 }
 
 ///  Only addresses __name__; other Python built-ins such as

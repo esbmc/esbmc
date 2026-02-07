@@ -1033,6 +1033,28 @@ expr2tc member2t::do_simplify() const
     // If no match is found, return an empty expression
     return expr2tc();
   }
+  // Handle bitcast expressions
+  else if (is_bitcast2t(source_value))
+  {
+    const bitcast2t &bc = to_bitcast2t(source_value);
+    // If bitcast wraps byte_update, try to extract from the original before byte_update
+    if (is_byte_update2t(bc.from))
+    {
+      const byte_update2t &bu = to_byte_update2t(bc.from);
+      // If bu.source_value is also a bitcast, recurse through it
+      if (is_bitcast2t(bu.source_value))
+      {
+        const bitcast2t &inner_bc = to_bitcast2t(bu.source_value);
+        if (is_struct_type(inner_bc.from->type))
+        {
+          expr2tc member_of_original = member2tc(type, inner_bc.from, member);
+          expr2tc simplified = member_of_original->simplify();
+          if (!is_nil_expr(simplified))
+            return simplified;
+        }
+      }
+    }
+  }
 
   return expr2tc();
 }
