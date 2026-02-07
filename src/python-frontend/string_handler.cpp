@@ -3026,35 +3026,12 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list argument (the iterable to join)
   const nlohmann::json &list_arg = call_json["args"][0];
 
-  // Currently only support Name references (e.g., variable names)
-  // TODO: Support direct List literals such as " ".join(["a", "b"])
+  // Constant-fold only for direct List literals of constant strings.
   if (
-    list_arg.contains("_type") && list_arg["_type"] == "Name" &&
-    list_arg.contains("id"))
+    list_arg.contains("_type") && list_arg["_type"] == "List" &&
+    list_arg.contains("elts"))
   {
-    std::string var_name = list_arg["id"].get<std::string>();
-
-    // Look up the variable in the AST to get its initialization value
-    nlohmann::json var_decl = json_utils::find_var_decl(
-      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
-
-    if (var_decl.empty())
-      throw std::runtime_error(
-        "NameError: name '" + var_name + "' is not defined");
-
-    // Ensure the variable is a list with elements array
-    if (!var_decl.contains("value"))
-      throw std::runtime_error("join() requires a list");
-
-    const nlohmann::json &list_value = var_decl["value"];
-
-    if (
-      !list_value.contains("_type") || list_value["_type"] != "List" ||
-      !list_value.contains("elts"))
-      throw std::runtime_error("join() requires a list");
-
-    // Get the list elements from the AST
-    const auto &elements = list_value["elts"];
+    const auto &elements = list_arg["elts"];
 
     // Edge case: empty list returns empty string
     if (elements.empty())
@@ -3107,6 +3084,55 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 
     // Build final null-terminated string from all collected characters
     return string_builder_->build_null_terminated_string(all_chars);
+  }
+
+  // Runtime join for list variables (e.g., "".join(list_var))
+  if (
+    list_arg.contains("_type") && list_arg["_type"] == "Name" &&
+    list_arg.contains("id"))
+  {
+    const std::string func_name = "c:@F@__python_str_join";
+    const symbolt *func_symbol = symbol_table_.find_symbol(func_name);
+
+    if (!func_symbol)
+    {
+      // Create function type: char* __python_str_join(PyListObject* list, const char* sep)
+      code_typet func_type;
+      func_type.return_type() = pointer_typet(char_type());
+
+      code_typet::argumentt list_arg_type;
+      list_arg_type.type() = type_handler_.get_list_type();
+      func_type.arguments().push_back(list_arg_type);
+
+      code_typet::argumentt sep_arg_type;
+      sep_arg_type.type() = pointer_typet(char_type());
+      func_type.arguments().push_back(sep_arg_type);
+
+      symbolt new_symbol;
+      new_symbol.name = func_name;
+      new_symbol.id = func_name;
+      new_symbol.type = func_type;
+      new_symbol.mode = "C";
+      new_symbol.module = "python";
+      new_symbol.location = converter_.get_location_from_decl(call_json);
+      new_symbol.is_extern = true;
+
+      converter_.add_symbol(new_symbol);
+      func_symbol = symbol_table_.find_symbol(func_name);
+    }
+
+    exprt list_expr = converter_.get_expr(list_arg);
+    exprt sep_expr = separator;
+    if (sep_expr.type().is_array())
+      sep_expr = get_array_base_address(sep_expr);
+
+    side_effect_expr_function_callt join_call;
+    join_call.function() = symbol_expr(*func_symbol);
+    join_call.arguments().push_back(list_expr);
+    join_call.arguments().push_back(sep_expr);
+    join_call.type() = pointer_typet(char_type());
+    join_call.location() = converter_.get_location_from_decl(call_json);
+    return join_call;
   }
 
   throw std::runtime_error("join() argument must be a list of strings");
