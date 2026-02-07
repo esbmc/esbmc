@@ -58,6 +58,16 @@
 class code_contractst
 {
 public:
+  // ========== __ESBMC_is_fresh support for ensures ==========
+
+  /// \brief Structure to store is_fresh mapping information
+  struct is_fresh_mapping_t
+  {
+    irep_idt
+      temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
+    expr2tc ptr_expr; ///< Pointer expression (dereferenced from &ptr)
+  };
+
   code_contractst(
     goto_functionst &goto_functions,
     contextt &context,
@@ -114,13 +124,15 @@ private:
   /// \param ensures_clause Ensures expression
   /// \param original_func_id ID of the renamed original function
   /// \param original_body Original function body (before renaming)
+  /// \param is_fresh_mappings Mappings for is_fresh temp variables in ensures
   /// \return Generated wrapper function body
   goto_programt generate_checking_wrapper(
     const symbolt &original_func,
     const expr2tc &requires_clause,
     const expr2tc &ensures_clause,
     const irep_idt &original_func_id,
-    const goto_programt &original_body);
+    const goto_programt &original_body,
+    const std::vector<is_fresh_mapping_t> &is_fresh_mappings);
 
   /// \brief Generate replacement code at function call site
   /// \param contract_symbol Contract symbol
@@ -194,6 +206,22 @@ private:
   expr2tc replace_old_in_expr(
     const expr2tc &expr,
     const std::vector<old_snapshot_t> &snapshots) const;
+
+  // ========== __ESBMC_is_fresh support for ensures ==========
+
+  /// \brief Extract is_fresh mappings from function body
+  /// \param function_body Function goto program
+  /// \return Vector of is_fresh mappings (temp var name -> pointer expr)
+  std::vector<is_fresh_mapping_t>
+  extract_is_fresh_mappings_from_body(const goto_programt &function_body) const;
+
+  /// \brief Replace is_fresh temporary variables in ensures with verification expressions
+  /// \param expr Expression containing is_fresh temp variables
+  /// \param mappings Vector of is_fresh mappings
+  /// \return Expression with is_fresh temp variables replaced by verification expressions
+  expr2tc replace_is_fresh_in_ensures_expr(
+    const expr2tc &expr,
+    const std::vector<is_fresh_mapping_t> &mappings) const;
 
   /// \brief Havoc assigns targets (similar to loop invariant approach)
   /// \param assigns_clause Assigns clause expression
