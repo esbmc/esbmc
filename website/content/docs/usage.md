@@ -119,7 +119,7 @@ Violated property:
   dereference failure: NULL pointer
 ```
 
-In the counterexample shown above, State 1 indicates that memory has been allocated, which is identified by 'dynamic_1_array'. State 2 indicates that the call to the `malloc` function did not succeed, and thus returned NULL, i.e., the memory was not allocated. Note that ESBMC allows the user not to check for malloc/new failure via `--force-malloc-success`. State 3 represents an assignment to pointer b. Lastly, State 6 reports a failure to dereference pointer b.
+In the counterexample shown above, State 1 indicates that memory has been allocated, as indicated by 'dynamic_1_array'. State 2 indicates that the call to the `malloc` function failed and returned NULL, i.e., the memory was not allocated. Note that ESBMC allows the user to skip checking for malloc/new failures via `--force-malloc-success`. State 3 represents an assignment to pointer b. Lastly, State 6 reports a failure to dereference pointer b.
 
 As an illustrative example to show some of the ESBMC features concerning concurrency, consider the following C code:
 
@@ -152,7 +152,7 @@ int main (void) {
 
 Here, we create two threads `id1` and `id1`; both threads will run the same code as implemented in **P**. Note that these two threads communicate via the shared memory `n`, which is protected by a mutex via **pthread_mutex_lock** and **pthread_mutex_unlock**. Note further that the thread `main` contains two joining points via **pthread_join** for `id1` and `id2`.
 
-ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where <i>file.c</i> is the C program to be checked and `--context-bound nr` limits number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
+ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where <i>file.c</i> is the C program to be checked, and `--context-bound nr` limits the number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
 
 ```
 *** Thread interleavings 612 ***
@@ -211,7 +211,7 @@ int main() {
 }
 ```
 
-If we call ESBMC as `esbmc main.c --witness-output main.graphml`, where `main.c` is the C program we want to verify while `main.graphml` stores the counterexample in graphml format, then ESBMC will produce the following output:
+If we call ESBMC as `esbmc main.c --witness-output main.graphml`, where `main.c` is the C program we want to verify, while `main.graphml` stores the counterexample in graphml format, then ESBMC will produce the following output:
 
 ```sh
 esbmc main.c --witness-output main.graphml
@@ -312,7 +312,7 @@ while ( x>0) x−−;
 assert ( x==0);
 ```
 
-Note that the loop in line 2 runs an unknown number of times, depending on the initial non-deterministic value assigned to x in line 1. The assertion in line 3 holds independent of x's initial value. BMC tools typically fail to verify programs that contain such loops. In particular, BMC tools introduce an unwinding assertion at the end of the loop, as illustrated in line 5 of this C code fragment.
+Note that the loop in line 2 runs an unknown number of times, depending on the initial non-deterministic value assigned to x in line 1. The assertion in line 3 holds independently of x's initial value. BMC tools typically fail to verify programs that contain such loops. In particular, BMC tools introduce an unwinding assertion at the end of the loop, as illustrated in line 5 of this C code fragment.
 
 ```c
 unsigned int x=∗;
@@ -323,7 +323,7 @@ assert (!(x>0));
 assert(x==0);
 ```
 
-his unwinding assertion in line 5 causes the BMC tool to fail if _k_ is too small as follows:
+This unwinding assertion in line 5 causes the BMC tool to fail if _k_ is too small, as follows:
 
 ```c
 #include <assert.h>
