@@ -2521,8 +2521,13 @@ exprt python_list::build_list_from_range(
 
   // Extract all arguments
   std::optional<long long> arg0 = extract_constant(range_args[0]);
-  std::optional<long long> arg1 = range_args.size() > 1 ? extract_constant(range_args[1]) : std::nullopt;
-  std::optional<long long> arg2 = range_args.size() > 2 ? extract_constant(range_args[2]) : std::nullopt;
+  std::optional<long long> arg1;
+  std::optional<long long> arg2;
+
+  if (range_args.size() > 1)
+    arg1 = extract_constant(range_args[1]);
+  if (range_args.size() > 2)
+    arg2 = extract_constant(range_args[2]);
 
   // If any argument is non-constant, return empty list
   if (!arg0.has_value() ||
