@@ -28,6 +28,15 @@ jobs:
         name: Developer-Manual
         path: manual.pdf    
 
+  build-ubuntu-python:
+    uses: ./.github/workflows/build-unix.yml
+    name: static llvm-21 DebugOpt (python)
+    with:
+      operating-system: ubuntu-22.04
+      build-flags: '-b DebugOpt -e On'
+      testing: true
+      ctest-regex: 'regression/(python|python-coverage|quixbugs|humaneval|python-intensive|numpy)/'
+
   build-ubuntu:
     uses: ./.github/workflows/build-unix.yml
     name: static llvm-21 DebugOpt
@@ -35,6 +44,7 @@ jobs:
       operating-system: ubuntu-22.04
       build-flags: '-b DebugOpt -e On'
       testing: true
+      ctest-regex: 'regression/'
 
   build-windows:
     uses: ./.github/workflows/build-windows.yml
@@ -150,4 +160,3 @@ jobs:
       run: pip install cmakelint
     - name: Run CMake Lint
       run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs cmakelint || echo "failure"
-
