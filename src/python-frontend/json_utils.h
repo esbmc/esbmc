@@ -180,22 +180,79 @@ get_object_alias(const JsonType &ast, const std::string &obj_name)
 template <typename JsonType>
 const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
-  for (auto &element : block["body"])
-  {
-    // Check for annotated assignment (AnnAssign)
-    if (
-      element["_type"] == "AnnAssign" && element.contains("target") &&
-      element["target"].contains("id") && element["target"]["id"] == var_name)
-      return element;
+  auto find_in_body = [&](const JsonType &body, const auto &self) -> JsonType {
+    for (auto &element : body)
+    {
+      // Check for annotated assignment (AnnAssign)
+      if (
+        element["_type"] == "AnnAssign" && element.contains("target") &&
+        element["target"].contains("id") && element["target"]["id"] == var_name)
+        return element;
 
-    // Check for regular assignment (Assign)
-    if (
-      element["_type"] == "Assign" && element.contains("targets") &&
-      !element["targets"].empty() && element["targets"][0].contains("_type") &&
-      element["targets"][0]["_type"] == "Name" &&
-      element["targets"][0].contains("id") &&
-      element["targets"][0]["id"] == var_name)
-      return element;
+      // Check for regular assignment (Assign)
+      if (
+        element["_type"] == "Assign" && element.contains("targets") &&
+        !element["targets"].empty() &&
+        element["targets"][0].contains("_type") &&
+        element["targets"][0]["_type"] == "Name" &&
+        element["targets"][0].contains("id") &&
+        element["targets"][0]["id"] == var_name)
+        return element;
+
+      // Avoid descending into new scopes
+      if (
+        element.contains("_type") &&
+        (element["_type"] == "FunctionDef" || element["_type"] == "ClassDef" ||
+         element["_type"] == "Lambda"))
+        continue;
+
+      // Recurse into nested blocks
+      for (const auto &key : {"body", "orelse", "finalbody"})
+      {
+        if (element.contains(key) && element[key].is_array())
+        {
+          JsonType nested = self(element[key], self);
+          if (!nested.empty())
+            return nested;
+        }
+      }
+
+      // Try/Except handlers
+      if (element.contains("handlers") && element["handlers"].is_array())
+      {
+        for (auto &handler : element["handlers"])
+        {
+          if (handler.contains("body") && handler["body"].is_array())
+          {
+            JsonType nested = self(handler["body"], self);
+            if (!nested.empty())
+              return nested;
+          }
+        }
+      }
+
+      // Match cases
+      if (element.contains("cases") && element["cases"].is_array())
+      {
+        for (auto &case_node : element["cases"])
+        {
+          if (case_node.contains("body") && case_node["body"].is_array())
+          {
+            JsonType nested = self(case_node["body"], self);
+            if (!nested.empty())
+              return nested;
+          }
+        }
+      }
+    }
+    return JsonType();
+  };
+
+  if (block.contains("body") && block["body"].is_array())
+  {
+    JsonType found = find_in_body(block["body"], find_in_body);
+    if (!found.empty())
+      return found;
   }
 
   if (block.contains("args"))

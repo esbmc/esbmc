@@ -256,6 +256,21 @@ private:
     std::vector<Json> function_calls =
       find_function_calls(func_name, search_context);
 
+    // Determine the call-site context for resolving argument names.
+    // For top-level functions, use global scope (empty context).
+    // For nested functions, use the parent function context.
+    std::string call_site_context;
+    if (parent_func != nullptr)
+    {
+      // Strip the last "@F@" to get the parent function path
+      std::string cur = current_func_name_context_;
+      size_t pos = cur.rfind("@F@");
+      if (pos != std::string::npos)
+        call_site_context = cur.substr(0, pos);
+      else if (parent_func->contains("name"))
+        call_site_context = (*parent_func)["name"].template get<std::string>();
+    }
+
     // For each parameter, try to infer its type from the function calls
     if (
       function_element.contains("args") &&
@@ -295,7 +310,14 @@ private:
 
         // Try to infer type from function calls if available
         if (needs_inference && !function_calls.empty())
+        {
+          // Temporarily switch to call-site context so Name resolution uses
+          // the scope where the call occurs (not the callee scope).
+          std::string saved_ctx = current_func_name_context_;
+          current_func_name_context_ = call_site_context;
           inferred_type = infer_parameter_type_from_calls(i, function_calls);
+          current_func_name_context_ = saved_ctx;
+        }
 
         // Apply inference results
         if (has_partial_annotation)
