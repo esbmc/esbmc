@@ -2498,11 +2498,24 @@ exprt python_list::build_list_from_range(
   if (range_args.empty() || range_args.size() > 3)
     throw std::runtime_error("range() takes 1 to 3 arguments");
 
-  // Extract constant integer or return nullptr
+  // Extract constant integer, handling UnaryOp for negative numbers
   auto extract_constant = [&](const nlohmann::json &arg) -> std::optional<long long> {
     exprt expr = converter.get_expr(arg);
+
     if (expr.is_constant())
       return binary2integer(expr.value().as_string(), expr.type().is_signedbv()).to_int64();
+
+    // Handle UnaryOp (e.g., -1)
+    if (expr.id() == "unary-" && expr.operands().size() == 1)
+    {
+      const exprt &operand = expr.operands()[0];
+      if (operand.is_constant())
+      {
+        long long val = binary2integer(operand.value().as_string(), operand.type().is_signedbv()).to_int64();
+        return -val;
+      }
+    }
+
     return std::nullopt;
   };
 
@@ -2577,6 +2590,7 @@ exprt python_list::build_list_from_range(
     nlohmann::json elem;
     elem["_type"] = "Constant";
     elem["value"] = i;
+    elem["kind"] = nullptr;
     converter.copy_location_fields_from_decl(element, elem);
     list_node["elts"].push_back(elem);
   }
