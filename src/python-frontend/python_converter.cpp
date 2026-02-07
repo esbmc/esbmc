@@ -2197,8 +2197,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     nlohmann::json func_node;
     if (can_fold)
     {
-      func_node =
-        find_function((*ast_json)["body"], "parse_nested_parens");
+      func_node = find_function((*ast_json)["body"], "parse_nested_parens");
       if (func_node.empty())
         can_fold = false;
     }
@@ -2206,8 +2205,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     auto returns_list = [](const nlohmann::json &ret) -> bool {
       if (ret.is_null())
         return false;
-      if (ret.contains("_type") && ret["_type"] == "Subscript" &&
-          ret.contains("value") && ret["value"].contains("id"))
+      if (
+        ret.contains("_type") && ret["_type"] == "Subscript" &&
+        ret.contains("value") && ret["value"].contains("id"))
       {
         const std::string &container = ret["value"]["id"];
         return container == "List" || container == "list";
@@ -2222,8 +2222,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (
       !func_node.empty() &&
-      (!func_node.contains("returns") ||
-       !returns_list(func_node["returns"])))
+      (!func_node.contains("returns") || !returns_list(func_node["returns"])))
       can_fold = false;
 
     const auto &arg0 = element["args"][0];
