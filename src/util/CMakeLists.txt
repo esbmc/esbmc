@@ -37,7 +37,7 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         string_constant.cpp c_types.cpp python_types.cpp ieee_float.cpp c_qualifiers.cpp
         c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp destructor.cpp
         c_expr2string.cpp cpp_expr2string.cpp type2name.cpp
-        message.cpp encoding.cpp expr.cpp irep.cpp type.cpp
+        message.cpp encoding.cpp expr.cpp irep.cpp type.cpp yaml_parser.cpp
         )
 
 # Boost is needed by anything that touches irep2
@@ -48,7 +48,7 @@ target_include_directories(util_esbmc
         lib
         )
 
-target_compile_definitions(util_esbmc PUBLIC BOOST_ALL_NO_LIB)
-target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt string_container ${Boost_LIBRARIES})
+target_compile_definitions(util_esbmc PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
+target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt string_container yaml-cpp::yaml-cpp ${Boost_LIBRARIES})
 
 target_link_libraries(algorithms gotoprograms)
