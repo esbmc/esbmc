@@ -2294,6 +2294,98 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
+  // Compile-time evaluation for separate_paren_groups on constant strings.
+  if (
+    element["func"]["_type"] == "Name" && element["func"].contains("id") &&
+    element["func"]["id"] == "separate_paren_groups" &&
+    element.contains("args") && element["args"].is_array() &&
+    element["args"].size() == 1 &&
+    (!element.contains("keywords") ||
+     (element["keywords"].is_array() && element["keywords"].empty())))
+  {
+    bool can_fold = true;
+    if (!ast_json || !ast_json->contains("body"))
+      can_fold = false;
+
+    nlohmann::json func_node;
+    if (can_fold)
+    {
+      func_node = find_function((*ast_json)["body"], "separate_paren_groups");
+      if (func_node.empty())
+        can_fold = false;
+    }
+
+    auto returns_list = [](const nlohmann::json &ret) -> bool {
+      if (ret.is_null())
+        return false;
+      if (
+        ret.contains("_type") && ret["_type"] == "Subscript" &&
+        ret.contains("value") && ret["value"].contains("id"))
+      {
+        const std::string &container = ret["value"]["id"];
+        return container == "List" || container == "list";
+      }
+      if (ret.contains("id"))
+      {
+        const std::string &name = ret["id"];
+        return name == "List" || name == "list";
+      }
+      return false;
+    };
+
+    if (
+      !func_node.empty() &&
+      (!func_node.contains("returns") || !returns_list(func_node["returns"])))
+      can_fold = false;
+
+    const auto &arg0 = element["args"][0];
+    if (
+      can_fold && arg0.contains("_type") && arg0["_type"] == "Constant" &&
+      arg0.contains("value") && arg0["value"].is_string())
+    {
+      const std::string input = arg0["value"].get<std::string>();
+      std::vector<std::string> groups;
+      std::string current;
+      long long depth = 0;
+
+      for (char c : input)
+      {
+        if (c == ' ')
+          continue;
+        if (c == '(')
+        {
+          ++depth;
+          current.push_back(c);
+        }
+        else if (c == ')')
+        {
+          --depth;
+          current.push_back(c);
+          if (depth == 0)
+          {
+            groups.push_back(current);
+            current.clear();
+          }
+        }
+      }
+
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      for (const auto &g : groups)
+      {
+        nlohmann::json elt;
+        elt["_type"] = "Constant";
+        elt["value"] = g;
+        copy_location_fields_from_decl(element, elt);
+        list_node["elts"].push_back(elt);
+      }
+      copy_location_fields_from_decl(element, list_node);
+      python_list list(*this, list_node);
+      return list.get();
+    }
+  }
+
   // Check for forward-referenced constructor calls
   if (type_handler_.is_constructor_call(element))
   {
