@@ -14,6 +14,10 @@ on:
         description: "Whether to run tests (regression) for this build"
         required: true
         type: boolean
+      ctest-regex:
+        description: "Regex to filter tests (ctest -R)"
+        required: false
+        type: string
 
 jobs:
   build:
@@ -59,5 +63,16 @@ jobs:
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L python
         else
-          ctest -j4 --output-on-failure --progress .
+          if [[ -n "${{ inputs.ctest-regex }}" ]]; then
+            if [[ "${{ inputs.ctest-regex }}" == "regression/" ]]; then
+              # Runs everything except the Python-related tests.
+              ctest -j4 --output-on-failure --progress -E "regression/(python|python-coverage|quixbugs|humaneval|python-intensive|numpy)/"
+            else
+              # Runs only Python-related tests as filtered by regex
+              ctest -j4 --output-on-failure --progress -R "${{ inputs.ctest-regex }}"
+            fi
+          else
+            # No filter provided: run the full test suite.
+            ctest -j4 --output-on-failure --progress .
+          fi
         fi
