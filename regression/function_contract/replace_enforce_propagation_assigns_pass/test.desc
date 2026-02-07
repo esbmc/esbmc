@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract leaf --enforce-contract parent --function parent --no-align-check
+^VERIFICATION SUCCESSFUL$

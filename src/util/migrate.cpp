@@ -573,6 +573,14 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
 
   if (target_level != symbol2t::level2_global)
   {
+    // Check that at_pos and exm_pos are valid before using them
+    if (at_pos == std::string::npos || exm_pos == std::string::npos)
+    {
+      // Invalid symbol identifier - missing required delimiters
+      // Return a level0 symbol as fallback
+      return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
+    }
+
     std::string atstr = thestr.substr(at_pos + 1, exm_pos - at_pos - 1);
     std::string exmstr = thestr.substr(exm_pos + 1, and_pos - exm_pos - 1);
 
@@ -1857,6 +1865,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     {
       // __ESBMC_old() in function contracts
       t = sideeffect2t::old_snapshot;
+      migrate_expr(expr.op0(), new_expr_ref);
+    }
+    else if (expr.statement() == "assigns_target")
+    {
+      // __ESBMC_assigns() in function contracts
+      t = sideeffect2t::assigns_target;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else
@@ -3299,6 +3313,9 @@ exprt migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::old_snapshot:
       theexpr.statement("old_snapshot");
+      break;
+    case sideeffect2t::assigns_target:
+      theexpr.statement("assigns_target");
       break;
     default:
 

@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract "init_node"
+^VERIFICATION SUCCESSFUL$

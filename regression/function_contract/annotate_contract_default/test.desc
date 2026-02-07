@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract modify_value --no-bounds-check --no-div-by-zero-check
+^VERIFICATION SUCCESSFUL$
