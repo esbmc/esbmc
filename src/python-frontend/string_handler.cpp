@@ -571,10 +571,7 @@ exprt string_handler::get_array_base_address(const exprt &arr)
     // Avoid taking the address of a constant array directly, which can
     // produce an invalid pointer constant in migration.
     symbolt &tmp = converter_.create_tmp_symbol(
-      nlohmann::json(),
-      "$str_tmp$",
-      arr.type(),
-      exprt());
+      nlohmann::json(), "$str_tmp$", arr.type(), exprt());
     code_declt decl(symbol_expr(tmp));
     decl.copy_to_operands(arr);
     converter_.add_instruction(decl);
@@ -3156,8 +3153,9 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
         return fold_join(var_decl["value"]["elts"]);
       }
 
-      if (var_decl["value"].contains("elts") &&
-          var_decl["value"]["elts"].is_array())
+      if (
+        var_decl["value"].contains("elts") &&
+        var_decl["value"]["elts"].is_array())
         return emit_type_error("join() requires a list of strings");
     }
   }
