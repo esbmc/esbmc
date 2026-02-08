@@ -138,7 +138,6 @@ public:
   exprt
   extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
 
-public:
   /**
    * @brief Check if all elements in a list have the same type
    * @param list_id The list identifier

@@ -2190,17 +2190,44 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     (!element.contains("keywords") ||
      (element["keywords"].is_array() && element["keywords"].empty())))
   {
+    bool can_fold = true;
     if (!ast_json || !ast_json->contains("body"))
-      return nil_exprt();
+      can_fold = false;
 
-    const auto &func_node =
-      find_function((*ast_json)["body"], "parse_nested_parens");
-    if (func_node.empty())
-      return nil_exprt();
+    nlohmann::json func_node;
+    if (can_fold)
+    {
+      func_node = find_function((*ast_json)["body"], "parse_nested_parens");
+      if (func_node.empty())
+        can_fold = false;
+    }
+
+    auto returns_list = [](const nlohmann::json &ret) -> bool {
+      if (ret.is_null())
+        return false;
+      if (
+        ret.contains("_type") && ret["_type"] == "Subscript" &&
+        ret.contains("value") && ret["value"].contains("id"))
+      {
+        const std::string &container = ret["value"]["id"];
+        return container == "List" || container == "list";
+      }
+      if (ret.contains("id"))
+      {
+        const std::string &name = ret["id"];
+        return name == "List" || name == "list";
+      }
+      return false;
+    };
+
+    if (
+      !func_node.empty() &&
+      (!func_node.contains("returns") || !returns_list(func_node["returns"])))
+      can_fold = false;
 
     const auto &arg0 = element["args"][0];
     if (
-      arg0.contains("_type") && arg0["_type"] == "Constant" &&
+      can_fold && arg0.contains("_type") && arg0["_type"] == "Constant" &&
       arg0.contains("value") && arg0["value"].is_string())
     {
       const std::string input = arg0["value"].get<std::string>();
@@ -5503,11 +5530,19 @@ size_t python_converter::register_function_argument(
   {
     if (!element.contains("annotation") || element["annotation"].is_null())
     {
-      throw std::runtime_error(
-        "All parameters in function \"" + current_func_name_ +
-        "\" must be type annotated");
+      // Allow unannotated parameters in nested functions by defaulting to Any.
+      // Top-level functions still require explicit annotations.
+      if (current_func_name_.find("@F@") != std::string::npos)
+        arg_type = any_type();
+      else
+      {
+        throw std::runtime_error(
+          "All parameters in function \"" + current_func_name_ +
+          "\" must be type annotated");
+      }
     }
-    arg_type = get_type_from_annotation(element["annotation"], element);
+    else
+      arg_type = get_type_from_annotation(element["annotation"], element);
   }
 
   // Arrays are converted to pointers so that the backend receives the same
