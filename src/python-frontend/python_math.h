@@ -172,7 +172,7 @@ public:
    */
   exprt handle_sqrt(exprt operand, const nlohmann::json &element);
 
-    /**
+  /**
    * @brief Handle sine function (math.sin)
    *
    * Implements Python's math.sin() function by creating a call to C's sin().

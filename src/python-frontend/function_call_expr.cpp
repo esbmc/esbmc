@@ -2166,27 +2166,27 @@ function_call_expr::get_dispatch_table()
      "math.sqrt()"},
     // Math module functions (sin, cos)
     {[this]() {
-      const std::string &func_name = function_id_.get_function();
-      bool is_math_module = false;
-      if (call_["func"]["_type"] == "Attribute")
-      {
-        std::string caller = get_object_name();
-        is_math_module = (caller == "math");
-      }
-      return is_math_module && (func_name == "sin" || func_name == "cos");
-    },
-    [this]() {
-      const std::string &func_name = function_id_.get_function();
-      const auto &args = call_["args"];
-      if (args.size() != 1)
-        throw std::runtime_error(func_name + "() expects exactly 1 argument");
-      exprt arg_expr = converter_.get_expr(args[0]);
-      if (func_name == "sin")
-        return converter_.get_math_handler().handle_sin(arg_expr, call_);
-      else // cos
-        return converter_.get_math_handler().handle_cos(arg_expr, call_);
-    },
-    "math.sin/cos()"},
+       const std::string &func_name = function_id_.get_function();
+       bool is_math_module = false;
+       if (call_["func"]["_type"] == "Attribute")
+       {
+         std::string caller = get_object_name();
+         is_math_module = (caller == "math");
+       }
+       return is_math_module && (func_name == "sin" || func_name == "cos");
+     },
+     [this]() {
+       const std::string &func_name = function_id_.get_function();
+       const auto &args = call_["args"];
+       if (args.size() != 1)
+         throw std::runtime_error(func_name + "() expects exactly 1 argument");
+       exprt arg_expr = converter_.get_expr(args[0]);
+       if (func_name == "sin")
+         return converter_.get_math_handler().handle_sin(arg_expr, call_);
+       else // cos
+         return converter_.get_math_handler().handle_cos(arg_expr, call_);
+     },
+     "math.sin/cos()"},
 
     // divmod function
     {[this]() {
