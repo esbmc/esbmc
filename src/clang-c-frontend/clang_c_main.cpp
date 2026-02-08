@@ -194,11 +194,50 @@ bool clang_c_maint::clang_main()
 
       init_code.copy_to_operands(code_assumet(le));
 
-      // assign argv[argc] to NULL
+      // Add a reasonable argc upper bound (256) to prevent unrealistic
+      // counterexamples with extremely large argc values
+      BigInt reasonable_max = 256;
+      exprt argc_upper_bound = from_integer(reasonable_max, argc_symbol.type);
+      exprt le_reasonable("<=", bool_type());
+      le_reasonable.copy_to_operands(symbol_expr(argc_symbol), argc_upper_bound);
+      init_code.copy_to_operands(code_assumet(le_reasonable));
+
+      // Restore dynamic_size assignment for proper argv array bounds checking
+      // This was removed by PR #3486 and caused array bounds check failures
+      exprt dynamic_size("dynamic_size", size_type());
+      dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
+      init_code.copy_to_operands(code_assignt(dynamic_size, mult));
+
+      // Create a shared symbolic char array for argv string storage.
+      // This ensures value-set analysis tracks argv[i] as pointing to
+      // valid memory, preventing false "invalid pointer" errors when
+      // argv[i] is passed to string functions like strncpy.
+      symbolt argv_str_sym;
+      argv_str_sym.name = "argv_str_storage";
+      argv_str_sym.id = "argv_str_storage'";
+      argv_str_sym.type =
+        array_typet(char_type(), from_integer(128, size_type()));
+      argv_str_sym.static_lifetime = true;
+      argv_str_sym.lvalue = true;
+
+      symbolt *argv_str_storage_ptr;
+      context.move(argv_str_sym, argv_str_storage_ptr);
+
+      // Initialize ALL argv elements to &argv_str_storage[0] using array_of.
+      // This ensures every argv[i] points to valid memory by default.
+      index_exprt storage_first_elem(
+        symbol_expr(*argv_str_storage_ptr),
+        gen_zero(index_type()),
+        char_type());
+      exprt storage_addr = gen_address_of(storage_first_elem);
+
+      array_of_exprt argv_init(storage_addr, argv_symbol.type);
+      init_code.copy_to_operands(
+        code_assignt(symbol_expr(argv_symbol), argv_init));
+
+      // Then assign argv[argc] = NULL (C standard requirement)
       constant_exprt null(
         irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
-
-      exprt index_expr("index", argv_symbol.type.subtype());
 
       index_exprt argv_index(
         symbol_expr(argv_symbol),
