@@ -517,3 +517,53 @@ exprt python_math::handle_divmod(
 
   return tuple_expr;
 }
+
+exprt python_math::handle_sin(exprt operand, const nlohmann::json &element)
+{
+  // Find the sin function symbol from C math library
+  symbolt *sin_symbol = symbol_table.find_symbol("c:@F@sin");
+  if (!sin_symbol)
+    throw std::runtime_error("sin function not found in symbol table");
+
+  // Promote operand to double if needed (sin always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt sin_call;
+  sin_call.function() = symbol_expr(*sin_symbol);
+  sin_call.arguments() = {double_operand};
+  sin_call.type() = double_type();
+  sin_call.location() = converter.get_location_from_decl(element);
+
+  return sin_call;
+}
+
+exprt python_math::handle_cos(exprt operand, const nlohmann::json &element)
+{
+  // Find the cos function symbol from C math library
+  symbolt *cos_symbol = symbol_table.find_symbol("c:@F@cos");
+  if (!cos_symbol)
+    throw std::runtime_error("cos function not found in symbol table");
+
+  // Promote operand to double if needed (cos always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt cos_call;
+  cos_call.function() = symbol_expr(*cos_symbol);
+  cos_call.arguments() = {double_operand};
+  cos_call.type() = double_type();
+  cos_call.location() = converter.get_location_from_decl(element);
+
+  return cos_call;
+}
