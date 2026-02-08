@@ -119,7 +119,7 @@ Violated property:
   dereference failure: NULL pointer
 ```
 
-In the counterexample shown above, State 1 indicates that memory has been allocated, as indicated by 'dynamic_1_array'. State 2 indicates that the call to the `malloc` function failed and returned NULL, i.e., the memory was not allocated. Note that ESBMC allows the user to skip checking for malloc/new failures via `--force-malloc-success`. State 3 represents an assignment to pointer b. Lastly, State 6 reports a failure to dereference pointer b.
+In the counterexample shown above, State 1 indicates that memory has been allocated, as indicated by 'dynamic_1_array'. State 2 indicates that the `malloc` call failed and returned NULL, indicating that the memory was not allocated. Note that ESBMC allows the user to skip checking for malloc/new failures via `--force-malloc-success`. State 3 represents an assignment to pointer b. Lastly, State 6 reports a failure to dereference pointer b.
 
 As an illustrative example to show some of the ESBMC features concerning concurrency, consider the following C code:
 
