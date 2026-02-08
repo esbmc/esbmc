@@ -85,3 +85,48 @@ def ceil(x: float) -> int:
             return int_x
         else:
             return int_x + 1
+
+
+def sin(x: float) -> float:
+    """
+    Calculate sine of x (in radians)
+
+    Args:
+        x: Input angle in radians
+
+    Returns:
+        Sine of x
+    """
+    return __ESBMC_sin(x)
+
+
+def cos(x: float) -> float:
+    """
+    Calculate cosine of x (in radians)
+
+    Args:
+        x: Input angle in radians
+
+    Returns:
+        Cosine of x
+    """
+    return __ESBMC_cos(x)
+
+
+def sqrt(x: float) -> float:
+    """
+    Calculate square root of x
+
+    Args:
+        x: Non-negative number
+
+    Returns:
+        Square root of x
+
+    Raises:
+        ValueError: If x is negative (math domain error)
+    """
+    # Domain check: sqrt of negative numbers is undefined in real numbers
+    assert x >= 0, "math domain error: sqrt of negative number"
+
+    return __ESBMC_sqrt(x)
