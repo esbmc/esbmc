@@ -2149,7 +2149,31 @@ function_call_expr::get_dispatch_table()
       else if (func_name == "exp" || func_name == "__ESBMC_exp")
         return converter_.get_math_handler().handle_exp(arg_expr, call_);
       else if (func_name == "sqrt" || func_name == "__ESBMC_sqrt")
-        return converter_.get_math_handler().handle_sqrt(arg_expr, call_);
+      {
+        // Domain check for sqrt
+        exprt double_operand = arg_expr;
+        if (!arg_expr.type().is_floatbv())
+        {
+          double_operand = exprt("typecast", type_handler_.get_typet("float", 0));
+          double_operand.copy_to_operands(arg_expr);
+        }
+
+        exprt zero = gen_zero(type_handler_.get_typet("float", 0));
+        exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
+        domain_check.copy_to_operands(double_operand, zero);
+
+        exprt raise = gen_exception_raise("ValueError", "math domain error");
+        locationt loc = converter_.get_location_from_decl(call_);
+        raise.location() = loc;
+        raise.location().user_provided(true);
+
+        exprt sqrt_result = converter_.get_math_handler().handle_sqrt(arg_expr, call_);
+
+        if_exprt conditional(domain_check, raise, sqrt_result);
+        conditional.type() = type_handler_.get_typet("float", 0);
+
+        return static_cast<exprt>(conditional);
+      }
       else if (func_name == "log" || func_name == "__ESBMC_log")
         return converter_.get_math_handler().handle_log(arg_expr, call_);
 

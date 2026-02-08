@@ -102,9 +102,6 @@ double log1p(double x) /* ln(x+1) */
 double log(double x)
 {
 __ESBMC_HIDE:;
-  __ESBMC_assert(x > 0.0, "math domain error");
-
-  if (x == 1.0) return 0.0;
   return log2(x) * M_LN2;
 }
 

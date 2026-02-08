@@ -11,7 +11,6 @@
 double sqrt(double n)
 {
 __ESBMC_HIDE:;
-  __ESBMC_assert(n >= 0.0, "math domain error");
   /*We are using n itself as initial approximation
    This can definitely be improved */
   double x = n;
