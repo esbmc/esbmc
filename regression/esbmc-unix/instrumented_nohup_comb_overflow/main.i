@@ -5,6 +5,8 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <time.h>
+
 extern void __assert_fail (const char *__assertion, const char *__file,
       unsigned int __line, const char *__function)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__noreturn__));
@@ -16,9 +18,7 @@ extern void __assert (const char *__assertion, const char *__file, int __line)
 extern unsigned int __VERIFIER_nondet_uint();
 extern void abort(void);
 void reach_error() { ((void) sizeof ((0) ? 1 : 0), __extension__ ({ if (0) ; else __assert_fail ("0", "instrumented_nohup_comb.c", 9, __extension__ __PRETTY_FUNCTION__); })); }
-typedef long ptrdiff_t;
 typedef unsigned long size_t;
-typedef int wchar_t;
 typedef unsigned char __u_char;
 typedef unsigned short __u_short;
 typedef unsigned int __u_int;
@@ -57,11 +57,9 @@ struct __anonstruct___fsid_t_109580352 {
    int __val[2] ;
 };
 typedef struct __anonstruct___fsid_t_109580352 __fsid_t;
-typedef long __clock_t;
 typedef unsigned long __rlim_t;
 typedef unsigned long __rlim64_t;
 typedef unsigned int __id_t;
-typedef long __time_t;
 typedef unsigned int __useconds_t;
 typedef long __suseconds_t;
 typedef long __suseconds64_t;
@@ -78,18 +76,12 @@ typedef unsigned long __fsfilcnt_t;
 typedef unsigned long __fsfilcnt64_t;
 typedef long __fsword_t;
 typedef long __ssize_t;
-typedef long __syscall_slong_t;
 typedef unsigned long __syscall_ulong_t;
 typedef __off64_t __loff_t;
 typedef char *__caddr_t;
 typedef long __intptr_t;
 typedef unsigned int __socklen_t;
 typedef int __sig_atomic_t;
-typedef __time_t time_t;
-struct timespec {
-   __time_t tv_sec ;
-   long tv_nsec ;
-};
 typedef __pid_t pid_t;
 struct sched_param {
    int sched_priority ;
@@ -99,26 +91,8 @@ struct __anonstruct_cpu_set_t_826868708 {
    __cpu_mask __bits[1024UL / (8UL * sizeof(__cpu_mask ))] ;
 };
 typedef struct __anonstruct_cpu_set_t_826868708 cpu_set_t;
-typedef __clock_t clock_t;
-struct tm {
-   int tm_sec ;
-   int tm_min ;
-   int tm_hour ;
-   int tm_mday ;
-   int tm_mon ;
-   int tm_year ;
-   int tm_wday ;
-   int tm_yday ;
-   int tm_isdst ;
-   long tm_gmtoff ;
-   char const *tm_zone ;
-};
 typedef __clockid_t clockid_t;
 typedef __timer_t timer_t;
-struct itimerspec {
-   struct timespec it_interval ;
-   struct timespec it_value ;
-};
 struct sigevent ;
 struct __locale_data ;
 struct __locale_struct {
@@ -692,7 +666,7 @@ struct F_triple {
    dev_t st_dev ;
 };
 struct timeval {
-   __time_t tv_sec ;
+   time_t tv_sec ;
    __suseconds_t tv_usec ;
 };
 struct timezone {
@@ -2423,29 +2397,6 @@ extern int ( __attribute__((__leaf__)) sched_yield)(void) __attribute__((__nothr
 extern int ( __attribute__((__leaf__)) sched_get_priority_max)(int __algorithm ) __attribute__((__nothrow__)) ;
 extern int ( __attribute__((__leaf__)) sched_get_priority_min)(int __algorithm ) __attribute__((__nothrow__)) ;
 extern int ( __attribute__((__leaf__)) sched_rr_get_interval)(__pid_t __pid , struct timespec *__t ) __attribute__((__nothrow__)) ;
-extern clock_t ( __attribute__((__leaf__)) clock)(void) __attribute__((__nothrow__)) ;
-extern time_t ( __attribute__((__leaf__)) time)(time_t *__timer ) __attribute__((__nothrow__)) ;
-extern double ( __attribute__((__leaf__)) difftime)(time_t __time1 , time_t __time0 ) __attribute__((__nothrow__,
-__const__)) ;
-extern time_t ( __attribute__((__leaf__)) mktime)(struct tm *__tp ) __attribute__((__nothrow__)) ;
-extern size_t ( __attribute__((__leaf__)) strftime)(char *__s , size_t __maxsize ,
-                                                    char const *__format , struct tm const *__tp ) __attribute__((__nothrow__)) ;
-extern size_t ( __attribute__((__leaf__)) strftime_l)(char * __restrict __s , size_t __maxsize ,
-                                                      char const * __restrict __format ,
-                                                      struct tm const * __restrict __tp ,
-                                                      locale_t __loc ) __attribute__((__nothrow__)) ;
-extern struct tm *( __attribute__((__leaf__)) gmtime)(time_t const *__timer ) __attribute__((__nothrow__)) ;
-extern struct tm *( __attribute__((__leaf__)) localtime)(time_t const *__timer ) __attribute__((__nothrow__)) ;
-extern struct tm *( __attribute__((__leaf__)) gmtime_r)(time_t const * __restrict __timer ,
-                                                        struct tm * __restrict __tp ) __attribute__((__nothrow__)) ;
-extern struct tm *( __attribute__((__leaf__)) localtime_r)(time_t const * __restrict __timer ,
-                                                           struct tm * __restrict __tp ) __attribute__((__nothrow__)) ;
-extern char *( __attribute__((__leaf__)) asctime)(struct tm const *__tp ) __attribute__((__nothrow__)) ;
-extern char *( __attribute__((__leaf__)) ctime)(time_t const *__timer ) __attribute__((__nothrow__)) ;
-extern char *( __attribute__((__leaf__)) asctime_r)(struct tm const * __restrict __tp ,
-                                                    char * __restrict __buf ) __attribute__((__nothrow__)) ;
-extern char *( __attribute__((__leaf__)) ctime_r)(time_t const * __restrict __timer ,
-                                                  char * __restrict __buf ) __attribute__((__nothrow__)) ;
 extern char *__tzname[2] ;
 extern int __daylight ;
 extern long __timezone ;
@@ -42223,7 +42174,7 @@ static void digits_to_date_time(parser_control *pc , textint text_int )
         }
       }
       {
-      pc->seconds.tv_sec = (__time_t )0;
+      pc->seconds.tv_sec = (time_t )0;
       pc->seconds.tv_nsec = 0L;
       pc->meridian = 2;
       }
@@ -46328,7 +46279,7 @@ _Bool parse_datetime(struct timespec *result , char const *p , struct timespec c
   pc.day = (long )tmp->tm_mday;
   pc.hour = (long )tmp->tm_hour;
   pc.minutes = (long )tmp->tm_min;
-  pc.seconds.tv_sec = (__time_t )tmp->tm_sec;
+  pc.seconds.tv_sec = (time_t )tmp->tm_sec;
   pc.seconds.tv_nsec = Start_ns;
   tm.tm_isdst = (int )tmp->tm_isdst;
   pc.meridian = 2;
@@ -56397,7 +56348,7 @@ int settime(struct timespec const *ts )
     }
   }
   {
-  tv.tv_sec = (__time_t )ts->tv_sec;
+  tv.tv_sec = (time_t )ts->tv_sec;
   tv.tv_usec = (__suseconds_t )(ts->tv_nsec / 1000L);
   tmp___1 = settimeofday((struct timeval const *)(& tv), (struct timezone const *)0);
   }
@@ -63132,7 +63083,7 @@ static int validate_timespec(struct timespec *timespec )
       {
       _L___1:
       {
-      (timespec + 0)->tv_sec = (__time_t )0;
+      (timespec + 0)->tv_sec = (time_t )0;
       result = 1;
       }
       if ((timespec + 0)->tv_nsec == (1L << 30) - 2L) {
@@ -63156,7 +63107,7 @@ static int validate_timespec(struct timespec *timespec )
       {
       _L___2:
       {
-      (timespec + 1)->tv_sec = (__time_t )0;
+      (timespec + 1)->tv_sec = (time_t )0;
       result = 1;
       }
       if ((timespec + 1)->tv_nsec == (1L << 30) - 2L) {

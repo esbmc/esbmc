@@ -6,6 +6,8 @@
 //
 // SPDX-License-Identifier: CC0-1.0
 
+#include <time.h>
+
 typedef long unsigned int size_t;
 typedef __builtin_va_list __gnuc_va_list;
 typedef unsigned char __u_char;
@@ -46,11 +48,9 @@ typedef struct
 {
   int __val[2];
 } __fsid_t;
-typedef long int __clock_t;
 typedef unsigned long int __rlim_t;
 typedef unsigned long int __rlim64_t;
 typedef unsigned int __id_t;
-typedef long int __time_t;
 typedef unsigned int __useconds_t;
 typedef long int __suseconds_t;
 typedef long int __suseconds64_t;
@@ -67,7 +67,6 @@ typedef unsigned long int __fsfilcnt_t;
 typedef unsigned long int __fsfilcnt64_t;
 typedef long int __fsword_t;
 typedef long int __ssize_t;
-typedef long int __syscall_slong_t;
 typedef unsigned long int __syscall_ulong_t;
 typedef __off64_t __loff_t;
 typedef char *__caddr_t;
@@ -415,9 +414,7 @@ typedef __id_t id_t;
 typedef __daddr_t daddr_t;
 typedef __caddr_t caddr_t;
 typedef __key_t key_t;
-typedef __clock_t clock_t;
 typedef __clockid_t clockid_t;
-typedef __time_t time_t;
 typedef __timer_t timer_t;
 typedef unsigned long int ulong;
 typedef unsigned short int ushort;
@@ -460,16 +457,6 @@ typedef struct
   unsigned long int __val[(1024 / (8 * sizeof(unsigned long int)))];
 } __sigset_t;
 typedef __sigset_t sigset_t;
-struct timeval
-{
-  __time_t tv_sec;
-  __suseconds_t tv_usec;
-};
-struct timespec
-{
-  __time_t tv_sec;
-  __syscall_slong_t tv_nsec;
-};
 typedef __suseconds_t suseconds_t;
 typedef long int __fd_mask;
 typedef struct
@@ -865,31 +852,6 @@ extern int getloadavg(double __loadavg[], int __nelem)
   __attribute__((__nothrow__, __leaf__)) __attribute__((__nonnull__(1)));
 
 typedef long int ptrdiff_t;
-typedef struct
-{
-  long long __max_align_ll __attribute__((__aligned__(__alignof__(long long))));
-  long double __max_align_ld
-    __attribute__((__aligned__(__alignof__(long double))));
-} max_align_t;
-struct tm
-{
-  int tm_sec;
-  int tm_min;
-  int tm_hour;
-  int tm_mday;
-  int tm_mon;
-  int tm_year;
-  int tm_wday;
-  int tm_yday;
-  int tm_isdst;
-  long int tm_gmtoff;
-  const char *tm_zone;
-};
-struct itimerspec
-{
-  struct timespec it_interval;
-  struct timespec it_value;
-};
 struct sigevent;
 struct __locale_struct
 {
@@ -902,40 +864,6 @@ struct __locale_struct
 typedef struct __locale_struct *__locale_t;
 typedef __locale_t locale_t;
 
-extern clock_t clock(void) __attribute__((__nothrow__, __leaf__));
-extern time_t time(time_t *__timer) __attribute__((__nothrow__, __leaf__));
-extern double difftime(time_t __time1, time_t __time0)
-  __attribute__((__nothrow__, __leaf__)) __attribute__((__const__));
-extern time_t mktime(struct tm *__tp) __attribute__((__nothrow__, __leaf__));
-extern size_t strftime(
-  char *__restrict __s,
-  size_t __maxsize,
-  const char *__restrict __format,
-  const struct tm *__restrict __tp) __attribute__((__nothrow__, __leaf__));
-extern size_t strftime_l(
-  char *__restrict __s,
-  size_t __maxsize,
-  const char *__restrict __format,
-  const struct tm *__restrict __tp,
-  locale_t __loc) __attribute__((__nothrow__, __leaf__));
-extern struct tm *gmtime(const time_t *__timer)
-  __attribute__((__nothrow__, __leaf__));
-extern struct tm *localtime(const time_t *__timer)
-  __attribute__((__nothrow__, __leaf__));
-extern struct tm *
-gmtime_r(const time_t *__restrict __timer, struct tm *__restrict __tp)
-  __attribute__((__nothrow__, __leaf__));
-extern struct tm *
-localtime_r(const time_t *__restrict __timer, struct tm *__restrict __tp)
-  __attribute__((__nothrow__, __leaf__));
-extern char *asctime(const struct tm *__tp)
-  __attribute__((__nothrow__, __leaf__));
-extern char *ctime(const time_t *__timer)
-  __attribute__((__nothrow__, __leaf__));
-extern char *asctime_r(const struct tm *__restrict __tp, char *__restrict __buf)
-  __attribute__((__nothrow__, __leaf__));
-extern char *ctime_r(const time_t *__restrict __timer, char *__restrict __buf)
-  __attribute__((__nothrow__, __leaf__));
 extern char *__tzname[2];
 extern int __daylight;
 extern long int __timezone;
@@ -1239,7 +1167,7 @@ struct stat
   struct timespec st_atim;
   struct timespec st_mtim;
   struct timespec st_ctim;
-  __syscall_slong_t __glibc_reserved[3];
+  long int __glibc_reserved[3];
 };
 extern int fcntl(int __fd, int __cmd, ...);
 extern int open(const char *__file, int __oflag, ...)
