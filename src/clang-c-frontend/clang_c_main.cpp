@@ -199,7 +199,8 @@ bool clang_c_maint::clang_main()
       BigInt reasonable_max = 256;
       exprt argc_upper_bound = from_integer(reasonable_max, argc_symbol.type);
       exprt le_reasonable("<=", bool_type());
-      le_reasonable.copy_to_operands(symbol_expr(argc_symbol), argc_upper_bound);
+      le_reasonable.copy_to_operands(
+        symbol_expr(argc_symbol), argc_upper_bound);
       init_code.copy_to_operands(code_assumet(le_reasonable));
 
       // Restore dynamic_size assignment for proper argv array bounds checking
