@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 gh-1533.c
 --unwind 1 --no-unwinding-assertions --overflow-check --z3 --no-slice
 ^VERIFICATION FAILED$
