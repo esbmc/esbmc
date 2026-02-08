@@ -564,6 +564,24 @@ exprt string_handler::handle_string_operations(
 
 exprt string_handler::get_array_base_address(const exprt &arr)
 {
+  if (
+    (arr.is_constant() && arr.type().is_array()) ||
+    (arr.id() == "string-constant" && arr.type().is_array()))
+  {
+    // Avoid taking the address of a constant array directly, which can
+    // produce an invalid pointer constant in migration.
+    symbolt &tmp = converter_.create_tmp_symbol(
+      nlohmann::json(),
+      "$str_tmp$",
+      arr.type(),
+      exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.copy_to_operands(arr);
+    converter_.add_instruction(decl);
+    exprt index = index_exprt(symbol_expr(tmp), from_integer(0, index_type()));
+    return address_of_exprt(index);
+  }
+
   exprt index = index_exprt(arr, from_integer(0, index_type()));
   return address_of_exprt(index);
 }
@@ -3026,13 +3044,30 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list argument (the iterable to join)
   const nlohmann::json &list_arg = call_json["args"][0];
 
-  // Constant-fold only for direct List literals of constant strings.
-  if (
-    list_arg.contains("_type") && list_arg["_type"] == "List" &&
-    list_arg.contains("elts"))
-  {
-    const auto &elements = list_arg["elts"];
+  auto can_fold_elements = [](const nlohmann::json &elements) -> bool {
+    if (!elements.is_array())
+      return false;
+    for (const auto &elem : elements)
+    {
+      if (
+        !elem.contains("_type") || elem["_type"] != "Constant" ||
+        !elem.contains("value") || !elem["value"].is_string())
+        return false;
+    }
+    return true;
+  };
 
+  auto emit_type_error = [&](const std::string &msg) -> exprt {
+    locationt location = converter_.get_location_from_decl(call_json);
+    code_assertt assert_code(gen_boolean(false));
+    assert_code.location() = location;
+    assert_code.location().user_provided(true);
+    assert_code.location().comment(msg);
+    converter_.current_block->copy_to_operands(assert_code);
+    return string_builder_->build_string_literal("");
+  };
+
+  auto fold_join = [&](const nlohmann::json &elements) -> exprt {
     // Edge case: empty list returns empty string
     if (elements.empty())
     {
@@ -3084,6 +3119,47 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 
     // Build final null-terminated string from all collected characters
     return string_builder_->build_null_terminated_string(all_chars);
+  };
+
+  // Constant-fold for direct List literals of constant strings.
+  if (list_arg.contains("_type") && list_arg["_type"] == "List")
+  {
+    if (list_arg.contains("elts") && can_fold_elements(list_arg["elts"]))
+    {
+      const auto &elements = list_arg["elts"];
+      return fold_join(elements);
+    }
+
+    if (list_arg.contains("elts") && list_arg["elts"].is_array())
+      return emit_type_error("join() requires a list of strings");
+  }
+
+  // Constant-fold for variables initialized with List literals of constants.
+  if (
+    list_arg.contains("_type") && list_arg["_type"] == "Name" &&
+    list_arg.contains("id"))
+  {
+    std::string var_name = list_arg["id"].get<std::string>();
+
+    nlohmann::json var_decl = json_utils::find_var_decl(
+      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
+
+    if (
+      !var_decl.empty() && var_decl.contains("value") &&
+      var_decl["value"].contains("_type") &&
+      var_decl["value"]["_type"] == "List")
+    {
+      if (
+        var_decl["value"].contains("elts") &&
+        can_fold_elements(var_decl["value"]["elts"]))
+      {
+        return fold_join(var_decl["value"]["elts"]);
+      }
+
+      if (var_decl["value"].contains("elts") &&
+          var_decl["value"]["elts"].is_array())
+        return emit_type_error("join() requires a list of strings");
+    }
   }
 
   // Runtime join for list variables (e.g., "".join(list_var))

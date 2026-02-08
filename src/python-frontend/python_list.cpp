@@ -1502,9 +1502,22 @@ exprt python_list::handle_index_access(
     cond.copy_to_operands(idx, bound);
 
     index_exprt in_bounds(array, idx, char_type());
-    if_exprt result(cond, in_bounds, gen_zero(char_type()));
-    result.type() = char_type();
-    return result;
+    if_exprt ch(cond, in_bounds, gen_zero(char_type()));
+    ch.type() = char_type();
+    return ch;
+  }
+
+  // Handle pointer-based indexing (e.g., str parameters or raw pointers)
+  if (array.type().is_pointer())
+  {
+    exprt idx = pos_expr;
+    if (idx.type() != size_type())
+      idx = typecast_exprt(idx, size_type());
+
+    plus_exprt ptr_plus(array, idx);
+    ptr_plus.type() = array.type();
+    exprt elem = dereference_exprt(ptr_plus, array.type().subtype());
+    return elem;
   }
 
   // Handle static arrays
@@ -2488,7 +2501,6 @@ typet python_list::check_homogeneous_list_types(
 
   return elem_type;
 }
-
 exprt python_list::build_list_from_range(
   python_converter &converter,
   const nlohmann::json &range_args,

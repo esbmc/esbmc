@@ -1839,7 +1839,9 @@ exprt function_call_expr::handle_list_append() const
       const constant_exprt &size_const = to_constant_expr(array_type.size());
       BigInt size_value = binary2integer(size_const.value().c_str(), false);
       if (size_value == 1)
-        value_to_append.type() = gen_pointer_type(char_type());
+        value_to_append =
+          converter_.get_string_handler().get_array_base_address(
+            value_to_append);
     }
   }
 
@@ -2416,7 +2418,8 @@ exprt function_call_expr::handle_general_function_call()
                   arg.type(),
                   string_constantt::k_default);
               }
-              call.arguments().push_back(address_of_exprt(arg));
+              call.arguments().push_back(
+                converter_.get_string_handler().get_array_base_address(arg));
             }
             else
               call.arguments().push_back(arg);
@@ -2492,7 +2495,8 @@ exprt function_call_expr::handle_general_function_call()
                   arg.type(),
                   string_constantt::k_default);
               }
-              call.arguments().push_back(address_of_exprt(arg));
+              call.arguments().push_back(
+                converter_.get_string_handler().get_array_base_address(arg));
             }
             else
               call.arguments().push_back(arg);
@@ -2585,7 +2589,11 @@ exprt function_call_expr::handle_general_function_call()
         call_["func"].contains("value"))
       {
         exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
-        call.arguments().push_back(gen_address_of(obj_expr));
+        if (obj_expr.type().is_array())
+          call.arguments().push_back(
+            converter_.get_string_handler().get_array_base_address(obj_expr));
+        else
+          call.arguments().push_back(gen_address_of(obj_expr));
       }
       else
       {
@@ -2833,7 +2841,8 @@ exprt function_call_expr::handle_general_function_call()
           arg.type(),
           string_constantt::k_default);
       }
-      call.arguments().push_back(address_of_exprt(arg));
+      call.arguments().push_back(
+        converter_.get_string_handler().get_array_base_address(arg));
     }
     else
       call.arguments().push_back(arg);
@@ -2985,7 +2994,9 @@ exprt function_call_expr::handle_general_function_call()
           // For string constants, use address_of
           if (default_val.id() == "string-constant")
           {
-            default_val = address_of_exprt(default_val);
+            default_val =
+              converter_.get_string_handler().get_array_base_address(
+                default_val);
           }
           else
           {

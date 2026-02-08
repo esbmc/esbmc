@@ -3999,6 +3999,15 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   }
   else
   {
+    if (
+      value_type == "List" && ast_node["value"].contains("elts") &&
+      ast_node["value"]["elts"].is_array() &&
+      ast_node["value"]["elts"].empty())
+    {
+      inferred_type = type_handler_.get_list_type();
+    }
+    else
+    {
     // Evaluate the RHS for any expression type (Call, BoolOp, Attribute,
     // Name, BinOp, Subscript, …) so that its type can be inferred.
     // If the expression is itself invalid — e.g. accessing a non-existent
@@ -4011,6 +4020,7 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     inferred_type = rhs_expr.type();
     if (inferred_type.is_empty())
       inferred_type = any_type();
+    }
   }
 
   symbolt symbol =
@@ -6269,8 +6279,8 @@ void python_converter::get_return_statements(
         return_value = string_constantt(
           str_content, string_type, string_constantt::k_default);
 
-        // Get its address (converts array to pointer)
-        return_value = address_of_exprt(return_value);
+        // Get its address (converts array to pointer) without pointer constants
+        return_value = string_handler_.get_array_base_address(return_value);
       }
       else
       {

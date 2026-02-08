@@ -1502,6 +1502,16 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     type = migrate_type(expr.type());
 
     assert(expr.operands().size() == 2);
+    if (expr.op0().type().is_pointer())
+    {
+      expr2tc source, index;
+      convert_operand_pair(expr, source, index);
+      type2tc ptr_type = migrate_type(expr.op0().type());
+      expr2tc ptr_plus = add2tc(ptr_type, source, index);
+      new_expr_ref = dereference2tc(type, ptr_plus);
+      return;
+    }
+
     expr2tc source, index;
     convert_operand_pair(expr, source, index);
 
