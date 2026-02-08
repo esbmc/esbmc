@@ -198,7 +198,9 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_dict_eq",
   "__ESBMC_sin",
   "__ESBMC_cos",
-  "__ESBMC_sqrt"};
+  "__ESBMC_sqrt",
+  "__ESBMC_exp",
+  "__ESBMC_log"};
 } // namespace
 
 static void generate_symbol_deps(

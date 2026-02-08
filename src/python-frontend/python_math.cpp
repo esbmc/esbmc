@@ -567,3 +567,53 @@ exprt python_math::handle_cos(exprt operand, const nlohmann::json &element)
 
   return cos_call;
 }
+
+exprt python_math::handle_exp(exprt operand, const nlohmann::json &element)
+{
+  // Find the exp function symbol from C math library
+  symbolt *exp_symbol = symbol_table.find_symbol("c:@F@exp");
+  if (!exp_symbol)
+    throw std::runtime_error("exp function not found in symbol table");
+
+  // Promote operand to double if needed (exp always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt exp_call;
+  exp_call.function() = symbol_expr(*exp_symbol);
+  exp_call.arguments() = {double_operand};
+  exp_call.type() = double_type();
+  exp_call.location() = converter.get_location_from_decl(element);
+
+  return exp_call;
+}
+
+exprt python_math::handle_log(exprt operand, const nlohmann::json &element)
+{
+  // Find the log function symbol from C math library
+  symbolt *log_symbol = symbol_table.find_symbol("c:@F@log");
+  if (!log_symbol)
+    throw std::runtime_error("log function not found in symbol table");
+
+  // Promote operand to double if needed (log always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt log_call;
+  log_call.function() = symbol_expr(*log_symbol);
+  log_call.arguments() = {double_operand};
+  log_call.type() = double_type();
+  log_call.location() = converter.get_location_from_decl(element);
+
+  return log_call;
+}

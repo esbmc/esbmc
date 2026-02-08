@@ -1,5 +1,5 @@
 pi: float = 3.14153
-
+e: float = 2.71828
 inf: float = float('inf')
 
 
@@ -128,3 +128,32 @@ def sqrt(x: float) -> float:
     """
 
     return __ESBMC_sqrt(x)
+
+
+def exp(x: float) -> float:
+    """
+    Calculate e raised to the power of x
+
+    Args:
+        x: Input value
+
+    Returns:
+        e^x
+    """
+    return __ESBMC_exp(x)
+
+
+def log(x: float) -> float:
+    """
+    Calculate natural logarithm of x
+
+    Args:
+        x: Positive number
+
+    Returns:
+        Natural logarithm of x
+
+    Raises:
+        ValueError: If x <= 0 (math domain error)
+    """
+    return __ESBMC_log(x)

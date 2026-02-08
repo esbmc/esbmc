@@ -15,3 +15,13 @@ double __ESBMC_sqrt(double x)
 {
   return sqrt(x);
 }
+
+double __ESBMC_exp(double x)
+{
+  return exp(x);
+}
+
+double __ESBMC_log(double x)
+{
+  return log(x);
+}
