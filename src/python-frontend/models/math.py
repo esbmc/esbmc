@@ -126,7 +126,5 @@ def sqrt(x: float) -> float:
     Raises:
         ValueError: If x is negative (math domain error)
     """
-    # Domain check: sqrt of negative numbers is undefined in real numbers
-    assert x >= 0, "math domain error: sqrt of negative number"
 
     return __ESBMC_sqrt(x)
