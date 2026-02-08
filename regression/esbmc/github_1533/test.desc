@@ -1,5 +1,5 @@
-CORE
+THOROUGH
 gh-1533.c
--D_CRT_SECURE_NO_WARNINGS --unwind 1 --no-unwinding-assertions --overflow-check --z3 --no-slice
+--unwind 1 --no-unwinding-assertions --overflow-check --z3 --no-slice
 ^VERIFICATION FAILED$
 !overflow
