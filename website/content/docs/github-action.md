@@ -17,7 +17,7 @@ To see how to manually specify files with this action (instead of using the git 
 
 ## Creating Artifacts
 
-This action gives the user the option to create a GitHub artifact when using certain ESBMC options that generate files. To see how to do this, watch [this video](https://youtu.be/Zy2jR1MH1HU). The create-artifact option can be enabled to enable artifact creation, and the user can also specify the artifact-retention-days and artifact-compression-level. As shown in the video, the artifact can be accessed with an id and url for later use.
+This action gives the user the option to create a GitHub artifact when using certain ESBMC options that generate files. To see how to do this, watch [this video](https://youtu.be/Zy2jR1MH1HU). The create-artifact option can be enabled to create artifacts, and the user can also specify artifact-retention-days and artifact-compression-level. As shown in the video, the artifact can be accessed with an id and URL for later use.
 
 ## Manual Checkout
 
