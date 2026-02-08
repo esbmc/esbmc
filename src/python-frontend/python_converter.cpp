@@ -2147,13 +2147,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
   // Handle list(range(...))
   if (
-    element["func"]["_type"] == "Name" &&
-    element["func"]["id"] == "list" &&
-    element["args"].size() == 1 &&
-    element["args"][0]["_type"] == "Call" &&
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
+    element["args"].size() == 1 && element["args"][0]["_type"] == "Call" &&
     element["args"][0]["func"]["id"] == "range")
   {
-    const auto& range_args = element["args"][0]["args"];
+    const auto &range_args = element["args"][0]["args"];
     return python_list::build_list_from_range(*this, range_args, element);
   }
 

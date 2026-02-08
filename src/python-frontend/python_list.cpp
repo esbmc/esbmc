@@ -2499,11 +2499,13 @@ exprt python_list::build_list_from_range(
     throw std::runtime_error("range() takes 1 to 3 arguments");
 
   // Extract constant integer, handling UnaryOp for negative numbers
-  auto extract_constant = [&](const nlohmann::json &arg) -> std::optional<long long> {
+  auto extract_constant =
+    [&](const nlohmann::json &arg) -> std::optional<long long> {
     exprt expr = converter.get_expr(arg);
 
     if (expr.is_constant())
-      return binary2integer(expr.value().as_string(), expr.type().is_signedbv()).to_int64();
+      return binary2integer(expr.value().as_string(), expr.type().is_signedbv())
+        .to_int64();
 
     // Handle UnaryOp (e.g., -1)
     if (expr.id() == "unary-" && expr.operands().size() == 1)
@@ -2511,7 +2513,10 @@ exprt python_list::build_list_from_range(
       const exprt &operand = expr.operands()[0];
       if (operand.is_constant())
       {
-        long long val = binary2integer(operand.value().as_string(), operand.type().is_signedbv()).to_int64();
+        long long val =
+          binary2integer(
+            operand.value().as_string(), operand.type().is_signedbv())
+            .to_int64();
         return -val;
       }
     }
@@ -2530,9 +2535,9 @@ exprt python_list::build_list_from_range(
     arg2 = extract_constant(range_args[2]);
 
   // If any argument is non-constant, return empty list
-  if (!arg0.has_value() ||
-      (range_args.size() > 1 && !arg1.has_value()) ||
-      (range_args.size() > 2 && !arg2.has_value()))
+  if (
+    !arg0.has_value() || (range_args.size() > 1 && !arg1.has_value()) ||
+    (range_args.size() > 2 && !arg2.has_value()))
   {
     nlohmann::json empty_list_node;
     empty_list_node["_type"] = "List";
@@ -2579,9 +2584,8 @@ exprt python_list::build_list_from_range(
   if (range_size > MAX_RANGE_SIZE)
   {
     throw std::runtime_error(
-      "range() size too large for expansion: " +
-      std::to_string(range_size) + " elements (max: " +
-      std::to_string(MAX_RANGE_SIZE) + ")");
+      "range() size too large for expansion: " + std::to_string(range_size) +
+      " elements (max: " + std::to_string(MAX_RANGE_SIZE) + ")");
   }
 
   // Build the list of elements
