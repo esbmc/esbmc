@@ -2026,6 +2026,68 @@ exprt function_call_expr::handle_any() const
   return result;
 }
 
+bool function_call_expr::is_math_comb_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+
+  // Check if it's the wrapper function
+  if (func_name == "comb")
+  {
+    // Verify it's being called from the math module
+    if (call_["func"]["_type"] == "Attribute")
+    {
+      std::string caller = get_object_name();
+      return (caller == "math");
+    }
+  }
+
+  return false;
+}
+
+exprt function_call_expr::handle_math_comb() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 2)
+    throw std::runtime_error("comb() takes exactly 2 arguments");
+
+  // Get the argument expressions
+  exprt n_expr = converter_.get_expr(args[0]);
+  exprt k_expr = converter_.get_expr(args[1]);
+
+  // Type checking: both arguments must be integers
+  if (!n_expr.type().is_signedbv() && !n_expr.type().is_unsignedbv())
+  {
+    return gen_exception_raise(
+      "TypeError",
+      "'float' object cannot be interpreted as an integer");
+  }
+
+  if (!k_expr.type().is_signedbv() && !k_expr.type().is_unsignedbv())
+  {
+    return gen_exception_raise(
+      "TypeError",
+      "'float' object cannot be interpreted as an integer");
+  }
+
+  // Find the actual comb implementation function
+  const symbolt *comb_func = converter_.find_symbol(function_id_.to_string());
+
+  if (!comb_func)
+    throw std::runtime_error("comb() implementation not found");
+
+  // Build the function call
+  locationt location = converter_.get_location_from_decl(call_);
+  code_function_callt call;
+  call.location() = location;
+  call.function() = symbol_expr(*comb_func);
+  call.type() = int_type();
+  call.arguments().push_back(n_expr);
+  call.arguments().push_back(k_expr);
+
+  return call;
+}
+
 std::vector<function_call_expr::FunctionHandler>
 function_call_expr::get_dispatch_table()
 {
@@ -2194,6 +2256,11 @@ function_call_expr::get_dispatch_table()
        throw std::runtime_error("Unsupported math function: " + func_name);
      },
      "math.sin/cos/sqrt/exp/log()"},
+
+    // Math.comb function with type checking
+    {[this]() { return is_math_comb_call(); },
+     [this]() { return handle_math_comb(); },
+     "math.comb"},
 
     // divmod function
     {[this]() {
