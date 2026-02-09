@@ -4,15 +4,15 @@ yaml_parser::yaml_parser(const std::string &path) : file_path(path)
 {
 }
 
-bool yaml_parser::load_file(const std::string &path)
+bool yaml_parser::load_file()
 {
   try
   {
-    root = YAML::LoadFile(path);
+    root = YAML::LoadFile(file_path);
   }
   catch (const YAML::Exception &e)
   {
-    log_error("Failed to parse YAML file '{}': {}", path, e.what());
+    log_error("Failed to parse YAML file '{}': {}", file_path, e.what());
     return true;
   }
 
@@ -80,5 +80,6 @@ invariant::Type yaml_parser::type_from_string(const std::string &s) const
   if (s == "location_transition_invariant")
     return invariant::location_transition_invariant;
 
-  return invariant::loop_invariant;
+  log_error("Unknown invariant type: {}", s);
+  abort();
 }

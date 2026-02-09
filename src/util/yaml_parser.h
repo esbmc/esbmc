@@ -11,7 +11,7 @@ public:
   explicit yaml_parser(const std::string &path);
   ~yaml_parser() = default;
 
-  bool load_file(const std::string &path);
+  bool load_file();
   std::vector<invariant> get_invariants() const;
 
 private:
