@@ -2149,7 +2149,7 @@ function_call_expr::get_dispatch_table()
          return converter_.get_math_handler().handle_exp(arg_expr, call_);
        else if (func_name == "sqrt" || func_name == "__ESBMC_sqrt")
        {
-         // Domain check for sqrt
+         // Domain check for sqrt: operand must be >= 0
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
          {
@@ -2162,18 +2162,30 @@ function_call_expr::get_dispatch_table()
          exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
          domain_check.copy_to_operands(double_operand, zero);
 
-         exprt raise = gen_exception_raise("ValueError", "math domain error");
+         // Create the exception raise as a code expression
+         exprt raise_expr = gen_exception_raise("ValueError", "math domain error");
          locationt loc = converter_.get_location_from_decl(call_);
-         raise.location() = loc;
-         raise.location().user_provided(true);
+         raise_expr.location() = loc;
+         raise_expr.location().user_provided(true);
 
+         // Convert expression to code statement
+         code_expressiont raise_code(raise_expr);
+         raise_code.location() = loc;
+
+         // Create the guard condition
+         code_ifthenelset guard;
+         guard.cond() = domain_check;
+         guard.then_case() = raise_code;
+         guard.location() = loc;
+
+         // Add the guard to the current block
+         converter_.current_block->copy_to_operands(guard);
+
+         // Now compute sqrt (only reached if operand >= 0)
          exprt sqrt_result =
            converter_.get_math_handler().handle_sqrt(arg_expr, call_);
 
-         if_exprt conditional(domain_check, raise, sqrt_result);
-         conditional.type() = type_handler_.get_typet("float", 0);
-
-         return static_cast<exprt>(conditional);
+         return sqrt_result;
        }
        else if (func_name == "log" || func_name == "__ESBMC_log")
          return converter_.get_math_handler().handle_log(arg_expr, call_);
