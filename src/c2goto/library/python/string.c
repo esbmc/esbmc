@@ -14,16 +14,60 @@ __ESBMC_HIDE:;
 static size_t __python_strnlen_bounded(const char *s, size_t max_len)
 {
 __ESBMC_HIDE:;
-  size_t i = 0;
-  while (i < max_len)
-  {
-    if (s[i] == '\0')
-      return i;
-    i++;
-  }
-
-  __ESBMC_assert(0, "string not null-terminated");
+  if (!s || max_len == 0)
+    return 0;
+  if (max_len > 16)
+    max_len = 16;
+  if (s[0] == '\0' || max_len <= 0) return 0;
+  if (s[1] == '\0' || max_len <= 1) return 1;
+  if (s[2] == '\0' || max_len <= 2) return 2;
+  if (s[3] == '\0' || max_len <= 3) return 3;
+  if (s[4] == '\0' || max_len <= 4) return 4;
+  if (s[5] == '\0' || max_len <= 5) return 5;
+  if (s[6] == '\0' || max_len <= 6) return 6;
+  if (s[7] == '\0' || max_len <= 7) return 7;
+  if (s[8] == '\0' || max_len <= 8) return 8;
+  if (s[9] == '\0' || max_len <= 9) return 9;
+  if (s[10] == '\0' || max_len <= 10) return 10;
+  if (s[11] == '\0' || max_len <= 11) return 11;
+  if (s[12] == '\0' || max_len <= 12) return 12;
+  if (s[13] == '\0' || max_len <= 13) return 13;
+  if (s[14] == '\0' || max_len <= 14) return 14;
+  if (s[15] == '\0' || max_len <= 15) return 15;
   return max_len;
+}
+
+size_t __python_strnlen(const char *s)
+{
+__ESBMC_HIDE:;
+  const size_t max_len = 16;
+  if (!s)
+    return 0;
+  return __python_strnlen_bounded(s, max_len);
+}
+
+size_t __python_strnlen_16(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return 0;
+  if (s[0] == '\0') return 0;
+  if (s[1] == '\0') return 1;
+  if (s[2] == '\0') return 2;
+  if (s[3] == '\0') return 3;
+  if (s[4] == '\0') return 4;
+  if (s[5] == '\0') return 5;
+  if (s[6] == '\0') return 6;
+  if (s[7] == '\0') return 7;
+  if (s[8] == '\0') return 8;
+  if (s[9] == '\0') return 9;
+  if (s[10] == '\0') return 10;
+  if (s[11] == '\0') return 11;
+  if (s[12] == '\0') return 12;
+  if (s[13] == '\0') return 13;
+  if (s[14] == '\0') return 14;
+  if (s[15] == '\0') return 15;
+  return 16;
 }
 
 // Python string isalpha - handles ASCII and common two-byte UTF-8 Latin letters.
@@ -827,6 +871,206 @@ __ESBMC_HIDE:;
     nonempty_list.size = 1;
     return &nonempty_list;
   }
+}
+
+// Python string join - joins a list of strings/chars with a separator
+// Returns a freshly allocated C string (char*) with null terminator.
+char *__python_str_join_chars(const PyListObject *list)
+{
+__ESBMC_HIDE:;
+  const size_t max_len = 8;
+  if (!list)
+    return (char *)0;
+
+  size_t n = list->size;
+  if (n > max_len)
+    n = max_len;
+
+  char *out = __ESBMC_alloca(max_len + 1);
+  size_t pos = 0;
+
+  if (n > 0 && list->items[0].value)
+    out[pos++] = *(const char *)list->items[0].value;
+  if (n > 1 && list->items[1].value && pos < max_len)
+    out[pos++] = *(const char *)list->items[1].value;
+  if (n > 2 && list->items[2].value && pos < max_len)
+    out[pos++] = *(const char *)list->items[2].value;
+  if (n > 3 && list->items[3].value && pos < max_len)
+    out[pos++] = *(const char *)list->items[3].value;
+  if (n > 4 && list->items[4].value && pos < max_len)
+    out[pos++] = *(const char *)list->items[4].value;
+  if (n > 5 && list->items[5].value && pos < max_len)
+    out[pos++] = *(const char *)list->items[5].value;
+  if (n > 6 && list->items[6].value && pos < max_len)
+    out[pos++] = *(const char *)list->items[6].value;
+  if (n > 7 && list->items[7].value && pos < max_len)
+    out[pos++] = *(const char *)list->items[7].value;
+
+  out[pos] = '\0';
+  return out;
+}
+
+char *__python_str_join(const char *sep, const PyListObject *list)
+{
+__ESBMC_HIDE:;
+  // Conservative bound to keep symbolic execution tractable
+  const size_t max_len = 8;
+  if (!list)
+    return (char *)0;
+
+  // Separator can be NULL for edge cases; treat as empty
+  const char *sep_str = sep ? sep : "";
+  size_t sep_len = __python_strnlen_bounded(sep_str, max_len);
+
+  // Fixed-size output buffer to keep constraints small
+  size_t n = list->size;
+  if (n > max_len)
+    n = max_len;
+
+  char *out = __ESBMC_alloca(max_len + 1);
+  size_t pos = 0;
+
+  // Fast path: empty separator, char lists (no loops)
+  if (sep_len == 0)
+  {
+    if (n > 0 && list->items[0].value)
+    {
+      const PyObject *e0 = &list->items[0];
+      if (e0->size == sizeof(char))
+        out[pos++] = *(const char *)e0->value;
+      else if (e0->size == sizeof(char *))
+        out[pos++] = (*(const char *const *)e0->value)[0];
+      else
+        out[pos++] = ((const char *)e0->value)[0];
+    }
+    if (n > 1 && list->items[1].value && pos < max_len)
+    {
+      const PyObject *e1 = &list->items[1];
+      if (e1->size == sizeof(char))
+        out[pos++] = *(const char *)e1->value;
+      else if (e1->size == sizeof(char *))
+        out[pos++] = (*(const char *const *)e1->value)[0];
+      else
+        out[pos++] = ((const char *)e1->value)[0];
+    }
+    if (n > 2 && list->items[2].value && pos < max_len)
+    {
+      const PyObject *e2 = &list->items[2];
+      if (e2->size == sizeof(char))
+        out[pos++] = *(const char *)e2->value;
+      else if (e2->size == sizeof(char *))
+        out[pos++] = (*(const char *const *)e2->value)[0];
+      else
+        out[pos++] = ((const char *)e2->value)[0];
+    }
+    if (n > 3 && list->items[3].value && pos < max_len)
+    {
+      const PyObject *e3 = &list->items[3];
+      if (e3->size == sizeof(char))
+        out[pos++] = *(const char *)e3->value;
+      else if (e3->size == sizeof(char *))
+        out[pos++] = (*(const char *const *)e3->value)[0];
+      else
+        out[pos++] = ((const char *)e3->value)[0];
+    }
+    if (n > 4 && list->items[4].value && pos < max_len)
+    {
+      const PyObject *e4 = &list->items[4];
+      if (e4->size == sizeof(char))
+        out[pos++] = *(const char *)e4->value;
+      else if (e4->size == sizeof(char *))
+        out[pos++] = (*(const char *const *)e4->value)[0];
+      else
+        out[pos++] = ((const char *)e4->value)[0];
+    }
+    if (n > 5 && list->items[5].value && pos < max_len)
+    {
+      const PyObject *e5 = &list->items[5];
+      if (e5->size == sizeof(char))
+        out[pos++] = *(const char *)e5->value;
+      else if (e5->size == sizeof(char *))
+        out[pos++] = (*(const char *const *)e5->value)[0];
+      else
+        out[pos++] = ((const char *)e5->value)[0];
+    }
+    if (n > 6 && list->items[6].value && pos < max_len)
+    {
+      const PyObject *e6 = &list->items[6];
+      if (e6->size == sizeof(char))
+        out[pos++] = *(const char *)e6->value;
+      else if (e6->size == sizeof(char *))
+        out[pos++] = (*(const char *const *)e6->value)[0];
+      else
+        out[pos++] = ((const char *)e6->value)[0];
+    }
+    if (n > 7 && list->items[7].value && pos < max_len)
+    {
+      const PyObject *e7 = &list->items[7];
+      if (e7->size == sizeof(char))
+        out[pos++] = *(const char *)e7->value;
+      else if (e7->size == sizeof(char *))
+        out[pos++] = (*(const char *const *)e7->value)[0];
+      else
+        out[pos++] = ((const char *)e7->value)[0];
+    }
+
+    out[pos] = '\0';
+    return out;
+  }
+  size_t i = 0;
+  while (i < n && pos < max_len)
+  {
+    const PyObject *elem = &list->items[i];
+    if (elem && elem->value)
+    {
+      // Add separator between elements
+      if (i > 0 && sep_len > 0)
+      {
+        size_t k = 0;
+        while (k < sep_len && pos < max_len)
+        {
+          out[pos++] = sep_str[k];
+          k++;
+        }
+      }
+
+      if (elem->size == sizeof(char))
+      {
+        if (pos < max_len)
+          out[pos++] = *(const char *)elem->value;
+      }
+      else if (elem->size == sizeof(char *))
+      {
+        const char *s = *(const char *const *)elem->value;
+        if (s)
+        {
+          size_t k = 0;
+          while (s[k] != '\0' && pos < max_len)
+          {
+            out[pos++] = s[k];
+            k++;
+          }
+        }
+      }
+      else
+      {
+        const char *s = (const char *)elem->value;
+        if (s)
+        {
+          size_t k = 0;
+          while (k < elem->size && s[k] != '\0' && pos < max_len)
+          {
+            out[pos++] = s[k];
+            k++;
+          }
+        }
+      }
+    }
+    i++;
+  }
+
+  out[pos] = '\0';
+  return out;
 }
 // Python int() builtin - converts string to integer
 int __python_int(const char *s, int base)

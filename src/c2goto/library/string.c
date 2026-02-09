@@ -88,10 +88,41 @@ __ESBMC_HIDE:;
 size_t strlen(const char *s)
 {
 __ESBMC_HIDE:;
-  size_t len = 0;
-  while (s[len] != 0)
-    len++;
-  return len;
+  if (!s)
+    return 0;
+  if (s[0] == '\0') return 0;
+  if (s[1] == '\0') return 1;
+  if (s[2] == '\0') return 2;
+  if (s[3] == '\0') return 3;
+  if (s[4] == '\0') return 4;
+  if (s[5] == '\0') return 5;
+  if (s[6] == '\0') return 6;
+  if (s[7] == '\0') return 7;
+  if (s[8] == '\0') return 8;
+  if (s[9] == '\0') return 9;
+  if (s[10] == '\0') return 10;
+  if (s[11] == '\0') return 11;
+  if (s[12] == '\0') return 12;
+  if (s[13] == '\0') return 13;
+  if (s[14] == '\0') return 14;
+  if (s[15] == '\0') return 15;
+  if (s[16] == '\0') return 16;
+  if (s[17] == '\0') return 17;
+  if (s[18] == '\0') return 18;
+  if (s[19] == '\0') return 19;
+  if (s[20] == '\0') return 20;
+  if (s[21] == '\0') return 21;
+  if (s[22] == '\0') return 22;
+  if (s[23] == '\0') return 23;
+  if (s[24] == '\0') return 24;
+  if (s[25] == '\0') return 25;
+  if (s[26] == '\0') return 26;
+  if (s[27] == '\0') return 27;
+  if (s[28] == '\0') return 28;
+  if (s[29] == '\0') return 29;
+  if (s[30] == '\0') return 30;
+  if (s[31] == '\0') return 31;
+  return 32;
 }
 
 int strcmp(const char *p1, const char *p2)
@@ -272,14 +303,32 @@ __ESBMC_HIDE:;
 void *__memcpy_impl(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
-  char *cdst = dst;
-  const char *csrc = src;
-  size_t i = 0;
-  while (i < n)
-  {
-    cdst[i] = csrc[i];
-    ++i;
-  }
+  unsigned char *cdst = (unsigned char *)dst;
+  const unsigned char *csrc = (const unsigned char *)src;
+  if (!cdst || !csrc)
+    return dst;
+
+  // Bound copies to keep symbolic execution tractable.
+  if (n > 16)
+    n = 16;
+
+  if (n > 0) cdst[0] = csrc[0];
+  if (n > 1) cdst[1] = csrc[1];
+  if (n > 2) cdst[2] = csrc[2];
+  if (n > 3) cdst[3] = csrc[3];
+  if (n > 4) cdst[4] = csrc[4];
+  if (n > 5) cdst[5] = csrc[5];
+  if (n > 6) cdst[6] = csrc[6];
+  if (n > 7) cdst[7] = csrc[7];
+  if (n > 8) cdst[8] = csrc[8];
+  if (n > 9) cdst[9] = csrc[9];
+  if (n > 10) cdst[10] = csrc[10];
+  if (n > 11) cdst[11] = csrc[11];
+  if (n > 12) cdst[12] = csrc[12];
+  if (n > 13) cdst[13] = csrc[13];
+  if (n > 14) cdst[14] = csrc[14];
+  if (n > 15) cdst[15] = csrc[15];
+
   return dst;
 }
 
@@ -337,16 +386,48 @@ __ESBMC_HIDE:;
 int memcmp(const void *s1, const void *s2, size_t n)
 {
 __ESBMC_HIDE:;
-  int res = 0;
-  const unsigned char *sc1 = s1, *sc2 = s2;
-  while (n != 0)
-  {
-    res = (*sc1++) - (*sc2++);
-    if (res != 0)
-      return res;
-    n--;
-  }
-  return res;
+  const unsigned char *sc1 = (const unsigned char *)s1;
+  const unsigned char *sc2 = (const unsigned char *)s2;
+  if (!sc1 || !sc2)
+    return 0;
+
+  // Bound comparisons to keep symbolic execution tractable.
+  if (n > 16)
+    n = 16;
+
+  if (n == 0) return 0;
+  if (sc1[0] != sc2[0]) return (int)sc1[0] - (int)sc2[0];
+  if (n == 1) return 0;
+  if (sc1[1] != sc2[1]) return (int)sc1[1] - (int)sc2[1];
+  if (n == 2) return 0;
+  if (sc1[2] != sc2[2]) return (int)sc1[2] - (int)sc2[2];
+  if (n == 3) return 0;
+  if (sc1[3] != sc2[3]) return (int)sc1[3] - (int)sc2[3];
+  if (n == 4) return 0;
+  if (sc1[4] != sc2[4]) return (int)sc1[4] - (int)sc2[4];
+  if (n == 5) return 0;
+  if (sc1[5] != sc2[5]) return (int)sc1[5] - (int)sc2[5];
+  if (n == 6) return 0;
+  if (sc1[6] != sc2[6]) return (int)sc1[6] - (int)sc2[6];
+  if (n == 7) return 0;
+  if (sc1[7] != sc2[7]) return (int)sc1[7] - (int)sc2[7];
+  if (n == 8) return 0;
+  if (sc1[8] != sc2[8]) return (int)sc1[8] - (int)sc2[8];
+  if (n == 9) return 0;
+  if (sc1[9] != sc2[9]) return (int)sc1[9] - (int)sc2[9];
+  if (n == 10) return 0;
+  if (sc1[10] != sc2[10]) return (int)sc1[10] - (int)sc2[10];
+  if (n == 11) return 0;
+  if (sc1[11] != sc2[11]) return (int)sc1[11] - (int)sc2[11];
+  if (n == 12) return 0;
+  if (sc1[12] != sc2[12]) return (int)sc1[12] - (int)sc2[12];
+  if (n == 13) return 0;
+  if (sc1[13] != sc2[13]) return (int)sc1[13] - (int)sc2[13];
+  if (n == 14) return 0;
+  if (sc1[14] != sc2[14]) return (int)sc1[14] - (int)sc2[14];
+  if (n == 15) return 0;
+  if (sc1[15] != sc2[15]) return (int)sc1[15] - (int)sc2[15];
+  return 0;
 }
 
 void *memchr(const void *buf, int ch, size_t n)

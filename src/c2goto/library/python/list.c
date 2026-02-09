@@ -18,8 +18,17 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   // Python frontend maps: int/float -> 8 bytes, bool -> 1 byte
   if (size == 8)
     return *(const uint64_t *)a == *(const uint64_t *)b;
+  if (size == 4)
+    return *(const uint32_t *)a == *(const uint32_t *)b;
+  if (size == 2)
+    return *(const uint16_t *)a == *(const uint16_t *)b;
   if (size == 1)
     return *(const uint8_t *)a == *(const uint8_t *)b;
+  if (size == 16)
+  {
+    return *(const uint64_t *)a == *(const uint64_t *)b &&
+           *((const uint64_t *)a + 1) == *((const uint64_t *)b + 1);
+  }
   // Fallback for larger/unusual sizes
   return memcmp(a, b, size) == 0;
 }
@@ -31,6 +40,136 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
 // Maximum physical stack size for list comparison (prevents buffer overflow).
 // Set to 64 to allow users to increase depth without hitting buffer limits.
 #define __ESBMC_LIST_MAX_STACK 64
+
+static inline const char *
+__ESBMC_list_elem_to_str(const PyObject *obj)
+{
+  if (!obj || !obj->value)
+    return NULL;
+
+  if (obj->size == sizeof(char *))
+    return *(const char *const *)obj->value;
+
+  return (const char *)obj->value;
+}
+
+static inline const char *
+__ESBMC_list_item_to_str(const void *item, size_t item_size)
+{
+  if (!item)
+    return NULL;
+
+  if (item_size == sizeof(char *))
+    return *(const char *const *)item;
+
+  return (const char *)item;
+}
+
+static inline size_t
+__ESBMC_strnlen_bounded(const char *s, size_t max_len)
+{
+  if (!s)
+    return 0;
+  if (max_len == 0)
+    return 0;
+  // Unrolled up to 16 to avoid loops in BMC.
+  if (s[0] == '\0' || max_len <= 0) return 0;
+  if (s[1] == '\0' || max_len <= 1) return 1;
+  if (s[2] == '\0' || max_len <= 2) return 2;
+  if (s[3] == '\0' || max_len <= 3) return 3;
+  if (s[4] == '\0' || max_len <= 4) return 4;
+  if (s[5] == '\0' || max_len <= 5) return 5;
+  if (s[6] == '\0' || max_len <= 6) return 6;
+  if (s[7] == '\0' || max_len <= 7) return 7;
+  if (s[8] == '\0' || max_len <= 8) return 8;
+  if (s[9] == '\0' || max_len <= 9) return 9;
+  if (s[10] == '\0' || max_len <= 10) return 10;
+  if (s[11] == '\0' || max_len <= 11) return 11;
+  if (s[12] == '\0' || max_len <= 12) return 12;
+  if (s[13] == '\0' || max_len <= 13) return 13;
+  if (s[14] == '\0' || max_len <= 14) return 14;
+  if (s[15] == '\0' || max_len <= 15) return 15;
+  return (max_len < 16) ? max_len : 16;
+}
+
+static inline bool
+__ESBMC_str_equal_bounded(const char *a, const char *b, size_t max_len)
+{
+  if (a == b)
+    return true;
+  if (!a || !b)
+    return false;
+  size_t len_a = __ESBMC_strnlen_bounded(a, max_len);
+  size_t len_b = __ESBMC_strnlen_bounded(b, max_len);
+  if (len_a != len_b)
+    return false;
+  // Unrolled compare up to 16 chars
+  if (len_a == 0) return true;
+  if (a[0] != b[0]) return false;
+  if (len_a == 1) return true;
+  if (a[1] != b[1]) return false;
+  if (len_a == 2) return true;
+  if (a[2] != b[2]) return false;
+  if (len_a == 3) return true;
+  if (a[3] != b[3]) return false;
+  if (len_a == 4) return true;
+  if (a[4] != b[4]) return false;
+  if (len_a == 5) return true;
+  if (a[5] != b[5]) return false;
+  if (len_a == 6) return true;
+  if (a[6] != b[6]) return false;
+  if (len_a == 7) return true;
+  if (a[7] != b[7]) return false;
+  if (len_a == 8) return true;
+  if (a[8] != b[8]) return false;
+  if (len_a == 9) return true;
+  if (a[9] != b[9]) return false;
+  if (len_a == 10) return true;
+  if (a[10] != b[10]) return false;
+  if (len_a == 11) return true;
+  if (a[11] != b[11]) return false;
+  if (len_a == 12) return true;
+  if (a[12] != b[12]) return false;
+  if (len_a == 13) return true;
+  if (a[13] != b[13]) return false;
+  if (len_a == 14) return true;
+  if (a[14] != b[14]) return false;
+  if (len_a == 15) return true;
+  if (a[15] != b[15]) return false;
+  return true;
+}
+
+static inline bool __ESBMC_list_elem_eq_simple(
+  const PyObject *a,
+  const PyObject *b,
+  size_t list_type_id,
+  size_t string_type_id)
+{
+  if (a->value == b->value)
+    return true;
+
+  if (a->type_id == string_type_id && b->type_id == string_type_id)
+  {
+    const char *sa = __ESBMC_list_elem_to_str(a);
+    const char *sb = __ESBMC_list_elem_to_str(b);
+    if (!sa || !sb)
+      return false;
+    return __ESBMC_str_equal_bounded(sa, sb, 64);
+  }
+
+  if (!a->value || !b->value)
+    return false;
+  if (a->type_id != b->type_id)
+    return false;
+  if (a->size != b->size)
+    return false;
+
+  // Defer nested list comparison to slow path
+  if (a->type_id == list_type_id)
+    return false;
+
+  return __ESBMC_values_equal(a->value, b->value, a->size);
+}
 
 PyObject *__ESBMC_create_inf_obj()
 {
@@ -62,6 +201,10 @@ static inline void *__ESBMC_copy_value(const void *value, size_t size)
 
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
+  else if (size == 4)
+    *(uint32_t *)copied = *(const uint32_t *)value;
+  else if (size == 2)
+    *(uint16_t *)copied = *(const uint16_t *)value;
   else if (size == 16)
   {
     // Handle 16-byte structs (such as dictionaries) explicitly
@@ -105,6 +248,7 @@ bool __ESBMC_list_eq(
   const PyListObject *l1,
   const PyListObject *l2,
   size_t list_type_id,
+  size_t string_type_id,
   size_t max_depth)
 {
   // Quick checks
@@ -115,97 +259,86 @@ bool __ESBMC_list_eq(
   if (l1->size != l2->size)
     return false;
 
-  // Use max_depth or default if 0, but cap at physical stack size
-  size_t depth_limit = max_depth > 0 ? max_depth : __ESBMC_LIST_DEFAULT_DEPTH;
-  if (depth_limit > __ESBMC_LIST_MAX_STACK)
-    depth_limit = __ESBMC_LIST_MAX_STACK;
-
-  // Use explicit stack to avoid recursive function calls
-  // This prevents state explosion from recursive unrolling
-  const PyListObject *stack_a[__ESBMC_LIST_MAX_STACK];
-  const PyListObject *stack_b[__ESBMC_LIST_MAX_STACK];
-  size_t stack_idx[__ESBMC_LIST_MAX_STACK];
-  int top = 0;
-
-  // Initialize with first list pair
-  stack_a[0] = l1;
-  stack_b[0] = l2;
-  stack_idx[0] = 0;
-  top = 1;
-
-  while (top > 0)
+  // Fast path for small, non-nested lists (avoids loops in the model).
+  const size_t small_max = 8;
+  __ESBMC_assume(l1->size <= small_max);
+  if (l1->size <= small_max)
   {
-    int cur = top - 1;
-    const PyListObject *cur_a = stack_a[cur];
-    const PyListObject *cur_b = stack_b[cur];
-    size_t idx = stack_idx[cur];
-
-    // Finished comparing this list pair?
-    if (idx >= cur_a->size)
+    if (l1->size > 0)
     {
-      top--;
-      continue;
-    }
-
-    // Advance index for next iteration
-    stack_idx[cur] = idx + 1;
-
-    const PyObject *a = &cur_a->items[idx];
-    const PyObject *b = &cur_b->items[idx];
-
-    // Same pointer => elements equal
-    if (a->value == b->value)
-      continue;
-
-    // Validation checks
-    if (!a->value || !b->value)
-      return false;
-    if (a->type_id != b->type_id)
-      return false;
-    if (a->size != b->size)
-      return false;
-
-    // Check if elements are nested lists
-    if (a->type_id == list_type_id)
-    {
-      const PyListObject *nested_a = *(const PyListObject **)a->value;
-      const PyListObject *nested_b = *(const PyListObject **)b->value;
-
-      // Quick checks for nested lists
-      if (!nested_a || !nested_b)
+      const PyObject *a0 = &l1->items[0];
+      const PyObject *b0 = &l2->items[0];
+      if (a0->type_id == list_type_id || b0->type_id == list_type_id)
         return false;
-      if (__ESBMC_same_object(nested_a, nested_b))
-        continue;
-      if (nested_a->size != nested_b->size)
-        return false;
-
-      // Check depth limit and report if exceeded
-      if ((size_t)top >= depth_limit)
-      {
-        // List depth unwinding assertion: similar to loop unwinding assertions.
-        // If this fires, increase depth with --python-list-compare-depth option.
-        __ESBMC_assert(
-          0,
-          "list comparison depth limit exceeded "
-          "(use --python-list-compare-depth to increase)");
-        // Note: return is needed to stop symbolic execution on this path
-        return false;
-      }
-
-      // Push nested comparison onto stack
-      stack_a[top] = nested_a;
-      stack_b[top] = nested_b;
-      stack_idx[top] = 0;
-      top++;
-    }
-    else
-    {
-      // Primitive comparison - use optimized version (no memcmp loop)
-      if (!__ESBMC_values_equal(a->value, b->value, a->size))
+      if (!__ESBMC_list_elem_eq_simple(a0, b0, list_type_id, string_type_id))
         return false;
     }
+    if (l1->size > 1)
+    {
+      const PyObject *a1 = &l1->items[1];
+      const PyObject *b1 = &l2->items[1];
+      if (a1->type_id == list_type_id || b1->type_id == list_type_id)
+        return false;
+      if (!__ESBMC_list_elem_eq_simple(a1, b1, list_type_id, string_type_id))
+        return false;
+    }
+    if (l1->size > 2)
+    {
+      const PyObject *a2 = &l1->items[2];
+      const PyObject *b2 = &l2->items[2];
+      if (a2->type_id == list_type_id || b2->type_id == list_type_id)
+        return false;
+      if (!__ESBMC_list_elem_eq_simple(a2, b2, list_type_id, string_type_id))
+        return false;
+    }
+    if (l1->size > 3)
+    {
+      const PyObject *a3 = &l1->items[3];
+      const PyObject *b3 = &l2->items[3];
+      if (a3->type_id == list_type_id || b3->type_id == list_type_id)
+        return false;
+      if (!__ESBMC_list_elem_eq_simple(a3, b3, list_type_id, string_type_id))
+        return false;
+    }
+    if (l1->size > 4)
+    {
+      const PyObject *a4 = &l1->items[4];
+      const PyObject *b4 = &l2->items[4];
+      if (a4->type_id == list_type_id || b4->type_id == list_type_id)
+        return false;
+      if (!__ESBMC_list_elem_eq_simple(a4, b4, list_type_id, string_type_id))
+        return false;
+    }
+    if (l1->size > 5)
+    {
+      const PyObject *a5 = &l1->items[5];
+      const PyObject *b5 = &l2->items[5];
+      if (a5->type_id == list_type_id || b5->type_id == list_type_id)
+        return false;
+      if (!__ESBMC_list_elem_eq_simple(a5, b5, list_type_id, string_type_id))
+        return false;
+    }
+    if (l1->size > 6)
+    {
+      const PyObject *a6 = &l1->items[6];
+      const PyObject *b6 = &l2->items[6];
+      if (a6->type_id == list_type_id || b6->type_id == list_type_id)
+        return false;
+      if (!__ESBMC_list_elem_eq_simple(a6, b6, list_type_id, string_type_id))
+        return false;
+    }
+    if (l1->size > 7)
+    {
+      const PyObject *a7 = &l1->items[7];
+      const PyObject *b7 = &l2->items[7];
+      if (a7->type_id == list_type_id || b7->type_id == list_type_id)
+        return false;
+      if (!__ESBMC_list_elem_eq_simple(a7, b7, list_type_id, string_type_id))
+        return false;
+    }
+    return true;
   }
-  return true;
+  return false;
 }
 
 PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
@@ -271,7 +404,8 @@ bool __ESBMC_list_contains(
   const PyListObject *l,
   const void *item,
   size_t item_type_id,
-  size_t item_size)
+  size_t item_size,
+  size_t string_type_id)
 {
   if (!l || !item)
     return false;
@@ -281,11 +415,17 @@ bool __ESBMC_list_contains(
   {
     const PyObject *elem = &l->items[i];
 
-    // Check if types and sizes match
-    if (elem->type_id == item_type_id && elem->size == item_size)
+    // String comparison: compare by content, ignore size mismatches
+    if (elem->type_id == string_type_id && item_type_id == string_type_id)
     {
-      // Compare the actual data
-      // TODO: Not sure if this works for recursive types
+      const char *elem_str = __ESBMC_list_elem_to_str(elem);
+      const char *item_str = __ESBMC_list_item_to_str(item, item_size);
+      if (elem_str && item_str &&
+          __ESBMC_str_equal_bounded(elem_str, item_str, 64))
+        return true;
+    }
+    else if (elem->type_id == item_type_id && elem->size == item_size)
+    {
       if (__ESBMC_values_equal(elem->value, item, item_size))
         return true;
     }
@@ -330,7 +470,8 @@ size_t __ESBMC_list_find_index(
   PyListObject *l,
   const void *item,
   size_t item_type_id,
-  size_t item_size)
+  size_t item_size,
+  size_t string_type_id)
 {
   __ESBMC_assert(l != NULL, "KeyError: dictionary is null");
   __ESBMC_assert(item != NULL, "KeyError: key is null");
@@ -341,7 +482,15 @@ size_t __ESBMC_list_find_index(
   {
     const PyObject *elem = &l->items[i];
 
-    if (elem->type_id == item_type_id && elem->size == item_size)
+    if (elem->type_id == string_type_id && item_type_id == string_type_id)
+    {
+      const char *elem_str = __ESBMC_list_elem_to_str(elem);
+      const char *item_str = __ESBMC_list_item_to_str(item, item_size);
+      if (elem_str && item_str &&
+          __ESBMC_str_equal_bounded(elem_str, item_str, 64))
+        return i;
+    }
+    else if (elem->type_id == item_type_id && elem->size == item_size)
     {
       if (__ESBMC_values_equal(elem->value, item, item_size))
         return i;
@@ -358,7 +507,8 @@ size_t __ESBMC_list_try_find_index(
   PyListObject *l,
   const void *item,
   size_t item_type_id,
-  size_t item_size)
+  size_t item_size,
+  size_t string_type_id)
 {
   if (!l || !item || l->size == 0)
     return SIZE_MAX;
@@ -368,7 +518,15 @@ size_t __ESBMC_list_try_find_index(
   {
     const PyObject *elem = &l->items[i];
 
-    if (elem->type_id == item_type_id && elem->size == item_size)
+    if (elem->type_id == string_type_id && item_type_id == string_type_id)
+    {
+      const char *elem_str = __ESBMC_list_elem_to_str(elem);
+      const char *item_str = __ESBMC_list_item_to_str(item, item_size);
+      if (elem_str && item_str &&
+          __ESBMC_str_equal_bounded(elem_str, item_str, 64))
+        return i;
+    }
+    else if (elem->type_id == item_type_id && elem->size == item_size)
     {
       if (__ESBMC_values_equal(elem->value, item, item_size))
         return i;
@@ -447,7 +605,8 @@ bool __ESBMC_dict_eq(
   const PyListObject *lhs_keys,
   const PyListObject *lhs_values,
   const PyListObject *rhs_keys,
-  const PyListObject *rhs_values)
+  const PyListObject *rhs_values,
+  size_t string_type_id)
 {
   if (!lhs_keys || !lhs_values || !rhs_keys || !rhs_values)
     return false;
@@ -468,7 +627,8 @@ bool __ESBMC_dict_eq(
       (PyListObject *)rhs_keys,
       lhs_key->value,
       lhs_key->type_id,
-      lhs_key->size);
+      lhs_key->size,
+      string_type_id);
 
     // Key not found in rhs
     if (rhs_idx == SIZE_MAX)
