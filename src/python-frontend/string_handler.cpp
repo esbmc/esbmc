@@ -18,6 +18,7 @@
 #include <util/type.h>
 
 #include <cmath>
+#include <functional>
 #include <cctype>
 #include <cstring>
 #include <iomanip>
@@ -562,20 +563,79 @@ exprt string_handler::handle_string_operations(
   return nil_exprt();
 }
 
+exprt string_handler::get_or_create_string_literal_symbol(
+  const exprt &arr)
+{
+  std::string content;
+  if (arr.id() == "string-constant")
+  {
+    content = id2string(to_string_constant(arr).mb_value());
+  }
+  else
+  {
+    content = extract_string_from_array_operands(arr);
+  }
+
+  auto it = string_literal_symbols_.find(content);
+  if (it != string_literal_symbols_.end())
+  {
+    symbolt *sym = symbol_table_.find_symbol(it->second.c_str());
+    if (sym)
+      return symbol_expr(*sym);
+  }
+
+  locationt location;
+  location.set_file(converter_.python_file().c_str());
+  location.set_line(1);
+
+  std::string module_name =
+    converter_.python_file().substr(
+      0, converter_.python_file().find_last_of("."));
+
+  symbol_id sid(converter_.python_file(), "", "");
+  std::string hash =
+    std::to_string(std::hash<std::string>{}(content));
+  sid.set_object("$strlit$" + hash);
+  std::string symbol_id_str = sid.to_string();
+
+  if (symbolt *existing = symbol_table_.find_symbol(symbol_id_str.c_str()))
+  {
+    string_literal_symbols_[content] = symbol_id_str;
+    return symbol_expr(*existing);
+  }
+
+  exprt value_expr;
+  if (arr.type().is_array())
+    value_expr = arr;
+  else
+    value_expr = string_builder_->build_string_literal(content);
+
+  typet string_type = value_expr.type();
+
+  symbolt symbol =
+    converter_.create_symbol(
+      module_name, "$strlit$", symbol_id_str, location, string_type);
+  symbol.lvalue = true;
+  symbol.static_lifetime = true;
+  symbol.is_extern = false;
+  symbol.file_local = true;
+  symbol.value = value_expr;
+
+  converter_.add_symbol(symbol);
+  string_literal_symbols_[content] = symbol_id_str;
+  symbolt *added = symbol_table_.find_symbol(symbol_id_str.c_str());
+  assert(added);
+  return symbol_expr(*added);
+}
+
 exprt string_handler::get_array_base_address(const exprt &arr)
 {
   if (
     (arr.is_constant() && arr.type().is_array()) ||
     (arr.id() == "string-constant" && arr.type().is_array()))
   {
-    // Avoid taking the address of a constant array directly, which can
-    // produce an invalid pointer constant in migration.
-    symbolt &tmp = converter_.create_tmp_symbol(
-      nlohmann::json(), "$str_tmp$", arr.type(), exprt());
-    code_declt decl(symbol_expr(tmp));
-    decl.copy_to_operands(arr);
-    converter_.add_instruction(decl);
-    exprt index = index_exprt(symbol_expr(tmp), from_integer(0, index_type()));
+    exprt str_sym = get_or_create_string_literal_symbol(arr);
+    exprt index = index_exprt(str_sym, from_integer(0, index_type()));
     return address_of_exprt(index);
   }
 

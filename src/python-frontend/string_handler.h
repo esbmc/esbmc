@@ -9,6 +9,7 @@
 #include <util/message.h>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // Forward declarations
@@ -703,6 +704,9 @@ private:
   contextt &symbol_table_;
   type_handler &type_handler_;
   string_builder *string_builder_;
+  std::unordered_map<std::string, std::string> string_literal_symbols_;
+
+  exprt get_or_create_string_literal_symbol(const exprt &arr);
 
   // Helper methods for internal use
 
