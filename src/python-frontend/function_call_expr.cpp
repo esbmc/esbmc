@@ -2060,14 +2060,16 @@ exprt function_call_expr::handle_math_comb() const
   {
     return gen_exception_raise(
       "TypeError",
-      "'float' object cannot be interpreted as an integer");
+      "'" + type_handler_.type_to_string(n_expr.type()) +
+        "' object cannot be interpreted as an integer");
   }
 
   if (!k_expr.type().is_signedbv() && !k_expr.type().is_unsignedbv())
   {
     return gen_exception_raise(
       "TypeError",
-      "'float' object cannot be interpreted as an integer");
+      "'" + type_handler_.type_to_string(k_expr.type()) +
+        "' object cannot be interpreted as an integer");
   }
 
   // Find the actual comb implementation function
