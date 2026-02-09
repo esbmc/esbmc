@@ -20,10 +20,10 @@ def comb(n: int, k: int) -> int:
     """
     # Type checking
     if not isinstance(n, int) or not isinstance(k, int):
-        assert False
+        raise TypeError("Both n and k must be integers")
     # Handle negative inputs
     if n < 0 or k < 0:
-        assert False
+        raise ValueError("Both n and k must be non-negative integers")
 
     # Handle edge cases
     if k > n:
