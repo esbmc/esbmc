@@ -127,10 +127,9 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     return (t.is_array() && t.subtype() == char_type()) ||
            (t.is_pointer() && t.subtype() == char_type());
   };
-  const std::string elem_type_name = is_string_like(elem.type())
-                                       ? "__python_str"
-                                       : type_handler_.type_to_string(
-                                           elem.type());
+  const std::string elem_type_name =
+    is_string_like(elem.type()) ? "__python_str"
+                                : type_handler_.type_to_string(elem.type());
 
   // Create type name as null-terminated char array
   const typet type_name_type =
@@ -202,11 +201,13 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     const symbolt *strlen_symbol =
       converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
     if (!strlen_symbol)
-      strlen_symbol = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+      strlen_symbol =
+        converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
     if (!strlen_symbol)
       strlen_symbol = converter_.symbol_table().find_symbol("c:@F@strlen");
     if (!strlen_symbol)
-      throw std::runtime_error("string length function not found in symbol table");
+      throw std::runtime_error(
+        "string length function not found in symbol table");
 
     // Create temp variable to store strlen result
     symbolt &strlen_result = converter_.create_tmp_symbol(
@@ -970,11 +971,13 @@ exprt python_list::handle_range_slice(
         const symbolt *strlen_symbol =
           converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
         if (!strlen_symbol)
-          strlen_symbol = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+          strlen_symbol =
+            converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
         if (!strlen_symbol)
           strlen_symbol = converter_.symbol_table().find_symbol("c:@F@strlen");
         if (!strlen_symbol)
-          throw std::runtime_error("string length function not found in symbol table");
+          throw std::runtime_error(
+            "string length function not found in symbol table");
 
         symbolt &strlen_result = converter_.create_tmp_symbol(
           slice_node, "$strlen_result$", size_type(), gen_zero(size_type()));
@@ -1834,9 +1837,11 @@ exprt python_list::contains(const exprt &item, const exprt &list)
           const symbolt *strlen_symbol =
             converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
           if (!strlen_symbol)
-            strlen_symbol = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+            strlen_symbol =
+              converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
           if (!strlen_symbol)
-            strlen_symbol = converter_.symbol_table().find_symbol("c:@F@strlen");
+            strlen_symbol =
+              converter_.symbol_table().find_symbol("c:@F@strlen");
           if (strlen_symbol)
           {
             // Call strlen to get actual string length
@@ -1926,11 +1931,13 @@ exprt python_list::build_extend_list_call(
       const symbolt *strlen_symbol =
         converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
       if (!strlen_symbol)
-        strlen_symbol = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+        strlen_symbol =
+          converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
       if (!strlen_symbol)
         strlen_symbol = converter_.symbol_table().find_symbol("c:@F@strlen");
       if (!strlen_symbol)
-        throw std::runtime_error("string length function not found in symbol table");
+        throw std::runtime_error(
+          "string length function not found in symbol table");
 
       symbolt &strlen_result = converter_.create_tmp_symbol(
         op, "$strlen_result$", size_type(), gen_zero(size_type()));
@@ -2227,7 +2234,8 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     const symbolt *strnlen_func =
       converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
     if (!strnlen_func)
-      strnlen_func = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+      strnlen_func =
+        converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
     if (!strnlen_func)
       strnlen_func = converter_.symbol_table().find_symbol("c:@F@strlen");
     if (strnlen_func)

@@ -41,8 +41,7 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
 // Set to 64 to allow users to increase depth without hitting buffer limits.
 #define __ESBMC_LIST_MAX_STACK 64
 
-static inline const char *
-__ESBMC_list_elem_to_str(const PyObject *obj)
+static inline const char *__ESBMC_list_elem_to_str(const PyObject *obj)
 {
   if (!obj || !obj->value)
     return NULL;
@@ -65,30 +64,45 @@ __ESBMC_list_item_to_str(const void *item, size_t item_size)
   return (const char *)item;
 }
 
-static inline size_t
-__ESBMC_strnlen_bounded(const char *s, size_t max_len)
+static inline size_t __ESBMC_strnlen_bounded(const char *s, size_t max_len)
 {
   if (!s)
     return 0;
   if (max_len == 0)
     return 0;
   // Unrolled up to 16 to avoid loops in BMC.
-  if (s[0] == '\0' || max_len <= 0) return 0;
-  if (s[1] == '\0' || max_len <= 1) return 1;
-  if (s[2] == '\0' || max_len <= 2) return 2;
-  if (s[3] == '\0' || max_len <= 3) return 3;
-  if (s[4] == '\0' || max_len <= 4) return 4;
-  if (s[5] == '\0' || max_len <= 5) return 5;
-  if (s[6] == '\0' || max_len <= 6) return 6;
-  if (s[7] == '\0' || max_len <= 7) return 7;
-  if (s[8] == '\0' || max_len <= 8) return 8;
-  if (s[9] == '\0' || max_len <= 9) return 9;
-  if (s[10] == '\0' || max_len <= 10) return 10;
-  if (s[11] == '\0' || max_len <= 11) return 11;
-  if (s[12] == '\0' || max_len <= 12) return 12;
-  if (s[13] == '\0' || max_len <= 13) return 13;
-  if (s[14] == '\0' || max_len <= 14) return 14;
-  if (s[15] == '\0' || max_len <= 15) return 15;
+  if (s[0] == '\0' || max_len <= 0)
+    return 0;
+  if (s[1] == '\0' || max_len <= 1)
+    return 1;
+  if (s[2] == '\0' || max_len <= 2)
+    return 2;
+  if (s[3] == '\0' || max_len <= 3)
+    return 3;
+  if (s[4] == '\0' || max_len <= 4)
+    return 4;
+  if (s[5] == '\0' || max_len <= 5)
+    return 5;
+  if (s[6] == '\0' || max_len <= 6)
+    return 6;
+  if (s[7] == '\0' || max_len <= 7)
+    return 7;
+  if (s[8] == '\0' || max_len <= 8)
+    return 8;
+  if (s[9] == '\0' || max_len <= 9)
+    return 9;
+  if (s[10] == '\0' || max_len <= 10)
+    return 10;
+  if (s[11] == '\0' || max_len <= 11)
+    return 11;
+  if (s[12] == '\0' || max_len <= 12)
+    return 12;
+  if (s[13] == '\0' || max_len <= 13)
+    return 13;
+  if (s[14] == '\0' || max_len <= 14)
+    return 14;
+  if (s[15] == '\0' || max_len <= 15)
+    return 15;
   return (max_len < 16) ? max_len : 16;
 }
 
@@ -104,38 +118,70 @@ __ESBMC_str_equal_bounded(const char *a, const char *b, size_t max_len)
   if (len_a != len_b)
     return false;
   // Unrolled compare up to 16 chars
-  if (len_a == 0) return true;
-  if (a[0] != b[0]) return false;
-  if (len_a == 1) return true;
-  if (a[1] != b[1]) return false;
-  if (len_a == 2) return true;
-  if (a[2] != b[2]) return false;
-  if (len_a == 3) return true;
-  if (a[3] != b[3]) return false;
-  if (len_a == 4) return true;
-  if (a[4] != b[4]) return false;
-  if (len_a == 5) return true;
-  if (a[5] != b[5]) return false;
-  if (len_a == 6) return true;
-  if (a[6] != b[6]) return false;
-  if (len_a == 7) return true;
-  if (a[7] != b[7]) return false;
-  if (len_a == 8) return true;
-  if (a[8] != b[8]) return false;
-  if (len_a == 9) return true;
-  if (a[9] != b[9]) return false;
-  if (len_a == 10) return true;
-  if (a[10] != b[10]) return false;
-  if (len_a == 11) return true;
-  if (a[11] != b[11]) return false;
-  if (len_a == 12) return true;
-  if (a[12] != b[12]) return false;
-  if (len_a == 13) return true;
-  if (a[13] != b[13]) return false;
-  if (len_a == 14) return true;
-  if (a[14] != b[14]) return false;
-  if (len_a == 15) return true;
-  if (a[15] != b[15]) return false;
+  if (len_a == 0)
+    return true;
+  if (a[0] != b[0])
+    return false;
+  if (len_a == 1)
+    return true;
+  if (a[1] != b[1])
+    return false;
+  if (len_a == 2)
+    return true;
+  if (a[2] != b[2])
+    return false;
+  if (len_a == 3)
+    return true;
+  if (a[3] != b[3])
+    return false;
+  if (len_a == 4)
+    return true;
+  if (a[4] != b[4])
+    return false;
+  if (len_a == 5)
+    return true;
+  if (a[5] != b[5])
+    return false;
+  if (len_a == 6)
+    return true;
+  if (a[6] != b[6])
+    return false;
+  if (len_a == 7)
+    return true;
+  if (a[7] != b[7])
+    return false;
+  if (len_a == 8)
+    return true;
+  if (a[8] != b[8])
+    return false;
+  if (len_a == 9)
+    return true;
+  if (a[9] != b[9])
+    return false;
+  if (len_a == 10)
+    return true;
+  if (a[10] != b[10])
+    return false;
+  if (len_a == 11)
+    return true;
+  if (a[11] != b[11])
+    return false;
+  if (len_a == 12)
+    return true;
+  if (a[12] != b[12])
+    return false;
+  if (len_a == 13)
+    return true;
+  if (a[13] != b[13])
+    return false;
+  if (len_a == 14)
+    return true;
+  if (a[14] != b[14])
+    return false;
+  if (len_a == 15)
+    return true;
+  if (a[15] != b[15])
+    return false;
   return true;
 }
 
@@ -420,8 +466,9 @@ bool __ESBMC_list_contains(
     {
       const char *elem_str = __ESBMC_list_elem_to_str(elem);
       const char *item_str = __ESBMC_list_item_to_str(item, item_size);
-      if (elem_str && item_str &&
-          __ESBMC_str_equal_bounded(elem_str, item_str, 64))
+      if (
+        elem_str && item_str &&
+        __ESBMC_str_equal_bounded(elem_str, item_str, 64))
         return true;
     }
     else if (elem->type_id == item_type_id && elem->size == item_size)
@@ -486,8 +533,9 @@ size_t __ESBMC_list_find_index(
     {
       const char *elem_str = __ESBMC_list_elem_to_str(elem);
       const char *item_str = __ESBMC_list_item_to_str(item, item_size);
-      if (elem_str && item_str &&
-          __ESBMC_str_equal_bounded(elem_str, item_str, 64))
+      if (
+        elem_str && item_str &&
+        __ESBMC_str_equal_bounded(elem_str, item_str, 64))
         return i;
     }
     else if (elem->type_id == item_type_id && elem->size == item_size)
@@ -522,8 +570,9 @@ size_t __ESBMC_list_try_find_index(
     {
       const char *elem_str = __ESBMC_list_elem_to_str(elem);
       const char *item_str = __ESBMC_list_item_to_str(item, item_size);
-      if (elem_str && item_str &&
-          __ESBMC_str_equal_bounded(elem_str, item_str, 64))
+      if (
+        elem_str && item_str &&
+        __ESBMC_str_equal_bounded(elem_str, item_str, 64))
         return i;
     }
     else if (elem->type_id == item_type_id && elem->size == item_size)

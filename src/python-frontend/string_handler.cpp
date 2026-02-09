@@ -732,7 +732,8 @@ exprt string_handler::handle_string_endswith(
 
   // For length calculation, we need to use strlen for pointer types
   // Find strlen symbol
-  symbolt *strlen_symbol = symbol_table_.find_symbol("c:@F@__python_strnlen_16");
+  symbolt *strlen_symbol =
+    symbol_table_.find_symbol("c:@F@__python_strnlen_16");
   if (!strlen_symbol)
     strlen_symbol = symbol_table_.find_symbol("c:@F@__python_strnlen");
   if (!strlen_symbol)
@@ -3096,8 +3097,9 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     // Fast path: empty separator + list of chars
     bool sep_is_empty = false;
     std::string sep_value;
-    if (extract_constant_string(func["value"], converter_, sep_value) &&
-        sep_value.empty())
+    if (
+      extract_constant_string(func["value"], converter_, sep_value) &&
+      sep_value.empty())
     {
       sep_is_empty = true;
     }
@@ -3126,8 +3128,9 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     {
       const std::string &list_id = list_expr.identifier().as_string();
       const auto *type_info = python_list::find_list_type(list_id);
-      if (type_info && !type_info->empty() &&
-          is_char_like((*type_info)[0].second))
+      if (
+        type_info && !type_info->empty() &&
+        is_char_like((*type_info)[0].second))
         list_is_char = true;
     }
 

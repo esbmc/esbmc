@@ -18,22 +18,38 @@ __ESBMC_HIDE:;
     return 0;
   if (max_len > 16)
     max_len = 16;
-  if (s[0] == '\0' || max_len <= 0) return 0;
-  if (s[1] == '\0' || max_len <= 1) return 1;
-  if (s[2] == '\0' || max_len <= 2) return 2;
-  if (s[3] == '\0' || max_len <= 3) return 3;
-  if (s[4] == '\0' || max_len <= 4) return 4;
-  if (s[5] == '\0' || max_len <= 5) return 5;
-  if (s[6] == '\0' || max_len <= 6) return 6;
-  if (s[7] == '\0' || max_len <= 7) return 7;
-  if (s[8] == '\0' || max_len <= 8) return 8;
-  if (s[9] == '\0' || max_len <= 9) return 9;
-  if (s[10] == '\0' || max_len <= 10) return 10;
-  if (s[11] == '\0' || max_len <= 11) return 11;
-  if (s[12] == '\0' || max_len <= 12) return 12;
-  if (s[13] == '\0' || max_len <= 13) return 13;
-  if (s[14] == '\0' || max_len <= 14) return 14;
-  if (s[15] == '\0' || max_len <= 15) return 15;
+  if (s[0] == '\0' || max_len <= 0)
+    return 0;
+  if (s[1] == '\0' || max_len <= 1)
+    return 1;
+  if (s[2] == '\0' || max_len <= 2)
+    return 2;
+  if (s[3] == '\0' || max_len <= 3)
+    return 3;
+  if (s[4] == '\0' || max_len <= 4)
+    return 4;
+  if (s[5] == '\0' || max_len <= 5)
+    return 5;
+  if (s[6] == '\0' || max_len <= 6)
+    return 6;
+  if (s[7] == '\0' || max_len <= 7)
+    return 7;
+  if (s[8] == '\0' || max_len <= 8)
+    return 8;
+  if (s[9] == '\0' || max_len <= 9)
+    return 9;
+  if (s[10] == '\0' || max_len <= 10)
+    return 10;
+  if (s[11] == '\0' || max_len <= 11)
+    return 11;
+  if (s[12] == '\0' || max_len <= 12)
+    return 12;
+  if (s[13] == '\0' || max_len <= 13)
+    return 13;
+  if (s[14] == '\0' || max_len <= 14)
+    return 14;
+  if (s[15] == '\0' || max_len <= 15)
+    return 15;
   return max_len;
 }
 
@@ -51,22 +67,38 @@ size_t __python_strnlen_16(const char *s)
 __ESBMC_HIDE:;
   if (!s)
     return 0;
-  if (s[0] == '\0') return 0;
-  if (s[1] == '\0') return 1;
-  if (s[2] == '\0') return 2;
-  if (s[3] == '\0') return 3;
-  if (s[4] == '\0') return 4;
-  if (s[5] == '\0') return 5;
-  if (s[6] == '\0') return 6;
-  if (s[7] == '\0') return 7;
-  if (s[8] == '\0') return 8;
-  if (s[9] == '\0') return 9;
-  if (s[10] == '\0') return 10;
-  if (s[11] == '\0') return 11;
-  if (s[12] == '\0') return 12;
-  if (s[13] == '\0') return 13;
-  if (s[14] == '\0') return 14;
-  if (s[15] == '\0') return 15;
+  if (s[0] == '\0')
+    return 0;
+  if (s[1] == '\0')
+    return 1;
+  if (s[2] == '\0')
+    return 2;
+  if (s[3] == '\0')
+    return 3;
+  if (s[4] == '\0')
+    return 4;
+  if (s[5] == '\0')
+    return 5;
+  if (s[6] == '\0')
+    return 6;
+  if (s[7] == '\0')
+    return 7;
+  if (s[8] == '\0')
+    return 8;
+  if (s[9] == '\0')
+    return 9;
+  if (s[10] == '\0')
+    return 10;
+  if (s[11] == '\0')
+    return 11;
+  if (s[12] == '\0')
+    return 12;
+  if (s[13] == '\0')
+    return 13;
+  if (s[14] == '\0')
+    return 14;
+  if (s[15] == '\0')
+    return 15;
   return 16;
 }
 
