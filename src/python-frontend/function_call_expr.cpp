@@ -2163,7 +2163,8 @@ function_call_expr::get_dispatch_table()
          domain_check.copy_to_operands(double_operand, zero);
 
          // Create the exception raise as a code expression
-         exprt raise_expr = gen_exception_raise("ValueError", "math domain error");
+         exprt raise_expr =
+           gen_exception_raise("ValueError", "math domain error");
          locationt loc = converter_.get_location_from_decl(call_);
          raise_expr.location() = loc;
          raise_expr.location().user_provided(true);
