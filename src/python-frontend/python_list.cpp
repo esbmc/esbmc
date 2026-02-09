@@ -1490,11 +1490,46 @@ exprt python_list::handle_index_access(
   // Handle static string indexing with safe null fallback
   if (array.type().is_array() && array.type().subtype() == char_type())
   {
+    if (converter_.get_string_handler().is_zero_length_array(array))
+      return index_exprt(array, pos_expr, char_type());
+
     exprt idx = pos_expr;
     if (idx.type() != size_type())
       idx = typecast_exprt(idx, size_type());
 
-    exprt bound = to_array_type(array.type()).size();
+    const auto &arr_type = to_array_type(array.type());
+    exprt bound = arr_type.size();
+    if (arr_type.size().is_constant())
+    {
+      BigInt size = binary2integer(arr_type.size().value().as_string(), false);
+      if (size == 0)
+      {
+        bool has_size = false;
+        std::size_t actual_size = 0;
+
+        if (!array.operands().empty())
+        {
+          actual_size = array.operands().size();
+          has_size = true;
+        }
+        else if (array.is_symbol())
+        {
+          const symbolt *symbol = converter_.find_symbol(
+            to_symbol_expr(array).get_identifier().as_string());
+          if (
+            symbol && symbol->value.is_not_nil() &&
+            symbol->value.type().is_array() &&
+            !symbol->value.operands().empty())
+          {
+            actual_size = symbol->value.operands().size();
+            has_size = true;
+          }
+        }
+
+        if (has_size)
+          bound = from_integer(actual_size, size_type());
+      }
+    }
     if (bound.type() != size_type())
       bound = typecast_exprt(bound, size_type());
 

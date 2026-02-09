@@ -10,6 +10,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 
 #include <boost/filesystem.hpp>
 
@@ -53,6 +54,27 @@ static const std::string &dump_python_script()
 #include <pythonastgen.h>
 #undef ESBMC_FLAIL
   }
+
+  // Ensure models/string.py is available (may be missing from embedded files)
+  {
+    fs::path models_dir(fs::path(p.path()) / "models");
+    fs::path string_model = models_dir / "string.py";
+    if (!fs::exists(string_model))
+    {
+      fs::path source_model =
+        fs::path(__FILE__).parent_path() / "models" / "string.py";
+      if (fs::exists(source_model))
+      {
+        std::ifstream in(source_model.string());
+        std::ostringstream buffer;
+        buffer << in.rdbuf();
+        const std::string contents = buffer.str();
+        file_operations::create_path_and_write(
+          string_model.string(), contents.c_str(), contents.size());
+      }
+    }
+  }
+
   return p.path();
 }
 

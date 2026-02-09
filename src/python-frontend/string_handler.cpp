@@ -141,6 +141,34 @@ BigInt string_handler::get_string_size(const exprt &expr)
   }
 
   const auto &arr_type = to_array_type(expr.type());
+  if (arr_type.size().is_constant())
+  {
+    BigInt size = binary2integer(arr_type.size().value().as_string(), false);
+    if (size != 0)
+      return size;
+
+    // Size 0 is used as a placeholder for variable-length strings.
+    // Try to recover actual size from constant operands or symbol value.
+    if (expr.is_constant() || (!expr.operands().empty()))
+    {
+      std::string value = extract_string_from_array_operands(expr);
+      return BigInt(value.size() + 1);
+    }
+
+    if (expr.is_symbol())
+    {
+      const symbolt *symbol = symbol_table_.find_symbol(expr.identifier());
+      if (symbol && symbol->value.is_not_nil() && symbol->value.type().is_array())
+      {
+        std::string value = extract_string_from_array_operands(symbol->value);
+        return BigInt(value.size() + 1);
+      }
+    }
+
+    // Unknown length - return a conservative default
+    return BigInt(20);
+  }
+
   return binary2integer(arr_type.size().value().as_string(), false);
 }
 
@@ -501,7 +529,27 @@ bool string_handler::is_zero_length_array(const exprt &expr)
     return false;
 
   BigInt size = binary2integer(arr_type.size().value().as_string(), false);
-  return size == 0;
+  if (size != 0)
+    return false;
+
+  // Size 0 can represent variable-length strings; inspect actual contents.
+  if (expr.is_constant() || (!expr.operands().empty()))
+  {
+    std::string value = extract_string_from_array_operands(expr);
+    return value.empty();
+  }
+
+  if (expr.is_symbol())
+  {
+    const symbolt *symbol = symbol_table_.find_symbol(expr.identifier());
+    if (symbol && symbol->value.is_not_nil() && symbol->value.type().is_array())
+    {
+      std::string value = extract_string_from_array_operands(symbol->value);
+      return value.empty();
+    }
+  }
+
+  return true;
 }
 
 std::string string_handler::extract_string_from_array_operands(

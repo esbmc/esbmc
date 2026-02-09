@@ -2711,6 +2711,14 @@ exprt function_call_expr::handle_general_function_call()
         arg = address_of_exprt(symbol_expr(temp_symbol));
       }
 
+      // Convert string arrays to pointer arguments when needed
+      if (
+        param_type.is_pointer() && param_type.subtype() == char_type() &&
+        arg.type().is_array())
+      {
+        arg = converter_.get_string_handler().get_array_base_address(arg);
+      }
+
       // Check if parameter is an Optional type
       if (param_type.is_struct())
       {
@@ -2731,6 +2739,15 @@ exprt function_call_expr::handle_general_function_call()
     {
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);
+    }
+
+    // Convert string arrays to pointer arguments when needed (after literals)
+    if (
+      param_idx < params.size() && params[param_idx].type().is_pointer() &&
+      params[param_idx].type().subtype() == char_type() &&
+      arg.type().is_array())
+    {
+      arg = converter_.get_string_handler().get_array_base_address(arg);
     }
 
     if (
