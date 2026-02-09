@@ -834,6 +834,54 @@ public:
   typedef esbmct::expr2t_traits<source_value_field, member_field> traits;
 };
 
+class member_ref_data : public datatype_ops
+{
+public:
+  member_ref_data(
+    const type2tc &t,
+    datatype_ops::expr_ids id,
+    const irep_idt &m)
+    : datatype_ops(t, id), member(m)
+  {
+  }
+  member_ref_data(const member_ref_data &ref) = default;
+
+  irep_idt member;
+
+  // Type mangling:
+  typedef esbmct::
+    field_traits<irep_idt, member_ref_data, &member_ref_data::member>
+      member_field;
+  typedef esbmct::expr2t_traits<member_field> traits;
+};
+
+class ptr_mem_data : public datatype_ops
+{
+public:
+  ptr_mem_data(
+    const type2tc &t,
+    datatype_ops::expr_ids id,
+    const expr2tc &s,
+    const expr2tc &p)
+    : datatype_ops(t, id), source_value(s), member_pointer(p)
+  {
+  }
+  ptr_mem_data(const ptr_mem_data &ref) = default;
+
+  expr2tc source_value;
+  expr2tc member_pointer;
+
+  // Type mangling:
+  typedef esbmct::
+    field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::source_value>
+      source_value_field;
+  typedef esbmct::
+    field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::member_pointer>
+      member_pointer_field;
+  typedef esbmct::expr2t_traits<source_value_field, member_pointer_field>
+    traits;
+};
+
 class index_data : public datatype_ops
 {
 public:
@@ -1483,6 +1531,8 @@ irep_typedefs(byte_extract, byte_extract_data);
 irep_typedefs(byte_update, byte_update_data);
 irep_typedefs(with, with_data);
 irep_typedefs(member, member_data);
+irep_typedefs(member_ref, member_ref_data);
+irep_typedefs(ptr_mem, ptr_mem_data);
 irep_typedefs(index, index_data);
 irep_typedefs(isnan, bool_1op);
 irep_typedefs(overflow, overflow_ops);
@@ -2921,6 +2971,40 @@ public:
   member2t(const member2t &ref) = default;
 
   expr2tc do_simplify() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Member reference
+ *  @extends member_ref_data */
+class member_ref2t : public member_ref_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of extracted member.
+   *  @param memb Name of member to extract.  */
+  member_ref2t(const type2tc &type, const irep_idt &memb)
+    : member_ref_expr_methods(type, member_ref_id, memb)
+  {
+  }
+  member_ref2t(const member_ref2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Member pointer
+ *  @extends ptr_mem_data */
+class ptr_mem2t : public ptr_mem_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param source Data structure to extract from.
+   *  @param pointer Pointer to member.  */
+  ptr_mem2t(const type2tc &type, const expr2tc &source, const expr2tc &pointer)
+    : ptr_mem_expr_methods(type, ptr_mem_id, source, pointer)
+  {
+  }
+  ptr_mem2t(const ptr_mem2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };

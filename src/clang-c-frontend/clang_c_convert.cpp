@@ -260,21 +260,17 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::Typedef:
     break;
 
+  // We pretty much ignore this information, clang does the expansion for us.
+  // Will keep the warning just in case we eventually make a nondet use.
   case clang::Decl::BuiltinTemplate:
   {
-    // expanded by clang itself
+    // expanded by clang itself (e.g. make_seq<int,5> ==> [0,1,2,3,4])
     const clang::BuiltinTemplateDecl &btd =
       static_cast<const clang::BuiltinTemplateDecl &>(decl);
-    if (
-      btd.getBuiltinTemplateKind() !=
-      clang::BuiltinTemplateKind::BTK__make_integer_seq)
-    {
-      log_error(
-        "Unsupported builtin template kind id: {}",
-        (int)btd.getBuiltinTemplateKind());
-      abort();
-    }
-
+    log_debug(
+      "[CPP]",
+      "Unsupported builtin template kind id: {}",
+      (int)btd.getBuiltinTemplateKind());
     break;
   }
   default:
@@ -513,13 +509,16 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.lvalue = true;
   symbol.static_lifetime =
     (vd.getStorageClass() == clang::SC_Static) || vd.hasGlobalStorage();
-  symbol.is_extern = vd.hasExternalStorage();
+  // extern variables with initializers are no longer considered extern
+  // in the resulting object file by at least gcc.
+  // See TC linking-8 or try readelf -s on main_init_extern.o
+  symbol.is_extern = vd.hasExternalStorage() && !vd.hasInit();
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
   symbol.is_thread_local = vd.getTLSKind() != clang::VarDecl::TLS_None;
 
   if (
-    symbol.static_lifetime &&
+    symbol.static_lifetime && !symbol.is_extern &&
     (!vd.hasInit() || is_aggregate_type(vd.getType())))
   {
     // the type might contains symbolic types,
@@ -527,17 +526,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    if (symbol.is_extern)
-    {
-      exprt value = exprt("sideeffect", get_complete_type(t, ns));
-      value.statement("nondet");
-      symbol.value = value;
-    }
-    else
-    {
-      symbol.value = gen_zero(get_complete_type(t, ns), true);
-      symbol.value.zero_initializer(true);
-    }
+    symbol.value = gen_zero(get_complete_type(t, ns), true);
+    symbol.value.zero_initializer(true);
   }
 
   symbolt *added_symbol = nullptr;
@@ -3324,6 +3314,11 @@ bool clang_c_convertert::get_binary_operator_expr(
 
   case clang::BO_Comma:
     new_expr = exprt("comma", t);
+    break;
+
+  case clang::BO_PtrMemI:
+  case clang::BO_PtrMemD:
+    new_expr = exprt("ptr_mem", t);
     break;
 
   default:

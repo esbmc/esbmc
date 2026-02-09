@@ -1,10 +1,11 @@
 #include "config_file.h"
 
 #include <boost/program_options/option.hpp>
-#include <stdexcept>
+#include <cstdlib>
 #include <string>
 #include <set>
 #include <fmt/core.h>
+#include <util/message.h>
 
 #include "lib/toml.hpp"
 
@@ -45,12 +46,14 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
   }
   catch (const toml::parse_error &err)
   {
-    throw std::runtime_error(
-      fmt::format("Config: error parsing TOML file: {}", err.what()));
+    log_error("config: error parsing TOML file: {}", err.what());
+    abort();
   }
 
   // Get all the long option names and use those as allowed options.
+  // Also track which options are boolean flags (zero-token options).
   std::set<std::string> allowed_options;
+  std::set<std::string> bool_flag_options;
   const std::vector<
     boost::shared_ptr<boost::program_options::option_description>> &options =
     desc.options();
@@ -64,6 +67,8 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
         "configuration files"));
 
     allowed_options.insert(d.long_name());
+    if (d.semantic()->max_tokens() == 0)
+      bool_flag_options.insert(d.long_name());
   }
 
   // Parser return char strings
@@ -73,48 +78,60 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
     if (tbl.contains(key_name))
     {
       auto value_node = tbl.get(key_name);
+
+      auto add_option =
+        [&](
+          const std::string &key, const std::string &val, bool quote = false) {
+          if (quote)
+            log_status("[CONFIG] loaded {} = \"{}\"", key, val);
+          else
+            log_status("[CONFIG] loaded {} = {}", key, val);
+          result.options.push_back(boost::program_options::option(
+            key, std::vector<std::string>(1, val)));
+        };
+
       switch (value_node->type())
       {
       case toml::node_type::string:
       {
-        const auto value = value_node->as_string()->get();
-        // For some reason takes it in as an array of values.
-        const auto option = boost::program_options::option(
-          key_name, std::vector<std::string>(1, value));
-        result.options.push_back(option);
+        if (bool_flag_options.count(key_name))
+        {
+          log_error(
+            "config: key '{}' is a boolean flag but got string value \"{}\""
+            " (use {} = true instead of {} = \"true\")",
+            key_name,
+            value_node->as_string()->get(),
+            key_name,
+            key_name);
+          abort();
+        }
+
+        add_option(key_name, value_node->as_string()->get(), true);
         break;
       }
       case toml::node_type::integer:
       {
-        const auto value = std::to_string(value_node->as_integer()->get());
-        // For some reason takes it in as an array of values.
-        const auto option = boost::program_options::option(
-          key_name, std::vector<std::string>(1, value));
-        result.options.push_back(option);
+        add_option(key_name, std::to_string(value_node->as_integer()->get()));
         break;
       }
       case toml::node_type::floating_point:
       {
-        const auto value =
-          std::to_string(value_node->as_floating_point()->get());
-        // For some reason takes it in as an array of values.
-        const auto option = boost::program_options::option(
-          key_name, std::vector<std::string>(1, value));
-        result.options.push_back(option);
+        add_option(
+          key_name, std::to_string(value_node->as_floating_point()->get()));
         break;
       }
       case toml::node_type::boolean:
       {
         const auto value = value_node->as_boolean()->get();
+        log_status(
+          "[CONFIG] loaded {} = {}", key_name, value ? "true" : "false");
         // Boolean flags are handled in this codebase as flags, so only add if
         // true. For context: cmdlinet::isset
         // Also they are added as blank strings!
         if (value)
         {
-          const auto option = boost::program_options::option(
-            key_name, std::vector<std::string>(1, ""));
-
-          result.options.push_back(option);
+          result.options.push_back(boost::program_options::option(
+            key_name, std::vector<std::string>(1, "")));
         }
         break;
       }
@@ -125,11 +142,11 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       case toml::node_type::time:
       case toml::node_type::date_time:
       case toml::node_type::none:
-        throw std::runtime_error(fmt::format(
+        log_error(
           "config: invalid key type: {}: {}",
           key_name,
-          toml_type_to_string(*value_node)));
-        break;
+          toml_type_to_string(*value_node));
+        abort();
       };
     }
   }

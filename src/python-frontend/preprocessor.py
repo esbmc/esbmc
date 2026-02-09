@@ -11,6 +11,7 @@ class Preprocessor(ast.NodeTransformer):
         self.known_variable_types = {}
         self.range_loop_counter = 0  # Counter for unique variable names in nested range loops
         self.iterable_loop_counter = 0  # Counter for unique variable names in nested iterable loops
+        self.enumerate_loop_counter = 0  # Counter for unique variable names in nested enumerate loops
         self.helper_functions_added = False  # Track if helper functions have been added
         self.functionKwonlyParams = {}
         self.listcomp_counter = 0  # Counter for list comprehension temporaries
@@ -506,6 +507,9 @@ class Preprocessor(ast.NodeTransformer):
             2. for item in enumerate(iterable, start):          # single variable gets tuple
         """
         enumerate_call = node.iter
+        # Generate unique variable names for this enumerate loop level
+        loop_id = self.enumerate_loop_counter
+        self.enumerate_loop_counter += 1
 
         # Step 1: Validate the enumerate call
         self._validate_enumerate_call(enumerate_call)
@@ -518,12 +522,12 @@ class Preprocessor(ast.NodeTransformer):
 
         # Step 4: Create setup statements (variable declarations)
         setup_statements = self._create_enumerate_setup_statements(
-            node, iterable, start_value
+            node, iterable, start_value, loop_id
         )
 
         # Step 5: Create the while loop
         while_stmt = self._create_enumerate_while_loop(
-            node, target_info, setup_statements
+            node, target_info, setup_statements, loop_id
         )
 
         # Step 6: Combine everything and ensure proper AST locations
@@ -596,13 +600,19 @@ class Preprocessor(ast.NodeTransformer):
                 type_name = type(start_val).__name__
                 raise TypeError(f"'{type_name}' object cannot be interpreted as an integer")
 
-    def _create_enumerate_setup_statements(self, node, iterable, start_value):
+    def _create_enumerate_setup_statements(self, node, iterable, start_value, loop_id):
         """Create the initial variable assignments for enumerate transformation."""
         annotation_id = self._get_iterable_type_annotation(iterable)
 
+        iter_var = f'ESBMC_iter_{loop_id}'
+        index_var = f'ESBMC_index_{loop_id}'
+        array_index_var = f'ESBMC_array_index_{loop_id}'
+        length_var = f'ESBMC_length_{loop_id}'
+
         # Create: ESBMC_iter: <type> = iterable
         iter_assign = ast.AnnAssign(
-            target=self.create_name_node('ESBMC_iter', ast.Store(), node),
+            target=self.create_name_node(iter_var, ast.Store(), node),
+            # annotation=annotation_node,
             annotation=self.create_name_node(annotation_id, ast.Load(), node),
             value=iterable,
             simple=1
@@ -611,7 +621,7 @@ class Preprocessor(ast.NodeTransformer):
 
         # Create: ESBMC_index: int = start_value (enumeration index)
         index_assign = ast.AnnAssign(
-            target=self.create_name_node('ESBMC_index', ast.Store(), node),
+            target=self.create_name_node(index_var, ast.Store(), node),
             annotation=self.create_name_node('int', ast.Load(), node),
             value=start_value,
             simple=1
@@ -620,7 +630,7 @@ class Preprocessor(ast.NodeTransformer):
 
         # Create: ESBMC_array_index: int = 0 (array access index)
         array_index_assign = ast.AnnAssign(
-            target=self.create_name_node('ESBMC_array_index', ast.Store(), node),
+            target=self.create_name_node(array_index_var, ast.Store(), node),
             annotation=self.create_name_node('int', ast.Load(), node),
             value=self.create_constant_node(0, node),
             simple=1
@@ -630,12 +640,12 @@ class Preprocessor(ast.NodeTransformer):
         # Create: ESBMC_length: int = len(ESBMC_iter)
         len_call = ast.Call(
             func=self.create_name_node('len', ast.Load(), node),
-            args=[self.create_name_node('ESBMC_iter', ast.Load(), node)],
+            args=[self.create_name_node(iter_var, ast.Load(), node)],
             keywords=[]
         )
         self.ensure_all_locations(len_call, node)
         length_assign = ast.AnnAssign(
-            target=self.create_name_node('ESBMC_length', ast.Store(), node),
+            target=self.create_name_node(length_var, ast.Store(), node),
             annotation=self.create_name_node('int', ast.Load(), node),
             value=len_call,
             simple=1
@@ -644,24 +654,27 @@ class Preprocessor(ast.NodeTransformer):
 
         return [iter_assign, index_assign, array_index_assign, length_assign]
 
-    def _create_enumerate_while_loop(self, node, target_info, setup_statements):
+    def _create_enumerate_while_loop(self, node, target_info, setup_statements, loop_id):
         """Create the while loop for enumerate transformation."""
+        array_index_var = f'ESBMC_array_index_{loop_id}'
+        length_var = f'ESBMC_length_{loop_id}'
+
         # Create while condition: ESBMC_array_index < ESBMC_length
         while_cond = ast.Compare(
-            left=self.create_name_node('ESBMC_array_index', ast.Load(), node),
+            left=self.create_name_node(array_index_var, ast.Load(), node),
             ops=[ast.Lt()],
-            comparators=[self.create_name_node('ESBMC_length', ast.Load(), node)]
+            comparators=[self.create_name_node(length_var, ast.Load(), node)]
         )
         self.ensure_all_locations(while_cond, node)
 
         # Create loop body based on target type
         if target_info['type'] == 'unpacking':
-            loop_body = self._create_unpacking_loop_body(node, target_info)
+            loop_body = self._create_unpacking_loop_body(node, target_info, loop_id)
         else:  # single variable
-            loop_body = self._create_single_var_loop_body(node, target_info)
+            loop_body = self._create_single_var_loop_body(node, target_info, loop_id)
 
         # Add increment statements
-        loop_body.extend(self._create_increment_statements(node))
+        loop_body.extend(self._create_increment_statements(node, loop_id))
 
         # Transform the original body
         loop_body.extend(self._transform_original_body(node))
@@ -672,31 +685,33 @@ class Preprocessor(ast.NodeTransformer):
 
         return while_stmt
 
-    def _create_unpacking_loop_body(self, node, target_info):
+    def _create_unpacking_loop_body(self, node, target_info, loop_id):
         """Create loop body for unpacking case: for i, x in enumerate(...)"""
-        annotation_id = self._get_iterable_type_annotation(
-            # We need to reconstruct this - could be improved by passing it through
-            node.iter.args[0] if hasattr(node.iter, 'args') else None
-        )
+        iterable_node = node.iter.args[0] if hasattr(node.iter, 'args') else None
+        annotation_id = self._get_iterable_type_annotation(iterable_node)
+
+        iter_var = f'ESBMC_iter_{loop_id}'
+        index_var = f'ESBMC_index_{loop_id}'
+        array_index_var = f'ESBMC_array_index_{loop_id}'
 
         # index_var: int = ESBMC_index
         user_index_assign = ast.AnnAssign(
             target=self.create_name_node(target_info['index_var'], ast.Store(), node),
             annotation=self.create_name_node('int', ast.Load(), node),
-            value=self.create_name_node('ESBMC_index', ast.Load(), node),
+            value=self.create_name_node(index_var, ast.Load(), node),
             simple=1
         )
         self.ensure_all_locations(user_index_assign, node)
 
         # value_var: <element_type> = ESBMC_iter[ESBMC_array_index]
         subscript = ast.Subscript(
-            value=self.create_name_node('ESBMC_iter', ast.Load(), node),
-            slice=self.create_name_node('ESBMC_array_index', ast.Load(), node),
+            value=self.create_name_node(iter_var, ast.Load(), node),
+            slice=self.create_name_node(array_index_var, ast.Load(), node),
             ctx=ast.Load()
         )
         self.ensure_all_locations(subscript, node)
 
-        element_type = self._get_element_type_from_container(annotation_id)
+        element_type = self._get_element_type_from_container(annotation_id, iterable_node)
         user_value_assign = ast.AnnAssign(
             target=self.create_name_node(target_info['value_var'], ast.Store(), node),
             annotation=self.create_name_node(element_type, ast.Load(), node),
@@ -707,19 +722,23 @@ class Preprocessor(ast.NodeTransformer):
 
         return [user_index_assign, user_value_assign]
 
-    def _create_single_var_loop_body(self, node, target_info):
+    def _create_single_var_loop_body(self, node, target_info, loop_id):
         """Create loop body for single variable case: for item in enumerate(...)"""
+        iter_var = f'ESBMC_iter_{loop_id}'
+        index_var = f'ESBMC_index_{loop_id}'
+        array_index_var = f'ESBMC_array_index_{loop_id}'
+
         # Create tuple: (ESBMC_index, ESBMC_iter[ESBMC_array_index])
         subscript = ast.Subscript(
-            value=self.create_name_node('ESBMC_iter', ast.Load(), node),
-            slice=self.create_name_node('ESBMC_array_index', ast.Load(), node),
+            value=self.create_name_node(iter_var, ast.Load(), node),
+            slice=self.create_name_node(array_index_var, ast.Load(), node),
             ctx=ast.Load()
         )
         self.ensure_all_locations(subscript, node)
 
         tuple_value = ast.Tuple(
             elts=[
-                self.create_name_node('ESBMC_index', ast.Load(), node),
+                self.create_name_node(index_var, ast.Load(), node),
                 subscript
             ],
             ctx=ast.Load()
@@ -737,14 +756,17 @@ class Preprocessor(ast.NodeTransformer):
 
         return [user_tuple_assign]
 
-    def _create_increment_statements(self, node):
+    def _create_increment_statements(self, node, loop_id):
         """Create the increment statements for both indices."""
+        index_var = f'ESBMC_index_{loop_id}'
+        array_index_var = f'ESBMC_array_index_{loop_id}'
+
         # ESBMC_index: int = ESBMC_index + 1
         index_increment = ast.AnnAssign(
-            target=self.create_name_node('ESBMC_index', ast.Store(), node),
+            target=self.create_name_node(index_var, ast.Store(), node),
             annotation=self.create_name_node('int', ast.Load(), node),
             value=ast.BinOp(
-                left=self.create_name_node('ESBMC_index', ast.Load(), node),
+                left=self.create_name_node(index_var, ast.Load(), node),
                 op=ast.Add(),
                 right=self.create_constant_node(1, node)
             ),
@@ -754,10 +776,10 @@ class Preprocessor(ast.NodeTransformer):
 
         # ESBMC_array_index: int = ESBMC_array_index + 1
         array_index_increment = ast.AnnAssign(
-            target=self.create_name_node('ESBMC_array_index', ast.Store(), node),
+            target=self.create_name_node(array_index_var, ast.Store(), node),
             annotation=self.create_name_node('int', ast.Load(), node),
             value=ast.BinOp(
-                left=self.create_name_node('ESBMC_array_index', ast.Load(), node),
+                left=self.create_name_node(array_index_var, ast.Load(), node),
                 op=ast.Add(),
                 right=self.create_constant_node(1, node)
             ),

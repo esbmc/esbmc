@@ -379,13 +379,13 @@ __PTRDIFF_TYPE__ __ESBMC_POINTER_OFFSET(const void *);
 
 // malloc
 __attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_alloc[1];
+extern _Bool __ESBMC_alloc[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_is_dynamic[1];
+extern _Bool __ESBMC_is_dynamic[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
-__SIZE_TYPE__ __ESBMC_alloc_size[1];
+extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
@@ -400,7 +400,7 @@ _Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
 
 _Bool __ESBMC_is_little_endian();
 
-int __ESBMC_rounding_mode = 0;
+extern int __ESBMC_rounding_mode;
 
 void *__ESBMC_memset(void *, int, __SIZE_TYPE__);
       void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);

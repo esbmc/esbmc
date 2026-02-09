@@ -26,7 +26,10 @@
 // - compiler GNU 9.4.0
 //
 
-typedef unsigned int size_t;
+#include <time.h>
+#include <stdbool.h>
+#include <stddef.h>
+
 typedef __builtin_va_list __gnuc_va_list;
 typedef unsigned char __u_char;
 typedef unsigned short int __u_short;
@@ -63,11 +66,9 @@ __extension__ typedef long int __off_t;
 __extension__ typedef __int64_t __off64_t;
 __extension__ typedef int __pid_t;
 __extension__ typedef struct { int __val[2]; } __fsid_t;
-__extension__ typedef long int __clock_t;
 __extension__ typedef unsigned long int __rlim_t;
 __extension__ typedef __uint64_t __rlim64_t;
 __extension__ typedef unsigned int __id_t;
-__extension__ typedef long int __time_t;
 __extension__ typedef unsigned int __useconds_t;
 __extension__ typedef long int __suseconds_t;
 __extension__ typedef int __daddr_t;
@@ -83,7 +84,6 @@ __extension__ typedef unsigned long int __fsfilcnt_t;
 __extension__ typedef __uint64_t __fsfilcnt64_t;
 __extension__ typedef int __fsword_t;
 __extension__ typedef int __ssize_t;
-__extension__ typedef long int __syscall_slong_t;
 __extension__ typedef unsigned long int __syscall_ulong_t;
 typedef __off64_t __loff_t;
 typedef char *__caddr_t;
@@ -234,40 +234,6 @@ extern int ferror (FILE *__stream) __attribute__ ((__nothrow__ , __leaf__)) ;
 extern void perror (const char *__s);
 extern int __uflow (FILE *);
 extern int __overflow (FILE *, int);
-
-typedef __time_t time_t;
-struct timespec
-{
-  __time_t tv_sec;
-  __syscall_slong_t tv_nsec;
-};
-typedef __clock_t clock_t;
-struct tm
-{
-  int tm_sec;
-  int tm_min;
-  int tm_hour;
-  int tm_mday;
-  int tm_mon;
-  int tm_year;
-  int tm_wday;
-  int tm_yday;
-  int tm_isdst;
-  long int __tm_gmtoff;
-  const char *__tm_zone;
-};
-
-extern clock_t clock (void) __attribute__ ((__nothrow__ , __leaf__));
-extern time_t time (time_t *__timer) __attribute__ ((__nothrow__ , __leaf__));
-extern double difftime (time_t __time1, time_t __time0)
-     __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__const__));
-extern time_t mktime (struct tm *__tp) __attribute__ ((__nothrow__ , __leaf__));
-extern size_t strftime (char *__restrict __s, size_t __maxsize,
-   const char *__restrict __format,
-   const struct tm *__restrict __tp) __attribute__ ((__nothrow__ , __leaf__));
-extern struct tm *gmtime (const time_t *__timer) __attribute__ ((__nothrow__ , __leaf__));
-extern struct tm *localtime (const time_t *__timer) __attribute__ ((__nothrow__ , __leaf__));
-extern char *asctime (const struct tm *__tp) __attribute__ ((__nothrow__ , __leaf__));
 extern char *ctime (const time_t *__timer) __attribute__ ((__nothrow__ , __leaf__));
 extern char *__tzname[2];
 extern int __daylight;
@@ -678,8 +644,6 @@ extern uintmax_t wcstoumax (const __gwchar_t *__restrict __nptr,
        __gwchar_t ** __restrict __endptr, int __base)
      __attribute__ ((__nothrow__ , __leaf__));
 
-typedef int ptrdiff_t;
-typedef long int wchar_t;
 typedef uint8_t vuint8_t;
 typedef uint16_t vuint16_t;
 typedef uint32_t vuint32_t;
@@ -691,7 +655,7 @@ typedef int32_t vint32_t;
 typedef int64_t vint64_t;
 typedef intptr_t vintptr_t;
 typedef size_t vsize_t;
-typedef _Bool vbool_t;
+typedef bool vbool_t;
 
 extern void __assert_fail (const char *__assertion, const char *__file,
       unsigned int __line, const char *__function)

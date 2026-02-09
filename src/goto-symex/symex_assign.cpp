@@ -122,12 +122,29 @@ goto_symext::goto_symext(
           {
             // #pragma unroll (no N) - unlimited unrolling (0 means no limit in ESBMC)
             unwind_set[instruction.loop_number] = 0;
+            log_status(
+              "Applying #pragma unroll (unlimited) to loop {} in file {} line "
+              "{} column {} function {}",
+              instruction.loop_number,
+              instruction.location.get_file(),
+              instruction.location.get_line(),
+              instruction.location.get_column(),
+              instruction.location.get_function());
           }
           else
           {
             // #pragma unroll N - use specified count
             unwind_set[instruction.loop_number] =
               BigInt(instruction.pragma_unroll_count);
+            log_status(
+              "Applying #pragma unroll {} to loop {} in file {} line {} column "
+              "{} function {}",
+              instruction.pragma_unroll_count,
+              instruction.loop_number,
+              instruction.location.get_file(),
+              instruction.location.get_line(),
+              instruction.location.get_column(),
+              instruction.location.get_function());
           }
         }
       }
@@ -470,6 +487,13 @@ void goto_symext::symex_assign_symbol(
   expr2tc new_lhs = full_lhs;
   if (is_index2t(new_lhs))
     cur_state->rename(to_index2t(new_lhs).index);
+
+  if (is_member_ref2t(rhs))
+    // In pointer-to-member, the following assignment will occur:
+    // int S::* pm = &S::x;
+    // This assignment is static and we do not need to generate an SSA for it,
+    // we can simply skip it - constant propagation can handle it.
+    return;
 
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);

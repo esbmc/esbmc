@@ -1487,6 +1487,24 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == exprt::member_ref)
+  {
+    type = migrate_type(expr.type());
+
+    new_expr_ref = member_ref2tc(type, expr.component_name());
+    return;
+  }
+
+  if (expr.id() == exprt::ptr_mem)
+  {
+    type = migrate_type(expr.type());
+    expr2tc source, pointer;
+    convert_operand_pair(expr, source, pointer);
+
+    new_expr_ref = ptr_mem2tc(type, source, pointer);
+    return;
+  }
+
   if (expr.id() == exprt::index)
   {
     type = migrate_type(expr.type());
@@ -3001,6 +3019,24 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt member_name("member_name");
     member.copy_to_operands(migrate_expr_back(ref2.source_value));
     return member;
+  }
+  case expr2t::member_ref_id:
+  {
+    const member_ref2t &ref2 = to_member_ref2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt member_ref("member_ref", thetype);
+    member_ref.set("component_name", ref2.member);
+    return member_ref;
+  }
+  case expr2t::ptr_mem_id:
+  {
+    const ptr_mem2t &ref2 = to_ptr_mem2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt ptrmem("ptr_mem", thetype);
+    ptrmem.copy_to_operands(
+      migrate_expr_back(ref2.source_value),
+      migrate_expr_back(ref2.member_pointer));
+    return ptrmem;
   }
   case expr2t::index_id:
   {

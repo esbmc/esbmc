@@ -173,6 +173,46 @@ public:
   exprt handle_sqrt(exprt operand, const nlohmann::json &element);
 
   /**
+   * @brief Handle sine function (math.sin)
+   *
+   * Implements Python's math.sin() function by creating a call to C's sin().
+   * Always returns a float (double) result representing the sine of the angle
+   * in radians.
+   *
+   * @param operand The angle in radians (promoted to float if needed)
+   * @param element JSON AST node for location information
+   * @return Function call expression to sin()
+   * @throws std::runtime_error if sin symbol not found in symbol table
+   *
+   * Examples:
+   *   math.sin(0) -> 0.0
+   *   math.sin(math.pi/2) -> 1.0
+   *   math.sin(math.pi) -> 0.0 (approximately)
+   *   math.sin(-math.pi/2) -> -1.0
+   */
+  exprt handle_sin(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle cosine function (math.cos)
+   *
+   * Implements Python's math.cos() function by creating a call to C's cos().
+   * Always returns a float (double) result representing the cosine of the angle
+   * in radians.
+   *
+   * @param operand The angle in radians (promoted to float if needed)
+   * @param element JSON AST node for location information
+   * @return Function call expression to cos()
+   * @throws std::runtime_error if cos symbol not found in symbol table
+   *
+   * Examples:
+   *   math.cos(0) -> 1.0
+   *   math.cos(math.pi/2) -> 0.0 (approximately)
+   *   math.cos(math.pi) -> -1.0
+   *   math.cos(2*math.pi) -> 1.0
+   */
+  exprt handle_cos(exprt operand, const nlohmann::json &element);
+
+  /**
    * @brief Handle divmod() built-in function
    * 
    * Implements Python's divmod(a, b) function, which returns a tuple containing
@@ -205,6 +245,51 @@ public:
    */
   exprt
   handle_divmod(exprt dividend, exprt divisor, const nlohmann::json &element);
+
+  /**
+   * @brief Handle exponential function (math.exp)
+   *
+   * Implements Python's math.exp() function by creating a call to C's exp().
+   * Always returns a float (double) result representing e raised to the power
+   * of the operand.
+   *
+   * @param operand The exponent value (promoted to float if needed)
+   * @param element JSON AST node for location information
+   * @return Function call expression to exp()
+   * @throws std::runtime_error if exp symbol not found in symbol table
+   *
+   * Examples:
+   *   math.exp(0) -> 1.0
+   *   math.exp(1) -> 2.718... (e)
+   *   math.exp(2) -> 7.389...
+   *   math.exp(-1) -> 0.368...
+   */
+  exprt handle_exp(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle natural logarithm function (math.log)
+   *
+   * Implements Python's math.log() function by creating a call to C's log().
+   * Always returns a float (double) result representing the natural logarithm
+   * (base e) of the operand.
+   *
+   * Domain: x > 0 (positive values only)
+   * - log(0) produces domain error
+   * - log(negative) produces domain error
+   *
+   * @param operand The value to take logarithm of (promoted to float if needed)
+   * @param element JSON AST node for location information
+   * @return Function call expression to log()
+   * @throws std::runtime_error if log symbol not found in symbol table
+   *
+   * Examples:
+   *   math.log(1) -> 0.0
+   *   math.log(math.e) -> 1.0
+   *   math.log(10) -> 2.302...
+   *   math.log(0) -> domain error at runtime
+   *   math.log(-1) -> domain error at runtime
+   */
+  exprt handle_log(exprt operand, const nlohmann::json &element);
 };
 
 #endif
