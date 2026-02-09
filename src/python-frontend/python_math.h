@@ -246,7 +246,7 @@ public:
   exprt
   handle_divmod(exprt dividend, exprt divisor, const nlohmann::json &element);
 
-/**
+  /**
    * @brief Handle exponential function (math.exp)
    *
    * Implements Python's math.exp() function by creating a call to C's exp().

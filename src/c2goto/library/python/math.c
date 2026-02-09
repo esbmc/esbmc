@@ -30,6 +30,7 @@ double __ESBMC_log(double x)
 __ESBMC_HIDE:;
   __ESBMC_assert(x > 0.0, "math domain error");
 
-  if (x == 1.0) return 0.0;
+  if (x == 1.0)
+    return 0.0;
   return log(x);
 }
