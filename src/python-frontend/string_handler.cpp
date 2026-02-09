@@ -563,8 +563,7 @@ exprt string_handler::handle_string_operations(
   return nil_exprt();
 }
 
-exprt string_handler::get_or_create_string_literal_symbol(
-  const exprt &arr)
+exprt string_handler::get_or_create_string_literal_symbol(const exprt &arr)
 {
   std::string content;
   if (arr.id() == "string-constant")
@@ -588,13 +587,11 @@ exprt string_handler::get_or_create_string_literal_symbol(
   location.set_file(converter_.python_file().c_str());
   location.set_line(1);
 
-  std::string module_name =
-    converter_.python_file().substr(
-      0, converter_.python_file().find_last_of("."));
+  std::string module_name = converter_.python_file().substr(
+    0, converter_.python_file().find_last_of("."));
 
   symbol_id sid(converter_.python_file(), "", "");
-  std::string hash =
-    std::to_string(std::hash<std::string>{}(content));
+  std::string hash = std::to_string(std::hash<std::string>{}(content));
   sid.set_object("$strlit$" + hash);
   std::string symbol_id_str = sid.to_string();
 
@@ -612,9 +609,8 @@ exprt string_handler::get_or_create_string_literal_symbol(
 
   typet string_type = value_expr.type();
 
-  symbolt symbol =
-    converter_.create_symbol(
-      module_name, "$strlit$", symbol_id_str, location, string_type);
+  symbolt symbol = converter_.create_symbol(
+    module_name, "$strlit$", symbol_id_str, location, string_type);
   symbol.lvalue = true;
   symbol.static_lifetime = true;
   symbol.is_extern = false;
