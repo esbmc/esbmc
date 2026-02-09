@@ -437,6 +437,11 @@ exprt python_dict_handler::handle_dict_subscript(
   find_call.arguments().push_back(key_arg);
   find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
   find_call.arguments().push_back(key_info.elem_size);
+  const std::string string_type_name = "__python_str";
+  constant_exprt string_type_id(size_type());
+  string_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(string_type_name), config.ansi_c.address_width));
+  find_call.arguments().push_back(string_type_id);
   find_call.type() = size_type();
   find_call.location() = location;
   converter_.add_instruction(find_call);
@@ -1204,6 +1209,11 @@ exprt python_dict_handler::handle_dict_get(
   try_find_call.arguments().push_back(key_arg);
   try_find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
   try_find_call.arguments().push_back(key_info.elem_size);
+  const std::string string_type_name = "__python_str";
+  constant_exprt string_type_id(size_type());
+  string_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(string_type_name), config.ansi_c.address_width));
+  try_find_call.arguments().push_back(string_type_id);
   try_find_call.type() = size_type();
   try_find_call.location() = location;
   converter_.add_instruction(try_find_call);
@@ -1353,6 +1363,11 @@ exprt python_dict_handler::compare(
   dict_eq_call.arguments().push_back(lhs_values);
   dict_eq_call.arguments().push_back(rhs_keys);
   dict_eq_call.arguments().push_back(rhs_values);
+  const std::string string_type_name = "__python_str";
+  constant_exprt string_type_id(size_type());
+  string_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(string_type_name), config.ansi_c.address_width));
+  dict_eq_call.arguments().push_back(string_type_id);
   dict_eq_call.type() = bool_type();
   dict_eq_call.location() = location;
   converter_.add_instruction(dict_eq_call);

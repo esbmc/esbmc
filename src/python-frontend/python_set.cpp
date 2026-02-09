@@ -4,6 +4,7 @@
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 #include <util/std_code.h>
+#include <functional>
 
 symbolt &python_set::create_set_list()
 {
@@ -197,6 +198,12 @@ exprt python_set::build_set_difference_call(
   }
   contains_call.arguments().push_back(elem_size);
 
+  const std::string string_type_name = "__python_str";
+  constant_exprt string_type_id(size_type());
+  string_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(string_type_name), config.ansi_c.address_width));
+  contains_call.arguments().push_back(string_type_id);
+
   contains_call.type() = bool_type();
   contains_call.location() = loc;
   body.copy_to_operands(contains_call);
@@ -347,6 +354,12 @@ exprt python_set::build_set_intersection_call(
     base.swap(deref);
   }
   contains_call.arguments().push_back(elem_size);
+
+  const std::string string_type_name = "__python_str";
+  constant_exprt string_type_id(size_type());
+  string_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(string_type_name), config.ansi_c.address_width));
+  contains_call.arguments().push_back(string_type_id);
 
   contains_call.type() = bool_type();
   contains_call.location() = loc;
@@ -509,6 +522,12 @@ exprt python_set::build_set_union_call(
     base.swap(deref);
   }
   contains_call.arguments().push_back(elem_size);
+
+  const std::string string_type_name = "__python_str";
+  constant_exprt string_type_id(size_type());
+  string_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(string_type_name), config.ansi_c.address_width));
+  contains_call.arguments().push_back(string_type_id);
 
   contains_call.type() = bool_type();
   contains_call.location() = loc;

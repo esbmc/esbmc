@@ -108,12 +108,29 @@ static typet get_elem_type_from_annotation(
 std::unordered_map<std::string, std::vector<std::pair<std::string, typet>>>
   python_list::list_type_map{};
 
+const TypeInfo *python_list::find_list_type(const std::string &list_id)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || it->second.empty())
+    return nullptr;
+  return &it->second;
+}
+
 list_elem_info
 python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 {
   const type_handler type_handler_ = converter_.get_type_handler();
   locationt location = converter_.get_location_from_decl(op);
-  const std::string elem_type_name = type_handler_.type_to_string(elem.type());
+  // Normalize string-like types (char arrays and char pointers) to a stable
+  // type name so list comparisons can treat them uniformly.
+  auto is_string_like = [](const typet &t) -> bool {
+    return (t.is_array() && t.subtype() == char_type()) ||
+           (t.is_pointer() && t.subtype() == char_type());
+  };
+  const std::string elem_type_name = is_string_like(elem.type())
+                                       ? "__python_str"
+                                       : type_handler_.type_to_string(
+                                           elem.type());
 
   // Create type name as null-terminated char array
   const typet type_name_type =
@@ -183,11 +200,13 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   {
     // Call strlen to get actual string length
     const symbolt *strlen_symbol =
-      converter_.symbol_table().find_symbol("c:@F@strlen");
+      converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
     if (!strlen_symbol)
-    {
-      throw std::runtime_error("strlen function not found in symbol table");
-    }
+      strlen_symbol = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+    if (!strlen_symbol)
+      strlen_symbol = converter_.symbol_table().find_symbol("c:@F@strlen");
+    if (!strlen_symbol)
+      throw std::runtime_error("string length function not found in symbol table");
 
     // Create temp variable to store strlen result
     symbolt &strlen_result = converter_.create_tmp_symbol(
@@ -949,9 +968,13 @@ exprt python_list::handle_range_slice(
       {
         // Call strlen to get the length
         const symbolt *strlen_symbol =
-          converter_.symbol_table().find_symbol("c:@F@strlen");
+          converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
         if (!strlen_symbol)
-          throw std::runtime_error("strlen function not found in symbol table");
+          strlen_symbol = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+        if (!strlen_symbol)
+          strlen_symbol = converter_.symbol_table().find_symbol("c:@F@strlen");
+        if (!strlen_symbol)
+          throw std::runtime_error("string length function not found in symbol table");
 
         symbolt &strlen_result = converter_.create_tmp_symbol(
           slice_node, "$strlen_result$", size_type(), gen_zero(size_type()));
@@ -1561,6 +1584,12 @@ exprt python_list::compare(
   list_type_id.set_value(integer2binary(
     std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
 
+  // Compute string type_id for string comparisons inside lists
+  const std::string string_type_name = "__python_str";
+  constant_exprt string_type_id(size_type());
+  string_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(string_type_name), config.ansi_c.address_width));
+
   symbolt &eq_ret = converter_.create_tmp_symbol(
     list_value_, "eq_tmp", bool_type(), gen_boolean(false));
   code_declt eq_ret_decl(symbol_expr(eq_ret));
@@ -1579,6 +1608,7 @@ exprt python_list::compare(
   list_eq_func_call.arguments().push_back(symbol_expr(*lhs_symbol)); // l1
   list_eq_func_call.arguments().push_back(symbol_expr(*rhs_symbol)); // l2
   list_eq_func_call.arguments().push_back(list_type_id);   // list_type_id
+  list_eq_func_call.arguments().push_back(string_type_id); // string_type_id
   list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
@@ -1802,7 +1832,11 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
           // Use strlen for void* strings from iteration
           const symbolt *strlen_symbol =
-            converter_.symbol_table().find_symbol("c:@F@strlen");
+            converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
+          if (!strlen_symbol)
+            strlen_symbol = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+          if (!strlen_symbol)
+            strlen_symbol = converter_.symbol_table().find_symbol("c:@F@strlen");
           if (strlen_symbol)
           {
             // Call strlen to get actual string length
@@ -1838,6 +1872,12 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   contains_call.arguments().push_back(type_hash);
   contains_call.arguments().push_back(elem_size);
+  // Pass string type_id for string comparisons inside lists
+  const std::string string_type_name = "__python_str";
+  constant_exprt string_type_id(size_type());
+  string_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(string_type_name), config.ansi_c.address_width));
+  contains_call.arguments().push_back(string_type_id);
 
   contains_call.type() = bool_type();
   contains_call.location() = converter_.get_location_from_decl(list_value_);
@@ -1884,9 +1924,13 @@ exprt python_list::build_extend_list_call(
     else // pointer type - use strlen
     {
       const symbolt *strlen_symbol =
-        converter_.symbol_table().find_symbol("c:@F@strlen");
+        converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
       if (!strlen_symbol)
-        throw std::runtime_error("strlen function not found in symbol table");
+        strlen_symbol = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+      if (!strlen_symbol)
+        strlen_symbol = converter_.symbol_table().find_symbol("c:@F@strlen");
+      if (!strlen_symbol)
+        throw std::runtime_error("string length function not found in symbol table");
 
       symbolt &strlen_result = converter_.create_tmp_symbol(
         op, "$strlen_result$", size_type(), gen_zero(size_type()));
@@ -2180,9 +2224,13 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   }
   else if (iterable_expr.type().is_pointer())
   {
-    const symbolt *strlen_func =
-      converter_.symbol_table().find_symbol("c:@F@strlen");
-    if (strlen_func)
+    const symbolt *strnlen_func =
+      converter_.symbol_table().find_symbol("c:@F@__python_strnlen_16");
+    if (!strnlen_func)
+      strnlen_func = converter_.symbol_table().find_symbol("c:@F@__python_strnlen");
+    if (!strnlen_func)
+      strnlen_func = converter_.symbol_table().find_symbol("c:@F@strlen");
+    if (strnlen_func)
     {
       symbolt &length_var = converter_.create_tmp_symbol(
         element, "comp_len", size_type(), gen_zero(size_type()));
@@ -2192,7 +2240,7 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
       converter_.add_instruction(length_decl);
 
       code_function_callt strlen_call;
-      strlen_call.function() = symbol_expr(*strlen_func);
+      strlen_call.function() = symbol_expr(*strnlen_func);
       strlen_call.arguments().push_back(iterable_expr);
       strlen_call.lhs() = symbol_expr(length_var);
       strlen_call.type() = size_type();

@@ -163,6 +163,8 @@ public:
     const nlohmann::json &range_args,
     const nlohmann::json &element);
 
+  static const TypeInfo *find_list_type(const std::string &list_id);
+
 private:
   friend class python_dict_handler;
 

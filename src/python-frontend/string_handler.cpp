@@ -732,9 +732,13 @@ exprt string_handler::handle_string_endswith(
 
   // For length calculation, we need to use strlen for pointer types
   // Find strlen symbol
-  symbolt *strlen_symbol = symbol_table_.find_symbol("c:@F@strlen");
+  symbolt *strlen_symbol = symbol_table_.find_symbol("c:@F@__python_strnlen_16");
   if (!strlen_symbol)
-    throw std::runtime_error("strlen function not found for endswith()");
+    strlen_symbol = symbol_table_.find_symbol("c:@F@__python_strnlen");
+  if (!strlen_symbol)
+    strlen_symbol = symbol_table_.find_symbol("c:@F@strlen");
+  if (!strlen_symbol)
+    throw std::runtime_error("string length function not found for endswith()");
 
   // Get string length using strlen
   side_effect_expr_function_callt str_strlen_call;
@@ -3026,48 +3030,22 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list argument (the iterable to join)
   const nlohmann::json &list_arg = call_json["args"][0];
 
-  // Currently only support Name references (e.g., variable names)
-  // TODO: Support direct List literals such as " ".join(["a", "b"])
+  // Case 1: direct list literal, fold at compile-time
   if (
-    list_arg.contains("_type") && list_arg["_type"] == "Name" &&
-    list_arg.contains("id"))
+    list_arg.contains("_type") && list_arg["_type"] == "List" &&
+    list_arg.contains("elts"))
   {
-    std::string var_name = list_arg["id"].get<std::string>();
-
-    // Look up the variable in the AST to get its initialization value
-    nlohmann::json var_decl = json_utils::find_var_decl(
-      var_name, converter_.get_current_func_name(), converter_.get_ast_json());
-
-    if (var_decl.empty())
-      throw std::runtime_error(
-        "NameError: name '" + var_name + "' is not defined");
-
-    // Ensure the variable is a list with elements array
-    if (!var_decl.contains("value"))
-      throw std::runtime_error("join() requires a list");
-
-    const nlohmann::json &list_value = var_decl["value"];
-
-    if (
-      !list_value.contains("_type") || list_value["_type"] != "List" ||
-      !list_value.contains("elts"))
-      throw std::runtime_error("join() requires a list");
-
-    // Get the list elements from the AST
-    const auto &elements = list_value["elts"];
+    const auto &elements = list_arg["elts"];
 
     // Edge case: empty list returns empty string
     if (elements.empty())
     {
-      // Create a proper null-terminated empty string
       typet empty_string_type = type_handler_.build_array(char_type(), 1);
       exprt empty_str = gen_zero(empty_string_type);
-      // Explicitly set the first (and only) element to null terminator
       empty_str.operands().at(0) = from_integer(0, char_type());
       return empty_str;
     }
 
-    // Convert JSON elements to ESBMC expressions
     std::vector<exprt> elem_exprs;
     for (const auto &elem : elements)
     {
@@ -3076,37 +3054,121 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       elem_exprs.push_back(elem_expr);
     }
 
-    // Edge case: single element returns the element itself (no separator)
     if (elem_exprs.size() == 1)
       return elem_exprs[0];
 
-    // Main algorithm: Build the joined string by extracting characters
-    // from all elements and separators, then constructing a single string.
-    // This avoids multiple concatenation operations which could cause
-    // null terminator issues.
     std::vector<exprt> all_chars;
-
-    // Start with the first element
     std::vector<exprt> first_chars =
       string_builder_->extract_string_chars(elem_exprs[0]);
     all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
 
-    // For each remaining element: add separator, then add element
     for (size_t i = 1; i < elem_exprs.size(); ++i)
     {
-      // Insert separator characters
       std::vector<exprt> sep_chars =
         string_builder_->extract_string_chars(separator);
       all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
 
-      // Insert element characters
       std::vector<exprt> elem_chars =
         string_builder_->extract_string_chars(elem_exprs[i]);
       all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
     }
 
-    // Build final null-terminated string from all collected characters
     return string_builder_->build_null_terminated_string(all_chars);
+  }
+
+  // Case 2: list variable (runtime join)
+  if (
+    list_arg.contains("_type") && list_arg["_type"] == "Name" &&
+    list_arg.contains("id"))
+  {
+    exprt list_expr = converter_.get_expr(list_arg);
+    typet list_type = converter_.get_type_handler().get_list_type();
+    if (list_expr.type() != list_type)
+      throw std::runtime_error("join() requires a list");
+
+    exprt sep_expr = separator;
+    if (sep_expr.type().is_array())
+      sep_expr = get_array_base_address(sep_expr);
+
+    // Ensure __python_str_join exists
+    const locationt location = converter_.get_location_from_decl(call_json);
+
+    // Fast path: empty separator + list of chars
+    bool sep_is_empty = false;
+    std::string sep_value;
+    if (extract_constant_string(func["value"], converter_, sep_value) &&
+        sep_value.empty())
+    {
+      sep_is_empty = true;
+    }
+
+    auto is_char_like = [](const typet &t) -> bool {
+      if (t == char_type())
+        return true;
+      if (t.is_array() && t.subtype() == char_type())
+      {
+        const auto &array_type = to_array_type(t);
+        if (array_type.size().is_constant())
+        {
+          BigInt len;
+          if (to_integer(array_type.size(), len) && len <= 2)
+            return true;
+          return false;
+        }
+        // Unknown array size: avoid fast-path.
+        return false;
+      }
+      return false;
+    };
+
+    bool list_is_char = false;
+    if (list_expr.is_symbol())
+    {
+      const std::string &list_id = list_expr.identifier().as_string();
+      const auto *type_info = python_list::find_list_type(list_id);
+      if (type_info && !type_info->empty() &&
+          is_char_like((*type_info)[0].second))
+        list_is_char = true;
+    }
+
+    if (sep_is_empty && list_is_char)
+    {
+      std::string func_symbol_id = ensure_string_function_symbol(
+        "__python_str_join_chars",
+        pointer_typet(char_type()),
+        {list_type},
+        location);
+
+      const symbolt *func_symbol =
+        symbol_table_.find_symbol(func_symbol_id.c_str());
+      if (!func_symbol)
+        throw std::runtime_error("__python_str_join_chars function not found");
+
+      side_effect_expr_function_callt join_call;
+      join_call.function() = symbol_expr(*func_symbol);
+      join_call.arguments() = {list_expr};
+      join_call.location() = location;
+      join_call.type() = pointer_typet(char_type());
+      return join_call;
+    }
+
+    std::string func_symbol_id = ensure_string_function_symbol(
+      "__python_str_join",
+      pointer_typet(char_type()),
+      {pointer_typet(char_type()), list_type},
+      location);
+
+    const symbolt *func_symbol =
+      symbol_table_.find_symbol(func_symbol_id.c_str());
+    if (!func_symbol)
+      throw std::runtime_error("__python_str_join function not found");
+
+    side_effect_expr_function_callt join_call;
+    join_call.function() = symbol_expr(*func_symbol);
+    join_call.arguments() = {sep_expr, list_expr};
+    join_call.location() = location;
+    join_call.type() = pointer_typet(char_type());
+    return join_call;
   }
 
   throw std::runtime_error("join() argument must be a list of strings");
