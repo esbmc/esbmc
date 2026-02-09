@@ -2081,7 +2081,7 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_dict_method(); },
      "dict methods"},
 
-    // Math module functions
+    // Math module functions (isnan, isinf)
     {[this]() {
        const std::string &func_name = function_id_.get_function();
        return func_name == "__ESBMC_isnan" || func_name == "__ESBMC_isinf";
@@ -2113,7 +2113,7 @@ function_call_expr::get_dispatch_table()
      },
      "isnan/isinf"},
 
-    // Math module functions
+    // Math module functions (sin, cos, sqrt, exp, log)
     {[this]() {
        const std::string &func_name = function_id_.get_function();
        bool is_math_module = false;
@@ -2122,71 +2122,65 @@ function_call_expr::get_dispatch_table()
          std::string caller = get_object_name();
          is_math_module = (caller == "math");
        }
-       return is_math_module && func_name == "sqrt";
+
+       bool is_math_wrapper =
+         (func_name == "__ESBMC_sin" || func_name == "__ESBMC_cos" ||
+          func_name == "__ESBMC_sqrt" || func_name == "__ESBMC_exp" ||
+          func_name == "__ESBMC_log");
+
+       return (is_math_module && (func_name == "sin" || func_name == "cos" ||
+                                  func_name == "sqrt" || func_name == "exp" ||
+                                  func_name == "log")) ||
+              is_math_wrapper;
      },
-     [this]() {
-       const auto &args = call_["args"];
-       if (args.size() != 1)
-         throw std::runtime_error("sqrt() expects exactly 1 argument");
-
-       exprt arg_expr = converter_.get_expr(args[0]);
-
-       // Promote to float if needed
-       exprt double_operand = arg_expr;
-       if (!arg_expr.type().is_floatbv())
-       {
-         double_operand =
-           exprt("typecast", type_handler_.get_typet("float", 0));
-         double_operand.copy_to_operands(arg_expr);
-       }
-
-       // Create domain check: x < 0 (error condition)
-       exprt zero = gen_zero(type_handler_.get_typet("float", 0));
-       exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
-       domain_check.copy_to_operands(double_operand, zero);
-
-       // Create exception for domain violation
-       exprt raise = gen_exception_raise("ValueError", "math domain error");
-
-       // Add location information
-       locationt loc = converter_.get_location_from_decl(call_);
-       raise.location() = loc;
-       raise.location().user_provided(true);
-
-       // Call python_math to handle the actual sqrt call
-       exprt sqrt_result =
-         converter_.get_math_handler().handle_sqrt(arg_expr, call_);
-
-       // Return conditional: if (x < 0) raise ValueError else sqrt(x)
-       if_exprt conditional(domain_check, raise, sqrt_result);
-       conditional.type() = type_handler_.get_typet("float", 0);
-
-       return conditional;
-     },
-     "math.sqrt()"},
-    // Math module functions (sin, cos)
-    {[this]() {
-       const std::string &func_name = function_id_.get_function();
-       bool is_math_module = false;
-       if (call_["func"]["_type"] == "Attribute")
-       {
-         std::string caller = get_object_name();
-         is_math_module = (caller == "math");
-       }
-       return is_math_module && (func_name == "sin" || func_name == "cos");
-     },
-     [this]() {
+     [this]() -> exprt {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
+
        if (args.size() != 1)
          throw std::runtime_error(func_name + "() expects exactly 1 argument");
        exprt arg_expr = converter_.get_expr(args[0]);
-       if (func_name == "sin")
+
+       if (func_name == "sin" || func_name == "__ESBMC_sin")
          return converter_.get_math_handler().handle_sin(arg_expr, call_);
-       else // cos
+       else if (func_name == "cos" || func_name == "__ESBMC_cos")
          return converter_.get_math_handler().handle_cos(arg_expr, call_);
+       else if (func_name == "exp" || func_name == "__ESBMC_exp")
+         return converter_.get_math_handler().handle_exp(arg_expr, call_);
+       else if (func_name == "sqrt" || func_name == "__ESBMC_sqrt")
+       {
+         // Domain check for sqrt
+         exprt double_operand = arg_expr;
+         if (!arg_expr.type().is_floatbv())
+         {
+           double_operand =
+             exprt("typecast", type_handler_.get_typet("float", 0));
+           double_operand.copy_to_operands(arg_expr);
+         }
+
+         exprt zero = gen_zero(type_handler_.get_typet("float", 0));
+         exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
+         domain_check.copy_to_operands(double_operand, zero);
+
+         exprt raise = gen_exception_raise("ValueError", "math domain error");
+         locationt loc = converter_.get_location_from_decl(call_);
+         raise.location() = loc;
+         raise.location().user_provided(true);
+
+         exprt sqrt_result =
+           converter_.get_math_handler().handle_sqrt(arg_expr, call_);
+
+         if_exprt conditional(domain_check, raise, sqrt_result);
+         conditional.type() = type_handler_.get_typet("float", 0);
+
+         return static_cast<exprt>(conditional);
+       }
+       else if (func_name == "log" || func_name == "__ESBMC_log")
+         return converter_.get_math_handler().handle_log(arg_expr, call_);
+
+       throw std::runtime_error("Unsupported math function: " + func_name);
      },
-     "math.sin/cos()"},
+     "math.sin/cos/sqrt/exp/log()"},
 
     // divmod function
     {[this]() {
