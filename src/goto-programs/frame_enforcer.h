@@ -29,7 +29,8 @@ public:
   struct snapshot_entryt
   {
     expr2tc original_expr; ///< The variable being snapshotted (e.g., "i")
-    expr2tc snapshot_sym;  ///< The snapshot symbol (e.g., "__ESBMC_frame_snap_loop_0_i")
+    expr2tc
+      snapshot_sym; ///< The snapshot symbol (e.g., "__ESBMC_frame_snap_loop_0_i")
   };
 
   frame_enforcert(contextt &_context);

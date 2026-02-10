@@ -37,8 +37,7 @@ void frame_enforcert::materialize_snapshots(
 
     // 3. Generate DECL instruction for the snapshot variable
     goto_programt::targett decl_inst = dest.add_instruction(DECL);
-    decl_inst->code =
-      code_decl2tc(var->type, to_symbol2t(snap_sym).thename);
+    decl_inst->code = code_decl2tc(var->type, to_symbol2t(snap_sym).thename);
     decl_inst->location = loc;
     decl_inst->location.comment("frame: snapshot declaration");
 
@@ -84,8 +83,7 @@ void frame_enforcert::enforce_frame_rule(
   }
 }
 
-expr2tc
-frame_enforcert::replace_old_with_snapshots(const expr2tc &expr) const
+expr2tc frame_enforcert::replace_old_with_snapshots(const expr2tc &expr) const
 {
   if (is_nil_expr(expr))
     return expr;

@@ -325,8 +325,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   // =========================================================
   if (use_frame_rule && frame_enforcer && !loop_assigns.empty())
   {
-    frame_enforcer->enforce_frame_rule(
-      loop_assigns, dest, loop_head->location);
+    frame_enforcer->enforce_frame_rule(loop_assigns, dest, loop_head->location);
   }
 
   // =========================================================
