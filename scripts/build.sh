@@ -38,7 +38,7 @@ error() {
 ubuntu_setup () {
     # Tested on ubuntu 22.04
     PKGS="\
-        python-is-python3 csmith python3 \
+        python-is-python3 csmith python3 libbz2-dev liblzma-dev \
         git unzip wget curl libcsmith-dev gperf \
         cmake bison flex g++-multilib linux-libc-dev \
         libboost-date-time-dev libboost-program-options-dev \
