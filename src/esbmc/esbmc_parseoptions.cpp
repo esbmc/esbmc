@@ -2031,7 +2031,8 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       // Process loop invariants and insert assert/assume/havoc
       remove_no_op(goto_functions);
-      goto_loop_invariant(goto_functions);
+      bool use_frame_rule = cmdline.isset("loop-frame-rule");
+      goto_loop_invariant(goto_functions, context, use_frame_rule);
     }
 
     if (

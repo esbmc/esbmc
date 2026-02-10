@@ -498,6 +498,23 @@ _Bool __ESBMC_exists(void*, _Bool);
  */
 void __ESBMC_loop_invariant(_Bool);
 
+/* __ESBMC_loop_assigns: specifies memory locations a loop may modify.
+ * Used with --loop-frame-rule for frame condition enforcement.
+ * Variables NOT in this set are assumed unchanged across loop iterations.
+ *
+ * Usage (place before loop, after __ESBMC_loop_invariant):
+ *   __ESBMC_loop_invariant(i >= 0 && i < n);
+ *   __ESBMC_loop_assigns(i);
+ *   for (i = 0; ...) { ... }
+ */
+void __ESBMC_loop_assigns_impl(const void *, ...);
+#define __ESBMC_loop_assigns_1(a) __ESBMC_loop_assigns_impl(&(a))
+#define __ESBMC_loop_assigns_2(a,b) __ESBMC_loop_assigns_impl(&(a),&(b))
+#define __ESBMC_loop_assigns_3(a,b,c) __ESBMC_loop_assigns_impl(&(a),&(b),&(c))
+#define __ESBMC_loop_assigns_4(a,b,c,d) __ESBMC_loop_assigns_impl(&(a),&(b),&(c),&(d))
+#define __ESBMC_loop_assigns_5(a,b,c,d,e) __ESBMC_loop_assigns_impl(&(a),&(b),&(c),&(d),&(e))
+#define __ESBMC_loop_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_loop_assigns_##N
+#define __ESBMC_loop_assigns(...) __ESBMC_loop_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
 
 #define __builtin_offsetof(type, member) \
     ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))

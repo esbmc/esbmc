@@ -107,6 +107,9 @@ public:
     //! loop invariant for loop_invariant instruction
     std::list<expr2tc> loop_invariants;
 
+    //! loop assigns targets for frame rule enforcement
+    std::list<expr2tc> loop_assigns_targets;
+
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;
     typedef std::list<class instructiont>::const_iterator const_targett;
@@ -159,6 +162,7 @@ public:
       guard = gen_true_expr();
       code = expr2tc();
       loop_invariants.clear();
+      loop_assigns_targets.clear();
       inductive_step_instruction = false;
       inductive_assertion = false;
     }
@@ -433,6 +437,7 @@ public:
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
       instruction.loop_invariants.swap(loop_invariants);
+      instruction.loop_assigns_targets.swap(loop_assigns_targets);
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
@@ -452,6 +457,15 @@ public:
     std::list<expr2tc> get_loop_invariants() const
     {
       return loop_invariants;
+    }
+
+    void add_loop_assigns_target(const expr2tc &target)
+    {
+      loop_assigns_targets.push_back(target);
+    }
+    std::list<expr2tc> get_loop_assigns_targets() const
+    {
+      return loop_assigns_targets;
     }
 
     //! A globally unique number to identify a program location.

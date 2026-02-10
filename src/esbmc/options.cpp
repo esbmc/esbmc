@@ -314,6 +314,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"extended-try-analysis", NULL, ""},
     {"skip-bmc", NULL, "do not perform bounded model checking"},
     {"loop-invariant", NULL, "enable loop invariant checking"},
+    {"loop-frame-rule",
+     NULL,
+     "enable frame rule for loop invariant checking "
+     "(snapshot-havoc-assume pattern, requires --loop-invariant)"},
     {"no-cache-asserts",
      NULL,
      "do not cache asserts that were already proven correct"}}},
