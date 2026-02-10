@@ -21,5 +21,5 @@ This action gives the user the option to create a GitHub artifact when using cer
 
 ## Manual Checkout
 
-This action will automatically check out at its start, but this may be disabled in the case that the user wishes to modify the contents of the runner before running ESBMC. If the user disables this option (sets it to 'n'), then they still must checkout before this action (with a fetch-depth of 2 if they wish to use a git diff). Watch [this video](https://youtu.be/LI4Zp1tNMJE) for a demonstration of a manual checkout.
+This action will automatically check out at startup, but this may be disabled if the user wishes to modify the runner's contents before running ESBMC. If the user disables this option (sets it to 'n'), then they still must check out before this action (with a fetch-depth of 2 if they wish to use a git diff). Watch [this video](https://youtu.be/LI4Zp1tNMJE) for a demonstration of a manual checkout.
 
