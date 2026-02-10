@@ -1482,6 +1482,17 @@ class Preprocessor(ast.NodeTransformer):
             # Handle method calls (e.g., obj.method())
             method_name = node.func.attr
 
+            # Check if the object being accessed exists
+            if isinstance(node.func.value, ast.Name):
+                var_name = node.func.value.id
+                # If this variable/module is not defined in our known variables or function params,
+                # we can't validate the call: let it pass through for runtime error
+                if (var_name not in self.known_variable_types and
+                    var_name not in self.functionParams and
+                    not hasattr(__builtins__, var_name)):
+                    self.generic_visit(node)
+                    return node
+
             # Try to determine the class type from the variable
             qualified_name = None
             if isinstance(node.func.value, ast.Name):
