@@ -2615,8 +2615,8 @@ void python_list::set_list_symbolic_size(
       code_assignt size_assignment(size_member, size_value);
 
       size_assignment.location() = element.contains("lineno")
-        ? converter.get_location_from_decl(element)
-        : locationt();
+                                     ? converter.get_location_from_decl(element)
+                                     : locationt();
 
       converter.current_block->operands().push_back(size_assignment);
       break;
@@ -2637,26 +2637,26 @@ exprt python_list::build_concrete_range(
 
   switch (range_args.size())
   {
-    case 1:
-      start = 0;
-      stop = arg0.value();
-      step = 1;
-      break;
+  case 1:
+    start = 0;
+    stop = arg0.value();
+    step = 1;
+    break;
 
-    case 2:
-      start = arg0.value();
-      stop = arg1.value();
-      step = 1;
-      break;
+  case 2:
+    start = arg0.value();
+    stop = arg1.value();
+    step = 1;
+    break;
 
-    case 3:
-      start = arg0.value();
-      stop = arg1.value();
-      step = arg2.value();
-      break;
+  case 3:
+    start = arg0.value();
+    stop = arg1.value();
+    step = arg2.value();
+    break;
 
-    default:
-      throw std::runtime_error("Invalid range argument count");
+  default:
+    throw std::runtime_error("Invalid range argument count");
   }
 
   // Validate step
@@ -2695,7 +2695,7 @@ exprt python_list::build_concrete_range(
   }
 
   converter.copy_location_fields_from_decl(element, list_node);
-  
+
   python_list list(converter, list_node);
   return list.get();
 }

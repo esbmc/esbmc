@@ -283,8 +283,9 @@ symbol_id function_call_builder::build_function_id() const
     // Handle len(range(...))
     if (arg["_type"] == "Call")
     {
-      if (arg.contains("func") && arg["func"].contains("id") &&
-          arg["func"]["id"] == "range")
+      if (
+        arg.contains("func") && arg["func"].contains("id") &&
+        arg["func"]["id"] == "range")
         func_name = kGetObjectSize;
     }
     else if (arg["_type"] == "List")
