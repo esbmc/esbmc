@@ -130,12 +130,16 @@ public:
         // Find the class in ast_["body"] using reference to modify in-place
         for (Json &class_node : ast_["body"])
         {
-          if (class_node["_type"] == "ClassDef" && class_node["name"] == func_name)
+          if (
+            class_node["_type"] == "ClassDef" &&
+            class_node["name"] == func_name)
           {
             // Find __init__ method
             for (Json &member : class_node["body"])
             {
-              if (member["_type"] == "FunctionDef" && member["name"] == "__init__")
+              if (
+                member["_type"] == "FunctionDef" &&
+                member["name"] == "__init__")
               {
                 // Annotate parameters based on this call
                 if (member.contains("args") && member["args"].contains("args"))
@@ -143,7 +147,9 @@ public:
                   Json &params = member["args"]["args"];
                   const Json &call_args = node["args"];
                   // Skip self (index 0), match remaining params with call args
-                  for (size_t i = 1; i < params.size() && (i - 1) < call_args.size(); ++i)
+                  for (size_t i = 1;
+                       i < params.size() && (i - 1) < call_args.size();
+                       ++i)
                   {
                     Json &param = params[i];
                     const Json &arg = call_args[i - 1];
