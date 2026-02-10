@@ -858,8 +858,7 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   case expr2t::expr_ids::constant_int_id:
     f = new ibex::Function(
       *vars,
-      ibex::ExprConstant::new_scalar(
-        to_constant_int2t(expr).value.to_int64()));
+      ibex::ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64()));
     break;
   case expr2t::expr_ids::constant_floatbv_id:
     f = new ibex::Function(
