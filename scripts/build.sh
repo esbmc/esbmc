@@ -12,8 +12,7 @@ BASE_ARGS="\
     -DENABLE_PYTHON_FRONTEND=On \
     -DCMAKE_INSTALL_PREFIX:PATH=$PWD/release \
 "
-# Must disable old frontend to enable goto contractor. github issue #1110
-# https://github.com/esbmc/esbmc/issues/1110.
+
 SOLVER_FLAGS="\
     -DENABLE_BOOLECTOR=On \
     -DENABLE_YICES=Off \
