@@ -3,7 +3,7 @@ title: GitHub Action
 weight: 15
 ---
 
-The [esbmc-action](https://github.com/esbmc/esbmc-action) is a custom GitHub action which allows users to verify files on a GitHub repository using ESBMC. The user can either manually specify files to be verified, or, they can not specify any files in order to verify C and C++ files with a git diff between the two most recent commits. Note that the git diff functionality of this action relies on the user using appropriate naming conventions for their files: when using a git diff, ESBMC will only run on files that end with the '.c' or '.cpp' extension.
+The [esbmc-action](https://github.com/esbmc/esbmc-action) is a custom GitHub action that lets users verify files in a GitHub repository using ESBMC. The user can either manually specify files to be verified, or, they can not specify any files in order to verify C and C++ files with a git diff between the two most recent commits. Note that the git diff functionality of this action relies on the user using appropriate naming conventions for their files: when using a git diff, ESBMC will only run on files that end with the '.c' or '.cpp' extension.
 
 This action is supported on Linux, Windows, and macOS runners. For a more detailed guide on how to use this action, see the [esbmc-action repository's README](https://github.com/esbmc/esbmc-action/blob/main/README.md).
 
@@ -21,5 +21,5 @@ This action gives the user the option to create a GitHub artifact when using cer
 
 ## Manual Checkout
 
-This action will automatically check out at its start, but this may be disabled in the case that the user wishes to modify the contents of the runner before running ESBMC. If the user disables this option (sets it to 'n'), then they still must checkout before this action (with a fetch-depth of 2 if they wish to use a git diff). Watch [this video](https://youtu.be/LI4Zp1tNMJE) for a demonstration of a manual checkout.
+This action will automatically check out at startup, but this may be disabled if the user wishes to modify the runner's contents before running ESBMC. If the user disables this option (sets it to 'n'), then they still must check out before this action (with a fetch-depth of 2 if they wish to use a git diff). Watch [this video](https://youtu.be/LI4Zp1tNMJE) for a demonstration of a manual checkout.
 

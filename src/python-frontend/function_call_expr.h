@@ -46,6 +46,20 @@ public:
 
 private:
   /*
+  * Check if the current function call is to math.comb() function
+  * Returns true if this is a call to math.comb
+  */
+  bool is_math_comb_call() const;
+
+  /*
+  * Handles math.comb() function calls with type checking.
+  * Validates that both arguments are integers (not floats).
+  * Returns TypeError exception if arguments are not integers.
+  * Otherwise delegates to the comb implementation function.
+  */
+  exprt handle_math_comb() const;
+
+  /*
    * Validates that function call arguments match expected parameter types.
    * Returns TypeError exception if type mismatch is detected, nil_exprt otherwise.
    */
