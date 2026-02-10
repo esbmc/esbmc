@@ -2534,17 +2534,65 @@ exprt python_list::build_list_from_range(
   if (range_args.size() > 2)
     arg2 = extract_constant(range_args[2]);
 
-  // If any argument is non-constant, return empty list
+  // If any argument is non-constant, create a list with symbolic size
   if (
     !arg0.has_value() || (range_args.size() > 1 && !arg1.has_value()) ||
     (range_args.size() > 2 && !arg2.has_value()))
   {
-    nlohmann::json empty_list_node;
-    empty_list_node["_type"] = "List";
-    empty_list_node["elts"] = nlohmann::json::array();
-    converter.copy_location_fields_from_decl(element, empty_list_node);
-    python_list list(converter, empty_list_node);
-    return list.get();
+    if (range_args.size() == 1)
+    {
+      // range(n) case: create list with symbolic size n
+      exprt n_expr = converter.get_expr(range_args[0]);
+      // Create an empty list structure
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      converter.copy_location_fields_from_decl(element, list_node);
+      python_list list(converter, list_node);
+      exprt list_expr = list.get();
+      // Set the size field to n_expr symbolically
+      if (list_expr.type().is_pointer())
+      {
+        typet pointee_type = list_expr.type().subtype();
+        // Follow symbol types to get actual struct type
+        if (pointee_type.is_symbol())
+          pointee_type = converter.ns.follow(pointee_type);
+        if (pointee_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(pointee_type);
+          const struct_typet::componentst &components = struct_type.components();
+          // Find the size member and assign n to it
+          for (const auto &comp : components)
+          {
+            if (comp.get_name() == "size")
+            {
+              // Create assignment: list->size = n
+              dereference_exprt deref(list_expr, pointee_type);
+              member_exprt size_member(deref, comp.get_name(), comp.type());
+              exprt size_value = typecast_exprt(n_expr, comp.type());
+              code_assignt size_assignment(size_member, size_value);
+              size_assignment.location() = element.contains("lineno")
+                ? converter.get_location_from_decl(element)
+                : locationt();
+              // Add assignment to current code block
+              converter.current_block->operands().push_back(size_assignment);
+              break;
+            }
+          }
+        }
+      }
+      return list_expr;
+    }
+    else
+    {
+      // Return empty list
+      nlohmann::json empty_list_node;
+      empty_list_node["_type"] = "List";
+      empty_list_node["elts"] = nlohmann::json::array();
+      converter.copy_location_fields_from_decl(element, empty_list_node);
+      python_list list(converter, empty_list_node);
+      return list.get();
+    }
   }
 
   // Determine start, stop, step based on argument count
