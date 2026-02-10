@@ -319,7 +319,7 @@ symbol_id function_call_builder::build_function_id() const
       }
       else if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
-        var_type == "set" || var_type == "Sequence")
+        var_type == "set" || var_type == "Sequence" || var_type == "range")
       {
         func_name = kGetObjectSize;
       }
