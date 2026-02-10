@@ -1482,6 +1482,17 @@ class Preprocessor(ast.NodeTransformer):
             # Handle method calls (e.g., obj.method())
             method_name = node.func.attr
 
+            # Check if the object being accessed exists
+            if isinstance(node.func.value, ast.Name):
+                var_name = node.func.value.id
+                # If this variable/module is not defined in our known variables or function params,
+                # we can't validate the call: let it pass through for runtime error
+                if (var_name not in self.known_variable_types and
+                    var_name not in self.functionParams and
+                    not hasattr(__builtins__, var_name)):
+                    self.generic_visit(node)
+                    return node
+
             # Try to determine the class type from the variable
             qualified_name = None
             if isinstance(node.func.value, ast.Name):
@@ -1500,11 +1511,19 @@ class Preprocessor(ast.NodeTransformer):
                 expectedArgs = self.functionParams[method_name][1:]  # Skip 'self'
                 kwonlyArgs = self.functionKwonlyParams.get(method_name, [])
         elif isinstance(node.func, ast.Name):
-            # Handle regular function calls
-            if node.func.id in self.functionParams:
-                functionName = node.func.id
-                expectedArgs = self.functionParams[functionName]
-                kwonlyArgs = self.functionKwonlyParams.get(functionName, [])
+            # Handle regular function calls and class constructor calls
+            func_name = node.func.id
+
+            # Check if this is a class constructor (Class.__init__)
+            init_name = f"{func_name}.__init__"
+            if init_name in self.functionParams:
+                functionName = init_name
+                expectedArgs = self.functionParams[init_name][1:]  # Skip 'self'
+                kwonlyArgs = self.functionKwonlyParams.get(init_name, [])
+            elif func_name in self.functionParams:
+                functionName = func_name
+                expectedArgs = self.functionParams[func_name]
+                kwonlyArgs = self.functionKwonlyParams.get(func_name, [])
 
         # If not a tracked function/method, just visit and return
         if functionName is None or expectedArgs is None:
@@ -1537,10 +1556,22 @@ class Preprocessor(ast.NodeTransformer):
                     f"{display_name}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
                 )
 
-        # return early if correct no. or too many parameters
-        if len(node.args) >= len(expectedArgs):
-            self.generic_visit(node)
-            return node
+        # Check for too many positional arguments
+        if len(node.args) > len(expectedArgs):
+            # Count how many parameters can accept positional args (non-keyword-only)
+            display_name = functionName.split('.')[-1] if '.' in functionName else functionName
+            # For __init__, include 'self' in the count for error message
+            if display_name == '__init__':
+                total_params = len(expectedArgs) + 1  # +1 for 'self'
+                total_given = len(node.args) + 1      # +1 for implicit 'self'
+            else:
+                total_params = len(expectedArgs)
+                total_given = len(node.args)
+
+            raise TypeError(
+                f"{display_name}() takes {total_params} positional argument{'s' if total_params != 1 else ''} "
+                f"but {total_given} {'were' if total_given != 1 else 'was'} given"
+            )
 
         # Check for conflicts between positional and keyword arguments
         for i in range(len(node.args)):
@@ -1584,6 +1615,7 @@ class Preprocessor(ast.NodeTransformer):
 
         self.generic_visit(node)
         return node # transformed node
+
 
     def visit_FunctionDef(self, node):
         # Extract parameter type annotations and store them
