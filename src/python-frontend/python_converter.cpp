@@ -2145,6 +2145,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
 
+  // Handle direct range(...) calls by converting to list
+  if (element["func"]["_type"] == "Name" && element["func"]["id"] == "range")
+  {
+    const auto &range_args = element["args"];
+    return python_list::build_list_from_range(*this, range_args, element);
+  }
+
   // Handle list(range(...))
   if (
     element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
