@@ -101,12 +101,12 @@ def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
     while i < size:
         # Generate new key each iteration
         if key_type is None:
-            key_type: Any = "nondet_int()"
+            k: Any = nondet_int()
 
         # Generate new value each iteration
         if value_type is None:
-            value_type: Any = "nondet_int()"
-        result[key_type] = value_type
+            v: Any = nondet_int()
+        result[k] = v
         i = i + 1
 
     return result
