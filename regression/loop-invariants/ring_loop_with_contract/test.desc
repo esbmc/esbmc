@@ -1,4 +1,4 @@
 CORE
 main.c
---loop-invariant --replace-call-with-contract "source_startup,source_reaction_start,source_reaction_in,node_reaction" --no-align-check
+--loop-invariant --replace-call-with-contract "source_startup,source_reaction_start,source_reaction_in,node_reaction,process_messages_at_time" --no-align-check
 ^VERIFICATION SUCCESSFUL$
