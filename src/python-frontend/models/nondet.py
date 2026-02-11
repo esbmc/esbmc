@@ -62,7 +62,7 @@ def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> 
     i: int = 0
     while i < size:
         if elem_type is None:
-            elem_type = nondet_int()
+            elem_type : Any = "nondet_int()"
             result.append(elem_type)
         else:
             result.append(elem_type)
