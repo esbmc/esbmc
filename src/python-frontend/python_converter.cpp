@@ -6685,14 +6685,16 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
         exprt arg;
         // Check if args exists and is not empty before accessing
-        if (element["exc"].contains("args") &&
-            !element["exc"]["args"].empty() &&
-            !element["exc"]["args"][0].is_null())
+        const auto &exc = element["exc"];
+        if (exc.contains("args") &&
+            !exc["args"].empty() &&
+            !exc["args"][0].is_null())
         {
-          arg = get_expr(element["exc"]["args"][0]);
+          const auto &json_arg = exc["args"][0];
+          exprt tmp = get_expr(json_arg);
           arg = string_constantt(
-            string_handler_.process_format_spec(element["exc"]["args"][0]),
-            arg.type(),
+            string_handler_.process_format_spec(json_arg),
+            tmp.type(),
             string_constantt::k_default);
         }
         else
