@@ -8,7 +8,7 @@ class BaseException:
         return self.message
 
 
-class ValueError(BaseException):
+class Exception(BaseException):
     message: str = ""
 
     def __init__(self, message: str):
@@ -18,7 +18,7 @@ class ValueError(BaseException):
         return self.message
 
 
-class TypeError(BaseException):
+class ValueError(Exception):
     message: str = ""
 
     def __init__(self, message: str):
@@ -28,7 +28,7 @@ class TypeError(BaseException):
         return self.message
 
 
-class IndexError(BaseException):
+class TypeError(Exception):
     message: str = ""
 
     def __init__(self, message: str):
@@ -38,7 +38,7 @@ class IndexError(BaseException):
         return self.message
 
 
-class KeyError(BaseException):
+class IndexError(Exception):
     message: str = ""
 
     def __init__(self, message: str):
@@ -48,7 +48,17 @@ class KeyError(BaseException):
         return self.message
 
 
-class ZeroDivisionError(BaseException):
+class KeyError(Exception):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class ZeroDivisionError(Exception):
     message: str = ""
 
     def __init__(self, message: str):
@@ -68,17 +78,7 @@ class AssertionError(BaseException):
         return self.message
 
 
-class Exception(BaseException):
-    message: str = ""
-
-    def __init__(self, message: str):
-        self.message: str = message
-
-    def __str__(self) -> str:
-        return self.message
-
-
-class NameError(BaseException):
+class NameError(Exception):
     message: str = ""
 
     def __init__(self, message: str):
