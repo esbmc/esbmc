@@ -1,0 +1,4 @@
+CORE
+main.c
+--loop-invariant --replace-call-with-contract "step"
+^VERIFICATION SUCCESSFUL$
