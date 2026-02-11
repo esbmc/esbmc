@@ -5,6 +5,8 @@
 #include <string.h>
 #include "python_types.h"
 
+#define ESBMC_PY_STR_TYPE_ID ((size_t)0x826e83195d0d60f0ULL)
+
 // List helpers (defined in list.c)
 extern PyListObject *__ESBMC_list_create(void);
 extern bool __ESBMC_list_push(
@@ -797,7 +799,7 @@ __ESBMC_HIDE:;
     char *buf = __ESBMC_alloca(len_str + 1);
     memcpy(buf, str, len_str);
     buf[len_str] = '\0';
-    __ESBMC_list_push(out, buf, 0, len_str + 1);
+    __ESBMC_list_push(out, buf, ESBMC_PY_STR_TYPE_ID, len_str + 1);
     return out;
   }
 
@@ -821,7 +823,7 @@ __ESBMC_HIDE:;
           k++;
         }
         buf[part_len] = '\0';
-        __ESBMC_list_push(out, buf, 0, part_len + 1);
+        __ESBMC_list_push(out, buf, ESBMC_PY_STR_TYPE_ID, part_len + 1);
 
         if (maxsplit > 0)
         {
@@ -839,7 +841,7 @@ __ESBMC_HIDE:;
                 k2++;
               }
               buf2[rem] = '\0';
-              __ESBMC_list_push(out, buf2, 0, rem + 1);
+              __ESBMC_list_push(out, buf2, ESBMC_PY_STR_TYPE_ID, rem + 1);
             }
             return out;
           }
@@ -855,7 +857,7 @@ __ESBMC_HIDE:;
     char *buf = __ESBMC_alloca(len_str + 1);
     memcpy(buf, str, len_str);
     buf[len_str] = '\0';
-    __ESBMC_list_push(out, buf, 0, len_str + 1);
+    __ESBMC_list_push(out, buf, ESBMC_PY_STR_TYPE_ID, len_str + 1);
   }
 
   return out;
@@ -888,13 +890,11 @@ __ESBMC_HIDE:;
   for (size_t i = 0; i < n; ++i)
   {
     PyObject *item = __ESBMC_list_at((PyListObject *)list, i);
-    if (!item)
-      continue;
     const char *s = (const char *)item->value;
     if (!s)
       s = "";
     size_t len = 0;
-    if (item && item->size > 0)
+    if (item->size > 0)
     {
       len = item->size;
       if (s[len - 1] == '\0')
@@ -917,13 +917,11 @@ __ESBMC_HIDE:;
   for (size_t i = 0; i < n; ++i)
   {
     PyObject *item = __ESBMC_list_at((PyListObject *)list, i);
-    if (!item)
-      continue;
     const char *s = (const char *)item->value;
     if (!s)
       s = "";
     size_t len = 0;
-    if (item && item->size > 0)
+    if (item->size > 0)
     {
       len = item->size;
       if (s[len - 1] == '\0')

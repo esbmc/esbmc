@@ -18,6 +18,14 @@
 #include <string>
 #include <functional>
 
+static size_t esbmc_type_name_hash(const std::string &name)
+{
+  // Stable hash for string type to match runtime models.
+  if (name == "str")
+    return 0x826e83195d0d60f0ULL;
+  return std::hash<std::string>{}(name);
+}
+
 // Default depth for list comparison if option not set
 static const int DEFAULT_LIST_COMPARE_DEPTH = 4;
 
@@ -164,7 +172,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   // this will allow better verification counter-examples.
   constant_exprt hash_value(size_type());
   hash_value.set_value(integer2binary(
-    std::hash<std::string>{}(elem_type_name), config.ansi_c.address_width));
+    esbmc_type_name_hash(elem_type_name), config.ansi_c.address_width));
   code_assignt hash_assignment(symbol_expr(elem_type_sym), hash_value);
   hash_assignment.location() = location;
   converter_.add_instruction(hash_assignment);
@@ -1650,7 +1658,7 @@ exprt python_list::compare(
     converter_.get_type_handler().type_to_string(list_type);
   constant_exprt list_type_id(size_type());
   list_type_id.set_value(integer2binary(
-    std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
+    esbmc_type_name_hash(list_type_name), config.ansi_c.address_width));
 
   symbolt &eq_ret = converter_.create_tmp_symbol(
     list_value_, "eq_tmp", bool_type(), gen_boolean(false));
@@ -1887,7 +1895,7 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
           constant_exprt stored_hash(size_type());
           stored_hash.set_value(integer2binary(
-            std::hash<std::string>{}(stored_type_name),
+            esbmc_type_name_hash(stored_type_name),
             config.ansi_c.address_width));
           type_hash = stored_hash;
 
@@ -2011,7 +2019,7 @@ exprt python_list::build_extend_list_call(
       type_handler_.type_to_string(char_arr_type);
     constant_exprt type_hash(size_type());
     type_hash.set_value(integer2binary(
-      std::hash<std::string>{}(elem_type_name), config.ansi_c.address_width));
+      esbmc_type_name_hash(elem_type_name), config.ansi_c.address_width));
 
     // Create loop index
     symbolt &idx = converter_.create_tmp_symbol(
