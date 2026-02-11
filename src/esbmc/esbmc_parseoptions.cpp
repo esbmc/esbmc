@@ -2058,7 +2058,10 @@ bool esbmc_parseoptionst::process_goto_program(
     bool has_replace_all = cmdline.isset("replace-all-contracts");
     if (has_enforce || has_replace || has_enforce_all || has_replace_all)
       process_function_contracts(
-        goto_functions, has_replace, has_enforce, has_enforce_all,
+        goto_functions,
+        has_replace,
+        has_enforce,
+        has_enforce_all,
         has_replace_all);
 
     // add re-evaluations of monitored properties
@@ -2768,35 +2771,32 @@ void esbmc_parseoptionst::process_function_contracts(
   }
 
   // Lambda to collect ONLY functions with __ESBMC_contract annotation
-  auto collect_annotated_contract_functions =
-    [&contracts, &goto_functions, &ctx]() {
-      std::set<std::string> result;
-      forall_goto_functions (it, goto_functions)
-      {
-        if (!it->second.body_available)
-          continue;
-        std::string func_name = id2string(it->first);
-        if (
-          func_name.find("~") == 0 ||
-          func_name.find("#") != std::string::npos)
-          continue;
-        symbolt *func_sym = ctx.find_symbol(it->first);
-        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
-          result.insert(func_name);
-      }
-      return result;
-    };
+  auto collect_annotated_contract_functions = [&contracts,
+                                               &goto_functions,
+                                               &ctx]() {
+    std::set<std::string> result;
+    forall_goto_functions (it, goto_functions)
+    {
+      if (!it->second.body_available)
+        continue;
+      std::string func_name = id2string(it->first);
+      if (func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
+        continue;
+      symbolt *func_sym = ctx.find_symbol(it->first);
+      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+        result.insert(func_name);
+    }
+    return result;
+  };
 
   // Process --enforce-all-contracts
   if (has_enforce_all)
   {
-    std::set<std::string> to_enforce =
-      collect_annotated_contract_functions();
+    std::set<std::string> to_enforce = collect_annotated_contract_functions();
     if (!to_enforce.empty())
     {
       log_status(
-        "Enforcing annotated contracts for {} function(s)",
-        to_enforce.size());
+        "Enforcing annotated contracts for {} function(s)", to_enforce.size());
       bool assume_nonnull_valid = cmdline.isset("assume-nonnull-valid");
       std::string entry_function =
         cmdline.isset("function") ? cmdline.getval("function") : "";
@@ -2808,8 +2808,7 @@ void esbmc_parseoptionst::process_function_contracts(
   // Process --replace-all-contracts
   if (has_replace_all)
   {
-    std::set<std::string> to_replace =
-      collect_annotated_contract_functions();
+    std::set<std::string> to_replace = collect_annotated_contract_functions();
     if (!to_replace.empty())
     {
       log_status(
