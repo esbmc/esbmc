@@ -6702,7 +6702,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
           // No arguments provided, create default empty message
           arg = string_constantt(
             "",
-            array_typet(char_type(), from_integer(1, size_type())),
+            type_handler_.build_array(char_type(), 1),
             string_constantt::k_default);
         }
 
