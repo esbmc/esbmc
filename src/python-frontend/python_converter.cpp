@@ -6682,11 +6682,27 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       {
         // Construct a constant struct to throw:
         // raise { .message=&"Error message" }
-        exprt arg = get_expr(element["exc"]["args"][0]);
-        arg = string_constantt(
-          string_handler_.process_format_spec(element["exc"]["args"][0]),
-          arg.type(),
-          string_constantt::k_default);
+
+        exprt arg;
+        // Check if args exists and is not empty before accessing
+        if (element["exc"].contains("args") &&
+            !element["exc"]["args"].empty() &&
+            !element["exc"]["args"][0].is_null())
+        {
+          arg = get_expr(element["exc"]["args"][0]);
+          arg = string_constantt(
+            string_handler_.process_format_spec(element["exc"]["args"][0]),
+            arg.type(),
+            string_constantt::k_default);
+        }
+        else
+        {
+          // No arguments provided, create default empty message
+          arg = string_constantt(
+            "",
+            array_typet(char_type(), from_integer(1, size_type())),
+            string_constantt::k_default);
+        }
 
         raise.id("struct");
         raise.type() = type;
