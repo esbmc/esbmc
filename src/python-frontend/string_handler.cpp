@@ -3028,8 +3028,8 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list argument (the iterable to join)
   const nlohmann::json &list_arg = call_json["args"][0];
 
-  // Currently only support Name references (e.g., variable names)
-  // TODO: Support direct List literals such as " ".join(["a", "b"])
+  // Try to resolve Name references to list literals in the AST
+  // (fast path for static lists)
   if (
     list_arg.contains("_type") && list_arg["_type"] == "Name" &&
     list_arg.contains("id"))
@@ -3044,71 +3044,221 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       throw std::runtime_error(
         "NameError: name '" + var_name + "' is not defined");
 
-    // Ensure the variable is a list with elements array
-    if (!var_decl.contains("value"))
-      throw std::runtime_error("join() requires a list");
-
-    const nlohmann::json &list_value = var_decl["value"];
-
-    if (
-      !list_value.contains("_type") || list_value["_type"] != "List" ||
-      !list_value.contains("elts"))
-      throw std::runtime_error("join() requires a list");
-
-    // Get the list elements from the AST
-    const auto &elements = list_value["elts"];
-
-    // Edge case: empty list returns empty string
-    if (elements.empty())
+    if (var_decl.contains("value"))
     {
-      // Create a proper null-terminated empty string
-      typet empty_string_type = type_handler_.build_array(char_type(), 1);
-      exprt empty_str = gen_zero(empty_string_type);
-      // Explicitly set the first (and only) element to null terminator
-      empty_str.operands().at(0) = from_integer(0, char_type());
-      return empty_str;
+      const nlohmann::json &list_value = var_decl["value"];
+
+      if (
+        list_value.contains("_type") && list_value["_type"] == "List" &&
+        list_value.contains("elts"))
+      {
+        // Get the list elements from the AST
+        const auto &elements = list_value["elts"];
+
+        if (!elements.empty())
+        {
+          // Convert JSON elements to ESBMC expressions
+          std::vector<exprt> elem_exprs;
+          for (const auto &elem : elements)
+          {
+            exprt elem_expr = converter_.get_expr(elem);
+            ensure_string_array(elem_expr);
+            elem_exprs.push_back(elem_expr);
+          }
+
+          // Edge case: single element returns the element itself (no separator)
+          if (elem_exprs.size() == 1)
+            return elem_exprs[0];
+
+          // Main algorithm: Build the joined string by extracting characters
+          std::vector<exprt> all_chars;
+          std::vector<exprt> first_chars =
+            string_builder_->extract_string_chars(elem_exprs[0]);
+          all_chars.insert(
+            all_chars.end(), first_chars.begin(), first_chars.end());
+
+          for (size_t i = 1; i < elem_exprs.size(); ++i)
+          {
+            std::vector<exprt> sep_chars =
+              string_builder_->extract_string_chars(separator);
+            all_chars.insert(
+              all_chars.end(), sep_chars.begin(), sep_chars.end());
+
+            std::vector<exprt> elem_chars =
+              string_builder_->extract_string_chars(elem_exprs[i]);
+            all_chars.insert(
+              all_chars.end(), elem_chars.begin(), elem_chars.end());
+          }
+
+          return string_builder_->build_null_terminated_string(all_chars);
+        }
+      }
+    }
+  }
+
+  // Fallback: runtime join for dynamic lists
+  exprt list_expr = converter_.get_expr(list_arg);
+  typet list_type = type_handler_.get_list_type();
+  if (list_expr.type() == list_type)
+  {
+    locationt location = converter_.get_location_from_decl(call_json);
+
+    // Get base address for separator
+    exprt sep_addr = separator;
+    if (sep_addr.type().is_array())
+      sep_addr = get_array_base_address(sep_addr);
+
+    // Create result pointer initialized to empty string
+    exprt empty_str = string_builder_->build_string_literal("");
+    exprt empty_ptr = get_array_base_address(empty_str);
+    symbolt &result_sym = converter_.create_tmp_symbol(
+      call_json, "$join_result$", empty_ptr.type(), empty_ptr);
+    code_declt result_decl(symbol_expr(result_sym));
+    result_decl.copy_to_operands(empty_ptr);
+    result_decl.location() = location;
+    converter_.add_instruction(result_decl);
+
+    // i = 0
+    symbolt &idx_sym = converter_.create_tmp_symbol(
+      call_json, "$join_i$", size_type(), gen_zero(size_type()));
+    code_declt idx_decl(symbol_expr(idx_sym));
+    idx_decl.location() = location;
+    converter_.add_instruction(idx_decl);
+    code_assignt idx_init(symbol_expr(idx_sym), gen_zero(size_type()));
+    idx_init.location() = location;
+    converter_.add_instruction(idx_init);
+
+    // len = list_size(list)
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error("__ESBMC_list_size not found in symbol table");
+
+    symbolt &len_sym = converter_.create_tmp_symbol(
+      call_json, "$join_len$", size_type(), gen_zero(size_type()));
+    code_declt len_decl(symbol_expr(len_sym));
+    len_decl.location() = location;
+    converter_.add_instruction(len_decl);
+
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.arguments().push_back(list_expr);
+    size_call.lhs() = symbol_expr(len_sym);
+    size_call.type() = size_type();
+    size_call.location() = location;
+    converter_.add_instruction(size_call);
+
+    // Build concat symbol
+    std::string concat_name = "__python_str_concat";
+    std::string concat_id = "c:@F@" + concat_name;
+    symbolt *concat_symbol =
+      converter_.symbol_table().find_symbol(concat_id);
+    if (!concat_symbol)
+    {
+      symbolt new_symbol;
+      new_symbol.name = concat_name;
+      new_symbol.id = concat_id;
+      new_symbol.mode = "C";
+      new_symbol.is_extern = true;
+
+      code_typet concat_type;
+      typet char_ptr = gen_pointer_type(char_type());
+      concat_type.return_type() = char_ptr;
+      code_typet::argumentt arg1(char_ptr);
+      code_typet::argumentt arg2(char_ptr);
+      concat_type.arguments().push_back(arg1);
+      concat_type.arguments().push_back(arg2);
+
+      new_symbol.type = concat_type;
+      converter_.symbol_table().add(new_symbol);
+      concat_symbol = converter_.symbol_table().find_symbol(concat_id);
     }
 
-    // Convert JSON elements to ESBMC expressions
-    std::vector<exprt> elem_exprs;
-    for (const auto &elem : elements)
+    // Build list_at symbol
+    const symbolt *at_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+    if (!at_func)
+      throw std::runtime_error("__ESBMC_list_at not found in symbol table");
+
+    // while (i < len)
+    exprt cond("<", bool_type());
+    cond.copy_to_operands(symbol_expr(idx_sym), symbol_expr(len_sym));
+
+    code_blockt loop_body;
+
+    // item = list_at(list, i)
+    typet pyobj_ptr = pointer_typet(type_handler_.get_list_element_type());
+    symbolt &item_sym = converter_.create_tmp_symbol(
+      call_json, "$join_item$", pyobj_ptr, exprt());
+    code_declt item_decl(symbol_expr(item_sym));
+    item_decl.location() = location;
+    loop_body.copy_to_operands(item_decl);
+
+    code_function_callt at_call;
+    at_call.function() = symbol_expr(*at_func);
+    at_call.arguments().push_back(list_expr);
+    at_call.arguments().push_back(symbol_expr(idx_sym));
+    at_call.lhs() = symbol_expr(item_sym);
+    at_call.type() = pyobj_ptr;
+    at_call.location() = location;
+    loop_body.copy_to_operands(at_call);
+
+    // item_value = (char*) item->value
+    member_exprt item_value(
+      symbol_expr(item_sym), "value", pointer_typet(empty_typet()));
     {
-      exprt elem_expr = converter_.get_expr(elem);
-      ensure_string_array(elem_expr);
-      elem_exprs.push_back(elem_expr);
+      exprt &base = item_value.struct_op();
+      exprt deref("dereference");
+      deref.type() = base.type().subtype();
+      deref.move_to_operands(base);
+      base.swap(deref);
     }
+    typecast_exprt item_str(item_value, gen_pointer_type(char_type()));
 
-    // Edge case: single element returns the element itself (no separator)
-    if (elem_exprs.size() == 1)
-      return elem_exprs[0];
+    // result = __python_str_concat(result, item_str)
+    side_effect_expr_function_callt concat_call;
+    concat_call.function() = symbol_expr(*concat_symbol);
+    concat_call.arguments().push_back(symbol_expr(result_sym));
+    concat_call.arguments().push_back(item_str);
+    concat_call.type() = gen_pointer_type(char_type());
+    concat_call.location() = location;
+    code_assignt assign_concat(symbol_expr(result_sym), concat_call);
+    assign_concat.location() = location;
+    loop_body.copy_to_operands(assign_concat);
 
-    // Main algorithm: Build the joined string by extracting characters
-    // from all elements and separators, then constructing a single string.
-    // This avoids multiple concatenation operations which could cause
-    // null terminator issues.
-    std::vector<exprt> all_chars;
+    // if (i + 1 < len) result = __python_str_concat(result, sep)
+    plus_exprt next_idx(symbol_expr(idx_sym), gen_one(size_type()));
+    exprt has_next("<", bool_type());
+    has_next.copy_to_operands(next_idx, symbol_expr(len_sym));
 
-    // Start with the first element
-    std::vector<exprt> first_chars =
-      string_builder_->extract_string_chars(elem_exprs[0]);
-    all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
+    side_effect_expr_function_callt sep_concat;
+    sep_concat.function() = symbol_expr(*concat_symbol);
+    sep_concat.arguments().push_back(symbol_expr(result_sym));
+    sep_concat.arguments().push_back(sep_addr);
+    sep_concat.type() = gen_pointer_type(char_type());
+    sep_concat.location() = location;
+    code_assignt assign_sep(symbol_expr(result_sym), sep_concat);
+    assign_sep.location() = location;
 
-    // For each remaining element: add separator, then add element
-    for (size_t i = 1; i < elem_exprs.size(); ++i)
-    {
-      // Insert separator characters
-      std::vector<exprt> sep_chars =
-        string_builder_->extract_string_chars(separator);
-      all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+    code_ifthenelset if_sep;
+    if_sep.cond() = has_next;
+    if_sep.then_case() = assign_sep;
+    if_sep.location() = location;
+    loop_body.copy_to_operands(if_sep);
 
-      // Insert element characters
-      std::vector<exprt> elem_chars =
-        string_builder_->extract_string_chars(elem_exprs[i]);
-      all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
-    }
+    // i = i + 1
+    plus_exprt inc(symbol_expr(idx_sym), gen_one(size_type()));
+    code_assignt idx_inc(symbol_expr(idx_sym), inc);
+    idx_inc.location() = location;
+    loop_body.copy_to_operands(idx_inc);
 
-    // Build final null-terminated string from all collected characters
-    return string_builder_->build_null_terminated_string(all_chars);
+    codet while_stmt;
+    while_stmt.set_statement("while");
+    while_stmt.copy_to_operands(cond, loop_body);
+    while_stmt.location() = location;
+    converter_.add_instruction(while_stmt);
+
+    return symbol_expr(result_sym);
   }
 
   throw std::runtime_error("join() argument must be a list of strings");
