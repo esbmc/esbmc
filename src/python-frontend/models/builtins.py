@@ -220,3 +220,18 @@ def sorted_str(iterable: list[str]) -> list[str]:
         i = i + 1
 
     return result
+
+
+def zip(a: str, b: str) -> list:
+    """Minimal zip support for two strings."""
+    result: list = []
+    i: int = 0
+    len_a: int = len(a)
+    len_b: int = len(b)
+    n: int = len_a if len_a < len_b else len_b
+
+    while i < n:
+        result.append((a[i], b[i]))
+        i = i + 1
+
+    return result
