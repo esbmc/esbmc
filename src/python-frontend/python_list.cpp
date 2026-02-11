@@ -137,8 +137,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     converter_.add_instruction(temp_decl);
 
     exprt temp_array = symbol_expr(temp_symbol);
-    exprt first_element =
-      index_exprt(temp_array, from_integer(0, size_type()));
+    exprt first_element = index_exprt(temp_array, from_integer(0, size_type()));
     code_assignt assign_char(first_element, elem_expr);
     assign_char.location() = location;
     converter_.add_instruction(assign_char);
@@ -178,8 +177,8 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   converter_.add_instruction(hash_assignment);
 
   // Create and declare temporary symbol for list element
-  symbolt &elem_symbol =
-    converter_.create_tmp_symbol(op, "$list_elem$", elem_expr.type(), elem_expr);
+  symbolt &elem_symbol = converter_.create_tmp_symbol(
+    op, "$list_elem$", elem_expr.type(), elem_expr);
   code_declt elem_decl(symbol_expr(elem_symbol));
   elem_decl.copy_to_operands(elem_expr);
   elem_decl.location() = location;

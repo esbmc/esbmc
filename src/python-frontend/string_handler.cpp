@@ -3151,8 +3151,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     // Build concat symbol
     std::string concat_name = "__python_str_concat";
     std::string concat_id = "c:@F@" + concat_name;
-    symbolt *concat_symbol =
-      converter_.symbol_table().find_symbol(concat_id);
+    symbolt *concat_symbol = converter_.symbol_table().find_symbol(concat_id);
     if (!concat_symbol)
     {
       symbolt new_symbol;
