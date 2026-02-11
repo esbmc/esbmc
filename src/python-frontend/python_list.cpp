@@ -113,7 +113,39 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 {
   const type_handler type_handler_ = converter_.get_type_handler();
   locationt location = converter_.get_location_from_decl(op);
-  const std::string elem_type_name = type_handler_.type_to_string(elem.type());
+  exprt elem_expr = elem;
+
+  // Promote single character to a null-terminated string array.
+  if (elem_expr.type() == char_type())
+  {
+    typet char_array_type =
+      array_typet(char_type(), from_integer(2, size_type()));
+
+    symbolt &temp_symbol = converter_.create_tmp_symbol(
+      op, "$char_to_str$", char_array_type, exprt());
+
+    code_declt temp_decl(symbol_expr(temp_symbol));
+    temp_decl.location() = location;
+    converter_.add_instruction(temp_decl);
+
+    exprt temp_array = symbol_expr(temp_symbol);
+    exprt first_element =
+      index_exprt(temp_array, from_integer(0, size_type()));
+    code_assignt assign_char(first_element, elem_expr);
+    assign_char.location() = location;
+    converter_.add_instruction(assign_char);
+
+    exprt second_element =
+      index_exprt(temp_array, from_integer(1, size_type()));
+    code_assignt assign_null(second_element, from_integer(0, char_type()));
+    assign_null.location() = location;
+    converter_.add_instruction(assign_null);
+
+    elem_expr = symbol_expr(temp_symbol);
+  }
+
+  const std::string elem_type_name =
+    type_handler_.type_to_string(elem_expr.type());
 
   // Create type name as null-terminated char array
   const typet type_name_type =
@@ -139,9 +171,9 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 
   // Create and declare temporary symbol for list element
   symbolt &elem_symbol =
-    converter_.create_tmp_symbol(op, "$list_elem$", elem.type(), elem);
+    converter_.create_tmp_symbol(op, "$list_elem$", elem_expr.type(), elem_expr);
   code_declt elem_decl(symbol_expr(elem_symbol));
-  elem_decl.copy_to_operands(elem);
+  elem_decl.copy_to_operands(elem_expr);
   elem_decl.location() = location;
   converter_.add_instruction(elem_decl);
 
@@ -222,11 +254,10 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     {
       if (elem_symbol.type.is_array())
       {
-        const size_t subtype_size_bits =
-          std::stoull(elem.type().subtype().width().as_string(), nullptr, 10);
-
         const array_typet &array_type =
           static_cast<const array_typet &>(elem_symbol.type);
+        const size_t subtype_size_bits =
+          std::stoull(array_type.subtype().width().as_string(), nullptr, 10);
 
         const size_t array_length =
           std::stoull(array_type.size().value().as_string(), nullptr, 2);
