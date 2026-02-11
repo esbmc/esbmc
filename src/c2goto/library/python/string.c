@@ -1,8 +1,19 @@
 #include <ctype.h>
+#include <stdbool.h>
 #include <limits.h>
 #include <stddef.h>
 #include <string.h>
 #include "python_types.h"
+
+// List helpers (defined in list.c)
+extern PyListObject *__ESBMC_list_create(void);
+extern bool __ESBMC_list_push(
+  PyListObject *l,
+  const void *value,
+  size_t type_id,
+  size_t type_size);
+extern size_t __ESBMC_list_size(const PyListObject *l);
+extern PyObject *__ESBMC_list_at(PyListObject *l, size_t index);
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
@@ -774,59 +785,168 @@ __ESBMC_HIDE:;
 
   size_t len_sep = __python_strnlen_bounded(sep, 64);
   size_t len_str = __python_strnlen_bounded(str, 256);
-  _Bool has_empty = 0;
+  PyListObject *out = __ESBMC_list_create();
+  if (!out)
+    return (PyListObject *)0;
 
-  (void)maxsplit;
+  if (len_sep == 0)
+    return out;
+
+  if (maxsplit == 0)
+  {
+    char *buf = __ESBMC_alloca(len_str + 1);
+    memcpy(buf, str, len_str);
+    buf[len_str] = '\0';
+    __ESBMC_list_push(out, buf, 0, len_str + 1);
+    return out;
+  }
 
   if (len_sep == 1)
   {
     char sep_ch = sep[0];
+    size_t start = 0;
+    size_t splits = 0;
 
-    if (len_str == 0)
+    size_t i = 0;
+    while (i <= len_str)
     {
-      has_empty = 1;
-    }
-    else
-    {
-      if (str[0] == sep_ch || str[len_str - 1] == sep_ch)
-        has_empty = 1;
-
-      size_t i = 1;
-      while (i < len_str && !has_empty)
+      if (i == len_str || str[i] == sep_ch)
       {
-        if (str[i] == sep_ch && str[i - 1] == sep_ch)
-          has_empty = 1;
-        i++;
-      }
-    }
-  }
+        size_t part_len = i - start;
+        char *buf = __ESBMC_alloca(part_len + 1);
+        size_t k = 0;
+        while (k < part_len)
+        {
+          buf[k] = str[start + k];
+          k++;
+        }
+        buf[part_len] = '\0';
+        __ESBMC_list_push(out, buf, 0, part_len + 1);
 
-  if (has_empty)
-  {
-    const char *empty = "";
-    static PyObject empty_items[1];
-    static PyListObject empty_list;
-    empty_items[0].value = empty;
-    empty_items[0].type_id = 0;
-    empty_items[0].size = 1;
-    empty_list.type = NULL;
-    empty_list.items = empty_items;
-    empty_list.size = 1;
-    return &empty_list;
+        if (maxsplit > 0)
+        {
+          splits++;
+          if (splits >= (size_t)maxsplit)
+          {
+            if (i < len_str)
+            {
+              size_t rem = len_str - (i + 1);
+              char *buf2 = __ESBMC_alloca(rem + 1);
+              size_t k2 = 0;
+              while (k2 < rem)
+              {
+                buf2[k2] = str[i + 1 + k2];
+                k2++;
+              }
+              buf2[rem] = '\0';
+              __ESBMC_list_push(out, buf2, 0, rem + 1);
+            }
+            return out;
+          }
+        }
+
+        start = i + 1;
+      }
+      i++;
+    }
   }
   else
   {
-    const char *nonempty = "a";
-    static PyObject nonempty_items[1];
-    static PyListObject nonempty_list;
-    nonempty_items[0].value = nonempty;
-    nonempty_items[0].type_id = 0;
-    nonempty_items[0].size = 2;
-    nonempty_list.type = NULL;
-    nonempty_list.items = nonempty_items;
-    nonempty_list.size = 1;
-    return &nonempty_list;
+    char *buf = __ESBMC_alloca(len_str + 1);
+    memcpy(buf, str, len_str);
+    buf[len_str] = '\0';
+    __ESBMC_list_push(out, buf, 0, len_str + 1);
   }
+
+  return out;
+}
+
+// Python string join - joins a list of strings using a separator
+char *__python_str_join(const char *sep, const PyListObject *list)
+{
+__ESBMC_HIDE:;
+  const char *sep_str = sep ? sep : "";
+  size_t sep_len = __python_strnlen_bounded(sep_str, 64);
+
+  if (!list)
+  {
+    char *out = __ESBMC_alloca(1);
+    out[0] = '\0';
+    return out;
+  }
+
+  size_t n = __ESBMC_list_size(list);
+  if (n == 0)
+  {
+    char *out = __ESBMC_alloca(1);
+    out[0] = '\0';
+    return out;
+  }
+
+  // First pass: compute total length
+  size_t total = 1; // null terminator
+  for (size_t i = 0; i < n; ++i)
+  {
+    PyObject *item = __ESBMC_list_at((PyListObject *)list, i);
+    const char *s = (const char *)item->value;
+    if (!s)
+      s = "";
+    size_t len = 0;
+    if (item && item->size > 0)
+    {
+      len = item->size;
+      if (s[len - 1] == '\0')
+        len = len - 1;
+      else
+        len = __python_strnlen_bounded(s, 1024);
+    }
+    else
+    {
+      len = __python_strnlen_bounded(s, 1024);
+    }
+    total += len;
+    if (i + 1 < n)
+      total += sep_len;
+  }
+
+  char *out = __ESBMC_alloca(total);
+  size_t pos = 0;
+
+  for (size_t i = 0; i < n; ++i)
+  {
+    PyObject *item = __ESBMC_list_at((PyListObject *)list, i);
+    const char *s = (const char *)item->value;
+    if (!s)
+      s = "";
+    size_t len = 0;
+    if (item && item->size > 0)
+    {
+      len = item->size;
+      if (s[len - 1] == '\0')
+        len = len - 1;
+      else
+        len = __python_strnlen_bounded(s, 1024);
+    }
+    else
+    {
+      len = __python_strnlen_bounded(s, 1024);
+    }
+
+    if (len > 0)
+    {
+      memcpy(out + pos, s, len);
+      pos += len;
+    }
+
+    if (i + 1 < n && sep_len > 0)
+    {
+      memcpy(out + pos, sep_str, sep_len);
+      pos += sep_len;
+    }
+  }
+
+  out[pos] = '\0';
+  return out;
 }
 // Python int() builtin - converts string to integer
 int __python_int(const char *s, int base)
