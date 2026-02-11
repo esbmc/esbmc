@@ -121,7 +121,6 @@ std::string pytest_generator::extract_function_name(
     "__ESBMC_main",
     "python_user_main",
     "python_init",
-    // nondet helper functions
     "nondet_list",
     "nondet_dict",
     "_nondet_size",
@@ -1036,7 +1035,7 @@ void pytest_generator::generate(const std::string &file_name) const
   // Generate pytest file
   std::ofstream pytest_file(file_name);
 
-  // Write file components using helper methods
+  // Write file components
   write_file_header(pytest_file, input_file);
   write_imports(pytest_file, module_name);
   write_test_data(pytest_file, param_names, test_cases);
@@ -1425,7 +1424,7 @@ void pytest_generator::generate_single(
   // Generate pytest file
   std::ofstream pytest_file(file_name);
 
-  // Write file components using helper methods
+  // Write file components 
   write_file_header(pytest_file, original_file);
   write_imports(pytest_file, module_name);
 
