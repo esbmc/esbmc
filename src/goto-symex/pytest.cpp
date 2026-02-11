@@ -1424,7 +1424,7 @@ void pytest_generator::generate_single(
   // Generate pytest file
   std::ofstream pytest_file(file_name);
 
-  // Write file components 
+  // Write file components
   write_file_header(pytest_file, original_file);
   write_imports(pytest_file, module_name);
 
