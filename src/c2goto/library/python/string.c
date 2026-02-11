@@ -888,6 +888,8 @@ __ESBMC_HIDE:;
   for (size_t i = 0; i < n; ++i)
   {
     PyObject *item = __ESBMC_list_at((PyListObject *)list, i);
+    if (!item)
+      continue;
     const char *s = (const char *)item->value;
     if (!s)
       s = "";
@@ -915,6 +917,8 @@ __ESBMC_HIDE:;
   for (size_t i = 0; i < n; ++i)
   {
     PyObject *item = __ESBMC_list_at((PyListObject *)list, i);
+    if (!item)
+      continue;
     const char *s = (const char *)item->value;
     if (!s)
       s = "";

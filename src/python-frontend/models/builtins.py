@@ -222,7 +222,8 @@ def sorted_str(iterable: list[str]) -> list[str]:
     return result
 
 
-def zip(a: str, b: str) -> list:
+# NOTE: This models Python's built-in zip; name intentional.
+def zip(a: str, b: str) -> list:  # noqa: A001
     """Minimal zip support for two strings."""
     result: list = []
     i: int = 0
