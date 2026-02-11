@@ -10,7 +10,7 @@
 int value = 0;
 int other = 100;
 
-__attribute__((annotate("__ESBMC_contract")))
+__ESBMC_contract
 void modify_value(void)
 {
     __ESBMC_assigns(value);  // Only 'value' is modified

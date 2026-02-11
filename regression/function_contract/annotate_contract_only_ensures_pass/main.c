@@ -6,7 +6,7 @@
 
 int result = 0;
 
-__attribute__((annotate("__ESBMC_contract")))
+__ESBMC_contract
 int get_positive(void)
 {
     __ESBMC_ensures(__ESBMC_return_value > 0);

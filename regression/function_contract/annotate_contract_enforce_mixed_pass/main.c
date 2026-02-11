@@ -1,21 +1,21 @@
-/* Test: Mix of annotated and non-annotated functions
+/* Test: enforce-all-contracts with mixed annotated/non-annotated functions
  *
- * This test verifies that --enforce-all-contracts only processes
- * functions marked with __ESBMC_contract annotation.
- * add() is NOT annotated and should NOT be enforced.
- * accumulate() IS annotated and should be enforced.
+ * add() is NOT annotated -> not enforced, body runs normally.
+ * accumulate() IS annotated -> enforced, contract is checked.
+ *
+ * Only accumulate() should be enforced. add() should not be touched.
  */
 
 int global_sum = 0;
 
-// Regular function WITHOUT annotation - not enforced
+/* Not annotated: not enforced */
 int add(int a, int b)
 {
     return a + b;
 }
 
-// Annotation-marked function - will be enforced
-__ESBMC_contract
+/* Annotated: will be enforced */
+__attribute__((annotate("__ESBMC_contract")))
 void accumulate(int x)
 {
     __ESBMC_requires(x >= 0);

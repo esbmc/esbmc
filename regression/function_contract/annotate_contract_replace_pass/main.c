@@ -5,7 +5,7 @@
 
 int counter = 0;
 
-__attribute__((annotate("__ESBMC_contract")))
+__ESBMC_contract
 int increment(int x)
 {
     __ESBMC_requires(x >= 0);

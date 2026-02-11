@@ -505,6 +505,8 @@ void __ESBMC_loop_invariant(_Bool);
 
 #define __builtin_object_size(ptr, type) \
     __ESBMC_builtin_object_size(ptr, type)
+
+#define __ESBMC_contract __attribute__((annotate("__ESBMC_contract")))
     )";
 
   if (config.ansi_c.cheri)
@@ -533,7 +535,10 @@ struct cap_info __ESBMC_cheri_info[1];
   std::string enforce_opt = config.options.get_option("enforce-contract");
   std::string replace_opt =
     config.options.get_option("replace-call-with-contract");
-  if (!enforce_opt.empty() || !replace_opt.empty())
+  bool enforce_all = config.options.get_bool_option("enforce-all-contracts");
+  bool replace_all = config.options.get_bool_option("replace-all-contracts");
+  if (
+    !enforce_opt.empty() || !replace_opt.empty() || enforce_all || replace_all)
   {
     intrinsics += R"(
 /* Function contract support

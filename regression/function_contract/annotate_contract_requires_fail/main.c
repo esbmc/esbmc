@@ -4,7 +4,7 @@
  * The replace mode checks preconditions at call site.
  */
 
-__attribute__((annotate("__ESBMC_contract")))
+__ESBMC_contract
 void require_positive(int x)
 {
     __ESBMC_requires(x > 0);
