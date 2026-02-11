@@ -68,7 +68,7 @@ class ZeroDivisionError(Exception):
         return self.message
 
 
-class AssertionError(BaseException):
+class AssertionError(Exception):
     message: str = ""
 
     def __init__(self, message: str):
