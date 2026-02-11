@@ -150,7 +150,8 @@ std::string pytest_generator::extract_function_name(
         has_prefix(full_func, "python_") || has_prefix(full_func, "__ESBMC_") ||
         has_prefix(full_func, "__VERIFIER_") ||
         has_prefix(func_to_check, "nondet_") ||
-        has_prefix(func_to_check, "__") ||  // Skip all double-underscore functions
+        has_prefix(
+          func_to_check, "__") || // Skip all double-underscore functions
         func_to_check == "_nondet_size")
         continue;
 
@@ -597,10 +598,14 @@ void pytest_generator::collect(
 
   // Track nondet_list/nondet_dict components for building composite values
   // We collect size values and element values separately, then combine them
-  std::vector<std::pair<std::string, BigInt>> list_sizes;   // (nondet_symbol, size_value)
-  std::vector<std::pair<std::string, std::string>> list_elems; // (nondet_symbol, elem_value_str)
-  std::vector<std::pair<std::string, std::string>> dict_keys;  // (nondet_symbol, key_value_str)
-  std::vector<std::pair<std::string, std::string>> dict_values; // (nondet_symbol, value_value_str)
+  std::vector<std::pair<std::string, BigInt>>
+    list_sizes; // (nondet_symbol, size_value)
+  std::vector<std::pair<std::string, std::string>>
+    list_elems; // (nondet_symbol, elem_value_str)
+  std::vector<std::pair<std::string, std::string>>
+    dict_keys; // (nondet_symbol, key_value_str)
+  std::vector<std::pair<std::string, std::string>>
+    dict_values; // (nondet_symbol, value_value_str)
 
   // Extract function name if not already set
   std::string extracted_func_name;
@@ -720,7 +725,8 @@ void pytest_generator::collect(
 
       // For dict/list components, allow duplicate nondet symbols
       // (key_type and value_type may share the same nondet symbol due to solver optimization)
-      bool is_component = is_list_size || is_list_elem || is_dict_key || is_dict_value;
+      bool is_component =
+        is_list_size || is_list_elem || is_dict_key || is_dict_value;
 
       if (seen_nondets.count(sym.thename.as_string()) && !is_component)
         continue;
@@ -1187,7 +1193,8 @@ void pytest_generator::generate_single(
 
       // For dict/list components, allow duplicate nondet symbols
       // (key_type and value_type may share the same nondet symbol due to solver optimization)
-      bool is_component = is_list_size || is_list_elem || is_dict_key || is_dict_value;
+      bool is_component =
+        is_list_size || is_list_elem || is_dict_key || is_dict_value;
 
       if (seen_nondets.count(sym.thename.as_string()) && !is_component)
         continue;
