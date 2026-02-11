@@ -6686,9 +6686,9 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         exprt arg;
         // Check if args exists and is not empty before accessing
         const auto &exc = element["exc"];
-        if (exc.contains("args") &&
-            !exc["args"].empty() &&
-            !exc["args"][0].is_null())
+        if (
+          exc.contains("args") && !exc["args"].empty() &&
+          !exc["args"][0].is_null())
         {
           const auto &json_arg = exc["args"][0];
           exprt tmp = get_expr(json_arg);
