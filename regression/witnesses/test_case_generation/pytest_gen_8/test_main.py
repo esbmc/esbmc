@@ -6,10 +6,7 @@ from test import *
 import pytest
 
 @pytest.mark.parametrize("dict0", [
-    {0: 0},
-    {1375: 1375},
-    {0: 0},
-    {0: 0},
+    {144115188075855873: 144115188075855873},
 ])
 def test_sum_of_positive_elements(dict0):
     """Auto-generated test cases for sum_of_positive_elements"""
