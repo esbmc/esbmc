@@ -18,11 +18,13 @@
 #include <string>
 #include <functional>
 
+#include <c2goto/library/python/python_types.h>
+
 static size_t esbmc_type_name_hash(const std::string &name)
 {
   // Stable hash for string type to match runtime models.
   if (name == "str")
-    return 0x826e83195d0d60f0ULL;
+    return ESBMC_PY_STR_TYPE_ID;
   return std::hash<std::string>{}(name);
 }
 
