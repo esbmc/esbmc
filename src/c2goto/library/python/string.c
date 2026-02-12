@@ -853,6 +853,19 @@ __ESBMC_HIDE:;
   return out;
 }
 
+static inline size_t __python_str_item_len(const PyObject *item, const char *s)
+{
+  if (item->size > 0)
+  {
+    size_t len = item->size;
+    if (s[len - 1] == '\0')
+      return len - 1;
+    return __python_strnlen_bounded(s, 1024);
+  }
+
+  return __python_strnlen_bounded(s, 1024);
+}
+
 // Python string join - joins a list of strings using a separator
 char *__python_str_join(const char *sep, const PyListObject *list)
 {
@@ -883,19 +896,7 @@ __ESBMC_HIDE:;
     const char *s = (const char *)item->value;
     if (!s)
       s = "";
-    size_t len = 0;
-    if (item->size > 0)
-    {
-      len = item->size;
-      if (s[len - 1] == '\0')
-        len = len - 1;
-      else
-        len = __python_strnlen_bounded(s, 1024);
-    }
-    else
-    {
-      len = __python_strnlen_bounded(s, 1024);
-    }
+    size_t len = __python_str_item_len(item, s);
     total += len;
     if (i + 1 < n)
       total += sep_len;
@@ -910,19 +911,7 @@ __ESBMC_HIDE:;
     const char *s = (const char *)item->value;
     if (!s)
       s = "";
-    size_t len = 0;
-    if (item->size > 0)
-    {
-      len = item->size;
-      if (s[len - 1] == '\0')
-        len = len - 1;
-      else
-        len = __python_strnlen_bounded(s, 1024);
-    }
-    else
-    {
-      len = __python_strnlen_bounded(s, 1024);
-    }
+    size_t len = __python_str_item_len(item, s);
 
     if (len > 0)
     {
