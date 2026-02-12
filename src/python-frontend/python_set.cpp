@@ -104,7 +104,8 @@ exprt python_set::get_from_iterable(
   {
     const symbolt *size_func =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
-    assert(size_func);
+    if (!size_func)
+      throw std::runtime_error("__ESBMC_list_size not found in symbol table");
 
     symbolt &len_sym = converter_.create_tmp_symbol(
       element, "$set_len$", size_type(), gen_zero(size_type()));
@@ -183,8 +184,22 @@ exprt python_set::get_from_iterable(
   code_blockt loop_body;
 
   // Switch context so helper calls insert into loop body
-  code_blockt *saved_block = converter_.current_block;
-  converter_.current_block = &loop_body;
+  struct current_block_guard
+  {
+    python_converter &converter;
+    code_blockt *saved;
+
+    current_block_guard(python_converter &converter, code_blockt *next)
+      : converter(converter), saved(converter.current_block)
+    {
+      converter.current_block = next;
+    }
+
+    ~current_block_guard()
+    {
+      converter.current_block = saved;
+    }
+  } block_guard(converter_, &loop_body);
 
   exprt elem_expr;
   if (iterable.type() == list_type)
@@ -270,9 +285,6 @@ exprt python_set::get_from_iterable(
   plus_exprt idx_inc(symbol_expr(idx_sym), gen_one(size_type()));
   code_assignt idx_update(symbol_expr(idx_sym), idx_inc);
   loop_body.copy_to_operands(idx_update);
-
-  // Restore context
-  converter_.current_block = saved_block;
 
   // Create while loop
   codet while_loop;
