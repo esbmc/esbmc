@@ -102,10 +102,19 @@ def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
         # Generate new key each iteration
         if key_type is None:
             k: Any = nondet_int()
+        else:
+            k: Any = key_type
+        # TODO here we should do like 
+        # elif isinstance(key_type, bool):
+        #   k: Any = nondet_bool()    
+        # but for now we dont support isinstance and int/bool... keys, 
+        # so we just return key_type directly if it is not None 
 
         # Generate new value each iteration
         if value_type is None:
             v: Any = nondet_int()
+        else:
+            v: Any = value_type
         result[k] = v
         i = i + 1
 
