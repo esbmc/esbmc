@@ -844,10 +844,68 @@ __ESBMC_HIDE:;
   }
   else
   {
-    char *buf = __ESBMC_alloca(len_str + 1);
-    memcpy(buf, str, len_str);
-    buf[len_str] = '\0';
-    __ESBMC_list_push(out, buf, ESBMC_PY_STR_TYPE_ID, len_str + 1);
+    size_t start = 0;
+    size_t splits = 0;
+
+    size_t i = 0;
+    while (i + len_sep <= len_str)
+    {
+      // Check for separator match at position i
+      size_t k = 0;
+      while (k < len_sep && str[i + k] == sep[k])
+        k++;
+
+      if (k == len_sep)
+      {
+        size_t part_len = i - start;
+        char *buf = __ESBMC_alloca(part_len + 1);
+        size_t j = 0;
+        while (j < part_len)
+        {
+          buf[j] = str[start + j];
+          j++;
+        }
+        buf[part_len] = '\0';
+        __ESBMC_list_push(out, buf, ESBMC_PY_STR_TYPE_ID, part_len + 1);
+
+        if (maxsplit > 0)
+        {
+          splits++;
+          if (splits >= (size_t)maxsplit)
+          {
+            size_t rem = len_str - (i + len_sep);
+            char *buf2 = __ESBMC_alloca(rem + 1);
+            size_t j2 = 0;
+            while (j2 < rem)
+            {
+              buf2[j2] = str[i + len_sep + j2];
+              j2++;
+            }
+            buf2[rem] = '\0';
+            __ESBMC_list_push(out, buf2, ESBMC_PY_STR_TYPE_ID, rem + 1);
+            return out;
+          }
+        }
+
+        i = i + len_sep;
+        start = i;
+        continue;
+      }
+
+      i++;
+    }
+
+    // Push remaining tail (or whole string if no matches)
+    size_t tail_len = len_str - start;
+    char *buf = __ESBMC_alloca(tail_len + 1);
+    size_t t = 0;
+    while (t < tail_len)
+    {
+      buf[t] = str[start + t];
+      t++;
+    }
+    buf[tail_len] = '\0';
+    __ESBMC_list_push(out, buf, ESBMC_PY_STR_TYPE_ID, tail_len + 1);
   }
 
   return out;
