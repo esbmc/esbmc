@@ -41,9 +41,7 @@ public:
    * @param element AST node for location info
    * @return Expression representing the set
    */
-  exprt get_from_iterable(
-    const exprt &iterable,
-    const nlohmann::json &element);
+  exprt get_from_iterable(const exprt &iterable, const nlohmann::json &element);
 
   /**
    * @brief Build set difference operation (set1 - set2)

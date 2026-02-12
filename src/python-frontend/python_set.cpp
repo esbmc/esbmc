@@ -124,15 +124,14 @@ exprt python_set::get_from_iterable(
 
     length_expr = symbol_expr(len_sym);
   }
-  else if (iterable.type().is_array() &&
-           iterable.type().subtype() == char_type())
+  else if (
+    iterable.type().is_array() && iterable.type().subtype() == char_type())
   {
     const array_typet &arr_type = to_array_type(iterable.type());
     length_expr = minus_exprt(arr_type.size(), gen_one(size_type()));
   }
   else if (
-    iterable.type().is_pointer() &&
-    iterable.type().subtype() == char_type())
+    iterable.type().is_pointer() && iterable.type().subtype() == char_type())
   {
     // Use bounded length from runtime to avoid unbounded strlen
     const symbolt *strlen_bounded =
@@ -162,8 +161,7 @@ exprt python_set::get_from_iterable(
   else
   {
     throw std::runtime_error(
-      "Unsupported iterable type in set(): " +
-      iterable.type().id_string());
+      "Unsupported iterable type in set(): " + iterable.type().id_string());
   }
 
   // Loop counter
@@ -233,17 +231,16 @@ exprt python_set::get_from_iterable(
 
     if (elem_type != typet())
     {
-      const std::string elem_id =
-        elem_expr.is_symbol() ? elem_expr.identifier().as_string()
-                              : std::string();
+      const std::string elem_id = elem_expr.is_symbol()
+                                    ? elem_expr.identifier().as_string()
+                                    : std::string();
       list_helper.add_type_info(set_id, elem_id, elem_expr.type());
     }
   }
   else if (
     iterable.type().is_array() && iterable.type().subtype() == char_type())
   {
-    index_exprt array_index(
-      iterable, symbol_expr(idx_sym), char_type());
+    index_exprt array_index(iterable, symbol_expr(idx_sym), char_type());
     elem_expr = array_index;
     list_helper.add_type_info(set_id, std::string(), elem_expr.type());
   }
@@ -273,7 +270,8 @@ exprt python_set::get_from_iterable(
   not_exprt not_contains(contains_expr);
 
   code_blockt push_block;
-  exprt push_call = list_helper.build_push_list_call(set_symbol, element, elem_expr);
+  exprt push_call =
+    list_helper.build_push_list_call(set_symbol, element, elem_expr);
   push_block.copy_to_operands(push_call);
 
   code_ifthenelset push_if;

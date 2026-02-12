@@ -6,7 +6,7 @@
 // Bounded string length used by Python frontend/runtime helpers.
 // Keeps symbolic loops finite while still respecting '\0' within the bound.
 #ifndef ESBMC_PY_STRNLEN_BOUND
-#define ESBMC_PY_STRNLEN_BOUND 256
+#  define ESBMC_PY_STRNLEN_BOUND 256
 #endif
 
 /**
