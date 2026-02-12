@@ -164,6 +164,9 @@ bool goto_symext::symex_throw()
     goto_symex_statet::exceptiont::catch_mapt::const_iterator c_it =
       except->catch_map.find(it);
 
+    // Track which catch type was matched (might be a base class)
+    irep_idt matched_catch_type = it;
+
     // If no exact match, check inheritance hierarchy for Python exceptions
     if (c_it == except->catch_map.end())
     {
@@ -172,6 +175,7 @@ bool goto_symext::symex_throw()
         if (is_python_exception_subtype(it, catch_entry.first))
         {
           c_it = except->catch_map.find(catch_entry.first);
+          matched_catch_type = catch_entry.first;  // Track the actual catch type
           break;
         }
       }
@@ -183,7 +187,8 @@ bool goto_symext::symex_throw()
       // We do!
 
       // Get current catch number and update if needed
-      new_id_number = (*except->catch_order.find(it)).second;
+      // Use matched_catch_type instead of it for the lookup
+      new_id_number = (*except->catch_order.find(matched_catch_type)).second;
 
       if (new_id_number < old_id_number)
       {
