@@ -8,66 +8,6 @@ class BaseException:
         return self.message
 
 
-class ValueError(BaseException):
-    message: str = ""
-
-    def __init__(self, message: str):
-        self.message: str = message
-
-    def __str__(self) -> str:
-        return self.message
-
-
-class TypeError(BaseException):
-    message: str = ""
-
-    def __init__(self, message: str):
-        self.message: str = message
-
-    def __str__(self) -> str:
-        return self.message
-
-
-class IndexError(BaseException):
-    message: str = ""
-
-    def __init__(self, message: str):
-        self.message: str = message
-
-    def __str__(self) -> str:
-        return self.message
-
-
-class KeyError(BaseException):
-    message: str = ""
-
-    def __init__(self, message: str):
-        self.message: str = message
-
-    def __str__(self) -> str:
-        return self.message
-
-
-class ZeroDivisionError(BaseException):
-    message: str = ""
-
-    def __init__(self, message: str):
-        self.message: str = message
-
-    def __str__(self) -> str:
-        return self.message
-
-
-class AssertionError(BaseException):
-    message: str = ""
-
-    def __init__(self, message: str):
-        self.message: str = message
-
-    def __str__(self) -> str:
-        return self.message
-
-
 class Exception(BaseException):
     message: str = ""
 
@@ -78,7 +18,67 @@ class Exception(BaseException):
         return self.message
 
 
-class NameError(BaseException):
+class ValueError(Exception):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class TypeError(Exception):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class IndexError(Exception):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class KeyError(Exception):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class ZeroDivisionError(Exception):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class AssertionError(Exception):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class NameError(Exception):
     message: str = ""
 
     def __init__(self, message: str):
