@@ -175,7 +175,7 @@ bool goto_symext::symex_throw()
         if (is_python_exception_subtype(it, catch_entry.first))
         {
           c_it = except->catch_map.find(catch_entry.first);
-          matched_catch_type = catch_entry.first;  // Track the actual catch type
+          matched_catch_type = catch_entry.first; // Track the actual catch type
           break;
         }
       }
