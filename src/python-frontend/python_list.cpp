@@ -2488,3 +2488,214 @@ typet python_list::check_homogeneous_list_types(
 
   return elem_type;
 }
+
+exprt python_list::build_list_from_range(
+  python_converter &converter,
+  const nlohmann::json &range_args,
+  const nlohmann::json &element)
+{
+  // Validate argument count
+  if (range_args.empty() || range_args.size() > 3)
+    throw std::runtime_error("range() takes 1 to 3 arguments");
+
+  // Extract constant integer, handling UnaryOp for negative numbers
+  auto extract_constant =
+    [&](const nlohmann::json &arg) -> std::optional<long long> {
+    exprt expr = converter.get_expr(arg);
+
+    if (expr.is_constant())
+      return binary2integer(expr.value().as_string(), expr.type().is_signedbv())
+        .to_int64();
+
+    // Handle UnaryOp (e.g., -1)
+    if (expr.id() == "unary-" && expr.operands().size() == 1)
+    {
+      const exprt &operand = expr.operands()[0];
+      if (operand.is_constant())
+      {
+        long long val =
+          binary2integer(
+            operand.value().as_string(), operand.type().is_signedbv())
+            .to_int64();
+        return -val;
+      }
+    }
+
+    return std::nullopt;
+  };
+
+  // Extract all arguments
+  std::optional<long long> arg0 = extract_constant(range_args[0]);
+  std::optional<long long> arg1;
+  std::optional<long long> arg2;
+
+  if (range_args.size() > 1)
+    arg1 = extract_constant(range_args[1]);
+  if (range_args.size() > 2)
+    arg2 = extract_constant(range_args[2]);
+
+  // Check if all required arguments are constant
+  const bool all_constant = arg0.has_value() &&
+                            (range_args.size() <= 1 || arg1.has_value()) &&
+                            (range_args.size() <= 2 || arg2.has_value());
+
+  // Handle symbolic (non-constant) case
+  if (!all_constant)
+  {
+    return handle_symbolic_range(converter, range_args, element);
+  }
+
+  // All arguments are constant
+  return build_concrete_range(converter, range_args, element, arg0, arg1, arg2);
+}
+
+exprt python_list::handle_symbolic_range(
+  python_converter &converter,
+  const nlohmann::json &range_args,
+  const nlohmann::json &element)
+{
+  if (range_args.size() == 1)
+  {
+    // range(n) case: create list with symbolic size n
+    exprt n_expr = converter.get_expr(range_args[0]);
+
+    // Create an empty list using existing create_list infrastructure
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    converter.copy_location_fields_from_decl(element, list_node);
+
+    python_list temp_list(converter, list_node);
+    exprt list_expr = temp_list.get();
+
+    // Set symbolic size using helper method
+    set_list_symbolic_size(converter, list_expr, n_expr, element);
+
+    return list_expr;
+  }
+
+  // For multi-argument symbolic ranges, return empty list
+  nlohmann::json empty_list_node;
+  empty_list_node["_type"] = "List";
+  empty_list_node["elts"] = nlohmann::json::array();
+  converter.copy_location_fields_from_decl(element, empty_list_node);
+  python_list list(converter, empty_list_node);
+  return list.get();
+}
+
+void python_list::set_list_symbolic_size(
+  python_converter &converter,
+  exprt &list_expr,
+  const exprt &size_expr,
+  const nlohmann::json &element)
+{
+  if (!list_expr.type().is_pointer())
+    return;
+
+  typet pointee_type = list_expr.type().subtype();
+
+  // Follow symbol types to get actual struct type
+  if (pointee_type.is_symbol())
+    pointee_type = converter.ns.follow(pointee_type);
+
+  if (!pointee_type.is_struct())
+    return;
+
+  const struct_typet &struct_type = to_struct_type(pointee_type);
+
+  // Find and update the size member
+  for (const auto &comp : struct_type.components())
+  {
+    if (comp.get_name() == "size")
+    {
+      // Create assignment: list->size = n
+      dereference_exprt deref(list_expr, pointee_type);
+      member_exprt size_member(deref, comp.get_name(), comp.type());
+      exprt size_value = typecast_exprt(size_expr, comp.type());
+      code_assignt size_assignment(size_member, size_value);
+
+      size_assignment.location() = element.contains("lineno")
+                                     ? converter.get_location_from_decl(element)
+                                     : locationt();
+
+      converter.current_block->operands().push_back(size_assignment);
+      break;
+    }
+  }
+}
+
+exprt python_list::build_concrete_range(
+  python_converter &converter,
+  const nlohmann::json &range_args,
+  const nlohmann::json &element,
+  const std::optional<long long> &arg0,
+  const std::optional<long long> &arg1,
+  const std::optional<long long> &arg2)
+{
+  // Determine start, stop, step based on argument count
+  long long start, stop, step;
+
+  switch (range_args.size())
+  {
+  case 1:
+    start = 0;
+    stop = arg0.value();
+    step = 1;
+    break;
+
+  case 2:
+    start = arg0.value();
+    stop = arg1.value();
+    step = 1;
+    break;
+
+  case 3:
+    start = arg0.value();
+    stop = arg1.value();
+    step = arg2.value();
+    break;
+
+  default:
+    throw std::runtime_error("Invalid range argument count");
+  }
+
+  // Validate step
+  if (step == 0)
+    throw std::runtime_error("range() step argument must not be zero");
+
+  // Calculate and validate range size
+  long long range_size;
+  if (step > 0)
+    range_size = std::max(0LL, (stop - start + step - 1) / step);
+  else
+    range_size = std::max(0LL, (stop - start + step + 1) / step);
+
+  constexpr long long MAX_RANGE_SIZE = 10000;
+  if (range_size > MAX_RANGE_SIZE)
+  {
+    throw std::runtime_error(
+      "range() size too large for expansion: " + std::to_string(range_size) +
+      " elements (max: " + std::to_string(MAX_RANGE_SIZE) + ")");
+  }
+
+  // Build the list of elements
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+
+  // Generate list elements
+  for (long long i = start; (step > 0) ? (i < stop) : (i > stop); i += step)
+  {
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = i;
+    elem["kind"] = nullptr;
+    converter.copy_location_fields_from_decl(element, elem);
+    list_node["elts"].push_back(elem);
+  }
+
+  converter.copy_location_fields_from_decl(element, list_node);
+
+  python_list list(converter, list_node);
+  return list.get();
+}

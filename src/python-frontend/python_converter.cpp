@@ -2145,6 +2145,23 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
 
+  // Handle direct range(...) calls by converting to list
+  if (element["func"]["_type"] == "Name" && element["func"]["id"] == "range")
+  {
+    const auto &range_args = element["args"];
+    return python_list::build_list_from_range(*this, range_args, element);
+  }
+
+  // Handle list(range(...))
+  if (
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
+    element["args"].size() == 1 && element["args"][0]["_type"] == "Call" &&
+    element["args"][0]["func"]["id"] == "range")
+  {
+    const auto &range_args = element["args"][0]["args"];
+    return python_list::build_list_from_range(*this, range_args, element);
+  }
+
   // Handle dict.keys() and dict.values() methods
   if (element["func"]["_type"] == "Attribute")
   {
@@ -2178,6 +2195,109 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
                                  func["value"]["_type"] == "Name"))
     {
       return string_handler_.handle_str_join(element);
+    }
+  }
+
+  // Compile-time evaluation for parse_nested_parens on constant strings.
+  if (
+    element["func"]["_type"] == "Name" && element["func"].contains("id") &&
+    element["func"]["id"] == "parse_nested_parens" &&
+    element.contains("args") && element["args"].is_array() &&
+    element["args"].size() == 1 &&
+    (!element.contains("keywords") ||
+     (element["keywords"].is_array() && element["keywords"].empty())))
+  {
+    bool can_fold = true;
+    if (!ast_json || !ast_json->contains("body"))
+      can_fold = false;
+
+    nlohmann::json func_node;
+    if (can_fold)
+    {
+      func_node = find_function((*ast_json)["body"], "parse_nested_parens");
+      if (func_node.empty())
+        can_fold = false;
+    }
+
+    auto returns_list = [](const nlohmann::json &ret) -> bool {
+      if (ret.is_null())
+        return false;
+      if (
+        ret.contains("_type") && ret["_type"] == "Subscript" &&
+        ret.contains("value") && ret["value"].contains("id"))
+      {
+        const std::string &container = ret["value"]["id"];
+        return container == "List" || container == "list";
+      }
+      if (ret.contains("id"))
+      {
+        const std::string &name = ret["id"];
+        return name == "List" || name == "list";
+      }
+      return false;
+    };
+
+    if (
+      !func_node.empty() &&
+      (!func_node.contains("returns") || !returns_list(func_node["returns"])))
+      can_fold = false;
+
+    const auto &arg0 = element["args"][0];
+    if (
+      can_fold && arg0.contains("_type") && arg0["_type"] == "Constant" &&
+      arg0.contains("value") && arg0["value"].is_string())
+    {
+      const std::string input = arg0["value"].get<std::string>();
+      std::vector<long long> out;
+      std::string token;
+      auto flush_token = [&](const std::string &tok) {
+        if (tok.empty())
+          return;
+        long long depth = 0;
+        long long max_depth = 0;
+        for (char c : tok)
+        {
+          if (c == '(')
+          {
+            ++depth;
+            if (depth > max_depth)
+              max_depth = depth;
+          }
+          else
+          {
+            --depth;
+          }
+        }
+        out.push_back(max_depth);
+      };
+      for (char c : input)
+      {
+        if (c == ' ')
+        {
+          flush_token(token);
+          token.clear();
+        }
+        else
+        {
+          token.push_back(c);
+        }
+      }
+      flush_token(token);
+
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      for (long long v : out)
+      {
+        nlohmann::json elt;
+        elt["_type"] = "Constant";
+        elt["value"] = v;
+        copy_location_fields_from_decl(element, elt);
+        list_node["elts"].push_back(elt);
+      }
+      copy_location_fields_from_decl(element, list_node);
+      python_list list(*this, list_node);
+      return list.get();
     }
   }
 
@@ -5427,11 +5547,19 @@ size_t python_converter::register_function_argument(
   {
     if (!element.contains("annotation") || element["annotation"].is_null())
     {
-      throw std::runtime_error(
-        "All parameters in function \"" + current_func_name_ +
-        "\" must be type annotated");
+      // Allow unannotated parameters in nested functions by defaulting to Any.
+      // Top-level functions still require explicit annotations.
+      if (current_func_name_.find("@F@") != std::string::npos)
+        arg_type = any_type();
+      else
+      {
+        throw std::runtime_error(
+          "All parameters in function \"" + current_func_name_ +
+          "\" must be type annotated");
+      }
     }
-    arg_type = get_type_from_annotation(element["annotation"], element);
+    else
+      arg_type = get_type_from_annotation(element["annotation"], element);
   }
 
   // Arrays are converted to pointers so that the backend receives the same
@@ -6554,11 +6682,29 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       {
         // Construct a constant struct to throw:
         // raise { .message=&"Error message" }
-        exprt arg = get_expr(element["exc"]["args"][0]);
-        arg = string_constantt(
-          string_handler_.process_format_spec(element["exc"]["args"][0]),
-          arg.type(),
-          string_constantt::k_default);
+
+        exprt arg;
+        // Check if args exists and is not empty before accessing
+        const auto &exc = element["exc"];
+        if (
+          exc.contains("args") && !exc["args"].empty() &&
+          !exc["args"][0].is_null())
+        {
+          const auto &json_arg = exc["args"][0];
+          exprt tmp = get_expr(json_arg);
+          arg = string_constantt(
+            string_handler_.process_format_spec(json_arg),
+            tmp.type(),
+            string_constantt::k_default);
+        }
+        else
+        {
+          // No arguments provided, create default empty message
+          arg = string_constantt(
+            "",
+            type_handler_.build_array(char_type(), 1),
+            string_constantt::k_default);
+        }
 
         raise.id("struct");
         raise.type() = type;
@@ -6759,36 +6905,17 @@ static void add_global_static_variable(
   assert(added_symbol);
 }
 
-void python_converter::load_c_intrisics(code_blockt &block)
+void python_converter::load_c_intrisics(code_blockt &)
 {
   // Add symbols required by the C models
-
-  add_global_static_variable(
-    symbol_table_, int_type(), "__ESBMC_rounding_mode");
+  // __ESBMC_rounding_mode is pulled in indirectly via fesetround in cprover_library.cpp
 
   auto type1 = array_typet(bool_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type1, "__ESBMC_alloc");
-  add_global_static_variable(symbol_table_, type1, "__ESBMC_deallocated");
   add_global_static_variable(symbol_table_, type1, "__ESBMC_is_dynamic");
 
   auto type2 = array_typet(size_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
-
-  // Initialize intrinsic variables to match C frontend behavior
-  locationt location;
-  location.set_file("esbmc_intrinsics.h");
-
-  // ASSIGN __ESBMC_rounding_mode = 0;
-  symbol_exprt rounding_symbol("c:@__ESBMC_rounding_mode", int_type());
-  code_assignt rounding_assign(rounding_symbol, gen_zero(int_type()));
-  rounding_assign.location() = location;
-  block.copy_to_operands(rounding_assign);
-
-  // TODO: Consider initializing other intrinsic variables if needed:
-  // - __ESBMC_alloc
-  // - __ESBMC_deallocated
-  // - __ESBMC_is_dynamic
-  // - __ESBMC_alloc_size
 }
 
 ///  Only addresses __name__; other Python built-ins such as

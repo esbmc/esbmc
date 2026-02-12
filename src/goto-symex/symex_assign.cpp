@@ -127,6 +127,13 @@ goto_symext::goto_symext(
               __LINE__,
               instruction.loop_number,
               func_pair.first);
+              "Applying #pragma unroll (unlimited) to loop {} in file {} line "
+              "{} column {} function {}",
+              instruction.loop_number,
+              instruction.location.get_file(),
+              instruction.location.get_line(),
+              instruction.location.get_column(),
+              instruction.location.get_function());
           }
           else
           {
@@ -140,6 +147,14 @@ goto_symext::goto_symext(
               func_pair.first,
               instruction.pragma_unroll_count,
               instruction.pragma_unroll_count);
+              "Applying #pragma unroll {} to loop {} in file {} line {} column "
+              "{} function {}",
+              instruction.pragma_unroll_count,
+              instruction.loop_number,
+              instruction.location.get_file(),
+              instruction.location.get_line(),
+              instruction.location.get_column(),
+              instruction.location.get_function());
           }
         }
       }

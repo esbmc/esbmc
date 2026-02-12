@@ -117,9 +117,70 @@ public:
         module_manager::create(ast_["ast_output_dir"], python_filename_);
   }
 
+  void preprocess_constructor_calls(const Json &node)
+  {
+    if (node.is_object())
+    {
+      // Check if this is a constructor call
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"]["_type"] == "Name")
+      {
+        const std::string &func_name = node["func"]["id"];
+        // Find the class in ast_["body"] using reference to modify in-place
+        for (Json &class_node : ast_["body"])
+        {
+          if (
+            class_node["_type"] == "ClassDef" &&
+            class_node["name"] == func_name)
+          {
+            // Find __init__ method
+            for (Json &member : class_node["body"])
+            {
+              if (
+                member["_type"] == "FunctionDef" &&
+                member["name"] == "__init__")
+              {
+                // Annotate parameters based on this call
+                if (member.contains("args") && member["args"].contains("args"))
+                {
+                  Json &params = member["args"]["args"];
+                  const Json &call_args = node["args"];
+                  // Skip self (index 0), match remaining params with call args
+                  for (size_t i = 1;
+                       i < params.size() && (i - 1) < call_args.size();
+                       ++i)
+                  {
+                    Json &param = params[i];
+                    const Json &arg = call_args[i - 1];
+                    std::string arg_type = get_argument_type(arg);
+                    if (!arg_type.empty())
+                      add_parameter_annotation(param, arg_type);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      // Recursively search all object fields
+      for (auto &kv : node.items())
+        preprocess_constructor_calls(kv.value());
+    }
+    else if (node.is_array())
+    {
+      // Search in arrays (such as list literals)
+      for (const auto &element : node)
+        preprocess_constructor_calls(element);
+    }
+  }
+
   void add_type_annotation()
   {
-    // Add type annotations to global scope variables
+    // First pass: preprocess all constructor calls to infer parameter types
+    preprocess_constructor_calls(ast_);
+
+    // Second pass: add type annotations to global scope variables
     annotate_global_scope();
     current_line_ = 0;
 
@@ -256,6 +317,21 @@ private:
     std::vector<Json> function_calls =
       find_function_calls(func_name, search_context);
 
+    // Determine the call-site context for resolving argument names.
+    // For top-level functions, use global scope (empty context).
+    // For nested functions, use the parent function context.
+    std::string call_site_context;
+    if (parent_func != nullptr)
+    {
+      // Strip the last "@F@" to get the parent function path
+      std::string cur = current_func_name_context_;
+      size_t pos = cur.rfind("@F@");
+      if (pos != std::string::npos)
+        call_site_context = cur.substr(0, pos);
+      else if (parent_func->contains("name"))
+        call_site_context = (*parent_func)["name"].template get<std::string>();
+    }
+
     // For each parameter, try to infer its type from the function calls
     if (
       function_element.contains("args") &&
@@ -295,7 +371,14 @@ private:
 
         // Try to infer type from function calls if available
         if (needs_inference && !function_calls.empty())
+        {
+          // Temporarily switch to call-site context so Name resolution uses
+          // the scope where the call occurs (not the callee scope).
+          std::string saved_ctx = current_func_name_context_;
+          current_func_name_context_ = call_site_context;
           inferred_type = infer_parameter_type_from_calls(i, function_calls);
+          current_func_name_context_ = saved_ctx;
+        }
 
         // Apply inference results
         if (has_partial_annotation)
