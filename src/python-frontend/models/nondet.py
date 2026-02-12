@@ -7,7 +7,7 @@ USAGE:
     x = nondet_list(5)                                   # int list, size [0, 5]
     x = nondet_list(elem_type=nondet_float())                 # float list, size [0, 8]
     x = nondet_list(max_size=10, elem_type=nondet_bool())     # bool list, size [0, 10]
-    
+
     # Dictionaries:
     d = nondet_dict()                                    # int->int dict, size [0, 8]
     d = nondet_dict(5)                                   # int->int dict, size [0, 5]
@@ -104,11 +104,11 @@ def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
             k: Any = nondet_int()
         else:
             k: Any = key_type
-        # TODO here we should do like 
+        # TODO here we should do like
         # elif isinstance(key_type, bool):
-        #   k: Any = nondet_bool()    
-        # but for now we dont support isinstance and int/bool... keys, 
-        # so we just return key_type directly if it is not None 
+        #   k: Any = nondet_bool()
+        # but for now we dont support isinstance and int/bool... keys,
+        # so we just return key_type directly if it is not None
 
         # Generate new value each iteration
         if value_type is None:
