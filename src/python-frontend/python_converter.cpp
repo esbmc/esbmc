@@ -857,6 +857,127 @@ exprt python_converter::handle_string_comparison(
   if (!mismatch_result.is_nil())
     return mismatch_result;
 
+  // Fast-path: compare fixed-size char arrays directly to avoid strcmp loops
+  auto get_array_operand = [&](const exprt &expr) -> const exprt * {
+    if (expr.type().is_array())
+      return &expr;
+    if (expr.id() == "address_of" && expr.operands().size() == 1)
+    {
+      const exprt &op0 = expr.op0();
+      if (op0.type().is_array())
+        return &op0;
+    }
+    return nullptr;
+  };
+
+  const exprt *lhs_array = get_array_operand(resolved_lhs);
+  const exprt *rhs_array = get_array_operand(resolved_rhs);
+  if (lhs_array && rhs_array)
+  {
+    const array_typet &lhs_type = to_array_type(lhs_array->type());
+    const array_typet &rhs_type = to_array_type(rhs_array->type());
+    if (
+      lhs_type.subtype() == char_type() && rhs_type.subtype() == char_type() &&
+      lhs_type.size().is_constant() && rhs_type.size().is_constant())
+    {
+      const auto lhs_size = to_constant_expr(lhs_type.size()).value();
+      const auto rhs_size = to_constant_expr(rhs_type.size()).value();
+      if (lhs_size == rhs_size)
+      {
+        const unsigned long long size_val =
+          binary2integer(lhs_size.as_string(), false).to_uint64();
+        // Keep this small to avoid large expression blow-ups.
+        if (size_val > 0 && size_val <= 16)
+        {
+          exprt all_eq = gen_boolean(true);
+          for (unsigned long long i = 0; i < size_val; ++i)
+          {
+            exprt idx = from_integer(i, index_type());
+            exprt lch = index_exprt(*lhs_array, idx, char_type());
+            exprt rch = index_exprt(*rhs_array, idx, char_type());
+            exprt eq("=", bool_type());
+            eq.copy_to_operands(lch, rch);
+            if (i == 0)
+              all_eq = eq;
+            else
+            {
+              exprt conj("and", bool_type());
+              conj.copy_to_operands(all_eq, eq);
+              all_eq = conj;
+            }
+          }
+
+          if (op == "NotEq")
+          {
+            exprt not_expr("not", bool_type());
+            not_expr.copy_to_operands(all_eq);
+            return not_expr;
+          }
+          return all_eq;
+        }
+      }
+    }
+  }
+
+  // Fast-path: pointer vs fixed-size char array comparison
+  auto is_char_ptr = [&](const exprt &expr) -> bool {
+    return expr.type().is_pointer() && expr.type().subtype() == char_type();
+  };
+
+  const exprt *array_side = lhs_array ? lhs_array : rhs_array;
+  const exprt *ptr_side = nullptr;
+  if (array_side)
+  {
+    const exprt &other = lhs_array ? resolved_rhs : resolved_lhs;
+    if (is_char_ptr(other))
+      ptr_side = &other;
+  }
+
+  if (array_side && ptr_side)
+  {
+    const array_typet &arr_type = to_array_type(array_side->type());
+    if (
+      arr_type.subtype() == char_type() && arr_type.size().is_constant())
+    {
+      const auto arr_size = to_constant_expr(arr_type.size()).value();
+      const unsigned long long size_val =
+        binary2integer(arr_size.as_string(), false).to_uint64();
+      if (size_val > 0 && size_val <= 16)
+      {
+        exprt all_eq = gen_boolean(true);
+        for (unsigned long long i = 0; i < size_val; ++i)
+        {
+          exprt idx = from_integer(i, index_type());
+          exprt lch = index_exprt(*array_side, idx, char_type());
+          plus_exprt ptr_plus(*ptr_side, idx);
+          ptr_plus.type() = ptr_side->type();
+          exprt rch = dereference_exprt(ptr_plus, char_type());
+          exprt eq("=", bool_type());
+          if (lhs_array)
+            eq.copy_to_operands(lch, rch);
+          else
+            eq.copy_to_operands(rch, lch);
+          if (i == 0)
+            all_eq = eq;
+          else
+          {
+            exprt conj("and", bool_type());
+            conj.copy_to_operands(all_eq, eq);
+            all_eq = conj;
+          }
+        }
+
+        if (op == "NotEq")
+        {
+          exprt not_expr("not", bool_type());
+          not_expr.copy_to_operands(all_eq);
+          return not_expr;
+        }
+        return all_eq;
+      }
+    }
+  }
+
   // At this point, both operands should be strings (arrays of char)
   if (resolved_lhs.type().is_array())
     resolved_lhs = string_handler_.get_array_base_address(resolved_lhs);
