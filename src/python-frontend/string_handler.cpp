@@ -3028,6 +3028,48 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list argument (the iterable to join)
   const nlohmann::json &list_arg = call_json["args"][0];
 
+  auto build_empty_string = [&]() -> exprt {
+    typet empty_string_type = type_handler_.build_array(char_type(), 1);
+    exprt empty_str = gen_zero(empty_string_type);
+    empty_str.operands().at(0) = from_integer(0, char_type());
+    return empty_str;
+  };
+
+  auto build_join_from_elements =
+    [&](const nlohmann::json &elements) -> exprt {
+    std::vector<exprt> elem_exprs;
+    for (const auto &elem : elements)
+    {
+      exprt elem_expr = converter_.get_expr(elem);
+      ensure_string_array(elem_expr);
+      elem_exprs.push_back(elem_expr);
+    }
+
+    if (elem_exprs.empty())
+      return build_empty_string();
+
+    if (elem_exprs.size() == 1)
+      return elem_exprs[0];
+
+    std::vector<exprt> all_chars;
+    std::vector<exprt> first_chars =
+      string_builder_->extract_string_chars(elem_exprs[0]);
+    all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
+
+    for (size_t i = 1; i < elem_exprs.size(); ++i)
+    {
+      std::vector<exprt> sep_chars =
+        string_builder_->extract_string_chars(separator);
+      all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+
+      std::vector<exprt> elem_chars =
+        string_builder_->extract_string_chars(elem_exprs[i]);
+      all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
+    }
+
+    return string_builder_->build_null_terminated_string(all_chars);
+  };
+
   // Try to resolve Name references to list literals in the AST
   // (fast path for static lists)
   if (
@@ -3054,44 +3096,8 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       {
         // Get the list elements from the AST
         const auto &elements = list_value["elts"];
-
         if (!elements.empty())
-        {
-          // Convert JSON elements to ESBMC expressions
-          std::vector<exprt> elem_exprs;
-          for (const auto &elem : elements)
-          {
-            exprt elem_expr = converter_.get_expr(elem);
-            ensure_string_array(elem_expr);
-            elem_exprs.push_back(elem_expr);
-          }
-
-          // Edge case: single element returns the element itself (no separator)
-          if (elem_exprs.size() == 1)
-            return elem_exprs[0];
-
-          // Main algorithm: Build the joined string by extracting characters
-          std::vector<exprt> all_chars;
-          std::vector<exprt> first_chars =
-            string_builder_->extract_string_chars(elem_exprs[0]);
-          all_chars.insert(
-            all_chars.end(), first_chars.begin(), first_chars.end());
-
-          for (size_t i = 1; i < elem_exprs.size(); ++i)
-          {
-            std::vector<exprt> sep_chars =
-              string_builder_->extract_string_chars(separator);
-            all_chars.insert(
-              all_chars.end(), sep_chars.begin(), sep_chars.end());
-
-            std::vector<exprt> elem_chars =
-              string_builder_->extract_string_chars(elem_exprs[i]);
-            all_chars.insert(
-              all_chars.end(), elem_chars.begin(), elem_chars.end());
-          }
-
-          return string_builder_->build_null_terminated_string(all_chars);
-        }
+          return build_join_from_elements(elements);
       }
     }
   }
@@ -3102,37 +3108,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     list_arg.contains("elts"))
   {
     const auto &elements = list_arg["elts"];
-    if (!elements.empty())
-    {
-      std::vector<exprt> elem_exprs;
-      for (const auto &elem : elements)
-      {
-        exprt elem_expr = converter_.get_expr(elem);
-        ensure_string_array(elem_expr);
-        elem_exprs.push_back(elem_expr);
-      }
-
-      if (elem_exprs.size() == 1)
-        return elem_exprs[0];
-
-      std::vector<exprt> all_chars;
-      std::vector<exprt> first_chars =
-        string_builder_->extract_string_chars(elem_exprs[0]);
-      all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
-
-      for (size_t i = 1; i < elem_exprs.size(); ++i)
-      {
-        std::vector<exprt> sep_chars =
-          string_builder_->extract_string_chars(separator);
-        all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
-
-        std::vector<exprt> elem_chars =
-          string_builder_->extract_string_chars(elem_exprs[i]);
-        all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
-      }
-
-      return string_builder_->build_null_terminated_string(all_chars);
-    }
+    return build_join_from_elements(elements);
   }
 
   // Fallback: runtime join for dynamic lists
