@@ -252,8 +252,8 @@ exprt python_set::get_from_iterable(
         use_pyobject = true;
         contains_func =
           converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
-        push_obj_func =
-          converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+        push_obj_func = converter_.symbol_table().find_symbol(
+          "c:@F@__ESBMC_list_push_object");
         if (!contains_func || !push_obj_func)
           throw std::runtime_error(
             "__ESBMC_list_contains/__ESBMC_list_push_object not found");
@@ -313,8 +313,9 @@ exprt python_set::get_from_iterable(
       contains_call.function() = symbol_expr(*contains_func);
       contains_call.lhs() = symbol_expr(contains_result);
       contains_call.arguments().push_back(
-        set_symbol.type.is_pointer() ? symbol_expr(set_symbol)
-                                     : address_of_exprt(symbol_expr(set_symbol)));
+        set_symbol.type.is_pointer()
+          ? symbol_expr(set_symbol)
+          : address_of_exprt(symbol_expr(set_symbol)));
 
       member_exprt elem_value(
         symbol_expr(*elem_obj_sym), "value", pointer_typet(empty_typet()));
@@ -338,8 +339,7 @@ exprt python_set::get_from_iterable(
       }
       contains_call.arguments().push_back(elem_type_id);
 
-      member_exprt elem_size(
-        symbol_expr(*elem_obj_sym), "size", size_type());
+      member_exprt elem_size(symbol_expr(*elem_obj_sym), "size", size_type());
       {
         exprt &base = elem_size.struct_op();
         exprt deref("dereference");
@@ -359,8 +359,9 @@ exprt python_set::get_from_iterable(
       side_effect_expr_function_callt push_call;
       push_call.function() = symbol_expr(*push_obj_func);
       push_call.arguments().push_back(
-        set_symbol.type.is_pointer() ? symbol_expr(set_symbol)
-                                     : address_of_exprt(symbol_expr(set_symbol)));
+        set_symbol.type.is_pointer()
+          ? symbol_expr(set_symbol)
+          : address_of_exprt(symbol_expr(set_symbol)));
       push_call.arguments().push_back(symbol_expr(*elem_obj_sym));
       push_call.type() = bool_type();
       push_call.location() = loc;

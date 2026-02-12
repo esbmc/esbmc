@@ -1592,11 +1592,13 @@ exprt python_list::compare(
     set_eq_call.function() = symbol_expr(*set_eq_func);
     set_eq_call.lhs() = symbol_expr(eq_ret);
     set_eq_call.arguments().push_back(
-      lhs_symbol->type.is_pointer() ? symbol_expr(*lhs_symbol)
-                                    : address_of_exprt(symbol_expr(*lhs_symbol)));
+      lhs_symbol->type.is_pointer()
+        ? symbol_expr(*lhs_symbol)
+        : address_of_exprt(symbol_expr(*lhs_symbol)));
     set_eq_call.arguments().push_back(
-      rhs_symbol->type.is_pointer() ? symbol_expr(*rhs_symbol)
-                                    : address_of_exprt(symbol_expr(*rhs_symbol)));
+      rhs_symbol->type.is_pointer()
+        ? symbol_expr(*rhs_symbol)
+        : address_of_exprt(symbol_expr(*rhs_symbol)));
     set_eq_call.type() = bool_type();
     set_eq_call.location() = loc;
     converter_.add_instruction(set_eq_call);
