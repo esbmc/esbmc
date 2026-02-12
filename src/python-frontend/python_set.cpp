@@ -182,107 +182,218 @@ exprt python_set::get_from_iterable(
   code_blockt loop_body;
 
   // Switch context so helper calls insert into loop body
-  struct current_block_guard
   {
-    python_converter &converter;
-    code_blockt *saved;
-
-    current_block_guard(python_converter &converter, code_blockt *next)
-      : converter(converter), saved(converter.current_block)
+    struct current_block_guard
     {
-      converter.current_block = next;
-    }
+      python_converter &converter;
+      code_blockt *saved;
 
-    ~current_block_guard()
+      current_block_guard(python_converter &converter, code_blockt *next)
+        : converter(converter), saved(converter.current_block)
+      {
+        converter.current_block = next;
+      }
+
+      ~current_block_guard()
+      {
+        converter.current_block = saved;
+      }
+    } block_guard(converter_, &loop_body);
+
+    exprt elem_expr;
+    bool use_pyobject = false;
+    const symbolt *contains_func = nullptr;
+    const symbolt *push_obj_func = nullptr;
+    symbolt *elem_obj_sym = nullptr;
+    if (iterable.type() == list_type)
     {
-      converter.current_block = saved;
+      // Build list_at call (cannot use python_list::build_list_at_call here)
+      pointer_typet obj_type(th.get_list_element_type());
+      const symbolt *list_at_func_sym =
+        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+      assert(list_at_func_sym);
+
+      side_effect_expr_function_callt list_at;
+      list_at.function() = symbol_expr(*list_at_func_sym);
+      if (iterable.type().is_pointer())
+        list_at.arguments().push_back(iterable);
+      else
+        list_at.arguments().push_back(address_of_exprt(iterable));
+      list_at.arguments().push_back(symbol_expr(idx_sym));
+      list_at.type() = obj_type;
+      list_at.location() = loc;
+
+      typet elem_type;
+      if (iterable.is_symbol())
+      {
+        const std::string &list_id = iterable.identifier().as_string();
+        elem_type = python_list::get_list_element_type(list_id);
+      }
+      if (elem_type == typet())
+        elem_type = any_type();
+
+      // Materialize list_at into a temporary PyObject* in the loop body
+      symbolt &tmp_obj = converter_.create_tmp_symbol(
+        element, "$set_elem_obj$", obj_type, exprt());
+      code_declt tmp_obj_decl(symbol_expr(tmp_obj));
+      tmp_obj_decl.location() = loc;
+      loop_body.copy_to_operands(tmp_obj_decl);
+
+      code_function_callt list_at_call;
+      list_at_call.function() = list_at.function();
+      list_at_call.arguments() = list_at.arguments();
+      list_at_call.lhs() = symbol_expr(tmp_obj);
+      list_at_call.type() = obj_type;
+      list_at_call.location() = loc;
+      loop_body.copy_to_operands(list_at_call);
+
+      if (elem_type == any_type())
+      {
+        use_pyobject = true;
+        contains_func =
+          converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+        push_obj_func =
+          converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+        if (!contains_func || !push_obj_func)
+          throw std::runtime_error(
+            "__ESBMC_list_contains/__ESBMC_list_push_object not found");
+
+        elem_obj_sym = &tmp_obj;
+      }
+      else
+      {
+        elem_expr =
+          list_helper.extract_pyobject_value(symbol_expr(tmp_obj), elem_type);
+
+        if (elem_type != typet())
+        {
+          const std::string elem_id = elem_expr.is_symbol()
+                                        ? elem_expr.identifier().as_string()
+                                        : std::string();
+          list_helper.add_type_info(set_id, elem_id, elem_expr.type());
+        }
+      }
     }
-  } block_guard(converter_, &loop_body);
-
-  exprt elem_expr;
-  if (iterable.type() == list_type)
-  {
-    // Build list_at call (cannot use python_list::build_list_at_call here)
-    pointer_typet obj_type(th.get_list_element_type());
-    const symbolt *list_at_func_sym =
-      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
-    assert(list_at_func_sym);
-
-    side_effect_expr_function_callt list_at;
-    list_at.function() = symbol_expr(*list_at_func_sym);
-    if (iterable.type().is_pointer())
-      list_at.arguments().push_back(iterable);
+    else if (
+      iterable.type().is_array() && iterable.type().subtype() == char_type())
+    {
+      index_exprt array_index(iterable, symbol_expr(idx_sym), char_type());
+      elem_expr = array_index;
+      list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+    }
     else
-      list_at.arguments().push_back(address_of_exprt(iterable));
-    list_at.arguments().push_back(symbol_expr(idx_sym));
-    list_at.type() = obj_type;
-    list_at.location() = loc;
-
-    typet elem_type;
-    if (iterable.is_symbol())
     {
-      const std::string &list_id = iterable.identifier().as_string();
-      elem_type = python_list::get_list_element_type(list_id);
+      // char* case: *(iterable + i)
+      exprt ptr_add("+", iterable.type());
+      ptr_add.copy_to_operands(iterable, symbol_expr(idx_sym));
+      dereference_exprt deref(char_type());
+      deref.op0() = ptr_add;
+      elem_expr = deref;
+      list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+
+      // Break if we hit the null terminator
+      exprt is_zero("=", bool_type());
+      is_zero.copy_to_operands(elem_expr, gen_zero(char_type()));
+      code_breakt brk;
+      code_ifthenelset break_if;
+      break_if.cond() = is_zero;
+      break_if.then_case() = brk;
+      loop_body.copy_to_operands(break_if);
     }
-    if (elem_type == typet())
-      elem_type = any_type();
 
-    elem_expr = list_helper.extract_pyobject_value(list_at, elem_type);
-
-    if (elem_type != typet())
+    // If not already present in the set, push element
+    if (use_pyobject)
     {
-      const std::string elem_id = elem_expr.is_symbol()
-                                    ? elem_expr.identifier().as_string()
-                                    : std::string();
-      list_helper.add_type_info(set_id, elem_id, elem_expr.type());
+      symbolt &contains_result = converter_.create_tmp_symbol(
+        element, "$contains$", bool_type(), gen_boolean(false));
+      code_declt contains_decl(symbol_expr(contains_result));
+      loop_body.copy_to_operands(contains_decl);
+
+      code_function_callt contains_call;
+      contains_call.function() = symbol_expr(*contains_func);
+      contains_call.lhs() = symbol_expr(contains_result);
+      contains_call.arguments().push_back(
+        set_symbol.type.is_pointer() ? symbol_expr(set_symbol)
+                                     : address_of_exprt(symbol_expr(set_symbol)));
+
+      member_exprt elem_value(
+        symbol_expr(*elem_obj_sym), "value", pointer_typet(empty_typet()));
+      {
+        exprt &base = elem_value.struct_op();
+        exprt deref("dereference");
+        deref.type() = base.type().subtype();
+        deref.move_to_operands(base);
+        base.swap(deref);
+      }
+      contains_call.arguments().push_back(elem_value);
+
+      member_exprt elem_type_id(
+        symbol_expr(*elem_obj_sym), "type_id", size_type());
+      {
+        exprt &base = elem_type_id.struct_op();
+        exprt deref("dereference");
+        deref.type() = base.type().subtype();
+        deref.move_to_operands(base);
+        base.swap(deref);
+      }
+      contains_call.arguments().push_back(elem_type_id);
+
+      member_exprt elem_size(
+        symbol_expr(*elem_obj_sym), "size", size_type());
+      {
+        exprt &base = elem_size.struct_op();
+        exprt deref("dereference");
+        deref.type() = base.type().subtype();
+        deref.move_to_operands(base);
+        base.swap(deref);
+      }
+      contains_call.arguments().push_back(elem_size);
+
+      contains_call.type() = bool_type();
+      contains_call.location() = loc;
+      loop_body.copy_to_operands(contains_call);
+
+      not_exprt not_contains(symbol_expr(contains_result));
+
+      code_blockt push_block;
+      side_effect_expr_function_callt push_call;
+      push_call.function() = symbol_expr(*push_obj_func);
+      push_call.arguments().push_back(
+        set_symbol.type.is_pointer() ? symbol_expr(set_symbol)
+                                     : address_of_exprt(symbol_expr(set_symbol)));
+      push_call.arguments().push_back(symbol_expr(*elem_obj_sym));
+      push_call.type() = bool_type();
+      push_call.location() = loc;
+      push_block.copy_to_operands(
+        converter_.convert_expression_to_code(push_call));
+
+      code_ifthenelset push_if;
+      push_if.cond() = not_contains;
+      push_if.then_case() = push_block;
+      loop_body.copy_to_operands(push_if);
     }
+    else
+    {
+      exprt contains_expr =
+        list_helper.contains(elem_expr, symbol_expr(set_symbol));
+      not_exprt not_contains(contains_expr);
+
+      code_blockt push_block;
+      exprt push_call =
+        list_helper.build_push_list_call(set_symbol, element, elem_expr);
+      push_block.copy_to_operands(push_call);
+
+      code_ifthenelset push_if;
+      push_if.cond() = not_contains;
+      push_if.then_case() = push_block;
+      loop_body.copy_to_operands(push_if);
+    }
+
+    // Increment index: i++
+    plus_exprt idx_inc(symbol_expr(idx_sym), gen_one(size_type()));
+    code_assignt idx_update(symbol_expr(idx_sym), idx_inc);
+    loop_body.copy_to_operands(idx_update);
   }
-  else if (
-    iterable.type().is_array() && iterable.type().subtype() == char_type())
-  {
-    index_exprt array_index(iterable, symbol_expr(idx_sym), char_type());
-    elem_expr = array_index;
-    list_helper.add_type_info(set_id, std::string(), elem_expr.type());
-  }
-  else
-  {
-    // char* case: *(iterable + i)
-    exprt ptr_add("+", iterable.type());
-    ptr_add.copy_to_operands(iterable, symbol_expr(idx_sym));
-    dereference_exprt deref(char_type());
-    deref.op0() = ptr_add;
-    elem_expr = deref;
-    list_helper.add_type_info(set_id, std::string(), elem_expr.type());
-
-    // Break if we hit the null terminator
-    exprt is_zero("=", bool_type());
-    is_zero.copy_to_operands(elem_expr, gen_zero(char_type()));
-    code_breakt brk;
-    code_ifthenelset break_if;
-    break_if.cond() = is_zero;
-    break_if.then_case() = brk;
-    loop_body.copy_to_operands(break_if);
-  }
-
-  // If not already present in the set, push element
-  exprt contains_expr =
-    list_helper.contains(elem_expr, symbol_expr(set_symbol));
-  not_exprt not_contains(contains_expr);
-
-  code_blockt push_block;
-  exprt push_call =
-    list_helper.build_push_list_call(set_symbol, element, elem_expr);
-  push_block.copy_to_operands(push_call);
-
-  code_ifthenelset push_if;
-  push_if.cond() = not_contains;
-  push_if.then_case() = push_block;
-  loop_body.copy_to_operands(push_if);
-
-  // Increment index: i++
-  plus_exprt idx_inc(symbol_expr(idx_sym), gen_one(size_type()));
-  code_assignt idx_update(symbol_expr(idx_sym), idx_inc);
-  loop_body.copy_to_operands(idx_update);
 
   // Create while loop
   codet while_loop;
