@@ -2882,26 +2882,19 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // Unsupported extensions (optional don't care)
   case clang::Stmt::BuiltinBitCastExprClass:
   {
-    const clang::BuiltinBitCastExpr &temp =
+    const clang::BuiltinBitCastExpr &cast =
       static_cast<const clang::BuiltinBitCastExpr &>(stmt);
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-    {
-      typet t;
-      if (get_type(temp.getType(), t))
-        return true;
-      auto nondet = sideeffect2tc(
-        migrate_type(t),
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::nondet);
-      exprt expr = migrate_expr_back(nondet);
-      new_expr.swap(expr);
-      break;
-    }
+
+    typet t;
+    if (get_type(cast.getType(), t))
+      return true;
+
+    if (get_expr(*cast.getSubExpr(), new_expr))
+      return true;
+
+    gen_typecast(ns, new_expr, t);
+    break;
   }
-    [[fallthrough]];
 
   default:
   {
