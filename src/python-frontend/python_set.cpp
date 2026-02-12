@@ -1,9 +1,12 @@
 #include <python-frontend/python_set.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_list.h>
+#include <c2goto/library/python/python_types.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
+#include <util/python_types.h>
 #include <util/std_code.h>
+#include <util/std_expr.h>
 
 symbolt &python_set::create_set_list()
 {
@@ -80,6 +83,203 @@ exprt python_set::get_empty_set()
 
   // No elements to add for empty set
   // Type information will be determined when elements are added
+  return symbol_expr(set_symbol);
+}
+
+exprt python_set::get_from_iterable(
+  const exprt &iterable,
+  const nlohmann::json &element)
+{
+  symbolt &set_symbol = create_set_list();
+  const std::string &set_id = set_symbol.id.as_string();
+  locationt loc = converter_.get_location_from_decl(element);
+
+  python_list list_helper(converter_, element);
+  const type_handler &th = converter_.get_type_handler();
+  const typet list_type = th.get_list_type();
+
+  // Determine length expression for the iterable
+  exprt length_expr;
+  if (iterable.type() == list_type)
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    assert(size_func);
+
+    symbolt &len_sym = converter_.create_tmp_symbol(
+      element, "$set_len$", size_type(), gen_zero(size_type()));
+    code_declt len_decl(symbol_expr(len_sym));
+    len_decl.location() = loc;
+    converter_.add_instruction(len_decl);
+
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.arguments().push_back(
+      iterable.type().is_pointer() ? iterable : address_of_exprt(iterable));
+    size_call.lhs() = symbol_expr(len_sym);
+    size_call.type() = size_type();
+    size_call.location() = loc;
+    converter_.add_instruction(size_call);
+
+    length_expr = symbol_expr(len_sym);
+  }
+  else if (iterable.type().is_array() &&
+           iterable.type().subtype() == char_type())
+  {
+    const array_typet &arr_type = to_array_type(iterable.type());
+    length_expr = minus_exprt(arr_type.size(), gen_one(size_type()));
+  }
+  else if (
+    iterable.type().is_pointer() &&
+    iterable.type().subtype() == char_type())
+  {
+    // Use bounded length from runtime to avoid unbounded strlen
+    const symbolt *strlen_bounded =
+      converter_.symbol_table().find_symbol("c:@F@__python_strnlen_bounded");
+    if (!strlen_bounded)
+      throw std::runtime_error(
+        "__python_strnlen_bounded not found in symbol table");
+
+    symbolt &len_sym = converter_.create_tmp_symbol(
+      element, "$set_strlen$", size_type(), gen_zero(size_type()));
+    code_declt len_decl(symbol_expr(len_sym));
+    len_decl.location() = loc;
+    converter_.add_instruction(len_decl);
+
+    code_function_callt len_call;
+    len_call.function() = symbol_expr(*strlen_bounded);
+    len_call.lhs() = symbol_expr(len_sym);
+    len_call.arguments().push_back(iterable);
+    len_call.arguments().push_back(
+      from_integer(BigInt(ESBMC_PY_STRNLEN_BOUND), size_type()));
+    len_call.type() = size_type();
+    len_call.location() = loc;
+    converter_.add_instruction(len_call);
+
+    length_expr = symbol_expr(len_sym);
+  }
+  else
+  {
+    throw std::runtime_error(
+      "Unsupported iterable type in set(): " +
+      iterable.type().id_string());
+  }
+
+  // Loop counter
+  symbolt &idx_sym = converter_.create_tmp_symbol(
+    element, "$set_i$", size_type(), gen_zero(size_type()));
+  code_declt idx_decl(symbol_expr(idx_sym));
+  idx_decl.location() = loc;
+  converter_.add_instruction(idx_decl);
+
+  code_assignt idx_init(symbol_expr(idx_sym), gen_zero(size_type()));
+  idx_init.location() = loc;
+  converter_.add_instruction(idx_init);
+
+  // Loop condition: i < length
+  exprt cond("<", bool_type());
+  cond.copy_to_operands(symbol_expr(idx_sym), length_expr);
+
+  code_blockt loop_body;
+
+  // Switch context so helper calls insert into loop body
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+
+  exprt elem_expr;
+  if (iterable.type() == list_type)
+  {
+    // Build list_at call (cannot use python_list::build_list_at_call here)
+    pointer_typet obj_type(th.get_list_element_type());
+    const symbolt *list_at_func_sym =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+    assert(list_at_func_sym);
+
+    side_effect_expr_function_callt list_at;
+    list_at.function() = symbol_expr(*list_at_func_sym);
+    if (iterable.type().is_pointer())
+      list_at.arguments().push_back(iterable);
+    else
+      list_at.arguments().push_back(address_of_exprt(iterable));
+    list_at.arguments().push_back(symbol_expr(idx_sym));
+    list_at.type() = obj_type;
+    list_at.location() = loc;
+
+    typet elem_type;
+    if (iterable.is_symbol())
+    {
+      const std::string &list_id = iterable.identifier().as_string();
+      elem_type = python_list::get_list_element_type(list_id);
+    }
+    if (elem_type == typet())
+      elem_type = any_type();
+
+    elem_expr = list_helper.extract_pyobject_value(list_at, elem_type);
+
+    if (elem_type != typet())
+    {
+      const std::string elem_id =
+        elem_expr.is_symbol() ? elem_expr.identifier().as_string()
+                              : std::string();
+      list_helper.add_type_info(set_id, elem_id, elem_expr.type());
+    }
+  }
+  else if (
+    iterable.type().is_array() && iterable.type().subtype() == char_type())
+  {
+    index_exprt array_index(
+      iterable, symbol_expr(idx_sym), char_type());
+    elem_expr = array_index;
+    list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+  }
+  else
+  {
+    // char* case: *(iterable + i)
+    exprt ptr_add("+", iterable.type());
+    ptr_add.copy_to_operands(iterable, symbol_expr(idx_sym));
+    dereference_exprt deref(char_type());
+    deref.op0() = ptr_add;
+    elem_expr = deref;
+    list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+
+    // Break if we hit the null terminator
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(elem_expr, gen_zero(char_type()));
+    code_breakt brk;
+    code_ifthenelset break_if;
+    break_if.cond() = is_zero;
+    break_if.then_case() = brk;
+    loop_body.copy_to_operands(break_if);
+  }
+
+  // If not already present in the set, push element
+  exprt contains_expr =
+    list_helper.contains(elem_expr, symbol_expr(set_symbol));
+  not_exprt not_contains(contains_expr);
+
+  code_blockt push_block;
+  exprt push_call = list_helper.build_push_list_call(set_symbol, element, elem_expr);
+  push_block.copy_to_operands(push_call);
+
+  code_ifthenelset push_if;
+  push_if.cond() = not_contains;
+  push_if.then_case() = push_block;
+  loop_body.copy_to_operands(push_if);
+
+  // Increment index: i++
+  plus_exprt idx_inc(symbol_expr(idx_sym), gen_one(size_type()));
+  code_assignt idx_update(symbol_expr(idx_sym), idx_inc);
+  loop_body.copy_to_operands(idx_update);
+
+  // Restore context
+  converter_.current_block = saved_block;
+
+  // Create while loop
+  codet while_loop;
+  while_loop.set_statement("while");
+  while_loop.copy_to_operands(cond, loop_body);
+  converter_.add_instruction(while_loop);
+
   return symbol_expr(set_symbol);
 }
 
