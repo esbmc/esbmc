@@ -1,5 +1,5 @@
 CORE
 main.py
---unwind 9 --no-bounds-check --no-pointer-check --no-div-by-zero-check --no-align-check --branch-coverage --generate-pytest-testcase
-^Generated pytest test case with 1 test\(s\)\: test_main\.py
+--unwind 3 --no-bounds-check --no-pointer-check --no-div-by-zero-check --no-align-check --branch-coverage --generate-pytest-testcase
+^Generated pytest test case with 5 test\(s\)\: test_main\.py
 ^VERIFICATION FAILED$
