@@ -1553,6 +1553,64 @@ exprt python_list::compare(
   assert(lhs_symbol);
   assert(rhs_symbol);
 
+  const bool lhs_is_set = lhs_symbol->is_set;
+  const bool rhs_is_set = rhs_symbol->is_set;
+  if (lhs_is_set || rhs_is_set)
+  {
+    if (!(lhs_is_set && rhs_is_set))
+      return gen_boolean(op == "NotEq");
+
+    symbolt *set_eq_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_eq");
+    if (!set_eq_func)
+    {
+      symbolt new_symbol;
+      new_symbol.name = "__ESBMC_list_set_eq";
+      new_symbol.id = "c:@F@__ESBMC_list_set_eq";
+      new_symbol.mode = "C";
+      new_symbol.is_extern = true;
+
+      code_typet func_type;
+      func_type.return_type() = bool_type();
+      typet list_ptr = converter_.get_type_handler().get_list_type();
+      func_type.arguments().push_back(code_typet::argumentt(list_ptr));
+      func_type.arguments().push_back(code_typet::argumentt(list_ptr));
+      new_symbol.type = func_type;
+
+      converter_.symbol_table().add(new_symbol);
+      set_eq_func =
+        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_eq");
+    }
+
+    locationt loc = converter_.get_location_from_decl(list_value_);
+    symbolt &eq_ret = converter_.create_tmp_symbol(
+      list_value_, "set_eq_tmp", bool_type(), gen_boolean(false));
+    code_declt eq_ret_decl(symbol_expr(eq_ret));
+    converter_.add_instruction(eq_ret_decl);
+
+    code_function_callt set_eq_call;
+    set_eq_call.function() = symbol_expr(*set_eq_func);
+    set_eq_call.lhs() = symbol_expr(eq_ret);
+    set_eq_call.arguments().push_back(
+      lhs_symbol->type.is_pointer() ? symbol_expr(*lhs_symbol)
+                                    : address_of_exprt(symbol_expr(*lhs_symbol)));
+    set_eq_call.arguments().push_back(
+      rhs_symbol->type.is_pointer() ? symbol_expr(*rhs_symbol)
+                                    : address_of_exprt(symbol_expr(*rhs_symbol)));
+    set_eq_call.type() = bool_type();
+    set_eq_call.location() = loc;
+    converter_.add_instruction(set_eq_call);
+
+    exprt cond("=", bool_type());
+    cond.copy_to_operands(symbol_expr(eq_ret));
+    if (op == "Eq")
+      cond.copy_to_operands(gen_boolean(true));
+    else
+      cond.copy_to_operands(gen_boolean(false));
+
+    return cond;
+  }
+
   // Compute list type_id for nested list detection
   const typet &list_type = l1.type();
   const std::string list_type_name =
