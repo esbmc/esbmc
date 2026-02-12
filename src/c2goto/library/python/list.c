@@ -14,12 +14,21 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
 {
   if (a == b)
     return true;
+  if (size == 0)
+    return true;
   // Direct comparison for common sizes - no loop needed
   // Python frontend maps: int/float -> 8 bytes, bool -> 1 byte
   if (size == 8)
     return *(const uint64_t *)a == *(const uint64_t *)b;
+  if (size == 4)
+    return *(const uint32_t *)a == *(const uint32_t *)b;
+  if (size == 2)
+    return *(const uint16_t *)a == *(const uint16_t *)b;
   if (size == 1)
     return *(const uint8_t *)a == *(const uint8_t *)b;
+  if (size == 16)
+    return *(const uint64_t *)a == *(const uint64_t *)b &&
+           *((const uint64_t *)a + 1) == *((const uint64_t *)b + 1);
   // Fallback for larger/unusual sizes
   return memcmp(a, b, size) == 0;
 }
