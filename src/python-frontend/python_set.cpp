@@ -156,6 +156,18 @@ exprt python_set::get_from_iterable(
     len_call.location() = loc;
     converter_.add_instruction(len_call);
 
+    // Ensure bounded strlen doesn't exceed the configured limit.
+    // If it does, the model would silently truncate, so assert to make it explicit.
+    exprt bound_check("<=", bool_type());
+    bound_check.copy_to_operands(
+      symbol_expr(len_sym),
+      from_integer(BigInt(ESBMC_PY_STRNLEN_BOUND), size_type()));
+    code_assertt bound_assert(bound_check);
+    bound_assert.location() = loc;
+    bound_assert.location().comment(
+      "set(): string length exceeds ESBMC_PY_STRNLEN_BOUND");
+    converter_.add_instruction(bound_assert);
+
     length_expr = symbol_expr(len_sym);
   }
   else
