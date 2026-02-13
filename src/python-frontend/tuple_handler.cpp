@@ -316,3 +316,47 @@ typet tuple_handler::get_tuple_type_from_annotation(
 
   return create_tuple_struct_type(element_types);
 }
+
+exprt tuple_handler::handle_tuple_membership(
+  const exprt &lhs,
+  const exprt &rhs,
+  bool invert) const
+{
+  assert(rhs.type().is_struct());
+  const struct_typet &tuple_type = to_struct_type(rhs.type());
+
+  // Verify it's a tuple
+  if (!is_tuple_type(tuple_type))
+  {
+    throw std::runtime_error(
+      "Membership test on non-tuple struct type: " +
+      tuple_type.tag().as_string());
+  }
+
+  const auto &components = tuple_type.components();
+  if (components.empty())
+  {
+    // Empty tuple: always return false (or true for "not in")
+    if (invert)
+      return true_exprt();
+    else
+      return false_exprt();
+  }
+
+  // Build OR chain: lhs == tuple.element_0 || lhs == tuple.element_1 || ...
+  exprt result;
+  for (size_t i = 0; i < components.size(); i++)
+  {
+    std::string member_name = "element_" + std::to_string(i);
+    member_exprt member_access(rhs, member_name, components[i].type());
+
+    exprt equality = equality_exprt(lhs, member_access);
+
+    if (i == 0)
+      result = equality;
+    else
+      result = or_exprt(result, equality);
+  }
+
+  return invert ? not_exprt(result) : result;
+}

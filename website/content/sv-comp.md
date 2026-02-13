@@ -10,7 +10,7 @@ toc: true
   </a>
 </h3>   
 <ul>
-  <li><strong>Competing Version:</strong> ESBMC 7.8.1
+  <li><strong>Competing Version:</strong> ESBMC 7.7
 <!--  - **System Description**:
   [ESBMC at the SV-COMP 2025](https://sv-comp.sosy-lab.org/2025/results/results-verified/) --></li>
   <li><strong>Divisions Entered:</strong>

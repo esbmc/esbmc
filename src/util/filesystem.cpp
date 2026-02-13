@@ -1,8 +1,26 @@
 #include <util/filesystem.h>
 #include <boost/filesystem.hpp>
 #include <fstream>
+#include <vector>
 
 using namespace file_operations;
+
+static std::vector<std::string> registered_tmp_paths;
+
+void file_operations::register_tmp_for_cleanup(const std::string &path)
+{
+  registered_tmp_paths.push_back(path);
+}
+
+void file_operations::cleanup_registered_tmps()
+{
+  for (const auto &p : registered_tmp_paths)
+  {
+    boost::system::error_code ec;
+    boost::filesystem::remove_all(p, ec);
+  }
+  registered_tmp_paths.clear();
+}
 
 tmp_path::tmp_path(std::string path, bool keep)
   : _path(std::move(path)), _keep(keep)
@@ -98,9 +116,11 @@ file_operations::create_tmp_file(const std::string &format, const char *mode)
 
 tmp_path file_operations::create_tmp_dir(const std::string &format)
 {
-  return {with_unique_tmp_path(
+  std::string dir = with_unique_tmp_path(
     [](auto path) { return boost::filesystem::create_directory(path); },
-    format)};
+    format);
+  register_tmp_for_cleanup(dir);
+  return {std::move(dir)};
 }
 
 const std::string

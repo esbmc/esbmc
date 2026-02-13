@@ -46,6 +46,48 @@ void goto_symext::symex_catch()
   }
 }
 
+bool goto_symext::is_python_exception_subtype(
+  const irep_idt &thrown_type,
+  const irep_idt &catch_type)
+{
+  std::string thrown = thrown_type.as_string();
+  std::string catch_t = catch_type.as_string();
+
+  // Exact match
+  if (thrown == catch_t)
+    return true;
+
+  // Look up the thrown exception class in the symbol table
+  const symbolt *thrown_symbol = ns.lookup("tag-" + thrown);
+  if (!thrown_symbol)
+    return false;
+
+  // Get the bases from the type metadata
+  const irept &bases = thrown_symbol->type.find("bases");
+
+  if (bases.is_nil())
+    return false;
+
+  const irept::subt &base_list = bases.get_sub();
+
+  // Iterate through base classes
+  for (const auto &base : base_list)
+  {
+    // The base class is stored with id() == "tag-BaseClassName"
+    std::string base_name = base.id().as_string();
+
+    // Remove "tag-" prefix to get the class name
+    if (base_name.find("tag-") == 0)
+      base_name = base_name.substr(4);
+
+    // Recursively check if this base class matches or inherits from catch_type
+    if (is_python_exception_subtype(irep_idt(base_name), catch_type))
+      return true;
+  }
+
+  return false;
+}
+
 bool goto_symext::symex_throw()
 {
   irep_idt catch_name = "missing";
@@ -118,9 +160,26 @@ bool goto_symext::symex_throw()
       break;
     }
 
-    // Search for a catch with a matching type
+    // Search for a catch with a matching type (including base classes)
     goto_symex_statet::exceptiont::catch_mapt::const_iterator c_it =
       except->catch_map.find(it);
+
+    // Track which catch type was matched (might be a base class)
+    irep_idt matched_catch_type = it;
+
+    // If no exact match, check inheritance hierarchy for Python exceptions
+    if (c_it == except->catch_map.end())
+    {
+      for (const auto &catch_entry : except->catch_map)
+      {
+        if (is_python_exception_subtype(it, catch_entry.first))
+        {
+          c_it = except->catch_map.find(catch_entry.first);
+          matched_catch_type = catch_entry.first; // Track the actual catch type
+          break;
+        }
+      }
+    }
 
     // Do we have a catch for it?
     if (c_it != except->catch_map.end())
@@ -128,7 +187,8 @@ bool goto_symext::symex_throw()
       // We do!
 
       // Get current catch number and update if needed
-      new_id_number = (*except->catch_order.find(it)).second;
+      // Use matched_catch_type instead of it for the lookup
+      new_id_number = (*except->catch_order.find(matched_catch_type)).second;
 
       if (new_id_number < old_id_number)
       {

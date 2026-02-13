@@ -1,0 +1,4 @@
+CORE
+main.py
+--no-standard-checks --unwind 10 --smt-during-symex --smt-symex-guard --z3
+^VERIFICATION FAILED$
