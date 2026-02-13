@@ -28,22 +28,11 @@ If the formula is satisfiable, a bug exists (with counterexample); if unsatisfia
 
 ### Plugin Installation
 
-```bash
-# Clone or copy the plugin to your Claude plugins directory
-cp -r claude-plugin ~/.claude/plugins/
+From within Claude Code, add the marketplace and install the plugin:
 
-# Verify installation
-claude --plugin-dir ~/.claude/plugins/claude-plugin
 ```
-
-Or add to your Claude Code configuration:
-
-```json
-{
-  "plugins": [
-    "~/.claude/plugins/esbmc-plugin"
-  ]
-}
+/plugin marketplace add esbmc/esbmc
+/plugin install esbmc-plugin@esbmc-marketplace
 ```
 
 ## Features

@@ -10,7 +10,12 @@ This tutorial walks through using the ESBMC Claude Code plugin to verify C, C++,
 
 2. **Claude Code** CLI installed
 
-3. **Plugin installed** (see [README.md](README.md) for installation)
+3. **Plugin installed** — in Claude Code run:
+   ```
+   /plugin marketplace add esbmc/esbmc
+   /plugin install esbmc-plugin@esbmc-marketplace
+   ```
+   See [README.md](README.md) for details.
 
 ## Part 1: Verifying a C Program
 
