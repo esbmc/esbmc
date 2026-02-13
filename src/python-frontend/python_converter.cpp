@@ -4445,6 +4445,15 @@ void python_converter::get_var_assign(
       const std::string &lhs_identifier = lhs.identifier().as_string();
       const std::string &rhs_identifier = rhs.identifier().as_string();
       python_list::copy_type_info(rhs_identifier, lhs_identifier);
+
+      if (lhs_symbol)
+      {
+        const symbolt *rhs_symbol = nullptr;
+        if (rhs.is_symbol())
+          rhs_symbol = find_symbol(rhs.identifier().as_string());
+        if (rhs_symbol && rhs_symbol->is_set)
+          lhs_symbol->is_set = true;
+      }
     }
     else if (
       rhs.type() != lhs.type() && lhs.type().is_array() &&
