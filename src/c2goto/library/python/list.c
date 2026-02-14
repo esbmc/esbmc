@@ -73,9 +73,36 @@ static inline void *__ESBMC_copy_value(
   void *copied = __ESBMC_alloca(size);
 
   // Always copy byte-wise to preserve object semantics and avoid unsafe
-  // type-punning on non-scalar or unaligned values.
+  // type-punning on non-scalar or unaligned values. For small sizes,
+  // use unrolled byte copies to avoid memcpy loop unwinding.
   (void)type_id;
-  memcpy(copied, value, size);
+  if (size <= 16)
+  {
+    const uint8_t *src = (const uint8_t *)value;
+    uint8_t *dst = (uint8_t *)copied;
+    switch (size)
+    {
+    case 16: dst[15] = src[15];
+    case 15: dst[14] = src[14];
+    case 14: dst[13] = src[13];
+    case 13: dst[12] = src[12];
+    case 12: dst[11] = src[11];
+    case 11: dst[10] = src[10];
+    case 10: dst[9] = src[9];
+    case 9: dst[8] = src[8];
+    case 8: dst[7] = src[7];
+    case 7: dst[6] = src[6];
+    case 6: dst[5] = src[5];
+    case 5: dst[4] = src[4];
+    case 4: dst[3] = src[3];
+    case 3: dst[2] = src[2];
+    case 2: dst[1] = src[1];
+    case 1: dst[0] = src[0];
+    default: break; // size == 0
+    }
+  }
+  else
+    memcpy(copied, value, size);
 
   return copied;
 }
