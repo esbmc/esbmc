@@ -645,6 +645,28 @@ private:
   // =========================================================================
 
   /**
+   * @brief Handles type identity checks (value is type_identifier).
+   *
+   * In Python, checking if a value "is" a type object is always False
+   * because runtime values are never identical to type objects.
+   * This method detects such comparisons and returns the appropriate
+   * boolean result without generating a comparison expression.
+   *
+   * @param op The operator string ("Is" or "IsNot").
+   * @param lhs The left operand expression.
+   * @param rhs The right operand expression.
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @return Boolean result expression, or nil_exprt if not a type identity check.
+   */
+  exprt handle_type_identity_check(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
    * @param rhs Right operand expression (may be modified).

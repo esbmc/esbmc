@@ -1397,6 +1397,41 @@ exprt python_converter::handle_string_type_mismatch(
   return nil_exprt(); // No action taken for other operators
 }
 
+exprt python_converter::handle_type_identity_check(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  // Only handle identity operators
+  if (op != "Is" && op != "IsNot")
+    return nil_exprt();
+
+  // Check if either operand is a type identifier
+  bool lhs_is_type = false;
+  bool rhs_is_type = false;
+
+  if (left["_type"] == "Name" && left.contains("id"))
+  {
+    std::string lhs_name = left["id"].get<std::string>();
+    lhs_is_type = type_utils::is_builtin_type(lhs_name);
+  }
+
+  if (right["_type"] == "Name" && right.contains("id"))
+  {
+    std::string rhs_name = right["id"].get<std::string>();
+    rhs_is_type = type_utils::is_builtin_type(rhs_name);
+  }
+
+  // If neither operand is a type identifier, not a type identity check
+  if (!lhs_is_type && !rhs_is_type)
+    return nil_exprt();
+
+  // Type identity checks: value is type → False, value is not type → True
+  return gen_boolean(op == "IsNot");
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   // Extract left and right operands from AST
@@ -1424,6 +1459,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("ops"))
     op = element["ops"][0]["_type"].get<std::string>();
   assert(!op.empty());
+
+  // Handle type identity checks (e.g., y is int, x is str)
+  exprt type_identity_result =
+    handle_type_identity_check(op, lhs, rhs, left, right);
+  if (!type_identity_result.is_nil())
+    return type_identity_result;
 
   // Handle None comparisons (don't unwrap optionals for identity checks)
   bool is_none_check = handle_none_check_setup(op, lhs, rhs);
