@@ -2152,6 +2152,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return python_list::build_list_from_range(*this, range_args, element);
   }
 
+  // Handle set(iterable) calls
+  if (
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "set" &&
+    element.contains("args") && element["args"].size() == 1)
+  {
+    exprt iterable_expr = get_expr(element["args"][0]);
+    python_set set_handler(*this, element);
+    return set_handler.get_from_iterable(iterable_expr, element);
+  }
+
   // Handle list(range(...))
   if (
     element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
@@ -4435,6 +4445,15 @@ void python_converter::get_var_assign(
       const std::string &lhs_identifier = lhs.identifier().as_string();
       const std::string &rhs_identifier = rhs.identifier().as_string();
       python_list::copy_type_info(rhs_identifier, lhs_identifier);
+
+      if (lhs_symbol)
+      {
+        const symbolt *rhs_symbol = nullptr;
+        if (rhs.is_symbol())
+          rhs_symbol = find_symbol(rhs.identifier().as_string());
+        if (rhs_symbol && rhs_symbol->is_set)
+          lhs_symbol->is_set = true;
+      }
     }
     else if (
       rhs.type() != lhs.type() && lhs.type().is_array() &&

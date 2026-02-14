@@ -11,7 +11,7 @@ __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
-static size_t __python_strnlen_bounded(const char *s, size_t max_len)
+size_t __python_strnlen_bounded(const char *s, size_t max_len)
 {
 __ESBMC_HIDE:;
   size_t i = 0;
