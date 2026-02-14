@@ -2703,6 +2703,21 @@ private:
 
       std::string inferred_type("");
 
+      // Check if RHS is a type identifier
+      if (element["value"]["_type"] == "Name")
+      {
+        const std::string &rhs_name = element["value"]["id"];
+        if (type_utils::is_builtin_type(rhs_name))
+        {
+          // This is a type object assignment: x = int
+          inferred_type = "type";
+          update_assignment_node(element, inferred_type);
+          if (itr != referenced_global_elements.end())
+            *itr = element;
+          continue;
+        }
+      }
+
       // Check if LHS was previously annotated
       if (
         element.contains("targets") && element["targets"][0]["_type"] == "Name")

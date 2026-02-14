@@ -2975,6 +2975,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (element["_type"] == "Name")
     {
       var_name = element["id"].get<std::string>();
+
+      // Handle type identifiers (int, str, float, bool, etc.)
+      // When user writes x = int, we convert it to x = "int" (a string constant)
+      if (type_utils::is_builtin_type(var_name))
+      {
+        // Create a string constant containing the type name
+        std::string type_name = var_name;
+        typet str_type = type_handler_.build_array(char_type(), type_name.size() + 1);
+        constant_exprt type_str(type_name, type_name, str_type);
+        expr = type_str;
+        break;
+      }
     }
     else if (element["_type"] == "Attribute")
     {
