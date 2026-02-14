@@ -1960,11 +1960,11 @@ static inline expr2tc do_memcpy_expression(
         constant_int2tc(get_int32_type(), BigInt(src_offset + i));
       expr2tc dst_off =
         constant_int2tc(get_int32_type(), BigInt(dst_offset + i));
-        const bool big_endian =
-          config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
-        expr2tc byte =
-          byte_extract2tc(get_uint8_type(), src, src_off, big_endian);
-        result = byte_update2tc(dst->type, result, dst_off, byte, big_endian);
+      const bool big_endian =
+        config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+      expr2tc byte =
+        byte_extract2tc(get_uint8_type(), src, src_off, big_endian);
+      result = byte_update2tc(dst->type, result, dst_off, byte, big_endian);
     }
     simplify(result);
     return result;
@@ -2109,33 +2109,32 @@ void goto_symext::intrinsic_memcpy(
         return;
       }
 
-    if (is_code_type(item_object->type))
-    {
-      if (config.options.get_bool_option("enable-unreachability-intrinsic"))
+      if (is_code_type(item_object->type))
       {
-        // Workaround:
-        // linux-3.10-rc1-43_1a-bitvector-drivers--net--ethernet--broadcom--b44.ko--ldv_main0.cil.out.i
-        // generates an INVALID address pointing to both a struct and
-        // initializes an extern global function ptr with. Resulting in this
-        // being triggered wrongly. Need to check if it's a VSA issue or ESBMC
-        // initialization issue.
-        bump_call(func_call, bump_name);
-        return;
+        if (config.options.get_bool_option("enable-unreachability-intrinsic"))
+        {
+          // Workaround:
+          // linux-3.10-rc1-43_1a-bitvector-drivers--net--ethernet--broadcom--b44.ko--ldv_main0.cil.out.i
+          // generates an INVALID address pointing to both a struct and
+          // initializes an extern global function ptr with. Resulting in this
+          // being triggered wrongly. Need to check if it's a VSA issue or ESBMC
+          // initialization issue.
+          bump_call(func_call, bump_name);
+          return;
+        }
+
+        std::string error_msg =
+          fmt::format("dereference failure: trying to deref a ptr code");
+
+        // SAME_OBJECT(ptr, item) => DEREF ERROR
+        expr2tc check = implies2tc(item.guard, gen_false_expr());
+        claim(check, error_msg);
+        continue;
       }
 
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
-      continue;
-    }
-
       // Over reading?
-      bool is_out_bounds =
-        ((type_size - number_of_offset) < number_of_bytes) ||
-        (number_of_offset > type_size);
+      bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
+                           (number_of_offset > type_size);
       if (
         is_out_bounds && !options.get_bool_option("no-pointer-check") &&
         !options.get_bool_option("no-bounds-check"))
@@ -2190,9 +2189,8 @@ void goto_symext::intrinsic_memcpy(
         bump_call(func_call, bump_name);
         return;
       }
-      bool is_out_bounds =
-        ((type_size - number_of_offset) < number_of_bytes) ||
-        (number_of_offset > type_size);
+      bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
+                           (number_of_offset > type_size);
       if (
         is_out_bounds && !options.get_bool_option("no-pointer-check") &&
         !options.get_bool_option("no-bounds-check"))

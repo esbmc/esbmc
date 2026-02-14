@@ -888,7 +888,9 @@ skip_single_char_fast_path:
 
   const exprt *lhs_array = get_array_operand(resolved_lhs);
   const exprt *rhs_array = get_array_operand(resolved_rhs);
-  if (lhs_array && rhs_array && lhs_array->is_constant() && rhs_array->is_constant())
+  if (
+    lhs_array && rhs_array && lhs_array->is_constant() &&
+    rhs_array->is_constant())
   {
     const array_typet &lhs_type = to_array_type(lhs_array->type());
     const array_typet &rhs_type = to_array_type(rhs_array->type());

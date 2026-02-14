@@ -399,12 +399,12 @@ exprt string_builder::concatenate_strings_via_c_function(
   exprt rhs_str = ensure_null_terminated_string(const_cast<exprt &>(rhs));
 
   // Get base addresses (pointers) for the strings
-  exprt lhs_addr =
-    lhs_str.type().is_pointer() ? lhs_str
-                                : str_handler_->get_array_base_address(lhs_str);
-  exprt rhs_addr =
-    rhs_str.type().is_pointer() ? rhs_str
-                                : str_handler_->get_array_base_address(rhs_str);
+  exprt lhs_addr = lhs_str.type().is_pointer()
+                     ? lhs_str
+                     : str_handler_->get_array_base_address(lhs_str);
+  exprt rhs_addr = rhs_str.type().is_pointer()
+                     ? rhs_str
+                     : str_handler_->get_array_base_address(rhs_str);
 
   // Find or create the __python_str_concat function symbol
   std::string func_name = "__python_str_concat";
