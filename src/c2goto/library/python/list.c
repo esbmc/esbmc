@@ -60,7 +60,13 @@ static inline void *__ESBMC_copy_value(const void *value, size_t size)
 
   void *copied = __ESBMC_alloca(size);
 
-  if (size == 8)
+  if (size == 1)
+    *(uint8_t *)copied = *(const uint8_t *)value;
+  else if (size == 2)
+    *(uint16_t *)copied = *(const uint16_t *)value;
+  else if (size == 4)
+    *(uint32_t *)copied = *(const uint32_t *)value;
+  else if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
   else if (size == 16)
   {

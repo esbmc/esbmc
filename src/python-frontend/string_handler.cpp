@@ -3251,13 +3251,75 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       deref.move_to_operands(base);
       base.swap(deref);
     }
-    typecast_exprt item_str(item_value, gen_pointer_type(char_type()));
+
+    // item_size = item->size
+    member_exprt item_size(
+      symbol_expr(item_sym), "size", size_type());
+    {
+      exprt &base = item_size.struct_op();
+      exprt deref("dereference");
+      deref.type() = base.type().subtype();
+      deref.move_to_operands(base);
+      base.swap(deref);
+    }
+
+    // item_str = (char*) item->value (default)
+    symbolt &item_str_sym = converter_.create_tmp_symbol(
+      call_json, "$join_item_str$", gen_pointer_type(char_type()), exprt());
+    code_declt item_str_decl(symbol_expr(item_str_sym));
+    item_str_decl.location() = location;
+    loop_body.copy_to_operands(item_str_decl);
+
+    typecast_exprt item_str_cast(item_value, gen_pointer_type(char_type()));
+    code_assignt item_str_init(symbol_expr(item_str_sym), item_str_cast);
+    item_str_init.location() = location;
+    loop_body.copy_to_operands(item_str_init);
+
+    // If size == 1, build a null-terminated string from the single char
+    exprt size_is_one("=", bool_type());
+    size_is_one.copy_to_operands(item_size, gen_one(size_type()));
+
+    typet char_arr_type = type_handler_.build_array(char_type(), 2);
+    symbolt &char_buf_sym = converter_.create_tmp_symbol(
+      call_json, "$join_char_buf$", char_arr_type, gen_zero(char_arr_type));
+    code_declt char_buf_decl(symbol_expr(char_buf_sym));
+    char_buf_decl.location() = location;
+
+    typecast_exprt item_ptr(item_value, gen_pointer_type(char_type()));
+    dereference_exprt item_char(char_type());
+    item_char.op0() = item_ptr;
+
+    index_exprt buf_0(
+      symbol_expr(char_buf_sym), gen_zero(size_type()), char_type());
+    index_exprt buf_1(
+      symbol_expr(char_buf_sym), gen_one(size_type()), char_type());
+
+    code_assignt assign_0(buf_0, item_char);
+    assign_0.location() = location;
+    code_assignt assign_1(buf_1, gen_zero(char_type()));
+    assign_1.location() = location;
+
+    exprt buf_addr = get_array_base_address(symbol_expr(char_buf_sym));
+    code_assignt assign_buf_ptr(symbol_expr(item_str_sym), buf_addr);
+    assign_buf_ptr.location() = location;
+
+    code_blockt then_block;
+    then_block.copy_to_operands(char_buf_decl);
+    then_block.copy_to_operands(assign_0);
+    then_block.copy_to_operands(assign_1);
+    then_block.copy_to_operands(assign_buf_ptr);
+
+    code_ifthenelset if_one;
+    if_one.cond() = size_is_one;
+    if_one.then_case() = then_block;
+    if_one.location() = location;
+    loop_body.copy_to_operands(if_one);
 
     // result = __python_str_concat(result, item_str)
     side_effect_expr_function_callt concat_call;
     concat_call.function() = symbol_expr(*concat_symbol);
     concat_call.arguments().push_back(symbol_expr(result_sym));
-    concat_call.arguments().push_back(item_str);
+    concat_call.arguments().push_back(symbol_expr(item_str_sym));
     concat_call.type() = gen_pointer_type(char_type());
     concat_call.location() = location;
     code_assignt assign_concat(symbol_expr(result_sym), concat_call);

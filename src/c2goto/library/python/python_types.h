@@ -9,6 +9,10 @@
 #  define ESBMC_PY_STRNLEN_BOUND 256
 #endif
 
+#ifndef ESBMC_PY_STR_TYPE_ID
+#  define ESBMC_PY_STR_TYPE_ID ((size_t)0x826e83195d0d60f0ULL)
+#endif
+
 /**
  * @brief Type object representation for Python-like types.
  */

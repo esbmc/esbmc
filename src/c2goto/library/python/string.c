@@ -4,18 +4,8 @@
 #include <stddef.h>
 #include <string.h>
 #include "python_types.h"
+#include "list.h"
 
-#define ESBMC_PY_STR_TYPE_ID ((size_t)0x826e83195d0d60f0ULL)
-
-// List helpers (defined in list.c)
-extern PyListObject *__ESBMC_list_create(void);
-extern bool __ESBMC_list_push(
-  PyListObject *l,
-  const void *value,
-  size_t type_id,
-  size_t type_size);
-extern size_t __ESBMC_list_size(const PyListObject *l);
-extern PyObject *__ESBMC_list_at(PyListObject *l, size_t index);
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
