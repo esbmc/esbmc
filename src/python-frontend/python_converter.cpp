@@ -1415,13 +1415,13 @@ exprt python_converter::handle_type_identity_check(
   if (left["_type"] == "Name" && left.contains("id"))
   {
     std::string lhs_name = left["id"].get<std::string>();
-    lhs_is_type = type_utils::is_builtin_type(lhs_name);
+    lhs_is_type = type_utils::is_type_identifier(lhs_name);
   }
 
   if (right["_type"] == "Name" && right.contains("id"))
   {
     std::string rhs_name = right["id"].get<std::string>();
-    rhs_is_type = type_utils::is_builtin_type(rhs_name);
+    rhs_is_type = type_utils::is_type_identifier(rhs_name);
   }
 
   // If neither operand is a type identifier, not a type identity check
@@ -3016,10 +3016,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (element["_type"] == "Name")
     {
       var_name = element["id"].get<std::string>();
-
       // Handle type identifiers (int, str, float, bool, etc.)
-      // When user writes x = int, we convert it to x = "int" (a string constant)
-      if (type_utils::is_builtin_type(var_name))
+      if (type_utils::is_type_identifier(var_name))
       {
         // Create a string constant containing the type name
         std::string type_name = var_name;

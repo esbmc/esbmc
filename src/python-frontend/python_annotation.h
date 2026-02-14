@@ -2707,7 +2707,7 @@ private:
       if (element["value"]["_type"] == "Name")
       {
         const std::string &rhs_name = element["value"]["id"];
-        if (type_utils::is_builtin_type(rhs_name))
+        if (type_utils::is_type_identifier(rhs_name))
         {
           // This is a type object assignment: x = int
           inferred_type = "type";

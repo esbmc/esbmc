@@ -274,6 +274,13 @@ public:
            element.contains("value");
   }
 
+  static inline bool is_type_identifier(const std::string &name)
+  {
+    static const std::unordered_set<std::string> type_identifiers = {
+      "int", "float", "str", "bool", "bytes"};
+    return type_identifiers.find(name) != type_identifiers.end();
+  }
+
 private:
   static void
   update_type_flags_from_node(const nlohmann::json &node, TypeFlags &flags)
