@@ -459,7 +459,9 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return double_type();
   else if (elem.is_string())
   {
-    size_t str_size = elem.get<std::string>().size() + 1;
+    size_t str_size = elem.get<std::string>().size();
+    if (str_size > 1)
+      str_size += 1;
     return build_array(char_type(), str_size);
   }
 

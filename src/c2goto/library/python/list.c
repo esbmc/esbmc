@@ -60,7 +60,10 @@ size_t __ESBMC_list_size(const PyListObject *l)
   return l ? l->size : 0;
 }
 
-static inline void *__ESBMC_copy_value(const void *value, size_t size)
+static inline void *__ESBMC_copy_value(
+  const void *value,
+  size_t size,
+  size_t type_id)
 {
   // None type (NULL pointer with size 0)
   // Don't allocate: return NULL to preserve None semantics
@@ -69,22 +72,10 @@ static inline void *__ESBMC_copy_value(const void *value, size_t size)
 
   void *copied = __ESBMC_alloca(size);
 
-  if (size == 1)
-    *(uint8_t *)copied = *(const uint8_t *)value;
-  else if (size == 2)
-    *(uint16_t *)copied = *(const uint16_t *)value;
-  else if (size == 4)
-    *(uint32_t *)copied = *(const uint32_t *)value;
-  else if (size == 8)
-    *(uint64_t *)copied = *(const uint64_t *)value;
-  else if (size == 16)
-  {
-    // Handle 16-byte structs (such as dictionaries) explicitly
-    *(uint64_t *)copied = *(const uint64_t *)value;
-    *((uint64_t *)copied + 1) = *((const uint64_t *)value + 1);
-  }
-  else
-    memcpy(copied, value, size);
+  // Always copy byte-wise to preserve object semantics and avoid unsafe
+  // type-punning on non-scalar or unaligned values.
+  (void)type_id;
+  memcpy(copied, value, size);
 
   return copied;
 }
@@ -96,7 +87,7 @@ bool __ESBMC_list_push(
   size_t type_size)
 {
   // TODO: __ESBMC_obj_cpy
-  void *copied_value = __ESBMC_copy_value(value, type_size);
+  void *copied_value = __ESBMC_copy_value(value, type_size, type_id);
 
   // Use a pointer to avoid repeated indexing
   PyObject *item = &l->items[l->size];

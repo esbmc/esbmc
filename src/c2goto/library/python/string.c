@@ -4,7 +4,18 @@
 #include <stddef.h>
 #include <string.h>
 #include "python_types.h"
-#include "list.h"
+
+#define ESBMC_PY_STR_TYPE_ID ((size_t)0x826e83195d0d60f0ULL)
+
+// List helpers (defined in list.c)
+extern PyListObject *__ESBMC_list_create(void);
+extern bool __ESBMC_list_push(
+  PyListObject *l,
+  const void *value,
+  size_t type_id,
+  size_t type_size);
+extern size_t __ESBMC_list_size(const PyListObject *l);
+extern PyObject *__ESBMC_list_at(PyListObject *l, size_t index);
 
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
@@ -843,84 +854,13 @@ __ESBMC_HIDE:;
   }
   else
   {
-    size_t start = 0;
-    size_t splits = 0;
-
-    size_t i = 0;
-    while (i + len_sep <= len_str)
-    {
-      // Check for separator match at position i
-      size_t k = 0;
-      while (k < len_sep && str[i + k] == sep[k])
-        k++;
-
-      if (k == len_sep)
-      {
-        size_t part_len = i - start;
-        char *buf = __ESBMC_alloca(part_len + 1);
-        size_t j = 0;
-        while (j < part_len)
-        {
-          buf[j] = str[start + j];
-          j++;
-        }
-        buf[part_len] = '\0';
-        __ESBMC_list_push(out, buf, ESBMC_PY_STR_TYPE_ID, part_len + 1);
-
-        if (maxsplit > 0)
-        {
-          splits++;
-          if (splits >= (size_t)maxsplit)
-          {
-            size_t rem = len_str - (i + len_sep);
-            char *buf2 = __ESBMC_alloca(rem + 1);
-            size_t j2 = 0;
-            while (j2 < rem)
-            {
-              buf2[j2] = str[i + len_sep + j2];
-              j2++;
-            }
-            buf2[rem] = '\0';
-            __ESBMC_list_push(out, buf2, ESBMC_PY_STR_TYPE_ID, rem + 1);
-            return out;
-          }
-        }
-
-        i = i + len_sep;
-        start = i;
-        continue;
-      }
-
-      i++;
-    }
-
-    // Push remaining tail (or whole string if no matches)
-    size_t tail_len = len_str - start;
-    char *buf = __ESBMC_alloca(tail_len + 1);
-    size_t t = 0;
-    while (t < tail_len)
-    {
-      buf[t] = str[start + t];
-      t++;
-    }
-    buf[tail_len] = '\0';
-    __ESBMC_list_push(out, buf, ESBMC_PY_STR_TYPE_ID, tail_len + 1);
+    char *buf = __ESBMC_alloca(len_str + 1);
+    memcpy(buf, str, len_str);
+    buf[len_str] = '\0';
+    __ESBMC_list_push(out, buf, ESBMC_PY_STR_TYPE_ID, len_str + 1);
   }
 
   return out;
-}
-
-static inline size_t __python_str_item_len(const PyObject *item, const char *s)
-{
-  if (item->size > 0)
-  {
-    size_t len = item->size;
-    if (s[len - 1] == '\0')
-      return len - 1;
-    return __python_strnlen_bounded(s, 1024);
-  }
-
-  return __python_strnlen_bounded(s, 1024);
 }
 
 // Python string join - joins a list of strings using a separator
@@ -953,7 +893,19 @@ __ESBMC_HIDE:;
     const char *s = (const char *)item->value;
     if (!s)
       s = "";
-    size_t len = __python_str_item_len(item, s);
+    size_t len = 0;
+    if (item->size > 0)
+    {
+      len = item->size;
+      if (s[len - 1] == '\0')
+        len = len - 1;
+      else
+        len = __python_strnlen_bounded(s, 1024);
+    }
+    else
+    {
+      len = __python_strnlen_bounded(s, 1024);
+    }
     total += len;
     if (i + 1 < n)
       total += sep_len;
@@ -968,7 +920,19 @@ __ESBMC_HIDE:;
     const char *s = (const char *)item->value;
     if (!s)
       s = "";
-    size_t len = __python_str_item_len(item, s);
+    size_t len = 0;
+    if (item->size > 0)
+    {
+      len = item->size;
+      if (s[len - 1] == '\0')
+        len = len - 1;
+      else
+        len = __python_strnlen_bounded(s, 1024);
+    }
+    else
+    {
+      len = __python_strnlen_bounded(s, 1024);
+    }
 
     if (len > 0)
     {

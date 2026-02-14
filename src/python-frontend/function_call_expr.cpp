@@ -1828,24 +1828,18 @@ exprt function_call_expr::handle_list_append() const
     value_to_append = symbol_expr(tmp_var);
   }
 
-  // Promote single-character string arrays to null-terminated strings
   if (
     value_to_append.type().is_array() &&
     value_to_append.type().subtype() == char_type())
   {
     const array_typet &array_type = to_array_type(value_to_append.type());
+    // Only convert single-element char arrays (string literals)
     if (array_type.size().is_constant())
     {
       const constant_exprt &size_const = to_constant_expr(array_type.size());
       BigInt size_value = binary2integer(size_const.value().c_str(), false);
       if (size_value == 1)
-      {
-        index_exprt first_char(
-          value_to_append, gen_zero(size_type()), char_type());
-        std::vector<exprt> chars{first_char};
-        value_to_append =
-          converter_.get_string_builder().build_null_terminated_string(chars);
-      }
+        value_to_append.type() = gen_pointer_type(char_type());
     }
   }
 

@@ -3096,6 +3096,45 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     }
   }
 
+  // Handle direct list literals: " ".join(["a", "b"])
+  if (
+    list_arg.contains("_type") && list_arg["_type"] == "List" &&
+    list_arg.contains("elts"))
+  {
+    const auto &elements = list_arg["elts"];
+    if (!elements.empty())
+    {
+      std::vector<exprt> elem_exprs;
+      for (const auto &elem : elements)
+      {
+        exprt elem_expr = converter_.get_expr(elem);
+        ensure_string_array(elem_expr);
+        elem_exprs.push_back(elem_expr);
+      }
+
+      if (elem_exprs.size() == 1)
+        return elem_exprs[0];
+
+      std::vector<exprt> all_chars;
+      std::vector<exprt> first_chars =
+        string_builder_->extract_string_chars(elem_exprs[0]);
+      all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
+
+      for (size_t i = 1; i < elem_exprs.size(); ++i)
+      {
+        std::vector<exprt> sep_chars =
+          string_builder_->extract_string_chars(separator);
+        all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+
+        std::vector<exprt> elem_chars =
+          string_builder_->extract_string_chars(elem_exprs[i]);
+        all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
+      }
+
+      return string_builder_->build_null_terminated_string(all_chars);
+    }
+  }
+
   // Fallback: runtime join for dynamic lists
   exprt list_expr = converter_.get_expr(list_arg);
   typet list_type = type_handler_.get_list_type();
