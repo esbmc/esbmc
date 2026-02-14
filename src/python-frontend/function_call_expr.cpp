@@ -1824,8 +1824,8 @@ exprt function_call_expr::handle_list_append() const
     new_call.location() = converter_.get_location_from_decl(call_);
     converter_.current_block->copy_to_operands(new_call);
 
-  // Replace value_to_append with the temporary variable
-  value_to_append = symbol_expr(tmp_var);
+    // Replace value_to_append with the temporary variable
+    value_to_append = symbol_expr(tmp_var);
   }
 
   // Promote single-character string arrays to null-terminated strings

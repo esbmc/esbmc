@@ -3,14 +3,16 @@
 
 #include <stddef.h>
 
+// Stable type id for Python str elements in list models. Must match
+// python-frontend's stable hash for "str" to keep runtime/frontend
+// list operations (split/join/contains) consistent.
+#ifndef ESBMC_PY_STR_TYPE_ID
+#  define ESBMC_PY_STR_TYPE_ID ((size_t)0x826e83195d0d60f0ULL)
+#endif
 // Bounded string length used by Python frontend/runtime helpers.
 // Keeps symbolic loops finite while still respecting '\0' within the bound.
 #ifndef ESBMC_PY_STRNLEN_BOUND
 #  define ESBMC_PY_STRNLEN_BOUND 256
-#endif
-
-#ifndef ESBMC_PY_STR_TYPE_ID
-#  define ESBMC_PY_STR_TYPE_ID ((size_t)0x826e83195d0d60f0ULL)
 #endif
 
 /**

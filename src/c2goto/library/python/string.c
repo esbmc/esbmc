@@ -6,7 +6,6 @@
 #include "python_types.h"
 #include "list.h"
 
-
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
 {

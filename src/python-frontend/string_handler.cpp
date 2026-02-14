@@ -3035,8 +3035,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     return empty_str;
   };
 
-  auto build_join_from_elements =
-    [&](const nlohmann::json &elements) -> exprt {
+  auto build_join_from_elements = [&](const nlohmann::json &elements) -> exprt {
     std::vector<exprt> elem_exprs;
     for (const auto &elem : elements)
     {
@@ -3229,8 +3228,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     }
 
     // item_size = item->size
-    member_exprt item_size(
-      symbol_expr(item_sym), "size", size_type());
+    member_exprt item_size(symbol_expr(item_sym), "size", size_type());
     {
       exprt &base = item_size.struct_op();
       exprt deref("dereference");
