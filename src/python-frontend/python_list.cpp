@@ -2509,10 +2509,23 @@ exprt python_list::extract_pyobject_value(
   // Dereference the PyObject* to access its members
   {
     exprt &base = obj_value.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
+    auto contains_deref = [&](const exprt &e, const auto &self) -> bool {
+      if (e.id() == "dereference")
+        return true;
+      for (const auto &op : e.operands())
+      {
+        if (self(op, self))
+          return true;
+      }
+      return false;
+    };
+    if (!contains_deref(base, contains_deref))
+    {
+      exprt deref("dereference");
+      deref.type() = base.type().subtype();
+      deref.move_to_operands(base);
+      base.swap(deref);
+    }
   }
 
   // For array types, return pointer to element type instead of pointer to array

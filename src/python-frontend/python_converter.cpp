@@ -763,6 +763,17 @@ exprt python_converter::handle_string_comparison(
   // This avoids introducing strcmp() calls that can inflate branch coverage counts.
   if (op == "Eq" || op == "NotEq")
   {
+    auto contains_deref = [&](const exprt &expr, const auto &self) -> bool {
+      if (expr.id() == "dereference")
+        return true;
+      for (const auto &op : expr.operands())
+      {
+        if (self(op, self))
+          return true;
+      }
+      return false;
+    };
+
     auto extract_single_char = [&](const exprt &expr, char &ch) -> bool {
       const exprt *candidate = &expr;
       if (
@@ -811,6 +822,10 @@ exprt python_converter::handle_string_comparison(
        type_utils::is_string_type(resolved_rhs.type())))
     {
       const exprt &str_expr = lhs_is_char_literal ? resolved_rhs : resolved_lhs;
+      // Skip fast-path when the string expression already contains dereference(s).
+      // This avoids creating nested dereferences that the pointer analysis rejects.
+      if (contains_deref(str_expr, contains_deref))
+        goto skip_single_char_fast_path;
       exprt first_char = char_at_index(str_expr, 0);
       exprt second_char = char_at_index(str_expr, 1);
 
@@ -838,6 +853,7 @@ exprt python_converter::handle_string_comparison(
       return both_eq;
     }
   }
+skip_single_char_fast_path:
 
   // Try constant comparisons
   exprt constant_result =
@@ -857,7 +873,7 @@ exprt python_converter::handle_string_comparison(
   if (!mismatch_result.is_nil())
     return mismatch_result;
 
-  // Fast-path: compare fixed-size char arrays directly to avoid strcmp loops
+  // Fast-path: compare fixed-size *constant* char arrays directly to avoid strcmp loops
   auto get_array_operand = [&](const exprt &expr) -> const exprt * {
     if (expr.type().is_array())
       return &expr;
@@ -872,7 +888,7 @@ exprt python_converter::handle_string_comparison(
 
   const exprt *lhs_array = get_array_operand(resolved_lhs);
   const exprt *rhs_array = get_array_operand(resolved_rhs);
-  if (lhs_array && rhs_array)
+  if (lhs_array && rhs_array && lhs_array->is_constant() && rhs_array->is_constant())
   {
     const array_typet &lhs_type = to_array_type(lhs_array->type());
     const array_typet &rhs_type = to_array_type(rhs_array->type());
@@ -915,65 +931,6 @@ exprt python_converter::handle_string_comparison(
           }
           return all_eq;
         }
-      }
-    }
-  }
-
-  // Fast-path: pointer vs fixed-size char array comparison
-  auto is_char_ptr = [&](const exprt &expr) -> bool {
-    return expr.type().is_pointer() && expr.type().subtype() == char_type();
-  };
-
-  const exprt *array_side = lhs_array ? lhs_array : rhs_array;
-  const exprt *ptr_side = nullptr;
-  if (array_side)
-  {
-    const exprt &other = lhs_array ? resolved_rhs : resolved_lhs;
-    if (is_char_ptr(other))
-      ptr_side = &other;
-  }
-
-  if (array_side && ptr_side)
-  {
-    const array_typet &arr_type = to_array_type(array_side->type());
-    if (
-      arr_type.subtype() == char_type() && arr_type.size().is_constant())
-    {
-      const auto arr_size = to_constant_expr(arr_type.size()).value();
-      const unsigned long long size_val =
-        binary2integer(arr_size.as_string(), false).to_uint64();
-      if (size_val > 0 && size_val <= 16)
-      {
-        exprt all_eq = gen_boolean(true);
-        for (unsigned long long i = 0; i < size_val; ++i)
-        {
-          exprt idx = from_integer(i, index_type());
-          exprt lch = index_exprt(*array_side, idx, char_type());
-          plus_exprt ptr_plus(*ptr_side, idx);
-          ptr_plus.type() = ptr_side->type();
-          exprt rch = dereference_exprt(ptr_plus, char_type());
-          exprt eq("=", bool_type());
-          if (lhs_array)
-            eq.copy_to_operands(lch, rch);
-          else
-            eq.copy_to_operands(rch, lch);
-          if (i == 0)
-            all_eq = eq;
-          else
-          {
-            exprt conj("and", bool_type());
-            conj.copy_to_operands(all_eq, eq);
-            all_eq = conj;
-          }
-        }
-
-        if (op == "NotEq")
-        {
-          exprt not_expr("not", bool_type());
-          not_expr.copy_to_operands(all_eq);
-          return not_expr;
-        }
-        return all_eq;
       }
     }
   }
