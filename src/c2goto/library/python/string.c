@@ -854,6 +854,7 @@ __ESBMC_HIDE:;
   }
   else
   {
+    // NOTE: Multi-character separators are not split yet; return whole string.
     char *buf = __ESBMC_alloca(len_str + 1);
     memcpy(buf, str, len_str);
     buf[len_str] = '\0';

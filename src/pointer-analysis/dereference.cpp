@@ -1309,6 +1309,16 @@ void dereferencet::construct_from_const_struct_offset(
   const BigInt int_offset = to_constant_int2t(offset).value;
   BigInt access_size = type_byte_size_bits(type);
 
+  // If we are accessing the struct using a byte, ignore alignment rules and
+  // extract from the bitvector representation.
+  if (access_size == config.ansi_c.char_width)
+  {
+    value = bitcast2tc(
+      get_uint_type(type_byte_size_bits(value->type, &ns).to_uint64()), value);
+    construct_from_const_offset(value, offset, type);
+    return;
+  }
+
   unsigned int i = 0;
   for (auto const &it : struct_type.members)
   {

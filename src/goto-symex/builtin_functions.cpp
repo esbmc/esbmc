@@ -1946,16 +1946,37 @@ static inline expr2tc do_memcpy_expression(
   if (num_of_bytes == 0)
     return dst;
 
+  // Fallback for structs/unions or mismatched types: copy byte-by-byte using
+  // byte_extract/byte_update to avoid alignment issues.
+  if (
+    is_struct_type(dst->type) || is_union_type(dst->type) ||
+    is_struct_type(src->type) || is_union_type(src->type) ||
+    src->type != dst->type)
+  {
+    expr2tc result = dst;
+    for (size_t i = 0; i < num_of_bytes; i++)
+    {
+      expr2tc src_off =
+        constant_int2tc(get_int32_type(), BigInt(src_offset + i));
+      expr2tc dst_off =
+        constant_int2tc(get_int32_type(), BigInt(dst_offset + i));
+        const bool big_endian =
+          config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+        expr2tc byte =
+          byte_extract2tc(get_uint8_type(), src, src_off, big_endian);
+        result = byte_update2tc(dst->type, result, dst_off, byte, big_endian);
+    }
+    simplify(result);
+    return result;
+  }
+
   // Short-circuit
   if (
     dst->type == src->type && !dst_offset && !src_offset &&
     type_byte_size(dst->type).to_uint64() == num_of_bytes)
     return src;
 
-  if (
-    is_array_type(src->type) || is_array_type(dst->type) ||
-    is_struct_type(dst->type) || is_union_type(dst->type) ||
-    is_struct_type(src->type) || is_union_type(src->type))
+  if (is_array_type(src->type) || is_array_type(dst->type))
   {
     log_debug("memcpy", "Only primitives are supported for now");
     return expr2tc();
@@ -2016,13 +2037,15 @@ void goto_symext::intrinsic_memcpy(
   // 3. Compute all DST addresses, memory check and compute operation result
 
   cur_state->rename(n_arg);
-  if (!n_arg || is_symbol2t(n_arg))
+  if (!n_arg)
   {
     bump_call(func_call, bump_name);
     return;
   }
 
   simplify(n_arg);
+  if (is_typecast2t(n_arg) && is_constant_int2t(to_typecast2t(n_arg).from))
+    n_arg = to_typecast2t(n_arg).from;
   if (!is_constant_int2t(n_arg))
   {
     bump_call(func_call, bump_name);
@@ -2065,30 +2088,26 @@ void goto_symext::intrinsic_memcpy(
     }
 
     offset_simplifier(item_offset);
-    if (!is_constant_int2t(item_offset))
+    if (is_constant_int2t(item_offset))
     {
-      bump_call(func_call, bump_name);
-      return;
-    }
+      const uint64_t number_of_offset =
+        to_constant_int2t(item_offset).value.to_uint64();
 
-    const uint64_t number_of_offset =
-      to_constant_int2t(item_offset).value.to_uint64();
-
-    uint64_t type_size;
-    try
-    {
-      type_size = type_byte_size(item_object->type).to_uint64();
-    }
-    catch (const array_type2t::dyn_sized_array_excp &)
-    {
-      bump_call(func_call, bump_name);
-      return;
-    }
-    catch (const array_type2t::inf_sized_array_excp &)
-    {
-      bump_call(func_call, bump_name);
-      return;
-    }
+      uint64_t type_size;
+      try
+      {
+        type_size = type_byte_size(item_object->type).to_uint64();
+      }
+      catch (const array_type2t::dyn_sized_array_excp &)
+      {
+        bump_call(func_call, bump_name);
+        return;
+      }
+      catch (const array_type2t::inf_sized_array_excp &)
+      {
+        bump_call(func_call, bump_name);
+        return;
+      }
 
     if (is_code_type(item_object->type))
     {
@@ -2113,24 +2132,26 @@ void goto_symext::intrinsic_memcpy(
       continue;
     }
 
-    // Over reading?
-    bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
-                         (number_of_offset > type_size);
-    if (
-      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
-      !options.get_bool_option("no-bounds-check"))
-    {
-      std::string error_msg = fmt::format(
-        "dereference failure on memcpy: reading memory segment of size {} with "
-        "{} "
-        "bytes",
-        type_size - number_of_offset,
-        number_of_bytes);
+      // Over reading?
+      bool is_out_bounds =
+        ((type_size - number_of_offset) < number_of_bytes) ||
+        (number_of_offset > type_size);
+      if (
+        is_out_bounds && !options.get_bool_option("no-pointer-check") &&
+        !options.get_bool_option("no-bounds-check"))
+      {
+        std::string error_msg = fmt::format(
+          "dereference failure on memcpy: reading memory segment of size {} "
+          "with {} "
+          "bytes",
+          type_size - number_of_offset,
+          number_of_bytes);
 
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
-      continue;
+        // SAME_OBJECT(ptr, item) => DEREF ERROR
+        expr2tc check = implies2tc(item.guard, gen_false_expr());
+        claim(check, error_msg);
+        continue;
+      }
     }
   }
 
@@ -2149,66 +2170,83 @@ void goto_symext::intrinsic_memcpy(
     cur_state->rename(item.offset);
 
     offset_simplifier(item.offset);
-    if (!is_constant_int2t(item.offset))
+    if (is_constant_int2t(item.offset))
     {
-      bump_call(func_call, bump_name);
-      return;
-    }
+      const uint64_t number_of_offset =
+        to_constant_int2t(item.offset).value.to_uint64();
 
-    const uint64_t number_of_offset =
-      to_constant_int2t(item.offset).value.to_uint64();
+      uint64_t type_size;
+      try
+      {
+        type_size = type_byte_size(item.object->type).to_uint64();
+      }
+      catch (const array_type2t::dyn_sized_array_excp &)
+      {
+        bump_call(func_call, bump_name);
+        return;
+      }
+      catch (const array_type2t::inf_sized_array_excp &)
+      {
+        bump_call(func_call, bump_name);
+        return;
+      }
+      bool is_out_bounds =
+        ((type_size - number_of_offset) < number_of_bytes) ||
+        (number_of_offset > type_size);
+      if (
+        is_out_bounds && !options.get_bool_option("no-pointer-check") &&
+        !options.get_bool_option("no-bounds-check"))
+      {
+        std::string error_msg = fmt::format(
+          "dereference failure on memcpy: writing memory segment of size {} "
+          "with {} "
+          "bytes",
+          type_size - number_of_offset,
+          number_of_bytes);
 
-    uint64_t type_size;
-    try
-    {
-      type_size = type_byte_size(item.object->type).to_uint64();
-    }
-    catch (const array_type2t::dyn_sized_array_excp &)
-    {
-      bump_call(func_call, bump_name);
-      return;
-    }
-    catch (const array_type2t::inf_sized_array_excp &)
-    {
-      bump_call(func_call, bump_name);
-      return;
-    }
-    bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
-                         (number_of_offset > type_size);
-    if (
-      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
-      !options.get_bool_option("no-bounds-check"))
-    {
-      std::string error_msg = fmt::format(
-        "dereference failure on memcpy: writing memory segment of size {} with "
-        "{} "
-        "bytes",
-        type_size - number_of_offset,
-        number_of_bytes);
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
-      continue;
+        // SAME_OBJECT(ptr, item) => DEREF ERROR
+        expr2tc check = implies2tc(item.guard, gen_false_expr());
+        claim(check, error_msg);
+        continue;
+      }
     }
 
     // Time to do the actual copy
     for (const auto &src_item : src_items)
     {
-      // Offset is garanteed to be a constant
-      const uint64_t src_offset =
-        to_constant_int2t(src_item.offset).value.to_uint64();
-      const expr2tc new_object = do_memcpy_expression(
-        item.object,
-        number_of_offset,
-        src_item.object,
-        src_offset,
-        number_of_bytes);
-
+      expr2tc new_object;
+      if (is_constant_int2t(item.offset) && is_constant_int2t(src_item.offset))
+      {
+        const uint64_t number_of_offset =
+          to_constant_int2t(item.offset).value.to_uint64();
+        const uint64_t src_offset =
+          to_constant_int2t(src_item.offset).value.to_uint64();
+        new_object = do_memcpy_expression(
+          item.object,
+          number_of_offset,
+          src_item.object,
+          src_offset,
+          number_of_bytes);
+      }
       if (!new_object)
       {
-        bump_call(func_call, bump_name);
-        return;
+        expr2tc src_off = typecast2tc(size_type2(), src_item.offset);
+        expr2tc dst_off = typecast2tc(size_type2(), item.offset);
+        expr2tc result = item.object;
+        for (size_t i = 0; i < number_of_bytes; i++)
+        {
+          expr2tc idx = constant_int2tc(size_type2(), BigInt(i));
+          expr2tc src_off_i = add2tc(size_type2(), src_off, idx);
+          expr2tc dst_off_i = add2tc(size_type2(), dst_off, idx);
+          const bool big_endian =
+            config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+          expr2tc byte = byte_extract2tc(
+            get_uint8_type(), src_item.object, src_off_i, big_endian);
+          result = byte_update2tc(
+            item.object->type, result, dst_off_i, byte, big_endian);
+        }
+        simplify(result);
+        new_object = result;
       }
 
       guardt assignment_guard = guard;

@@ -274,37 +274,11 @@ void *__memcpy_impl(void *dst, const void *src, size_t n)
 __ESBMC_HIDE:;
   char *cdst = dst;
   const char *csrc = src;
-  if (n <= 16)
+  size_t i = 0;
+  while (i < n)
   {
-    switch (n)
-    {
-    case 16: cdst[15] = csrc[15];
-    case 15: cdst[14] = csrc[14];
-    case 14: cdst[13] = csrc[13];
-    case 13: cdst[12] = csrc[12];
-    case 12: cdst[11] = csrc[11];
-    case 11: cdst[10] = csrc[10];
-    case 10: cdst[9] = csrc[9];
-    case 9: cdst[8] = csrc[8];
-    case 8: cdst[7] = csrc[7];
-    case 7: cdst[6] = csrc[6];
-    case 6: cdst[5] = csrc[5];
-    case 5: cdst[4] = csrc[4];
-    case 4: cdst[3] = csrc[3];
-    case 3: cdst[2] = csrc[2];
-    case 2: cdst[1] = csrc[1];
-    case 1: cdst[0] = csrc[0];
-    default: break;
-    }
-  }
-  else
-  {
-    size_t i = 0;
-    while (i < n)
-    {
-      cdst[i] = csrc[i];
-      ++i;
-    }
+    cdst[i] = csrc[i];
+    ++i;
   }
   return dst;
 }
