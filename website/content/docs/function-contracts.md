@@ -181,11 +181,13 @@ only have an `__ESBMC_assigns` clause or no contract specification at all.
 In general, annotated functions should include meaningful contract clauses to
 get useful verification results.
 
-Note that compositional verification introduces additional proof obligations —
-each function must be individually verified against its contract. In replace
-mode, the callee's body is not unrolled at the call site, so the performance
-benefit grows with the number of call sites: the more often a function is
-called, the more redundant analysis is avoided.
+{{< callout type="info" >}}
+Compositional verification introduces additional proof obligations — each
+function must be individually verified against its contract. In replace mode,
+the callee's body is not unrolled at the call site, so the performance benefit
+grows with the number of call sites: the more often a function is called, the
+more redundant analysis is avoided.
+{{< /callout >}}
 
 ## Working Logic
 
