@@ -46,15 +46,15 @@ def absolute_value(x: int) -> int:
 def test_absolute_value() -> None:
     """Verify absolute value properties."""
     x: int = nondet_int()
-    assume(x > -1000 and x < 1000)  # Avoid overflow
+    __ESBMC_assume(x > -1000 and x < 1000)  # Avoid overflow
 
     result = absolute_value(x)
 
     # Property: result is always non-negative
-    esbmc_assert(result >= 0, "Absolute value is non-negative")
+    assert result >= 0, "Absolute value is non-negative"
 
     # Property: result equals x or -x
-    esbmc_assert(result == x or result == -x, "Result is x or -x")
+    assert result == x or result == -x, "Result is x or -x"
 
 
 # ============================================
@@ -63,7 +63,7 @@ def test_absolute_value() -> None:
 
 def find_max(lst: list[int]) -> int:
     """Find maximum element in a list."""
-    esbmc_assert(len(lst) > 0, "List must not be empty")
+    assert len(lst) > 0, "List must not be empty"
 
     max_val: int = lst[0]
     for elem in lst:
@@ -77,12 +77,12 @@ def test_find_max() -> None:
     """Verify find_max correctness."""
     # Create symbolic list
     size: int = nondet_int()
-    assume(size > 0 and size <= 5)
+    __ESBMC_assume(size > 0 and size <= 5)
 
     lst: list[int] = []
     for _ in range(size):
         val: int = nondet_int()
-        assume(val > -100 and val < 100)
+        __ESBMC_assume(val > -100 and val < 100)
         lst.append(val)
 
     result = find_max(lst)
@@ -92,11 +92,11 @@ def test_find_max() -> None:
     for elem in lst:
         if elem == result:
             found = True
-    esbmc_assert(found, "Max value is in the list")
+    assert found, "Max value is in the list"
 
-    # Property: no element is greater than result
+    # Property: no element is greater than the result
     for elem in lst:
-        esbmc_assert(elem <= result, "No element exceeds max")
+        assert elem <= result, "No element exceeds max"
 
 
 # ============================================
@@ -116,8 +116,8 @@ def binary_search(arr: list[int], target: int) -> int:
 
     while left <= right:
         # Invariants
-        esbmc_assert(left >= 0, "Left bound non-negative")
-        esbmc_assert(right < len(arr), "Right bound in range")
+        assert left >= 0, "Left bound non-negative"
+        assert right < len(arr), "Right bound in range"
 
         mid: int = left + (right - left) // 2
 
@@ -135,15 +135,15 @@ def test_binary_search() -> None:
     """Verify binary search correctness."""
     # Create sorted array
     size: int = nondet_int()
-    assume(size > 0 and size <= 5)
+    __ESBMC_assume(size > 0 and size <= 5)
 
     arr: list[int] = []
     prev: int = nondet_int()
-    assume(prev > -50)
+    __ESBMC_assume(prev > -50)
 
     for _ in range(size):
         val: int = nondet_int()
-        assume(val >= prev and val < prev + 10)  # Ensure sorted, bounded gaps
+        __ESBMC_assume(val >= prev and val < prev + 10)  # Ensure sorted, bounded gaps
         arr.append(val)
         prev = val
 
@@ -153,8 +153,8 @@ def test_binary_search() -> None:
 
     # Property: if found, element at index equals target
     if result >= 0:
-        esbmc_assert(result < len(arr), "Index in bounds")
-        esbmc_assert(arr[result] == target, "Found element matches target")
+        assert result < len(arr), "Index in bounds"
+        assert arr[result] == target, "Found element matches target"
 
 
 # ============================================
@@ -177,12 +177,12 @@ def test_safe_divide() -> None:
     result = safe_divide(a, b)
 
     # Property: function always returns (doesn't crash)
-    esbmc_assert(True, "Division completed")
+    assert True, "Division completed"
 
     # Property: if b != 0, result * b is close to a
     if b != 0:
         # Note: integer division truncates
-        esbmc_assert(result * b <= a, "Division lower bound")
+        assert result * b <= a, "Division lower bound"
 
 
 # ============================================
@@ -191,8 +191,8 @@ def test_safe_divide() -> None:
 
 def factorial(n: int) -> int:
     """Compute factorial with precondition."""
-    esbmc_assert(n >= 0, "Input must be non-negative")
-    esbmc_assert(n <= 12, "Input must be <= 12 to avoid overflow")
+    assert n >= 0, "Input must be non-negative"
+    assert n <= 12, "Input must be <= 12 to avoid overflow"
 
     if n <= 1:
         return 1
