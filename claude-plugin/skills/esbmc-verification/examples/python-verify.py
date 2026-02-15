@@ -207,16 +207,16 @@ def factorial(n: int) -> int:
 def test_factorial() -> None:
     """Verify factorial properties."""
     n: int = nondet_int()
-    assume(n >= 0 and n <= 10)
+    __ESBMC_assume(n >= 0 and n <= 10)
 
     result = factorial(n)
 
     # Property: factorial is always positive
-    esbmc_assert(result > 0, "Factorial is positive")
+    assert result > 0, "Factorial is positive"
 
     # Property: factorial(n) >= n for n >= 1
     if n >= 1:
-        esbmc_assert(result >= n, "Factorial >= input")
+        assert result >= n, "Factorial >= input"
 
 
 # ============================================
@@ -240,7 +240,7 @@ def test_palindrome() -> None:
     assert is_palindrome("") == True
     assert is_palindrome("a") == True
 
-    esbmc_assert(True, "Palindrome tests passed")
+    assert True, "Palindrome tests passed"
 
 
 # ============================================
@@ -267,7 +267,7 @@ class Stack:
         return True
 
     def pop(self) -> int:
-        esbmc_assert(not self.is_empty(), "Cannot pop from empty stack")
+        assert not self.is_empty(), "Cannot pop from empty stack"
         return self.items.pop()
 
     def size(self) -> int:
@@ -277,14 +277,14 @@ class Stack:
 def test_stack() -> None:
     """Verify stack operations."""
     capacity: int = nondet_int()
-    assume(capacity > 0 and capacity <= 5)
+    __ESBMC_assume(capacity > 0 and capacity <= 5)
 
     stack = Stack(capacity)
-    esbmc_assert(stack.is_empty(), "New stack is empty")
+    assert stack.is_empty(), "New stack is empty"
 
     # Push some elements
     num_ops: int = nondet_int()
-    assume(num_ops >= 0 and num_ops <= 3)
+    __ESBMC_assume(num_ops >= 0 and num_ops <= 3)
 
     for _ in range(num_ops):
         val: int = nondet_int()
@@ -292,14 +292,14 @@ def test_stack() -> None:
             stack.push(val)
 
     # Size invariant
-    esbmc_assert(stack.size() >= 0, "Size non-negative")
-    esbmc_assert(stack.size() <= capacity, "Size within capacity")
+    assert stack.size() >= 0, "Size non-negative"
+    assert stack.size() <= capacity, "Size within capacity"
 
     # Pop if not empty
     if not stack.is_empty():
         old_size: int = stack.size()
         stack.pop()
-        esbmc_assert(stack.size() == old_size - 1, "Pop decreases size")
+        assert stack.size() == old_size - 1, "Pop decreases size"
 
 
 # ============================================
@@ -333,21 +333,21 @@ def bubble_sort(arr: list[int]) -> list[int]:
 def test_bubble_sort() -> None:
     """Verify bubble sort correctness."""
     size: int = nondet_int()
-    assume(size >= 0 and size <= 4)
+    __ESBMC_assume(size >= 0 and size <= 4)
 
     arr: list[int] = []
     for _ in range(size):
         val: int = nondet_int()
-        assume(val > -50 and val < 50)
+        __ESBMC_assume(val > -50 and val < 50)
         arr.append(val)
 
     sorted_arr = bubble_sort(arr)
 
     # Property: result is sorted
-    esbmc_assert(is_sorted(sorted_arr), "Result is sorted")
+    assert is_sorted(sorted_arr), "Result is sorted"
 
     # Property: same length
-    esbmc_assert(len(sorted_arr) == len(arr), "Length preserved")
+    assert len(sorted_arr) == len(arr), "Length preserved"
 
 
 # ============================================
