@@ -85,7 +85,7 @@ Comprehensive security audit with multiple verification passes:
 - Integer overflow detection
 - Concurrency safety (if applicable)
 - Deep verification with higher bounds
-- K-induction proof attempts
+- *k*-Induction proof attempts
 
 ```bash
 /audit src/critical_module.c
@@ -129,6 +129,14 @@ Comprehensive security audit script.
 
 ## Safety Properties
 
+### User-Defined Safety Properties
+Users can specify custom safety properties using `assert` statements:
+
+- `assert(expression)`: The expression must always evaluate to true
+- If an assertion can fail, ESBMC reports a verification failure and provides a counterexample
+
+These allow users to verify functional correctness requirements, invariants, and application-specific safety conditions.
+
 ### Default Checks (Always On)
 - Array bounds violations
 - Division by zero
@@ -152,7 +160,7 @@ esbmc file.c --unwind 10
 ```
 Fast bug finding with fixed loop bounds.
 
-### K-Induction (Unbounded Proofs)
+### *k*-Induction (Unbounded Proofs)
 ```bash
 esbmc file.c --k-induction
 ```
@@ -193,11 +201,9 @@ __ESBMC_atomic_end();
 
 ### Python
 ```python
-from esbmc import nondet_int, assume, esbmc_assert
-
 x: int = nondet_int()
-assume(x > 0)
-esbmc_assert(result >= 0, "Result non-negative")
+__ESBMC_assume(x > 0)
+assert result >= 0, "Result non-negative"
 ```
 
 ## Examples
@@ -325,10 +331,8 @@ esbmc safe_stack.cpp --unwind 10
 
 ```python
 # verify_factorial.py
-from esbmc import nondet_int, assume, esbmc_assert
-
 def factorial(n: int) -> int:
-    esbmc_assert(n >= 0, "Input non-negative")
+    assert n >= 0, "Input non-negative"
 
     if n <= 1:
         return 1
@@ -336,10 +340,10 @@ def factorial(n: int) -> int:
 
 def main():
     n: int = nondet_int()
-    assume(n >= 0 and n <= 10)
+    __ESBMC_assume(n >= 0 and n <= 10)
 
     result = factorial(n)
-    esbmc_assert(result > 0, "Factorial positive")
+    assert result > 0, "Factorial positive"
 
 if __name__ == "__main__":
     main()
