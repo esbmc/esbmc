@@ -350,6 +350,205 @@ def test_bubble_sort() -> None:
     # Property: same length
     assert len(sorted_arr) == len(arr), "Length preserved"
 
+# ============================================
+# Example 9: String Validation with nondet_str
+# ============================================
+
+def validate_email_format(email: str) -> bool:
+    """
+    Simple email format validation.
+    Checks for: non-empty, contains @, has text before and after @
+    """
+    if len(email) == 0:
+        return False
+    
+    # Find @ symbol
+    at_pos: int = -1
+    for i in range(len(email)):
+        if email[i] == '@':
+            if at_pos >= 0:  # Multiple @ symbols
+                return False
+            at_pos = i
+    
+    # Must have @ with text before and after
+    if at_pos <= 0 or at_pos >= len(email) - 1:
+        return False
+    
+    return True
+
+
+def test_email_validation() -> None:
+    """Verify email validation with symbolic strings."""
+    email: str = nondet_str()
+    
+    # Bound string length for verification
+    __ESBMC_assume(len(email) >= 0 and len(email) <= 20)
+    
+    result = validate_email_format(email)
+    
+    # Property: valid emails must have @ symbol
+    if result:
+        has_at: bool = False
+        for char in email:
+            if char == '@':
+                has_at = True
+                break
+        assert has_at, "Valid email must contain @"
+        assert len(email) >= 3, "Valid email has minimum length"
+    
+    # Property: empty string is invalid
+    if len(email) == 0:
+        assert not result, "Empty string is not valid email"
+
+test_email_validation()
+
+# ============================================
+# Example 10: List Operations with nondet_list
+# ============================================
+
+def remove_duplicates(lst: list[int]) -> list[int]:
+    """
+    Remove duplicate elements from list, preserving order.
+    Returns new list with only first occurrence of each element.
+    """
+    result: list[int] = []
+    
+    for elem in lst:
+        # Check if elem already in result
+        found: bool = False
+        for existing in result:
+            if existing == elem:
+                found = True
+                break
+        
+        if not found:
+            result.append(elem)
+    
+    return result
+
+
+def test_remove_duplicates() -> None:
+    """Verify duplicate removal with symbolic lists."""
+    # Create symbolic list of integers
+    lst: list[int] = nondet_list(max_size=5, elem_type=nondet_int())
+    
+    # Bound element values
+    for elem in lst:
+        __ESBMC_assume(elem >= -10 and elem <= 10)
+    
+    result = remove_duplicates(lst)
+    
+    # Property: result has no duplicates
+    for i in range(len(result)):
+        for j in range(i + 1, len(result)):
+            assert result[i] != result[j], "No duplicates in result"
+    
+    # Property: result length <= original length
+    assert len(result) <= len(lst), "Result not longer than input"
+    
+    # Property: all elements in result exist in original
+    for elem in result:
+        found: bool = False
+        for orig in lst:
+            if orig == elem:
+                found = True
+                break
+        assert found, "Result elements from original list"
+    
+    # Property: if input has no duplicates, lengths are equal
+    input_has_dups: bool = False
+    for i in range(len(lst)):
+        for j in range(i + 1, len(lst)):
+            if lst[i] == lst[j]:
+                input_has_dups = True
+                break
+    
+    if not input_has_dups:
+        assert len(result) == len(lst), "No change if no duplicates"
+
+test_remove_duplicates()
+
+# ============================================
+# Example 11: Dictionary Operations with nondet_dict
+# ============================================
+
+def count_value_occurrences(d: dict[str, int], target: int) -> int:
+    """
+    Count how many times a target value appears in dictionary values.
+    """
+    count: int = 0
+    
+    for key in d:
+        if d[key] == target:
+            count = count + 1
+    
+    return count
+
+
+def get_keys_with_value(d: dict[str, int], target: int) -> list[str]:
+    """
+    Return list of all keys that map to the target value.
+    """
+    result: list[str] = []
+    
+    for key in d:
+        if d[key] == target:
+            result.append(key)
+    
+    return result
+
+
+def test_dict_operations() -> None:
+    """Verify dictionary operations with symbolic dictionaries."""
+    # Create symbolic string->int dictionary
+    d: dict[str, int] = nondet_dict(
+        max_size=4,
+        key_type=nondet_str(),
+        value_type=nondet_int()
+    )
+    
+    # Bound values
+    for key in d:
+        __ESBMC_assume(d[key] >= -5 and d[key] <= 5)
+    
+    # Pick a target value to search for
+    target: int = nondet_int()
+    __ESBMC_assume(target >= -5 and target <= 5)
+    
+    count = count_value_occurrences(d, target)
+    keys = get_keys_with_value(d, target)
+    
+    # Property: count matches number of keys found
+    assert count == len(keys), "Count matches keys list length"
+    
+    # Property: count is non-negative and bounded by dict size
+    assert count >= 0, "Count is non-negative"
+    assert count <= len(d), "Count does not exceed dict size"
+    
+    # Property: all returned keys map to target value
+    for key in keys:
+        assert key in d, "Returned key exists in dict"
+        assert d[key] == target, "Returned key maps to target"
+    
+    # Property: if count is 0, keys list is empty
+    if count == 0:
+        assert len(keys) == 0, "Empty keys when count is zero"
+    
+    # Property: no key mapping to target is missed
+    for key in d:
+        if d[key] == target:
+            found: bool = False
+            for k in keys:
+                if k == key:
+                    found = True
+                    break
+            assert found, "All matching keys are found"
+
+test_dict_operations()
+
+# ============================================
+# Main: Run all tests
+# ============================================
 
 # ============================================
 # Main: Run all tests
@@ -365,6 +564,9 @@ def main() -> None:
     test_palindrome()
     test_stack()
     test_bubble_sort()
+    test_email_validation()
+    test_remove_duplicates()
+    test_dict_operations()
 
     print("All tests passed!")
 
