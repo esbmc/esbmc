@@ -856,19 +856,16 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
     return f;
     break;
   case expr2t::expr_ids::constant_int_id:
-  {
-    const ibex::ExprConstant &c =
-      ibex::ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64());
-    f = new ibex::Function(*vars, c);
+    f = new ibex::Function(
+      *vars,
+      ibex::ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64()));
     break;
-  }
   case expr2t::expr_ids::constant_floatbv_id:
-  {
-    const ibex::ExprConstant &c = ibex::ExprConstant::new_scalar(
-      to_constant_floatbv2t(expr).value.to_double());
-    f = new ibex::Function(*vars, c);
+    f = new ibex::Function(
+      *vars,
+      ibex::ExprConstant::new_scalar(
+        to_constant_floatbv2t(expr).value.to_double()));
     break;
-  }
   default:
     f = nullptr;
   }

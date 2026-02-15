@@ -11,7 +11,7 @@ tags:
 ---
 
 🚀 Exciting News! We are pleased to announce our new
-[ESBMC website](esbmc.github.io).
+[ESBMC website](https://esbmc.github.io).
 
 ESBMC 🔍 is a mature, permissively licensed open-source SMT-based bounded model
 checker for C, C++, Python, Rust, and Solidity programs, verifying both single and

@@ -36,6 +36,14 @@ public:
   exprt get_empty_set();
 
   /**
+   * @brief Create a set from an iterable (e.g., set(list) or set(str))
+   * @param iterable Expression for the iterable
+   * @param element AST node for location info
+   * @return Expression representing the set
+   */
+  exprt get_from_iterable(const exprt &iterable, const nlohmann::json &element);
+
+  /**
    * @brief Build set difference operation (set1 - set2)
    * @param lhs Left operand (set expression)
    * @param rhs Right operand (set expression)
