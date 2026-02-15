@@ -91,7 +91,7 @@ esbmc file.c --unwindset L1:5,L2:10
 # Incremental unwinding (find bugs faster)
 esbmc file.c --incremental-bmc
 
-# K-induction for unbounded verification
+# k-induction for unbounded verification
 esbmc file.c --k-induction
 ```
 
@@ -101,12 +101,12 @@ esbmc file.c --k-induction
 |------|----------|---------|
 | Quick bug finding | BMC | `--unwind 10` |
 | Unknown loop bounds | Incremental BMC | `--incremental-bmc` |
-| Prove correctness | K-induction | `--k-induction` |
+| Prove partial correctness | *k*-Induction | `--k-induction` |
 | All violations | Multi-property | `--multi-property` |
 | Large programs | Incremental SMT | `--smt-during-symex` |
 | Concurrent code | Context-bounded | `--context-bound 3` |
 
-For detailed strategy descriptions and configuration, see `references/verification-strategies.md`.
+For detailed descriptions of the strategies and their configurations, see `references/verification-strategies.md`.
 
 ## Solver Selection
 
@@ -131,6 +131,7 @@ Use these in the source code to guide verification.
 | Symbolic float | `__ESBMC_nondet_float()` | `nondet_float()` |
 | Symbolic string | N/A | `nondet_str()` |
 | Symbolic list | N/A | `nondet_list()` |
+| Symbolic dictionary | N/A | `nondet_dict()` |
 | Assumption | `__ESBMC_assume(cond)` | `assume(cond)` |
 | Assertion | `__ESBMC_assert(cond, msg)` | `esbmc_assert(cond, msg)` |
 | Atomic section | `__ESBMC_atomic_begin/end()` | N/A |
