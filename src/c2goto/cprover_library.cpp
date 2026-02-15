@@ -115,6 +115,7 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_list_size",
   "list_hash_string",
   "__ESBMC_list_eq",
+  "__ESBMC_list_set_eq",
   "strncmp",
   "strcmp",
   "strlen",
