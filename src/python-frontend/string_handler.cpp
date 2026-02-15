@@ -564,6 +564,8 @@ exprt string_handler::handle_string_operations(
 
 exprt string_handler::get_array_base_address(const exprt &arr)
 {
+  if (arr.type().is_pointer())
+    return arr;
   exprt index = index_exprt(arr, from_integer(0, index_type()));
   return address_of_exprt(index);
 }

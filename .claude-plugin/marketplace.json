@@ -1,0 +1,36 @@
+{
+  "name": "esbmc-marketplace",
+  "owner": {
+    "name": "Paulo Matos",
+    "email": "pmatos@igalia.com"
+  },
+  "metadata": {
+    "description": "ESBMC software model checker integration for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "esbmc-plugin",
+      "source": "./claude-plugin",
+      "description": "Verify C, C++, Python, Solidity, and Java/Kotlin programs for bugs, memory safety, undefined behavior, and more using ESBMC bounded model checker",
+      "version": "1.0.0",
+      "author": {
+        "name": "Paulo Matos",
+        "email": "pmatos@igalia.com"
+      },
+      "homepage": "https://github.com/esbmc/esbmc",
+      "repository": "https://github.com/esbmc/esbmc",
+      "keywords": [
+        "esbmc",
+        "model-checker",
+        "formal-verification",
+        "static-analysis",
+        "bug-detection",
+        "memory-safety",
+        "bounded-model-checking",
+        "smt-solver"
+      ],
+      "category": "verification"
+    }
+  ]
+}

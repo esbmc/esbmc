@@ -1463,8 +1463,11 @@ void goto_symext::symex_loop_invariant()
   // Get the loop invariant
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
+  auto num_invariants = instruction.get_loop_invariants().size();
   log_status(
-    "Processing {} loop invariant", instruction.get_loop_invariants().size());
+    "Processing {} loop invariant{}",
+    num_invariants,
+    num_invariants == 1 ? "" : "s");
   for (auto &invariant : instruction.get_loop_invariants())
   {
     // rename the variables to match the current symbolic execution state

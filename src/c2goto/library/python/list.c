@@ -208,6 +208,68 @@ bool __ESBMC_list_eq(
   return true;
 }
 
+// Order-insensitive set equality: compare by value only.
+bool __ESBMC_list_set_eq(const PyListObject *l1, const PyListObject *l2)
+{
+  if (!l1 || !l2)
+    return false;
+  if (__ESBMC_same_object(l1, l2))
+    return true;
+  if (l1->size != l2->size)
+    return false;
+
+  size_t n = l1->size;
+  if (n == 0)
+    return true;
+
+  // Track which elements in l2 have been matched.
+  bool *matched = (bool *)__ESBMC_alloca(n * sizeof(bool));
+  size_t i = 0;
+  while (i < n)
+  {
+    matched[i] = false;
+    ++i;
+  }
+
+  i = 0;
+  while (i < n)
+  {
+    const PyObject *a = &l1->items[i];
+    bool found = false;
+
+    size_t j = 0;
+    while (j < n)
+    {
+      if (matched[j])
+      {
+        ++j;
+        continue;
+      }
+
+      const PyObject *b = &l2->items[j];
+      if (a->size != b->size)
+      {
+        ++j;
+        continue;
+      }
+
+      if (__ESBMC_values_equal(a->value, b->value, a->size))
+      {
+        matched[j] = true;
+        found = true;
+        break;
+      }
+      ++j;
+    }
+
+    if (!found)
+      return false;
+    ++i;
+  }
+
+  return true;
+}
+
 PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(index < l->size, "out-of-bounds read in list");

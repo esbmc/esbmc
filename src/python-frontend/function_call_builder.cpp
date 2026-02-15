@@ -287,6 +287,10 @@ symbol_id function_call_builder::build_function_id() const
         arg.contains("func") && arg["func"].contains("id") &&
         arg["func"]["id"] == "range")
         func_name = kGetObjectSize;
+      else if (
+        arg.contains("func") && arg["func"].contains("id") &&
+        arg["func"]["id"] == "set")
+        func_name = kGetObjectSize;
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
