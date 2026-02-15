@@ -647,10 +647,9 @@ private:
   /**
    * @brief Handles type identity checks (value is type_identifier).
    *
-   * In Python, checking if a value "is" a type object is always False
-   * because runtime values are never identical to type objects.
-   * This method detects such comparisons and returns the appropriate
-   * boolean result without generating a comparison expression.
+   * Handles identity checks involving Python type objects.
+   * Type objects are singletons, so identity comparisons between
+   * type objects can be resolved by comparing their identifiers.
    *
    * @param op The operator string ("Is" or "IsNot").
    * @param lhs The left operand expression.

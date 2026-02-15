@@ -277,7 +277,10 @@ public:
   static inline bool is_type_identifier(const std::string &name)
   {
     static const std::unordered_set<std::string> type_identifiers = {
-      "int", "float", "str", "bool", "bytes"};
+      "int", "float", "str", "bool", "bytes",
+      "list", "set", "tuple", "type",
+      "object", "complex", "frozenset"
+    };
     return type_identifiers.find(name) != type_identifiers.end();
   }
 
