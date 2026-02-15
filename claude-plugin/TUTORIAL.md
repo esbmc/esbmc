@@ -64,7 +64,7 @@ This runs ESBMC with default checks (array bounds, null pointers, division by ze
 /verify example.c all
 ```
 
-This enables memory leak checking, overflow checking, and concurrency checking in addition to defaults.
+This enables memory leak, overflow, and concurrency checking in addition to the defaults.
 
 ### Step 4: Run a full audit
 
@@ -78,7 +78,7 @@ This performs six verification passes with increasing depth:
 3. Integer safety
 4. Concurrency (if detected)
 5. Deep verification with higher bounds
-6. K-induction proof attempt
+6. *k*-Induction proof attempt
 
 You receive a structured report with findings per category.
 
@@ -284,8 +284,6 @@ ESBMC can verify Python programs. All functions must have type annotations.
 Create `verify_sort.py`:
 
 ```python
-from esbmc import nondet_int, assume, esbmc_assert
-
 def is_sorted(arr: list[int]) -> bool:
     for i in range(len(arr) - 1):
         if arr[i] > arr[i + 1]:
@@ -305,18 +303,18 @@ def insertion_sort(arr: list[int]) -> list[int]:
 
 def main() -> None:
     size: int = nondet_int()
-    assume(size >= 0 and size <= 4)
+    __ESBMC_assume(size >= 0 and size <= 4)
 
     arr: list[int] = []
     for _ in range(size):
         val: int = nondet_int()
-        assume(val > -50 and val < 50)
+        __ESBMC_assume(val > -50 and val < 50)
         arr.append(val)
 
     sorted_arr = insertion_sort(arr)
 
-    esbmc_assert(is_sorted(sorted_arr), "Result is sorted")
-    esbmc_assert(len(sorted_arr) == len(arr), "Length preserved")
+    assert is_sorted(sorted_arr), "Result is sorted"
+    assert len(sorted_arr) == len(arr), "Length preserved"
 
 if __name__ == "__main__":
     main()
@@ -325,20 +323,20 @@ if __name__ == "__main__":
 ### Step 2: Verify
 
 ```
-/verify verify_sort.py
+/verify verify_sort.py --incremental-bmc
 ```
 
 ### Python Tips
 - Type annotations are **required** on all function parameters and return types
-- Import intrinsics from `esbmc`: `nondet_int`, `nondet_float`, `nondet_bool`, `assume`, `esbmc_assert`
+- Import intrinsics from `esbmc`: `nondet_str` `nondet_int`, `nondet_float`, `nondet_bool`, and `__ESBMC_assume`
 - Use `--generate-pytest-testcase` to get a pytest from a counterexample
 - Use `--nondet-str-length N` to control maximum symbolic string length
-- Keep list sizes small (<=5) for feasible verification times
+- Keep list sizes small (`<=5`) for feasible verification times
 
 ## Part 6: Interpreting Results
 
 ### VERIFICATION SUCCESSFUL
-All properties hold within bounds. For bounded model checking, this means no bugs found up to the unwind limit. For k-induction, this is a full proof.
+All properties are held within bounds. For bounded model checking, this means no bugs found up to the unwind limit. For *k*-induction, this is a partial proof of correctness. ESBMC also offers the option `--termination` to check for total correctness.
 
 ### VERIFICATION FAILED
 A bug was found. The counterexample trace shows:
@@ -349,11 +347,11 @@ A bug was found. The counterexample trace shows:
 Ask Claude to help interpret: "Explain this ESBMC counterexample and suggest a fix."
 
 ### VERIFICATION UNKNOWN
-Verification could not complete. Try:
-- Reducing `--unwind` value
+Verification could not be completed. Try:
+- Increasing `--unwind` value
 - Adding more `__ESBMC_assume` constraints
 - Increasing `--timeout`
-- Using `--incremental-bmc` instead of fixed bounds
+- Using `k-induction` or `--incremental-bmc` instead of fixed bounds
 
 ## Part 7: Verification Strategies
 
@@ -363,7 +361,7 @@ Different verification goals call for different strategies:
 |------|-----------|
 | Quick bug check | `/verify file.c` |
 | Thorough audit | `/audit file.c` |
-| Prove correctness | Ask: "Prove this function correct with k-induction" |
+| Prove partial correctness | Ask: "Prove this function correct with k-induction" |
 | Memory safety | `/verify file.c memory` |
 | Concurrency safety | `/verify threaded.c concurrent` |
 | All checks | `/verify file.c all` |
@@ -417,8 +415,7 @@ __ESBMC_assert(result >= 0, "msg");  // Verify
 
 **Python:**
 ```python
-from esbmc import nondet_int, assume, esbmc_assert
 x: int = nondet_int()
-assume(x > 0 and x < 100)
-esbmc_assert(result >= 0, "msg")
+__ESBMC_assume(x > 0 and x < 100)
+assert result >= 0, "msg"
 ```

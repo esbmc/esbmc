@@ -1,6 +1,6 @@
 ---
 name: esbmc-verification
-description: This skill should be used when the user asks to "verify code", "run ESBMC", "model check", "check for bugs", "find memory leaks", "detect buffer overflow", "find undefined behavior", "check for race conditions", "detect deadlocks", "prove correctness", "add verification intrinsics", "add nondet values", "add preconditions", "make code verifiable", or mentions bounded model checking, SMT solving, formal methods, or safety properties. Provides guidance for verifying C, C++, Python, Solidity, CUDA, and Java/Kotlin programs with ESBMC and adding verification annotations.
+description: This skill should be used when the user asks to "verify code", "run ESBMC", "model check", "check for bugs", "find memory leaks", "detect buffer overflow", "find undefined behavior", "check for race conditions", "detect deadlocks", "prove correctness", "add verification intrinsics", "add nondet values", "add type annotations", "add preconditions", "make code verifiable", or mentions bounded model checking, SMT solving, formal methods, or safety properties. Provides guidance for verifying C, C++, Python, Solidity, CUDA, and Java/Kotlin programs with ESBMC and adding verification annotations.
 version: 1.0.0
 ---
 
@@ -71,6 +71,7 @@ For language-specific options and examples, see `references/language-specific.md
 - `--deadlock-check` / `--data-races-check`: Concurrency safety
 - `--nan-check`: Floating-point NaN
 - `--ub-shift-check`: Undefined shift behavior
+- `--is-instance-check`: Enable runtime isinstance assertions for annotated Python code
 
 ### Disable Specific Checks
 `--no-bounds-check`, `--no-pointer-check`, `--no-div-by-zero-check`, `--no-assertions`
@@ -90,7 +91,7 @@ esbmc file.c --unwindset L1:5,L2:10
 # Incremental unwinding (find bugs faster)
 esbmc file.c --incremental-bmc
 
-# K-induction for unbounded verification
+# k-induction for unbounded verification
 esbmc file.c --k-induction
 ```
 
@@ -100,12 +101,12 @@ esbmc file.c --k-induction
 |------|----------|---------|
 | Quick bug finding | BMC | `--unwind 10` |
 | Unknown loop bounds | Incremental BMC | `--incremental-bmc` |
-| Prove correctness | K-induction | `--k-induction` |
+| Prove partial correctness | *k*-Induction | `--k-induction` |
 | All violations | Multi-property | `--multi-property` |
 | Large programs | Incremental SMT | `--smt-during-symex` |
 | Concurrent code | Context-bounded | `--context-bound 3` |
 
-For detailed strategy descriptions and configuration, see `references/verification-strategies.md`.
+For detailed descriptions of the strategies and their configurations, see `references/verification-strategies.md`.
 
 ## Solver Selection
 
@@ -118,7 +119,7 @@ esbmc file.c --boolector # Efficient bit-vectors
 
 ## ESBMC Intrinsics
 
-Use these in source code to guide verification.
+Use these in the source code to guide verification.
 
 ### Quick Reference
 
@@ -128,6 +129,9 @@ Use these in source code to guide verification.
 | Symbolic uint | `__ESBMC_nondet_uint()` | N/A |
 | Symbolic bool | `__ESBMC_nondet_bool()` | `nondet_bool()` |
 | Symbolic float | `__ESBMC_nondet_float()` | `nondet_float()` |
+| Symbolic string | N/A | `nondet_str()` |
+| Symbolic list | N/A | `nondet_list()` |
+| Symbolic dictionary | N/A | `nondet_dict()` |
 | Assumption | `__ESBMC_assume(cond)` | `assume(cond)` |
 | Assertion | `__ESBMC_assert(cond, msg)` | `esbmc_assert(cond, msg)` |
 | Atomic section | `__ESBMC_atomic_begin/end()` | N/A |
@@ -141,10 +145,9 @@ __ESBMC_assert(result >= 0, "msg");  // Verify property
 ```
 
 ```python
-from esbmc import nondet_int, assume, esbmc_assert
 x: int = nondet_int()
-assume(x > 0 and x < 100)
-esbmc_assert(result >= 0, "msg")
+__ESBMC_assume(x > 0 and x < 100)
+assert result >= 0, "msg"
 ```
 
 For the step-by-step process of adding intrinsics to code, see `references/adding-intrinsics.md`.

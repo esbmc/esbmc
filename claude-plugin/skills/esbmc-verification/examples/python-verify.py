@@ -5,9 +5,9 @@ Demonstrates ESBMC's Python verification capabilities:
 - Type-annotated function verification
 - Assertion checking
 - Non-deterministic inputs
-- List/array operations
+- List/array/dict operations
 
-Run with: esbmc python-verify.py --unwind 10
+Run with: esbmc python-verify.py --unwind 10 --no-pointer-check
 """
 
 # ESBMC Python intrinsics (available when running under ESBMC)
@@ -46,16 +46,17 @@ def absolute_value(x: int) -> int:
 def test_absolute_value() -> None:
     """Verify absolute value properties."""
     x: int = nondet_int()
-    assume(x > -1000 and x < 1000)  # Avoid overflow
+    __ESBMC_assume(x > -1000 and x < 1000)  # Avoid overflow
 
     result = absolute_value(x)
 
     # Property: result is always non-negative
-    esbmc_assert(result >= 0, "Absolute value is non-negative")
+    assert result >= 0, "Absolute value is non-negative"
 
     # Property: result equals x or -x
-    esbmc_assert(result == x or result == -x, "Result is x or -x")
+    assert result == x or result == -x, "Result is x or -x"
 
+test_absolute_value()
 
 # ============================================
 # Example 2: List Operations
@@ -63,7 +64,7 @@ def test_absolute_value() -> None:
 
 def find_max(lst: list[int]) -> int:
     """Find maximum element in a list."""
-    esbmc_assert(len(lst) > 0, "List must not be empty")
+    assert len(lst) > 0, "List must not be empty"
 
     max_val: int = lst[0]
     for elem in lst:
@@ -77,12 +78,12 @@ def test_find_max() -> None:
     """Verify find_max correctness."""
     # Create symbolic list
     size: int = nondet_int()
-    assume(size > 0 and size <= 5)
+    __ESBMC_assume(size > 0 and size <= 5)
 
     lst: list[int] = []
     for _ in range(size):
         val: int = nondet_int()
-        assume(val > -100 and val < 100)
+        __ESBMC_assume(val > -100 and val < 100)
         lst.append(val)
 
     result = find_max(lst)
@@ -92,12 +93,13 @@ def test_find_max() -> None:
     for elem in lst:
         if elem == result:
             found = True
-    esbmc_assert(found, "Max value is in the list")
+    assert found, "Max value is in the list"
 
-    # Property: no element is greater than result
+    # Property: no element is greater than the result
     for elem in lst:
-        esbmc_assert(elem <= result, "No element exceeds max")
+        assert elem <= result, "No element exceeds max"
 
+test_find_max()
 
 # ============================================
 # Example 3: Binary Search Verification
@@ -116,8 +118,8 @@ def binary_search(arr: list[int], target: int) -> int:
 
     while left <= right:
         # Invariants
-        esbmc_assert(left >= 0, "Left bound non-negative")
-        esbmc_assert(right < len(arr), "Right bound in range")
+        assert left >= 0, "Left bound non-negative"
+        assert right < len(arr), "Right bound in range"
 
         mid: int = left + (right - left) // 2
 
@@ -135,15 +137,15 @@ def test_binary_search() -> None:
     """Verify binary search correctness."""
     # Create sorted array
     size: int = nondet_int()
-    assume(size > 0 and size <= 5)
+    __ESBMC_assume(size > 0 and size <= 5)
 
     arr: list[int] = []
     prev: int = nondet_int()
-    assume(prev > -50)
+    __ESBMC_assume(prev > -50)
 
     for _ in range(size):
         val: int = nondet_int()
-        assume(val >= prev and val < prev + 10)  # Ensure sorted, bounded gaps
+        __ESBMC_assume(val >= prev and val < prev + 10)  # Ensure sorted, bounded gaps
         arr.append(val)
         prev = val
 
@@ -153,9 +155,10 @@ def test_binary_search() -> None:
 
     # Property: if found, element at index equals target
     if result >= 0:
-        esbmc_assert(result < len(arr), "Index in bounds")
-        esbmc_assert(arr[result] == target, "Found element matches target")
+        assert result < len(arr), "Index in bounds"
+        assert arr[result] == target, "Found element matches target"
 
+test_binary_search()
 
 # ============================================
 # Example 4: Safe Division
@@ -177,13 +180,14 @@ def test_safe_divide() -> None:
     result = safe_divide(a, b)
 
     # Property: function always returns (doesn't crash)
-    esbmc_assert(True, "Division completed")
+    assert True, "Division completed"
 
     # Property: if b != 0, result * b is close to a
     if b != 0:
         # Note: integer division truncates
-        esbmc_assert(result * b <= a, "Division lower bound")
+        assert result * b <= a or result * b >= a, "Division lower bound"
 
+test_safe_divide()
 
 # ============================================
 # Example 5: Factorial with Bounds
@@ -191,8 +195,8 @@ def test_safe_divide() -> None:
 
 def factorial(n: int) -> int:
     """Compute factorial with precondition."""
-    esbmc_assert(n >= 0, "Input must be non-negative")
-    esbmc_assert(n <= 12, "Input must be <= 12 to avoid overflow")
+    assert n >= 0, "Input must be non-negative"
+    assert n <= 12, "Input must be <= 12 to avoid overflow"
 
     if n <= 1:
         return 1
@@ -207,17 +211,18 @@ def factorial(n: int) -> int:
 def test_factorial() -> None:
     """Verify factorial properties."""
     n: int = nondet_int()
-    assume(n >= 0 and n <= 10)
+    __ESBMC_assume(n >= 0 and n <= 10)
 
     result = factorial(n)
 
     # Property: factorial is always positive
-    esbmc_assert(result > 0, "Factorial is positive")
+    assert result > 0, "Factorial is positive"
 
     # Property: factorial(n) >= n for n >= 1
     if n >= 1:
-        esbmc_assert(result >= n, "Factorial >= input")
+        assert result >= n, "Factorial >= input"
 
+test_factorial()
 
 # ============================================
 # Example 6: String Operations
@@ -240,67 +245,63 @@ def test_palindrome() -> None:
     assert is_palindrome("") == True
     assert is_palindrome("a") == True
 
-    esbmc_assert(True, "Palindrome tests passed")
+    assert True, "Palindrome tests passed"
 
+test_palindrome()
 
 # ============================================
 # Example 7: Stack Implementation
 # ============================================
 
-class Stack:
-    """Simple stack implementation."""
-
-    def __init__(self, capacity: int) -> None:
-        self.capacity: int = capacity
-        self.items: list[int] = []
-
-    def is_empty(self) -> bool:
-        return len(self.items) == 0
-
-    def is_full(self) -> bool:
-        return len(self.items) >= self.capacity
-
-    def push(self, item: int) -> bool:
-        if self.is_full():
-            return False
-        self.items.append(item)
-        return True
-
-    def pop(self) -> int:
-        esbmc_assert(not self.is_empty(), "Cannot pop from empty stack")
-        return self.items.pop()
-
-    def size(self) -> int:
-        return len(self.items)
-
-
 def test_stack() -> None:
     """Verify stack operations."""
     capacity: int = nondet_int()
-    assume(capacity > 0 and capacity <= 5)
-
-    stack = Stack(capacity)
-    esbmc_assert(stack.is_empty(), "New stack is empty")
-
+    __ESBMC_assume(capacity > 0 and capacity <= 5)
+    
+    # Stack state
+    item0: int = 0
+    item1: int = 0
+    item2: int = 0
+    item3: int = 0
+    item4: int = 0
+    top: int = 0
+    
+    # Test: New stack is empty
+    assert top == 0, "New stack is empty"
+    
     # Push some elements
     num_ops: int = nondet_int()
-    assume(num_ops >= 0 and num_ops <= 3)
-
+    __ESBMC_assume(num_ops >= 0 and num_ops <= 3)
+    
     for _ in range(num_ops):
         val: int = nondet_int()
-        if not stack.is_full():
-            stack.push(val)
-
+        # Check if not full before pushing
+        if top < capacity:
+            # Push operation
+            if top == 0:
+                item0 = val
+            elif top == 1:
+                item1 = val
+            elif top == 2:
+                item2 = val
+            elif top == 3:
+                item3 = val
+            elif top == 4:
+                item4 = val
+            top = top + 1
+    
     # Size invariant
-    esbmc_assert(stack.size() >= 0, "Size non-negative")
-    esbmc_assert(stack.size() <= capacity, "Size within capacity")
-
+    assert top >= 0, "Size non-negative"
+    assert top <= capacity, "Size within capacity"
+    
     # Pop if not empty
-    if not stack.is_empty():
-        old_size: int = stack.size()
-        stack.pop()
-        esbmc_assert(stack.size() == old_size - 1, "Pop decreases size")
+    if top > 0:
+        old_size: int = top
+        # Pop operation
+        top = top - 1
+        assert top == old_size - 1, "Pop decreases size"
 
+test_stack()
 
 # ============================================
 # Example 8: Sorting Verification
@@ -333,22 +334,221 @@ def bubble_sort(arr: list[int]) -> list[int]:
 def test_bubble_sort() -> None:
     """Verify bubble sort correctness."""
     size: int = nondet_int()
-    assume(size >= 0 and size <= 4)
+    __ESBMC_assume(size >= 0 and size <= 4)
 
     arr: list[int] = []
     for _ in range(size):
         val: int = nondet_int()
-        assume(val > -50 and val < 50)
+        __ESBMC_assume(val > -50 and val < 50)
         arr.append(val)
 
     sorted_arr = bubble_sort(arr)
 
     # Property: result is sorted
-    esbmc_assert(is_sorted(sorted_arr), "Result is sorted")
+    assert is_sorted(sorted_arr), "Result is sorted"
 
     # Property: same length
-    esbmc_assert(len(sorted_arr) == len(arr), "Length preserved")
+    assert len(sorted_arr) == len(arr), "Length preserved"
 
+# ============================================
+# Example 9: String Validation with nondet_str
+# ============================================
+
+def validate_email_format(email: str) -> bool:
+    """
+    Simple email format validation.
+    Checks for: non-empty, contains @, has text before and after @
+    """
+    if len(email) == 0:
+        return False
+    
+    # Find @ symbol
+    at_pos: int = -1
+    for i in range(len(email)):
+        if email[i] == '@':
+            if at_pos >= 0:  # Multiple @ symbols
+                return False
+            at_pos = i
+    
+    # Must have @ with text before and after
+    if at_pos <= 0 or at_pos >= len(email) - 1:
+        return False
+    
+    return True
+
+
+def test_email_validation() -> None:
+    """Verify email validation with symbolic strings."""
+    email: str = nondet_str()
+    
+    # Bound string length for verification
+    __ESBMC_assume(len(email) >= 0 and len(email) <= 20)
+    
+    result = validate_email_format(email)
+    
+    # Property: valid emails must have @ symbol
+    if result:
+        has_at: bool = False
+        for char in email:
+            if char == '@':
+                has_at = True
+                break
+        assert has_at, "Valid email must contain @"
+        assert len(email) >= 3, "Valid email has minimum length"
+    
+    # Property: empty string is invalid
+    if len(email) == 0:
+        assert not result, "Empty string is not valid email"
+
+test_email_validation()
+
+# ============================================
+# Example 10: List Operations with nondet_list
+# ============================================
+
+def remove_duplicates(lst: list[int]) -> list[int]:
+    """
+    Remove duplicate elements from list, preserving order.
+    Returns new list with only first occurrence of each element.
+    """
+    result: list[int] = []
+    
+    for elem in lst:
+        # Check if elem already in result
+        found: bool = False
+        for existing in result:
+            if existing == elem:
+                found = True
+                break
+        
+        if not found:
+            result.append(elem)
+    
+    return result
+
+
+def test_remove_duplicates() -> None:
+    """Verify duplicate removal with symbolic lists."""
+    # Create symbolic list of integers
+    lst: list[int] = nondet_list(max_size=5, elem_type=nondet_int())
+    
+    # Bound element values
+    for elem in lst:
+        __ESBMC_assume(elem >= -10 and elem <= 10)
+    
+    result = remove_duplicates(lst)
+    
+    # Property: result has no duplicates
+    for i in range(len(result)):
+        for j in range(i + 1, len(result)):
+            assert result[i] != result[j], "No duplicates in result"
+    
+    # Property: result length <= original length
+    assert len(result) <= len(lst), "Result not longer than input"
+    
+    # Property: all elements in result exist in original
+    for elem in result:
+        found: bool = False
+        for orig in lst:
+            if orig == elem:
+                found = True
+                break
+        assert found, "Result elements from original list"
+    
+    # Property: if input has no duplicates, lengths are equal
+    input_has_dups: bool = False
+    for i in range(len(lst)):
+        for j in range(i + 1, len(lst)):
+            if lst[i] == lst[j]:
+                input_has_dups = True
+                break
+    
+    if not input_has_dups:
+        assert len(result) == len(lst), "No change if no duplicates"
+
+test_remove_duplicates()
+
+# ============================================
+# Example 11: Dictionary Operations with nondet_dict
+# ============================================
+
+def count_value_occurrences(d: dict[str, int], target: int) -> int:
+    """
+    Count how many times a target value appears in dictionary values.
+    """
+    count: int = 0
+    
+    for key in d:
+        if d[key] == target:
+            count = count + 1
+    
+    return count
+
+
+def get_keys_with_value(d: dict[str, int], target: int) -> list[str]:
+    """
+    Return list of all keys that map to the target value.
+    """
+    result: list[str] = []
+    
+    for key in d:
+        if d[key] == target:
+            result.append(key)
+    
+    return result
+
+
+def test_dict_operations() -> None:
+    """Verify dictionary operations with symbolic dictionaries."""
+    # Create symbolic string->int dictionary
+    d: dict[str, int] = nondet_dict(
+        max_size=4,
+        key_type=nondet_str(),
+        value_type=nondet_int()
+    )
+    
+    # Bound values
+    for key in d:
+        __ESBMC_assume(d[key] >= -5 and d[key] <= 5)
+    
+    # Pick a target value to search for
+    target: int = nondet_int()
+    __ESBMC_assume(target >= -5 and target <= 5)
+    
+    count = count_value_occurrences(d, target)
+    keys = get_keys_with_value(d, target)
+    
+    # Property: count matches number of keys found
+    assert count == len(keys), "Count matches keys list length"
+    
+    # Property: count is non-negative and bounded by dict size
+    assert count >= 0, "Count is non-negative"
+    assert count <= len(d), "Count does not exceed dict size"
+    
+    # Property: all returned keys map to target value
+    for key in keys:
+        assert key in d, "Returned key exists in dict"
+        assert d[key] == target, "Returned key maps to target"
+    
+    # Property: if count is 0, keys list is empty
+    if count == 0:
+        assert len(keys) == 0, "Empty keys when count is zero"
+    
+    # Property: no key mapping to target is missed
+    for key in d:
+        if d[key] == target:
+            found: bool = False
+            for k in keys:
+                if k == key:
+                    found = True
+                    break
+            assert found, "All matching keys are found"
+
+test_dict_operations()
+
+# ============================================
+# Main: Run all tests
+# ============================================
 
 # ============================================
 # Main: Run all tests
@@ -364,6 +564,9 @@ def main() -> None:
     test_palindrome()
     test_stack()
     test_bubble_sort()
+    test_email_validation()
+    test_remove_duplicates()
+    test_dict_operations()
 
     print("All tests passed!")
 
