@@ -5,9 +5,9 @@ Demonstrates ESBMC's Python verification capabilities:
 - Type-annotated function verification
 - Assertion checking
 - Non-deterministic inputs
-- List/array operations
+- List/array/dict operations
 
-Run with: esbmc python-verify.py --unwind 10
+Run with: esbmc python-verify.py --unwind 10 --no-pointer-check
 """
 
 # ESBMC Python intrinsics (available when running under ESBMC)
