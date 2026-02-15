@@ -27,6 +27,7 @@ class module_locator;
 class tuple_handler;
 class python_typechecking;
 class python_class_builder;
+class python_lambda;
 
 /**
  * @class python_converter
@@ -55,6 +56,14 @@ public:
   void set_current_lhs(exprt *value)
   {
     current_lhs = value;
+  }
+  void set_current_func_name(const std::string &name)
+  {
+    current_func_name_ = name;
+  }
+  void set_current_element_type(const typet &type)
+  {
+    current_element_type = type;
   }
   symbolt *add_symbol_and_get_ptr(symbolt &symbol)
   {
@@ -636,6 +645,27 @@ private:
   // =========================================================================
 
   /**
+   * @brief Handles type identity checks (value is type_identifier).
+   *
+   * Handles identity checks involving Python type objects.
+   * Type objects are singletons, so identity comparisons between
+   * type objects can be resolved by comparing their identifiers.
+   *
+   * @param op The operator string ("Is" or "IsNot").
+   * @param lhs The left operand expression.
+   * @param rhs The right operand expression.
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @return Boolean result expression, or nil_exprt if not a type identity check.
+   */
+  exprt handle_type_identity_check(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
    * @param rhs Right operand expression (may be modified).
@@ -771,6 +801,15 @@ private:
   void
   promote_ieee_operands(exprt &bin_expr, const exprt &lhs, const exprt &rhs);
 
+  /**
+   * @brief Infers function return type from return statements in the body.
+   *
+   * @param body The JSON AST node representing the function body statements.
+   * @return The inferred return type (struct_typet for tuples), or empty_typet
+   *         if no inferrable return type is found.
+   */
+  typet infer_return_type_from_body(const nlohmann::json &body);
+
   // =========================================================================
   // String method helpers
   // =========================================================================
@@ -818,6 +857,8 @@ private:
   python_math math_handler_;
   tuple_handler *tuple_handler_;
   python_dict_handler *dict_handler_;
+  python_typechecking *typechecker_ = nullptr;
+  python_lambda *lambda_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
@@ -837,6 +878,4 @@ private:
   std::vector<std::string> scope_stack_;
 
   exprt extract_type_from_boolean_op(const exprt &bool_op);
-
-  python_typechecking *typechecker_ = nullptr;
 };

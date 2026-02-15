@@ -14,8 +14,31 @@
 #include <util/mp_arith.h>
 #include <util/python_types.h>
 #include <util/symbolic_types.h>
+#include <util/config.h>
 #include <string>
 #include <functional>
+
+// Default depth for list comparison if option not set
+static const int DEFAULT_LIST_COMPARE_DEPTH = 4;
+
+static int get_list_compare_depth()
+{
+  std::string opt_value =
+    config.options.get_option("python-list-compare-depth");
+  if (!opt_value.empty())
+  {
+    try
+    {
+      int depth = std::stoi(opt_value);
+      if (depth > 0)
+        return depth;
+    }
+    catch (...)
+    {
+    }
+  }
+  return DEFAULT_LIST_COMPARE_DEPTH;
+}
 
 // Extract element type from annotation
 static typet get_elem_type_from_annotation(
@@ -1530,6 +1553,66 @@ exprt python_list::compare(
   assert(lhs_symbol);
   assert(rhs_symbol);
 
+  const bool lhs_is_set = lhs_symbol->is_set;
+  const bool rhs_is_set = rhs_symbol->is_set;
+  if (lhs_is_set || rhs_is_set)
+  {
+    if (!(lhs_is_set && rhs_is_set))
+      return gen_boolean(op == "NotEq");
+
+    symbolt *set_eq_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_eq");
+    if (!set_eq_func)
+    {
+      symbolt new_symbol;
+      new_symbol.name = "__ESBMC_list_set_eq";
+      new_symbol.id = "c:@F@__ESBMC_list_set_eq";
+      new_symbol.mode = "C";
+      new_symbol.is_extern = true;
+
+      code_typet func_type;
+      func_type.return_type() = bool_type();
+      typet list_ptr = converter_.get_type_handler().get_list_type();
+      func_type.arguments().push_back(code_typet::argumentt(list_ptr));
+      func_type.arguments().push_back(code_typet::argumentt(list_ptr));
+      new_symbol.type = func_type;
+
+      converter_.symbol_table().add(new_symbol);
+      set_eq_func =
+        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_eq");
+    }
+
+    locationt loc = converter_.get_location_from_decl(list_value_);
+    symbolt &eq_ret = converter_.create_tmp_symbol(
+      list_value_, "set_eq_tmp", bool_type(), gen_boolean(false));
+    code_declt eq_ret_decl(symbol_expr(eq_ret));
+    converter_.add_instruction(eq_ret_decl);
+
+    code_function_callt set_eq_call;
+    set_eq_call.function() = symbol_expr(*set_eq_func);
+    set_eq_call.lhs() = symbol_expr(eq_ret);
+    set_eq_call.arguments().push_back(
+      lhs_symbol->type.is_pointer()
+        ? symbol_expr(*lhs_symbol)
+        : address_of_exprt(symbol_expr(*lhs_symbol)));
+    set_eq_call.arguments().push_back(
+      rhs_symbol->type.is_pointer()
+        ? symbol_expr(*rhs_symbol)
+        : address_of_exprt(symbol_expr(*rhs_symbol)));
+    set_eq_call.type() = bool_type();
+    set_eq_call.location() = loc;
+    converter_.add_instruction(set_eq_call);
+
+    exprt cond("=", bool_type());
+    cond.copy_to_operands(symbol_expr(eq_ret));
+    if (op == "Eq")
+      cond.copy_to_operands(gen_boolean(true));
+    else
+      cond.copy_to_operands(gen_boolean(false));
+
+    return cond;
+  }
+
   // Compute list type_id for nested list detection
   const typet &list_type = l1.type();
   const std::string list_type_name =
@@ -1543,13 +1626,20 @@ exprt python_list::compare(
   code_declt eq_ret_decl(symbol_expr(eq_ret));
   converter_.add_instruction(eq_ret_decl);
 
+  // Get max depth from configuration option
+  int max_depth = get_list_compare_depth();
+  constant_exprt max_depth_expr(size_type());
+  max_depth_expr.set_value(
+    integer2binary(max_depth, config.ansi_c.address_width));
+
   code_function_callt list_eq_func_call;
   list_eq_func_call.function() = symbol_expr(*list_eq_func_sym);
   list_eq_func_call.lhs() = symbol_expr(eq_ret);
   // passing arguments
   list_eq_func_call.arguments().push_back(symbol_expr(*lhs_symbol)); // l1
   list_eq_func_call.arguments().push_back(symbol_expr(*rhs_symbol)); // l2
-  list_eq_func_call.arguments().push_back(list_type_id); // list_type_id
+  list_eq_func_call.arguments().push_back(list_type_id);   // list_type_id
+  list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
@@ -2413,4 +2503,259 @@ exprt python_list::extract_pyobject_value(
     deref.op0() = tc;
     return deref;
   }
+}
+
+typet python_list::check_homogeneous_list_types(
+  const std::string &list_id,
+  const std::string &func_name)
+{
+  auto it = list_type_map.find(list_id);
+
+  if (it == list_type_map.end() || it->second.empty())
+    return typet();
+
+  const TypeInfo &type_info = it->second;
+  size_t list_size = type_info.size();
+
+  // Get the first element's type
+  typet elem_type = type_info[0].second;
+
+  // Check whether a type is a string type (char array or char pointer)
+  auto is_string_type = [](const typet &t) -> bool {
+    return (t.is_array() && t.subtype() == char_type()) ||
+           (t.is_pointer() && t.subtype() == char_type());
+  };
+
+  // Check all other elements have the same type
+  for (size_t i = 1; i < list_size; i++)
+  {
+    const typet &current_elem_type = type_info[i].second;
+
+    // For string types, all char arrays and char pointers are considered compatible
+    if (is_string_type(elem_type) && is_string_type(current_elem_type))
+      continue;
+
+    // For non-string types, require exact match
+    if (elem_type != current_elem_type)
+    {
+      throw std::runtime_error(
+        "Type mismatch in " + func_name +
+        "() call: list contains mixed types. "
+        "ESBMC currently requires all elements to have the same type for " +
+        func_name + "().");
+    }
+  }
+
+  return elem_type;
+}
+
+exprt python_list::build_list_from_range(
+  python_converter &converter,
+  const nlohmann::json &range_args,
+  const nlohmann::json &element)
+{
+  // Validate argument count
+  if (range_args.empty() || range_args.size() > 3)
+    throw std::runtime_error("range() takes 1 to 3 arguments");
+
+  // Extract constant integer, handling UnaryOp for negative numbers
+  auto extract_constant =
+    [&](const nlohmann::json &arg) -> std::optional<long long> {
+    exprt expr = converter.get_expr(arg);
+
+    if (expr.is_constant())
+      return binary2integer(expr.value().as_string(), expr.type().is_signedbv())
+        .to_int64();
+
+    // Handle UnaryOp (e.g., -1)
+    if (expr.id() == "unary-" && expr.operands().size() == 1)
+    {
+      const exprt &operand = expr.operands()[0];
+      if (operand.is_constant())
+      {
+        long long val =
+          binary2integer(
+            operand.value().as_string(), operand.type().is_signedbv())
+            .to_int64();
+        return -val;
+      }
+    }
+
+    return std::nullopt;
+  };
+
+  // Extract all arguments
+  std::optional<long long> arg0 = extract_constant(range_args[0]);
+  std::optional<long long> arg1;
+  std::optional<long long> arg2;
+
+  if (range_args.size() > 1)
+    arg1 = extract_constant(range_args[1]);
+  if (range_args.size() > 2)
+    arg2 = extract_constant(range_args[2]);
+
+  // Check if all required arguments are constant
+  const bool all_constant = arg0.has_value() &&
+                            (range_args.size() <= 1 || arg1.has_value()) &&
+                            (range_args.size() <= 2 || arg2.has_value());
+
+  // Handle symbolic (non-constant) case
+  if (!all_constant)
+  {
+    return handle_symbolic_range(converter, range_args, element);
+  }
+
+  // All arguments are constant
+  return build_concrete_range(converter, range_args, element, arg0, arg1, arg2);
+}
+
+exprt python_list::handle_symbolic_range(
+  python_converter &converter,
+  const nlohmann::json &range_args,
+  const nlohmann::json &element)
+{
+  if (range_args.size() == 1)
+  {
+    // range(n) case: create list with symbolic size n
+    exprt n_expr = converter.get_expr(range_args[0]);
+
+    // Create an empty list using existing create_list infrastructure
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    converter.copy_location_fields_from_decl(element, list_node);
+
+    python_list temp_list(converter, list_node);
+    exprt list_expr = temp_list.get();
+
+    // Set symbolic size using helper method
+    set_list_symbolic_size(converter, list_expr, n_expr, element);
+
+    return list_expr;
+  }
+
+  // For multi-argument symbolic ranges, return empty list
+  nlohmann::json empty_list_node;
+  empty_list_node["_type"] = "List";
+  empty_list_node["elts"] = nlohmann::json::array();
+  converter.copy_location_fields_from_decl(element, empty_list_node);
+  python_list list(converter, empty_list_node);
+  return list.get();
+}
+
+void python_list::set_list_symbolic_size(
+  python_converter &converter,
+  exprt &list_expr,
+  const exprt &size_expr,
+  const nlohmann::json &element)
+{
+  if (!list_expr.type().is_pointer())
+    return;
+
+  typet pointee_type = list_expr.type().subtype();
+
+  // Follow symbol types to get actual struct type
+  if (pointee_type.is_symbol())
+    pointee_type = converter.ns.follow(pointee_type);
+
+  if (!pointee_type.is_struct())
+    return;
+
+  const struct_typet &struct_type = to_struct_type(pointee_type);
+
+  // Find and update the size member
+  for (const auto &comp : struct_type.components())
+  {
+    if (comp.get_name() == "size")
+    {
+      // Create assignment: list->size = n
+      dereference_exprt deref(list_expr, pointee_type);
+      member_exprt size_member(deref, comp.get_name(), comp.type());
+      exprt size_value = typecast_exprt(size_expr, comp.type());
+      code_assignt size_assignment(size_member, size_value);
+
+      size_assignment.location() = element.contains("lineno")
+                                     ? converter.get_location_from_decl(element)
+                                     : locationt();
+
+      converter.current_block->operands().push_back(size_assignment);
+      break;
+    }
+  }
+}
+
+exprt python_list::build_concrete_range(
+  python_converter &converter,
+  const nlohmann::json &range_args,
+  const nlohmann::json &element,
+  const std::optional<long long> &arg0,
+  const std::optional<long long> &arg1,
+  const std::optional<long long> &arg2)
+{
+  // Determine start, stop, step based on argument count
+  long long start, stop, step;
+
+  switch (range_args.size())
+  {
+  case 1:
+    start = 0;
+    stop = arg0.value();
+    step = 1;
+    break;
+
+  case 2:
+    start = arg0.value();
+    stop = arg1.value();
+    step = 1;
+    break;
+
+  case 3:
+    start = arg0.value();
+    stop = arg1.value();
+    step = arg2.value();
+    break;
+
+  default:
+    throw std::runtime_error("Invalid range argument count");
+  }
+
+  // Validate step
+  if (step == 0)
+    throw std::runtime_error("range() step argument must not be zero");
+
+  // Calculate and validate range size
+  long long range_size;
+  if (step > 0)
+    range_size = std::max(0LL, (stop - start + step - 1) / step);
+  else
+    range_size = std::max(0LL, (stop - start + step + 1) / step);
+
+  constexpr long long MAX_RANGE_SIZE = 10000;
+  if (range_size > MAX_RANGE_SIZE)
+  {
+    throw std::runtime_error(
+      "range() size too large for expansion: " + std::to_string(range_size) +
+      " elements (max: " + std::to_string(MAX_RANGE_SIZE) + ")");
+  }
+
+  // Build the list of elements
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+
+  // Generate list elements
+  for (long long i = start; (step > 0) ? (i < stop) : (i > stop); i += step)
+  {
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = i;
+    elem["kind"] = nullptr;
+    converter.copy_location_fields_from_decl(element, elem);
+    list_node["elts"].push_back(elem);
+  }
+
+  converter.copy_location_fields_from_decl(element, list_node);
+
+  python_list list(converter, list_node);
+  return list.get();
 }

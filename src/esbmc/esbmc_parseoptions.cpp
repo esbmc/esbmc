@@ -21,6 +21,7 @@ extern "C"
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
+#include <util/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <util/expr_util.h>
@@ -58,8 +59,10 @@ extern "C"
 
 #ifndef _WIN32
 #  include <sys/wait.h>
-#  include <execinfo.h>
 #  include <fcntl.h>
+#  ifdef __GLIBC__
+#    include <execinfo.h>
+#  endif
 #endif
 
 #ifdef ENABLE_GOTO_CONTRACTOR
@@ -94,10 +97,8 @@ struct resultt
 void timeout_handler(int)
 {
   log_error("Timed out");
-  // Unfortunately some highly useful pieces of code hook themselves into
-  // aexit and attempt to free some memory. That doesn't really make sense to
-  // occur on exit, but more importantly doesn't mix well with signal handlers,
-  // and results in the allocator locking against itself. So use _exit instead
+  file_operations::cleanup_registered_tmps();
+  // Use _exit to avoid atexit handlers that may deadlock the allocator
   _exit(1);
 }
 #endif
@@ -128,9 +129,11 @@ static void segfault_handler(int sig)
 {
   ::signal(sig, SIG_DFL);
   void *buffer[BT_BUF_SIZE];
+#  ifdef __GLIBC__
   int n = backtrace(buffer, BT_BUF_SIZE);
   dprintf(STDERR_FILENO, "\nSignal %d, backtrace:\n", sig);
   backtrace_symbols_fd(buffer, n, STDERR_FILENO);
+#  endif
   int fd = open("/proc/self/maps", O_RDONLY);
   if (fd != -1)
   {
@@ -398,6 +401,16 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("inductive-step", true);
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", false);
+  }
+
+  // Check for conflicting strategies
+  if (cmdline.isset("k-induction") && cmdline.isset("termination"))
+  {
+    log_warning(
+      "Both --k-induction and --termination specified. "
+      "Using --k-induction (which does not include termination checking).");
+    // Optionally disable termination flag
+    options.set_option("termination", false);
   }
 
   if (

@@ -1,0 +1,4 @@
+CORE
+../linking-common/main_uninit_extern.c
+../linking-common/another_def.c -DEXPECTED_VALUE=1234
+^VERIFICATION SUCCESSFUL$

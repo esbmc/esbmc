@@ -283,6 +283,16 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return get_typet(base_type, type_size);
   }
 
+  // type: represents Python type objects (int, str, float, bool, etc.)
+  // Type objects are used for dynamic type checking and introspection
+  if (ast_type == "type")
+    return build_array(char_type(), type_size > 0 ? type_size : 10);
+
+  // Typing module types should be treated as transparent
+  // These are type hints only and don't enforce runtime type checking
+  if (ast_type == "BinaryIO" || ast_type == "TextIO" || ast_type == "IO")
+    return any_type();
+
   // NoneType — represents Python's None value
   // Use a pointer type to void to represent None/null properly
   if (ast_type == "NoneType")
@@ -292,6 +302,15 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // This can occur during type inference. Return pointer type as placeholder.
   if (ast_type == "Optional")
     return pointer_type();
+
+  // Callable: represents function/callable types
+  // Return a pointer to a generic code type (function pointer)
+  if (ast_type == "Callable")
+  {
+    code_typet code_type;
+    code_type.return_type() = empty_typet();
+    return pointer_typet(code_type);
+  }
 
   // Python float type: IEEE 754 double-precision mapping
   // Python floats are implemented using C double (IEEE 754 double-precision)

@@ -1081,6 +1081,16 @@ void dereferencet::build_reference_rec(
   case flag_src_union | flag_dst_struct | flag_is_dyn_offs:
   {
     const union_type2t &uni_type = to_union_type(value->type);
+
+    // Handle empty unions (size == 0, no members)
+    if (uni_type.members.size() == 0)
+    {
+      dereference_failure(
+        "Bad dereference", "Cannot dereference through empty union", guard);
+      value = make_failed_symbol(type);
+      break;
+    }
+
     assert(uni_type.members.size() != 0);
     BigInt union_total_size = type_byte_size(value->type);
     // Let's find a member with the biggest size
@@ -1465,16 +1475,6 @@ void dereferencet::construct_from_dyn_struct_offset(
     {
       construct_from_array(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
-    }
-    else if (
-      access_sz > field_size && type->get_width() != config.ansi_c.char_width)
-    {
-      guardt newguard(guard);
-      newguard.add(field_guard);
-      dereference_failure(
-        "pointer dereference", "Oversized field offset", newguard);
-      // Push nothing back, allow fall-through of the if-then-else chain to
-      // resolve to a failed deref symbol.
     }
     else if (
       alignment >= config.ansi_c.word_size &&

@@ -521,6 +521,11 @@ protected:
 
   void simplify_python_builtins(expr2tc &expr);
 
+  /* Check if thrown_type in Python inherits from catch_type */
+  bool is_python_exception_subtype(
+    const irep_idt &thrown_type,
+    const irep_idt &catch_type);
+
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 

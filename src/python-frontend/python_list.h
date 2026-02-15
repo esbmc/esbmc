@@ -138,6 +138,30 @@ public:
   exprt
   extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
 
+  /**
+   * @brief Check if all elements in a list have the same type
+   * @param list_id The list identifier
+   * @param func_name The function name (for error messages)
+   * @return The common element type if all types match, empty typet() otherwise
+   * @throws std::runtime_error if mixed types are detected
+   */
+  static typet check_homogeneous_list_types(
+    const std::string &list_id,
+    const std::string &func_name);
+
+  /**
+   * @brief Create a list from a range() call
+   * @param converter The python converter instance
+   * @param range_args The arguments to range() (1-3 arguments: stop, or start+stop, or start+stop+step)
+   * @param element The AST node for location information
+   * @return Expression representing the list [start, start+step, ..., stop-1]
+   * @throws std::runtime_error if range parameters are invalid or too large
+   */
+  static exprt build_list_from_range(
+    python_converter &converter,
+    const nlohmann::json &range_args,
+    const nlohmann::json &element);
+
 private:
   friend class python_dict_handler;
 
@@ -163,11 +187,55 @@ private:
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
+  exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
+
+  /**
+   * @brief Handle symbolic (non-constant) range arguments
+   * @param converter The python converter instance
+   * @param range_args The range arguments from the AST
+   * @param element The AST element for location tracking
+   * @return Expression representing the symbolic range list
+   */
+  static exprt handle_symbolic_range(
+    python_converter &converter,
+    const nlohmann::json &range_args,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Set symbolic size on a list structure
+   * @param converter The python converter instance
+   * @param list_expr The list expression to modify
+   * @param size_expr The symbolic size expression
+   * @param element The AST element for location tracking
+   */
+  static void set_list_symbolic_size(
+    python_converter &converter,
+    exprt &list_expr,
+    const exprt &size_expr,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Build a concrete range with constant bounds
+   * @param converter The python converter instance
+   * @param range_args The range arguments from the AST
+   * @param element The AST element for location tracking
+   * @param arg0 First argument (start or stop depending on arg count)
+   * @param arg1 Second argument (stop or step depending on arg count)
+   * @param arg2 Third argument (step)
+   * @return Expression representing the concrete range list
+   * @throws std::runtime_error if range parameters are invalid or too large
+   */
+  static exprt build_concrete_range(
+    python_converter &converter,
+    const nlohmann::json &range_args,
+    const nlohmann::json &element,
+    const std::optional<long long> &arg0,
+    const std::optional<long long> &arg1,
+    const std::optional<long long> &arg2);
+
   python_converter &converter_;
   const nlohmann::json &list_value_;
 
   // <list_id, <elem_id, elem_type>>
   static std::unordered_map<std::string, TypeInfo> list_type_map;
-
-  exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
 };

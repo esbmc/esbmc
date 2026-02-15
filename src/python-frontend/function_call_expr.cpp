@@ -300,7 +300,45 @@ exprt function_call_expr::handle_isinstance() const
 
   // Convert the first argument (the object being checked) into an expression
   const exprt &obj_expr = converter_.get_expr(args[0]);
+  const auto &obj_arg = args[0];
   const auto &type_arg = args[1];
+
+  // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
+  // Type objects themselves are not instances of other types (except 'type')
+  if (obj_arg["_type"] == "Name")
+  {
+    const std::string &obj_name = obj_arg["id"];
+
+    // Check if this variable holds a type object by checking the symbol
+    std::string lookup_name = obj_name;
+    if (obj_expr.is_symbol())
+    {
+      const symbol_exprt &sym_expr = to_symbol_expr(obj_expr);
+      lookup_name = sym_expr.get_identifier().as_string();
+    }
+
+    const symbolt *var_symbol = converter_.ns.lookup(lookup_name);
+    if (var_symbol && var_symbol->value.is_constant())
+    {
+      const constant_exprt &const_val = to_constant_expr(var_symbol->value);
+      std::string value_str = const_val.get_value().as_string();
+      // Check if this constant value is a type name
+      if (type_utils::is_type_identifier(value_str))
+      {
+        auto extract_type_name = [](const nlohmann::json &node) -> std::string {
+          const std::string node_type = node["_type"];
+          if (node_type == "Name")
+            return node["id"];
+          return "";
+        };
+        std::string type_name = extract_type_name(type_arg);
+        if (type_name == "type")
+          return true_exprt();
+        else
+          return false_exprt();
+      }
+    }
+  }
 
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
@@ -1454,7 +1492,34 @@ std::string function_call_expr::get_object_name() const
 bool function_call_expr::is_min_max_call() const
 {
   const std::string &func_name = function_id_.get_function();
-  return func_name == "min" || func_name == "max";
+  bool is_min_or_max = (func_name == "min" || func_name == "max");
+
+  if (!is_min_or_max)
+    return false;
+
+  const auto &args = call_["args"];
+
+  // Handle two-argument case: min(a, b) or max(a, b)
+  if (args.size() == 2)
+    return true;
+
+  // Handle single-argument case if it's a tuple
+  if (args.size() == 1)
+  {
+    exprt arg = converter_.get_expr(args[0]);
+    const typet &arg_type = converter_.ns.follow(arg.type());
+
+    // Check if it's a tuple (struct with tag-tuple prefix)
+    if (arg_type.id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(arg_type);
+      std::string tag = struct_type.tag().as_string();
+      return tag.starts_with("tag-tuple");
+    }
+  }
+
+  // Single argument that's not a tuple falls through to general handler (for lists)
+  return false;
 }
 
 exprt function_call_expr::handle_min_max(
@@ -1468,8 +1533,50 @@ exprt function_call_expr::handle_min_max(
       func_name + " expected at least 1 argument, got 0");
 
   if (args.size() == 1)
-    throw std::runtime_error(
-      func_name + "() with single iterable argument not yet supported");
+  {
+    // Single iterable argument case: min(iterable) or max(iterable)
+    exprt arg = converter_.get_expr(args[0]);
+    const typet &arg_type = converter_.ns.follow(arg.type());
+
+    // Check if it's a tuple (struct type with element_N components)
+    if (arg_type.is_struct())
+    {
+      const struct_typet &struct_type = to_struct_type(arg_type);
+
+      // Check if this is a tuple by examining the tag
+      std::string tag = struct_type.tag().as_string();
+      if (tag.starts_with("tag-tuple"))
+      {
+        // Handle tuple directly by building comparison chain
+        const auto &components = struct_type.components();
+
+        if (components.empty())
+          throw std::runtime_error(func_name + "() arg is an empty sequence");
+
+        // Start with first element: result = t.element_0
+        exprt result =
+          member_exprt(arg, components[0].get_name(), components[0].type());
+
+        // Compare with remaining elements
+        for (size_t i = 1; i < components.size(); ++i)
+        {
+          member_exprt elem(
+            arg, components[i].get_name(), components[i].type());
+
+          // Create comparison: elem < result (for min) or elem > result (for max)
+          exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
+          condition.copy_to_operands(elem, result);
+
+          // result = (elem < result) ? elem : result
+          if_exprt update(condition, elem, result);
+          update.type() = components[i].type();
+          result = update;
+        }
+
+        return result;
+      }
+    }
+  }
 
   if (args.size() > 2)
     throw std::runtime_error(
@@ -1702,6 +1809,63 @@ exprt function_call_expr::handle_list_append() const
   // Get the value to append
   exprt value_to_append = converter_.get_expr(args[0]);
 
+  // If value_to_append is a function call, materialize its return value
+  bool is_func_call = (value_to_append.is_code() &&
+                       value_to_append.get("statement") == "function_call") ||
+                      (value_to_append.id() == "sideeffect" &&
+                       value_to_append.get("statement") == "function_call");
+
+  if (is_func_call)
+  {
+    exprt func_expr;
+    exprt::operandst func_args;
+    typet ret_type;
+
+    if (value_to_append.is_code())
+    {
+      const code_function_callt &call =
+        to_code_function_call(to_code(value_to_append));
+      func_expr = call.function();
+      func_args = call.arguments();
+      ret_type = call.type();
+    }
+    else
+    {
+      // side_effect_expr_function_callt
+      const side_effect_expr_function_callt &call =
+        to_side_effect_expr_function_call(value_to_append);
+      func_expr = call.function();
+      func_args = call.arguments();
+      ret_type = call.type();
+    }
+
+    if (ret_type.is_nil() || ret_type.is_empty())
+    {
+      log_warning(
+        "list.append with function call: unknown return type, assuming int");
+      ret_type = int_type();
+    }
+
+    symbolt &tmp_var = converter_.create_tmp_symbol(
+      call_, "$append_ret$", ret_type, gen_zero(ret_type));
+
+    code_declt tmp_decl(symbol_expr(tmp_var));
+    tmp_decl.location() = converter_.get_location_from_decl(call_);
+    converter_.current_block->copy_to_operands(tmp_decl);
+
+    // Create function call with lhs
+    code_function_callt new_call;
+    new_call.function() = func_expr;
+    new_call.arguments() = func_args;
+    new_call.lhs() = symbol_expr(tmp_var);
+    new_call.type() = ret_type;
+    new_call.location() = converter_.get_location_from_decl(call_);
+    converter_.current_block->copy_to_operands(new_call);
+
+    // Replace value_to_append with the temporary variable
+    value_to_append = symbol_expr(tmp_var);
+  }
+
   if (
     value_to_append.type().is_array() &&
     value_to_append.type().subtype() == char_type())
@@ -1900,6 +2064,70 @@ exprt function_call_expr::handle_any() const
   return result;
 }
 
+bool function_call_expr::is_math_comb_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+
+  // Check if it's the wrapper function
+  if (func_name == "comb")
+  {
+    // Verify it's being called from the math module
+    if (call_["func"]["_type"] == "Attribute")
+    {
+      std::string caller = get_object_name();
+      return (caller == "math");
+    }
+  }
+
+  return false;
+}
+
+exprt function_call_expr::handle_math_comb() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 2)
+    throw std::runtime_error("comb() takes exactly 2 arguments");
+
+  // Get the argument expressions
+  exprt n_expr = converter_.get_expr(args[0]);
+  exprt k_expr = converter_.get_expr(args[1]);
+
+  // Type checking: both arguments must be integers
+  if (!n_expr.type().is_signedbv() && !n_expr.type().is_unsignedbv())
+  {
+    return gen_exception_raise(
+      "TypeError",
+      "'" + type_handler_.type_to_string(n_expr.type()) +
+        "' object cannot be interpreted as an integer");
+  }
+
+  if (!k_expr.type().is_signedbv() && !k_expr.type().is_unsignedbv())
+  {
+    return gen_exception_raise(
+      "TypeError",
+      "'" + type_handler_.type_to_string(k_expr.type()) +
+        "' object cannot be interpreted as an integer");
+  }
+
+  // Find the actual comb implementation function
+  const symbolt *comb_func = converter_.find_symbol(function_id_.to_string());
+
+  if (!comb_func)
+    throw std::runtime_error("comb() implementation not found");
+
+  // Build the function call
+  locationt location = converter_.get_location_from_decl(call_);
+  code_function_callt call;
+  call.location() = location;
+  call.function() = symbol_expr(*comb_func);
+  call.type() = int_type();
+  call.arguments().push_back(n_expr);
+  call.arguments().push_back(k_expr);
+
+  return call;
+}
+
 std::vector<function_call_expr::FunctionHandler>
 function_call_expr::get_dispatch_table()
 {
@@ -1955,7 +2183,7 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_dict_method(); },
      "dict methods"},
 
-    // Math module functions
+    // Math module functions (isnan, isinf)
     {[this]() {
        const std::string &func_name = function_id_.get_function();
        return func_name == "__ESBMC_isnan" || func_name == "__ESBMC_isinf";
@@ -1987,7 +2215,7 @@ function_call_expr::get_dispatch_table()
      },
      "isnan/isinf"},
 
-    // Math module functions
+    // Math module functions (sin, cos, sqrt, exp, log)
     {[this]() {
        const std::string &func_name = function_id_.get_function();
        bool is_math_module = false;
@@ -1996,48 +2224,83 @@ function_call_expr::get_dispatch_table()
          std::string caller = get_object_name();
          is_math_module = (caller == "math");
        }
-       return is_math_module && func_name == "sqrt";
-     },
-     [this]() {
-       const auto &args = call_["args"];
-       if (args.size() != 1)
-         throw std::runtime_error("sqrt() expects exactly 1 argument");
 
+       bool is_math_wrapper =
+         (func_name == "__ESBMC_sin" || func_name == "__ESBMC_cos" ||
+          func_name == "__ESBMC_sqrt" || func_name == "__ESBMC_exp" ||
+          func_name == "__ESBMC_log");
+
+       return (is_math_module && (func_name == "sin" || func_name == "cos" ||
+                                  func_name == "sqrt" || func_name == "exp" ||
+                                  func_name == "log")) ||
+              is_math_wrapper;
+     },
+     [this]() -> exprt {
+       const std::string &func_name = function_id_.get_function();
+       const auto &args = call_["args"];
+
+       if (args.size() != 1)
+         throw std::runtime_error(func_name + "() expects exactly 1 argument");
        exprt arg_expr = converter_.get_expr(args[0]);
 
-       // Promote to float if needed
-       exprt double_operand = arg_expr;
-       if (!arg_expr.type().is_floatbv())
+       if (func_name == "sin" || func_name == "__ESBMC_sin")
+         return converter_.get_math_handler().handle_sin(arg_expr, call_);
+       else if (func_name == "cos" || func_name == "__ESBMC_cos")
+         return converter_.get_math_handler().handle_cos(arg_expr, call_);
+       else if (func_name == "exp" || func_name == "__ESBMC_exp")
+         return converter_.get_math_handler().handle_exp(arg_expr, call_);
+       else if (func_name == "sqrt" || func_name == "__ESBMC_sqrt")
        {
-         double_operand =
-           exprt("typecast", type_handler_.get_typet("float", 0));
-         double_operand.copy_to_operands(arg_expr);
+         // Domain check for sqrt: operand must be >= 0
+         exprt double_operand = arg_expr;
+         if (!arg_expr.type().is_floatbv())
+         {
+           double_operand =
+             exprt("typecast", type_handler_.get_typet("float", 0));
+           double_operand.copy_to_operands(arg_expr);
+         }
+
+         exprt zero = gen_zero(type_handler_.get_typet("float", 0));
+         exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
+         domain_check.copy_to_operands(double_operand, zero);
+
+         // Create the exception raise as a code expression
+         exprt raise_expr =
+           gen_exception_raise("ValueError", "math domain error");
+         locationt loc = converter_.get_location_from_decl(call_);
+         raise_expr.location() = loc;
+         raise_expr.location().user_provided(true);
+
+         // Convert expression to code statement
+         code_expressiont raise_code(raise_expr);
+         raise_code.location() = loc;
+
+         // Create the guard condition
+         code_ifthenelset guard;
+         guard.cond() = domain_check;
+         guard.then_case() = raise_code;
+         guard.location() = loc;
+
+         // Add the guard to the current block
+         converter_.current_block->copy_to_operands(guard);
+
+         // Now compute sqrt (only reached if operand >= 0)
+         exprt sqrt_result =
+           converter_.get_math_handler().handle_sqrt(arg_expr, call_);
+
+         return sqrt_result;
        }
+       else if (func_name == "log" || func_name == "__ESBMC_log")
+         return converter_.get_math_handler().handle_log(arg_expr, call_);
 
-       // Create domain check: x < 0 (error condition)
-       exprt zero = gen_zero(type_handler_.get_typet("float", 0));
-       exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
-       domain_check.copy_to_operands(double_operand, zero);
-
-       // Create exception for domain violation
-       exprt raise = gen_exception_raise("ValueError", "math domain error");
-
-       // Add location information
-       locationt loc = converter_.get_location_from_decl(call_);
-       raise.location() = loc;
-       raise.location().user_provided(true);
-
-       // Call python_math to handle the actual sqrt call
-       exprt sqrt_result =
-         converter_.get_math_handler().handle_sqrt(arg_expr, call_);
-
-       // Return conditional: if (x < 0) raise ValueError else sqrt(x)
-       if_exprt conditional(domain_check, raise, sqrt_result);
-       conditional.type() = type_handler_.get_typet("float", 0);
-
-       return conditional;
+       throw std::runtime_error("Unsupported math function: " + func_name);
      },
-     "math.sqrt()"},
+     "math.sin/cos/sqrt/exp/log()"},
+
+    // Math.comb function with type checking
+    {[this]() { return is_math_comb_call(); },
+     [this]() { return handle_math_comb(); },
+     "math.comb"},
 
     // divmod function
     {[this]() {
@@ -2088,6 +2351,35 @@ exprt function_call_expr::handle_general_function_call()
 {
   auto &symbol_table = converter_.symbol_table();
 
+  // Handle single-argument min/max by dispatching to typed builtins
+  const std::string &func_name = function_id_.get_function();
+  std::string actual_func_name = func_name;
+
+  if (
+    (func_name == "min" || func_name == "max" || func_name == "sorted") &&
+    call_["args"].size() == 1)
+  {
+    exprt list_arg = converter_.get_expr(call_["args"][0]);
+    typet elem_type;
+    if (list_arg.is_symbol())
+    {
+      const std::string &list_id = list_arg.identifier().as_string();
+      // Check that all elements have the same type and get the common type
+      elem_type = python_list::check_homogeneous_list_types(list_id, func_name);
+    }
+    // Dispatch to typed builtin based on element type
+    if (!elem_type.is_nil())
+    {
+      if (elem_type.is_floatbv())
+        actual_func_name += "_float";
+      else if (
+        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
+        (elem_type.is_array() && elem_type.subtype() == char_type()))
+        actual_func_name += "_str";
+      // Integer types use base name without suffix
+    }
+  }
+
   // Get object symbol
   symbolt *obj_symbol = nullptr;
   symbol_id obj_symbol_id = converter_.create_symbol_id();
@@ -2099,8 +2391,17 @@ exprt function_call_expr::handle_general_function_call()
     obj_symbol = symbol_table.find_symbol(obj_symbol_id.to_string());
   }
 
-  // Get function symbol id
-  const std::string &func_symbol_id = function_id_.to_string();
+  // Get function symbol id - use actual_func_name for typed dispatch
+  std::string func_symbol_id;
+  if (actual_func_name != func_name)
+  {
+    symbol_id modified_function_id = function_id_;
+    modified_function_id.set_function(actual_func_name);
+    func_symbol_id = modified_function_id.to_string();
+  }
+  else
+    func_symbol_id = function_id_.to_string();
+
   assert(!func_symbol_id.empty());
 
   // Find function symbol

@@ -80,6 +80,21 @@ public:
       name == "GeneralizedIndex");
   }
 
+  /**
+   * @brief Check if a name is TypedDict from typing module
+   *
+   * TypedDict is a special construct that should not be treated as a
+   * user-defined base class. Classes inheriting from TypedDict are
+   * converted to dict type (matching Python's runtime behavior).
+   *
+   * @param name The base class name to check
+   * @return true if it's TypedDict
+   */
+  static bool is_typeddict(const std::string &name)
+  {
+    return name == "TypedDict";
+  }
+
   static bool is_consensus_func(const std::string &name)
   {
     return consensus_func_to_type().find(name) !=
@@ -126,7 +141,9 @@ public:
            func_name == "det" || func_name == "matmul" || func_name == "pow" ||
            func_name == "log" || func_name == "pow_by_squaring" ||
            func_name == "log2" || func_name == "log1p_taylor" ||
-           func_name == "ldexp";
+           func_name == "ldexp" || func_name == "__ESBMC_sin" ||
+           func_name == "__ESBMC_cos" || func_name == "__ESBMC_sqrt" ||
+           func_name == "__ESBMC_exp" || func_name == "__ESBMC_log";
   }
 
   static bool is_ordered_comparison(const std::string &op)
@@ -255,6 +272,24 @@ public:
   {
     return element.contains("_type") && element["_type"] == "Subscript" &&
            element.contains("value");
+  }
+
+  static inline bool is_type_identifier(const std::string &name)
+  {
+    static const std::unordered_set<std::string> type_identifiers = {
+      "int",
+      "float",
+      "str",
+      "bool",
+      "bytes",
+      "list",
+      "set",
+      "tuple",
+      "type",
+      "object",
+      "complex",
+      "frozenset"};
+    return type_identifiers.find(name) != type_identifiers.end();
   }
 
 private:

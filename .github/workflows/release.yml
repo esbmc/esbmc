@@ -10,7 +10,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-22.04, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ${{ matrix.os }}
@@ -19,13 +19,13 @@ jobs:
 
   create-release:
     name: Upload Release Asset
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [build]
     steps:
       - name: Download Linux Build
         uses: actions/download-artifact@v4
         with:
-          name: 'release-ubuntu-22.04--b RelWithDebInfo -e Off'
+          name: 'release-ubuntu-24.04--b RelWithDebInfo -e Off'
           path: ./linux-release
       - name: Create Linux Release file
         run: zip -r esbmc-linux.zip ./linux-release

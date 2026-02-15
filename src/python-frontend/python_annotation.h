@@ -117,9 +117,70 @@ public:
         module_manager::create(ast_["ast_output_dir"], python_filename_);
   }
 
+  void preprocess_constructor_calls(const Json &node)
+  {
+    if (node.is_object())
+    {
+      // Check if this is a constructor call
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"]["_type"] == "Name")
+      {
+        const std::string &func_name = node["func"]["id"];
+        // Find the class in ast_["body"] using reference to modify in-place
+        for (Json &class_node : ast_["body"])
+        {
+          if (
+            class_node["_type"] == "ClassDef" &&
+            class_node["name"] == func_name)
+          {
+            // Find __init__ method
+            for (Json &member : class_node["body"])
+            {
+              if (
+                member["_type"] == "FunctionDef" &&
+                member["name"] == "__init__")
+              {
+                // Annotate parameters based on this call
+                if (member.contains("args") && member["args"].contains("args"))
+                {
+                  Json &params = member["args"]["args"];
+                  const Json &call_args = node["args"];
+                  // Skip self (index 0), match remaining params with call args
+                  for (size_t i = 1;
+                       i < params.size() && (i - 1) < call_args.size();
+                       ++i)
+                  {
+                    Json &param = params[i];
+                    const Json &arg = call_args[i - 1];
+                    std::string arg_type = get_argument_type(arg);
+                    if (!arg_type.empty())
+                      add_parameter_annotation(param, arg_type);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      // Recursively search all object fields
+      for (auto &kv : node.items())
+        preprocess_constructor_calls(kv.value());
+    }
+    else if (node.is_array())
+    {
+      // Search in arrays (such as list literals)
+      for (const auto &element : node)
+        preprocess_constructor_calls(element);
+    }
+  }
+
   void add_type_annotation()
   {
-    // Add type annotations to global scope variables
+    // First pass: preprocess all constructor calls to infer parameter types
+    preprocess_constructor_calls(ast_);
+
+    // Second pass: add type annotations to global scope variables
     annotate_global_scope();
     current_line_ = 0;
 
@@ -256,6 +317,21 @@ private:
     std::vector<Json> function_calls =
       find_function_calls(func_name, search_context);
 
+    // Determine the call-site context for resolving argument names.
+    // For top-level functions, use global scope (empty context).
+    // For nested functions, use the parent function context.
+    std::string call_site_context;
+    if (parent_func != nullptr)
+    {
+      // Strip the last "@F@" to get the parent function path
+      std::string cur = current_func_name_context_;
+      size_t pos = cur.rfind("@F@");
+      if (pos != std::string::npos)
+        call_site_context = cur.substr(0, pos);
+      else if (parent_func->contains("name"))
+        call_site_context = (*parent_func)["name"].template get<std::string>();
+    }
+
     // For each parameter, try to infer its type from the function calls
     if (
       function_element.contains("args") &&
@@ -267,24 +343,61 @@ private:
       {
         Json &param = params[i];
 
-        // Skip if parameter is already annotated
+        // Check if parameter needs type inference or refinement
+        bool needs_inference = false;
+        bool has_partial_annotation = false;
+        std::string current_type;
+
         if (param.contains("annotation") && !param["annotation"].is_null())
-          continue;
+        {
+          // Extract current annotation
+          if (param["annotation"].contains("id"))
+            current_type = param["annotation"]["id"];
+          // Check if it's a generic container without element type
+          if (
+            current_type == "list" || current_type == "dict" ||
+            current_type == "set")
+          {
+            has_partial_annotation = true;
+            needs_inference = true; // Try to refine with element type
+          }
+          else
+            continue; // Fully annotated, skip
+        }
+        else
+          needs_inference = true; // No annotation at all
 
         std::string inferred_type;
 
         // Try to infer type from function calls if available
-        if (!function_calls.empty())
-          inferred_type = infer_parameter_type_from_calls(i, function_calls);
-
-        // If inference failed or no calls found, use Any only for stub functions
-        if (inferred_type.empty() && !has_meaningful_body)
-          inferred_type = "Any"; // Default fallback for stub functions
-
-        if (!inferred_type.empty())
+        if (needs_inference && !function_calls.empty())
         {
-          // Add annotation to parameter
-          add_parameter_annotation(param, inferred_type);
+          // Temporarily switch to call-site context so Name resolution uses
+          // the scope where the call occurs (not the callee scope).
+          std::string saved_ctx = current_func_name_context_;
+          current_func_name_context_ = call_site_context;
+          inferred_type = infer_parameter_type_from_calls(i, function_calls);
+          current_func_name_context_ = saved_ctx;
+        }
+
+        // Apply inference results
+        if (has_partial_annotation)
+        {
+          // Refine partial annotation with inferred element type
+          if (!inferred_type.empty() && inferred_type != current_type)
+            add_parameter_annotation(param, inferred_type);
+        }
+        else
+        {
+          // Handle completely unannotated parameters
+          if (inferred_type.empty() && !has_meaningful_body)
+            inferred_type = "Any"; // Default fallback for stub functions
+
+          if (!inferred_type.empty())
+          {
+            // Add annotation to parameter
+            add_parameter_annotation(param, inferred_type);
+          }
         }
       }
     }
@@ -450,6 +563,14 @@ private:
         }
       }
 
+      // If still not found in local/parent scope, check global scope
+      if (!has_annotation)
+      {
+        var_node = find_annotated_assign(var_name, ast_["body"]);
+        has_annotation = !var_node.empty() && var_node.contains("annotation") &&
+                         !var_node["annotation"].is_null();
+      }
+
       // Extract type from the found variable node
       if (
         !var_node.empty() && var_node.contains("annotation") &&
@@ -480,7 +601,23 @@ private:
         // Handle simple type annotations like int, str (Name nodes)
         else if (var_node["annotation"].contains("id"))
         {
-          return var_node["annotation"]["id"];
+          std::string base_type =
+            var_node["annotation"]["id"].template get<std::string>();
+          // If annotation is just "list"/"dict"/"set" without element type, try to infer from value
+          if (
+            (base_type == "list" || base_type == "dict" ||
+             base_type == "set") &&
+            var_node.contains("value") && !var_node["value"].is_null())
+          {
+            if (base_type == "list" && var_node["value"]["_type"] == "List")
+            {
+              std::string full_type =
+                get_list_type_from_literal(var_node["value"]);
+              if (!full_type.empty())
+                return full_type;
+            }
+          }
+          return base_type;
         }
       }
     }
@@ -2120,7 +2257,26 @@ private:
     }
 
     if (obj_node.empty())
+    {
+      // Check if obj is a class name
+      Json class_node = json_utils::find_class(ast_["body"], obj);
+      if (!class_node.empty())
+      {
+        const std::string &method_name = call["func"]["attr"];
+        // Find the method in the class body
+        for (const Json &member : class_node["body"])
+        {
+          if (member["_type"] == "FunctionDef" && member["name"] == method_name)
+          {
+            std::string inferred_type =
+              infer_from_return_statements(member["body"], method_name);
+            if (!inferred_type.empty())
+              return inferred_type;
+          }
+        }
+      }
       throw std::runtime_error("Object \"" + obj + "\" not found.");
+    }
 
     std::string obj_type;
     if (
@@ -2546,6 +2702,21 @@ private:
       }
 
       std::string inferred_type("");
+
+      // Check if RHS is a type identifier
+      if (element["value"]["_type"] == "Name")
+      {
+        const std::string &rhs_name = element["value"]["id"];
+        if (type_utils::is_type_identifier(rhs_name))
+        {
+          // This is a type object assignment: x = int
+          inferred_type = "type";
+          update_assignment_node(element, inferred_type);
+          if (itr != referenced_global_elements.end())
+            *itr = element;
+          continue;
+        }
+      }
 
       // Check if LHS was previously annotated
       if (

@@ -280,19 +280,30 @@ symbol_id function_call_builder::build_function_id() const
       }
     }
 
-    if (arg["_type"] == "List")
+    // Handle len(range(...))
+    if (arg["_type"] == "Call")
+    {
+      if (
+        arg.contains("func") && arg["func"].contains("id") &&
+        arg["func"]["id"] == "range")
+        func_name = kGetObjectSize;
+      else if (
+        arg.contains("func") && arg["func"].contains("id") &&
+        arg["func"]["id"] == "set")
+        func_name = kGetObjectSize;
+    }
+    else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
+      symbol_id var_sid(python_file, current_class_name, current_function_name);
+      var_sid.set_object(arg["id"].get<std::string>());
+      symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+
       // Check if this is a tuple by looking up the variable's type
       if (var_type == "tuple" || var_type.empty())
       {
-        symbol_id var_sid(
-          python_file, current_class_name, current_function_name);
-        var_sid.set_object(arg["id"].get<std::string>());
-        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-
         if (var_symbol && var_symbol->type.id() == "struct")
         {
           const struct_typet &struct_type = to_struct_type(var_symbol->type);
@@ -320,9 +331,25 @@ symbol_id function_call_builder::build_function_id() const
       }
       else if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
-        var_type == "set" || var_type == "Sequence")
+        var_type == "set" || var_type == "Sequence" || var_type == "range")
       {
         func_name = kGetObjectSize;
+      }
+      else if (var_type.empty() && var_symbol)
+      {
+        typet actual_type = var_symbol->type;
+        if (actual_type.is_pointer())
+          actual_type = actual_type.subtype();
+        if (actual_type.id() == "symbol")
+          actual_type = converter_.ns.follow(actual_type);
+
+        if (actual_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(actual_type);
+          std::string tag = struct_type.tag().as_string();
+          if (tag.find("__ESBMC_PyListObj") != std::string::npos)
+            func_name = kGetObjectSize;
+        }
       }
       else if (var_type == "str" || var_type.empty())
       {
@@ -331,11 +358,6 @@ symbol_id function_call_builder::build_function_id() const
         func_name = kStrlen;
 
         // Check if this is a single character by looking up the variable
-        symbol_id var_sid(
-          python_file, current_class_name, current_function_name);
-        var_sid.set_object(arg["id"].get<std::string>());
-        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-
         if (
           var_symbol && var_symbol->value.is_constant() &&
           (var_symbol->value.type().is_unsignedbv() ||
@@ -597,6 +619,49 @@ exprt function_call_builder::build() const
         obj_expr, prefix_arg, loc);
     }
 
+    if (method_name == "capitalize")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("capitalize() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_capitalize(
+        obj_expr, loc);
+    }
+
+    if (method_name == "title")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("title() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_title(obj_expr, loc);
+    }
+
+    if (method_name == "swapcase")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("swapcase() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_swapcase(
+        obj_expr, loc);
+    }
+
+    if (method_name == "casefold")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      if (!call_["args"].empty())
+        throw std::runtime_error("casefold() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_casefold(
+        obj_expr, loc);
+    }
+
     if (method_name == "endswith")
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
@@ -611,6 +676,32 @@ exprt function_call_builder::build() const
         obj_expr, suffix_arg, loc);
     }
 
+    if (method_name == "removeprefix")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() != 1)
+        throw std::runtime_error("removeprefix() requires one argument");
+
+      exprt prefix_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_removeprefix(
+        obj_expr, prefix_arg, loc);
+    }
+
+    if (method_name == "removesuffix")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() != 1)
+        throw std::runtime_error("removesuffix() requires one argument");
+
+      exprt suffix_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_removesuffix(
+        obj_expr, suffix_arg, loc);
+    }
+
     if (method_name == "isdigit")
     {
       exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
@@ -621,6 +712,54 @@ exprt function_call_builder::build() const
       locationt loc = converter_.get_location_from_decl(call_);
 
       return converter_.get_string_handler().handle_string_isdigit(
+        obj_expr, loc);
+    }
+
+    if (method_name == "isalnum")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (!call_["args"].empty())
+        throw std::runtime_error("isalnum() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_isalnum(
+        obj_expr, loc);
+    }
+
+    if (method_name == "isupper")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (!call_["args"].empty())
+        throw std::runtime_error("isupper() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_isupper(
+        obj_expr, loc);
+    }
+
+    if (method_name == "isnumeric")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (!call_["args"].empty())
+        throw std::runtime_error("isnumeric() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_isnumeric(
+        obj_expr, loc);
+    }
+
+    if (method_name == "isidentifier")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (!call_["args"].empty())
+        throw std::runtime_error("isidentifier() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_isidentifier(
         obj_expr, loc);
     }
 
@@ -804,6 +943,86 @@ exprt function_call_builder::build() const
         obj_expr, chars_arg, loc);
     }
 
+    if (method_name == "center")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() < 1 || call_["args"].size() > 2)
+        throw std::runtime_error("center() requires one or two arguments");
+
+      exprt width_arg = converter_.get_expr(call_["args"][0]);
+      exprt fill_arg = nil_exprt();
+      if (call_["args"].size() == 2)
+        fill_arg = converter_.get_expr(call_["args"][1]);
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_center(
+        obj_expr, width_arg, fill_arg, loc);
+    }
+
+    if (method_name == "ljust")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() < 1 || call_["args"].size() > 2)
+        throw std::runtime_error("ljust() requires one or two arguments");
+
+      exprt width_arg = converter_.get_expr(call_["args"][0]);
+      exprt fill_arg = nil_exprt();
+      if (call_["args"].size() == 2)
+        fill_arg = converter_.get_expr(call_["args"][1]);
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_ljust(
+        obj_expr, width_arg, fill_arg, loc);
+    }
+
+    if (method_name == "rjust")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() < 1 || call_["args"].size() > 2)
+        throw std::runtime_error("rjust() requires one or two arguments");
+
+      exprt width_arg = converter_.get_expr(call_["args"][0]);
+      exprt fill_arg = nil_exprt();
+      if (call_["args"].size() == 2)
+        fill_arg = converter_.get_expr(call_["args"][1]);
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_rjust(
+        obj_expr, width_arg, fill_arg, loc);
+    }
+
+    if (method_name == "zfill")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() != 1)
+        throw std::runtime_error("zfill() requires one argument");
+
+      exprt width_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_zfill(
+        obj_expr, width_arg, loc);
+    }
+
+    if (method_name == "expandtabs")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() > 1)
+        throw std::runtime_error("expandtabs() takes zero or one argument");
+
+      exprt tabsize_arg = nil_exprt();
+      if (call_["args"].size() == 1)
+        tabsize_arg = converter_.get_expr(call_["args"][0]);
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_expandtabs(
+        obj_expr, tabsize_arg, loc);
+    }
+
     if (method_name == "replace")
     {
       if (call_["args"].size() != 2 && call_["args"].size() != 3)
@@ -835,6 +1054,66 @@ exprt function_call_builder::build() const
         obj_expr, old_arg, new_arg, count_expr, loc);
     }
 
+    if (method_name == "count")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() < 1 || call_["args"].size() > 3)
+        throw std::runtime_error("count() requires one to three arguments");
+
+      exprt sub_arg = converter_.get_expr(call_["args"][0]);
+      exprt start_arg = nil_exprt();
+      exprt end_arg = nil_exprt();
+      if (call_["args"].size() >= 2)
+        start_arg = converter_.get_expr(call_["args"][1]);
+      if (call_["args"].size() == 3)
+        end_arg = converter_.get_expr(call_["args"][2]);
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_count(
+        obj_expr, sub_arg, start_arg, end_arg, loc);
+    }
+
+    if (method_name == "splitlines")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (!call_["args"].empty())
+        throw std::runtime_error("splitlines() takes no arguments");
+
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_splitlines(
+        call_, obj_expr, loc);
+    }
+
+    if (method_name == "partition")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+
+      if (call_["args"].size() != 1)
+        throw std::runtime_error("partition() requires one argument");
+
+      exprt sep_arg = converter_.get_expr(call_["args"][0]);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_partition(
+        obj_expr, sep_arg, loc);
+    }
+
+    if (method_name == "format")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_format(
+        call_, obj_expr, loc);
+    }
+
+    if (method_name == "format_map")
+    {
+      exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_string_format_map(
+        call_, obj_expr, loc);
+    }
     if (method_name == "split")
     {
       if (call_["args"].size() > 2)
