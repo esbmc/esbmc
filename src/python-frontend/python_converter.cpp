@@ -1397,6 +1397,90 @@ exprt python_converter::handle_string_type_mismatch(
   return nil_exprt(); // No action taken for other operators
 }
 
+exprt python_converter::handle_type_identity_check(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  // Only handle identity operators
+  if (op != "Is" && op != "IsNot")
+    return nil_exprt();
+
+  // Resolve type identifiers from either direct names or symbol values
+  auto resolve_type_identifier = [&](
+                                   const nlohmann::json &node,
+                                   const exprt &expr,
+                                   std::string &out_name) -> bool {
+    if (node["_type"] == "Name" && node.contains("id"))
+    {
+      std::string name = node["id"].get<std::string>();
+      // Check if it's a direct type identifier (e.g., int, str, float)
+      if (type_utils::is_type_identifier(name))
+      {
+        out_name = name;
+        return true;
+      }
+      // Check if it's a variable holding a type object (e.g., x = int)
+      if (expr.is_symbol())
+      {
+        const symbol_exprt &sym = to_symbol_expr(expr);
+        const symbolt *symbol = ns.lookup(sym.get_identifier());
+        if (symbol && symbol->value.is_constant())
+        {
+          std::string val =
+            to_constant_expr(symbol->value).get_value().as_string();
+
+          if (type_utils::is_type_identifier(val))
+          {
+            out_name = val;
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  };
+
+  std::string lhs_type_name;
+  std::string rhs_type_name;
+  bool lhs_is_type = resolve_type_identifier(left, lhs, lhs_type_name);
+  bool rhs_is_type = resolve_type_identifier(right, rhs, rhs_type_name);
+
+  // If neither operand is a type identifier, not a type identity check
+  if (!lhs_is_type && !rhs_is_type)
+    return nil_exprt();
+
+  // If both are type identifiers, compare them
+  if (lhs_is_type && rhs_is_type)
+  {
+    bool same_type = (lhs_type_name == rhs_type_name);
+    if (op == "Is")
+    {
+      if (same_type)
+        return true_exprt();
+      else
+        return false_exprt();
+    }
+    else // op == "IsNot"
+    {
+      if (same_type)
+        return false_exprt();
+      else
+        return true_exprt();
+    }
+  }
+
+  // If only one side is a type identifier, they can never be identical
+  // (a value can't be identical to a type object)
+  if (op == "Is")
+    return false_exprt();
+  else // op == "IsNot"
+    return true_exprt();
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   // Extract left and right operands from AST
@@ -1424,6 +1508,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("ops"))
     op = element["ops"][0]["_type"].get<std::string>();
   assert(!op.empty());
+
+  // Handle type identity checks (e.g., y is int, x is str)
+  exprt type_identity_result =
+    handle_type_identity_check(op, lhs, rhs, left, right);
+  if (!type_identity_result.is_nil())
+    return type_identity_result;
 
   // Handle None comparisons (don't unwrap optionals for identity checks)
   bool is_none_check = handle_none_check_setup(op, lhs, rhs);
@@ -2975,6 +3065,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (element["_type"] == "Name")
     {
       var_name = element["id"].get<std::string>();
+      // Handle type identifiers (int, str, float, bool, etc.)
+      if (type_utils::is_type_identifier(var_name))
+      {
+        // Create a string constant containing the type name
+        std::string type_name = var_name;
+        typet str_type =
+          type_handler_.build_array(char_type(), type_name.size() + 1);
+        constant_exprt type_str(type_name, type_name, str_type);
+        expr = type_str;
+        break;
+      }
     }
     else if (element["_type"] == "Attribute")
     {

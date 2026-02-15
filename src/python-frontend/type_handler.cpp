@@ -283,6 +283,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return get_typet(base_type, type_size);
   }
 
+  // type: represents Python type objects (int, str, float, bool, etc.)
+  // Type objects are used for dynamic type checking and introspection
+  if (ast_type == "type")
+    return build_array(char_type(), type_size > 0 ? type_size : 10);
+
   // Typing module types should be treated as transparent
   // These are type hints only and don't enforce runtime type checking
   if (ast_type == "BinaryIO" || ast_type == "TextIO" || ast_type == "IO")
