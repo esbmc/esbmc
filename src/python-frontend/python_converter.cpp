@@ -1409,10 +1409,10 @@ exprt python_converter::handle_type_identity_check(
     return nil_exprt();
 
   // Resolve type identifiers from either direct names or symbol values
-  auto resolve_type_identifier = [&](const nlohmann::json &node,
-                                     const exprt &expr,
-                                     std::string &out_name) -> bool
-  {
+  auto resolve_type_identifier = [&](
+                                   const nlohmann::json &node,
+                                   const exprt &expr,
+                                   std::string &out_name) -> bool {
     if (node["_type"] == "Name" && node.contains("id"))
     {
       std::string name = node["id"].get<std::string>();
@@ -1429,7 +1429,8 @@ exprt python_converter::handle_type_identity_check(
         const symbolt *symbol = ns.lookup(sym.get_identifier());
         if (symbol && symbol->value.is_constant())
         {
-          std::string val = to_constant_expr(symbol->value).get_value().as_string();
+          std::string val =
+            to_constant_expr(symbol->value).get_value().as_string();
 
           if (type_utils::is_type_identifier(val))
           {
@@ -3069,7 +3070,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       {
         // Create a string constant containing the type name
         std::string type_name = var_name;
-        typet str_type = type_handler_.build_array(char_type(), type_name.size() + 1);
+        typet str_type =
+          type_handler_.build_array(char_type(), type_name.size() + 1);
         constant_exprt type_str(type_name, type_name, str_type);
         expr = type_str;
         break;
