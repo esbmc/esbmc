@@ -14,7 +14,7 @@ ESBMC is a software model checker that can detect bugs or prove their absence in
 4. Encoding the verification conditions as SMT formulas
 5. Using SMT solvers to check satisfiability
 
-If the formula is satisfiable, a bug exists (with counterexample); if unsatisfiable, the property holds within the verification bounds.
+If the formula is satisfiable, a bug exists (with a counterexample); if unsatisfiable, the property holds within the verification bounds.
 
 ## Installation
 
@@ -113,7 +113,7 @@ Comprehensive security audit script.
 ```bash
 ./full-audit.sh program.c                # Full audit
 ./full-audit.sh program.c -r report.txt  # Save report to file
-./full-audit.sh program.c -t 5m          # 5 minute timeout per check
+./full-audit.sh program.c -t 5m          #5-minute timeout per check
 ```
 
 ## Supported Languages
@@ -162,7 +162,7 @@ Proves properties hold for ALL executions.
 ```bash
 esbmc file.c --incremental-bmc
 ```
-Iteratively increases bounds until bug found.
+Iteratively increases bounds until a bug is found.
 
 ### Multi-Property
 ```bash
