@@ -617,3 +617,371 @@ exprt python_math::handle_log(exprt operand, const nlohmann::json &element)
 
   return log_call;
 }
+
+exprt python_math::handle_acos(exprt operand, const nlohmann::json &element)
+{
+  symbolt *acos_symbol = symbol_table.find_symbol("c:@F@acos");
+  if (!acos_symbol)
+    throw std::runtime_error("acos function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt acos_call;
+  acos_call.function() = symbol_expr(*acos_symbol);
+  acos_call.arguments() = {double_operand};
+  acos_call.type() = double_type();
+  acos_call.location() = converter.get_location_from_decl(element);
+
+  return acos_call;
+}
+
+exprt python_math::handle_atan(exprt operand, const nlohmann::json &element)
+{
+  symbolt *atan_symbol = symbol_table.find_symbol("c:@F@atan");
+  if (!atan_symbol)
+    throw std::runtime_error("atan function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt atan_call;
+  atan_call.function() = symbol_expr(*atan_symbol);
+  atan_call.arguments() = {double_operand};
+  atan_call.type() = double_type();
+  atan_call.location() = converter.get_location_from_decl(element);
+
+  return atan_call;
+}
+
+exprt python_math::handle_atan2(
+  exprt y_operand,
+  exprt x_operand,
+  const nlohmann::json &element)
+{
+  symbolt *atan2_symbol = symbol_table.find_symbol("c:@F@atan2");
+  if (!atan2_symbol)
+    throw std::runtime_error("atan2 function not found in symbol table");
+
+  if (!y_operand.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(y_operand);
+    y_operand = casted;
+  }
+  if (!x_operand.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(x_operand);
+    x_operand = casted;
+  }
+
+  side_effect_expr_function_callt atan2_call;
+  atan2_call.function() = symbol_expr(*atan2_symbol);
+  atan2_call.arguments() = {y_operand, x_operand};
+  atan2_call.type() = double_type();
+  atan2_call.location() = converter.get_location_from_decl(element);
+
+  return atan2_call;
+}
+
+exprt python_math::handle_log2(exprt operand, const nlohmann::json &element)
+{
+  symbolt *log2_symbol = symbol_table.find_symbol("c:@F@log2");
+  if (!log2_symbol)
+    throw std::runtime_error("log2 function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt log2_call;
+  log2_call.function() = symbol_expr(*log2_symbol);
+  log2_call.arguments() = {double_operand};
+  log2_call.type() = double_type();
+  log2_call.location() = converter.get_location_from_decl(element);
+
+  return log2_call;
+}
+
+exprt python_math::handle_pow(
+  exprt base,
+  exprt exp,
+  const nlohmann::json &element)
+{
+  symbolt *pow_symbol = symbol_table.find_symbol("c:@F@pow");
+  if (!pow_symbol)
+    throw std::runtime_error("pow function not found in symbol table");
+
+  if (!base.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(base);
+    base = casted;
+  }
+  if (!exp.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(exp);
+    exp = casted;
+  }
+
+  side_effect_expr_function_callt pow_call;
+  pow_call.function() = symbol_expr(*pow_symbol);
+  pow_call.arguments() = {base, exp};
+  pow_call.type() = double_type();
+  pow_call.location() = converter.get_location_from_decl(element);
+
+  return pow_call;
+}
+
+exprt python_math::handle_fabs(exprt operand, const nlohmann::json &element)
+{
+  symbolt *fabs_symbol = symbol_table.find_symbol("c:@F@fabs");
+  if (!fabs_symbol)
+    throw std::runtime_error("fabs function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt fabs_call;
+  fabs_call.function() = symbol_expr(*fabs_symbol);
+  fabs_call.arguments() = {double_operand};
+  fabs_call.type() = double_type();
+  fabs_call.location() = converter.get_location_from_decl(element);
+
+  return fabs_call;
+}
+
+exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
+{
+  symbolt *trunc_symbol = symbol_table.find_symbol("c:@F@trunc");
+  if (!trunc_symbol)
+    throw std::runtime_error("trunc function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt trunc_call;
+  trunc_call.function() = symbol_expr(*trunc_symbol);
+  trunc_call.arguments() = {double_operand};
+  trunc_call.type() = double_type();
+  trunc_call.location() = converter.get_location_from_decl(element);
+
+  exprt to_int("typecast", int_type());
+  to_int.copy_to_operands(trunc_call);
+  return to_int;
+}
+
+exprt python_math::handle_fmod(
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
+  symbolt *fmod_symbol = symbol_table.find_symbol("c:@F@fmod");
+  if (!fmod_symbol)
+    throw std::runtime_error("fmod function not found in symbol table");
+
+  if (!lhs.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(lhs);
+    lhs = casted;
+  }
+  if (!rhs.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(rhs);
+    rhs = casted;
+  }
+
+  side_effect_expr_function_callt fmod_call;
+  fmod_call.function() = symbol_expr(*fmod_symbol);
+  fmod_call.arguments() = {lhs, rhs};
+  fmod_call.type() = double_type();
+  fmod_call.location() = converter.get_location_from_decl(element);
+
+  return fmod_call;
+}
+
+exprt python_math::handle_copysign(
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
+  symbolt *copysign_symbol = symbol_table.find_symbol("c:@F@copysign");
+  if (!copysign_symbol)
+    throw std::runtime_error("copysign function not found in symbol table");
+
+  if (!lhs.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(lhs);
+    lhs = casted;
+  }
+  if (!rhs.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(rhs);
+    rhs = casted;
+  }
+
+  side_effect_expr_function_callt copysign_call;
+  copysign_call.function() = symbol_expr(*copysign_symbol);
+  copysign_call.arguments() = {lhs, rhs};
+  copysign_call.type() = double_type();
+  copysign_call.location() = converter.get_location_from_decl(element);
+
+  return copysign_call;
+}
+
+exprt python_math::handle_tan(exprt operand, const nlohmann::json &element)
+{
+  symbolt *tan_symbol = symbol_table.find_symbol("c:@F@tan");
+  if (!tan_symbol)
+    throw std::runtime_error("tan function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt tan_call;
+  tan_call.function() = symbol_expr(*tan_symbol);
+  tan_call.arguments() = {double_operand};
+  tan_call.type() = double_type();
+  tan_call.location() = converter.get_location_from_decl(element);
+
+  return tan_call;
+}
+
+exprt python_math::handle_asin(exprt operand, const nlohmann::json &element)
+{
+  symbolt *asin_symbol = symbol_table.find_symbol("c:@F@asin");
+  if (!asin_symbol)
+    throw std::runtime_error("asin function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt asin_call;
+  asin_call.function() = symbol_expr(*asin_symbol);
+  asin_call.arguments() = {double_operand};
+  asin_call.type() = double_type();
+  asin_call.location() = converter.get_location_from_decl(element);
+
+  return asin_call;
+}
+
+exprt python_math::handle_sinh(exprt operand, const nlohmann::json &element)
+{
+  symbolt *sinh_symbol = symbol_table.find_symbol("c:@F@sinh");
+  if (!sinh_symbol)
+    throw std::runtime_error("sinh function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt sinh_call;
+  sinh_call.function() = symbol_expr(*sinh_symbol);
+  sinh_call.arguments() = {double_operand};
+  sinh_call.type() = double_type();
+  sinh_call.location() = converter.get_location_from_decl(element);
+
+  return sinh_call;
+}
+
+exprt python_math::handle_cosh(exprt operand, const nlohmann::json &element)
+{
+  symbolt *cosh_symbol = symbol_table.find_symbol("c:@F@cosh");
+  if (!cosh_symbol)
+    throw std::runtime_error("cosh function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt cosh_call;
+  cosh_call.function() = symbol_expr(*cosh_symbol);
+  cosh_call.arguments() = {double_operand};
+  cosh_call.type() = double_type();
+  cosh_call.location() = converter.get_location_from_decl(element);
+
+  return cosh_call;
+}
+
+exprt python_math::handle_tanh(exprt operand, const nlohmann::json &element)
+{
+  symbolt *tanh_symbol = symbol_table.find_symbol("c:@F@tanh");
+  if (!tanh_symbol)
+    throw std::runtime_error("tanh function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt tanh_call;
+  tanh_call.function() = symbol_expr(*tanh_symbol);
+  tanh_call.arguments() = {double_operand};
+  tanh_call.type() = double_type();
+  tanh_call.location() = converter.get_location_from_decl(element);
+
+  return tanh_call;
+}
+
+exprt python_math::handle_log10(exprt operand, const nlohmann::json &element)
+{
+  symbolt *log10_symbol = symbol_table.find_symbol("c:@F@log10");
+  if (!log10_symbol)
+    throw std::runtime_error("log10 function not found in symbol table");
+
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  side_effect_expr_function_callt log10_call;
+  log10_call.function() = symbol_expr(*log10_symbol);
+  log10_call.arguments() = {double_operand};
+  log10_call.type() = double_type();
+  log10_call.location() = converter.get_location_from_decl(element);
+
+  return log10_call;
+}
