@@ -557,10 +557,10 @@ exprt python_list::build_list_at_call(
   locationt location = converter_.get_location_from_decl(element);
 
   // Check if index is already a constant non-negative value
-  if(index.is_constant() && index.type().is_signedbv())
+  if (index.is_constant() && index.type().is_signedbv())
   {
     BigInt idx_value;
-    if(to_integer(index, idx_value) && idx_value >= 0)
+    if (to_integer(index, idx_value) && idx_value >= 0)
     {
       // Index is constant and non-negative, use directly
       side_effect_expr_function_callt list_at_call;

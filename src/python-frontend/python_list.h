@@ -168,9 +168,8 @@ public:
    * @param element The AST node for location information
    * @return Expression representing the copied list
    */
-  exprt build_copy_list_call(
-    const symbolt &list,
-    const nlohmann::json &element);
+  exprt
+  build_copy_list_call(const symbolt &list, const nlohmann::json &element);
 
 private:
   friend class python_dict_handler;
