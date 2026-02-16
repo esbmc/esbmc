@@ -620,10 +620,12 @@ exprt python_math::handle_log(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_acos(exprt operand, const nlohmann::json &element)
 {
+  // Find the acos function symbol from C math library
   symbolt *acos_symbol = symbol_table.find_symbol("c:@F@acos");
   if (!acos_symbol)
     throw std::runtime_error("acos function not found in symbol table");
 
+  // Promote operand to double if needed (acos always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -631,6 +633,7 @@ exprt python_math::handle_acos(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt acos_call;
   acos_call.function() = symbol_expr(*acos_symbol);
   acos_call.arguments() = {double_operand};
@@ -642,10 +645,12 @@ exprt python_math::handle_acos(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_atan(exprt operand, const nlohmann::json &element)
 {
+  // Find the atan function symbol from C math library
   symbolt *atan_symbol = symbol_table.find_symbol("c:@F@atan");
   if (!atan_symbol)
     throw std::runtime_error("atan function not found in symbol table");
 
+  // Promote operand to double if needed (atan always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -653,6 +658,7 @@ exprt python_math::handle_atan(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt atan_call;
   atan_call.function() = symbol_expr(*atan_symbol);
   atan_call.arguments() = {double_operand};
@@ -667,10 +673,12 @@ exprt python_math::handle_atan2(
   exprt x_operand,
   const nlohmann::json &element)
 {
+  // Find the atan2 function symbol from C math library
   symbolt *atan2_symbol = symbol_table.find_symbol("c:@F@atan2");
   if (!atan2_symbol)
     throw std::runtime_error("atan2 function not found in symbol table");
 
+  // Promote operands to double if needed (atan2 always works with doubles)
   if (!y_operand.type().is_floatbv())
   {
     exprt casted = exprt("typecast", double_type());
@@ -684,6 +692,7 @@ exprt python_math::handle_atan2(
     x_operand = casted;
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt atan2_call;
   atan2_call.function() = symbol_expr(*atan2_symbol);
   atan2_call.arguments() = {y_operand, x_operand};
@@ -695,10 +704,12 @@ exprt python_math::handle_atan2(
 
 exprt python_math::handle_log2(exprt operand, const nlohmann::json &element)
 {
+  // Find the log2 function symbol from C math library
   symbolt *log2_symbol = symbol_table.find_symbol("c:@F@log2");
   if (!log2_symbol)
     throw std::runtime_error("log2 function not found in symbol table");
 
+  // Promote operand to double if needed (log2 always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -706,6 +717,7 @@ exprt python_math::handle_log2(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt log2_call;
   log2_call.function() = symbol_expr(*log2_symbol);
   log2_call.arguments() = {double_operand};
@@ -720,10 +732,12 @@ exprt python_math::handle_pow(
   exprt exp,
   const nlohmann::json &element)
 {
+  // Find the pow function symbol from C math library
   symbolt *pow_symbol = symbol_table.find_symbol("c:@F@pow");
   if (!pow_symbol)
     throw std::runtime_error("pow function not found in symbol table");
 
+  // Promote operands to double if needed (pow always works with doubles)
   if (!base.type().is_floatbv())
   {
     exprt casted = exprt("typecast", double_type());
@@ -737,6 +751,7 @@ exprt python_math::handle_pow(
     exp = casted;
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt pow_call;
   pow_call.function() = symbol_expr(*pow_symbol);
   pow_call.arguments() = {base, exp};
@@ -748,10 +763,12 @@ exprt python_math::handle_pow(
 
 exprt python_math::handle_fabs(exprt operand, const nlohmann::json &element)
 {
+  // Find the fabs function symbol from C math library
   symbolt *fabs_symbol = symbol_table.find_symbol("c:@F@fabs");
   if (!fabs_symbol)
     throw std::runtime_error("fabs function not found in symbol table");
 
+  // Promote operand to double if needed (fabs always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -759,6 +776,7 @@ exprt python_math::handle_fabs(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt fabs_call;
   fabs_call.function() = symbol_expr(*fabs_symbol);
   fabs_call.arguments() = {double_operand};
@@ -770,10 +788,12 @@ exprt python_math::handle_fabs(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
 {
+  // Find the trunc function symbol from C math library
   symbolt *trunc_symbol = symbol_table.find_symbol("c:@F@trunc");
   if (!trunc_symbol)
     throw std::runtime_error("trunc function not found in symbol table");
 
+  // Promote operand to double if needed (trunc always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -781,6 +801,7 @@ exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt trunc_call;
   trunc_call.function() = symbol_expr(*trunc_symbol);
   trunc_call.arguments() = {double_operand};
@@ -797,10 +818,12 @@ exprt python_math::handle_fmod(
   exprt rhs,
   const nlohmann::json &element)
 {
+  // Find the fmod function symbol from C math library
   symbolt *fmod_symbol = symbol_table.find_symbol("c:@F@fmod");
   if (!fmod_symbol)
     throw std::runtime_error("fmod function not found in symbol table");
 
+  // Promote operands to double if needed (fmod always works with doubles)
   if (!lhs.type().is_floatbv())
   {
     exprt casted = exprt("typecast", double_type());
@@ -814,6 +837,7 @@ exprt python_math::handle_fmod(
     rhs = casted;
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt fmod_call;
   fmod_call.function() = symbol_expr(*fmod_symbol);
   fmod_call.arguments() = {lhs, rhs};
@@ -828,10 +852,12 @@ exprt python_math::handle_copysign(
   exprt rhs,
   const nlohmann::json &element)
 {
+  // Find the copysign function symbol from C math library
   symbolt *copysign_symbol = symbol_table.find_symbol("c:@F@copysign");
   if (!copysign_symbol)
     throw std::runtime_error("copysign function not found in symbol table");
 
+  // Promote operands to double if needed (copysign always works with doubles)
   if (!lhs.type().is_floatbv())
   {
     exprt casted = exprt("typecast", double_type());
@@ -845,6 +871,7 @@ exprt python_math::handle_copysign(
     rhs = casted;
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt copysign_call;
   copysign_call.function() = symbol_expr(*copysign_symbol);
   copysign_call.arguments() = {lhs, rhs};
@@ -856,10 +883,12 @@ exprt python_math::handle_copysign(
 
 exprt python_math::handle_tan(exprt operand, const nlohmann::json &element)
 {
+  // Find the tan function symbol from C math library
   symbolt *tan_symbol = symbol_table.find_symbol("c:@F@tan");
   if (!tan_symbol)
     throw std::runtime_error("tan function not found in symbol table");
 
+  // Promote operand to double if needed (tan always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -867,6 +896,7 @@ exprt python_math::handle_tan(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt tan_call;
   tan_call.function() = symbol_expr(*tan_symbol);
   tan_call.arguments() = {double_operand};
@@ -878,10 +908,12 @@ exprt python_math::handle_tan(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_asin(exprt operand, const nlohmann::json &element)
 {
+  // Find the asin function symbol from C math library
   symbolt *asin_symbol = symbol_table.find_symbol("c:@F@asin");
   if (!asin_symbol)
     throw std::runtime_error("asin function not found in symbol table");
 
+  // Promote operand to double if needed (asin always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -889,6 +921,7 @@ exprt python_math::handle_asin(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt asin_call;
   asin_call.function() = symbol_expr(*asin_symbol);
   asin_call.arguments() = {double_operand};
@@ -900,10 +933,12 @@ exprt python_math::handle_asin(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_sinh(exprt operand, const nlohmann::json &element)
 {
+  // Find the sinh function symbol from C math library
   symbolt *sinh_symbol = symbol_table.find_symbol("c:@F@sinh");
   if (!sinh_symbol)
     throw std::runtime_error("sinh function not found in symbol table");
 
+  // Promote operand to double if needed (sinh always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -911,6 +946,7 @@ exprt python_math::handle_sinh(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt sinh_call;
   sinh_call.function() = symbol_expr(*sinh_symbol);
   sinh_call.arguments() = {double_operand};
@@ -922,10 +958,12 @@ exprt python_math::handle_sinh(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_cosh(exprt operand, const nlohmann::json &element)
 {
+  // Find the cosh function symbol from C math library
   symbolt *cosh_symbol = symbol_table.find_symbol("c:@F@cosh");
   if (!cosh_symbol)
     throw std::runtime_error("cosh function not found in symbol table");
 
+  // Promote operand to double if needed (cosh always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -933,6 +971,7 @@ exprt python_math::handle_cosh(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt cosh_call;
   cosh_call.function() = symbol_expr(*cosh_symbol);
   cosh_call.arguments() = {double_operand};
@@ -944,10 +983,12 @@ exprt python_math::handle_cosh(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_tanh(exprt operand, const nlohmann::json &element)
 {
+  // Find the tanh function symbol from C math library
   symbolt *tanh_symbol = symbol_table.find_symbol("c:@F@tanh");
   if (!tanh_symbol)
     throw std::runtime_error("tanh function not found in symbol table");
 
+  // Promote operand to double if needed (tanh always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -955,6 +996,7 @@ exprt python_math::handle_tanh(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt tanh_call;
   tanh_call.function() = symbol_expr(*tanh_symbol);
   tanh_call.arguments() = {double_operand};
@@ -966,10 +1008,12 @@ exprt python_math::handle_tanh(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_log10(exprt operand, const nlohmann::json &element)
 {
+  // Find the log10 function symbol from C math library
   symbolt *log10_symbol = symbol_table.find_symbol("c:@F@log10");
   if (!log10_symbol)
     throw std::runtime_error("log10 function not found in symbol table");
 
+  // Promote operand to double if needed (log10 always works with doubles)
   exprt double_operand = operand;
   if (!operand.type().is_floatbv())
   {
@@ -977,6 +1021,7 @@ exprt python_math::handle_log10(exprt operand, const nlohmann::json &element)
     double_operand.copy_to_operands(operand);
   }
 
+  // Create the function call expression
   side_effect_expr_function_callt log10_call;
   log10_call.function() = symbol_expr(*log10_symbol);
   log10_call.arguments() = {double_operand};
