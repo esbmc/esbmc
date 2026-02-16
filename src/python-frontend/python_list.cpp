@@ -2818,7 +2818,8 @@ exprt python_list::build_copy_list_call(
   // Find the list_copy C function
   const symbolt *copy_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_copy");
-  assert(copy_func && "list_copy function not found in symbol table");
+  if (!copy_func)
+    throw std::runtime_error("list_copy function not found in symbol table");
 
   // Create the copied list symbol
   symbolt &copied_list =
