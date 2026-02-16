@@ -2845,7 +2845,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           if (unroll_count > 0)
           {
             log_status(
-              "[pragma_unroll] clang_c_convert.cpp:{} Clang frontend: parsed #pragma unroll with count={}",
+              "[!DEBUG!] [pragma_unroll] clang_c_convert.cpp:{} Clang frontend: parsed #pragma unroll with count={}",
               __LINE__,
               unroll_count == UINT_MAX ? "unlimited" : std::to_string(unroll_count));
             new_expr.set(

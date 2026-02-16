@@ -469,7 +469,7 @@ bool goto_symext::get_unwind(
   {
     this_loop_max_unwind = unwind_set[id];
     log_status(
-      "[pragma_unroll] symex_goto.cpp:{} loop {} using unwind_set limit={}, current unwind={}",
+      "[!DEBUG!] [pragma_unroll] symex_goto.cpp:{} loop {} using unwind_set limit={}, current unwind={}",
       __LINE__,
       id,
       integer2string(this_loop_max_unwind),
