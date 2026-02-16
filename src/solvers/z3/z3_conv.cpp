@@ -1320,9 +1320,9 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
 
 bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
 {
-  const z3_smt_ast *za = static_cast<const z3_smt_ast *>(a);
+  const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
 
-  // First check if this is a numeral (constant value)
+  // First try direct numeral extraction
   if (Z3_get_ast_kind(z3_ctx, za->a) == Z3_NUMERAL_AST)
   {
     int64_t num, den;
@@ -1333,23 +1333,20 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
       return true;
     }
 
-    // Fallback to string-based parsing
     Z3_string str = Z3_get_numeral_string(z3_ctx, za->a);
     if (str != nullptr)
       return parse_rational_bigint(str, numerator, denominator);
   }
   else
   {
-    // It's not a numeral, need to evaluate it in the model
-    Z3_model current_model = Z3_solver_get_model(z3_ctx, solver);
-    if (current_model != nullptr)
+    // Evaluate expression in model
+    z3::model current_model = solver.get_model();
+    if (current_model)
     {
-      Z3_ast evaluated;
-      bool eval_success =
-        Z3_model_eval(z3_ctx, current_model, za->a, true, &evaluated);
+      z3::expr evaluated = current_model.eval(za->a, true);
 
       if (
-        eval_success && evaluated != nullptr &&
+        evaluated &&
         Z3_get_ast_kind(z3_ctx, evaluated) == Z3_NUMERAL_AST)
       {
         int64_t num, den;
@@ -1360,7 +1357,6 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
           return true;
         }
 
-        // Fallback to string-based parsing
         Z3_string str = Z3_get_numeral_string(z3_ctx, evaluated);
         if (str != nullptr)
           return parse_rational_bigint(str, numerator, denominator);
@@ -1370,6 +1366,7 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
 
   return false;
 }
+
 
 bool z3_convt::parse_rational_bigint(
   Z3_string str,
@@ -1422,12 +1419,18 @@ ieee_floatt z3_convt::get_fpbv(smt_astt a)
     else
       number.make_minus_infinity();
   }
-  else
+    else
   {
-    Z3_ast v;
-    if (Z3_model_eval(
-          z3_ctx, solver.get_model(), Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
-      number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
+    z3::model m = solver.get_model();
+    if (m)
+    {
+      // Convert fp numeral to IEEE bitvector and evaluate in the model
+      z3::expr bv(z3_ctx, Z3_mk_fpa_to_ieee_bv(z3_ctx, e));
+      z3::expr v = m.eval(bv, true);
+
+      if (v && Z3_get_ast_kind(z3_ctx, v) == Z3_NUMERAL_AST)
+        number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
+    }
   }
 
   return number;

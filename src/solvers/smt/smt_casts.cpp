@@ -725,14 +725,6 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     return mk_int2real(from_int);
   }
 
-  if (
-  int_encoding &&
-  is_floatbv_type(cast.from->type) &&
-  is_floatbv_type(cast.type))
-{
-  return convert_ast(cast.from);
-}
-
 
   if (cast.type == cast.from->type)
     return convert_ast(cast.from);

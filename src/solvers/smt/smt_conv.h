@@ -12,7 +12,7 @@
 #include <util/message.h>
 #include <util/namespace.h>
 #include <util/threeval.h>
-#include <solvers/smt/ra/ra_api.h>
+
 
 
 
@@ -89,6 +89,7 @@
 // Forward dec.
 class fp_convt;
 class smt_convt;
+class ra_apit;
 
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/tuple/smt_tuple.h>

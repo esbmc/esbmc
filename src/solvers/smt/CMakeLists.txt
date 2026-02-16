@@ -1,6 +1,6 @@
 add_subdirectory(tuple)
 add_subdirectory(fp)
-add_subdirectory(ra)
+
 
 add_library(smt
   array_conv.cpp
@@ -18,5 +18,5 @@ target_include_directories(smt
 
 target_link_libraries(smt
   fmt::fmt
-  ra
+  
 )
