@@ -113,6 +113,13 @@ def cos(x: float) -> float:
     return __ESBMC_cos(x)
 
 
+def tan(x: float) -> float:
+    """
+    Calculate tangent of x (in radians)
+    """
+    return __ESBMC_tan(x)
+
+
 def sqrt(x: float) -> float:
     """
     Calculate square root of x
@@ -159,3 +166,137 @@ def log(x: float) -> float:
         ValueError: If x <= 0 (math domain error)
     """
     return __ESBMC_log(x)
+
+
+def asin(x: float) -> float:
+    """
+    Calculate arcsine of x (in radians)
+
+    Raises:
+        ValueError: If |x| > 1 (math domain error)
+    """
+    if x < -1.0 or x > 1.0:
+        raise ValueError("math domain error")
+    return __ESBMC_asin(x)
+
+
+def acos(x: float) -> float:
+    """
+    Calculate arccosine of x (in radians)
+    """
+    return __ESBMC_acos(x)
+
+
+def atan(x: float) -> float:
+    """
+    Calculate arctangent of x (in radians)
+    """
+    return __ESBMC_atan(x)
+
+
+def atan2(y: float, x: float) -> float:
+    """
+    Calculate two-argument arctangent (in radians)
+    """
+    return __ESBMC_atan2(y, x)
+
+
+def log2(x: float) -> float:
+    """
+    Calculate base-2 logarithm of x
+
+    Raises:
+        ValueError: If x <= 0 (math domain error)
+    """
+    if x <= 0:
+        raise ValueError("math domain error")
+    return __ESBMC_log2(x)
+
+
+def log10(x: float) -> float:
+    """
+    Calculate base-10 logarithm of x
+
+    Raises:
+        ValueError: If x <= 0 (math domain error)
+    """
+    if x <= 0:
+        raise ValueError("math domain error")
+    return __ESBMC_log10(x)
+
+
+def pow(x: float, y: float) -> float:
+    """
+    Calculate x raised to the power of y
+    """
+    return __ESBMC_pow(x, y)
+
+
+def fabs(x: float) -> float:
+    """
+    Calculate absolute value of x
+    """
+    return __ESBMC_fabs(x)
+
+
+def trunc(x: float) -> int:
+    """
+    Truncate x toward zero and return int
+    """
+    return int(x)
+
+
+def fmod(x: float, y: float) -> float:
+    """
+    Floating-point remainder of x / y
+    """
+    return __ESBMC_fmod(x, y)
+
+
+def copysign(x: float, y: float) -> float:
+    """
+    Return x with the sign of y
+    """
+    return __ESBMC_copysign(x, y)
+
+
+def sinh(x: float) -> float:
+    """
+    Calculate hyperbolic sine of x
+    """
+    return __ESBMC_sinh(x)
+
+
+def cosh(x: float) -> float:
+    """
+    Calculate hyperbolic cosine of x
+    """
+    return __ESBMC_cosh(x)
+
+
+def tanh(x: float) -> float:
+    """
+    Calculate hyperbolic tangent of x
+    """
+    return __ESBMC_tanh(x)
+
+
+def isfinite(x: float) -> bool:
+    return (not isinf(x)) and (not isnan(x))
+
+
+def degrees(x: float) -> float:
+    return x * (180.0 / pi)
+
+
+def radians(x: float) -> float:
+    return x * (pi / 180.0)
+
+
+def modf(x: float) -> tuple[float, float]:
+    """
+    Split x into fractional and integer parts
+    """
+    int_part: float = float(int(x))
+    frac_part: float = x - int_part
+    return (frac_part, int_part)
