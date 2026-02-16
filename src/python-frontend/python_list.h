@@ -199,6 +199,10 @@ private:
 
   exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
 
+  void copy_type_map_entries(
+    const std::string &from_list_id,
+    const std::string &to_list_id);
+
   /**
    * @brief Handle symbolic (non-constant) range arguments
    * @param converter The python converter instance

@@ -479,19 +479,16 @@ exprt python_list::build_concat_list_call(
 
   // Update list type mapping
   const std::string dst_id = dst_list.id.as_string();
-  auto copy_type_info = [&](const exprt &src_list) {
+
+  // Copy type info from source list if it's a symbol
+  auto copy_type_info_from_expr = [&](const exprt &src_list) {
     if (!src_list.is_symbol())
       return;
-    const std::string key = src_list.identifier().as_string();
-    auto it = list_type_map.find(key);
-    if (it != list_type_map.end())
-    {
-      for (const auto &p : it->second)
-        list_type_map[dst_id].push_back(p);
-    }
+    copy_type_map_entries(src_list.identifier().as_string(), dst_id);
   };
-  copy_type_info(lhs);
-  copy_type_info(rhs);
+
+  copy_type_info_from_expr(lhs);
+  copy_type_info_from_expr(rhs);
 
   return symbol_expr(dst_list);
 }
@@ -2808,6 +2805,18 @@ exprt python_list::build_concrete_range(
   return list.get();
 }
 
+void python_list::copy_type_map_entries(
+  const std::string &from_list_id,
+  const std::string &to_list_id)
+{
+  auto it = list_type_map.find(from_list_id);
+  if (it != list_type_map.end())
+  {
+    for (const auto &type_entry : it->second)
+      list_type_map[to_list_id].push_back(type_entry);
+  }
+}
+
 exprt python_list::build_copy_list_call(
   const symbolt &list,
   const nlohmann::json &element)
@@ -2839,15 +2848,7 @@ exprt python_list::build_copy_list_call(
   converter_.add_instruction(copy_call);
 
   // Copy type information from original list to copied list
-  const std::string &list_id = list.id.as_string();
-  const std::string &copied_id = copied_list.id.as_string();
-
-  auto type_map_it = list_type_map.find(list_id);
-  if (type_map_it != list_type_map.end())
-  {
-    for (const auto &type_entry : type_map_it->second)
-      list_type_map[copied_id].push_back(type_entry);
-  }
+  copy_type_map_entries(list.id.as_string(), copied_list.id.as_string());
 
   return symbol_expr(copied_list);
 }
