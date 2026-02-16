@@ -1788,7 +1788,7 @@ bool function_call_expr::is_list_method_call() const
   return method_name == "append" || method_name == "pop" ||
          method_name == "insert" || method_name == "remove" ||
          method_name == "clear" || method_name == "extend" ||
-         method_name == "insert" || method_name == "copy";
+         method_name == "copy";
 }
 
 exprt function_call_expr::handle_list_method() const
