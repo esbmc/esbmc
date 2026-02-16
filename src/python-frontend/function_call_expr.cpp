@@ -2241,7 +2241,7 @@ function_call_expr::get_dispatch_table()
      },
      "isnan/isinf"},
 
-    // Math module functions (sin, cos, sqrt, exp, log)
+    // Math module functions (sin, cos, sqrt, exp, log, etc.)
     {[this]() {
        const std::string &func_name = function_id_.get_function();
        bool is_math_module = false;
@@ -2254,29 +2254,64 @@ function_call_expr::get_dispatch_table()
        bool is_math_wrapper =
          (func_name == "__ESBMC_sin" || func_name == "__ESBMC_cos" ||
           func_name == "__ESBMC_sqrt" || func_name == "__ESBMC_exp" ||
-          func_name == "__ESBMC_log");
+          func_name == "__ESBMC_log" || func_name == "__ESBMC_acos" ||
+          func_name == "__ESBMC_atan" || func_name == "__ESBMC_atan2" ||
+          func_name == "__ESBMC_log2" || func_name == "__ESBMC_pow" ||
+          func_name == "__ESBMC_fabs" || func_name == "__ESBMC_trunc" ||
+          func_name == "__ESBMC_fmod" || func_name == "__ESBMC_copysign" ||
+          func_name == "__ESBMC_tan" || func_name == "__ESBMC_asin" ||
+          func_name == "__ESBMC_sinh" || func_name == "__ESBMC_cosh" ||
+          func_name == "__ESBMC_tanh" || func_name == "__ESBMC_log10");
 
-       return (is_math_module && (func_name == "sin" || func_name == "cos" ||
-                                  func_name == "sqrt" || func_name == "exp" ||
-                                  func_name == "log")) ||
+       return (is_math_module &&
+               (func_name == "sin" || func_name == "cos" ||
+                func_name == "sqrt" || func_name == "exp" ||
+                func_name == "log" || func_name == "acos" ||
+                func_name == "atan" || func_name == "atan2" ||
+                func_name == "log2" || func_name == "pow" ||
+                func_name == "fabs" || func_name == "trunc" ||
+                func_name == "fmod" || func_name == "copysign" ||
+                func_name == "tan" || func_name == "asin" ||
+                func_name == "sinh" || func_name == "cosh" ||
+                func_name == "tanh" || func_name == "log10")) ||
               is_math_wrapper;
      },
      [this]() -> exprt {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
 
-       if (args.size() != 1)
-         throw std::runtime_error(func_name + "() expects exactly 1 argument");
-       exprt arg_expr = converter_.get_expr(args[0]);
+       auto require_one_arg = [&]() -> exprt {
+         if (args.size() != 1)
+           throw std::runtime_error(
+             func_name + "() expects exactly 1 argument");
+         return converter_.get_expr(args[0]);
+       };
+
+       auto require_two_args = [&]() -> std::pair<exprt, exprt> {
+         if (args.size() != 2)
+           throw std::runtime_error(
+             func_name + "() expects exactly 2 arguments");
+         return {converter_.get_expr(args[0]), converter_.get_expr(args[1])};
+       };
 
        if (func_name == "sin" || func_name == "__ESBMC_sin")
+       {
+         exprt arg_expr = require_one_arg();
          return converter_.get_math_handler().handle_sin(arg_expr, call_);
+       }
        else if (func_name == "cos" || func_name == "__ESBMC_cos")
+       {
+         exprt arg_expr = require_one_arg();
          return converter_.get_math_handler().handle_cos(arg_expr, call_);
+       }
        else if (func_name == "exp" || func_name == "__ESBMC_exp")
+       {
+         exprt arg_expr = require_one_arg();
          return converter_.get_math_handler().handle_exp(arg_expr, call_);
+       }
        else if (func_name == "sqrt" || func_name == "__ESBMC_sqrt")
        {
+         exprt arg_expr = require_one_arg();
          // Domain check for sqrt: operand must be >= 0
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -2317,11 +2352,93 @@ function_call_expr::get_dispatch_table()
          return sqrt_result;
        }
        else if (func_name == "log" || func_name == "__ESBMC_log")
+       {
+         exprt arg_expr = require_one_arg();
          return converter_.get_math_handler().handle_log(arg_expr, call_);
+       }
+       else if (func_name == "acos" || func_name == "__ESBMC_acos")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_acos(arg_expr, call_);
+       }
+       else if (func_name == "atan" || func_name == "__ESBMC_atan")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_atan(arg_expr, call_);
+       }
+       else if (func_name == "log2" || func_name == "__ESBMC_log2")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_log2(arg_expr, call_);
+       }
+       else if (func_name == "tan" || func_name == "__ESBMC_tan")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_tan(arg_expr, call_);
+       }
+       else if (func_name == "asin" || func_name == "__ESBMC_asin")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_asin(arg_expr, call_);
+       }
+       else if (func_name == "sinh" || func_name == "__ESBMC_sinh")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_sinh(arg_expr, call_);
+       }
+       else if (func_name == "cosh" || func_name == "__ESBMC_cosh")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_cosh(arg_expr, call_);
+       }
+       else if (func_name == "tanh" || func_name == "__ESBMC_tanh")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_tanh(arg_expr, call_);
+       }
+       else if (func_name == "log10" || func_name == "__ESBMC_log10")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_log10(arg_expr, call_);
+       }
+       else if (func_name == "fabs" || func_name == "__ESBMC_fabs")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_fabs(arg_expr, call_);
+       }
+       else if (func_name == "trunc" || func_name == "__ESBMC_trunc")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_trunc(arg_expr, call_);
+       }
+       else if (func_name == "atan2" || func_name == "__ESBMC_atan2")
+       {
+         auto [y_expr, x_expr] = require_two_args();
+         return converter_.get_math_handler().handle_atan2(
+           y_expr, x_expr, call_);
+       }
+       else if (func_name == "pow" || func_name == "__ESBMC_pow")
+       {
+         auto [base_expr, exp_expr] = require_two_args();
+         return converter_.get_math_handler().handle_pow(
+           base_expr, exp_expr, call_);
+       }
+       else if (func_name == "fmod" || func_name == "__ESBMC_fmod")
+       {
+         auto [lhs_expr, rhs_expr] = require_two_args();
+         return converter_.get_math_handler().handle_fmod(
+           lhs_expr, rhs_expr, call_);
+       }
+       else if (func_name == "copysign" || func_name == "__ESBMC_copysign")
+       {
+         auto [lhs_expr, rhs_expr] = require_two_args();
+         return converter_.get_math_handler().handle_copysign(
+           lhs_expr, rhs_expr, call_);
+       }
 
        throw std::runtime_error("Unsupported math function: " + func_name);
      },
-     "math.sin/cos/sqrt/exp/log()"},
+     "math.sin/cos/sqrt/exp/log/etc"},
 
     // Math.comb function with type checking
     {[this]() { return is_math_comb_call(); },

@@ -269,6 +269,11 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **math.ceil(x)**: Returns the smallest integer greater than or equal to x.
   - Both functions `math.floor(x)` and `math.ceil(x)` include built-in assertions to reject infinity and NaN inputs.
   - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions.
+- **Trigonometric**: `math.sin`, `math.cos`, `math.tan`, `math.asin`, `math.acos`, `math.atan`, `math.atan2`.
+- **Exponential/Logarithmic**: `math.exp`, `math.log`, `math.log2`, `math.log10`, `math.pow`.
+- **Hyperbolic**: `math.sinh`, `math.cosh`, `math.tanh`.
+- **Rounding/Abs**: `math.fabs`, `math.trunc`, `math.modf`.
+- **Other**: `math.fmod`, `math.copysign`, `math.degrees`, `math.radians`, `math.isfinite`.
 
 ### Regular Expression (re) Module Support
 ESBMC-Python provides operational modeling and verification capabilities for Python's re module, enabling pattern-matching verification:
@@ -329,6 +334,7 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
 ### Special Value Detection:
 - **math.isnan(x)**: Returns True if x is NaN (Not a Number).
 - **math.isinf(x)**: Returns True if x is positive or negative infinity.
+- **math.isfinite(x)**: Returns True if x is not NaN and not infinity.
 - Both functions use ESBMC's internal operations for accurate verification according to the IEEE-754 standard.
 
 ### Exception Handling
