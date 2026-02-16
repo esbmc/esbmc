@@ -7,6 +7,7 @@ def test_math29_fail() -> None:
     math.acos(2.0)
     math.log2(0.0)
     math.log10(0.0)
+    assert False
 
 
 test_math29_fail()
