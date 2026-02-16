@@ -140,6 +140,12 @@ const static std::vector<std::string> python_c_models = {
   "frexp",
   "round",
   "copysign",
+  "tan",
+  "asin",
+  "sinh",
+  "cosh",
+  "tanh",
+  "log10",
   "arctan",
   "atan",
   "_atan",
@@ -201,7 +207,13 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_cos",
   "__ESBMC_sqrt",
   "__ESBMC_exp",
-  "__ESBMC_log"};
+  "__ESBMC_log",
+  "__ESBMC_tan",
+  "__ESBMC_asin",
+  "__ESBMC_sinh",
+  "__ESBMC_cosh",
+  "__ESBMC_tanh",
+  "__ESBMC_log10"};
 } // namespace
 
 static void generate_symbol_deps(
