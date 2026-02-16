@@ -183,7 +183,12 @@ def asin(x: float) -> float:
 def acos(x: float) -> float:
     """
     Calculate arccosine of x (in radians)
+
+    Raises:
+        ValueError: If |x| > 1 (math domain error)
     """
+    if x < -1.0 or x > 1.0:
+        raise ValueError("math domain error")
     return __ESBMC_acos(x)
 
 
