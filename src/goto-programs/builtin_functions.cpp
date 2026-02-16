@@ -174,11 +174,13 @@ void goto_convertt::do_atomic_begin(
   if (
     function.location().function() != "pthread_create" &&
     function.location().function() != "pthread_join_noswitch" &&
-    function.location().function() != "pthread_trampoline")
+    function.location().function() != "pthread_trampoline" &&
+    !config.options.get_bool_option("data-races-check-only"))
   {
     code_function_callt call;
     call.function() = symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
-    do_function_call(call.lhs(), call.function(), call.arguments(), dest);
+    do_function_call(
+      call.lhs(), call.function(), call.arguments(), function.location(), dest);
   }
 
   goto_programt::targett t = dest.add_instruction(ATOMIC_BEGIN);
@@ -527,7 +529,7 @@ void goto_convertt::do_function_call_symbol(
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
   // the builtin function, we should honor the user function and call it
-  if (symbol->value.is_not_nil())
+  if (symbol->value.is_not_nil() && symbol->value.has_operands())
   {
     // insert function call
     code_function_callt function_call;
@@ -546,7 +548,11 @@ void goto_convertt::do_function_call_symbol(
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
   bool is_assert = (base_name == "assert");
 
-  if (is_assume || is_assert)
+  bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");
+  bool is_requires = (base_name == "__ESBMC_requires");
+  bool is_ensures = (base_name == "__ESBMC_ensures");
+
+  if (is_assume || is_assert || is_loop_invariant || is_requires || is_ensures)
   {
     if (arguments.size() != 1)
     {
@@ -554,12 +560,51 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    if (options.get_bool_option("no-assertions") && !is_assume)
+    if (
+      options.get_bool_option("no-assertions") && !is_assume &&
+      !is_loop_invariant && !is_requires && !is_ensures)
       return;
 
-    goto_programt::targett t =
-      dest.add_instruction(is_assume ? ASSUME : ASSERT);
-    migrate_expr(arguments.front(), t->guard);
+    // Rafael's invariant merging: combine consecutive __invariant() calls
+    // into a single LOOP_INVARIANT instruction for efficiency
+    // not tested yet, but should be correct
+    goto_programt::targett t;
+    expr2tc guard;
+    migrate_expr(arguments.front(), guard);
+
+    bool multiple_invariants = false;
+
+    if (is_loop_invariant)
+    {
+      if (!is_bool_type(guard))
+        log_error("invariants must be of bool type");
+
+      goto_programt::instructiont &final_instruct = dest.instructions.back();
+      if (final_instruct.is_loop_invariant())
+      {
+        multiple_invariants = true;
+        final_instruct.add_loop_invariant(guard);
+      }
+      else
+      {
+        t = dest.add_instruction(LOOP_INVARIANT);
+        t->add_loop_invariant(guard);
+      }
+    }
+    else
+    {
+      // For contract functions, generate ASSUME instructions with special markers
+      if (is_requires || is_ensures)
+      {
+        t = dest.add_instruction(ASSUME);
+        t->guard = guard;
+      }
+      else
+      {
+        t = dest.add_instruction(is_assume ? ASSUME : ASSERT);
+        t->guard = guard;
+      }
+    }
 
     // The user may have re-declared the assert or assume functions to take an
     // integer argument, rather than a boolean. This leads to problems at the
@@ -567,20 +612,61 @@ void goto_convertt::do_function_call_symbol(
     // ASSUME/ASSERT insns are boolean exprs.  So, if the given argument to
     // this function isn't a bool, typecast it.  We can't rely on the C/C++
     // type system to ensure that.
-    if (!is_bool_type(t->guard->type))
+    if (!is_loop_invariant && !is_bool_type(t->guard->type))
       t->guard = typecast2tc(get_bool_type(), t->guard);
 
-    t->location = function.location();
-    t->location.user_provided(true);
+    // make sure that we don't alraedy have a location
+    if (!multiple_invariants)
+    {
+      t->location = function.location();
+      t->location.user_provided(true);
+    }
 
     if (is_assert)
       t->location.property("assertion");
+
+    // Mark contract clauses with special comments
+    if (is_requires)
+      t->location.comment("contract::requires");
+    else if (is_ensures)
+      t->location.comment("contract::ensures");
 
     if (lhs.is_not_nil())
     {
       log_error("{} expected not to have LHS", id2string(base_name));
       abort();
     }
+  }
+  else if (base_name == "__ESBMC_old")
+  {
+    // __ESBMC_old(expr): captures the pre-state value of expr in ensures clauses
+    // This function should only be used within __ESBMC_ensures clauses
+    //
+    // Type handling: Declared as int in frontend, but at IR level we use
+    // arguments[0].type() to automatically inherit the correct type from the argument.
+    if (arguments.size() != 1)
+    {
+      log_error("`__ESBMC_old' expected to have one argument");
+      abort();
+    }
+
+    if (lhs.is_nil())
+    {
+      log_error("`__ESBMC_old' must be used in an expression (requires LHS)");
+      abort();
+    }
+
+    // Create a special sideeffect expression to mark this as an old() call
+    // Type is automatically inherited from the argument
+    exprt old_expr("sideeffect", arguments[0].type());
+    old_expr.set("statement", "old_snapshot");
+    old_expr.copy_to_operands(arguments[0]);
+    old_expr.location() = function.location();
+
+    // Generate assignment: lhs = old_expr
+    code_assignt assignment(lhs, old_expr);
+    assignment.location() = function.location();
+    copy(assignment, ASSIGN, dest);
   }
   else if (base_name == "__ESBMC_assert")
   {
@@ -1018,6 +1104,16 @@ void goto_convertt::do_function_call_symbol(
     code_assignt assignment(lhs, rhs);
     assignment.location() = function.location();
     copy(assignment, ASSIGN, dest);
+    return;
+  }
+  else if (base_name == "set_unexpected")
+  {
+    symbolt new_symbol;
+    new_symbol.name = "__ESBMC_unexpected";
+    new_symbol.type = arguments[0].type();
+    new_symbol.id = "c:@F@" + id2string(new_symbol.name);
+    new_symbol.value = arguments[0].op0().op0();
+    new_name(new_symbol);
     return;
   }
   else

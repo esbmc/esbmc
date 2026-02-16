@@ -5,6 +5,9 @@
 #include <goto-symex/slice.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
+#include <goto-symex/witnesses.h>
+#include <goto-symex/pytest.h>
+#include <goto-symex/ctest.h>
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
@@ -44,6 +47,8 @@ protected:
 
   std::unique_ptr<smt_convt> runtime_solver;
   std::unique_ptr<reachability_treet> symex;
+  pytest_generator pytest_gen; // For Python pytest test case generation
+  ctest_generator ctest_gen;   // For C CTest test case generation
   mutable std::atomic<bool> keep_alive_running;
   mutable std::atomic<int> keep_alive_interval;
 
@@ -58,7 +63,7 @@ protected:
   virtual void
   error_trace(smt_convt &smt_conv, const symex_target_equationt &eq);
 
-  virtual void successful_trace();
+  virtual void successful_trace(const symex_target_equationt &eq);
 
   virtual void show_vcc(const symex_target_equationt &eq);
 
@@ -78,7 +83,8 @@ protected:
 
   smt_convt::resultt multi_property_check(
     const symex_target_equationt &eq,
-    size_t remaining_claims);
+    size_t remaining_claims,
+    smt_convt &runtime_solver);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
@@ -87,14 +93,19 @@ protected:
     symex_target_equationt &eq) const;
 
   // for multi-property
-  void
-  clear_verified_claims(const claim_slicer &claim, const bool &is_goto_cov);
+  void clear_verified_claims_in_ssa(
+    symex_target_equationt &local_eq,
+    const claim_slicer &claim,
+    const bool &is_goto_cov);
+  void clear_verified_claims_in_goto(
+    const claim_slicer &claim,
+    const bool &is_goto_cov);
 
   virtual void report_multi_property_trace(
     const smt_convt::resultt &res,
-    const std::unique_ptr<smt_convt> &solver,
+    smt_convt *&solver,
     const symex_target_equationt &local_eq,
-    const size_t ce_counter,
+    const std::atomic<size_t> ce_counter,
     const goto_tracet &goto_trace,
     const std::string &msg);
 
@@ -107,11 +118,28 @@ protected:
     const bool &is_branch_func_cov,
     const std::unordered_set<std::string> &reached_claims,
     const std::unordered_multiset<std::string> &reached_mul_claims);
+
+private:
+  struct SimpleSummary
+  {
+    std::atomic<size_t> total_properties = 0;
+    std::atomic<size_t> passed_properties = 0;
+    std::atomic<size_t> skipped_properties = 0;
+    std::atomic<size_t> simplified_properties = 0;
+    std::atomic<size_t> failed_properties = 0;
+    std::atomic<double> total_time_s = 0.0;
+    std::string solver_name;
+    std::once_flag solver_name_flag;
+  };
+
+  void report_simple_summary(const SimpleSummary &summary) const;
 };
 
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
-  const std::unordered_multiset<std::string> &reached_mul_claims);
+  const std::unordered_multiset<std::string> &reached_mul_claims,
+  pytest_generator &pytest_gen,
+  ctest_generator &ctest_gen);
 
 #endif

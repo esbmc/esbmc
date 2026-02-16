@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: All parameters in function \"bad\" must be type annotated$

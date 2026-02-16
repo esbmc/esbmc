@@ -1,7 +1,6 @@
 #include <goto-symex/goto_symex.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/simplify_expr.h>
 
 void goto_symext::symex_catch()
 {
@@ -33,7 +32,7 @@ void goto_symext::symex_catch()
     for (goto_programt::targetst::const_iterator it =
            instruction.targets.begin();
          it != instruction.targets.end();
-         it++, i++)
+         ++it, ++i)
     {
       exception.catch_map[catch_ref.exception_list[i]] = *it;
       exception.catch_order[catch_ref.exception_list[i]] = i;
@@ -47,6 +46,48 @@ void goto_symext::symex_catch()
   }
 }
 
+bool goto_symext::is_python_exception_subtype(
+  const irep_idt &thrown_type,
+  const irep_idt &catch_type)
+{
+  std::string thrown = thrown_type.as_string();
+  std::string catch_t = catch_type.as_string();
+
+  // Exact match
+  if (thrown == catch_t)
+    return true;
+
+  // Look up the thrown exception class in the symbol table
+  const symbolt *thrown_symbol = ns.lookup("tag-" + thrown);
+  if (!thrown_symbol)
+    return false;
+
+  // Get the bases from the type metadata
+  const irept &bases = thrown_symbol->type.find("bases");
+
+  if (bases.is_nil())
+    return false;
+
+  const irept::subt &base_list = bases.get_sub();
+
+  // Iterate through base classes
+  for (const auto &base : base_list)
+  {
+    // The base class is stored with id() == "tag-BaseClassName"
+    std::string base_name = base.id().as_string();
+
+    // Remove "tag-" prefix to get the class name
+    if (base_name.find("tag-") == 0)
+      base_name = base_name.substr(4);
+
+    // Recursively check if this base class matches or inherits from catch_type
+    if (is_python_exception_subtype(irep_idt(base_name), catch_type))
+      return true;
+  }
+
+  return false;
+}
+
 bool goto_symext::symex_throw()
 {
   irep_idt catch_name = "missing";
@@ -55,7 +96,7 @@ bool goto_symext::symex_throw()
 
   // get the list of exceptions thrown
   const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(instruction.code);
-  const std::vector<irep_idt> exceptions_thrown = throw_ref.exception_list;
+  const std::vector<irep_idt> &exceptions_thrown = throw_ref.exception_list;
 
   // Handle rethrows
   if (handle_rethrow(throw_ref.operand, instruction))
@@ -119,9 +160,26 @@ bool goto_symext::symex_throw()
       break;
     }
 
-    // Search for a catch with a matching type
+    // Search for a catch with a matching type (including base classes)
     goto_symex_statet::exceptiont::catch_mapt::const_iterator c_it =
       except->catch_map.find(it);
+
+    // Track which catch type was matched (might be a base class)
+    irep_idt matched_catch_type = it;
+
+    // If no exact match, check inheritance hierarchy for Python exceptions
+    if (c_it == except->catch_map.end())
+    {
+      for (const auto &catch_entry : except->catch_map)
+      {
+        if (is_python_exception_subtype(it, catch_entry.first))
+        {
+          c_it = except->catch_map.find(catch_entry.first);
+          matched_catch_type = catch_entry.first; // Track the actual catch type
+          break;
+        }
+      }
+    }
 
     // Do we have a catch for it?
     if (c_it != except->catch_map.end())
@@ -129,11 +187,18 @@ bool goto_symext::symex_throw()
       // We do!
 
       // Get current catch number and update if needed
-      new_id_number = (*except->catch_order.find(it)).second;
+      // Use matched_catch_type instead of it for the lookup
+      new_id_number = (*except->catch_order.find(matched_catch_type)).second;
 
       if (new_id_number < old_id_number)
       {
-        cur_state->call_stack = old_stack;
+        // Only restore call_stack when re-selecting a better catch handler.
+        // Skip restoration on first match (old_id_number == -1) to avoid unnecessary
+        // deep copy that causes crashes on macOS with Python exceptions.
+        if (old_id_number != (unsigned)-1)
+        {
+          cur_state->call_stack = old_stack;
+        }
         cur_state->guard.make_true();
 
         update_throw_target(except, c_it->second, instruction.code);
@@ -248,22 +313,22 @@ bool goto_symext::unexpected_handler()
   // It'll call the current function handler
   if (!is_included)
   {
+    // We only call it if the user replaced the default one
+    const symbolt *handler = ns.lookup("c:@F@__ESBMC_unexpected");
+    if (!handler)
+      return false;
+
     expr2tc the_call;
     code_function_callt unexpected_function;
-    unexpected_function.function() = symbol_expr(*tmp);
+    unexpected_function.function() = handler->value;
     migrate_expr(unexpected_function, the_call);
-
-    // We only call it if the user replaced the default one
-    if (
-      to_symbol2t(to_code_function_call2t(the_call).function).thename ==
-      "c:@N@std@F@default_unexpected#")
-      return false;
 
     // Indicate there we're inside the unexpected flow
     inside_unexpected = true;
 
     // Call the function
     symex_function_call(the_call);
+    unexpected_end = handler->value.identifier();
     return true;
   }
 
@@ -318,7 +383,9 @@ void goto_symext::update_throw_target(
     for (i = cur_state->call_stack.rbegin(); i != cur_state->call_stack.rend();
          i++)
     {
-      if (i->function_identifier == target->function)
+      irep_idt id = i->function_identifier.empty() ? "__ESBMC_main"
+                                                   : i->function_identifier;
+      if (id == target->function)
       {
         statet::goto_state_listt &goto_state_list = i->goto_state_map[target];
 
@@ -329,7 +396,8 @@ void goto_symext::update_throw_target(
     }
 
     assert(
-      i != cur_state->call_stack.rend() &&
+      (i != cur_state->call_stack.rend() ||
+       target->function == "__ESBMC_main") &&
       "Target instruction in throw "
       "handler not in any function frame on the stack");
   }
@@ -388,8 +456,10 @@ bool goto_symext::handle_rethrow(
       goto_programt::instructiont &mutable_ref =
         const_cast<goto_programt::instructiont &>(instruction);
       to_code_cpp_throw2t(mutable_ref.code).exception_list.push_back((*e_it));
+      to_code_cpp_throw2t(mutable_ref.code).operand =
+        to_code_cpp_throw2t(last_throw->code).operand;
 
-      return true;
+      return false;
     }
 
     const std::string &msg = "Trying to re-throw without last exception.";

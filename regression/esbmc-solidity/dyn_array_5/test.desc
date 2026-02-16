@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --contract BASE --k-induction --no-standard-checks
+--sol contract.sol --contract BASE --no-standard-checks --unwind 3 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

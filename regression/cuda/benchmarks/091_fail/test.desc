@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.cu
 --force-malloc-success --unwind 5 --context-bound 2 -DGPU_threads=16
 

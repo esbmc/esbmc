@@ -1,6 +1,6 @@
 class Vehicle:
     def move(self):
-        assert False
+        raise NotImplementedError("Subclasses should implement this method.")
 
 class Car(Vehicle):
     def move(self):
@@ -15,15 +15,17 @@ class Airplane(Vehicle):
         return "Flying in the sky"
 
 def test_vehicle_movement(vehicle, expected_movement):
-    result = vehicle.move()
-    assert result == expected_movement
+    result:str = vehicle.move()
+    assert result == expected_movement, f"Expected '{expected_movement}', but got '{result}'"
 
-# Test cases
-car = Car()
-boat = Boat()
-airplane = Airplane()
+if __name__ == "__main__":
+    # Test cases
+    car = Car()
+    boat = Boat()
+    airplane = Airplane()
 
-test_vehicle_movement(car, "Driving on the road1")
-test_vehicle_movement(boat, "Sailing on the water")
-test_vehicle_movement(airplane, "Flying in the sky")
+    test_vehicle_movement(car, "Driving on the road")
+    test_vehicle_movement(boat, "Sailing on the water")
+    test_vehicle_movement(airplane, "Flying in the sky")
 
+    print("All tests passed.")

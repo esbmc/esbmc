@@ -8,11 +8,6 @@ add_subdirectory (irep2)
 add_subdirectory (goto-programs)
 add_subdirectory (c2goto)
 
-if(ENABLE_OLD_FRONTEND)
-  add_subdirectory (ansi-c)
-  add_subdirectory (cpp)
-endif()
-
 if(ENABLE_SOLIDITY_FRONTEND)
   add_subdirectory (solidity-frontend)
 endif()

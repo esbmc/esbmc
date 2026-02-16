@@ -1,17 +1,69 @@
-#include <python-frontend/numpy_call_expr.h>
-#include <python-frontend/symbol_id.h>
-#include <python-frontend/python_converter.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/numpy_call_expr.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/symbol_id.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
 #include <util/expr.h>
 #include <util/expr_util.h>
-#include <util/c_types.h>
 #include <util/message.h>
-#include <util/arith_tools.h>
 
 #include <ostream>
 
 const char *kConstant = "Constant";
 const char *kName = "Name";
+
+struct numeric_value
+{
+  bool is_int = true;
+  int64_t int_value = 0;
+  double double_value = 0.0;
+};
+
+static numeric_value make_int_value(int64_t value)
+{
+  return {true, value, static_cast<double>(value)};
+}
+
+static numeric_value make_float_value(double value)
+{
+  return {false, 0, value};
+}
+
+static double to_double(const numeric_value &value)
+{
+  return value.is_int ? static_cast<double>(value.int_value)
+                      : value.double_value;
+}
+
+static numeric_value extract_value(const nlohmann::json &arg)
+{
+  if (!arg.contains("_type"))
+    throw std::runtime_error("Invalid JSON: missing _type");
+
+  if (arg["_type"] == "UnaryOp")
+  {
+    if (!arg.contains("operand") || !arg["operand"].contains("value"))
+      throw std::runtime_error("Invalid UnaryOp: missing operand/value");
+
+    auto operand = arg["operand"]["value"];
+    if (operand.is_number_integer())
+      return make_int_value(-operand.get<int64_t>());
+    if (operand.is_number_float())
+      return make_float_value(-operand.get<double>());
+  }
+
+  if (!arg.contains("value"))
+    throw std::runtime_error("Invalid JSON: missing value");
+
+  auto value = arg["value"];
+  if (value.is_number_integer())
+    return make_int_value(value.get<int64_t>());
+  if (value.is_number_float())
+    return make_float_value(value.get<double>());
+
+  throw std::runtime_error("Unknown numeric type in JSON");
+}
 
 numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
@@ -19,6 +71,12 @@ numpy_call_expr::numpy_call_expr(
   python_converter &converter)
   : function_call_expr(function_id, call, converter)
 {
+  converter_.build_static_lists = true;
+}
+
+numpy_call_expr::~numpy_call_expr()
+{
+  converter_.build_static_lists = false;
 }
 
 template <typename T>
@@ -96,9 +154,7 @@ std::string numpy_call_expr::get_dtype() const
     for (const auto &kw : call_["keywords"])
     {
       if (kw["_type"] == "keyword" && kw["arg"] == "dtype")
-      {
         return kw["value"]["attr"];
-      }
     }
   }
   return {};
@@ -124,9 +180,7 @@ size_t numpy_call_expr::get_dtype_size() const
   {
     auto it = dtype_sizes.find(dtype);
     if (it != dtype_sizes.end())
-    {
       return it->second * 8;
-    }
     throw std::runtime_error("Unsupported dtype value: " + dtype);
   }
   return 0;
@@ -136,9 +190,7 @@ size_t count_effective_bits(const std::string &binary)
 {
   size_t first_one = binary.find('1');
   if (first_one == std::string::npos)
-  {
     return 1;
-  }
   return binary.size() - first_one;
 }
 
@@ -531,7 +583,9 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
-        typet t = converter_.get_expr(lhs).type();
+        typet size = type_handler_.get_typet(lhs["elts"]);
+        typet t = converter_.get_static_array(lhs, size).type();
+
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
         auto &args = call.arguments();
@@ -565,8 +619,6 @@ exprt numpy_call_expr::get()
   // Create array from numpy.array()
   if (function == "array")
   {
-    auto expr = converter_.get_expr(call_["args"][0]);
-
     // Check for 3D+ arrays and reject them early
     int array_dims = type_handler_.get_array_dimensions(call_["args"][0]);
 
@@ -580,7 +632,8 @@ exprt numpy_call_expr::get()
         "Please use 1D or 2D arrays only.");
     }
 
-    return expr;
+    typet size = type_handler_.get_typet(call_["args"][0]["elts"]);
+    return converter_.get_static_array(call_["args"][0], size);
   }
 
   static const std::unordered_map<std::string, float> array_creation_funcs = {
@@ -597,6 +650,117 @@ exprt numpy_call_expr::get()
   // Handle math function calls
   if (is_math_function())
   {
+    auto is_scalar_node = [](const nlohmann::json &node) {
+      const std::string type = node["_type"];
+      return type == "Constant" || type == "UnaryOp";
+    };
+
+    if (
+      call_["args"].size() == 2 && is_scalar_node(call_["args"][0]) &&
+      is_scalar_node(call_["args"][1]))
+    {
+      auto lhs = extract_value(call_["args"][0]);
+      auto rhs = extract_value(call_["args"][1]);
+
+      nlohmann::json result;
+      if (lhs.is_int && rhs.is_int)
+      {
+        result =
+          create_binary_op(function, kConstant, lhs.int_value, rhs.int_value);
+      }
+      else
+      {
+        result =
+          create_binary_op(function, kConstant, to_double(lhs), to_double(rhs));
+      }
+
+      exprt expr = converter_.get_expr(result);
+
+      auto compute_scalar_result =
+        [&](double left, double right, double &out) -> bool {
+        if (function == "add")
+        {
+          out = left + right;
+          return true;
+        }
+        if (function == "subtract")
+        {
+          out = left - right;
+          return true;
+        }
+        if (function == "multiply")
+        {
+          out = left * right;
+          return true;
+        }
+        if (function == "divide")
+        {
+          if (right == 0.0)
+            return false;
+          out = left / right;
+          return true;
+        }
+        if (function == "power")
+        {
+          out = std::pow(left, right);
+          return true;
+        }
+        return false;
+      };
+
+      auto dtype_size = get_dtype_size();
+      if (dtype_size && converter_.current_lhs)
+      {
+        typet t = get_typet_from_dtype();
+        converter_.current_lhs->type() = t;
+        converter_.update_symbol(*converter_.current_lhs);
+
+        expr.type() = converter_.current_lhs->type();
+        for (auto &operand : expr.operands())
+          operand.type() = expr.type();
+
+        double left = to_double(lhs);
+        double right = to_double(rhs);
+        double scalar_result = 0.0;
+
+        if (compute_scalar_result(left, right, scalar_result))
+        {
+          std::string dtype = get_dtype();
+          double final_value = scalar_result;
+
+          if (dtype.find("int") != std::string::npos)
+          {
+            int64_t mask = (1LL << dtype_size) - 1;
+            int64_t masked_value =
+              static_cast<int64_t>(std::llround(final_value)) & mask;
+
+            if (dtype[0] != 'u' && (masked_value >> (dtype_size - 1)) & 1)
+            {
+              masked_value -= (1LL << dtype_size);
+            }
+
+            if (static_cast<int64_t>(std::llround(final_value)) != masked_value)
+            {
+              log_warning(
+                "{}:{}: Integer overflow detected in {}() call. Consider using "
+                "a larger integer type.",
+                converter_.current_python_file,
+                call_["end_lineno"].get<int>(),
+                function_id_.get_function());
+            }
+
+            expr.set("#cformat", std::to_string(masked_value));
+          }
+          else
+          {
+            expr.set("#cformat", std::to_string(final_value));
+          }
+        }
+      }
+
+      return expr;
+    }
+
     broadcast_check(call_["args"]);
 
     exprt expr = create_expr_from_call();

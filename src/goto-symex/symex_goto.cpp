@@ -23,7 +23,12 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
   bool new_guard_true = is_true(new_guard);
 
-  if (!new_guard_false && options.get_bool_option("smt-symex-guard"))
+  // new_guard_false = TRUE means that the guard is false,
+  // new_guard_true = TRUE means that the guard is true.
+  // And if both variables are not TRUE we need to ask the solver whether the guard holds.
+  if (
+    !new_guard_false && !new_guard_true &&
+    options.get_bool_option("smt-symex-guard"))
   {
     auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
@@ -39,10 +44,9 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     }
     catch (runtime_encoded_equationt::dual_unsat_exception &e)
     {
-      // Assumptions mean that the guard is never satisfiable as true or false,
-      // basically means we've assume'd away the possibility of hitting this
-      // point.
-      new_guard_false = true;
+      // If reach here it means both guard G and !G are unsatisfiable,
+      // basically means we can't prove the guard must be true or must be false.
+      new_guard_false = false;
     }
   }
 
@@ -50,6 +54,19 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   bool forward =
     cur_state->source.pc->location_number < goto_target->location_number;
+
+  if (
+    options.get_option("witness-output-yaml") != "" && forward &&
+    !is_constant(old_guard) &&
+    !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
+  {
+    target->branching(
+      cur_state->guard.as_expr(),
+      new_guard,
+      cur_state->source,
+      cur_state->top().hidden,
+      first_loop);
+  }
 
   if (new_guard_false)
   {
@@ -340,7 +357,9 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     if (variable.base_name == guard_identifier_s)
       continue; // just a guard
 
-    if (has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
+    if (
+      has_prefix(variable.base_name.as_string(), "symex::invalid_object") ||
+      has_prefix(variable.base_name.as_string(), "symex_throw::thrown_obj"))
       continue;
 
     // If the variable was deleted in this branch, don't create an assignment
@@ -436,6 +455,16 @@ bool goto_symext::get_unwind(
   unsigned id = source.pc->loop_number;
   BigInt this_loop_max_unwind = max_unwind;
 
+  // Check for function-specific unwind bound
+  if (loop_id_to_func_index.count(id) != 0)
+  {
+    const auto &[func_name, loop_index] = loop_id_to_func_index[id];
+    auto unwind_key = std::make_pair(func_name, loop_index);
+    if (unwind_func_set.count(unwind_key) != 0)
+      this_loop_max_unwind = unwind_func_set[unwind_key];
+  }
+
+  // Loop-specific bound overrides function-specific bound
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
 

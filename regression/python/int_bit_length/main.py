@@ -11,7 +11,7 @@ d = 5
 assert (d-1).bit_length() == 3
 
 
-def foo(x: int) -> int:
+def foo(x: int):
   return int((x - 1).bit_length())
 
 

@@ -29,13 +29,17 @@ on:
         type: choice
         description: Run-set to use (be sure to set mode to "RunSet")
         options:
-        - SV-COMP25_unreach-call
-        - SV-COMP25_no-data-race
-        - SV-COMP25_valid-memcleanup
-        - SV-COMP25_valid-memsafety
-        - SV-COMP25_termination
-        - SV-COMP25_no-overflow
-        - SV-COMP25_ConcurrencySafety
+        - SV-COMP26_unreach-call
+        - SV-COMP26_no-data-race
+        - SV-COMP26_valid-memcleanup
+        - SV-COMP26_valid-memsafety
+        - SV-COMP26_termination
+        - SV-COMP26_no-overflow
+        - SV-COMP26_ConcurrencySafety
+        - SV-COMP26_unreach-call_demo
+        - SV-COMP26_no-data-race_demo
+        - SV-COMP26_valid-memsafety_demo
+        - SV-COMP26_no-overflow_demo
         - Custom
       task:
         type: choice
@@ -87,20 +91,29 @@ on:
         - Termination-MainHeap
         - Termination-Other
         - SoftwareSystems-DeviceDriversLinux64-Termination
+        - ReachSafety-Huawei-Concurrency-Challenges
+        - NoDataRace-Huawei-Concurrency-Challenges
+        - MemSafety-Huawei-Concurrency-Challenges
+        - NoOverflows-Huawei-Concurrency-Challenges
       cpachecker:
-            description: "Run CPAChecker for violation witness validation"
-            required: true
-            type: boolean
+        description: "Run CPAChecker for witness validation"
+        required: true
+        type: boolean
+      witness:
+        type: choice
+        description: Benchexec witness run mode
+        options:
+        - Full
+        - Correctness
+        - Violation
 
 jobs:
-
-
   build-unix:
     uses: ./.github/workflows/build.yml
     with:
-      operating-system: ubuntu-22.04
+      operating-system: ubuntu-24.04
       build-flags: '-b Release -e Off -C'
-      testing: false     
+      testing: false
 
   run-benchexec:
     runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
@@ -112,7 +125,7 @@ jobs:
       - name: Download Linux Build
         uses: actions/download-artifact@v4
         with:
-          name: 'release-ubuntu-22.04--b Release -e Off -C'
+          name: 'release-ubuntu-24.04--b Release -e Off -C'
           path: ./
       - name: Checkout code
         uses: actions/checkout@v4
@@ -122,7 +135,7 @@ jobs:
         if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'Custom' }}
         run: cp ./esbmc-src/scripts/competitions/svcomp/custom-reach.set $HOME/sv-benchmarks/c/ && mv ./esbmc-src/scripts/competitions/svcomp/custom.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
       - name: Set up the Concurrency runset
-        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP26_ConcurrencySafety' }}
         run: mv ./esbmc-src/scripts/competitions/svcomp/ConcurrencySafety.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
       - name: Run Benchexec (Full)
         if: ${{ inputs.mode == 'Full' }}
@@ -131,13 +144,13 @@ jobs:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
       - name: Run Benchexec (ConcurrencyRunSet)
-        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP26_ConcurrencySafety' }}
         run: ./esbmc-src/scripts/benchexec.sh -f
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
       - name: Run Benchexec (RunSet)
-        if: ${{ inputs.mode == 'RunSet'  && inputs.runset != 'SV-COMP25_ConcurrencySafety'}}
+        if: ${{ inputs.mode == 'RunSet'  && inputs.runset != 'SV-COMP26_ConcurrencySafety'}}
         run: ./esbmc-src/scripts/benchexec.sh -r ${{ inputs.runset }}
         env:
           TIMEOUT: ${{ inputs.timeout }}
@@ -169,22 +182,26 @@ jobs:
       - name: Run Validation (Full)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/witness.sh -f
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Run Validation (RunSet)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'RunSet' }}
         run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Run Validation (Task)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'Task' }}
         run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Move output
         if: ${{ inputs.cpachecker == true }}
         run: mv $HOME/witness-output.zip ./witness-output.zip      
       - name: Show summary (CPAChecker)
         if: ${{ inputs.cpachecker == true }}
-        run: tail $HOME/witness-output/*results*.txt
+        run: tail -v $HOME/witness-output/*results*.txt | sed -E 's|^==> .*/([^/.]+)\..* <==$|==> \1 <==|'
       - uses: actions/upload-artifact@v4
         if: ${{ inputs.cpachecker == true }}
         with:
           name: witness-result
           path: witness-output.zip
-
-      

@@ -199,8 +199,11 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
       command_line += "--branch-coverage "
     elif coverage == "condition":
       command_line += "--condition-coverage-rm --no-cov-asserts "
+    elif coverage == "branch-function":
+      command_line += "--branch-function-coverage "
   elif prop == Property.reach:
     command_line += "--base-k-step 5 --enable-unreachability-intrinsic "
+    command_line += "--generate-testcase "
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
@@ -247,7 +250,7 @@ parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
 parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
 parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
 parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
-parser.add_argument("-o","--coverage", help="run in coverage mode",  choices=["branch", "condition"])
+parser.add_argument("-o","--coverage", help="run in coverage mode",  choices=["branch", "branch-function", "condition"])
 
 args = parser.parse_args()
 
@@ -293,6 +296,11 @@ elif "COVER( init(main()), FQL(COVER EDGES(@BASICBLOCKENTRY)) )" in property_fil
 elif "COVER( init(main()), FQL(COVER EDGES(@CALL(__VERIFIER_error))) )" in property_file_content:
     category_property = Property.reach
 elif "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )" in property_file_content:
+    category_property = Property.reach
+# 2025 new properties: 
+elif "COVER( init(main()), FQL(COVER EDGES(@CALL(reach_error))) )" in property_file_content:
+    category_property = Property.reach 
+elif "CHECK( init(main()), LTL(G ! call(reach_error())) )" in property_file_content:
     category_property = Property.reach
 else:
     print ("Unsupported Property")

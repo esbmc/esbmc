@@ -908,16 +908,18 @@ void mathsat_smt_ast::dump() const
   log_debug("mathsat", "{}", msat_to_smtlib2(convt->env, a));
 }
 
-void mathsat_convt::dump_smt()
+std::string mathsat_convt::dump_smt()
 {
+  std::ostringstream oss;
   size_t num_of_asserted;
   msat_term *asserted_formulas =
     msat_get_asserted_formulas(env, &num_of_asserted);
 
   for (unsigned i = 0; i < num_of_asserted; i++)
-    log_status("{}", msat_to_smtlib2(env, asserted_formulas[i]));
+    oss << msat_to_smtlib2(env, asserted_formulas[i]) << "\n";
 
   msat_free(asserted_formulas);
+  return oss.str();
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_fma(

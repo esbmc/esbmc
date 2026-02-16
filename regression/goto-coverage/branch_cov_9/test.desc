@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --branch-coverage-claims --unwind 3 --no-unwinding-assertions
 ^Branches : 12

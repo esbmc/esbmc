@@ -21,6 +21,7 @@ extern "C"
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
+#include <util/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <util/expr_util.h>
@@ -30,6 +31,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
@@ -53,15 +55,14 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
+#include <goto-programs/contracts/contracts.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
-#  include <execinfo.h>
 #  include <fcntl.h>
-#endif
-
-#ifdef ENABLE_OLD_FRONTEND
-#  include <ansi-c/c_preprocess.h>
+#  ifdef __GLIBC__
+#    include <execinfo.h>
+#  endif
 #endif
 
 #ifdef ENABLE_GOTO_CONTRACTOR
@@ -96,10 +97,8 @@ struct resultt
 void timeout_handler(int)
 {
   log_error("Timed out");
-  // Unfortunately some highly useful pieces of code hook themselves into
-  // aexit and attempt to free some memory. That doesn't really make sense to
-  // occur on exit, but more importantly doesn't mix well with signal handlers,
-  // and results in the allocator locking against itself. So use _exit instead
+  file_operations::cleanup_registered_tmps();
+  // Use _exit to avoid atexit handlers that may deadlock the allocator
   _exit(1);
 }
 #endif
@@ -130,9 +129,11 @@ static void segfault_handler(int sig)
 {
   ::signal(sig, SIG_DFL);
   void *buffer[BT_BUF_SIZE];
+#  ifdef __GLIBC__
   int n = backtrace(buffer, BT_BUF_SIZE);
   dprintf(STDERR_FILENO, "\nSignal %d, backtrace:\n", sig);
   backtrace_symbols_fd(buffer, n, STDERR_FILENO);
+#  endif
   int fd = open("/proc/self/maps", O_RDONLY);
   if (fd != -1)
   {
@@ -407,6 +408,16 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", false);
   }
 
+  // Check for conflicting strategies
+  if (cmdline.isset("k-induction") && cmdline.isset("termination"))
+  {
+    log_warning(
+      "Both --k-induction and --termination specified. "
+      "Using --k-induction (which does not include termination checking).");
+    // Optionally disable termination flag
+    options.set_option("termination", false);
+  }
+
   if (
     cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
     options.set_option("disable-inductive-step", true);
@@ -478,6 +489,13 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
+  // parallel solving activates "--multi-property"
+  if (cmdline.isset("parallel-solving"))
+  {
+    options.set_option("base-case", true);
+    options.set_option("multi-property", true);
+  }
+
   // If multi-property is on, we should set base-case
   if (cmdline.isset("multi-property"))
   {
@@ -500,6 +518,62 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("override-return-annotation"))
     options.set_option("override-return-annotation", true);
+
+  if (cmdline.isset("witness-output-yaml"))
+  {
+    std::string filename = cmdline.getval("witness-output-yaml");
+    boost::filesystem::path n(filename);
+
+    if (n.extension() == ".yaml" || n.extension() == ".yml")
+    {
+      // expected extension
+    }
+    else if (!n.has_extension())
+    {
+      if (n != "-")
+        options.set_option("witness-output-yaml", filename + ".yml");
+    }
+    else
+    {
+      log_error(
+        "Output file has extension {}, expected yaml or yml.",
+        n.extension().string());
+      abort();
+    }
+  }
+
+  if (cmdline.isset("witness-output-graphml"))
+  {
+    std::string filename = cmdline.getval("witness-output-graphml");
+    boost::filesystem::path n(filename);
+
+    if (n.extension() == ".graphml")
+    {
+      // expected extension
+    }
+    else if (!n.has_extension())
+    {
+      if (n != "-")
+        options.set_option("witness-output-graphml", filename + ".graphml");
+    }
+    else
+    {
+      log_error(
+        "Output file has extension {}, expected graphml.",
+        n.extension().string());
+      abort();
+    }
+  }
+
+  if (cmdline.isset("witness-output"))
+  {
+    std::string filename = cmdline.getval("witness-output");
+    boost::filesystem::path n(filename);
+    n.replace_extension("");
+
+    options.set_option("witness-output-yaml", filename + ".yml");
+    options.set_option("witness-output-graphml", filename + ".graphml");
+  }
 
   config.options = options;
 }
@@ -1242,6 +1316,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
   // Get the start of the base-case, default 1
   unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+
+  // For pytest test generation
+  pytest_generator pytest_gen;
+
+  // For ctest test generation
+  ctest_generator ctest_gen;
+
   if (k_step_base >= max_k_step)
   {
     log_error(
@@ -1274,7 +1355,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
           report_coverage(
             options,
             goto_functions.reached_claims,
-            goto_functions.reached_mul_claims);
+            goto_functions.reached_mul_claims,
+            pytest_gen,
+            ctest_gen);
         return 0;
       }
 
@@ -1289,7 +1372,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
             report_coverage(
               options,
               goto_functions.reached_claims,
-              goto_functions.reached_mul_claims);
+              goto_functions.reached_mul_claims,
+              pytest_gen,
+              ctest_gen);
           return 0;
         }
       }
@@ -1324,7 +1409,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
           report_coverage(
             options,
             goto_functions.reached_claims,
-            goto_functions.reached_mul_claims);
+            goto_functions.reached_mul_claims,
+            pytest_gen,
+            ctest_gen);
         return 0;
       }
     }
@@ -1343,7 +1430,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     report_coverage(
       options,
       goto_functions.reached_claims,
-      goto_functions.reached_mul_claims);
+      goto_functions.reached_mul_claims,
+      pytest_gen,
+      ctest_gen);
   return 0;
 }
 
@@ -1827,7 +1916,8 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
-    bool is_mul = cmdline.isset("multi-property");
+    bool is_mul =
+      cmdline.isset("multi-property") || cmdline.isset("parallel-solving");
     is_coverage = cmdline.isset("assertion-coverage") ||
                   cmdline.isset("assertion-coverage-claims") ||
                   cmdline.isset("condition-coverage") ||
@@ -1946,6 +2036,13 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_k_induction(goto_functions);
     }
 
+    if (cmdline.isset("loop-invariant"))
+    {
+      // Process loop invariants and insert assert/assume/havoc
+      remove_no_op(goto_functions);
+      goto_loop_invariant(goto_functions);
+    }
+
     if (
       cmdline.isset("goto-contractor") ||
       cmdline.isset("goto-contractor-condition"))
@@ -1961,10 +2058,13 @@ bool esbmc_parseoptionst::process_goto_program(
 #endif
     }
 
-    if (cmdline.isset("termination"))
-      goto_termination(goto_functions);
-
     goto_check(ns, options, goto_functions);
+
+    // Process function contracts if enabled
+    bool has_enforce = cmdline.isset("enforce-contract");
+    bool has_replace = cmdline.isset("replace-call-with-contract");
+    if (has_enforce || has_replace)
+      process_function_contracts(goto_functions, has_replace, has_enforce);
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
@@ -1979,9 +2079,12 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_functions.update();
 
-    if (cmdline.isset("data-races-check"))
+    if (
+      cmdline.isset("data-races-check") ||
+      cmdline.isset("data-races-check-only"))
     {
       log_status("Adding Data Race Checks");
+      options.set_option("data-races-check", true);
       add_race_assertions(context, goto_functions);
     }
 
@@ -2495,7 +2598,6 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
     expr->foreach_operand([&globals, &ns](const expr2tc &e) {
       globals += calc_globals_used(ns, e);
     });
-
     return globals;
   }
 
@@ -2557,12 +2659,91 @@ void esbmc_parseoptionst::print_ileave_points(
       case CATCH:
       case THROW_DECL:
       case THROW_DECL_END:
+      case LOOP_INVARIANT:
         break;
       }
 
       if (print_insn)
         pit->output_instruction(ns, pit->function, std::cout);
     }
+}
+
+// Process function contracts if enabled
+void esbmc_parseoptionst::process_function_contracts(
+  goto_functionst &goto_functions,
+  bool has_replace,
+  bool has_enforce)
+{
+  namespacet ns(context);
+  code_contractst contracts(goto_functions, context, ns);
+
+  // Lambda function to collect all functions with contracts
+  // TODO: Consider adding a field in goto_functions to track this
+  auto collect_functions_with_contracts = [&contracts, &goto_functions]() {
+    std::set<std::string> result;
+    forall_goto_functions (it, goto_functions)
+    {
+      if (it->second.body_available && contracts.has_contracts(it->second.body))
+      {
+        std::string func_name = id2string(it->first);
+        // Skip compiler-generated functions
+        if (
+          func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
+          continue;
+        result.insert(func_name);
+      }
+    }
+    return result;
+  };
+
+  // Lambda function to process function list (handles "*" wildcard)
+  auto process_function_list = [&collect_functions_with_contracts](
+                                 const std::list<std::string> &func_list) {
+    std::set<std::string> result;
+    for (const auto &func : func_list)
+    {
+      if (func == "*")
+      {
+        // "*" means all functions with contracts
+        result = collect_functions_with_contracts();
+        break; // "*" means all, so we can break after collecting
+      }
+      else
+      {
+        result.insert(func);
+      }
+    }
+    return result;
+  };
+
+  // Process enforce-contract option
+  if (has_enforce)
+  {
+    const std::list<std::string> &enforce_list =
+      cmdline.get_values("enforce-contract");
+    std::set<std::string> to_enforce = process_function_list(enforce_list);
+
+    if (!to_enforce.empty())
+    {
+      log_status("Enforcing contracts for {} function(s)", to_enforce.size());
+      contracts.enforce_contracts(to_enforce);
+    }
+  }
+
+  // Process replace-call-with-contract option
+  if (has_replace)
+  {
+    const std::list<std::string> &replace_list =
+      cmdline.get_values("replace-call-with-contract");
+    std::set<std::string> to_replace = process_function_list(replace_list);
+
+    if (!to_replace.empty())
+    {
+      log_status(
+        "Replacing calls with contracts for {} function(s)", to_replace.size());
+      contracts.replace_calls(to_replace);
+    }
+  }
 }
 
 // This prints the ESBMC version and a list of CMD options

@@ -1306,17 +1306,66 @@ void cvc5_convt::pop_ctx()
   smt_convt::pop_ctx();
 }
 
-void cvc5_convt::dump_smt()
+std::string cvc5_convt::dump_smt()
 {
   std::ostringstream oss;
   auto const &assertions = slv.getAssertions();
   for (auto const &a : assertions)
     oss << a.toString();
-  log_status("{}", oss.str());
+  return oss.str();
 }
 
 void cvc5_smt_ast::dump() const
 {
   std::ostringstream oss;
   log_status("{}", a.toString());
+}
+
+smt_astt cvc5_convt::mk_quantifier(
+  bool is_forall,
+  std::vector<smt_astt> lhs,
+  smt_astt rhs)
+{
+  if (lhs.empty())
+  {
+    return rhs;
+  }
+  using namespace cvc5;
+
+  quantifier_counter++;
+
+  std::vector<Term> bound_vars;
+  std::vector<Term> original_vars;
+
+  for (size_t i = 0; i < lhs.size(); i++)
+  {
+    Term orig = to_solver_smt_ast<cvc5_smt_ast>(lhs[i])->a;
+    original_vars.push_back(orig);
+    Sort sort = orig.getSort();
+    std::string name =
+      "qvar_" + std::to_string(quantifier_counter) + "_" + std::to_string(i);
+    Term bound = slv.mkVar(sort, name);
+    bound_vars.push_back(bound);
+  }
+
+  // Here the body term is created.
+  Term body = to_solver_smt_ast<cvc5_smt_ast>(rhs)->a;
+
+  // Here the substitution is performed.
+  Term substituted_body = body.substitute(original_vars, bound_vars);
+
+  // Here the respective quantifier is created.
+  Term vars_list = slv.mkTerm(cvc5::Kind::VARIABLE_LIST, bound_vars);
+
+  Term quantifier;
+  if (is_forall)
+  {
+    quantifier = slv.mkTerm(cvc5::Kind::FORALL, {vars_list, substituted_body});
+  }
+  else
+  {
+    quantifier = slv.mkTerm(cvc5::Kind::EXISTS, {vars_list, substituted_body});
+  }
+
+  return new_ast(quantifier, rhs->sort);
 }

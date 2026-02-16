@@ -95,7 +95,7 @@ struct tuple_size<tuple<Types...>>
 };
 
 template <std::size_t I, typename... Types>
-typename tuple_element<I, tuple<Types...>>::type &
+constexpr typename tuple_element<I, tuple<Types...>>::type &
 get(tuple<Types...> &t) noexcept
 {
   if constexpr (I == 0)
@@ -105,7 +105,7 @@ get(tuple<Types...> &t) noexcept
 }
 
 template <std::size_t I, typename... Types>
-const typename tuple_element<I, tuple<Types...>>::type &
+constexpr const typename tuple_element<I, tuple<Types...>>::type &
 get(const tuple<Types...> &t) noexcept
 {
   if constexpr (I == 0)

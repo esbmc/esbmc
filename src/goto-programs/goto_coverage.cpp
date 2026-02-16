@@ -918,10 +918,11 @@ bool goto_coveraget::filter(
   if (target_function != "" && !is_target_func(func_name, target_function))
     return true;
 
-  // Skip the function that is labbelled with "__ESBMC_HIDE"
-  // For now, it's only for Solidity
-  // Maybe we can extend this to a dedicated label like __ESBMC_NO_COV
-  if (config.language.lid == language_idt::SOLIDITY && goto_program.hide)
+  // Skip the function that is labelled with "__ESBMC_HIDE"
+  // Extended to support Python in addition to Solidity
+  if (
+    goto_program.hide && (config.language.lid == language_idt::SOLIDITY ||
+                          config.language.lid == language_idt::PYTHON))
     return true;
   return false;
 }

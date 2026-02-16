@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--z3 --ir
+^VERIFICATION SUCCESSFUL$

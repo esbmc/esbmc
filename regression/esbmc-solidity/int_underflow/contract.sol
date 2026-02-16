@@ -1,4 +1,4 @@
-pragma solidity >= 0.4.0;
+pragma solidity >= 0.5.0;
 contract Contract {
 	function func() public {
 		int8 y0 = -128; --y0;

@@ -5,7 +5,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <AST/build_ast.h>
-#include <ansi-c/c_preprocess.h>
+#include <clang-c-frontend/c_preprocess.h>
 #include <boost/filesystem.hpp>
 #include <c2goto/cprover_library.h>
 #include <clang-c-frontend/clang_c_adjust.h>
@@ -19,6 +19,8 @@ CC_DIAGNOSTIC_POP()
 #include <util/filesystem.h>
 
 #include <ac_config.h>
+
+clang_c_languaget::~clang_c_languaget() = default;
 
 languaget *new_clang_c_language()
 {
@@ -244,6 +246,10 @@ void clang_c_languaget::build_compiler_args(
 
 #if ESBMC_SVCOMP
   compiler_args.push_back("-D__ESBMC_SVCOMP");
+  // No longer show compiler warnings for SV-COMP
+  compiler_args.push_back("-w");
+  compiler_args.push_back("-Wno-incompatible-function-pointer-types");
+  compiler_args.push_back("-Wno-int-conversion");
 #endif
 
   // Increase maximum bracket depth
@@ -358,6 +364,7 @@ std::string clang_c_languaget::internal_additions()
 # 1 "esbmc_intrinsics.h" 1
 void __ESBMC_assume(_Bool);
 void __ESBMC_assert(_Bool, const char *);
+void __ESBMC_cover(_Bool);
 _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
@@ -372,23 +379,24 @@ __PTRDIFF_TYPE__ __ESBMC_POINTER_OFFSET(const void *);
 
 // malloc
 __attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_alloc[1];
+extern _Bool __ESBMC_alloc[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_is_dynamic[1];
+extern _Bool __ESBMC_is_dynamic[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
-__SIZE_TYPE__ __ESBMC_alloc_size[1];
+extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
 _Bool __ESBMC_is_little_endian();
 
-int __ESBMC_rounding_mode = 0;
+extern int __ESBMC_rounding_mode;
 
-void *__ESBMC_memset(void *, int, unsigned int);
-
+void *__ESBMC_memset(void *, int, __SIZE_TYPE__);
+      void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
+      
 /* same semantics as memcpy(tgt, src, size) where size matches the size of the
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
@@ -448,6 +456,8 @@ _Bool __VERIFIER_nondet_bool();
 float __VERIFIER_nondet_float();
 double __VERIFIER_nondet_double();
 
+void __VERIFIER_nondet_memory(void *, __SIZE_TYPE__);
+
 void __VERIFIER_error();
 void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
@@ -472,6 +482,21 @@ _Noreturn void __ESBMC_unreachable();
 
 _Bool __ESBMC_forall(void*, _Bool);
 _Bool __ESBMC_exists(void*, _Bool);
+
+/* This function is used to check loop invariants
+ * It should be run with multi-property:
+ * 1. Check if it is preserved in the loop
+ * 2. Use the invariants to help the following of the loop continue with a simple assumption
+ */
+void __ESBMC_loop_invariant(_Bool);
+
+
+#define __builtin_offsetof(type, member) \
+    ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
+
+
+#define __builtin_object_size(ptr, type) \
+    __ESBMC_builtin_object_size(ptr, type)
     )";
 
   if (config.ansi_c.cheri)
@@ -493,6 +518,42 @@ struct cap_info {__SIZE_TYPE__ base; __SIZE_TYPE__ top;};
 
 __attribute__((annotate("__ESBMC_inf_size")))
 struct cap_info __ESBMC_cheri_info[1];
+    )";
+  }
+
+  // Function contract support - only add symbols when contract processing is enabled
+  // Check if enforce-contract or replace-call-with-contract options are set
+  std::string enforce_opt = config.options.get_option("enforce-contract");
+  std::string replace_opt =
+    config.options.get_option("replace-call-with-contract");
+  if (!enforce_opt.empty() || !replace_opt.empty())
+  {
+    intrinsics += R"(
+/* Function contract support
+ * __ESBMC_requires: precondition clause
+ * __ESBMC_ensures: postcondition clause
+ * __ESBMC_return_value: special variable representing function return value in ensures clauses
+ *   Note: The type of __ESBMC_return_value is resolved at conversion time to match
+ *   the function's return type. Declared as int for compatibility, but actual type
+ *   is determined during IR conversion based on the enclosing function's return type.
+ *   For pointer return types, Clang may emit warnings but the conversion will handle
+ *   the type correctly.
+ */
+void __ESBMC_requires(_Bool);
+void __ESBMC_ensures(_Bool);
+extern int __ESBMC_return_value;
+
+/* __ESBMC_old: captures pre-state value of expressions in ensures clauses
+ * This function is used in __ESBMC_ensures to reference the value of an
+ * expression before the function executes. For example:
+ *   __ESBMC_ensures(x == __ESBMC_old(x) + 1);
+ * declares that x after the function should equal x before plus 1.
+ *
+ * Note: Declared as returning int, but at IR level the actual return type
+ * is automatically inherited from the argument type. C's type system will
+ * perform implicit conversions as needed, similar to __ESBMC_return_value.
+ */
+int __ESBMC_old(int);
     )";
   }
 

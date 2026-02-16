@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --k-induction --contract Derived 
+--sol contract.sol --k-induction --contract Derived --bound
 ^VERIFICATION SUCCESSFUL$

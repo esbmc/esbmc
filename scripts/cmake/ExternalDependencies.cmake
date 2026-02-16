@@ -5,12 +5,17 @@ include(FetchContent)
 # FMT
 FetchContent_Declare(fmt
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG 10.2.0)
+  GIT_TAG 12.1.0)
 FetchContent_MakeAvailable(fmt)
 
 #nlohmann json
 FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
 FetchContent_MakeAvailable(json)
+
+# yaml-cpp
+FetchContent_Declare(yaml-cpp
+  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git)
+FetchContent_MakeAvailable(yaml-cpp)
 
 if(ESBMC_CHERI_CLANG)
   FetchContent_Declare(cheri_compressed_cap

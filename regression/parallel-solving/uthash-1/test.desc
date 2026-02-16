@@ -1,0 +1,4 @@
+CORE
+main.i
+--parallel-solving --unwind 2
+^VERIFICATION FAILED$

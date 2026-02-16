@@ -176,6 +176,7 @@ size_t
 esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::do_crc()
   const
 {
+  std::lock_guard<std::mutex> lock(this->crc_mutex);
   if (this->crc_val != 0)
     return this->crc_val;
 
@@ -424,8 +425,7 @@ public:
     Reg &reg,
     const char *fname,
     foo bar::*baz,
-    typename boost::disable_if<typename boost::is_const<foo>::type, bool>::type
-      qux = false)
+    typename boost::disable_if<std::is_const<foo>, bool>::type qux = false)
   {
     (void)qux;
     reg.def_readwrite(fname, baz);

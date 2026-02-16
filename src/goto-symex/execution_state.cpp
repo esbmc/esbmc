@@ -12,7 +12,6 @@
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/string2array.h>
 #include <vector>
@@ -826,6 +825,9 @@ void execution_statet::get_expr_globals(
   const expr2tc &expr,
   std::set<expr2tc> &globals_list)
 {
+  if (options.get_bool_option("data-races-check-only"))
+    return;
+
   if (is_nil_expr(expr))
     return;
 
@@ -860,6 +862,7 @@ void execution_statet::get_expr_globals(
       return;
     }
 
+    expr2tc p = expr;
     bool point_to_global = false;
     if (
       symbol->type.is_pointer() && symbol->name != "invalid_object" &&
@@ -885,6 +888,7 @@ void execution_statet::get_expr_globals(
           if (!s)
             continue;
           point_to_global = s->static_lifetime || s->type.is_dynamic_set();
+          p = to_object_descriptor2t(obj).object;
           /* Stop when the global symbol is found */
           if (point_to_global)
             break;
@@ -892,55 +896,60 @@ void execution_statet::get_expr_globals(
       }
     }
 
+    // Rename to level1 to avoid shared varible mismatch in mpor.
+    cur_state->top().level1.rename(p);
     if (
       symbol->static_lifetime || symbol->type.is_dynamic_set() ||
       point_to_global)
     {
       std::list<unsigned int> threadId_list;
-      auto it_find = art1->vars_map.find(expr);
+      auto it_find = art1->vars_map.find(p);
 
       // the expression was accessed in another interleaving
       if (it_find != art1->vars_map.end())
       {
         threadId_list = it_find->second;
-        threadId_list.push_back(get_active_state().top().level1.thread_id);
-
-        art1->vars_map.insert(
-          std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
+        if (
+          std::find(
+            threadId_list.begin(), threadId_list.end(), active_thread) ==
+          threadId_list.end())
+        {
+          it_find->second.push_back(active_thread);
+        }
 
         std::list<unsigned int>::iterator it_list;
         for (it_list = threadId_list.begin(); it_list != threadId_list.end();
              ++it_list)
         {
           // find if some thread access the same expression
-          if (*it_list != get_active_state().top().level1.thread_id)
+          if (*it_list != active_thread)
           {
-            globals_list.insert(expr);
-            art1->is_global.insert(expr);
+            globals_list.insert(p);
+            art1->is_global.insert(p);
           }
           // expression was not accessed by other thread
           else
           {
-            auto its_global = art1->is_global.find(expr);
+            auto its_global = art1->is_global.find(p);
             // expression was defined as global in another interleaving
             if (its_global != art1->is_global.end())
-              globals_list.insert(expr);
+              globals_list.insert(p);
           }
         }
         // first access of expression
       }
       else
       {
-        auto its_global = art1->is_global.find(expr);
+        auto its_global = art1->is_global.find(p);
         if (its_global != art1->is_global.end())
-          globals_list.insert(expr);
+          globals_list.insert(p);
         else
         {
-          threadId_list.push_back(get_active_state().top().level1.thread_id);
+          threadId_list.push_back(active_thread);
           art1->vars_map.insert(
-            std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
-          globals_list.insert(expr);
-          art1->is_global.insert(expr);
+            std::pair<expr2tc, std::list<unsigned int>>(p, threadId_list));
+          globals_list.insert(p);
+          art1->is_global.insert(p);
         }
       }
     }
@@ -1315,18 +1324,20 @@ void schedule_execution_statet::claim(
   const expr2tc &expr,
   const std::string &msg)
 {
-  unsigned int tmp_total, tmp_remaining;
+  unsigned int tmp_total, tmp_remaining, tmp_simplified;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
-
+  tmp_simplified = simplified_claims;
   execution_statet::claim(expr, msg);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;
+  tmp_simplified = simplified_claims - tmp_simplified;
 
   *ptotal_claims += tmp_total;
   *premaining_claims += tmp_remaining;
+  *psimplified_claims += tmp_simplified;
 }
 
 execution_statet::state_hashing_level2t::state_hashing_level2t(

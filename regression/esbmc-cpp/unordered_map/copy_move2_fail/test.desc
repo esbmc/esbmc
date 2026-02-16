@@ -1,4 +1,0 @@
-CORE
-main.cpp
---unwind 4 --goto-unwind
-^VERIFICATION FAILED$

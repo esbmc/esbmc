@@ -2,85 +2,109 @@
 def array(l: list[Any]) -> list[Any]:
     return l
 
-def zeros(shape:int) -> list[float] :
-    l:list[float] = [0.0]
+
+def zeros(shape: int) -> list[float]:
+    l: list[float] = [0.0]
     return l
 
-def ones(shape:int) -> list[float] :
-    l:list[float] = [1.0]
+
+def ones(shape: int) -> list[float]:
+    l: list[float] = [1.0]
     return l
 
-def add(a:int, b:int) -> float:
-    x:float = a + b
+
+def add(a: int, b: int) -> float:
+    x: float = a + b
     return x
 
-def subtract(a:int, b:int) -> float:
-    x:float = a - b
+
+def subtract(a: int, b: int) -> float:
+    x: float = a - b
     return x
 
-def multiply(a:int, b:int) -> float:
-    x:float = a * b
+
+def multiply(a: int, b: int) -> float:
+    x: float = a * b
     return x
 
-def divide(a:int, b:int) -> float:
-    x:float = a / b
+
+def divide(a: int, b: int) -> float:
+    x: float = a / b
     return x
 
-def power(a:int, b:int) -> float:
-    x:float = 42.0
+
+def power(a: int, b: int) -> float:
+    x: float = 42.0
     return x
 
-def ceil(x:float) -> int:
+
+def ceil(x: float) -> int:
     return 0
 
-def floor(x:float) -> int:
+
+def floor(x: float) -> int:
     return 0
 
-def fabs(x:float) -> float:
+
+def fabs(x: float) -> float:
     return 1.0
 
-def sqrt(x:float) -> float:
+
+def sqrt(x: float) -> float:
     return 0.2
 
-def fmin(x:float, y:float) -> float:
+
+def fmin(x: float, y: float) -> float:
     return 0.2
 
-def fmax(x:float, y:float) -> float:
+
+def fmax(x: float, y: float) -> float:
     return 0.2
 
-def trunc(x:float) -> float:
+
+def trunc(x: float) -> float:
     return 0.2
 
-def round(x:float) -> float:
+
+def round(x: float) -> float:
     return 0.2
 
-def copysign(x:float, y:float) -> float:
+
+def copysign(x: float, y: float) -> float:
     return 0.2
 
-def sin(x:float) -> float:
+
+def sin(x: float) -> float:
     return 0.2
 
-def cos(x:float) -> float:
+
+def cos(x: float) -> float:
     return 0.2
 
-def arccos(x:float) -> float:
+
+def arccos(x: float) -> float:
     return 0.2
 
-def exp(x:float) -> float:
+
+def exp(x: float) -> float:
     return 0.2
 
-def fmod(x:float) -> float:
+
+def fmod(x: float) -> float:
     return 0.2
 
-def arctan(x:float) -> float:
+
+def arctan(x: float) -> float:
     return 0.2
 
-def dot(a:float, b:float) -> float:
+
+def dot(a: float, b: float) -> float:
     return 0.0
 
-def matmul(a:float, b:float) -> float:
+
+def matmul(a: float, b: float) -> float:
     return 0.0
 
-def transpose(a:float, b:float) -> float:
-    return 0.0
 
+def transpose(a: float, b: float) -> float:
+    return 0.0

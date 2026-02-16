@@ -67,7 +67,8 @@ void reachability_treet::setup_for_new_explore()
       permanent_context,
       options,
       &schedule_total_claims,
-      &schedule_remaining_claims));
+      &schedule_remaining_claims,
+      &schedule_simplified_claims));
   }
   else
   {
@@ -215,7 +216,7 @@ bool reachability_treet::is_has_complete_formula()
 void reachability_treet::switch_to_next_execution_state()
 {
   std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
-  it++;
+  ++it;
 
   if (it != execution_states.end())
   {
@@ -308,7 +309,7 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
 
   // Iterate through each position in the DFS tree recording data into this
   // object.
-  for (it = rt.execution_states.begin(); it != rt.execution_states.end(); it++)
+  for (it = rt.execution_states.begin(); it != rt.execution_states.end(); ++it)
   {
     reachability_treet::dfs_position::dfs_state state;
     auto ex = *it;
@@ -368,7 +369,7 @@ bool reachability_treet::dfs_position::write_to_file(
   if (fwrite(&hdr, sizeof(hdr), 1, f) != 1)
     goto fail;
 
-  for (it = states.begin(); it != states.end(); it++)
+  for (it = states.begin(); it != states.end(); ++it)
   {
     entry.location_number = htonl(it->location_number);
     entry.num_threads = htons(it->num_threads);
@@ -382,7 +383,7 @@ bool reachability_treet::dfs_position::write_to_file(
 
     i = 0;
     memset(buffer, 0, sizeof(buffer));
-    for (ex_it = it->explored.begin(); ex_it != it->explored.end(); ex_it++)
+    for (ex_it = it->explored.begin(); ex_it != it->explored.end(); ++ex_it)
     {
       if (*ex_it)
       {
@@ -435,7 +436,7 @@ bool reachability_treet::dfs_position::read_from_file(
     return true;
   }
 
-  for (i = 0; i < ntohl(hdr.num_states); i++)
+  for (i = 0; i < ntohl(hdr.num_states); ++i)
   {
     reachability_treet::dfs_position::dfs_state state;
     if (fread(&entry, sizeof(entry), 1, f) != 1)
@@ -453,7 +454,7 @@ bool reachability_treet::dfs_position::read_from_file(
       return true;
     }
 
-    for (j = 0; j < state.num_threads; j++)
+    for (j = 0; j < state.num_threads; ++j)
     {
       if (j % 8 == 0)
       {
@@ -482,7 +483,7 @@ void reachability_treet::print_ileave_trace() const
   int i = 0;
 
   log_status("Context switch trace for interleaving:");
-  for (it = execution_states.begin(); it != execution_states.end(); it++, i++)
+  for (it = execution_states.begin(); it != execution_states.end(); ++it, ++i)
   {
     log_status("Context switch point {}", i);
     (*it)->print_stack_traces(4);
@@ -617,7 +618,10 @@ goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
   }
 
   return goto_symext::symex_resultt(
-    schedule_target, schedule_total_claims, schedule_remaining_claims);
+    schedule_target,
+    schedule_total_claims,
+    schedule_remaining_claims,
+    schedule_simplified_claims);
 }
 
 bool reachability_treet::restore_from_dfs_state(void *)

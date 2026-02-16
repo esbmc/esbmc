@@ -286,7 +286,8 @@ void violation_graphml_goto_trace(
   grapht graph(grapht::VIOLATION);
   graph.verified_file = options.get_option("input-file");
 
-  log_progress("Generating Violation Witness for: {}", graph.verified_file);
+  log_progress(
+    "Generating Violation Graphml Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -326,7 +327,7 @@ void violation_graphml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        std::string assignment = get_formated_assignment(ns, step);
+        std::string assignment = get_formated_assignment(ns, step, false);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
@@ -353,6 +354,89 @@ void violation_graphml_goto_trace(
   }
 }
 
+void violation_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns [[maybe_unused]],
+  const goto_tracet &goto_trace)
+{
+  yamlt yml(yamlt::VIOLATION);
+  yml.verified_file = options.get_option("input-file");
+  log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
+
+  for (const auto &step : goto_trace.steps)
+  {
+    switch (step.type)
+    {
+    case goto_trace_stept::ASSERT:
+      if (!step.guard)
+      {
+        waypoint wp;
+        wp.type = waypoint::target;
+        wp.file = yml.verified_file;
+        wp.line = get_line_number(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+        wp.column = step.pc->location.get_column().c_str();
+        wp.function = step.pc->location.function().c_str();
+        yml.segments.push_back(wp);
+
+        /* having printed a property violation, don't print more steps. */
+
+        yml.generate_yaml(options);
+        return;
+      }
+      break;
+
+    case goto_trace_stept::BREANCHING:
+      if (step.pc->is_goto())
+      {
+        waypoint wp;
+        wp.type = waypoint::branching;
+        wp.file = yml.verified_file;
+        wp.value = !step.guard ? "true" : "false";
+        wp.line = get_line_number(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+        wp.column = step.pc->location.get_column().c_str();
+        wp.function = step.pc->location.function().c_str();
+        yml.segments.push_back(wp);
+      }
+      break;
+
+    case goto_trace_stept::ASSIGNMENT:
+#if 0
+      if (
+        step.pc->is_assign() || step.pc->is_return() ||
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
+      {
+        std::string assignment = get_formated_assignment(ns, step, true);
+        if (assignment.empty())
+          continue;
+
+        waypoint wp;
+        wp.type = waypoint::assumption;
+        wp.file = yml.verified_file;
+        wp.value = assignment;
+        wp.line = get_line_number(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+        wp.column = step.pc->location.get_column().c_str();
+        wp.function = step.pc->location.function().c_str();
+        yml.segments.push_back(wp);
+      }
+#endif
+      break;
+
+    default:
+      continue;
+    }
+  }
+}
+
 void correctness_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
@@ -360,7 +444,8 @@ void correctness_graphml_goto_trace(
 {
   grapht graph(grapht::CORRECTNESS);
   graph.verified_file = options.get_option("input-file");
-  log_progress("Generating Correctness Witness for: {}", graph.verified_file);
+  log_progress(
+    "Generating Correctness Graphml Witness for: {}", graph.verified_file);
 
   edget *first_edge = &graph.edges.at(0);
   nodet *prev_node = first_edge->to_node;
@@ -398,6 +483,44 @@ void correctness_graphml_goto_trace(
   }
 
   graph.generate_graphml(options);
+}
+
+void correctness_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns [[maybe_unused]],
+  const goto_tracet &goto_trace [[maybe_unused]])
+{
+  yamlt yml(yamlt::CORRECTNESS);
+  yml.verified_file = options.get_option("input-file");
+  log_progress(
+    "Generating Correctness Yaml Witness for: {}", yml.verified_file);
+
+#if 0
+  for (const auto &step : goto_trace.steps)
+  {
+    /* checking restrictions for correctness yaml */
+    if (
+      (!(is_valid_witness_step(ns, step))) ||
+      (!(step.is_assume() || step.is_assert())))
+      continue;
+
+    std::string invariant = get_invariant(
+      yml.verified_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+
+    if (invariant.empty())
+      continue; /* we don't have to consider this invariant */
+
+    std::string function = step.pc->location.get_function().c_str();
+    get_line_number(
+      yml.verified_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+  }
+#endif
+
+  yml.generate_yaml(options);
 }
 
 void appendInfo(
@@ -531,6 +654,7 @@ void show_goto_trace(
 
     case goto_trace_stept::ASSUME:
     case goto_trace_stept::SKIP:
+    case goto_trace_stept::BREANCHING:
       // Something deliberately ignored
       break;
 

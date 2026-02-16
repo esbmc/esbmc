@@ -26,6 +26,11 @@ public:
   bool is_assume_call(const symbol_id &function_id) const;
 
   /*
+   * Checks if __ESBMC_cover function is being invoked.
+   */
+  bool is_cover_call(const symbol_id &function_id) const;
+
+  /*
    * Checks if the Python len() function is being invoked.
    */
   bool is_len_call(const symbol_id &function_id) const;
@@ -36,6 +41,9 @@ public:
   bool is_numpy_call(const symbol_id &function_id) const;
 
 private:
+  bool is_nondet_str_call(const nlohmann::json &node) const;
+  bool is_symbolic_string(const nlohmann::json &node) const;
+
   python_converter &converter_;
   const nlohmann::json &call_;
 };

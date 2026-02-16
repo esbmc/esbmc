@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 MyContract_underflow_UnaryOp.solast
 --sol MyContract_underflow_UnaryOp.sol --overflow-check --multi-property --unwind 5 --no-unwinding-assertions
 .*function func_underflow$

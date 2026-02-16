@@ -13,7 +13,7 @@ int main ()
 
   cout << "size: " << myvector.size() << "\n";
   cout << "capacity: " << myvector.capacity() << "\n";
-  assert(myvector.capacity() == 16);
+  assert(myvector.capacity() == 16); // WRONG: Implementation-dependent!
   cout << "max_size: " << myvector.max_size() << "\n";
   return 0;
 }

@@ -1323,6 +1323,9 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
 
   // First try direct numeral extraction
+  const z3_smt_ast *za = static_cast<const z3_smt_ast *>(a);
+
+  // First check if this is a numeral (constant value)
   if (Z3_get_ast_kind(z3_ctx, za->a) == Z3_NUMERAL_AST)
   {
     int64_t num, den;
@@ -1333,6 +1336,7 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
       return true;
     }
 
+    // Fallback to string-based parsing
     Z3_string str = Z3_get_numeral_string(z3_ctx, za->a);
     if (str != nullptr)
       return parse_rational_bigint(str, numerator, denominator);
@@ -1347,6 +1351,16 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
 
       if (
         evaluated &&
+    // It's not a numeral, need to evaluate it in the model
+    Z3_model current_model = Z3_solver_get_model(z3_ctx, solver);
+    if (current_model != nullptr)
+    {
+      Z3_ast evaluated;
+      bool eval_success =
+        Z3_model_eval(z3_ctx, current_model, za->a, true, &evaluated);
+
+      if (
+        eval_success && evaluated != nullptr &&
         Z3_get_ast_kind(z3_ctx, evaluated) == Z3_NUMERAL_AST)
       {
         int64_t num, den;
@@ -1357,6 +1371,7 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
           return true;
         }
 
+        // Fallback to string-based parsing
         Z3_string str = Z3_get_numeral_string(z3_ctx, evaluated);
         if (str != nullptr)
           return parse_rational_bigint(str, numerator, denominator);
@@ -1467,17 +1482,31 @@ void z3_smt_ast::dump() const
     "{}\nsort is {}", ast, Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a)));
 }
 
-void z3_convt::dump_smt()
+void z3_convt::output_smt()
 {
   const std::string &path = options.get_option("output");
   /* the iostream API is just unusable */
-  if (path == "-")
+  if (path.empty() || path == "-")
     print_smt_formulae(std::cout);
   else
   {
     std::ofstream out(path);
-    print_smt_formulae(out);
+    if (out)
+    {
+      print_smt_formulae(out);
+    }
+    else
+    {
+      log_error("Failed to open output file: {}", path);
+    }
   }
+}
+
+std::string z3_convt::dump_smt()
+{
+  std::ostringstream ss;
+  print_smt_formulae(ss);
+  return ss.str();
 }
 
 void z3_convt::print_smt_formulae(std::ostream &dest)

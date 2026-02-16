@@ -44,6 +44,10 @@ public:
   {
     return type == RENUMBER;
   }
+  bool is_branching() const
+  {
+    return type == BREANCHING;
+  }
 
   typedef enum
   {
@@ -52,7 +56,8 @@ public:
     ASSERT,
     OUTPUT,
     SKIP,
-    RENUMBER
+    RENUMBER,
+    BREANCHING
   } typet;
   typet type;
 
@@ -124,7 +129,17 @@ void violation_graphml_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
+void violation_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
+
 void correctness_graphml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
+
+void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace);

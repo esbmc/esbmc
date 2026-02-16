@@ -402,6 +402,13 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
   // Convert each expression
   for (auto const &it : code.operands())
   {
+    if (!it.is_code())
+    {
+      log_error(
+        "goto_convert: non-code operand in this block:\n{}\n", code.pretty());
+      abort();
+    }
+
     const codet &code_it = to_code(it);
     convert(code_it, dest);
   }
@@ -735,7 +742,8 @@ void goto_convertt::convert_assign(
     Forall_operands (it, rhs)
       remove_sideeffects(*it, dest);
 
-    do_function_call(lhs, rhs.op0(), rhs.op1().operands(), dest);
+    do_function_call(
+      lhs, rhs.op0(), rhs.op1().operands(), rhs.location(), dest);
   }
   else if (
     rhs.id() == "sideeffect" &&
@@ -1253,6 +1261,10 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   y->guard = gen_true_expr();
   y->location = code.location();
 
+  // Propagate pragma unroll count
+  if (!code.get("#pragma_unroll").empty())
+    y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
+
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
   dest.destructive_append(tmp_w);
@@ -1315,6 +1327,10 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   y->make_goto(v);
   y->guard = gen_true_expr();
   y->location = code.location();
+
+  // Propagate pragma unroll count
+  if (!code.get("#pragma_unroll").empty())
+    y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
 
   dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_x);
@@ -1381,6 +1397,10 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   y->make_goto(w);
   migrate_expr(cond, y->guard);
   y->location = condition_location;
+
+  // Propagate pragma unroll count
+  if (!code.get("#pragma_unroll").empty())
+    y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
 
   dest.destructive_append(tmp_w);
   dest.destructive_append(sideeffects);

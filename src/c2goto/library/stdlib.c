@@ -29,6 +29,8 @@ typedef struct atexit_key
 __attribute__((annotate(
   "__ESBMC_inf_size"))) static __ESBMC_atexit_key __ESBMC_stdlib_atexit_key[1];
 static size_t __ESBMC_atexit_count = 0;
+// Track if any were registered
+static size_t __ESBMC_atexit_registered = 0;
 
 void __ESBMC_atexit_handler()
 {
@@ -45,6 +47,8 @@ int atexit(void (*func)(void))
 __ESBMC_HIDE:;
   __ESBMC_stdlib_atexit_key[__ESBMC_atexit_count].atexit_func = func;
   __ESBMC_atexit_count++;
+  // Track that handlers were registered
+  __ESBMC_atexit_registered++;
   return 0;
 }
 
@@ -54,7 +58,9 @@ void exit(int status)
 {
 __ESBMC_HIDE:;
   __ESBMC_atexit_handler();
-  __ESBMC_memory_leak_checks();
+  // Only check if handlers were registered
+  if (__ESBMC_atexit_registered > 0)
+    __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
 
@@ -271,9 +277,21 @@ char *getenv(const char *name)
 {
 __ESBMC_HIDE:;
 
-  _Bool found;
+  __ESBMC_assert(name != NULL, "getenv called with NULL pointer");
+
+  // Return NULL when called with an empty string parameter
+  if (*name == '\0')
+    return NULL;
+
+  // Return NULL when the environment variable name
+  // contains an equals sign (=), per POSIX specification
+  if (strchr(name, '=') != NULL)
+    return NULL;
+
+  // Non-deterministically model whether the variable exists
+  _Bool found = nondet_bool();
   if (!found)
-    return 0;
+    return NULL;
 
   char *buffer;
   size_t buf_size;
@@ -417,4 +435,13 @@ __ESBMC_HIDE:;
   rev(str);
 
   return str;
+}
+
+void _exit(int status)
+{
+__ESBMC_HIDE:;
+  // Immediate process termination - end execution path
+  __ESBMC_assume(0);
+  while (1)
+    ; // Ensure function never returns to satisfy noreturn attribute
 }

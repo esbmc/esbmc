@@ -26,7 +26,7 @@ struct fmt::formatter<BigInt>
 
   // This will teach fmt how to convert BigInt into a str.
   template <typename FormatContext>
-  auto format(const BigInt &p, FormatContext &ctx)
+  auto format(const BigInt &p, FormatContext &ctx) const
   {
     int base;
     switch (presentation)
@@ -40,6 +40,6 @@ struct fmt::formatter<BigInt>
     char tmp[128];
     char *number;
     number = p.as_string(tmp, 128, base);
-    return format_to(ctx.out(), "{}", number);
+    return fmt::format_to(ctx.out(), "{}", number);
   }
 };

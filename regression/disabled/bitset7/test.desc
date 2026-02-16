@@ -1,0 +1,4 @@
+THOROUGH
+main.cpp
+--overflow-check --unwind 16
+^VERIFICATION SUCCESSFUL$

@@ -9,7 +9,7 @@
  *  during any of the higher levels of ESBMC; it's instead left until the
  *  conversion to SMT to be handled.
  *
- *  The substance of what's done in this file orientates around the correct
+ *  The substance of what's done in this file revolves around the correct
  *  manipulations of anything in an expression that has a pointer type. This is
  *  then complicated by the C requirement that all pointers have some kind of
  *  integer representation (i.e., an address) that fits in the machine word.
@@ -40,7 +40,7 @@ smt_astt smt_convt::convert_ptr_cmp(
   assert(is_pointer_type(side2));
   assert(dynamic_cast<const relation_data *>(templ_expr.get()));
 
-  /* Compare just the offsets. This is compatible with both, C and CHERI-C,
+  /* Compare just the offsets. This is compatible with both C and CHERI-C,
    * because we already asserted that they point to the same object (unless
    * --no-pointer-relation-check was specified, in which case the user opted
    * out of sanity anyway). */
@@ -340,7 +340,7 @@ smt_astt smt_convt::init_pointer_obj(
   expr2tc end_sym = symbol2tc(ptr_loc_type, end_name);
 
   /* The accessible object spans addresses [start, end), including start,
-   * excluding end. The addresses reserved for this object however are
+   * excluding end. The addresses reserved for this object, however, are
    * [start, end] including 'end'. The reason is that the "one-past end" pointer
    * still needs to be assigned to this object. Including one more byte at the
    * end has several benefits:
@@ -360,7 +360,7 @@ smt_astt smt_convt::init_pointer_obj(
   assert_expr(endisequal);
 
   // Even better, if we're operating in bitvector mode, it's possible that
-  // the solver will try to be clever and arrange the pointer range to cross
+  // The solver will try to be clever and arrange the pointer range to cross
   // the end of the address space (ie, wrap around). So, also assert that
   // end >= start
   expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
@@ -451,7 +451,21 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     {
       expr2tc alive =
         index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
-      e = implies2tc(alive, e);
+
+      // Tong: When a dynamic object gets registered/freed in __ESBMC_alloc by
+      // symex_malloc()/symex_free(), the alloc bit "alive" is assigned to 1/0.
+      // However, in dataraces check we introduce infinite array to store the address of
+      // shared objects, and if they are not dynamically managed by symex_malloc()/symex_free(),
+      // and it's alloc bit is always 0 by default.
+      // For now, we just modify the races check.
+
+      if (options.get_bool_option("data-races-check") && cur_dynamic)
+      {
+        expr2tc dynamic = index2tc(get_bool_type(), cur_dynamic, gen_ulong(j));
+        e = implies2tc((or2tc(not2tc(dynamic), alive)), e);
+      }
+      else
+        e = implies2tc(alive, e);
     }
 
     assert_expr(e);
@@ -532,7 +546,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
 
   if (is_typecast2t(obj.ptr_obj))
   {
-    // Take the address of whatevers being casted. Either way, they all end up
+    // Take the address of whatever's being cast. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
     expr2tc tmp = address_of2tc(type2tc(), to_typecast2t(obj.ptr_obj).from);
     tmp->type = obj.type;

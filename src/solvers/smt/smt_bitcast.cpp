@@ -149,6 +149,16 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
 
 
+    // When int_encoding is true, integer types are represented as integers
+    // in the SMT solver, but fp_api expects bitvectors. Fall back to value-based conversion.
+    if (
+      int_encoding &&
+      (is_signedbv_type(new_from) || is_unsignedbv_type(new_from)))
+    {
+      // Fall back to value-based conversion instead of bit-pattern conversion
+      return convert_ast(typecast2tc(to_type, new_from));
+    }
+
     // from bitvectors should go through the fp api
     if (is_bv_type(new_from) || is_union_type(new_from))
       return fp_api->mk_from_bv_to_fp(
@@ -171,6 +181,11 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
     "requires bitvector encoding (use --floatbv or avoid bitcast).");
   abort();
 }
+    // When int_encoding is true, fixed- and floating-point types
+    // are represented as reals in the SMT solver, but fp_api expects bitvectors.
+    // Fall back to value-based conversion.
+    if (int_encoding && (is_fixedbv_type(from) || is_floatbv_type(from)))
+      return convert_ast(typecast2tc(to_type, from));
 
     if (is_floatbv_type(from))
       return fp_api->mk_from_fp_to_bv(convert_ast(from));

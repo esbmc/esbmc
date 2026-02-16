@@ -1,4 +1,4 @@
-def sum_even_numbers(n:int) -> int:
+def sum_even_numbers(n):
   total = 0
   i = 1
   while i <= n:
@@ -9,6 +9,6 @@ def sum_even_numbers(n:int) -> int:
     i = i + 1
   return total
 
-result:int = sum_even_numbers(10)
+result = sum_even_numbers(10)
 
 assert result == 30

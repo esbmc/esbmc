@@ -13,7 +13,6 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
-#include <util/simplify_expr.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
@@ -94,7 +93,7 @@ void value_sett::output(std::ostream &out) const
       width += result.size();
 
       object_mapt::const_iterator next(o_it);
-      next++;
+      ++next;
 
       if (next != e.object_map.end())
       {
@@ -172,7 +171,7 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
   bool result = false;
 
   // Merge the pointed at objects in src into dest.
-  for (object_mapt::const_iterator it = src.begin(); it != src.end(); it++)
+  for (object_mapt::const_iterator it = src.begin(); it != src.end(); ++it)
   {
     if (insert(dest, it))
       result = true;
@@ -191,7 +190,7 @@ void value_sett::get_value_set(const expr2tc &expr, value_setst::valuest &dest)
   // Convert values into expressions to return.
   for (object_mapt::const_iterator it = object_map.begin();
        it != object_map.end();
-       it++)
+       ++it)
     dest.push_back(to_expr(it));
 }
 
@@ -328,6 +327,20 @@ void value_sett::get_value_set_rec(
     return;
   }
 
+  // Handle constant arrays being indexed (e.g., function pointer dispatch tables)
+  if (is_constant_array_of2t(expr) || is_constant_array2t(expr))
+  {
+    if (!suffix.empty() && suffix[0] == '[')
+    {
+      std::string remaining_suffix = suffix.substr(2); // Remove "[]" prefix
+      expr->foreach_operand(
+        [this, &dest, &remaining_suffix, &original_type](const expr2tc &e) {
+          get_value_set_rec(e, dest, remaining_suffix, original_type);
+        });
+      return;
+    }
+  }
+
   if (is_constant_expr(expr))
   {
     if (under_deref)
@@ -439,21 +452,57 @@ void value_sett::get_value_set_rec(
   {
     // Consider an array/struct update: the pointer we evaluate to may be in
     // the base array/struct, or depending on the index may be the update value.
-    // So, consider both.
-    // XXX jmorse -- this could be improved. What if source_value is a constant
-    // array or something?
     const with2t &with = to_with2t(expr);
 
-    // this is the array/struct
+    // Always get the base array/struct values
     object_mapt tmp_map0;
     get_value_set_rec(with.source_value, tmp_map0, suffix, original_type);
-
-    // this is the update value -- note NO SUFFIX
-    object_mapt tmp_map2;
-    get_value_set_rec(with.update_value, tmp_map2, "", original_type);
-
     make_union(dest, tmp_map0);
-    make_union(dest, tmp_map2);
+
+    // Only consider the update value if we're actually accessing an element
+    // that could be the updated one
+    bool should_include_update = false;
+
+    if (is_array_type(with.source_value->type))
+    {
+      // For arrays: if suffix indicates array access, we might hit the updated element
+      if (suffix.empty() || suffix.find("[]") == 0)
+        should_include_update = true;
+    }
+    else if (
+      is_struct_type(with.source_value->type) ||
+      is_union_type(with.source_value->type))
+    {
+      // For structs: check if the suffix matches the updated field
+      if (is_constant_string2t(with.update_field))
+      {
+        const std::string &updated_field =
+          to_constant_string2t(with.update_field).value.as_string();
+        std::string expected_suffix = "." + updated_field;
+
+        // Include update if suffix matches the updated field or is empty
+        if (suffix.empty() || suffix.find(expected_suffix) == 0)
+          should_include_update = true;
+      }
+      else
+      {
+        // Unknown which field is being updated, be conservative
+        should_include_update = true;
+      }
+    }
+    else
+    {
+      // Unknown type, be conservative
+      should_include_update = true;
+    }
+
+    if (should_include_update)
+    {
+      object_mapt tmp_map2;
+      get_value_set_rec(with.update_value, tmp_map2, "", original_type);
+      make_union(dest, tmp_map2);
+    }
+
     return;
   }
 
@@ -783,7 +832,7 @@ void value_sett::get_reference_set(
   // Then convert to expressions into the destination list.
   for (object_mapt::const_iterator it = object_map.begin();
        it != object_map.end();
-       it++)
+       ++it)
     dest.push_back(to_expr(it));
 }
 

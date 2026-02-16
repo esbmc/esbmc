@@ -47,13 +47,13 @@ private:
   Callable func;
 
 public:
-  explicit callable_wrapper(Callable &&f) : func(std::forward<Callable>(f))
+  explicit callable_wrapper(Callable &&f) : func(::std::forward<Callable>(f))
   {
   }
 
   int invoke(int a, int b) const override
   {
-    if constexpr (std::is_invocable_v<Callable, int, int>)
+    if constexpr (::std::is_invocable_v<Callable, int, int>)
     {
       return func(a, b);
     }
@@ -66,7 +66,7 @@ public:
 
   int invoke(int a) const override
   {
-    if constexpr (std::is_invocable_v<Callable, int>)
+    if constexpr (::std::is_invocable_v<Callable, int>)
     {
       return func(a);
     }
@@ -79,7 +79,7 @@ public:
 
   bool invoke_bool(int a, int b) const override
   {
-    if constexpr (std::is_invocable_r_v<bool, Callable, int, int>)
+    if constexpr (::std::is_invocable_r_v<bool, Callable, int, int>)
     {
       return func(a, b);
     }
@@ -92,7 +92,7 @@ public:
 
   bool invoke_bool(int a) const override
   {
-    if constexpr (std::is_invocable_r_v<bool, Callable, int>)
+    if constexpr (::std::is_invocable_r_v<bool, Callable, int>)
     {
       return func(a);
     }
@@ -159,7 +159,7 @@ public:
   Ret operator()(Args... args) const
   {
     assert(func != nullptr);
-    return func->invoke(std::forward<Args>(args)...);
+    return func->invoke(::std::forward<Args>(args)...);
   }
 
   explicit operator bool() const noexcept
@@ -186,7 +186,7 @@ inline size_t __esbmc_deterministic_hash(size_t key)
 template <typename SignedInt>
 inline size_t __esbmc_hash_signed_int(SignedInt key)
 {
-  using Unsigned = typename std::make_unsigned<SignedInt>::type;
+  using Unsigned = typename ::std::make_unsigned<SignedInt>::type;
   return __esbmc_deterministic_hash(
     static_cast<size_t>(static_cast<Unsigned>(key)));
 }
@@ -432,9 +432,9 @@ struct hash<const char *>
 
 // Specialization for std::string
 template <>
-struct hash<std::string>
+struct hash<::std::string>
 {
-  size_t operator()(const std::string &key) const
+  size_t operator()(const ::std::string &key) const
   {
     // Simple deterministic string hash using polynomial rolling hash
     size_t hash_value = 0;
@@ -640,7 +640,7 @@ struct bit_not
 template <typename Func, typename... Args>
 decltype(auto) invoke(Func &&f, Args &&...args)
 {
-  return forward<Func>(f)(forward<Args>(args)...);
+  return ::std::forward<Func>(f)(::std::forward<Args>(args)...);
 }
 
 } // namespace std

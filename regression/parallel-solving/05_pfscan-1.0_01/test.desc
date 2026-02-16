@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--incremental-bmc --parallel-solving
+^VERIFICATION FAILED$ .*
