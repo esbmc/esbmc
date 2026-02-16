@@ -555,3 +555,32 @@ bool __ESBMC_dict_eq(
 
   return true;
 }
+
+PyListObject *__ESBMC_list_copy(const PyListObject *l)
+{
+  if (!l)
+    return NULL;
+
+  // Create new list
+  PyListObject *copied = __ESBMC_list_create();
+
+  // Copy all elements
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    // Copy the value
+    void *copied_value = __ESBMC_copy_value(elem->value, elem->size);
+
+    // Add to new list
+    copied->items[copied->size].value = copied_value;
+    copied->items[copied->size].type_id = elem->type_id;
+    copied->items[copied->size].size = elem->size;
+    copied->size++;
+
+    ++i;
+  }
+
+  return copied;
+}

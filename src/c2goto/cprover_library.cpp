@@ -201,7 +201,8 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_cos",
   "__ESBMC_sqrt",
   "__ESBMC_exp",
-  "__ESBMC_log"};
+  "__ESBMC_log",
+  "__ESBMC_list_copy"};
 } // namespace
 
 static void generate_symbol_deps(

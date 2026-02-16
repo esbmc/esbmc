@@ -2759,3 +2759,46 @@ exprt python_list::build_concrete_range(
   python_list list(converter, list_node);
   return list.get();
 }
+
+exprt python_list::build_copy_list_call(
+  const symbolt &list,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+  const typet list_type = converter_.get_type_handler().get_list_type();
+
+  // Find the list_copy C function
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_copy");
+  assert(copy_func && "list_copy function not found in symbol table");
+
+  // Create the copied list symbol
+  symbolt &copied_list =
+    converter_.create_tmp_symbol(element, "$list_copy$", list_type, exprt());
+
+  code_declt copied_decl(symbol_expr(copied_list));
+  copied_decl.location() = location;
+  converter_.add_instruction(copied_decl);
+
+  // Build function call
+  code_function_callt copy_call;
+  copy_call.function() = symbol_expr(*copy_func);
+  copy_call.arguments().push_back(symbol_expr(list));
+  copy_call.lhs() = symbol_expr(copied_list);
+  copy_call.type() = list_type;
+  copy_call.location() = location;
+  converter_.add_instruction(copy_call);
+
+  // Copy type information from original list to copied list
+  const std::string &list_id = list.id.as_string();
+  const std::string &copied_id = copied_list.id.as_string();
+
+  auto type_map_it = list_type_map.find(list_id);
+  if (type_map_it != list_type_map.end())
+  {
+    for (const auto &type_entry : type_map_it->second)
+      list_type_map[copied_id].push_back(type_entry);
+  }
+
+  return symbol_expr(copied_list);
+}
