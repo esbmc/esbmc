@@ -304,10 +304,8 @@ public:
   /**
    * @brief Handle two-argument arctangent function (math.atan2)
    */
-  exprt handle_atan2(
-    exprt y_operand,
-    exprt x_operand,
-    const nlohmann::json &element);
+  exprt
+  handle_atan2(exprt y_operand, exprt x_operand, const nlohmann::json &element);
 
   /**
    * @brief Handle base-2 logarithm function (math.log2)

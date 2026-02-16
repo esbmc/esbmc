@@ -2256,13 +2256,15 @@ function_call_expr::get_dispatch_table()
 
        auto require_one_arg = [&]() -> exprt {
          if (args.size() != 1)
-           throw std::runtime_error(func_name + "() expects exactly 1 argument");
+           throw std::runtime_error(
+             func_name + "() expects exactly 1 argument");
          return converter_.get_expr(args[0]);
        };
 
        auto require_two_args = [&]() -> std::pair<exprt, exprt> {
          if (args.size() != 2)
-           throw std::runtime_error(func_name + "() expects exactly 2 arguments");
+           throw std::runtime_error(
+             func_name + "() expects exactly 2 arguments");
          return {converter_.get_expr(args[0]), converter_.get_expr(args[1])};
        };
 
@@ -2386,17 +2388,20 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "atan2" || func_name == "__ESBMC_atan2")
        {
          auto [y_expr, x_expr] = require_two_args();
-         return converter_.get_math_handler().handle_atan2(y_expr, x_expr, call_);
+         return converter_.get_math_handler().handle_atan2(
+           y_expr, x_expr, call_);
        }
        else if (func_name == "pow" || func_name == "__ESBMC_pow")
        {
          auto [base_expr, exp_expr] = require_two_args();
-         return converter_.get_math_handler().handle_pow(base_expr, exp_expr, call_);
+         return converter_.get_math_handler().handle_pow(
+           base_expr, exp_expr, call_);
        }
        else if (func_name == "fmod" || func_name == "__ESBMC_fmod")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         return converter_.get_math_handler().handle_fmod(lhs_expr, rhs_expr, call_);
+         return converter_.get_math_handler().handle_fmod(
+           lhs_expr, rhs_expr, call_);
        }
        else if (func_name == "copysign" || func_name == "__ESBMC_copysign")
        {
