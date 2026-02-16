@@ -80,13 +80,19 @@ void build_goto_trace(
     if (SSA_step.is_assignment())
     {
       goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
-
+      assert(!goto_trace_step.value);
       try
       {
         if (is_nil_expr(SSA_step.original_rhs))
           goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
         else
           goto_trace_step.value = build_rhs(smt_conv, SSA_step.original_rhs);
+
+        // Try asking solver if value was not built
+        if (
+          !goto_trace_step.value &&
+          (is_unsignedbv_type(SSA_step.lhs) || is_signedbv_type(SSA_step.lhs)))
+          goto_trace_step.value = smt_conv.get(SSA_step.lhs);
       }
       catch (const type2t::symbolic_type_excp &e)
       {
