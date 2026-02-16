@@ -388,11 +388,14 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        exprt alignment;
-        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
-          return true;
+        if (aattr.getAlignmentExpr())
+        {
+          exprt alignment;
+          if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+            return true;
 
-        t.set("alignment", alignment);
+          t.set("alignment", alignment);
+        }
       }
     }
   }
