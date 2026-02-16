@@ -557,6 +557,54 @@ exprt python_list::build_list_at_call(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
   assert(list_at_func_sym);
 
+  locationt location = converter_.get_location_from_decl(element);
+
+  // Get list size
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  assert(size_func && "list_size function not found");
+
+  symbolt &size_var = converter_.create_tmp_symbol(
+    element, "$list_size$", size_type(), gen_zero(size_type()));
+  code_declt size_decl(symbol_expr(size_var));
+  size_decl.location() = location;
+  converter_.add_instruction(size_decl);
+
+  code_function_callt size_call;
+  size_call.function() = symbol_expr(*size_func);
+  size_call.arguments().push_back(
+    list.type().is_pointer() ? list : address_of_exprt(list));
+  size_call.lhs() = symbol_expr(size_var);
+  size_call.type() = size_type();
+  size_call.location() = location;
+  converter_.add_instruction(size_call);
+
+  // Convert index to size_t for comparison and arithmetic
+  exprt index_as_size = typecast_exprt(index, size_type());
+
+  // Create: actual_index = (index < 0) ? (size + index) : index
+  exprt is_negative("<", bool_type());
+  is_negative.copy_to_operands(index, gen_zero(index.type()));
+
+  // For negative: size + index (since index is negative, this is size - abs(index))
+  exprt positive_index("+", size_type());
+  positive_index.copy_to_operands(symbol_expr(size_var), index_as_size);
+
+  // Choose between positive conversion or original
+  if_exprt converted_index(is_negative, positive_index, index_as_size);
+  converted_index.type() = size_type();
+
+  // Store in temporary
+  symbolt &converted_var = converter_.create_tmp_symbol(
+    element, "$converted_idx$", size_type(), exprt());
+  code_declt converted_decl(symbol_expr(converted_var));
+  converted_decl.location() = location;
+  converter_.add_instruction(converted_decl);
+
+  code_assignt converted_assign(symbol_expr(converted_var), converted_index);
+  converted_assign.location() = location;
+  converter_.add_instruction(converted_assign);
+
   side_effect_expr_function_callt list_at_call;
   list_at_call.function() = symbol_expr(*list_at_func_sym);
   if (list.type().is_pointer())
@@ -564,9 +612,9 @@ exprt python_list::build_list_at_call(
   else
     list_at_call.arguments().push_back(address_of_exprt(list)); // &l
 
-  list_at_call.arguments().push_back(index);
+  list_at_call.arguments().push_back(symbol_expr(converted_var));
   list_at_call.type() = obj_type;
-  list_at_call.location() = converter_.get_location_from_decl(element);
+  list_at_call.location() = location;
 
   return list_at_call;
 }
