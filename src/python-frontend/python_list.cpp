@@ -556,6 +556,24 @@ exprt python_list::build_list_at_call(
 
   locationt location = converter_.get_location_from_decl(element);
 
+  // Check if index is already a constant non-negative value
+  if(index.is_constant() && index.type().is_signedbv())
+  {
+    BigInt idx_value;
+    if(to_integer(index, idx_value) && idx_value >= 0)
+    {
+      // Index is constant and non-negative, use directly
+      side_effect_expr_function_callt list_at_call;
+      list_at_call.function() = symbol_expr(*list_at_func_sym);
+      list_at_call.arguments().push_back(
+        list.type().is_pointer() ? list : address_of_exprt(list));
+      list_at_call.arguments().push_back(typecast_exprt(index, size_type()));
+      list_at_call.type() = obj_type;
+      list_at_call.location() = location;
+      return list_at_call;
+    }
+  }
+
   // Get list size
   const symbolt *size_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
@@ -591,25 +609,12 @@ exprt python_list::build_list_at_call(
   if_exprt converted_index(is_negative, positive_index, index_as_size);
   converted_index.type() = size_type();
 
-  // Store in temporary
-  symbolt &converted_var = converter_.create_tmp_symbol(
-    element, "$converted_idx$", size_type(), exprt());
-  code_declt converted_decl(symbol_expr(converted_var));
-  converted_decl.location() = location;
-  converter_.add_instruction(converted_decl);
-
-  code_assignt converted_assign(symbol_expr(converted_var), converted_index);
-  converted_assign.location() = location;
-  converter_.add_instruction(converted_assign);
-
+  // Use the converted expression directly in the call
   side_effect_expr_function_callt list_at_call;
   list_at_call.function() = symbol_expr(*list_at_func_sym);
-  if (list.type().is_pointer())
-    list_at_call.arguments().push_back(list); // &l
-  else
-    list_at_call.arguments().push_back(address_of_exprt(list)); // &l
-
-  list_at_call.arguments().push_back(symbol_expr(converted_var));
+  list_at_call.arguments().push_back(
+    list.type().is_pointer() ? list : address_of_exprt(list));
+  list_at_call.arguments().push_back(converted_index);
   list_at_call.type() = obj_type;
   list_at_call.location() = location;
 
