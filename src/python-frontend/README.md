@@ -136,12 +136,9 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Data Structures**: Supports operations on Python's built-in data structures, including lists, strings, and tuples, with features such as concatenation and bounds checks.
   - **List Operations**:
     - **append()**: Add elements to the end of a list.
-    - **copy()**: Creates a shallow copy of a list (e.g., `copied = original.copy()`).
-      - Returns a new list containing the same elements as the original.
-      - Modifications to the copied list do not affect the original list.
-      - Implements shallow copy semantics: elements themselves are not copied, only references.
-      - Works with lists of any type (int, float, str, bool, etc.).
-      - The copied list maintains the same type information as the original.
+    - **clear()**: Remove all elements from the list (e.g., `my_list.clear()` empties the list).
+    - **pop()**: Remove and return an element at a given index (default is the last element).
+    - **copy()**: Return a shallow copy of the list (e.g., `new_list = old_list.copy()`).
     - **extend()**: Extends a list by appending all elements from an iterable (e.g., `list1.extend(list2)` or `list1.extend([3, 4, 5])`).
     - **insert()**: Insert elements at a specific index position.
       - When the index equals the list length, the element is appended to the end.
@@ -382,7 +379,7 @@ ESBMC-Python provides an optional strict type-checking mode that enforces type c
 The current version of ESBMC-Python has the following limitations:
 
 - Only `for` loops using the `range()` function are supported.
-- List and String support are partial and limited in functionality. Currently supported list methods include `append()`, `copy()`, `extend()`, and `insert()`.
+- List and String support are partial and limited in functionality. Currently supported list methods include `append()`, `extend()`, `insert()`, `clear()`, `pop()`, and `copy()`.
 - String slicing does not support step values (e.g., string[::2] for every second character is not supported).
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
