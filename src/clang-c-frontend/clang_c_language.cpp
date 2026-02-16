@@ -390,6 +390,14 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
+// Contract predicate: indicates that a pointer points to freshly allocated memory
+// Signature: __ESBMC_is_fresh(void **ptr, size_t size)
+// - ptr: Address of the pointer variable (semantically void**, declared as void* to avoid Clang USR issues)
+// - size: Size in bytes of the memory region
+// Returns: true when memory is successfully allocated (in contract enforcement mode)
+// Note: Used in requires clauses to specify fresh memory allocation requirements
+_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
+
 _Bool __ESBMC_is_little_endian();
 
 extern int __ESBMC_rounding_mode;
