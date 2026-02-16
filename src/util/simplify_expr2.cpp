@@ -2057,6 +2057,15 @@ static bool conditions_equivalent(const expr2tc &a, const expr2tc &b)
   return a_stripped == b_stripped;
 }
 
+// Strip typecast expressions to get the underlying value
+static expr2tc strip_typecasts(const expr2tc &expr)
+{
+  expr2tc result = expr;
+  while (is_typecast2t(result))
+    result = to_typecast2t(result).from;
+  return result;
+}
+
 expr2tc bitor2t::do_simplify() const
 {
   if (side_1 == side_2)
