@@ -1,3 +1,31 @@
+def __ESBMC_expm1(x: float) -> float:
+    ...
+
+
+def __ESBMC_log1p(x: float) -> float:
+    ...
+
+
+def __ESBMC_exp2(x: float) -> float:
+    ...
+
+
+def __ESBMC_asinh(x: float) -> float:
+    ...
+
+
+def __ESBMC_acosh(x: float) -> float:
+    ...
+
+
+def __ESBMC_atanh(x: float) -> float:
+    ...
+
+
+def __ESBMC_hypot(x: float, y: float) -> float:
+    ...
+
+
 pi: float = 3.14153
 e: float = 2.71828
 inf: float = float('inf')
@@ -232,12 +260,10 @@ def perm(n: int, k: int = -1) -> int:
         raise TypeError("n must be an integer")
     if n < 0:
         raise ValueError("n must be >= 0")
-    if k < 0:
-        return factorial(n)
     if not isinstance(k, int):
         raise TypeError("k must be an integer")
     if k < 0:
-        raise ValueError("k must be >= 0")
+        return factorial(n)
     if k > n:
         return 0
     result: int = 1
@@ -453,7 +479,7 @@ def radians(x: float) -> float:
     return x * (pi / 180.0)
 
 
-def modf(x: float):
+def modf(x: float) -> tuple[float, float]:
     """
     Split x into fractional and integer parts
     """
