@@ -2884,11 +2884,11 @@ exprt python_list::build_remove_list_call(
 
   code_function_callt remove_call;
   remove_call.function() = symbol_expr(*remove_func);
-  remove_call.arguments().push_back(symbol_expr(list));            // list
-  remove_call.arguments().push_back(element_arg);                  // &value or ptr
+  remove_call.arguments().push_back(symbol_expr(list)); // list
+  remove_call.arguments().push_back(element_arg);       // &value or ptr
   remove_call.arguments().push_back(
-    symbol_expr(*elem_info.elem_type_sym));                         // type_id
-  remove_call.arguments().push_back(elem_info.elem_size);          // size
+    symbol_expr(*elem_info.elem_type_sym));               // type_id
+  remove_call.arguments().push_back(elem_info.elem_size); // size
   remove_call.type() = bool_type();
   remove_call.location() = elem_info.location;
 
