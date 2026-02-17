@@ -395,7 +395,7 @@ expr2tc code_contractst::extract_ensures_clause(const symbolt &contract_symbol)
 }
 
 // Helper function to check if function has an explicit empty assigns clause
-// This distinguishes __ESBMC_assigns(0) from no assigns clause at all
+// This distinguishes __ESBMC_assigns() from no assigns clause at all
 static bool has_empty_assigns_marker(const goto_programt &function_body)
 {
   forall_goto_program_instructions (it, function_body)

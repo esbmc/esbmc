@@ -658,13 +658,13 @@ void goto_convertt::do_function_call_symbol(
     // then create an ASSIGN to a sideeffect "assigns_target". This stores the expression
     // tree for later evaluation during replace-call with proper parameter substitution.
     //
-    // Special case: __ESBMC_assigns(0) means function has NO side effects
+    // Special case: __ESBMC_assigns() means function has no side effects
 
     if (arguments.empty())
     {
       log_error(
         "`__ESBMC_assigns' expected to have at least one argument (use "
-        "__ESBMC_assigns(0) for empty assigns)");
+        "__ESBMC_assigns() for empty assigns)");
       abort();
     }
 
@@ -679,34 +679,28 @@ void goto_convertt::do_function_call_symbol(
       "Processing __ESBMC_assigns with {} arguments",
       arguments.size());
 
-    // Check for empty assigns: __ESBMC_assigns(0) means no side effects
-    // When user writes __ESBMC_assigns(0), macro expands to __ESBMC_assigns_impl(&(0))
-    // But &(0) is invalid, so we check for address_of(constant 0) pattern
+    // Check for empty assigns: __ESBMC_assigns() expands to
+    // __ESBMC_assigns_impl((void*)0), so we detect a single (void*)0 argument.
     if (arguments.size() == 1)
     {
       exprt first_arg = arguments[0];
-      // Strip typecast if present
       if (first_arg.id() == "typecast" && first_arg.operands().size() == 1)
       {
         first_arg = first_arg.op0();
       }
 
-      // Check if it's &(0) which would be address_of(constant 0) - but this is invalid C
-      // So also check for direct 0/NULL passed (shouldn't happen with macro, but be safe)
       if (
         first_arg.is_zero() ||
         (first_arg.id() == "constant" && first_arg.get("value") == "0"))
       {
         log_debug(
           "builtin_functions",
-          "__ESBMC_assigns(0) - pure function (no side effects)");
+          "__ESBMC_assigns() - function has no side effects");
 
-        // Generate a special marker to indicate explicit empty assigns
         goto_programt::targett t = dest.add_instruction(ASSERT);
         t->guard = gen_true_expr();
         t->location = function.location();
         t->location.comment("contract::assigns_empty");
-        t->location.property("empty assigns marker");
 
         return;
       }
@@ -751,12 +745,9 @@ void goto_convertt::do_function_call_symbol(
       assigns_expr.copy_to_operands(actual_arg);
       assigns_expr.location() = function.location();
 
-      // Create a temporary symbol expression as LHS
-      // The name doesn't matter - we only care about the sideeffect on RHS
-      irep_idt tmp_name = "assigns_target$tmp$" + std::to_string(i);
-      symbol_exprt tmp_lhs(tmp_name, actual_arg.type());
+      symbolt &tmp_sym = new_tmp_symbol(actual_arg.type());
+      symbol_exprt tmp_lhs(tmp_sym.name, actual_arg.type());
 
-      // Generate assignment: tmp = assigns_target(expr)
       code_assignt assignment(tmp_lhs, assigns_expr);
       assignment.location() = function.location();
       copy(assignment, ASSIGN, dest);

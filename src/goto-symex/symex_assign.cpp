@@ -451,20 +451,6 @@ void goto_symext::symex_assign_symbol(
   guardt &guard,
   const bool hidden)
 {
-  // Note: Struct/union type symbol assignment expansion is disabled due to
-  // segmentation fault issues. The problem requires deeper investigation into
-  // the symbolic execution engine's handling of struct assignments.
-  //
-  // The issue is that when we try to expand struct assignments into member-level
-  // assignments, we encounter problems with:
-  // 1. Type checking after rename/simplify
-  // 2. Recursive calls to symex_assign_rec
-  // 3. Member expression creation from renamed symbols
-  //
-  // This is a known limitation that affects enforce_return_struct_pass test.
-  // The test should be marked as KNOWNBUG until this is properly fixed.
-
-  // Original logic for non-struct/union symbol assignments
   // put assignment guard in rhs
   if (!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
