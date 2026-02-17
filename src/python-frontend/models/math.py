@@ -303,6 +303,7 @@ def isclose(a: float, b: float, rel_tol: float = 1e-09, abs_tol: float = 0.0) ->
         limit = abs_tol
     return diff <= limit
 
+
 def expm1(x: float) -> float:
     return __ESBMC_expm1(x)
 
