@@ -2023,6 +2023,49 @@ expr2tc bitand2t::do_simplify() const
   return do_bit_munge_operation<bitand2t>(op, type, side_1, side_2);
 }
 
+// Check if two conditions are equivalent (accounting for casts)
+static bool conditions_equivalent(const expr2tc &a, const expr2tc &b)
+{
+  if (a == b)
+    return true;
+
+  // Strip typecast from a
+  expr2tc a_stripped = a;
+  while (is_typecast2t(a_stripped))
+    a_stripped = to_typecast2t(a_stripped).from;
+
+  // Strip typecast from b
+  expr2tc b_stripped = b;
+  while (is_typecast2t(b_stripped))
+    b_stripped = to_typecast2t(b_stripped).from;
+
+  // Also handle (x != 0) <-> x pattern
+  if (is_notequal2t(a_stripped))
+  {
+    const notequal2t &ne = to_notequal2t(a_stripped);
+    if (is_constant_int2t(ne.side_2) && to_constant_int2t(ne.side_2).value == 0)
+      a_stripped = ne.side_1;
+  }
+
+  if (is_notequal2t(b_stripped))
+  {
+    const notequal2t &ne = to_notequal2t(b_stripped);
+    if (is_constant_int2t(ne.side_2) && to_constant_int2t(ne.side_2).value == 0)
+      b_stripped = ne.side_1;
+  }
+
+  return a_stripped == b_stripped;
+}
+
+// Strip typecast expressions to get the underlying value
+static expr2tc strip_typecasts(const expr2tc &expr)
+{
+  expr2tc result = expr;
+  while (is_typecast2t(result))
+    result = to_typecast2t(result).from;
+  return result;
+}
+
 expr2tc bitor2t::do_simplify() const
 {
   if (side_1 == side_2)
@@ -2066,6 +2109,49 @@ expr2tc bitor2t::do_simplify() const
     const bitand2t &band = to_bitand2t(side_1);
     if (band.side_1 == side_2 || band.side_2 == side_2)
       return side_2;
+  }
+
+  // A | (A || B) -> A || B
+  expr2tc side_2_stripped = strip_typecasts(side_2);
+
+  if (is_or2t(side_2_stripped))
+  {
+    const or2t &logical_or = to_or2t(side_2_stripped);
+
+    if (
+      conditions_equivalent(logical_or.side_1, side_1) ||
+      conditions_equivalent(logical_or.side_2, side_1))
+      return side_2;
+  }
+  else if (is_bitor2t(side_2_stripped))
+  {
+    const bitor2t &bor = to_bitor2t(side_2_stripped);
+
+    if (
+      conditions_equivalent(bor.side_1, side_1) ||
+      conditions_equivalent(bor.side_2, side_1))
+      return side_2;
+  }
+
+  expr2tc side_1_stripped = strip_typecasts(side_1);
+
+  if (is_or2t(side_1_stripped))
+  {
+    const or2t &logical_or = to_or2t(side_1_stripped);
+
+    if (
+      conditions_equivalent(logical_or.side_1, side_2) ||
+      conditions_equivalent(logical_or.side_2, side_2))
+      return side_1;
+  }
+  else if (is_bitor2t(side_1_stripped))
+  {
+    const bitor2t &bor = to_bitor2t(side_1_stripped);
+
+    if (
+      conditions_equivalent(bor.side_1, side_2) ||
+      conditions_equivalent(bor.side_2, side_2))
+      return side_1;
   }
 
   // Helper lambdas used by multiple simplifications
@@ -3319,40 +3405,6 @@ expr2tc greaterthanequal2t::do_simplify() const
 
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
     type, side_1, side_2);
-}
-
-// Check if two conditions are equivalent (accounting for casts)
-static bool conditions_equivalent(const expr2tc &a, const expr2tc &b)
-{
-  if (a == b)
-    return true;
-
-  // Strip typecast from a
-  expr2tc a_stripped = a;
-  while (is_typecast2t(a_stripped))
-    a_stripped = to_typecast2t(a_stripped).from;
-
-  // Strip typecast from b
-  expr2tc b_stripped = b;
-  while (is_typecast2t(b_stripped))
-    b_stripped = to_typecast2t(b_stripped).from;
-
-  // Also handle (x != 0) <-> x pattern
-  if (is_notequal2t(a_stripped))
-  {
-    const notequal2t &ne = to_notequal2t(a_stripped);
-    if (is_constant_int2t(ne.side_2) && to_constant_int2t(ne.side_2).value == 0)
-      a_stripped = ne.side_1;
-  }
-
-  if (is_notequal2t(b_stripped))
-  {
-    const notequal2t &ne = to_notequal2t(b_stripped);
-    if (is_constant_int2t(ne.side_2) && to_constant_int2t(ne.side_2).value == 0)
-      b_stripped = ne.side_1;
-  }
-
-  return a_stripped == b_stripped;
 }
 
 expr2tc if2t::do_simplify() const
