@@ -132,3 +132,60 @@ __ESBMC_HIDE:;
   __ESBMC_assert(x > 0.0, "math domain error");
   return log10(x);
 }
+
+double __ESBMC_inf(void)
+{
+__ESBMC_HIDE:;
+  return INFINITY;
+}
+
+double __ESBMC_nan(void)
+{
+__ESBMC_HIDE:;
+  return NAN;
+}
+
+double __ESBMC_expm1(double x)
+{
+__ESBMC_HIDE:;
+  return expm1(x);
+}
+
+double __ESBMC_log1p(double x)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(x > -1.0, "math domain error");
+  return log1p(x);
+}
+
+double __ESBMC_exp2(double x)
+{
+__ESBMC_HIDE:;
+  return exp2(x);
+}
+
+double __ESBMC_asinh(double x)
+{
+__ESBMC_HIDE:;
+  return asinh(x);
+}
+
+double __ESBMC_acosh(double x)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(x >= 1.0, "math domain error");
+  return acosh(x);
+}
+
+double __ESBMC_atanh(double x)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(x > -1.0 && x < 1.0, "math domain error");
+  return atanh(x);
+}
+
+double __ESBMC_hypot(double x, double y)
+{
+__ESBMC_HIDE:;
+  return hypot(x, y);
+}
