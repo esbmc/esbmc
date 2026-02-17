@@ -1777,6 +1777,34 @@ exprt function_call_expr::handle_list_copy() const
   return list_helper.build_copy_list_call(*list_symbol, call_);
 }
 
+exprt function_call_expr::handle_list_remove() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error("remove() takes exactly one argument");
+
+  std::string list_name = get_object_name();
+
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  exprt value_to_remove = converter_.get_expr(args[0]);
+
+  python_list list_helper(converter_, call_);
+  exprt result =
+    list_helper.build_remove_list_call(*list_symbol, call_, value_to_remove);
+
+  python_list::remove_last_type_entry(list_symbol->id.as_string());
+
+  return result;
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1807,6 +1835,8 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_pop();
   if (method_name == "copy")
     return handle_list_copy();
+  if (method_name == "remove")
+    return handle_list_remove();
 
   // Add other methods as needed
 

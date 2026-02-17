@@ -584,3 +584,39 @@ PyListObject *__ESBMC_list_copy(const PyListObject *l)
 
   return copied;
 }
+
+bool __ESBMC_list_remove(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(l != NULL, "ValueError: list is null");
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      if (__ESBMC_values_equal(elem->value, item, item_size))
+      {
+        /* Shift elements left to fill the gap */
+        size_t j = i;
+        while (j < l->size - 1)
+        {
+          l->items[j] = l->items[j + 1];
+          j++;
+        }
+        l->size--;
+        return true; /* found and removed */
+      }
+    }
+    i++;
+  }
+
+  /* Item not found */
+  __ESBMC_assert(0, "ValueError: list.remove(x): x not in list");
+  return false;
+}

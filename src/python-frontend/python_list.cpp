@@ -2857,3 +2857,40 @@ exprt python_list::build_copy_list_call(
 
   return symbol_expr(copied_list);
 }
+
+exprt python_list::build_remove_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  list_elem_info elem_info = get_list_element_info(op, elem);
+
+  const symbolt *remove_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_remove");
+
+  if (!remove_func)
+    throw std::runtime_error(
+      "__ESBMC_list_remove function not found in symbol table");
+
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->type.is_pointer() &&
+    elem_info.elem_symbol->type.subtype() == char_type())
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  else if (elem_info.elem_symbol->type.is_struct())
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+  else
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+
+  code_function_callt remove_call;
+  remove_call.function() = symbol_expr(*remove_func);
+  remove_call.arguments().push_back(symbol_expr(list));            // list
+  remove_call.arguments().push_back(element_arg);                  // &value or ptr
+  remove_call.arguments().push_back(
+    symbol_expr(*elem_info.elem_type_sym));                         // type_id
+  remove_call.arguments().push_back(elem_info.elem_size);          // size
+  remove_call.type() = bool_type();
+  remove_call.location() = elem_info.location;
+
+  return converter_.convert_expression_to_code(remove_call);
+}
