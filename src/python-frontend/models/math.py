@@ -513,14 +513,15 @@ def erf(x: float) -> float:
     a5: float = 1.061405429
 
     sign: float = 1.0
-    if x < 0.0:
+    abs_x: float = x
+    if abs_x < 0.0:
         sign = 0.0 - 1.0
-        x = 0.0 - x
+        abs_x = 0.0 - abs_x
 
-    t: float = 1.0 / (1.0 + p * x)
+    t: float = 1.0 / (1.0 + p * abs_x)
     y: float = 1.0 - (
         (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t
-    ) * exp(-x * x)
+    ) * exp(0.0 - abs_x * abs_x)
     return sign * y
 
 
@@ -544,13 +545,20 @@ def frexp(x: float) -> tuple[float, int]:
     if ax < 0.0:
         ax = 0.0 - ax
 
-    while ax < 0.5:
+    max_iter: int = 2048
+    iter_count: int = 0
+    while ax < 0.5 and iter_count < max_iter:
         ax = ax * 2.0
         e = e - 1
+        iter_count = iter_count + 1
+    assert iter_count < max_iter, "frexp loop bound exceeded"
 
-    while ax >= 1.0:
+    iter_count = 0
+    while ax >= 1.0 and iter_count < max_iter:
         ax = ax / 2.0
         e = e + 1
+        iter_count = iter_count + 1
+    assert iter_count < max_iter, "frexp loop bound exceeded"
 
     if x < 0.0:
         ax = 0.0 - ax
@@ -574,26 +582,10 @@ def fsum(values: list[float]) -> float:
     return total
 
 
-def gamma(x: float) -> float:
+def _lanczos_sum(z: float) -> float:
     """
-    Calculate the gamma function of x
+    Lanczos approximation sum for gamma/lgamma
     """
-    if x == int(x):
-        xi: int = int(x)
-        if xi <= 0:
-            raise ValueError("math domain error")
-        result_int: int = 1
-        i: int = 2
-        while i <= xi - 1:
-            result_int = result_int * i
-            i = i + 1
-        return float(result_int)
-
-    if x <= 0.0:
-        raise ValueError("math domain error")
-
-    # Lanczos approximation (no reflection, valid for x > 0)
-    z: float = x - 1.0
     a: float = 0.99999999999980993
     a = a + 676.5203681218851 / (z + 1.0)
     a = a + -1259.1392167224028 / (z + 2.0)
@@ -603,6 +595,32 @@ def gamma(x: float) -> float:
     a = a + -0.13857109526572012 / (z + 6.0)
     a = a + 0.000009984369578019572 / (z + 7.0)
     a = a + 0.00000015056327351493116 / (z + 8.0)
+    return a
+
+
+def gamma(x: float) -> float:
+    """
+    Calculate the gamma function of x.
+    For positive integers x, this function satisfies gamma(x) = (x - 1)!.
+    """
+    if x == int(x):
+        xi: int = int(x)
+        if xi <= 0:
+            raise ValueError("math domain error")
+        # For positive integer xi, Gamma(xi) = (xi - 1)!, which we compute explicitly.
+        factorial_x_minus_1: int = 1
+        i: int = 2
+        while i <= xi - 1:
+            factorial_x_minus_1 = factorial_x_minus_1 * i
+            i = i + 1
+        return float(factorial_x_minus_1)
+
+    if x <= 0.0:
+        raise ValueError("math domain error")
+
+    # Lanczos approximation (no reflection, valid for x > 0)
+    z: float = x - 1.0
+    a: float = _lanczos_sum(z)
 
     t: float = z + 7.0 + 0.5
     return sqrt(2.0 * pi) * pow(t, z + 0.5) * exp(0.0 - t) * a
@@ -636,15 +654,7 @@ def lgamma(x: float) -> float:
         raise ValueError("math domain error")
 
     z: float = x - 1.0
-    a: float = 0.99999999999980993
-    a = a + 676.5203681218851 / (z + 1.0)
-    a = a + -1259.1392167224028 / (z + 2.0)
-    a = a + 771.3234287776531 / (z + 3.0)
-    a = a + -176.6150291621406 / (z + 4.0)
-    a = a + 12.507343278686905 / (z + 5.0)
-    a = a + -0.13857109526572012 / (z + 6.0)
-    a = a + 0.000009984369578019572 / (z + 7.0)
-    a = a + 0.00000015056327351493116 / (z + 8.0)
+    a: float = _lanczos_sum(z)
 
     t: float = z + 7.0 + 0.5
     return 0.5 * log(2.0 * pi) + (z + 0.5) * log(t) - t + log(a)
@@ -708,12 +718,14 @@ def nextafter(x: float, y: float) -> float:
     """
     Return the next floating-point value after x towards y
     """
+    if isnan(x) or isnan(y):
+        return float('nan')
     if x == y:
         return x
     if x == 0.0:
         return copysign(pow(2.0, -1074.0), y)
 
     step: float = ulp(x)
-    if y > x:
-        return x + step
-    return x - step
+    if y < x:
+        step = 0.0 - step
+    return x + step
