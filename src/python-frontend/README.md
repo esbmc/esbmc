@@ -269,9 +269,14 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **math.ceil(x)**: Returns the smallest integer greater than or equal to x.
   - Both functions `math.floor(x)` and `math.ceil(x)` include built-in assertions to reject infinity and NaN inputs.
   - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions.
+- **Constants**: `math.pi`, `math.e`, `math.inf`, `math.tau`, `math.nan`.
 - **Trigonometric**: `math.sin`, `math.cos`, `math.tan`, `math.asin`, `math.acos`, `math.atan`, `math.atan2`.
-- **Exponential/Logarithmic**: `math.exp`, `math.log`, `math.log2`, `math.log10`, `math.pow`.
-- **Hyperbolic**: `math.sinh`, `math.cosh`, `math.tanh`.
+- **Exponential/Logarithmic**: `math.exp`, `math.expm1`, `math.log`, `math.log1p`, `math.log2`, `math.log10`, `math.exp2`, `math.pow`.
+- **Hyperbolic**: `math.sinh`, `math.cosh`, `math.tanh`, `math.asinh`, `math.acosh`, `math.atanh`.
+- **Integer/Helpers**: `math.factorial`, `math.gcd`, `math.lcm`, `math.isqrt`, `math.perm`, `math.prod`, `math.isclose`.
+  - `math.prod` currently expects `list[int]` inputs in the frontend model.
+- **Geometry**: `math.hypot`, `math.dist`.
+  - `math.dist` currently expects `list[float]` inputs (not tuples) in the frontend model.
 - **Rounding/Abs**: `math.fabs`, `math.trunc`, `math.modf`.
 - **Other**: `math.fmod`, `math.copysign`, `math.degrees`, `math.radians`, `math.isfinite`.
 

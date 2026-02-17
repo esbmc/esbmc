@@ -1,6 +1,36 @@
+def __ESBMC_expm1(x: float) -> float:
+    ...
+
+
+def __ESBMC_log1p(x: float) -> float:
+    ...
+
+
+def __ESBMC_exp2(x: float) -> float:
+    ...
+
+
+def __ESBMC_asinh(x: float) -> float:
+    ...
+
+
+def __ESBMC_acosh(x: float) -> float:
+    ...
+
+
+def __ESBMC_atanh(x: float) -> float:
+    ...
+
+
+def __ESBMC_hypot(x: float, y: float) -> float:
+    ...
+
+
 pi: float = 3.14153
 e: float = 2.71828
 inf: float = float('inf')
+tau: float = 6.28306
+nan: float = float('nan')
 
 
 def comb(n: int, k: int) -> int:
@@ -165,7 +195,127 @@ def log(x: float) -> float:
     Raises:
         ValueError: If x <= 0 (math domain error)
     """
+    if x <= 0:
+        raise ValueError("math domain error")
     return __ESBMC_log(x)
+
+
+def factorial(n: int) -> int:
+    if not isinstance(n, int):
+        raise TypeError("n must be an integer")
+    if n < 0:
+        raise ValueError("n must be >= 0")
+    result: int = 1
+    i: int = 2
+    while i <= n:
+        result = result * i
+        i = i + 1
+    return result
+
+
+def gcd(a: int, b: int) -> int:
+    if not isinstance(a, int) or not isinstance(b, int):
+        raise TypeError("gcd() arguments must be integers")
+    if a < 0:
+        a = 0 - a
+    if b < 0:
+        b = 0 - b
+    while b != 0:
+        tmp = a % b
+        a = b
+        b = tmp
+    return a
+
+
+def lcm(a: int, b: int) -> int:
+    if not isinstance(a, int) or not isinstance(b, int):
+        raise TypeError("lcm() arguments must be integers")
+    if a == 0 or b == 0:
+        return 0
+    g = gcd(a, b)
+    if a < 0:
+        a = 0 - a
+    if b < 0:
+        b = 0 - b
+    return (a // g) * b
+
+
+def isqrt(n: int) -> int:
+    if not isinstance(n, int):
+        raise TypeError("n must be an integer")
+    if n < 0:
+        raise ValueError("n must be >= 0")
+    if n == 0:
+        return 0
+    x: int = n
+    y: int = (x + 1) // 2
+    while y < x:
+        x = y
+        y = (x + n // x) // 2
+    return x
+
+
+def perm(n: int, k: int = -1) -> int:
+    if not isinstance(n, int):
+        raise TypeError("n must be an integer")
+    if n < 0:
+        raise ValueError("n must be >= 0")
+    if not isinstance(k, int):
+        raise TypeError("k must be an integer")
+    if k < 0:
+        return factorial(n)
+    if k > n:
+        return 0
+    result: int = 1
+    i: int = 0
+    while i < k:
+        result = result * (n - i)
+        i = i + 1
+    return result
+
+
+def prod(values: list[int], start: int = 1) -> int:
+    result = start
+    i = 0
+    while i < len(values):
+        result = result * values[i]
+        i = i + 1
+    return result
+
+
+def isclose(a: float, b: float, rel_tol: float = 1e-09, abs_tol: float = 0.0) -> bool:
+    if rel_tol < 0.0 or abs_tol < 0.0:
+        raise ValueError("tolerances must be non-negative")
+    diff = a - b
+    if diff < 0.0:
+        diff = 0.0 - diff
+    abs_a = a
+    if abs_a < 0.0:
+        abs_a = 0.0 - abs_a
+    abs_b = b
+    if abs_b < 0.0:
+        abs_b = 0.0 - abs_b
+    max_ab = abs_a
+    if abs_b > max_ab:
+        max_ab = abs_b
+    limit = rel_tol * max_ab
+    if abs_tol > limit:
+        limit = abs_tol
+    return diff <= limit
+
+
+def expm1(x: float) -> float:
+    return __ESBMC_expm1(x)
+
+
+def log1p(x: float) -> float:
+    if x <= -1.0:
+        raise ValueError("math domain error")
+    return __ESBMC_log1p(x)
+
+
+def exp2(x: float) -> float:
+    return __ESBMC_exp2(x)
 
 
 def asin(x: float) -> float:
@@ -228,6 +378,38 @@ def log10(x: float) -> float:
     if x <= 0:
         raise ValueError("math domain error")
     return __ESBMC_log10(x)
+
+
+def asinh(x: float) -> float:
+    return __ESBMC_asinh(x)
+
+
+def acosh(x: float) -> float:
+    if x < 1.0:
+        raise ValueError("math domain error")
+    return __ESBMC_acosh(x)
+
+
+def atanh(x: float) -> float:
+    if x <= -1.0 or x >= 1.0:
+        raise ValueError("math domain error")
+    return __ESBMC_atanh(x)
+
+
+def hypot(x: float, y: float) -> float:
+    return __ESBMC_hypot(x, y)
+
+
+def dist(p: list[float], q: list[float]) -> float:
+    if len(p) != len(q):
+        raise ValueError("points must have the same dimension")
+    total = 0.0
+    i = 0
+    while i < len(p):
+        d = p[i] - q[i]
+        total = total + d * d
+        i = i + 1
+    return sqrt(total)
 
 
 def pow(x: float, y: float) -> float:

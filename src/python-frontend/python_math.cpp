@@ -1030,3 +1030,187 @@ exprt python_math::handle_log10(exprt operand, const nlohmann::json &element)
 
   return log10_call;
 }
+
+exprt python_math::handle_expm1(exprt operand, const nlohmann::json &element)
+{
+  // Find the expm1 function symbol from C math library
+  symbolt *expm1_symbol = symbol_table.find_symbol("c:@F@expm1");
+  if (!expm1_symbol)
+    throw std::runtime_error("expm1 function not found in symbol table");
+
+  // Promote operand to double if needed (expm1 always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt expm1_call;
+  expm1_call.function() = symbol_expr(*expm1_symbol);
+  expm1_call.arguments() = {double_operand};
+  expm1_call.type() = double_type();
+  expm1_call.location() = converter.get_location_from_decl(element);
+
+  return expm1_call;
+}
+
+exprt python_math::handle_log1p(exprt operand, const nlohmann::json &element)
+{
+  // Find the log1p function symbol from C math library
+  symbolt *log1p_symbol = symbol_table.find_symbol("c:@F@log1p");
+  if (!log1p_symbol)
+    throw std::runtime_error("log1p function not found in symbol table");
+
+  // Promote operand to double if needed (log1p always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt log1p_call;
+  log1p_call.function() = symbol_expr(*log1p_symbol);
+  log1p_call.arguments() = {double_operand};
+  log1p_call.type() = double_type();
+  log1p_call.location() = converter.get_location_from_decl(element);
+
+  return log1p_call;
+}
+
+exprt python_math::handle_exp2(exprt operand, const nlohmann::json &element)
+{
+  // Find the exp2 function symbol from C math library
+  symbolt *exp2_symbol = symbol_table.find_symbol("c:@F@exp2");
+  if (!exp2_symbol)
+    throw std::runtime_error("exp2 function not found in symbol table");
+
+  // Promote operand to double if needed (exp2 always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt exp2_call;
+  exp2_call.function() = symbol_expr(*exp2_symbol);
+  exp2_call.arguments() = {double_operand};
+  exp2_call.type() = double_type();
+  exp2_call.location() = converter.get_location_from_decl(element);
+
+  return exp2_call;
+}
+
+exprt python_math::handle_asinh(exprt operand, const nlohmann::json &element)
+{
+  // Find the asinh function symbol from C math library
+  symbolt *asinh_symbol = symbol_table.find_symbol("c:@F@asinh");
+  if (!asinh_symbol)
+    throw std::runtime_error("asinh function not found in symbol table");
+
+  // Promote operand to double if needed (asinh always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt asinh_call;
+  asinh_call.function() = symbol_expr(*asinh_symbol);
+  asinh_call.arguments() = {double_operand};
+  asinh_call.type() = double_type();
+  asinh_call.location() = converter.get_location_from_decl(element);
+
+  return asinh_call;
+}
+
+exprt python_math::handle_acosh(exprt operand, const nlohmann::json &element)
+{
+  // Find the acosh function symbol from C math library
+  symbolt *acosh_symbol = symbol_table.find_symbol("c:@F@acosh");
+  if (!acosh_symbol)
+    throw std::runtime_error("acosh function not found in symbol table");
+
+  // Promote operand to double if needed (acosh always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt acosh_call;
+  acosh_call.function() = symbol_expr(*acosh_symbol);
+  acosh_call.arguments() = {double_operand};
+  acosh_call.type() = double_type();
+  acosh_call.location() = converter.get_location_from_decl(element);
+
+  return acosh_call;
+}
+
+exprt python_math::handle_atanh(exprt operand, const nlohmann::json &element)
+{
+  // Find the atanh function symbol from C math library
+  symbolt *atanh_symbol = symbol_table.find_symbol("c:@F@atanh");
+  if (!atanh_symbol)
+    throw std::runtime_error("atanh function not found in symbol table");
+
+  // Promote operand to double if needed (atanh always works with doubles)
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type());
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt atanh_call;
+  atanh_call.function() = symbol_expr(*atanh_symbol);
+  atanh_call.arguments() = {double_operand};
+  atanh_call.type() = double_type();
+  atanh_call.location() = converter.get_location_from_decl(element);
+
+  return atanh_call;
+}
+
+exprt python_math::handle_hypot(
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
+  // Find the hypot function symbol from C math library
+  symbolt *hypot_symbol = symbol_table.find_symbol("c:@F@hypot");
+  if (!hypot_symbol)
+    throw std::runtime_error("hypot function not found in symbol table");
+
+  // Promote operands to double if needed (hypot always works with doubles)
+  if (!lhs.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(lhs);
+    lhs = casted;
+  }
+  if (!rhs.type().is_floatbv())
+  {
+    exprt casted = exprt("typecast", double_type());
+    casted.copy_to_operands(rhs);
+    rhs = casted;
+  }
+
+  // Create the function call expression
+  side_effect_expr_function_callt hypot_call;
+  hypot_call.function() = symbol_expr(*hypot_symbol);
+  hypot_call.arguments() = {lhs, rhs};
+  hypot_call.type() = double_type();
+  hypot_call.location() = converter.get_location_from_decl(element);
+
+  return hypot_call;
+}
