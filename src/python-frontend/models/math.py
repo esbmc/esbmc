@@ -551,14 +551,16 @@ def frexp(x: float) -> tuple[float, int]:
         ax = ax * 2.0
         e = e - 1
         iter_count = iter_count + 1
-    assert iter_count < max_iter, "frexp loop bound exceeded"
+    if iter_count >= max_iter:
+        raise ValueError("frexp loop bound exceeded")
 
     iter_count = 0
     while ax >= 1.0 and iter_count < max_iter:
         ax = ax / 2.0
         e = e + 1
         iter_count = iter_count + 1
-    assert iter_count < max_iter, "frexp loop bound exceeded"
+    if iter_count >= max_iter:
+        raise ValueError("frexp loop bound exceeded")
 
     if x < 0.0:
         ax = 0.0 - ax
