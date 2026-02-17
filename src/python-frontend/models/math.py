@@ -487,3 +487,233 @@ def modf(x: float) -> tuple[float, float]:
     int_part: float = float(int(x))
     frac_part: float = x - int_part
     return (frac_part, int_part)
+
+
+def cbrt(x: float) -> float:
+    """
+    Calculate the cube root of x
+    """
+    if x == 0.0:
+        return 0.0
+    if x < 0.0:
+        return 0.0 - pow(0.0 - x, 1.0 / 3.0)
+    return pow(x, 1.0 / 3.0)
+
+
+def erf(x: float) -> float:
+    """
+    Calculate the error function of x
+    """
+    # Abramowitz and Stegun 7.1.26 approximation
+    p: float = 0.3275911
+    a1: float = 0.254829592
+    a2: float = -0.284496736
+    a3: float = 1.421413741
+    a4: float = -1.453152027
+    a5: float = 1.061405429
+
+    sign: float = 1.0
+    if x < 0.0:
+        sign = 0.0 - 1.0
+        x = 0.0 - x
+
+    t: float = 1.0 / (1.0 + p * x)
+    y: float = 1.0 - (
+        (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t
+    ) * exp(-x * x)
+    return sign * y
+
+
+def erfc(x: float) -> float:
+    """
+    Calculate the complementary error function of x
+    """
+    return 1.0 - erf(x)
+
+
+def frexp(x: float) -> tuple[float, int]:
+    """
+    Split x into mantissa and exponent (x = m * 2**e),
+    with m in [0.5, 1.0) (or 0.0 if x == 0)
+    """
+    if x == 0.0:
+        return (0.0, 0)
+
+    e: int = 0
+    ax: float = x
+    if ax < 0.0:
+        ax = 0.0 - ax
+
+    while ax < 0.5:
+        ax = ax * 2.0
+        e = e - 1
+
+    while ax >= 1.0:
+        ax = ax / 2.0
+        e = e + 1
+
+    if x < 0.0:
+        ax = 0.0 - ax
+    return (ax, e)
+
+
+def fsum(values: list[float]) -> float:
+    """
+    Return an accurate floating point sum of values
+    """
+    total: float = 0.0
+    c: float = 0.0
+    i: int = 0
+    n: int = len(values)
+    while i < n:
+        y: float = values[i] - c
+        t: float = total + y
+        c = (t - total) - y
+        total = t
+        i = i + 1
+    return total
+
+
+def gamma(x: float) -> float:
+    """
+    Calculate the gamma function of x
+    """
+    if x == int(x):
+        xi: int = int(x)
+        if xi <= 0:
+            raise ValueError("math domain error")
+        result_int: int = 1
+        i: int = 2
+        while i <= xi - 1:
+            result_int = result_int * i
+            i = i + 1
+        return float(result_int)
+
+    if x <= 0.0:
+        raise ValueError("math domain error")
+
+    # Lanczos approximation (no reflection, valid for x > 0)
+    z: float = x - 1.0
+    a: float = 0.99999999999980993
+    a = a + 676.5203681218851 / (z + 1.0)
+    a = a + -1259.1392167224028 / (z + 2.0)
+    a = a + 771.3234287776531 / (z + 3.0)
+    a = a + -176.6150291621406 / (z + 4.0)
+    a = a + 12.507343278686905 / (z + 5.0)
+    a = a + -0.13857109526572012 / (z + 6.0)
+    a = a + 0.000009984369578019572 / (z + 7.0)
+    a = a + 0.00000015056327351493116 / (z + 8.0)
+
+    t: float = z + 7.0 + 0.5
+    return sqrt(2.0 * pi) * pow(t, z + 0.5) * exp(0.0 - t) * a
+
+
+def ldexp(x: float, i: int) -> float:
+    """
+    Return x * (2**i)
+    """
+    if not isinstance(i, int):
+        raise TypeError("i must be an integer")
+    return x * pow(2.0, float(i))
+
+
+def lgamma(x: float) -> float:
+    """
+    Calculate the natural logarithm of the absolute value of the gamma function
+    """
+    if x == int(x):
+        xi: int = int(x)
+        if xi <= 0:
+            raise ValueError("math domain error")
+        result: float = 0.0
+        i: int = 2
+        while i <= xi - 1:
+            result = result + log(i * 1.0)
+            i = i + 1
+        return result
+
+    if x <= 0.0:
+        raise ValueError("math domain error")
+
+    z: float = x - 1.0
+    a: float = 0.99999999999980993
+    a = a + 676.5203681218851 / (z + 1.0)
+    a = a + -1259.1392167224028 / (z + 2.0)
+    a = a + 771.3234287776531 / (z + 3.0)
+    a = a + -176.6150291621406 / (z + 4.0)
+    a = a + 12.507343278686905 / (z + 5.0)
+    a = a + -0.13857109526572012 / (z + 6.0)
+    a = a + 0.000009984369578019572 / (z + 7.0)
+    a = a + 0.00000015056327351493116 / (z + 8.0)
+
+    t: float = z + 7.0 + 0.5
+    return 0.5 * log(2.0 * pi) + (z + 0.5) * log(t) - t + log(a)
+
+
+def remainder(x: float, y: float) -> float:
+    """
+    Return IEEE 754-style remainder of x with respect to y
+    """
+    if y == 0.0:
+        raise ValueError("math domain error")
+
+    q: float = x / y
+    n_int: int = trunc(q)
+    n: float = n_int * 1.0
+    frac: float = q - n
+
+    if frac > 0.5:
+        n = n + 1.0
+    elif frac < -0.5:
+        n = n - 1.0
+    elif frac == 0.5 or frac == -0.5:
+        if fmod(n, 2.0) != 0.0:
+            if q > 0.0:
+                n = n + 1.0
+            else:
+                n = n - 1.0
+
+    return x - n * y
+
+
+def sumprod(a: list[float], b: list[float]) -> float:
+    """
+    Return the sum of products of two sequences
+    """
+    if len(a) != len(b):
+        raise ValueError("sumprod() requires sequences of the same length")
+
+    total: float = 0.0
+    i: int = 0
+    n: int = len(a)
+    while i < n:
+        total = total + a[i] * b[i]
+        i = i + 1
+    return total
+
+
+def ulp(x: float) -> float:
+    """
+    Return the value of the least significant bit of the float x
+    """
+    if x == 0.0:
+        return pow(2.0, -1074.0)
+
+    ax: float = fabs(x)
+    _, e = frexp(ax)
+    return ldexp(1.0, e - 53)
+
+
+def nextafter(x: float, y: float) -> float:
+    """
+    Return the next floating-point value after x towards y
+    """
+    if x == y:
+        return x
+    if x == 0.0:
+        return copysign(pow(2.0, -1074.0), y)
+
+    step: float = ulp(x)
+    if y > x:
+        return x + step
+    return x - step

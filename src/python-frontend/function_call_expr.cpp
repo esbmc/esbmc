@@ -2281,7 +2281,13 @@ function_call_expr::get_dispatch_table()
                 func_name == "expm1" || func_name == "log1p" ||
                 func_name == "exp2" || func_name == "asinh" ||
                 func_name == "acosh" || func_name == "atanh" ||
-                func_name == "hypot")) ||
+                func_name == "hypot" || func_name == "cbrt" ||
+                func_name == "erf" || func_name == "erfc" ||
+                func_name == "frexp" || func_name == "fsum" ||
+                func_name == "gamma" || func_name == "ldexp" ||
+                func_name == "lgamma" || func_name == "nextafter" ||
+                func_name == "remainder" || func_name == "sumprod" ||
+                func_name == "ulp")) ||
               is_math_wrapper;
      },
      [this]() -> exprt {
@@ -2478,6 +2484,15 @@ function_call_expr::get_dispatch_table()
          auto [lhs_expr, rhs_expr] = require_two_args();
          return converter_.get_math_handler().handle_hypot(
            lhs_expr, rhs_expr, call_);
+       }
+       else if (
+         func_name == "cbrt" || func_name == "erf" || func_name == "erfc" ||
+         func_name == "frexp" || func_name == "fsum" || func_name == "gamma" ||
+         func_name == "ldexp" || func_name == "lgamma" ||
+         func_name == "nextafter" || func_name == "remainder" ||
+         func_name == "sumprod" || func_name == "ulp")
+       {
+         return handle_general_function_call();
        }
 
        throw std::runtime_error("Unsupported math function: " + func_name);
