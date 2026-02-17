@@ -208,6 +208,7 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_sqrt",
   "__ESBMC_exp",
   "__ESBMC_log",
+  "__ESBMC_list_copy",
   "__ESBMC_tan",
   "__ESBMC_asin",
   "__ESBMC_sinh",

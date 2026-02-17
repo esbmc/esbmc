@@ -479,19 +479,16 @@ exprt python_list::build_concat_list_call(
 
   // Update list type mapping
   const std::string dst_id = dst_list.id.as_string();
-  auto copy_type_info = [&](const exprt &src_list) {
+
+  // Copy type info from source list if it's a symbol
+  auto copy_type_info_from_expr = [&](const exprt &src_list) {
     if (!src_list.is_symbol())
       return;
-    const std::string key = src_list.identifier().as_string();
-    auto it = list_type_map.find(key);
-    if (it != list_type_map.end())
-    {
-      for (const auto &p : it->second)
-        list_type_map[dst_id].push_back(p);
-    }
+    copy_type_map_entries(src_list.identifier().as_string(), dst_id);
   };
-  copy_type_info(lhs);
-  copy_type_info(rhs);
+
+  copy_type_info_from_expr(lhs);
+  copy_type_info_from_expr(rhs);
 
   return symbol_expr(dst_list);
 }
@@ -557,16 +554,69 @@ exprt python_list::build_list_at_call(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
   assert(list_at_func_sym);
 
+  locationt location = converter_.get_location_from_decl(element);
+
+  // Check if index is already a constant non-negative value
+  if (index.is_constant() && index.type().is_signedbv())
+  {
+    BigInt idx_value;
+    if (to_integer(index, idx_value) && idx_value >= 0)
+    {
+      // Index is constant and non-negative, use directly
+      side_effect_expr_function_callt list_at_call;
+      list_at_call.function() = symbol_expr(*list_at_func_sym);
+      list_at_call.arguments().push_back(
+        list.type().is_pointer() ? list : address_of_exprt(list));
+      list_at_call.arguments().push_back(typecast_exprt(index, size_type()));
+      list_at_call.type() = obj_type;
+      list_at_call.location() = location;
+      return list_at_call;
+    }
+  }
+
+  // Get list size
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  assert(size_func && "list_size function not found");
+
+  symbolt &size_var = converter_.create_tmp_symbol(
+    element, "$list_size$", size_type(), gen_zero(size_type()));
+  code_declt size_decl(symbol_expr(size_var));
+  size_decl.location() = location;
+  converter_.add_instruction(size_decl);
+
+  code_function_callt size_call;
+  size_call.function() = symbol_expr(*size_func);
+  size_call.arguments().push_back(
+    list.type().is_pointer() ? list : address_of_exprt(list));
+  size_call.lhs() = symbol_expr(size_var);
+  size_call.type() = size_type();
+  size_call.location() = location;
+  converter_.add_instruction(size_call);
+
+  // Convert index to size_t for comparison and arithmetic
+  exprt index_as_size = typecast_exprt(index, size_type());
+
+  // Create: actual_index = (index < 0) ? (size + index) : index
+  exprt is_negative("<", bool_type());
+  is_negative.copy_to_operands(index, gen_zero(index.type()));
+
+  // For negative: size + index (since index is negative, this is size - abs(index))
+  exprt positive_index("+", size_type());
+  positive_index.copy_to_operands(symbol_expr(size_var), index_as_size);
+
+  // Choose between positive conversion or original
+  if_exprt converted_index(is_negative, positive_index, index_as_size);
+  converted_index.type() = size_type();
+
+  // Use the converted expression directly in the call
   side_effect_expr_function_callt list_at_call;
   list_at_call.function() = symbol_expr(*list_at_func_sym);
-  if (list.type().is_pointer())
-    list_at_call.arguments().push_back(list); // &l
-  else
-    list_at_call.arguments().push_back(address_of_exprt(list)); // &l
-
-  list_at_call.arguments().push_back(index);
+  list_at_call.arguments().push_back(
+    list.type().is_pointer() ? list : address_of_exprt(list));
+  list_at_call.arguments().push_back(converted_index);
   list_at_call.type() = obj_type;
-  list_at_call.location() = converter_.get_location_from_decl(element);
+  list_at_call.location() = location;
 
   return list_at_call;
 }
@@ -2758,4 +2808,52 @@ exprt python_list::build_concrete_range(
 
   python_list list(converter, list_node);
   return list.get();
+}
+
+void python_list::copy_type_map_entries(
+  const std::string &from_list_id,
+  const std::string &to_list_id)
+{
+  auto it = list_type_map.find(from_list_id);
+  if (it != list_type_map.end())
+  {
+    for (const auto &type_entry : it->second)
+      list_type_map[to_list_id].push_back(type_entry);
+  }
+}
+
+exprt python_list::build_copy_list_call(
+  const symbolt &list,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+  const typet list_type = converter_.get_type_handler().get_list_type();
+
+  // Find the list_copy C function
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_copy");
+  if (!copy_func)
+    throw std::runtime_error("list_copy function not found in symbol table");
+
+  // Create the copied list symbol
+  symbolt &copied_list =
+    converter_.create_tmp_symbol(element, "$list_copy$", list_type, exprt());
+
+  code_declt copied_decl(symbol_expr(copied_list));
+  copied_decl.location() = location;
+  converter_.add_instruction(copied_decl);
+
+  // Build function call
+  code_function_callt copy_call;
+  copy_call.function() = symbol_expr(*copy_func);
+  copy_call.arguments().push_back(symbol_expr(list));
+  copy_call.lhs() = symbol_expr(copied_list);
+  copy_call.type() = list_type;
+  copy_call.location() = location;
+  converter_.add_instruction(copy_call);
+
+  // Copy type information from original list to copied list
+  copy_type_map_entries(list.id.as_string(), copied_list.id.as_string());
+
+  return symbol_expr(copied_list);
 }

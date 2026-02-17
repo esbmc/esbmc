@@ -252,6 +252,7 @@ private:
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
   exprt handle_list_pop() const;
+  exprt handle_list_copy() const;
 
   /*
    * Check if the current function call is to a regular expression module function

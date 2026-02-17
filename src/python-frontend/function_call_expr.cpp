@@ -1753,6 +1753,30 @@ exprt function_call_expr::handle_dict_method() const
   throw std::runtime_error("Unsupported dict method: " + method_name);
 }
 
+exprt function_call_expr::handle_list_copy() const
+{
+  const auto &args = call_["args"];
+
+  if (!args.empty())
+    throw std::runtime_error("copy() takes no arguments");
+
+  // Get the list object name
+  std::string list_name = get_object_name();
+
+  // Find the list symbol
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  // Delegate to python_list to build the copy operation
+  python_list list_helper(converter_, call_);
+  return list_helper.build_copy_list_call(*list_symbol, call_);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1764,7 +1788,7 @@ bool function_call_expr::is_list_method_call() const
   return method_name == "append" || method_name == "pop" ||
          method_name == "insert" || method_name == "remove" ||
          method_name == "clear" || method_name == "extend" ||
-         method_name == "insert";
+         method_name == "copy";
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -1781,6 +1805,8 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_clear();
   if (method_name == "pop")
     return handle_list_pop();
+  if (method_name == "copy")
+    return handle_list_copy();
 
   // Add other methods as needed
 

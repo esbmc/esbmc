@@ -162,6 +162,15 @@ public:
     const nlohmann::json &range_args,
     const nlohmann::json &element);
 
+  /**
+   * @brief Build a list copy operation
+   * @param list The list symbol to copy from
+   * @param element The AST node for location information
+   * @return Expression representing the copied list
+   */
+  exprt
+  build_copy_list_call(const symbolt &list, const nlohmann::json &element);
+
 private:
   friend class python_dict_handler;
 
@@ -188,6 +197,10 @@ private:
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
   exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
+
+  void copy_type_map_entries(
+    const std::string &from_list_id,
+    const std::string &to_list_id);
 
   /**
    * @brief Handle symbolic (non-constant) range arguments
