@@ -138,6 +138,7 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **append()**: Add elements to the end of a list.
     - **clear()**: Remove all elements from the list (e.g., `my_list.clear()` empties the list).
     - **pop()**: Remove and return an element at a given index (default is the last element).
+    - **remove()**: Remove the first occurrence of a value from the list (e.g., `l.remove(x)`).
     - **copy()**: Return a shallow copy of the list (e.g., `new_list = old_list.copy()`).
     - **extend()**: Extends a list by appending all elements from an iterable (e.g., `list1.extend(list2)` or `list1.extend([3, 4, 5])`).
     - **insert()**: Insert elements at a specific index position.
@@ -390,7 +391,7 @@ ESBMC-Python provides an optional strict type-checking mode that enforces type c
 The current version of ESBMC-Python has the following limitations:
 
 - Only `for` loops using the `range()` function are supported.
-- List and String support are partial and limited in functionality. Currently supported list methods include `append()`, `extend()`, `insert()`, `clear()`, `pop()`, and `copy()`.
+- List and String support are partial and limited in functionality. Currently supported list methods include `append()`, `extend()`, `insert()`, `clear()`, `pop()`, `remove()`, and `copy()`.
 - String slicing does not support step values (e.g., string[::2] for every second character is not supported).
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
