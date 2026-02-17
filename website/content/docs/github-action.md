@@ -13,13 +13,13 @@ For a very brief example of how to set up a workflow file that uses the esbmc-ac
 
 ## Manually Specifying Files
 
-To see how to manually specify files with this action (instead of using the git diff as above), see [this video](https://youtu.be/tLuGGm7HpsQ). This video also shows the use of the fail-fast and display-overhead options, which mark the workflow as failed when an ESBMC verification error occurs and display the resource usage of ESBMC, respectively. If no files are specified for the 'files' input, this action will instead run off the git diff.
+To see how to manually specify files with this action (instead of using the git diff as above), see [this video](https://youtu.be/tLuGGm7HpsQ). This video also shows the use of the fail-fast and display-overhead options, which mark the workflow as failed when an ESBMC verification error occurs and display ESBMC's resource usage, respectively. If no files are specified for the 'files' input, this action will instead run off the git diff.
 
 ## Creating Artifacts
 
-This action gives the user the option to create a GitHub artifact when using certain ESBMC options that generate files. To see how to do this, watch [this video](https://youtu.be/Zy2jR1MH1HU). The create-artifact option can be enabled to create artifacts, and the user can also specify artifact-retention-days and artifact-compression-level. As shown in the video, the artifact can be accessed with an id and URL for later use.
+This action gives the user the option to create a GitHub artifact when using certain ESBMC options that generate files. To see how to do this, watch [this video](https://youtu.be/Zy2jR1MH1HU). The create-artifact option can be enabled to create artifacts, and the user can also specify artifact-retention-days and artifact-compression-level. As shown in the video, the artifact can be accessed using an ID and a URL for later use.
 
 ## Manual Checkout
 
-This action will automatically check out at startup, but this may be disabled if the user wishes to modify the runner's contents before running ESBMC. If the user disables this option (sets it to 'n'), then they still must check out before this action (with a fetch-depth of 2 if they wish to use a git diff). Watch [this video](https://youtu.be/LI4Zp1tNMJE) for a demonstration of a manual checkout.
+This action will automatically check out at startup, but this may be disabled if the user wishes to modify the runner's contents before running ESBMC. If the user disables this option (sets it to 'n'), they must still check out before this action (with a fetch-depth of 2 if they wish to use a git diff). Watch [this video](https://youtu.be/LI4Zp1tNMJE) for a demonstration of a manual checkout.
 

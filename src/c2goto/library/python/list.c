@@ -208,6 +208,68 @@ bool __ESBMC_list_eq(
   return true;
 }
 
+// Order-insensitive set equality: compare by value only.
+bool __ESBMC_list_set_eq(const PyListObject *l1, const PyListObject *l2)
+{
+  if (!l1 || !l2)
+    return false;
+  if (__ESBMC_same_object(l1, l2))
+    return true;
+  if (l1->size != l2->size)
+    return false;
+
+  size_t n = l1->size;
+  if (n == 0)
+    return true;
+
+  // Track which elements in l2 have been matched.
+  bool *matched = (bool *)__ESBMC_alloca(n * sizeof(bool));
+  size_t i = 0;
+  while (i < n)
+  {
+    matched[i] = false;
+    ++i;
+  }
+
+  i = 0;
+  while (i < n)
+  {
+    const PyObject *a = &l1->items[i];
+    bool found = false;
+
+    size_t j = 0;
+    while (j < n)
+    {
+      if (matched[j])
+      {
+        ++j;
+        continue;
+      }
+
+      const PyObject *b = &l2->items[j];
+      if (a->size != b->size)
+      {
+        ++j;
+        continue;
+      }
+
+      if (__ESBMC_values_equal(a->value, b->value, a->size))
+      {
+        matched[j] = true;
+        found = true;
+        break;
+      }
+      ++j;
+    }
+
+    if (!found)
+      return false;
+    ++i;
+  }
+
+  return true;
+}
+
 PyObject *__ESBMC_list_at(PyListObject *l, size_t index)
 {
   __ESBMC_assert(index < l->size, "out-of-bounds read in list");
@@ -492,4 +554,69 @@ bool __ESBMC_dict_eq(
   }
 
   return true;
+}
+
+PyListObject *__ESBMC_list_copy(const PyListObject *l)
+{
+  if (!l)
+    return NULL;
+
+  // Create new list
+  PyListObject *copied = __ESBMC_list_create();
+
+  // Copy all elements
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    // Copy the value
+    void *copied_value = __ESBMC_copy_value(elem->value, elem->size);
+
+    // Add to new list
+    copied->items[copied->size].value = copied_value;
+    copied->items[copied->size].type_id = elem->type_id;
+    copied->items[copied->size].size = elem->size;
+    copied->size++;
+
+    ++i;
+  }
+
+  return copied;
+}
+
+bool __ESBMC_list_remove(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(l != NULL, "ValueError: list is null");
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      if (__ESBMC_values_equal(elem->value, item, item_size))
+      {
+        /* Shift elements left to fill the gap */
+        size_t j = i;
+        while (j < l->size - 1)
+        {
+          l->items[j] = l->items[j + 1];
+          j++;
+        }
+        l->size--;
+        return true; /* found and removed */
+      }
+    }
+    i++;
+  }
+
+  /* Item not found */
+  __ESBMC_assert(0, "ValueError: list.remove(x): x not in list");
+  return false;
 }

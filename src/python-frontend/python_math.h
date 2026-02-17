@@ -290,6 +290,117 @@ public:
    *   math.log(-1) -> domain error at runtime
    */
   exprt handle_log(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle arccosine function (math.acos)
+   */
+  exprt handle_acos(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle arctangent function (math.atan)
+   */
+  exprt handle_atan(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle two-argument arctangent function (math.atan2)
+   */
+  exprt
+  handle_atan2(exprt y_operand, exprt x_operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle base-2 logarithm function (math.log2)
+   */
+  exprt handle_log2(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle power function (math.pow)
+   */
+  exprt handle_pow(exprt base, exprt exp, const nlohmann::json &element);
+
+  /**
+   * @brief Handle absolute value for floats (math.fabs)
+   */
+  exprt handle_fabs(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle truncate to integer towards zero (math.trunc)
+   */
+  exprt handle_trunc(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle floating-point remainder (math.fmod)
+   */
+  exprt handle_fmod(exprt lhs, exprt rhs, const nlohmann::json &element);
+
+  /**
+   * @brief Handle copy sign (math.copysign)
+   */
+  exprt handle_copysign(exprt lhs, exprt rhs, const nlohmann::json &element);
+
+  /**
+   * @brief Handle tangent function (math.tan)
+   */
+  exprt handle_tan(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle arcsine function (math.asin)
+   */
+  exprt handle_asin(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle hyperbolic sine function (math.sinh)
+   */
+  exprt handle_sinh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle hyperbolic cosine function (math.cosh)
+   */
+  exprt handle_cosh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle hyperbolic tangent function (math.tanh)
+   */
+  exprt handle_tanh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle base-10 logarithm function (math.log10)
+   */
+  exprt handle_log10(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle expm1 function (math.expm1)
+   */
+  exprt handle_expm1(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle log1p function (math.log1p)
+   */
+  exprt handle_log1p(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle exp2 function (math.exp2)
+   */
+  exprt handle_exp2(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle asinh function (math.asinh)
+   */
+  exprt handle_asinh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle acosh function (math.acosh)
+   */
+  exprt handle_acosh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle atanh function (math.atanh)
+   */
+  exprt handle_atanh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle hypot function (math.hypot)
+   */
+  exprt handle_hypot(exprt lhs, exprt rhs, const nlohmann::json &element);
 };
 
 #endif

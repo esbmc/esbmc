@@ -59,8 +59,10 @@ extern "C"
 
 #ifndef _WIN32
 #  include <sys/wait.h>
-#  include <execinfo.h>
 #  include <fcntl.h>
+#  ifdef __GLIBC__
+#    include <execinfo.h>
+#  endif
 #endif
 
 #ifdef ENABLE_GOTO_CONTRACTOR
@@ -127,9 +129,11 @@ static void segfault_handler(int sig)
 {
   ::signal(sig, SIG_DFL);
   void *buffer[BT_BUF_SIZE];
+#  ifdef __GLIBC__
   int n = backtrace(buffer, BT_BUF_SIZE);
   dprintf(STDERR_FILENO, "\nSignal %d, backtrace:\n", sig);
   backtrace_symbols_fd(buffer, n, STDERR_FILENO);
+#  endif
   int fd = open("/proc/self/maps", O_RDONLY);
   if (fd != -1)
   {
