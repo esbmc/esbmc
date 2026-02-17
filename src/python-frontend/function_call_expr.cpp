@@ -2261,7 +2261,11 @@ function_call_expr::get_dispatch_table()
           func_name == "__ESBMC_fmod" || func_name == "__ESBMC_copysign" ||
           func_name == "__ESBMC_tan" || func_name == "__ESBMC_asin" ||
           func_name == "__ESBMC_sinh" || func_name == "__ESBMC_cosh" ||
-          func_name == "__ESBMC_tanh" || func_name == "__ESBMC_log10");
+          func_name == "__ESBMC_tanh" || func_name == "__ESBMC_log10" ||
+          func_name == "__ESBMC_expm1" || func_name == "__ESBMC_log1p" ||
+          func_name == "__ESBMC_exp2" || func_name == "__ESBMC_asinh" ||
+          func_name == "__ESBMC_acosh" || func_name == "__ESBMC_atanh" ||
+          func_name == "__ESBMC_hypot");
 
        return (is_math_module &&
                (func_name == "sin" || func_name == "cos" ||
@@ -2273,7 +2277,11 @@ function_call_expr::get_dispatch_table()
                 func_name == "fmod" || func_name == "copysign" ||
                 func_name == "tan" || func_name == "asin" ||
                 func_name == "sinh" || func_name == "cosh" ||
-                func_name == "tanh" || func_name == "log10")) ||
+                func_name == "tanh" || func_name == "log10" ||
+                func_name == "expm1" || func_name == "log1p" ||
+                func_name == "exp2" || func_name == "asinh" ||
+                func_name == "acosh" || func_name == "atanh" ||
+                func_name == "hypot")) ||
               is_math_wrapper;
      },
      [this]() -> exprt {
@@ -2401,6 +2409,36 @@ function_call_expr::get_dispatch_table()
          exprt arg_expr = require_one_arg();
          return converter_.get_math_handler().handle_log10(arg_expr, call_);
        }
+       else if (func_name == "expm1" || func_name == "__ESBMC_expm1")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_expm1(arg_expr, call_);
+       }
+       else if (func_name == "log1p" || func_name == "__ESBMC_log1p")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_log1p(arg_expr, call_);
+       }
+       else if (func_name == "exp2" || func_name == "__ESBMC_exp2")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_exp2(arg_expr, call_);
+       }
+       else if (func_name == "asinh" || func_name == "__ESBMC_asinh")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_asinh(arg_expr, call_);
+       }
+       else if (func_name == "acosh" || func_name == "__ESBMC_acosh")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_acosh(arg_expr, call_);
+       }
+       else if (func_name == "atanh" || func_name == "__ESBMC_atanh")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_atanh(arg_expr, call_);
+       }
        else if (func_name == "fabs" || func_name == "__ESBMC_fabs")
        {
          exprt arg_expr = require_one_arg();
@@ -2433,6 +2471,12 @@ function_call_expr::get_dispatch_table()
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
          return converter_.get_math_handler().handle_copysign(
+           lhs_expr, rhs_expr, call_);
+       }
+       else if (func_name == "hypot" || func_name == "__ESBMC_hypot")
+       {
+         auto [lhs_expr, rhs_expr] = require_two_args();
+         return converter_.get_math_handler().handle_hypot(
            lhs_expr, rhs_expr, call_);
        }
 

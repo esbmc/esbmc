@@ -366,6 +366,41 @@ public:
    * @brief Handle base-10 logarithm function (math.log10)
    */
   exprt handle_log10(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle expm1 function (math.expm1)
+   */
+  exprt handle_expm1(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle log1p function (math.log1p)
+   */
+  exprt handle_log1p(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle exp2 function (math.exp2)
+   */
+  exprt handle_exp2(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle asinh function (math.asinh)
+   */
+  exprt handle_asinh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle acosh function (math.acosh)
+   */
+  exprt handle_acosh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle atanh function (math.atanh)
+   */
+  exprt handle_atanh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle hypot function (math.hypot)
+   */
+  exprt handle_hypot(exprt lhs, exprt rhs, const nlohmann::json &element);
 };
 
 #endif
