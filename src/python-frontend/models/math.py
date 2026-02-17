@@ -519,9 +519,8 @@ def erf(x: float) -> float:
         abs_x = 0.0 - abs_x
 
     t: float = 1.0 / (1.0 + p * abs_x)
-    y: float = 1.0 - (
-        (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t
-    ) * exp(0.0 - abs_x * abs_x)
+    y: float = 1.0 - (((((
+        (a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t) * exp(0.0 - abs_x * abs_x)
     return sign * y
 
 
