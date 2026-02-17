@@ -1,7 +1,7 @@
 /// \file frame_enforcer.cpp
-/// \brief Implementation of the Operational Frame Rule for inductive verification.
+/// \brief Implementation of the Operational Frame Rule for verification.
 ///
-/// This implements the core "Snapshot → Havoc → Assume(Unchanged == Snapshot)"
+/// This implements the core "Snapshot → Havoc/Call → Assume/Assert(Unchanged == Snapshot)"
 /// mechanism. See frame_enforcer.h for detailed documentation.
 
 #include "frame_enforcer.h"
@@ -49,38 +49,139 @@ void frame_enforcert::materialize_snapshots(
   }
 }
 
+frame_enforcert::classified_assignst
+frame_enforcert::classify_assigns_targets(
+  const std::vector<expr2tc> &explicit_assigns)
+{
+  classified_assignst result;
+
+  for (const auto &target : explicit_assigns)
+  {
+    if (is_pointer_type(target))
+    {
+      // Pointer-typed symbol: Clang simplified &(*ptr) to ptr
+      result.pointer_targets.push_back(target);
+    }
+    else if (is_dereference2t(target))
+    {
+      // Explicit dereference: extract the pointer operand
+      result.pointer_targets.push_back(to_dereference2t(target).value);
+    }
+    else
+    {
+      result.direct_targets.push_back(target);
+    }
+  }
+
+  return result;
+}
+
 void frame_enforcert::enforce_frame_rule(
   const std::vector<expr2tc> &explicit_assigns,
   goto_programt &dest,
-  const locationt &loc)
+  const locationt &loc,
+  frame_modet mode)
 {
+  // Classify assigns targets for aliasing analysis
+  classified_assignst classified = classify_assigns_targets(explicit_assigns);
+
   for (const auto &entry : active_snapshots)
   {
     const expr2tc &var = entry.original_expr;
     const expr2tc &snap = entry.snapshot_sym;
 
-    // Check if this variable is in the explicit assigns set
+    // Check if this variable is directly in the assigns set
     bool is_assigned = false;
-    for (const auto &assigned_var : explicit_assigns)
+    for (const auto &direct : classified.direct_targets)
     {
-      if (var == assigned_var)
+      if (var == direct)
       {
         is_assigned = true;
         break;
       }
     }
 
-    // If not in assigns set, it must retain its pre-havoc value
-    // Paper: ∀ v ∈ ModSet \ AssignsSet, assume(v_new = v_old)
-    if (!is_assigned)
+    // If directly assigned, skip — no constraint needed
+    if (is_assigned)
+      continue;
+
+    // Base guard: var == snapshot (unchanged condition)
+    expr2tc guard = equality2tc(var, snap);
+
+    // In ASSERT mode, add aliasing disjunctions for pointer targets.
+    // For each pointer p in pointer_targets whose pointed-to type matches
+    // var's type, add: guard = guard || (p == &var)
+    // This means: "var is unchanged OR some pointer in the assigns set aliases it"
+    if (mode == frame_modet::ASSERT)
     {
-      expr2tc eq = equality2tc(var, snap);
-      goto_programt::targett t = dest.add_instruction(ASSUME);
-      t->guard = eq;
-      t->location = loc;
+      for (const auto &ptr : classified.pointer_targets)
+      {
+        // Check type compatibility: pointer's subtype must match var's type
+        if (
+          is_pointer_type(ptr) &&
+          to_pointer_type(ptr->type).subtype == var->type)
+        {
+          // address_of2tc(subtype, obj): first arg is subtype, NOT pointer type
+          expr2tc addr_of_var = address_of2tc(var->type, var);
+          expr2tc alias_check = equality2tc(ptr, addr_of_var);
+          guard = or2tc(guard, alias_check);
+        }
+      }
+    }
+
+    // Emit ASSUME or ASSERT with the (possibly disjunctive) guard
+    goto_program_instruction_typet inst_type =
+      (mode == frame_modet::ASSERT) ? ASSERT : ASSUME;
+    goto_programt::targett t = dest.add_instruction(inst_type);
+    t->guard = guard;
+    t->location = loc;
+    if (mode == frame_modet::ASSERT)
+    {
+      std::string var_name = "unknown";
+      if (is_symbol2t(var))
+        var_name = id2string(to_symbol2t(var).thename);
+      t->location.comment(
+        "assigns compliance: " + var_name + " not in assigns clause");
+      t->location.property("assigns compliance");
+    }
+    else
+    {
       t->location.comment("frame: preserve unassigned variable");
     }
   }
+}
+
+std::vector<expr2tc>
+frame_enforcert::collect_global_variables(const contextt &context)
+{
+  std::vector<expr2tc> globals;
+
+  context.foreach_operand([&globals](const symbolt &s) {
+    // Skip functions, types, and non-lvalue symbols
+    if (s.type.is_code() || s.is_type || !s.lvalue)
+      return;
+
+    // Only process static lifetime variables (globals and static locals)
+    if (!s.static_lifetime)
+      return;
+
+    // Skip internal ESBMC symbols
+    std::string sym_name = id2string(s.name);
+    if (sym_name.find("__ESBMC_") == 0)
+      return;
+
+    // Build symbol expression
+    type2tc global_type = migrate_type(s.type);
+    expr2tc sym_expr = symbol2tc(global_type, s.id);
+
+    // Skip pointer types (consistent with loop frame rule behavior)
+    if (is_pointer_type(sym_expr))
+      return;
+
+    globals.push_back(sym_expr);
+  });
+
+  return globals;
 }
 
 expr2tc frame_enforcert::replace_old_with_snapshots(const expr2tc &expr) const

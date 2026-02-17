@@ -34,7 +34,10 @@ code_contractst::code_contractst(
   goto_functionst &_goto_functions,
   contextt &_context,
   const namespacet &_ns)
-  : goto_functions(_goto_functions), context(_context), ns(_ns)
+  : goto_functions(_goto_functions),
+    context(_context),
+    ns(_ns),
+    frame_enforcer(_context)
 {
 }
 
@@ -600,7 +603,8 @@ void code_contractst::havoc_static_globals(
 void code_contractst::enforce_contracts(
   const std::set<std::string> &to_enforce,
   bool assume_nonnull_valid,
-  const std::string &entry_function)
+  const std::string &entry_function,
+  bool check_assigns_compliance)
 {
   for (const auto &function_name : to_enforce)
   {
@@ -748,6 +752,10 @@ void code_contractst::enforce_contracts(
     std::vector<code_contractst::is_fresh_mapping_t> is_fresh_mappings =
       extract_is_fresh_mappings_from_body(original_body_copy);
 
+    // Extract assigns targets from function body for compliance checking
+    std::vector<expr2tc> assigns_targets =
+      extract_assigns_from_body(original_body_copy);
+
     // Determine if this function needs pointer validity assumptions.
     // When --function is used, the harness passes nil for pointer parameters,
     // so the wrapper must assume they point to valid memory for correct
@@ -765,7 +773,9 @@ void code_contractst::enforce_contracts(
       original_name_id,
       original_body_copy,
       is_fresh_mappings,
-      needs_ptr_validity);
+      needs_ptr_validity,
+      assigns_targets,
+      check_assigns_compliance);
 
     // Create new function entry
     goto_functiont new_func;
@@ -790,7 +800,9 @@ goto_programt code_contractst::generate_checking_wrapper(
   const irep_idt &original_func_id,
   const goto_programt &original_body,
   const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
-  bool assume_nonnull_valid)
+  bool assume_nonnull_valid,
+  const std::vector<expr2tc> &assigns_targets,
+  bool check_assigns_compliance)
 {
   goto_programt wrapper;
   locationt location = original_func.location;
@@ -917,6 +929,24 @@ goto_programt code_contractst::generate_checking_wrapper(
 
   // 3. Assume requires clause (after memory allocation for is_fresh)
   add_contract_clause(requires_clause, ASSUME, "contract requires");
+
+  // 3b. Snapshot globals for assigns compliance checking (before function call)
+  if (check_assigns_compliance)
+  {
+    std::string func_name = id2string(original_func.name);
+    auto globals = frame_enforcert::collect_global_variables(context);
+    if (!globals.empty())
+    {
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: snapshotting {} globals for assigns "
+        "compliance of {}",
+        globals.size(),
+        func_name);
+      frame_enforcer.materialize_snapshots(
+        globals, wrapper, location, "contract_" + func_name);
+    }
+  }
 
   // 2. Declare return value variable (if function has return type)
   expr2tc ret_val;
@@ -1054,6 +1084,17 @@ goto_programt code_contractst::generate_checking_wrapper(
     call_inst->code = call_expr;
     call_inst->location = location;
     call_inst->location.comment("contract call original function");
+  }
+
+  // 3c. Assert assigns compliance (after function call, before ensures)
+  if (check_assigns_compliance)
+  {
+    log_debug(
+      "contracts",
+      "generate_checking_wrapper: checking assigns compliance for {}",
+      id2string(original_func.name));
+    frame_enforcer.enforce_frame_rule(
+      assigns_targets, wrapper, location, frame_modet::ASSERT);
   }
 
   // 4. Assert ensures clause (replace __ESBMC_return_value and __ESBMC_old)

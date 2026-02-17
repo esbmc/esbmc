@@ -39,6 +39,7 @@
 #define ESBMC_CONTRACTS_H
 
 #include <goto-programs/goto_functions.h>
+#include <goto-programs/frame_enforcer.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <set>
@@ -84,7 +85,8 @@ public:
   void enforce_contracts(
     const std::set<std::string> &to_enforce,
     bool assume_nonnull_valid = false,
-    const std::string &entry_function = "");
+    const std::string &entry_function = "",
+    bool check_assigns_compliance = false);
 
   /// \brief Replace function calls with contracts
   /// Replaces function calls with contract semantics:
@@ -114,6 +116,7 @@ private:
   goto_functionst &goto_functions;
   contextt &context;
   const namespacet &ns;
+  frame_enforcert frame_enforcer;
 
   /// \brief Check if a function is compiler-generated and should be skipped
   /// \param function_name Function name or ID
@@ -146,7 +149,9 @@ private:
     const irep_idt &original_func_id,
     const goto_programt &original_body,
     const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
-    bool assume_nonnull_valid = false);
+    bool assume_nonnull_valid = false,
+    const std::vector<expr2tc> &assigns_targets = {},
+    bool check_assigns_compliance = false);
 
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called

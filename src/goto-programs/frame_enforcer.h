@@ -1,17 +1,21 @@
 /// \file frame_enforcer.h
-/// \brief Operational Frame Rule enforcement for inductive verification.
+/// \brief Operational Frame Rule enforcement for verification.
 ///
-/// This module implements the "Snapshot → Havoc → Assume(Unchanged == Snapshot)"
-/// pattern that bridges the inductive gap in k-induction loop verification.
+/// This module implements the "Snapshot → Havoc → Assume/Assert(Unchanged == Snapshot)"
+/// pattern used in two contexts:
 ///
-/// The frame rule ensures that variables NOT in the explicit assigns set
-/// retain their pre-havoc values, enabling verification of properties that
-/// depend on historical state (e.g., array shift patterns, sliding windows).
+/// 1. Loop invariants (ASSUME mode): Bridges the inductive gap in k-induction
+///    by assuming unassigned variables retain pre-havoc values.
+///
+/// 2. Function contracts (ASSERT mode): Checks assigns clause compliance by
+///    asserting that variables NOT in the assigns set are unchanged after
+///    the function call.
 ///
 /// Key operations:
-/// 1. materialize_snapshots: Capture pre-state before havoc
-/// 2. enforce_frame_rule: Constrain post-havoc state for unassigned variables
+/// 1. materialize_snapshots: Capture pre-state before havoc/call
+/// 2. enforce_frame_rule: Constrain/check post-state for unassigned variables
 /// 3. replace_old_with_snapshots: Support old() references in invariants
+/// 4. collect_global_variables: Gather all accessible globals from symbol table
 
 #ifndef GOTO_PROGRAMS_FRAME_ENFORCER_H
 #define GOTO_PROGRAMS_FRAME_ENFORCER_H
@@ -21,6 +25,13 @@
 #include <irep2/irep2_expr.h>
 #include <map>
 #include <vector>
+
+/// Enforcement mode: ASSUME constrains search space (loops), ASSERT checks compliance (contracts)
+enum class frame_modet
+{
+  ASSUME,
+  ASSERT
+};
 
 class frame_enforcert
 {
@@ -37,7 +48,7 @@ public:
 
   /// \brief Materialize snapshots for a set of variables.
   /// Generates DECL + ASSIGN instructions that capture the current value of
-  /// each variable into a fresh snapshot symbol. Call this BEFORE havoc.
+  /// each variable into a fresh snapshot symbol. Call this BEFORE havoc/call.
   ///
   /// \param vars_to_snapshot Variables to create snapshots for
   /// \param dest GOTO program to append snapshot instructions to
@@ -49,20 +60,22 @@ public:
     const locationt &loc,
     const std::string &scope_prefix);
 
-  /// \brief Enforce frame rule: add ASSUME constraints for unassigned variables.
-  /// For each snapshotted variable NOT in explicit_assigns, generates
-  /// ASSUME(var == snapshot_var). Call this AFTER havoc.
+  /// \brief Enforce frame rule with configurable mode.
+  /// For each snapshotted variable NOT in explicit_assigns, generates either
+  /// ASSUME(var == snapshot_var) or ASSERT(var == snapshot_var).
   ///
-  /// Paper semantics:
-  /// ∀ v ∈ ModSet \ AssignsSet, assume(v_new = v_old)
+  /// ASSUME mode (loops): constrains search space for k-induction
+  /// ASSERT mode (contracts): checks assigns clause compliance
   ///
   /// \param explicit_assigns Variables explicitly allowed to change
-  /// \param dest GOTO program to append ASSUME instructions to
+  /// \param dest GOTO program to append instructions to
   /// \param loc Source location for generated instructions
+  /// \param mode ASSUME for loops (default), ASSERT for contracts
   void enforce_frame_rule(
     const std::vector<expr2tc> &explicit_assigns,
     goto_programt &dest,
-    const locationt &loc);
+    const locationt &loc,
+    frame_modet mode = frame_modet::ASSUME);
 
   /// \brief Replace old() references in an expression with snapshot variables.
   /// Walks the expression tree and replaces any symbol matching a snapshotted
@@ -77,6 +90,30 @@ public:
   {
     return active_snapshots;
   }
+
+  /// \brief Collect all accessible global variables from the symbol table.
+  /// Returns symbol2tc expressions for all static-lifetime lvalue symbols,
+  /// excluding __ESBMC_* internal symbols, functions, and types.
+  ///
+  /// \param context Symbol table to scan
+  /// \return Vector of symbol2tc expressions for global variables
+  static std::vector<expr2tc> collect_global_variables(const contextt &context);
+
+  /// \brief Classification of assigns targets into direct and pointer categories.
+  /// Used to separate structurally-matchable targets from pointer-typed targets
+  /// that require aliasing disjunctions.
+  struct classified_assignst
+  {
+    std::vector<expr2tc> direct_targets;  ///< Non-pointer targets matched structurally
+    std::vector<expr2tc> pointer_targets; ///< Pointer-typed targets from *ptr pattern
+  };
+
+  /// \brief Classify assigns targets into direct and pointer categories.
+  /// - Pointer-typed symbols (from Clang simplifying &(*ptr) to ptr) → pointer_targets
+  /// - Dereference expressions → extract pointer operand → pointer_targets
+  /// - Everything else → direct_targets
+  static classified_assignst
+  classify_assigns_targets(const std::vector<expr2tc> &explicit_assigns);
 
 private:
   contextt &context;

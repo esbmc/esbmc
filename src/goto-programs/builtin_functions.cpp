@@ -733,6 +733,16 @@ void goto_convertt::do_function_call_symbol(
           i,
           actual_arg.pretty());
       }
+      else if (actual_arg.type().is_pointer())
+      {
+        // Pointer-typed argument: Clang simplified &(*ptr) to ptr.
+        // This is expected for __ESBMC_assigns(*ptr) patterns.
+        log_debug(
+          "builtin_functions",
+          "  Pointer-typed assigns target {} (from *ptr pattern): {}",
+          i,
+          actual_arg.pretty());
+      }
       else
       {
         // This shouldn't happen if using the macro correctly
