@@ -307,6 +307,19 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
     {
       if (e.is_constant())
         return e.is_true() ? 1 : 0;
+      if (e.is_symbol())
+      {
+        symbolt *sym = converter_.find_symbol(
+          to_symbol_expr(e).get_identifier().as_string());
+        if (sym && sym->value.is_constant())
+        {
+          if (sym->value.type().is_bool())
+            return sym->value.is_true() ? 1 : 0;
+          BigInt val;
+          if (!to_integer(sym->value, val))
+            return val.to_int64();
+        }
+      }
       // Unknown boolean: treat as nondet -> do not fold
       return std::nullopt;
     }
