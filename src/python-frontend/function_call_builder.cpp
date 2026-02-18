@@ -618,29 +618,101 @@ exprt function_call_builder::build() const
         call_["args"][0].contains("id"))
     {
       const std::string var_name = call_["args"][0]["id"].get<std::string>();
-      nlohmann::json var_value = json_utils::get_var_value(
-        var_name,
-        converter_.get_current_func_name(),
-        converter_.get_ast_json());
+      bool has_augassign = false;
+      auto count_assignments = [&](const nlohmann::json &node,
+                                   const std::string &name,
+                                   auto &&self) -> int {
+        int count = 0;
+        if (!node.is_object() && !node.is_array())
+          return 0;
 
-      if (!var_value.empty() && var_value.contains("value"))
-      {
-        if (
-          var_value["value"].contains("_type") &&
-          var_value["value"]["_type"] == "JoinedStr")
+        if (node.is_object() && node.contains("_type"))
         {
-          if (auto len = joinedstr_len(var_value["value"]))
-            return from_integer(*len, size_type());
+          const std::string type = node["_type"].get<std::string>();
+          if (type == "Assign" && node.contains("targets"))
+          {
+            for (const auto &tgt : node["targets"])
+            {
+              if (tgt.contains("_type") && tgt["_type"] == "Name" &&
+                  tgt.contains("id") && tgt["id"] == name)
+                count++;
+            }
+          }
+          else if (type == "AnnAssign" && node.contains("target"))
+          {
+            const auto &tgt = node["target"];
+            if (tgt.contains("_type") && tgt["_type"] == "Name" &&
+                tgt.contains("id") && tgt["id"] == name)
+              count++;
+          }
+          else if (type == "AugAssign" && node.contains("target"))
+          {
+            const auto &tgt = node["target"];
+            if (tgt.contains("_type") && tgt["_type"] == "Name" &&
+                tgt.contains("id") && tgt["id"] == name)
+            {
+              has_augassign = true;
+              count++;
+            }
+          }
         }
-        else if (
-          var_value["value"].contains("_type") &&
-          var_value["value"]["_type"] == "Constant" &&
-          var_value["value"].contains("value") &&
-          var_value["value"]["value"].is_string())
+
+        if (node.is_array())
         {
-          const std::string text =
-            var_value["value"]["value"].get<std::string>();
-          return from_integer(BigInt(text.size()), size_type());
+          for (const auto &elem : node)
+            count += self(elem, name, self);
+        }
+        else if (node.is_object())
+        {
+          for (const auto &item : node.items())
+            count += self(item.value(), name, self);
+        }
+
+        return count;
+      };
+
+      int assign_count = 0;
+      const nlohmann::json &ast = converter_.get_ast_json();
+      if (converter_.get_current_func_name().empty())
+        assign_count = count_assignments(ast["body"], var_name, count_assignments);
+      else
+      {
+        std::vector<std::string> function_path =
+          json_utils::split_function_path(converter_.get_current_func_name());
+        nlohmann::json func_node =
+          json_utils::find_function_by_path(ast, function_path);
+        if (!func_node.empty() && func_node.contains("body"))
+          assign_count =
+            count_assignments(func_node["body"], var_name, count_assignments);
+      }
+
+      // Only fold len() for variables assigned exactly once and never augmented.
+      if (assign_count == 1 && !has_augassign)
+      {
+        nlohmann::json var_value = json_utils::get_var_value(
+          var_name,
+          converter_.get_current_func_name(),
+          converter_.get_ast_json());
+
+        if (!var_value.empty() && var_value.contains("value"))
+        {
+          if (
+            var_value["value"].contains("_type") &&
+            var_value["value"]["_type"] == "JoinedStr")
+          {
+            if (auto len = joinedstr_len(var_value["value"]))
+              return from_integer(*len, size_type());
+          }
+          else if (
+            var_value["value"].contains("_type") &&
+            var_value["value"]["_type"] == "Constant" &&
+            var_value["value"].contains("value") &&
+            var_value["value"]["value"].is_string())
+          {
+            const std::string text =
+              var_value["value"]["value"].get<std::string>();
+            return from_integer(BigInt(text.size()), size_type());
+          }
         }
       }
     }
