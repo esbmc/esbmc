@@ -4,6 +4,7 @@
 #include <util/arith_tools.h>
 #include <util/std_code.h>
 #include <util/expr_util.h>
+#include <optional>
 
 string_builder::string_builder(python_converter &conv, string_handler *handler)
   : converter_(conv), str_handler_(handler)
@@ -299,27 +300,49 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
 {
   size_t size = 0;
   exprt str;
-  std::string value;
+
+  auto get_repeat_count = [this](const exprt &e) -> std::optional<long long> {
+    if (e.type().is_bool())
+    {
+      if (e.is_constant())
+        return e.is_true() ? 1 : 0;
+      // Unknown boolean: treat as nondet -> do not fold
+      return std::nullopt;
+    }
+
+    if (e.is_constant())
+    {
+      BigInt val;
+      if (!to_integer(e, val))
+        return val.to_int64();
+      return std::nullopt;
+    }
+
+    if (e.is_symbol())
+    {
+      symbolt *sym = converter_.find_symbol(
+        to_symbol_expr(e).get_identifier().as_string());
+      if (sym && sym->value.is_constant())
+      {
+        BigInt val;
+        if (!to_integer(sym->value, val))
+          return val.to_int64();
+      }
+    }
+
+    return std::nullopt;
+  };
 
   // Get size (e.g.: "a" * 3)
   if (rhs.type().is_signedbv() || rhs.type().is_bool())
   {
-    if (rhs.is_symbol())
-    {
-      symbolt *size_var = converter_.find_symbol(
-        to_symbol_expr(rhs).get_identifier().as_string());
-      assert(size_var);
-      value = size_var->value.value().as_string();
-    }
-    else if (rhs.is_constant())
-      value = rhs.value().as_string();
-
-    // "a" * True = "a"
-    // "a" * False = ""
-    if (rhs.type().is_bool())
-      size = value == "true" ? 1 : 0;
+    auto count = get_repeat_count(rhs);
+    if (!count)
+      throw std::runtime_error("Unsupported string repetition count");
+    if (*count <= 0)
+      size = 0;
     else
-      size = std::stoi(rhs.value().as_string(), nullptr, 2);
+      size = static_cast<size_t>(*count);
 
     str_handler_->ensure_string_array(lhs);
     str = lhs;
@@ -327,20 +350,13 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
   // Get size (e.g.: 3 * "a")
   else if (lhs.type().is_signedbv() || lhs.type().is_bool())
   {
-    if (lhs.is_symbol())
-    {
-      symbolt *size_var = converter_.find_symbol(
-        to_symbol_expr(lhs).get_identifier().as_string());
-      assert(size_var);
-      value = size_var->value.value().as_string();
-    }
-    else if (lhs.is_constant())
-      value = lhs.value().as_string();
-
-    if (rhs.type().is_bool())
-      size = value == "true" ? 1 : 0;
+    auto count = get_repeat_count(lhs);
+    if (!count)
+      throw std::runtime_error("Unsupported string repetition count");
+    if (*count <= 0)
+      size = 0;
     else
-      size = std::stoi(rhs.value().as_string(), nullptr, 2);
+      size = static_cast<size_t>(*count);
 
     str_handler_->ensure_string_array(rhs);
     str = rhs;
