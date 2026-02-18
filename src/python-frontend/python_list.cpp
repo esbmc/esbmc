@@ -1092,10 +1092,8 @@ exprt python_list::handle_range_slice(
 
       // UnaryOp USub in the AST (e.g. -1 represented as USub(1))
       if (
-        bound_node.contains("_type") &&
-        bound_node["_type"] == "UnaryOp" &&
-        bound_node.contains("op") &&
-        bound_node["op"]["_type"] == "USub")
+        bound_node.contains("_type") && bound_node["_type"] == "UnaryOp" &&
+        bound_node.contains("op") && bound_node["op"]["_type"] == "USub")
       {
         is_negative = true;
       }
@@ -1114,7 +1112,8 @@ exprt python_list::handle_range_slice(
         if (array.type().is_pointer())
           size_call.arguments().push_back(array); // Already a pointer
         else
-          size_call.arguments().push_back(address_of_exprt(array)); // Take address
+          size_call.arguments().push_back(
+            address_of_exprt(array)); // Take address
         size_call.type() = size_type();
         size_call.location() = converter_.get_location_from_decl(list_value_);
 
@@ -1261,8 +1260,7 @@ exprt python_list::handle_range_slice(
   if (list_type_map[sliced_id].empty())
   {
     if (
-      list_type_map[sliced_id].empty() &&
-      list_value_.contains("value") &&
+      list_type_map[sliced_id].empty() && list_value_.contains("value") &&
       list_value_["value"].contains("id"))
     {
       const std::string &param_name =
