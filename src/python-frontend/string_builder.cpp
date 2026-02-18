@@ -5,6 +5,8 @@
 #include <util/std_code.h>
 #include <util/expr_util.h>
 #include <optional>
+#include <stdexcept>
+#include <limits>
 
 string_builder::string_builder(python_converter &conv, string_handler *handler)
   : converter_(conv), str_handler_(handler)
@@ -301,6 +303,7 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
   size_t size = 0;
   exprt str;
   exprt count_expr;
+  constexpr long long kMaxRepeatSize = 10000;
 
   auto get_repeat_count = [this](const exprt &e) -> std::optional<long long> {
     if (e.type().is_bool())
@@ -412,10 +415,20 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
     if (*count <= 0)
       size = 0;
     else
+    {
+      if (
+        *count > static_cast<long long>(std::numeric_limits<size_t>::max()) ||
+        *count > kMaxRepeatSize)
+      {
+        str_handler_->ensure_string_array(lhs);
+        return make_repeat_call(lhs, rhs);
+      }
       size = static_cast<size_t>(*count);
+    }
 
     str_handler_->ensure_string_array(lhs);
     str = lhs;
+    count_expr = rhs;
   }
   // Get size (e.g.: 3 * "a")
   else if (lhs.type().is_signedbv() || lhs.type().is_bool())
@@ -429,15 +442,32 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
     if (*count <= 0)
       size = 0;
     else
+    {
+      if (
+        *count > static_cast<long long>(std::numeric_limits<size_t>::max()) ||
+        *count > kMaxRepeatSize)
+      {
+        str_handler_->ensure_string_array(rhs);
+        return make_repeat_call(rhs, lhs);
+      }
       size = static_cast<size_t>(*count);
+    }
 
     str_handler_->ensure_string_array(rhs);
     str = rhs;
+    count_expr = lhs;
   }
   else
     throw std::runtime_error("Unsupported string repetition type");
 
   std::vector<exprt> chars = extract_string_chars(str);
+  if (
+    size > 0 &&
+    chars.size() >
+      (std::numeric_limits<size_t>::max() / static_cast<size_t>(size)))
+  {
+    return make_repeat_call(str, count_expr);
+  }
   std::vector<exprt> combined_chars;
   combined_chars.reserve(chars.size() * size);
   for (size_t i = 0; i < size; ++i)
