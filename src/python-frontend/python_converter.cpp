@@ -2040,6 +2040,54 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     return is_empty;
   }
 
+  // Handle 'not' operator on list types: convert to emptiness check
+  typet list_type = type_handler_.get_list_type();
+  if (
+    op == "Not" && (unary_sub.type() == list_type ||
+                    (unary_sub.type().is_pointer() &&
+                     unary_sub.type().subtype() == list_type)))
+  {
+    if (!current_block)
+      throw std::runtime_error(
+        "List truthiness check requires a statement context");
+
+    locationt location = get_location_from_decl(element);
+
+    // Find __ESBMC_list_size function
+    const symbolt *size_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error(
+        "__ESBMC_list_size not found for list truthiness check");
+
+    // Create temporary variable to store the size result
+    symbolt &size_result = create_tmp_symbol(
+      element, "$list_size$", size_type(), gen_zero(size_type()));
+    code_declt size_decl(symbol_expr(size_result));
+    size_decl.location() = location;
+    current_block->copy_to_operands(size_decl);
+
+    // Call __ESBMC_list_size(list)
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.lhs() = symbol_expr(size_result);
+    // Pass address if not already a pointer
+    if (unary_sub.type().is_pointer())
+      size_call.arguments().push_back(unary_sub);
+    else
+      size_call.arguments().push_back(address_of_exprt(unary_sub));
+    size_call.type() = size_type();
+    size_call.location() = location;
+    current_block->copy_to_operands(size_call);
+
+    // Return comparison: size == 0 (empty list is falsy, so 'not list' is true when empty)
+    exprt is_empty =
+      equality_exprt(symbol_expr(size_result), gen_zero(size_type()));
+    is_empty.location() = location;
+
+    return is_empty;
+  }
+
   exprt unary_expr(map_operator(op, type), type);
   unary_expr.operands().push_back(unary_sub);
 
