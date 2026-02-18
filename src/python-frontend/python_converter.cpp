@@ -2079,8 +2079,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     current_block->copy_to_operands(size_call);
 
     // Return comparison: size == 0 (empty list is falsy, so 'not list' is true when empty)
-    exprt is_empty("=", bool_type());
-    is_empty.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+    exprt is_empty = equality_exprt(symbol_expr(size_result), gen_zero(size_type()));
     is_empty.location() = location;
 
     return is_empty;
