@@ -172,17 +172,6 @@ public:
   build_copy_list_call(const symbolt &list, const nlohmann::json &element);
 
   /**
-   * @brief Remove the first occurrence of an item from the list type map.
-   * Used by handle_list_remove() to keep the type map consistent.
-   */
-  static void remove_last_type_entry(const std::string &list_id)
-  {
-    auto it = list_type_map.find(list_id);
-    if (it != list_type_map.end() && !it->second.empty())
-      it->second.pop_back();
-  }
-
-  /**
    * @brief Build a list remove operation (removes first matching element).
    * Raises ValueError (via assertion) if element is not found.
    */

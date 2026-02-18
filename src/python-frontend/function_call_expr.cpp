@@ -1800,8 +1800,6 @@ exprt function_call_expr::handle_list_remove() const
   exprt result =
     list_helper.build_remove_list_call(*list_symbol, call_, value_to_remove);
 
-  python_list::remove_last_type_entry(list_symbol->id.as_string());
-
   return result;
 }
 
