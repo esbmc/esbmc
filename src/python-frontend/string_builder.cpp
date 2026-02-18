@@ -300,6 +300,7 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
 {
   size_t size = 0;
   exprt str;
+  exprt count_expr;
 
   auto get_repeat_count = [this](const exprt &e) -> std::optional<long long> {
     if (e.type().is_bool())
@@ -333,12 +334,68 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
     return std::nullopt;
   };
 
+  auto make_repeat_call = [&](exprt &str_expr, exprt &count) -> exprt {
+    // Ensure string is null-terminated and get base address
+    exprt str_nt = ensure_null_terminated_string(str_expr);
+    exprt str_addr = str_handler_->get_array_base_address(str_nt);
+
+    // Cast count to long long if needed
+    if (!(count.type().is_signedbv() || count.type().is_unsignedbv()))
+    {
+      exprt casted("typecast", long_long_int_type());
+      casted.copy_to_operands(count);
+      count = casted;
+    }
+    else if (count.type().is_bool())
+    {
+      exprt casted("typecast", long_long_int_type());
+      casted.copy_to_operands(count);
+      count = casted;
+    }
+
+    std::string func_name = "__python_str_repeat";
+    std::string func_symbol_id = "c:@F@" + func_name;
+
+    symbolt *repeat_symbol = get_symbol_table().find_symbol(func_symbol_id);
+    if (!repeat_symbol)
+    {
+      symbolt new_symbol;
+      new_symbol.name = func_name;
+      new_symbol.id = func_symbol_id;
+      new_symbol.mode = "C";
+      new_symbol.is_extern = true;
+
+      code_typet repeat_type;
+      typet char_ptr = gen_pointer_type(char_type());
+      repeat_type.return_type() = char_ptr;
+
+      code_typet::argumentt arg1(char_ptr);
+      code_typet::argumentt arg2(long_long_int_type());
+      repeat_type.arguments().push_back(arg1);
+      repeat_type.arguments().push_back(arg2);
+
+      new_symbol.type = repeat_type;
+      get_symbol_table().add(new_symbol);
+      repeat_symbol = get_symbol_table().find_symbol(func_symbol_id);
+    }
+
+    side_effect_expr_function_callt repeat_call;
+    repeat_call.function() = symbol_expr(*repeat_symbol);
+    repeat_call.arguments().push_back(str_addr);
+    repeat_call.arguments().push_back(count);
+    repeat_call.type() = gen_pointer_type(char_type());
+    return repeat_call;
+  };
+
   // Get size (e.g.: "a" * 3)
   if (rhs.type().is_signedbv() || rhs.type().is_bool())
   {
     auto count = get_repeat_count(rhs);
     if (!count)
-      throw std::runtime_error("Unsupported string repetition count");
+    {
+      str_handler_->ensure_string_array(lhs);
+      return make_repeat_call(lhs, rhs);
+    }
     if (*count <= 0)
       size = 0;
     else
@@ -352,7 +409,10 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
   {
     auto count = get_repeat_count(lhs);
     if (!count)
-      throw std::runtime_error("Unsupported string repetition count");
+    {
+      str_handler_->ensure_string_array(rhs);
+      return make_repeat_call(rhs, lhs);
+    }
     if (*count <= 0)
       size = 0;
     else
