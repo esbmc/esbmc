@@ -478,17 +478,93 @@ exprt function_call_builder::build() const
 
   if (is_len_call(function_id) && !call_["args"].empty())
   {
-    auto joinedstr_len = [](const nlohmann::json &joined) -> std::optional<BigInt> {
+    auto const_string_len_from_symbol =
+      [this](const std::string &name) -> std::optional<BigInt> {
+      auto is_constant_array = [](const exprt &value) -> bool {
+        if (!value.type().is_array())
+          return false;
+        if (value.operands().empty())
+          return false;
+        for (const auto &op : value.operands())
+        {
+          if (!op.is_constant())
+            return false;
+        }
+        return true;
+      };
+
+      // Special-case __name__ which is always a compile-time constant
+      if (name == "__name__")
+      {
+        std::string name_value;
+        if (converter_.python_file() == converter_.main_python_filename())
+          name_value = "__main__";
+        else
+        {
+          const std::string &file = converter_.python_file();
+          size_t last_slash = file.find_last_of("/\\");
+          size_t last_dot = file.find_last_of(".");
+          if (
+            last_slash != std::string::npos && last_dot != std::string::npos &&
+            last_dot > last_slash)
+          {
+            name_value = file.substr(last_slash + 1, last_dot - last_slash - 1);
+          }
+          else if (last_dot != std::string::npos)
+            name_value = file.substr(0, last_dot);
+          else
+            name_value = file;
+        }
+
+        return BigInt(name_value.size());
+      }
+
+      symbolt *sym = nullptr;
+
+      // First try current scope symbol id
+      symbol_id scoped_sid(
+        converter_.python_file(),
+        converter_.current_classname(),
+        converter_.current_function_name());
+      scoped_sid.set_object(name);
+      sym = converter_.find_symbol(scoped_sid.to_string());
+
+      // Fallback to global scope symbol id
+      if (!sym)
+      {
+        symbol_id global_sid(converter_.python_file(), "", "");
+        global_sid.set_object(name);
+        sym = converter_.find_symbol(global_sid.to_string());
+      }
+
+      if (sym && sym->value.is_not_nil() && is_constant_array(sym->value))
+      {
+        const array_typet &arr_type = to_array_type(sym->value.type());
+        if (type_utils::is_char_type(arr_type.subtype()) &&
+            arr_type.size().is_constant())
+        {
+          BigInt sz;
+          if (!to_integer(arr_type.size(), sz) && sz > 0)
+            return sz - 1;
+        }
+      }
+
+      return std::nullopt;
+    };
+
+    auto joinedstr_len =
+      [&const_string_len_from_symbol](const nlohmann::json &joined)
+        -> std::optional<BigInt> {
       if (!joined.contains("values") || !joined["values"].is_array())
         return std::nullopt;
 
       BigInt total = BigInt(0);
-      constexpr size_t kPlaceholderLen = 6; // "<expr>"
 
       for (const auto &part : joined["values"])
       {
-        if (part["_type"] == "Constant" && part.contains("value") &&
-            part["value"].is_string())
+        if (
+          part["_type"] == "Constant" && part.contains("value") &&
+          part["value"].is_string())
         {
           const std::string text = part["value"].get<std::string>();
           total += BigInt(text.size());
@@ -498,14 +574,21 @@ exprt function_call_builder::build() const
         if (part["_type"] == "FormattedValue" && part.contains("value"))
         {
           const auto &value = part["value"];
-          // Only optimize when formatted value is non-constant, which maps to "<expr>"
-          if (value.contains("_type") && value["_type"] == "Constant")
-            return std::nullopt;
+          if (value["_type"] == "Name" && value.contains("id"))
+          {
+            if (auto len =
+                  const_string_len_from_symbol(value["id"].get<std::string>()))
+            {
+              total += *len;
+              continue;
+            }
+          }
 
-          total += BigInt(kPlaceholderLen);
-          continue;
+          // Cannot prove constant length
+          return std::nullopt;
         }
 
+        // Unsupported part type for constant length folding
         return std::nullopt;
       }
 

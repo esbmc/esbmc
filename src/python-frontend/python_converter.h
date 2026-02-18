@@ -133,6 +133,11 @@ public:
     return current_python_file;
   }
 
+  const std::string &main_python_filename() const
+  {
+    return main_python_file;
+  }
+
   const std::string &current_function_name() const
   {
     return current_func_name_;
