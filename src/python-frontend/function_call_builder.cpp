@@ -508,8 +508,8 @@ exprt function_call_builder::build() const
     };
 
     auto joinedstr_len =
-      [&const_string_len_from_symbol](const nlohmann::json &joined)
-        -> std::optional<BigInt> {
+      [&const_string_len_from_symbol](
+        const nlohmann::json &joined) -> std::optional<BigInt> {
       if (!joined.contains("values") || !joined["values"].is_array())
         return std::nullopt;
 
@@ -531,8 +531,9 @@ exprt function_call_builder::build() const
           const auto &value = part["value"];
           if (value["_type"] == "Name" && value.contains("id"))
           {
-            if (auto len =
-                  const_string_len_from_symbol(value["id"].get<std::string>()))
+            if (
+              auto len =
+                const_string_len_from_symbol(value["id"].get<std::string>()))
             {
               total += *len;
               continue;
@@ -568,15 +569,16 @@ exprt function_call_builder::build() const
 
     // If the argument is a named variable initialized with a constant string
     // or f-string, compute its length from the initializer to avoid strlen.
-    if (call_["args"][0].contains("_type") &&
-        call_["args"][0]["_type"] == "Name" &&
-        call_["args"][0].contains("id"))
+    if (
+      call_["args"][0].contains("_type") &&
+      call_["args"][0]["_type"] == "Name" && call_["args"][0].contains("id"))
     {
       const std::string var_name = call_["args"][0]["id"].get<std::string>();
       bool has_augassign = false;
-      auto count_assignments = [&](const nlohmann::json &node,
-                                   const std::string &name,
-                                   auto &&self) -> int {
+      auto count_assignments = [&](
+                                 const nlohmann::json &node,
+                                 const std::string &name,
+                                 auto &&self) -> int {
         int count = 0;
         if (!node.is_object() && !node.is_array())
           return 0;
@@ -588,23 +590,26 @@ exprt function_call_builder::build() const
           {
             for (const auto &tgt : node["targets"])
             {
-              if (tgt.contains("_type") && tgt["_type"] == "Name" &&
-                  tgt.contains("id") && tgt["id"] == name)
+              if (
+                tgt.contains("_type") && tgt["_type"] == "Name" &&
+                tgt.contains("id") && tgt["id"] == name)
                 count++;
             }
           }
           else if (type == "AnnAssign" && node.contains("target"))
           {
             const auto &tgt = node["target"];
-            if (tgt.contains("_type") && tgt["_type"] == "Name" &&
-                tgt.contains("id") && tgt["id"] == name)
+            if (
+              tgt.contains("_type") && tgt["_type"] == "Name" &&
+              tgt.contains("id") && tgt["id"] == name)
               count++;
           }
           else if (type == "AugAssign" && node.contains("target"))
           {
             const auto &tgt = node["target"];
-            if (tgt.contains("_type") && tgt["_type"] == "Name" &&
-                tgt.contains("id") && tgt["id"] == name)
+            if (
+              tgt.contains("_type") && tgt["_type"] == "Name" &&
+              tgt.contains("id") && tgt["id"] == name)
             {
               has_augassign = true;
               count++;
@@ -629,7 +634,8 @@ exprt function_call_builder::build() const
       int assign_count = 0;
       const nlohmann::json &ast = converter_.get_ast_json();
       if (converter_.get_current_func_name().empty())
-        assign_count = count_assignments(ast["body"], var_name, count_assignments);
+        assign_count =
+          count_assignments(ast["body"], var_name, count_assignments);
       else
       {
         std::vector<std::string> function_path =
@@ -683,8 +689,9 @@ exprt function_call_builder::build() const
         arg_symbol->value.type().is_array() && arg_symbol->value.is_constant())
       {
         const array_typet &arr_type = to_array_type(arg_symbol->value.type());
-        if (type_utils::is_char_type(arr_type.subtype()) &&
-            arr_type.size().is_constant())
+        if (
+          type_utils::is_char_type(arr_type.subtype()) &&
+          arr_type.size().is_constant())
         {
           BigInt sz;
           if (!to_integer(arr_type.size(), sz) && sz > 0)
@@ -704,8 +711,9 @@ exprt function_call_builder::build() const
     if (actual_type.id() == "array")
     {
       const array_typet &arr_type = to_array_type(actual_type);
-      if (type_utils::is_char_type(arr_type.subtype()) &&
-          arr_type.size().is_constant())
+      if (
+        type_utils::is_char_type(arr_type.subtype()) &&
+        arr_type.size().is_constant())
       {
         BigInt sz;
         if (!to_integer(arr_type.size(), sz) && sz > 0)
