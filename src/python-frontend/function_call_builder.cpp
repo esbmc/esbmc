@@ -480,76 +480,31 @@ exprt function_call_builder::build() const
   {
     auto const_string_len_from_symbol =
       [this](const std::string &name) -> std::optional<BigInt> {
-      auto is_constant_array = [](const exprt &value) -> bool {
-        if (!value.type().is_array())
-          return false;
-        if (value.operands().empty())
-          return false;
-        for (const auto &op : value.operands())
-        {
-          if (!op.is_constant())
-            return false;
-        }
-        return true;
-      };
+      // Be conservative with named symbols; only __name__ is known constant.
+      if (name != "__name__")
+        return std::nullopt;
 
-      // Special-case __name__ which is always a compile-time constant
-      if (name == "__name__")
+      std::string name_value;
+      if (converter_.python_file() == converter_.main_python_filename())
+        name_value = "__main__";
+      else
       {
-        std::string name_value;
-        if (converter_.python_file() == converter_.main_python_filename())
-          name_value = "__main__";
+        const std::string &file = converter_.python_file();
+        size_t last_slash = file.find_last_of("/\\");
+        size_t last_dot = file.find_last_of(".");
+        if (
+          last_slash != std::string::npos && last_dot != std::string::npos &&
+          last_dot > last_slash)
+        {
+          name_value = file.substr(last_slash + 1, last_dot - last_slash - 1);
+        }
+        else if (last_dot != std::string::npos)
+          name_value = file.substr(0, last_dot);
         else
-        {
-          const std::string &file = converter_.python_file();
-          size_t last_slash = file.find_last_of("/\\");
-          size_t last_dot = file.find_last_of(".");
-          if (
-            last_slash != std::string::npos && last_dot != std::string::npos &&
-            last_dot > last_slash)
-          {
-            name_value = file.substr(last_slash + 1, last_dot - last_slash - 1);
-          }
-          else if (last_dot != std::string::npos)
-            name_value = file.substr(0, last_dot);
-          else
-            name_value = file;
-        }
-
-        return BigInt(name_value.size());
+          name_value = file;
       }
 
-      symbolt *sym = nullptr;
-
-      // First try current scope symbol id
-      symbol_id scoped_sid(
-        converter_.python_file(),
-        converter_.current_classname(),
-        converter_.current_function_name());
-      scoped_sid.set_object(name);
-      sym = converter_.find_symbol(scoped_sid.to_string());
-
-      // Fallback to global scope symbol id
-      if (!sym)
-      {
-        symbol_id global_sid(converter_.python_file(), "", "");
-        global_sid.set_object(name);
-        sym = converter_.find_symbol(global_sid.to_string());
-      }
-
-      if (sym && sym->value.is_not_nil() && is_constant_array(sym->value))
-      {
-        const array_typet &arr_type = to_array_type(sym->value.type());
-        if (type_utils::is_char_type(arr_type.subtype()) &&
-            arr_type.size().is_constant())
-        {
-          BigInt sz;
-          if (!to_integer(arr_type.size(), sz) && sz > 0)
-            return sz - 1;
-        }
-      }
-
-      return std::nullopt;
+      return BigInt(name_value.size());
     };
 
     auto joinedstr_len =
