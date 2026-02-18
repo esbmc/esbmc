@@ -327,7 +327,7 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
     if (e.is_constant())
     {
       BigInt val;
-      if (!to_integer(e, val))
+      if (!to_integer(e, val) && val.is_int64())
         return val.to_int64();
       return std::nullopt;
     }
@@ -339,7 +339,7 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
       if (sym && sym->value.is_constant())
       {
         BigInt val;
-        if (!to_integer(sym->value, val))
+        if (!to_integer(sym->value, val) && val.is_int64())
           return val.to_int64();
       }
     }
