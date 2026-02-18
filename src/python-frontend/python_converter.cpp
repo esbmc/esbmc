@@ -2042,8 +2042,10 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
   // Handle 'not' operator on list types: convert to emptiness check
   typet list_type = type_handler_.get_list_type();
-  if (op == "Not" && (unary_sub.type() == list_type ||
-                      (unary_sub.type().is_pointer() && unary_sub.type().subtype() == list_type)))
+  if (
+    op == "Not" && (unary_sub.type() == list_type ||
+                    (unary_sub.type().is_pointer() &&
+                     unary_sub.type().subtype() == list_type)))
   {
     if (!current_block)
       throw std::runtime_error(
@@ -2079,7 +2081,8 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     current_block->copy_to_operands(size_call);
 
     // Return comparison: size == 0 (empty list is falsy, so 'not list' is true when empty)
-    exprt is_empty = equality_exprt(symbol_expr(size_result), gen_zero(size_type()));
+    exprt is_empty =
+      equality_exprt(symbol_expr(size_result), gen_zero(size_type()));
     is_empty.location() = location;
 
     return is_empty;
