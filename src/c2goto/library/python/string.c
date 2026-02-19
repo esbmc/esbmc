@@ -1115,12 +1115,16 @@ __ESBMC_HIDE:;
   char *buffer = __ESBMC_alloca(total + 1);
 
   size_t pos = 0;
-  for (size_t i = 0; i < count_u; ++i)
+  size_t i = 0;
+  while (i < count_u)
   {
-    for (size_t j = 0; j < len; ++j)
+    size_t j = 0;
+    while (j < len)
     {
       buffer[pos++] = s[j];
+      ++j;
     }
+    ++i;
   }
 
   buffer[pos] = '\0';
