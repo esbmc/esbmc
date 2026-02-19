@@ -14,6 +14,17 @@
 #include <climits>
 #include <optional>
 
+static size_t utf8_codepoint_count(const std::string &text)
+{
+  size_t count = 0;
+  for (unsigned char c : text)
+  {
+    if ((c & 0xC0) != 0x80)
+      ++count;
+  }
+  return count;
+}
+
 bool function_call_builder::is_nondet_str_call(const nlohmann::json &node) const
 {
   return node.contains("_type") && node["_type"] == "Call" &&
@@ -522,7 +533,7 @@ exprt function_call_builder::build() const
           part["value"].is_string())
         {
           const std::string text = part["value"].get<std::string>();
-          total += BigInt(text.size());
+          total += BigInt(utf8_codepoint_count(text));
           continue;
         }
 
@@ -559,7 +570,7 @@ exprt function_call_builder::build() const
       call_["args"][0]["value"].is_string())
     {
       const std::string text = call_["args"][0]["value"].get<std::string>();
-      return from_integer(BigInt(text.size()), size_type());
+      return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
     }
 
     exprt arg_expr = converter_.get_expr(call_["args"][0]);
@@ -672,7 +683,7 @@ exprt function_call_builder::build() const
           {
             const std::string text =
               var_value["value"]["value"].get<std::string>();
-            return from_integer(BigInt(text.size()), size_type());
+            return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
           }
         }
       }
