@@ -26,7 +26,7 @@ public:
   ieee_floatt get_fpbv(smt_astt a) override;
   expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
     override;
-
+  bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator) override;
   void push_ctx() override;
   void pop_ctx() override;
   // SMT-abstraction migration:
@@ -152,7 +152,8 @@ public:
 
   void assert_ast(smt_astt a) override;
 
-  void dump_smt() override;
+  std::string dump_smt() override;
+
 
   unsigned int to_bv_counter;
 
