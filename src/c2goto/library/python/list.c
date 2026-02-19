@@ -555,3 +555,68 @@ bool __ESBMC_dict_eq(
 
   return true;
 }
+
+PyListObject *__ESBMC_list_copy(const PyListObject *l)
+{
+  if (!l)
+    return NULL;
+
+  // Create new list
+  PyListObject *copied = __ESBMC_list_create();
+
+  // Copy all elements
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    // Copy the value
+    void *copied_value = __ESBMC_copy_value(elem->value, elem->size);
+
+    // Add to new list
+    copied->items[copied->size].value = copied_value;
+    copied->items[copied->size].type_id = elem->type_id;
+    copied->items[copied->size].size = elem->size;
+    copied->size++;
+
+    ++i;
+  }
+
+  return copied;
+}
+
+bool __ESBMC_list_remove(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(l != NULL, "ValueError: list is null");
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      if (__ESBMC_values_equal(elem->value, item, item_size))
+      {
+        /* Shift elements left to fill the gap */
+        size_t j = i;
+        while (j < l->size - 1)
+        {
+          l->items[j] = l->items[j + 1];
+          j++;
+        }
+        l->size--;
+        return true; /* found and removed */
+      }
+    }
+    i++;
+  }
+
+  /* Item not found */
+  __ESBMC_assert(0, "ValueError: list.remove(x): x not in list");
+  return false;
+}

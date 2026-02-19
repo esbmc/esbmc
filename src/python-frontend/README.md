@@ -136,6 +136,10 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Data Structures**: Supports operations on Python's built-in data structures, including lists, strings, and tuples, with features such as concatenation and bounds checks.
   - **List Operations**:
     - **append()**: Add elements to the end of a list.
+    - **clear()**: Remove all elements from the list (e.g., `my_list.clear()` empties the list).
+    - **pop()**: Remove and return an element at a given index (default is the last element).
+    - **remove()**: Remove the first occurrence of a value from the list (e.g., `l.remove(x)`).
+    - **copy()**: Return a shallow copy of the list (e.g., `new_list = old_list.copy()`).
     - **extend()**: Extends a list by appending all elements from an iterable (e.g., `list1.extend(list2)` or `list1.extend([3, 4, 5])`).
     - **insert()**: Insert elements at a specific index position.
       - When the index equals the list length, the element is appended to the end.
@@ -266,9 +270,14 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **math.ceil(x)**: Returns the smallest integer greater than or equal to x.
   - Both functions `math.floor(x)` and `math.ceil(x)` include built-in assertions to reject infinity and NaN inputs.
   - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions.
+- **Constants**: `math.pi`, `math.e`, `math.inf`, `math.tau`, `math.nan`.
 - **Trigonometric**: `math.sin`, `math.cos`, `math.tan`, `math.asin`, `math.acos`, `math.atan`, `math.atan2`.
-- **Exponential/Logarithmic**: `math.exp`, `math.log`, `math.log2`, `math.log10`, `math.pow`.
-- **Hyperbolic**: `math.sinh`, `math.cosh`, `math.tanh`.
+- **Exponential/Logarithmic**: `math.exp`, `math.expm1`, `math.log`, `math.log1p`, `math.log2`, `math.log10`, `math.exp2`, `math.pow`.
+- **Hyperbolic**: `math.sinh`, `math.cosh`, `math.tanh`, `math.asinh`, `math.acosh`, `math.atanh`.
+- **Integer/Helpers**: `math.factorial`, `math.gcd`, `math.lcm`, `math.isqrt`, `math.perm`, `math.prod`, `math.isclose`.
+  - `math.prod` currently expects `list[int]` inputs in the frontend model.
+- **Geometry**: `math.hypot`, `math.dist`.
+  - `math.dist` currently expects `list[float]` inputs (not tuples) in the frontend model.
 - **Rounding/Abs**: `math.fabs`, `math.trunc`, `math.modf`.
 - **Other**: `math.fmod`, `math.copysign`, `math.degrees`, `math.radians`, `math.isfinite`.
 
@@ -382,7 +391,7 @@ ESBMC-Python provides an optional strict type-checking mode that enforces type c
 The current version of ESBMC-Python has the following limitations:
 
 - Only `for` loops using the `range()` function are supported.
-- List and String support are partial and limited in functionality. Currently supported list methods include `append()` and `insert()`.
+- List and String support are partial and limited in functionality. Currently supported list methods include `append()`, `extend()`, `insert()`, `clear()`, `pop()`, `remove()`, and `copy()`.
 - String slicing does not support step values (e.g., string[::2] for every second character is not supported).
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.

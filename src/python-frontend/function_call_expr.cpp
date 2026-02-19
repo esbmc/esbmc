@@ -1753,6 +1753,56 @@ exprt function_call_expr::handle_dict_method() const
   throw std::runtime_error("Unsupported dict method: " + method_name);
 }
 
+exprt function_call_expr::handle_list_copy() const
+{
+  const auto &args = call_["args"];
+
+  if (!args.empty())
+    throw std::runtime_error("copy() takes no arguments");
+
+  // Get the list object name
+  std::string list_name = get_object_name();
+
+  // Find the list symbol
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  // Delegate to python_list to build the copy operation
+  python_list list_helper(converter_, call_);
+  return list_helper.build_copy_list_call(*list_symbol, call_);
+}
+
+exprt function_call_expr::handle_list_remove() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error("remove() takes exactly one argument");
+
+  std::string list_name = get_object_name();
+
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  exprt value_to_remove = converter_.get_expr(args[0]);
+
+  python_list list_helper(converter_, call_);
+  exprt result =
+    list_helper.build_remove_list_call(*list_symbol, call_, value_to_remove);
+
+  return result;
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1764,7 +1814,7 @@ bool function_call_expr::is_list_method_call() const
   return method_name == "append" || method_name == "pop" ||
          method_name == "insert" || method_name == "remove" ||
          method_name == "clear" || method_name == "extend" ||
-         method_name == "insert";
+         method_name == "copy";
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -1781,6 +1831,10 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_clear();
   if (method_name == "pop")
     return handle_list_pop();
+  if (method_name == "copy")
+    return handle_list_copy();
+  if (method_name == "remove")
+    return handle_list_remove();
 
   // Add other methods as needed
 
@@ -2235,7 +2289,11 @@ function_call_expr::get_dispatch_table()
           func_name == "__ESBMC_fmod" || func_name == "__ESBMC_copysign" ||
           func_name == "__ESBMC_tan" || func_name == "__ESBMC_asin" ||
           func_name == "__ESBMC_sinh" || func_name == "__ESBMC_cosh" ||
-          func_name == "__ESBMC_tanh" || func_name == "__ESBMC_log10");
+          func_name == "__ESBMC_tanh" || func_name == "__ESBMC_log10" ||
+          func_name == "__ESBMC_expm1" || func_name == "__ESBMC_log1p" ||
+          func_name == "__ESBMC_exp2" || func_name == "__ESBMC_asinh" ||
+          func_name == "__ESBMC_acosh" || func_name == "__ESBMC_atanh" ||
+          func_name == "__ESBMC_hypot");
 
        return (is_math_module &&
                (func_name == "sin" || func_name == "cos" ||
@@ -2247,7 +2305,17 @@ function_call_expr::get_dispatch_table()
                 func_name == "fmod" || func_name == "copysign" ||
                 func_name == "tan" || func_name == "asin" ||
                 func_name == "sinh" || func_name == "cosh" ||
-                func_name == "tanh" || func_name == "log10")) ||
+                func_name == "tanh" || func_name == "log10" ||
+                func_name == "expm1" || func_name == "log1p" ||
+                func_name == "exp2" || func_name == "asinh" ||
+                func_name == "acosh" || func_name == "atanh" ||
+                func_name == "hypot" || func_name == "cbrt" ||
+                func_name == "erf" || func_name == "erfc" ||
+                func_name == "frexp" || func_name == "fsum" ||
+                func_name == "gamma" || func_name == "ldexp" ||
+                func_name == "lgamma" || func_name == "nextafter" ||
+                func_name == "remainder" || func_name == "sumprod" ||
+                func_name == "ulp")) ||
               is_math_wrapper;
      },
      [this]() -> exprt {
@@ -2375,6 +2443,36 @@ function_call_expr::get_dispatch_table()
          exprt arg_expr = require_one_arg();
          return converter_.get_math_handler().handle_log10(arg_expr, call_);
        }
+       else if (func_name == "expm1" || func_name == "__ESBMC_expm1")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_expm1(arg_expr, call_);
+       }
+       else if (func_name == "log1p" || func_name == "__ESBMC_log1p")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_log1p(arg_expr, call_);
+       }
+       else if (func_name == "exp2" || func_name == "__ESBMC_exp2")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_exp2(arg_expr, call_);
+       }
+       else if (func_name == "asinh" || func_name == "__ESBMC_asinh")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_asinh(arg_expr, call_);
+       }
+       else if (func_name == "acosh" || func_name == "__ESBMC_acosh")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_acosh(arg_expr, call_);
+       }
+       else if (func_name == "atanh" || func_name == "__ESBMC_atanh")
+       {
+         exprt arg_expr = require_one_arg();
+         return converter_.get_math_handler().handle_atanh(arg_expr, call_);
+       }
        else if (func_name == "fabs" || func_name == "__ESBMC_fabs")
        {
          exprt arg_expr = require_one_arg();
@@ -2408,6 +2506,21 @@ function_call_expr::get_dispatch_table()
          auto [lhs_expr, rhs_expr] = require_two_args();
          return converter_.get_math_handler().handle_copysign(
            lhs_expr, rhs_expr, call_);
+       }
+       else if (func_name == "hypot" || func_name == "__ESBMC_hypot")
+       {
+         auto [lhs_expr, rhs_expr] = require_two_args();
+         return converter_.get_math_handler().handle_hypot(
+           lhs_expr, rhs_expr, call_);
+       }
+       else if (
+         func_name == "cbrt" || func_name == "erf" || func_name == "erfc" ||
+         func_name == "frexp" || func_name == "fsum" || func_name == "gamma" ||
+         func_name == "ldexp" || func_name == "lgamma" ||
+         func_name == "nextafter" || func_name == "remainder" ||
+         func_name == "sumprod" || func_name == "ulp")
+       {
+         return handle_general_function_call();
        }
 
        throw std::runtime_error("Unsupported math function: " + func_name);

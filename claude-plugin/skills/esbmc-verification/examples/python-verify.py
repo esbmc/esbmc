@@ -350,6 +350,8 @@ def test_bubble_sort() -> None:
     # Property: same length
     assert len(sorted_arr) == len(arr), "Length preserved"
 
+test_bubble_sort()
+
 # ============================================
 # Example 9: String Validation with nondet_str
 # ============================================

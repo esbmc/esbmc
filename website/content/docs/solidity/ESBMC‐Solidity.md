@@ -66,7 +66,7 @@ title: Solidity
 ## Known Bugs
 - ~~Inheritance. Completely broken.~~
   - The override and virtual still contain bugs.
-- Incomplete message output related to struct. (e.g. Assertion `struct.id == 1` failed is reported as `struct. == 1`)
+- Incomplete message output related to struct. (e.g., Assertion `struct.id == 1` failed is reported as `struct. == 1`)
 - [out-of-bounds Bytes](https://docs.soliditylang.org/en/v0.8.23/control-structures.html#panic-via-assert-and-error-via-require) (**0x32**) 🟧⚠️
 - (need investigation) We did not implement the rollback features in Solidity. Will it affect the verification result?
 
@@ -80,10 +80,10 @@ title: Solidity
 ```
 0x01: If you call assert with an argument that evaluates to false.
 0x11: If an arithmetic operation results in underflow or overflow outside of an unchecked { ... } block.
-0x12: If you divide or modulo by zero (e.g. 5 / 0 or 23 % 0).
+0x12: If you divide or modulo by zero (e.g., 5 / 0 or 23 % 0).
 0x21: If you convert a value that is too big or negative into an enum type.
 0x31: If you call .pop() on an empty array.
-0x32: If you access an array, bytesN or an array slice at an out-of-bounds or negative index (i.e. x[i] where i >= x.length or i < 0).
+0x32: If you access an array, bytesN, or an array slice at an out-of-bounds or negative index (i.e., x[i] where i >= x.length or i < 0).
 0x41: If you allocate too much memory or create an array that is too large.
 0x51: If you call a zero-initialized variable of internal function type
 ```
