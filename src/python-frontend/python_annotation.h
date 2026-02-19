@@ -2779,8 +2779,7 @@ private:
 
       Json updated = element;
       update_assignment_node(updated, inferred_type);
-      pending_updates.push_back(
-        {body_index, std::move(updated), ref_index});
+      pending_updates.push_back({body_index, std::move(updated), ref_index});
     }
 
     for (const auto &update : pending_updates)
