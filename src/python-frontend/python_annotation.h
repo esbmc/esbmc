@@ -7,6 +7,7 @@
 #include <python-frontend/type_utils.h>
 #include <util/message.h>
 
+#include <optional>
 #include <string>
 
 enum class InferResult
@@ -1668,9 +1669,14 @@ private:
     if (rhs_node.empty())
     {
       auto var = json_utils::get_var_node(rhs_var_name, body);
-      std::string type;
-      if (infer_type(var, body, type) == InferResult::OK && !type.empty())
-        return type;
+      if (!var.empty())
+      {
+        if (var == element)
+          return "Any";
+        std::string type;
+        if (infer_type(var, body, type) == InferResult::OK && !type.empty())
+          return type;
+      }
     }
 
     // Find RHS variable declaration in the current function
@@ -1704,6 +1710,9 @@ private:
 
       throw std::runtime_error(oss.str());
     }
+
+    if (rhs_node == element)
+      return "Any";
 
     if (value_type == "Subscript")
     {
@@ -2625,12 +2634,26 @@ private:
 
   void add_annotation(Json &body)
   {
-    for (auto &element : body["body"])
+    struct PendingUpdate
     {
+      size_t body_index;
+      Json updated;
+      std::optional<size_t> ref_index;
+    };
+
+    std::vector<PendingUpdate> pending_updates;
+
+    for (size_t body_index = 0; body_index < body["body"].size(); ++body_index)
+    {
+      const auto &element = body["body"][body_index];
       auto itr = std::find(
         referenced_global_elements.begin(),
         referenced_global_elements.end(),
         element);
+      std::optional<size_t> ref_index;
+      if (itr != referenced_global_elements.end())
+        ref_index = static_cast<size_t>(
+          std::distance(referenced_global_elements.begin(), itr));
 
       if (filter_global_elements_ && itr == referenced_global_elements.end())
         continue;
@@ -2638,28 +2661,30 @@ private:
       if (element.contains("lineno"))
         current_line_ = element["lineno"].template get<int>();
 
-      auto &stmt_type = element["_type"];
+      const auto &stmt_type = element["_type"];
 
       if (stmt_type == "If" || stmt_type == "While" || stmt_type == "Try")
       {
-        add_annotation(element);
+        Json working = element;
+        add_annotation(working);
 
         // Infer loop variable types for preprocessor-transformed for loops
         if (stmt_type == "While")
-          infer_loop_variable_types(element);
+          infer_loop_variable_types(working);
 
         // Process else block if it exists
         if (
-          stmt_type == "If" && element.contains("orelse") &&
-          !element["orelse"].empty())
+          stmt_type == "If" && working.contains("orelse") &&
+          !working["orelse"].empty())
         {
           // Create a temporary body structure for the else block
-          Json else_body = {{"body", element["orelse"]}};
+          Json else_body = {{"body", working["orelse"]}};
           add_annotation(else_body);
           // Update the original orelse with annotated version
-          element["orelse"] = else_body["body"];
+          working["orelse"] = else_body["body"];
         }
 
+        pending_updates.push_back({body_index, std::move(working), ref_index});
         continue;
       }
 
@@ -2667,7 +2692,12 @@ private:
       {
         // Only annotate nested functions, not the current function itself
         if (current_func != nullptr && &element != current_func)
-          annotate_function(element);
+        {
+          Json working = element;
+          annotate_function(working);
+          pending_updates.push_back(
+            {body_index, std::move(working), ref_index});
+        }
 
         continue;
       }
@@ -2711,9 +2741,10 @@ private:
         {
           // This is a type object assignment: x = int
           inferred_type = "type";
-          update_assignment_node(element, inferred_type);
-          if (itr != referenced_global_elements.end())
-            *itr = element;
+          Json updated = element;
+          update_assignment_node(updated, inferred_type);
+          pending_updates.push_back(
+            {body_index, std::move(updated), ref_index});
           continue;
         }
       }
@@ -2746,9 +2777,17 @@ private:
         throw std::runtime_error(oss.str());
       }
 
-      update_assignment_node(element, inferred_type);
-      if (itr != referenced_global_elements.end())
-        *itr = element;
+      Json updated = element;
+      update_assignment_node(updated, inferred_type);
+      pending_updates.push_back(
+        {body_index, std::move(updated), ref_index});
+    }
+
+    for (const auto &update : pending_updates)
+    {
+      body["body"][update.body_index] = update.updated;
+      if (update.ref_index.has_value())
+        referenced_global_elements[*update.ref_index] = update.updated;
     }
   }
 
