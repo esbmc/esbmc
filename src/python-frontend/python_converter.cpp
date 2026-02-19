@@ -5606,8 +5606,9 @@ typet python_converter::get_type_from_annotation(
       }
       parts.push_back(trim_ws(current));
 
-      // Remove None/NoneType and keep first non-none type
+      // Remove None/NoneType and keep track of non-none members
       std::string base_type_name;
+      size_t non_none_count = 0;
       bool contains_none = false;
       for (const auto &p : parts)
       {
@@ -5618,10 +5619,19 @@ typet python_converter::get_type_from_annotation(
         }
         if (base_type_name.empty())
           base_type_name = p;
+        ++non_none_count;
       }
 
       if (base_type_name.empty())
         return any_type();
+
+      // If there are multiple non-None members, fall back conservatively
+      if (non_none_count > 1)
+      {
+        if (contains_none)
+          return gen_pointer_type(char_type());
+        return any_type();
+      }
 
       typet base_type = type_handler_.get_typet(base_type_name);
 
