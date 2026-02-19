@@ -4,6 +4,10 @@
 #include <util/arith_tools.h>
 #include <util/std_code.h>
 #include <util/expr_util.h>
+#include <python-frontend/python_frontend_limits.h>
+#include <optional>
+#include <stdexcept>
+#include <limits>
 
 string_builder::string_builder(python_converter &conv, string_handler *handler)
   : converter_(conv), str_handler_(handler)
@@ -299,56 +303,170 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
 {
   size_t size = 0;
   exprt str;
-  std::string value;
+  exprt count_expr;
+
+  auto get_repeat_count = [this](const exprt &e) -> std::optional<long long> {
+    if (e.type().is_bool())
+    {
+      if (e.is_constant())
+        return e.is_true() ? 1 : 0;
+      if (e.is_symbol())
+      {
+        symbolt *sym = converter_.find_symbol(
+          to_symbol_expr(e).get_identifier().as_string());
+        if (sym && sym->value.is_constant())
+        {
+          if (sym->value.type().is_bool())
+            return sym->value.is_true() ? 1 : 0;
+          BigInt val;
+          if (!to_integer(sym->value, val))
+            return val.to_int64();
+        }
+      }
+      // Unknown boolean: treat as nondet -> do not fold
+      return std::nullopt;
+    }
+
+    if (e.is_constant())
+    {
+      BigInt val;
+      if (!to_integer(e, val) && val.is_int64())
+        return val.to_int64();
+      return std::nullopt;
+    }
+
+    if (e.is_symbol())
+    {
+      symbolt *sym =
+        converter_.find_symbol(to_symbol_expr(e).get_identifier().as_string());
+      if (sym && sym->value.is_constant())
+      {
+        BigInt val;
+        if (!to_integer(sym->value, val) && val.is_int64())
+          return val.to_int64();
+      }
+    }
+
+    return std::nullopt;
+  };
+
+  auto make_repeat_call = [&](exprt &str_expr, exprt &count) -> exprt {
+    // Ensure string is null-terminated and get base address
+    exprt str_nt = ensure_null_terminated_string(str_expr);
+    exprt str_addr = str_handler_->get_array_base_address(str_nt);
+
+    // Cast count to long long if needed
+    if (!(count.type().is_signedbv() || count.type().is_unsignedbv()))
+    {
+      exprt casted("typecast", long_long_int_type());
+      casted.copy_to_operands(count);
+      count = casted;
+    }
+    else if (count.type().is_bool())
+    {
+      exprt casted("typecast", long_long_int_type());
+      casted.copy_to_operands(count);
+      count = casted;
+    }
+
+    std::string func_name = "__python_str_repeat";
+    std::string func_symbol_id = "c:@F@" + func_name;
+
+    symbolt *repeat_symbol = get_symbol_table().find_symbol(func_symbol_id);
+    if (!repeat_symbol)
+    {
+      symbolt new_symbol;
+      new_symbol.name = func_name;
+      new_symbol.id = func_symbol_id;
+      new_symbol.mode = "C";
+      new_symbol.is_extern = true;
+
+      code_typet repeat_type;
+      typet char_ptr = gen_pointer_type(char_type());
+      repeat_type.return_type() = char_ptr;
+
+      code_typet::argumentt arg1(char_ptr);
+      code_typet::argumentt arg2(long_long_int_type());
+      repeat_type.arguments().push_back(arg1);
+      repeat_type.arguments().push_back(arg2);
+
+      new_symbol.type = repeat_type;
+      get_symbol_table().add(new_symbol);
+      repeat_symbol = get_symbol_table().find_symbol(func_symbol_id);
+    }
+
+    side_effect_expr_function_callt repeat_call;
+    repeat_call.function() = symbol_expr(*repeat_symbol);
+    repeat_call.arguments().push_back(str_addr);
+    repeat_call.arguments().push_back(count);
+    repeat_call.type() = gen_pointer_type(char_type());
+    return repeat_call;
+  };
 
   // Get size (e.g.: "a" * 3)
   if (rhs.type().is_signedbv() || rhs.type().is_bool())
   {
-    if (rhs.is_symbol())
+    auto count = get_repeat_count(rhs);
+    if (!count)
     {
-      symbolt *size_var = converter_.find_symbol(
-        to_symbol_expr(rhs).get_identifier().as_string());
-      assert(size_var);
-      value = size_var->value.value().as_string();
+      str_handler_->ensure_string_array(lhs);
+      return make_repeat_call(lhs, rhs);
     }
-    else if (rhs.is_constant())
-      value = rhs.value().as_string();
-
-    // "a" * True = "a"
-    // "a" * False = ""
-    if (rhs.type().is_bool())
-      size = value == "true" ? 1 : 0;
+    if (*count <= 0)
+      size = 0;
     else
-      size = std::stoi(rhs.value().as_string(), nullptr, 2);
+    {
+      if (
+        *count > static_cast<long long>(std::numeric_limits<size_t>::max()) ||
+        *count > kMaxSequenceExpansion)
+      {
+        str_handler_->ensure_string_array(lhs);
+        return make_repeat_call(lhs, rhs);
+      }
+      size = static_cast<size_t>(*count);
+    }
 
     str_handler_->ensure_string_array(lhs);
     str = lhs;
+    count_expr = rhs;
   }
   // Get size (e.g.: 3 * "a")
   else if (lhs.type().is_signedbv() || lhs.type().is_bool())
   {
-    if (lhs.is_symbol())
+    auto count = get_repeat_count(lhs);
+    if (!count)
     {
-      symbolt *size_var = converter_.find_symbol(
-        to_symbol_expr(lhs).get_identifier().as_string());
-      assert(size_var);
-      value = size_var->value.value().as_string();
+      str_handler_->ensure_string_array(rhs);
+      return make_repeat_call(rhs, lhs);
     }
-    else if (lhs.is_constant())
-      value = lhs.value().as_string();
-
-    if (rhs.type().is_bool())
-      size = value == "true" ? 1 : 0;
+    if (*count <= 0)
+      size = 0;
     else
-      size = std::stoi(rhs.value().as_string(), nullptr, 2);
+    {
+      if (
+        *count > static_cast<long long>(std::numeric_limits<size_t>::max()) ||
+        *count > kMaxSequenceExpansion)
+      {
+        str_handler_->ensure_string_array(rhs);
+        return make_repeat_call(rhs, lhs);
+      }
+      size = static_cast<size_t>(*count);
+    }
 
     str_handler_->ensure_string_array(rhs);
     str = rhs;
+    count_expr = lhs;
   }
   else
     throw std::runtime_error("Unsupported string repetition type");
 
   std::vector<exprt> chars = extract_string_chars(str);
+  if (
+    size > 0 && chars.size() > (std::numeric_limits<size_t>::max() /
+                                static_cast<size_t>(size)))
+  {
+    return make_repeat_call(str, count_expr);
+  }
   std::vector<exprt> combined_chars;
   combined_chars.reserve(chars.size() * size);
   for (size_t i = 0; i < size; ++i)

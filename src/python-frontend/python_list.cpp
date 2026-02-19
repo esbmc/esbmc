@@ -9,6 +9,7 @@
 #include <util/symbol.h>
 #include <util/expr_util.h>
 #include <util/arith_tools.h>
+#include <python-frontend/python_frontend_limits.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/mp_arith.h>
@@ -2860,12 +2861,11 @@ exprt python_list::build_concrete_range(
   else
     range_size = std::max(0LL, (stop - start + step + 1) / step);
 
-  constexpr long long MAX_RANGE_SIZE = 10000;
-  if (range_size > MAX_RANGE_SIZE)
+  if (range_size > kMaxSequenceExpansion)
   {
     throw std::runtime_error(
       "range() size too large for expansion: " + std::to_string(range_size) +
-      " elements (max: " + std::to_string(MAX_RANGE_SIZE) + ")");
+      " elements (max: " + std::to_string(kMaxSequenceExpansion) + ")");
   }
 
   // Build the list of elements

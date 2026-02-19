@@ -1084,3 +1084,47 @@ __ESBMC_HIDE:;
   buffer[pos] = '\0';
   return buffer;
 }
+
+// Python string repetition - repeats a string count times
+char *__python_str_repeat(const char *s, long long count)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)0;
+
+  if (count <= 0)
+  {
+    char *empty = __ESBMC_alloca(1);
+    empty[0] = '\0';
+    return empty;
+  }
+
+  size_t len = __python_strnlen_bounded(s, ESBMC_PY_STRNLEN_BOUND);
+  size_t count_u = (size_t)count;
+
+  // Bound checks to keep buffers finite
+  __ESBMC_assert(
+    count_u <= ESBMC_PY_STRNLEN_BOUND, "String repetition count too large");
+
+  size_t total = len * count_u;
+  __ESBMC_assert(
+    total <= ESBMC_PY_STRNLEN_BOUND, "String repetition result too large");
+
+  char *buffer = __ESBMC_alloca(total + 1);
+
+  size_t pos = 0;
+  size_t i = 0;
+  while (i < count_u)
+  {
+    size_t j = 0;
+    while (j < len)
+    {
+      buffer[pos++] = s[j];
+      ++j;
+    }
+    ++i;
+  }
+
+  buffer[pos] = '\0';
+  return buffer;
+}
