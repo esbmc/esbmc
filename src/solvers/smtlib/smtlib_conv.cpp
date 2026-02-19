@@ -694,6 +694,15 @@ BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
   return m;
 }
 
+bool smtlib_convt::get_rational(
+  [[maybe_unused]] smt_astt a,
+  [[maybe_unused]] BigInt &numerator,
+  [[maybe_unused]] BigInt &denominator)
+{
+  return false;
+}
+
+
 expr2tc
 smtlib_convt::get_array_elem(smt_astt array, uint64_t index, const type2tc &t)
 {

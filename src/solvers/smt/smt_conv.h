@@ -253,28 +253,26 @@ public:
    *          reason. */
   virtual expr2tc get_by_ast(const type2tc &type, smt_astt a);
 
-  /** Builds the bitvector based on the value retrieved from the solver.
-   *  @param type the type (fixedbv or (un)signedbv),
-   *  @param value the value retrieved from the solver.
-   *  @return Expression representation of a's value */
-  expr2tc get_by_value(const type2tc &type, BigInt value);
+/** Builds the bitvector based on the value retrieved from the solver.
+ *  @param type the type (fixedbv or (un)signedbv),
+ *  @param value the value retrieved from the solver.
+ *  @return Expression representation of a's value */
+expr2tc get_by_value(const type2tc &type, BigInt value);
 
-    /** Extract the assignment to a rational/real value from the SMT solvers model.
-  /** Extract the assignment to a rational/real value from the SMT solvers model.
-   *  Used in integer/real arithmetic mode to get floating point values.
-   *  @param a The AST whose value we wish to know.
-   *  @param numerator Output parameter for the numerator of the rational.
-   *  @param denominator Output parameter for the denominator of the rational.
-   *  @return True if the rational value was successfully extracted, false otherwise. */
-  virtual bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
-  {
-    // Default implementation returns false - solver-specific implementations should override this
-    (void)a;
-    (void)numerator;
-    (void)denominator;
-    return false;
-  }
-
+/** Extract the assignment to a rational/real value from the SMT solver's model.
+ *  Used in integer/real arithmetic mode to get floating point values.
+ *  @param a The AST whose value we wish to know.
+ *  @param numerator Output parameter for the numerator of the rational.
+ *  @param denominator Output parameter for the denominator of the rational.
+ *  @return True if the rational value was successfully extracted, false otherwise.
+ */
+virtual bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
+{
+  (void)a;
+  (void)numerator;
+  (void)denominator;
+  return false;
+}
 
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
@@ -591,10 +589,7 @@ public:
    *         (e.g., multiplication where either operand is zero should yield zero
    *         regardless of the other operand, even if it would cause underflow)
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
-  virtual smt_astt apply_ieee754_semantics(
-    smt_astt real_result,
-    const floatbv_type2t &fbv_type,
-    smt_astt operand_zero_check = nullptr);
+
 
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();

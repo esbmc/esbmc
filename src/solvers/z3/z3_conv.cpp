@@ -1321,14 +1321,12 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
 bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
+  if (!za)
+    return false;
 
-  // First try direct numeral extraction
-  const z3_smt_ast *za = static_cast<const z3_smt_ast *>(a);
-
-  // First check if this is a numeral (constant value)
   if (Z3_get_ast_kind(z3_ctx, za->a) == Z3_NUMERAL_AST)
   {
-    int64_t num, den;
+    int64_t num = 0, den = 1;
     if (Z3_get_numeral_rational_int64(z3_ctx, za->a, &num, &den))
     {
       numerator = BigInt(num);
@@ -1336,52 +1334,27 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
       return true;
     }
 
-    // Fallback to string-based parsing
     Z3_string str = Z3_get_numeral_string(z3_ctx, za->a);
     if (str != nullptr)
       return parse_rational_bigint(str, numerator, denominator);
+
+    return false;
   }
-  else
-  {
-    // Evaluate expression in model
-    z3::model current_model = solver.get_model();
-    if (current_model)
-    {
-      z3::expr evaluated = current_model.eval(za->a, true);
 
-      if (
-        evaluated &&
-    // It's not a numeral, need to evaluate it in the model
-    Z3_model current_model = Z3_solver_get_model(z3_ctx, solver);
-    if (current_model != nullptr)
-    {
-      Z3_ast evaluated;
-      bool eval_success =
-        Z3_model_eval(z3_ctx, current_model, za->a, true, &evaluated);
+  Z3_model m = Z3_solver_get_model(z3_ctx, solver);
+  if (!m)
+    return false;
 
-      if (
-        eval_success && evaluated != nullptr &&
-        Z3_get_ast_kind(z3_ctx, evaluated) == Z3_NUMERAL_AST)
-      {
-        int64_t num, den;
-        if (Z3_get_numeral_rational_int64(z3_ctx, evaluated, &num, &den))
-        {
-          numerator = BigInt(num);
-          denominator = BigInt(den);
-          return true;
-        }
+  Z3_ast v = nullptr;
+  if (!Z3_model_eval(z3_ctx, m, za->a, true, &v) || v == nullptr)
+    return false;
 
-        // Fallback to string-based parsing
-        Z3_string str = Z3_get_numeral_string(z3_ctx, evaluated);
-        if (str != nullptr)
-          return parse_rational_bigint(str, numerator, denominator);
-      }
-    }
-  }
+  Z3_string s = Z3_get_numeral_string(z3_ctx, v);
+  if (s != nullptr)
+    return parse_rational_bigint(s, numerator, denominator);
 
   return false;
 }
-
 
 bool z3_convt::parse_rational_bigint(
   Z3_string str,

@@ -108,6 +108,7 @@ public:
     bool is_forall,
     std::vector<smt_astt> lhs,
     smt_astt rhs) override;
+    bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator) override;
 
   // Members
   Btor *btor;
