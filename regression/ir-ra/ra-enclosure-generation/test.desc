@@ -1,2 +1,5 @@
 CORE
-./test.sh
+main.c
+--ir-ra --z3
+^VERIFICATION FAILED$
+
