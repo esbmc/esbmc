@@ -270,6 +270,10 @@ We'd be extremely happy to receive contributions to improve ESBMC (under the ter
 
 Please review the [developer documentation](https://esbmc.github.io/blob/master/CONTRIBUTIONS.md) if you want to contribute to ESBMC.
 
+## Claude Code Plugin
+
+A [Claude Code](https://docs.anthropic.com/claude-code) plugin for ESBMC is available at [esbmc/agent-marketplace](https://github.com/esbmc/agent-marketplace). It provides `/verify` and `/audit` commands, a verification skill, reference documentation, and examples for using ESBMC within Claude Code.
+
 ## Differences from CBMC
 
 ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are described [here](https://esbmc.github.io#cbmc-differences).
