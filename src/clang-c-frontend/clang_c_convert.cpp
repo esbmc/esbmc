@@ -2842,7 +2842,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           else if (state == clang::LoopHintAttr::Numeric)
           {
              log_status("Processing an attribute (numeric)");
-            if (clang::Expr *val = static_cast<clang::Expr*>(lha->getValue()))
+            if (clang::Expr *val = lha->getValue())
             {
               clang::Expr::EvalResult result;
               if (val->EvaluateAsInt(result, *ASTContext))
