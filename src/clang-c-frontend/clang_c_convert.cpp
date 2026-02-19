@@ -2809,15 +2809,20 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::AttributedStmt &astmt =
       static_cast<const clang::AttributedStmt &>(stmt);
 
+    log_status("Processing an attribute");
+
     // First, convert the sub-statement
     if (get_expr(*astmt.getSubStmt(), new_expr))
       return true;
 
+    log_status("Processing an attribute (got subexpr)");
     // Check for loop unroll attributes
     for (const auto *attr : astmt.getAttrs())
     {
       if (const auto *lha = llvm::dyn_cast<clang::LoopHintAttr>(attr))
       {
+        
+        log_status("Processing an attribute (got loophint)");
         if (
           lha->getOption() == clang::LoopHintAttr::Unroll ||
           lha->getOption() == clang::LoopHintAttr::UnrollCount)
@@ -2829,17 +2834,24 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             state == clang::LoopHintAttr::Full ||
             state == clang::LoopHintAttr::Enable)
           {
+            
+            log_status("Processing an attribute (full)");
             // Full unroll - use sentinel to indicate "no limit"
             unroll_count = UINT_MAX;
           }
           else if (state == clang::LoopHintAttr::Numeric)
           {
+             log_status("Processing an attribute (numeric)");
             if (clang::Expr *val = lha->getValue())
             {
               clang::Expr::EvalResult result;
               if (val->EvaluateAsInt(result, *ASTContext))
                 unroll_count = result.Val.getInt().getZExtValue();
             }
+          }
+          else {
+            log_status("should be unreachable");
+            abort();
           }
 
           if (unroll_count > 0)
@@ -2851,6 +2863,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             new_expr.set(
               "#pragma_unroll", irep_idt(std::to_string(unroll_count)));
           }
+
+          log_status("Done attribute processing");
         }
       }
     }
