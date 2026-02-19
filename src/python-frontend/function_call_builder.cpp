@@ -683,7 +683,8 @@ exprt function_call_builder::build() const
           {
             const std::string text =
               var_value["value"]["value"].get<std::string>();
-            return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
+            return from_integer(
+              BigInt(utf8_codepoint_count(text)), size_type());
           }
         }
       }
