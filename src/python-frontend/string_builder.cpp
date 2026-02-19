@@ -4,6 +4,7 @@
 #include <util/arith_tools.h>
 #include <util/std_code.h>
 #include <util/expr_util.h>
+#include <python-frontend/python_frontend_limits.h>
 #include <optional>
 #include <stdexcept>
 #include <limits>
@@ -303,7 +304,6 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
   size_t size = 0;
   exprt str;
   exprt count_expr;
-  constexpr long long kMaxRepeatSize = 10000;
 
   auto get_repeat_count = [this](const exprt &e) -> std::optional<long long> {
     if (e.type().is_bool())
@@ -418,7 +418,7 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
     {
       if (
         *count > static_cast<long long>(std::numeric_limits<size_t>::max()) ||
-        *count > kMaxRepeatSize)
+        *count > kMaxSequenceExpansion)
       {
         str_handler_->ensure_string_array(lhs);
         return make_repeat_call(lhs, rhs);
@@ -445,7 +445,7 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
     {
       if (
         *count > static_cast<long long>(std::numeric_limits<size_t>::max()) ||
-        *count > kMaxRepeatSize)
+        *count > kMaxSequenceExpansion)
       {
         str_handler_->ensure_string_array(rhs);
         return make_repeat_call(rhs, lhs);
