@@ -1084,7 +1084,54 @@ exprt python_list::handle_range_slice(
   auto get_list_bound =
     [&](const std::string &bound_name, bool is_upper) -> exprt {
     if (slice_node.contains(bound_name) && !slice_node[bound_name].is_null())
-      return converter_.get_expr(slice_node[bound_name]);
+    {
+      const auto &bound_node = slice_node[bound_name];
+      exprt bound_expr = converter_.get_expr(bound_node);
+
+      // Resolve negative index: convert to (list_size + negative_bound)
+      bool is_negative = false;
+
+      // UnaryOp USub in the AST (e.g. -1 represented as USub(1))
+      if (
+        bound_node.contains("_type") && bound_node["_type"] == "UnaryOp" &&
+        bound_node.contains("op") && bound_node["op"]["_type"] == "USub")
+      {
+        is_negative = true;
+      }
+
+      if (is_negative)
+      {
+        // Compute: list_size + bound_expr  (bound_expr is negative)
+        const symbolt *size_func =
+          converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+        assert(size_func);
+
+        side_effect_expr_function_callt size_call;
+        size_call.function() = symbol_expr(*size_func);
+
+        // Check if array is already a pointer, don't take address again
+        if (array.type().is_pointer())
+          size_call.arguments().push_back(array); // Already a pointer
+        else
+          size_call.arguments().push_back(
+            address_of_exprt(array)); // Take address
+        size_call.type() = size_type();
+        size_call.location() = converter_.get_location_from_decl(list_value_);
+
+        symbolt &size_sym = converter_.create_tmp_symbol(
+          list_value_, "$list_size$", size_type(), exprt());
+        code_declt size_decl(symbol_expr(size_sym));
+        size_decl.copy_to_operands(size_call);
+        converter_.add_instruction(size_decl);
+
+        exprt bound_as_size = typecast_exprt(bound_expr, size_type());
+        exprt resolved("+", size_type());
+        resolved.copy_to_operands(symbol_expr(size_sym), bound_as_size);
+        return resolved;
+      }
+
+      return bound_expr;
+    }
 
     if (is_upper)
     {
@@ -1203,6 +1250,39 @@ exprt python_list::handle_range_slice(
           converter_.get_expr(list_node["value"]["elts"][i]);
         list_type_map[sliced_list.id.as_string()].push_back(
           std::make_pair(element.identifier().as_string(), element.type()));
+      }
+    }
+  }
+
+  // This handles cases where one or both bounds are null or negative (e.g.
+  // numbers[:-1]), or where the source is a function parameter rather than a
+  // locally constructed list, so list_type_map has no entries for it.
+  const std::string &sliced_id = sliced_list.id.as_string();
+  if (list_type_map[sliced_id].empty())
+  {
+    if (
+      list_type_map[sliced_id].empty() && list_value_.contains("value") &&
+      list_value_["value"].contains("id"))
+    {
+      const std::string &param_name =
+        list_value_["value"]["id"].get<std::string>();
+
+      nlohmann::json param_node = json_utils::find_var_decl(
+        param_name, converter_.current_function_name(), converter_.ast());
+
+      // Only use annotation fallback for function parameters (arg nodes),
+      // not for local variable declarations whose element type should come
+      // from the type map populated during list construction.
+      if (!param_node.is_null() && param_node["_type"] == "arg")
+      {
+        const typet elem_type = get_elem_type_from_annotation(
+          param_node, converter_.get_type_handler());
+
+        if (elem_type != typet())
+        {
+          list_type_map[sliced_id].push_back(
+            std::make_pair(std::string(), elem_type));
+        }
       }
     }
   }
