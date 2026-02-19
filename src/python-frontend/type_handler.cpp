@@ -293,6 +293,10 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "BinaryIO" || ast_type == "TextIO" || ast_type == "IO")
     return any_type();
 
+  // object — top type in Python; accept any value
+  if (ast_type == "object")
+    return any_type();
+
   // NoneType — represents Python's None value
   // Use a pointer type to void to represent None/null properly
   if (ast_type == "NoneType")
