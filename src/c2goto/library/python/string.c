@@ -1104,13 +1104,11 @@ __ESBMC_HIDE:;
 
   // Bound checks to keep buffers finite
   __ESBMC_assert(
-    count_u <= ESBMC_PY_STRNLEN_BOUND,
-    "String repetition count too large");
+    count_u <= ESBMC_PY_STRNLEN_BOUND, "String repetition count too large");
 
   size_t total = len * count_u;
   __ESBMC_assert(
-    total <= ESBMC_PY_STRNLEN_BOUND,
-    "String repetition result too large");
+    total <= ESBMC_PY_STRNLEN_BOUND, "String repetition result too large");
 
   char *buffer = __ESBMC_alloca(total + 1);
 

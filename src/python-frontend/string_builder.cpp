@@ -337,8 +337,8 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
 
     if (e.is_symbol())
     {
-      symbolt *sym = converter_.find_symbol(
-        to_symbol_expr(e).get_identifier().as_string());
+      symbolt *sym =
+        converter_.find_symbol(to_symbol_expr(e).get_identifier().as_string());
       if (sym && sym->value.is_constant())
       {
         BigInt val;
@@ -462,9 +462,8 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
 
   std::vector<exprt> chars = extract_string_chars(str);
   if (
-    size > 0 &&
-    chars.size() >
-      (std::numeric_limits<size_t>::max() / static_cast<size_t>(size)))
+    size > 0 && chars.size() > (std::numeric_limits<size_t>::max() /
+                                static_cast<size_t>(size)))
   {
     return make_repeat_call(str, count_expr);
   }
