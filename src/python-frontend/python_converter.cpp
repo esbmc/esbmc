@@ -29,6 +29,7 @@
 #include <util/symbolic_types.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -5577,6 +5578,82 @@ typet python_converter::get_type_from_annotation(
     // Handle string annotations like "CoordinateData | None" (forward references)
     std::string type_string = annotation_node["value"].get<std::string>();
     type_string = type_utils::remove_quotes(type_string);
+    // Support PEP 604 unions inside string annotations: "T | None"
+    if (type_string.find('|') != std::string::npos)
+    {
+      // Split by '|' and trim whitespace
+      auto trim_ws = [](std::string s) -> std::string {
+        const auto not_space = [](unsigned char ch) {
+          return !std::isspace(ch);
+        };
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
+        s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
+        return s;
+      };
+      std::vector<std::string> parts;
+      std::string current;
+      for (char c : type_string)
+      {
+        if (c == '|')
+        {
+          parts.push_back(trim_ws(current));
+          current.clear();
+        }
+        else
+        {
+          current.push_back(c);
+        }
+      }
+      parts.push_back(trim_ws(current));
+
+      // Remove None/NoneType and keep track of non-none members
+      std::string base_type_name;
+      size_t non_none_count = 0;
+      bool contains_none = false;
+      for (const auto &p : parts)
+      {
+        if (p == "None" || p == "NoneType")
+        {
+          contains_none = true;
+          continue;
+        }
+        if (base_type_name.empty())
+          base_type_name = p;
+        ++non_none_count;
+      }
+
+      if (base_type_name.empty())
+        return any_type();
+
+      // If there are multiple non-None members, fall back conservatively
+      if (non_none_count > 1)
+      {
+        if (contains_none)
+          return gen_pointer_type(char_type());
+        return any_type();
+      }
+
+      typet base_type = type_handler_.get_typet(base_type_name);
+
+      // Single type + None: use Optional wrapper for primitives only
+      if (
+        contains_none &&
+        (base_type == long_long_int_type() ||
+         base_type == long_long_uint_type() || base_type == double_type() ||
+         base_type == bool_type()))
+      {
+        return type_handler_.build_optional_type(base_type);
+      }
+
+      if (base_type == type_handler_.get_list_type())
+        return base_type;
+
+      if (contains_none)
+        return gen_pointer_type(base_type);
+
+      return base_type;
+    }
+
     return type_handler_.get_typet(type_string);
   }
   else if (
