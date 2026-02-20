@@ -1665,7 +1665,8 @@ private:
       if (
         stmt.contains("_type") && stmt["_type"] == "Assign" &&
         stmt.contains("targets") && !stmt["targets"].empty() &&
-        stmt["targets"][0].contains("_type") && stmt["targets"][0]["_type"] == "Name" &&
+        stmt["targets"][0].contains("_type") &&
+        stmt["targets"][0]["_type"] == "Name" &&
         stmt["targets"][0].contains("id"))
         return stmt["targets"][0]["id"].template get<std::string>();
 
