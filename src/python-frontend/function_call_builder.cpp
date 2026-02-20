@@ -1465,14 +1465,25 @@ exprt function_call_builder::build() const
         call_["func"]["value"]["op"]["_type"] == "Add")
       {
         const auto &binop = call_["func"]["value"];
-        std::string right_const;
+        std::string right_operand_str;
         if (string_handler::extract_constant_string(
-              binop["right"], converter_, right_const))
+              binop["right"], converter_, right_operand_str) &&
+            right_operand_str.rfind(separator, 0) == 0)
         {
-          if (right_const.rfind(separator, 0) == 0)
+          bool safe_boundary = true;
+          std::string left_const;
+          if (string_handler::extract_constant_string(
+                binop["left"], converter_, left_const))
           {
-            std::string right_suffix = right_const.substr(separator.size());
-            locationt loc = converter_.get_location_from_decl(call_);
+            // For constant left operands, preserve Python split semantics:
+            // the separator at the boundary must be the first occurrence.
+            safe_boundary = left_const.find(separator) == std::string::npos;
+          }
+
+          if (safe_boundary)
+          {
+            std::string right_suffix =
+              right_operand_str.substr(separator.size());
             nlohmann::json list_node;
             list_node["_type"] = "List";
             list_node["elts"] = nlohmann::json::array();
