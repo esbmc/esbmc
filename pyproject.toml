@@ -1,8 +1,8 @@
 [project]
 name = "esbmc"
-version = "0.1.0"
-description = "Add your description here"
-requires-python = ">=3.13"
+version = "8.0.0"
+description = "ESBMC Python frontend development dependencies"
+requires-python = ">=3.10"
 dependencies = [
     "ast2json>=0.4",
     "mypy>=1.19.1",

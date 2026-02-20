@@ -1,12 +1,11 @@
 """Property-based tests validating the Decimal model against CPython's decimal.Decimal."""
 
-import sys
 import os
 import importlib.util
 import decimal as cpython_decimal
 
 import pytest
-from hypothesis import given, strategies as st, assume, settings
+from hypothesis import given, strategies as st, settings
 
 
 def load_model_decimal():
@@ -19,10 +18,10 @@ def load_model_decimal():
     spec = importlib.util.spec_from_file_location("decimal_model", model_path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.Decimal, mod._decimal_from_int
+    return mod.Decimal
 
 
-ModelDecimal, _decimal_from_int = load_model_decimal()
+ModelDecimal = load_model_decimal()
 
 
 def cpython_to_model(d):
@@ -105,6 +104,7 @@ class TestConstruction:
         m = ModelDecimal(sign, int_val, exp, is_special)
         assert m._sign == sign
         assert m._int == 0
+        assert m._exp == exp
         assert m._is_special == 0
 
 
@@ -112,8 +112,8 @@ class TestDecimalFromInt:
     @given(n=st.integers(min_value=-10000, max_value=10000))
     @settings(max_examples=200)
     def test_from_int_matches_cpython(self, n):
-        """_decimal_from_int produces same representation as CPython Decimal(n)."""
-        m = _decimal_from_int(n)
+        """Decimal._from_int produces same representation as CPython Decimal(n)."""
+        m = ModelDecimal._from_int(n)
         d = cpython_decimal.Decimal(n)
         sign, int_val, exp, is_special = cpython_to_model(d)
         assert m._sign == sign

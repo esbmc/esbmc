@@ -18,6 +18,8 @@ class Preprocessor(ast.NodeTransformer):
         self.variable_annotations = {}  # Store full AST annotations
         self.decimal_imported = False
         self.decimal_module_imported = False
+        self.decimal_class_alias = None
+        self.decimal_module_alias = None
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -1466,14 +1468,25 @@ class Preprocessor(ast.NodeTransformer):
     def visit_Call(self, node):
         # Rewrite Decimal(...) constructor calls to internal 4-arg form
         is_decimal_call = False
-        if self.decimal_imported and isinstance(node.func, ast.Name) and node.func.id == "Decimal":
+        decimal_names = {"Decimal"}
+        if self.decimal_class_alias:
+            decimal_names.add(self.decimal_class_alias)
+
+        if self.decimal_imported and isinstance(node.func, ast.Name) and node.func.id in decimal_names:
             is_decimal_call = True
+            if node.func.id != "Decimal":
+                node.func = ast.Name(id="Decimal", ctx=ast.Load())
         elif self.decimal_module_imported and isinstance(node.func, ast.Attribute):
-            if isinstance(node.func.value, ast.Name) and node.func.value.id == "decimal" and node.func.attr == "Decimal":
+            module_names = {"decimal"}
+            if self.decimal_module_alias:
+                module_names.add(self.decimal_module_alias)
+            if isinstance(node.func.value, ast.Name) and node.func.value.id in module_names and node.func.attr == "Decimal":
                 is_decimal_call = True
                 node.func = ast.Name(id="Decimal", ctx=ast.Load())
 
         if is_decimal_call:
+            if node.keywords:
+                raise NotImplementedError("Decimal() with keyword arguments is not supported")
             import decimal as _decimal_mod
             if len(node.args) == 0:
                 d = _decimal_mod.Decimal()
@@ -1484,11 +1497,9 @@ class Preprocessor(ast.NodeTransformer):
                 elif isinstance(arg, ast.UnaryOp) and isinstance(arg.op, ast.USub) and isinstance(arg.operand, ast.Constant):
                     d = _decimal_mod.Decimal(-arg.operand.value)
                 else:
-                    self.generic_visit(node)
-                    return node
+                    raise NotImplementedError("Decimal() with non-constant arguments is not supported")
             else:
-                self.generic_visit(node)
-                return node
+                raise NotImplementedError("Decimal() with multiple arguments is not supported")
 
             t = d.as_tuple()
             sign = t.sign
@@ -1746,6 +1757,8 @@ class Preprocessor(ast.NodeTransformer):
             for alias in node.names:
                 if alias.name == "Decimal" or alias.name == "*":
                     self.decimal_imported = True
+                    if alias.asname:
+                        self.decimal_class_alias = alias.asname
         self.generic_visit(node)
         return node
 
@@ -1753,6 +1766,8 @@ class Preprocessor(ast.NodeTransformer):
         for alias in node.names:
             if alias.name == "decimal":
                 self.decimal_module_imported = True
+                if alias.asname:
+                    self.decimal_module_alias = alias.asname
         self.generic_visit(node)
         return node
 

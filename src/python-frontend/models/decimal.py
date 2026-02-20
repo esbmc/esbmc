@@ -10,11 +10,11 @@ class Decimal:
         self._exp: int = exp
         self._is_special: int = is_special
 
-
-def _decimal_from_int(n: int) -> "Decimal":
-    sign: int = 0
-    val: int = n
-    if n < 0:
-        sign = 1
-        val = 0 - n
-    return Decimal(sign, val, 0, 0)
+    @staticmethod
+    def _from_int(n: int) -> "Decimal":
+        sign: int = 0
+        val: int = n
+        if n < 0:
+            sign = 1
+            val = 0 - n
+        return Decimal(sign, val, 0, 0)
