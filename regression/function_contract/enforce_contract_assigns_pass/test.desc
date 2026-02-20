@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract "init_point" --function "init_point" --assume-nonnull-valid
+^VERIFICATION SUCCESSFUL$

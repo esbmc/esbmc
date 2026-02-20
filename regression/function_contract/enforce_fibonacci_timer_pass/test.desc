@@ -1,0 +1,4 @@
+CORE
+main.c
+--function fib_reaction_timer --enforce-contract fib_reaction_timer --no-align-check --unwind 2
+^VERIFICATION SUCCESSFUL$

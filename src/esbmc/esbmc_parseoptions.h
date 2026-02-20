@@ -51,10 +51,14 @@ protected:
   /// \param goto_functions GOTO functions
   /// \param has_replace Whether to replace calls with contracts
   /// \param has_enforce Whether to enforce contracts
+  /// \param has_enforce_all Whether to enforce contracts for all annotated functions
+  /// \param has_replace_all Whether to replace calls for all annotated functions
   void process_function_contracts(
     goto_functionst &goto_functions,
     bool has_replace,
-    bool has_enforce);
+    bool has_enforce,
+    bool has_enforce_all,
+    bool has_replace_all);
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
 
