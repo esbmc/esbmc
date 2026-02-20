@@ -244,8 +244,8 @@ exprt function_call_expr::handle_input() const
   nondet_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(nondet_assign);
 
-  symbolt &len_sym = converter_.create_tmp_symbol(
-    call_, "$input_len$", size_type(), exprt());
+  symbolt &len_sym =
+    converter_.create_tmp_symbol(call_, "$input_len$", size_type(), exprt());
   code_declt len_decl(symbol_expr(len_sym));
   len_decl.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(len_decl);

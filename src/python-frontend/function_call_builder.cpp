@@ -1466,9 +1466,10 @@ exprt function_call_builder::build() const
       {
         const auto &binop = call_["func"]["value"];
         std::string right_operand_str;
-        if (string_handler::extract_constant_string(
-              binop["right"], converter_, right_operand_str) &&
-            right_operand_str.rfind(separator, 0) == 0)
+        if (
+          string_handler::extract_constant_string(
+            binop["right"], converter_, right_operand_str) &&
+          right_operand_str.rfind(separator, 0) == 0)
         {
           bool safe_boundary = true;
           std::string left_const;
