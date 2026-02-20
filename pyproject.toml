@@ -1,0 +1,15 @@
+[project]
+name = "esbmc"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "ast2json>=0.4",
+    "mypy>=1.19.1",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.0",
+    "pytest>=8.0",
+]
