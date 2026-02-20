@@ -1474,6 +1474,11 @@ bool clang_c_convertert::get_builtin_type(
     }
     // fallthrough
 
+  case clang::BuiltinType::BoundMember:
+    new_type = ptrmem_typet();
+    c_type = "_ptrmem";
+    break;
+
   default:
   {
     std::ostringstream oss;
