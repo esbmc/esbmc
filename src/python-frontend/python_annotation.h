@@ -2003,6 +2003,34 @@ private:
       return obj_type;
     }
 
+    // Handle method calls on binary expressions like (s + ",end").split(",", 1)
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"]["_type"] == "BinOp")
+    {
+      std::string obj_type =
+        get_type_from_binary_expr(call["func"]["value"], ast_);
+      if (obj_type == "str" && call["func"].contains("attr"))
+      {
+        const std::string &method = call["func"]["attr"];
+        if (method == "split")
+          return "list";
+        if (method == "join" || method == "lower" || method == "upper" ||
+            method == "strip" || method == "lstrip" || method == "rstrip" ||
+            method == "format" || method == "replace")
+          return "str";
+        if (
+          method == "startswith" || method == "endswith" ||
+          method == "isdigit" || method == "isalpha" || method == "isspace" ||
+          method == "islower" || method == "isupper")
+          return "bool";
+        if (method == "find" || method == "rfind")
+          return "int";
+      }
+      if (!obj_type.empty())
+        return obj_type;
+    }
+
     const std::string &obj = get_object_name(call["func"], std::string());
     std::string attr_name = call["func"].contains("attr")
                               ? call["func"]["attr"].template get<std::string>()
