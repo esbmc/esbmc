@@ -419,8 +419,8 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
         # Second pass: include explicitly imported items and their referenced functions/classes
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
-                # Always include ESBMC helper functions
-                if node.name in ['ESBMC_range_has_next_', 'ESBMC_range_next_']:
+                # Always include ESBMC helper functions and _-prefixed model helpers
+                if node.name in ['ESBMC_range_has_next_', 'ESBMC_range_next_'] or (isinstance(node, ast.FunctionDef) and node.name.startswith('_')):
                     filtered_nodes.append(node)
                 # Include explicitly imported items
                 elif node.name in explicitly_imported:
