@@ -1,9 +1,9 @@
 """
 ESBMC Python intrinsic stubs.
 
-These functions have no runtime semantics.
-They are intercepted by the ESBMC Python frontend
-and translated into symbolic operations.
+These functions are replaced with symbolic operations during ESBMC
+verification. The ESBMC Python frontend intercepts them and
+translates them into symbolic operations.
 """
 
 def nondet_int() -> int:
