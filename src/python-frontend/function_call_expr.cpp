@@ -13,6 +13,7 @@
 #include <util/ieee_float.h>
 #include <util/message.h>
 #include <util/python_types.h>
+#include <util/std_expr.h>
 #include <util/string_constant.h>
 
 #include <regex>
@@ -227,15 +228,49 @@ static int get_nondet_str_length()
 exprt function_call_expr::handle_input() const
 {
   // input() returns a non-deterministic string
-  // We'll model input() as returning a non-deterministic string
-  // with a reasonable maximum length (e.g., 16 characters)
-  // This is an under-approximation to model the input function
+  // Model as a bounded C-string without embedded nulls.
   int max_str_length = get_nondet_str_length();
   typet string_type = type_handler_.get_typet("str", max_str_length);
-  exprt rhs = exprt("sideeffect", string_type);
-  rhs.statement("nondet");
 
-  return rhs;
+  symbolt &input_sym =
+    converter_.create_tmp_symbol(call_, "$input_str$", string_type, exprt());
+  code_declt decl(symbol_expr(input_sym));
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+
+  exprt nondet_value("sideeffect", string_type);
+  nondet_value.statement("nondet");
+  code_assignt nondet_assign(symbol_expr(input_sym), nondet_value);
+  nondet_assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(nondet_assign);
+
+  symbolt &len_sym =
+    converter_.create_tmp_symbol(call_, "$input_len$", size_type(), exprt());
+  code_declt len_decl(symbol_expr(len_sym));
+  len_decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(len_decl);
+
+  exprt len_nondet("sideeffect", size_type());
+  len_nondet.statement("nondet");
+  code_assignt len_assign(symbol_expr(len_sym), len_nondet);
+  len_assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(len_assign);
+
+  exprt len_bound("<", bool_type());
+  len_bound.copy_to_operands(
+    symbol_expr(len_sym), from_integer(max_str_length, size_type()));
+  codet assume_len("assume");
+  assume_len.copy_to_operands(len_bound);
+  assume_len.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(assume_len);
+
+  index_exprt term_pos(
+    symbol_expr(input_sym), symbol_expr(len_sym), char_type());
+  code_assignt term_assign(term_pos, from_integer(0, char_type()));
+  term_assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(term_assign);
+
+  return symbol_expr(input_sym);
 }
 
 exprt function_call_expr::build_nondet_call() const

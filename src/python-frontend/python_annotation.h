@@ -1962,6 +1962,30 @@ private:
     return json_utils::get_object_alias(ast_, obj_name);
   }
 
+  std::string get_string_method_return_type(const std::string &method) const
+  {
+    if (
+      method == "join" || method == "lower" || method == "upper" ||
+      method == "strip" || method == "lstrip" || method == "rstrip" ||
+      method == "format" || method == "replace")
+      return "str";
+
+    if (
+      method == "startswith" || method == "endswith" || method == "isdigit" ||
+      method == "isalpha" || method == "isspace" || method == "islower" ||
+      method == "isupper")
+      return "bool";
+
+    if (method == "find" || method == "rfind")
+      return "int";
+
+    if (method == "split")
+      return "list";
+
+    // Keep previous behavior for unmapped string methods.
+    return "str";
+  }
+
   std::string get_type_from_method(const Json &call)
   {
     std::string type("");
@@ -1980,27 +2004,26 @@ private:
       if (obj_type == "str" && call["func"].contains("attr"))
       {
         const std::string &method = call["func"]["attr"];
-        // Methods that return str
-        if (
-          method == "join" || method == "lower" || method == "upper" ||
-          method == "strip" || method == "lstrip" || method == "rstrip" ||
-          method == "format" || method == "replace")
-          return "str";
-        // Methods that return bool
-        else if (
-          method == "startswith" || method == "endswith" ||
-          method == "isdigit" || method == "isalpha" || method == "isspace" ||
-          method == "islower" || method == "isupper")
-          return "bool";
-        else if (method == "find" || method == "rfind")
-          return "int";
-        else if (method == "split")
-          return "list";
-        // Default for string methods
-        return "str";
+        return get_string_method_return_type(method);
       }
 
       return obj_type;
+    }
+
+    // Handle method calls on binary expressions like (s + ",end").split(",", 1)
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"]["_type"] == "BinOp")
+    {
+      std::string obj_type =
+        get_type_from_binary_expr(call["func"]["value"], ast_);
+      if (obj_type == "str" && call["func"].contains("attr"))
+      {
+        const std::string &method = call["func"]["attr"];
+        return get_string_method_return_type(method);
+      }
+      if (!obj_type.empty())
+        return obj_type;
     }
 
     const std::string &obj = get_object_name(call["func"], std::string());
