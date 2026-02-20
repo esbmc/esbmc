@@ -515,7 +515,7 @@ exprt function_call_builder::build() const
           name_value = file;
       }
 
-      return BigInt(name_value.size());
+      return BigInt(utf8_codepoint_count(name_value));
     };
 
     auto joinedstr_len =
