@@ -807,6 +807,19 @@ private:
   exprt unwrap_optional_if_needed(const exprt &expr);
 
   // =========================================================================
+  // Dunder method dispatch for user-defined struct types
+  // =========================================================================
+
+  static std::string op_to_dunder(const std::string &op);
+  symbolt *find_dunder_method(
+    const std::string &class_name,
+    const std::string &dunder_name);
+  exprt dispatch_dunder_operator(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs);
+
+  // =========================================================================
   // Member variables
   // =========================================================================
 

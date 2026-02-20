@@ -176,3 +176,52 @@ class TestPreprocessorRewriting:
         assert int_val == 0
         assert exp == 0
         assert is_special == 0
+
+
+class TestEquality:
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_equality_reflexive(self, d):
+        """Every finite Decimal equals itself."""
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.__eq__(m) == True
+
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_equality_matches_cpython(self, a, b):
+        """Model __eq__ matches CPython for finite decimals."""
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        assert ma.__eq__(mb) == (a == b)
+
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_ne_is_negation_of_eq(self, d):
+        """__ne__ is always the negation of __eq__."""
+        s, i, e, sp = cpython_to_model(d)
+        m1 = ModelDecimal(s, i, e, sp)
+        m2 = ModelDecimal(s, i, e, sp)
+        assert m1.__ne__(m2) == (not m1.__eq__(m2))
+
+    def test_nan_not_equal_to_self(self):
+        assert ModelDecimal(0, 0, 0, 2).__eq__(ModelDecimal(0, 0, 0, 2)) == False
+
+    def test_snan_not_equal_to_self(self):
+        assert ModelDecimal(0, 0, 0, 3).__eq__(ModelDecimal(0, 0, 0, 3)) == False
+
+    def test_neg_zero_equals_pos_zero(self):
+        assert ModelDecimal(1, 0, 0, 0).__eq__(ModelDecimal(0, 0, 0, 0)) == True
+
+    def test_different_exponents_same_value(self):
+        """1.0 == 1.00"""
+        assert ModelDecimal(0, 10, -1, 0).__eq__(ModelDecimal(0, 100, -2, 0)) == True
+
+    def test_infinity_equals_same_sign(self):
+        assert ModelDecimal(0, 0, 0, 1).__eq__(ModelDecimal(0, 0, 0, 1)) == True
+        assert ModelDecimal(1, 0, 0, 1).__eq__(ModelDecimal(1, 0, 0, 1)) == True
+
+    def test_pos_inf_not_equal_neg_inf(self):
+        assert ModelDecimal(0, 0, 0, 1).__eq__(ModelDecimal(1, 0, 0, 1)) == False
