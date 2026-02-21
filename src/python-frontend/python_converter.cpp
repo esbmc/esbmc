@@ -4470,7 +4470,7 @@ void python_converter::get_var_assign(
       get_typechecker().cache_annotation_types(
         *lhs_symbol, ast_node["annotation"]);
 
-    if (type_assertions_enabled() && lhs_symbol)
+    if (lhs_symbol)
     {
       auto &tc = get_typechecker();
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
@@ -4531,6 +4531,45 @@ void python_converter::get_var_assign(
       target_block.copy_to_operands(decl);
       current_lhs = nullptr;
       return;
+    }
+
+    // Type annotation violation: if the symbol has a cached annotation type
+    // that is fundamentally incompatible with the RHS type, emit a failing
+    // assertion (when --is-instance-check is enabled) and skip the assignment
+    // to avoid type-mismatch crashes in the GOTO program.
+    if (
+      lhs_symbol && !rhs.type().is_empty() && !rhs.type().is_code() &&
+      lhs.type() != rhs.type() && !annotation_candidates.empty())
+    {
+      bool compatible = false;
+      for (const auto &expected : annotation_candidates)
+      {
+        bool both_numeric = (type_utils::is_integer_type(rhs.type()) ||
+                             rhs.type().is_floatbv() || rhs.type().is_bool()) &&
+                            (type_utils::is_integer_type(expected) ||
+                             expected.is_floatbv() || expected.is_bool());
+
+        if (base_type_eq(rhs.type(), expected, name_space()) || both_numeric)
+        {
+          compatible = true;
+          break;
+        }
+      }
+
+      if (!compatible)
+      {
+        if (type_assertions_enabled() && can_emit_annotation_check)
+        {
+          code_assertt type_violation(gen_boolean(false));
+          type_violation.location() = location_begin;
+          type_violation.location().comment(
+            "Expected '" + annotated_name + "' to be of type '" +
+            type_handler_.type_to_string(annotation_candidates.front()) + "'");
+          target_block.copy_to_operands(type_violation);
+        }
+        current_lhs = nullptr;
+        return;
+      }
     }
 
     // Handle type adjustments
