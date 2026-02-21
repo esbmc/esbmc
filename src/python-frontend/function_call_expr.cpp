@@ -1160,6 +1160,31 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     {
       exprt inferred_expr = converter_.get_expr(arg);
       typet inferred_type = inferred_expr.type();
+
+      // Dispatch to __abs__ dunder for struct types
+      typet resolved = inferred_type;
+      if (resolved.id() == "symbol")
+        resolved = converter_.ns.follow(resolved);
+      if (resolved.is_struct())
+      {
+        const struct_typet &st = to_struct_type(resolved);
+        std::string tag = st.tag().as_string();
+        std::string cls =
+          converter_.extract_class_name_from_tag(tag);
+        symbolt *method =
+          converter_.find_dunder_method(cls, "__abs__");
+        if (method)
+        {
+          const code_typet &mt = to_code_type(method->type);
+          side_effect_expr_function_callt call;
+          call.function() = symbol_expr(*method);
+          call.type() = mt.return_type();
+          call.arguments().push_back(
+            gen_address_of(inferred_expr));
+          return call;
+        }
+      }
+
       exprt abs_expr("abs", inferred_type);
       abs_expr.copy_to_operands(inferred_expr);
       return abs_expr;
@@ -1178,9 +1203,32 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     const symbolt *sym = lookup_python_symbol(var_name);
     if (sym)
     {
-      // Build a symbolic abs() expression with the resolved operand type
       exprt operand_expr = converter_.get_expr(arg);
       typet operand_type = operand_expr.type();
+
+      // Dispatch to __abs__ dunder for struct types
+      typet resolved = operand_type;
+      if (resolved.id() == "symbol")
+        resolved = converter_.ns.follow(resolved);
+      if (resolved.is_struct())
+      {
+        const struct_typet &st = to_struct_type(resolved);
+        std::string tag = st.tag().as_string();
+        std::string cls =
+          converter_.extract_class_name_from_tag(tag);
+        symbolt *method =
+          converter_.find_dunder_method(cls, "__abs__");
+        if (method)
+        {
+          const code_typet &mt = to_code_type(method->type);
+          side_effect_expr_function_callt call;
+          call.function() = symbol_expr(*method);
+          call.type() = mt.return_type();
+          call.arguments().push_back(
+            gen_address_of(operand_expr));
+          return call;
+        }
+      }
 
       exprt abs_expr("abs", operand_type);
       abs_expr.copy_to_operands(operand_expr);

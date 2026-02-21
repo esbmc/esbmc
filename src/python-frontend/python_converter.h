@@ -818,6 +818,9 @@ private:
     const std::string &op,
     exprt &lhs,
     exprt &rhs);
+  exprt dispatch_unary_dunder_operator(
+    const std::string &op,
+    exprt &operand);
 
   // =========================================================================
   // Member variables

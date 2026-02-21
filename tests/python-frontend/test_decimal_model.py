@@ -5,7 +5,7 @@ import importlib.util
 import decimal as cpython_decimal
 
 import pytest
-from hypothesis import given, strategies as st, settings
+from hypothesis import given, strategies as st, assume, settings, HealthCheck
 
 
 def load_model_decimal():
@@ -69,6 +69,24 @@ zero_decimals = st.sampled_from([
 ])
 
 all_decimals = st.one_of(finite_decimals, special_decimals, zero_decimals)
+
+
+def values_equal(m, expected_tuple):
+    """Compare model Decimal against a cpython_to_model tuple by value.
+
+    Handles: NaN identity, zero sign ambiguity, exponent normalization.
+    """
+    es, ei, ee, esp = expected_tuple
+    if m._is_special != esp:
+        return False
+    if m._is_special >= 2:
+        return True
+    if m._is_special == 1:
+        return m._sign == es
+    if m._int == 0 and ei == 0:
+        return True
+    exp = ModelDecimal(es, ei, ee, esp)
+    return m.__eq__(exp) and m._sign == es
 
 
 # --- Construction Tests ---
@@ -366,3 +384,202 @@ class TestOrdering:
         ma = ModelDecimal(sa, ia, ea, spa)
         mb = ModelDecimal(sb, ib, eb, spb)
         assert ma.__ge__(mb) == (ma.__gt__(mb) or ma.__eq__(mb))
+
+
+nonzero_finite_decimals = finite_decimals.filter(lambda d: d != 0)
+
+# Narrower strategy for division/mod to stay within CPython's 28-digit precision
+small_finite_decimals = st.builds(
+    lambda sign, digits, exp: cpython_decimal.Decimal(
+        (sign, tuple(digits), exp)
+    ),
+    sign=st.integers(min_value=0, max_value=1),
+    digits=st.lists(st.integers(min_value=0, max_value=9), min_size=1, max_size=6),
+    exp=st.integers(min_value=-10, max_value=10),
+)
+small_nonzero_finite_decimals = small_finite_decimals.filter(lambda d: d != 0)
+
+
+class TestNeg:
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_neg_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__neg__()
+        expected = cpython_to_model(-d)
+        assert values_equal(result, expected)
+
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_double_neg_roundtrip(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__neg__().__neg__()
+        assert result._sign == m._sign
+        assert result._int == m._int
+        assert result._exp == m._exp
+        assert result._is_special == m._is_special
+
+    def test_nan_neg_preserves_nan(self):
+        nan = ModelDecimal(0, 0, 0, 2)
+        result = nan.__neg__()
+        assert result._is_special == 2
+
+
+class TestAbs:
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_abs_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__abs__()
+        expected = cpython_to_model(abs(d))
+        assert (result._sign, result._int, result._exp, result._is_special) == expected
+
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_abs_always_non_negative(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.__abs__()._sign == 0
+
+
+class TestAdd:
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_add_matches_cpython(self, a, b):
+        with cpython_decimal.localcontext() as ctx:
+            ctx.traps[cpython_decimal.Inexact] = False
+            cpython_result = a + b
+            assume(not ctx.flags[cpython_decimal.Inexact])
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.__add__(mb)
+        expected = cpython_to_model(cpython_result)
+        assert values_equal(result, expected)
+
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_add_zero_identity(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        zero = ModelDecimal(0, 0, 0, 0)
+        result = m.__add__(zero)
+        assert m.__eq__(result) or (m._int == 0 and result._int == 0)
+
+    def test_inf_plus_neg_inf_is_nan(self):
+        pos_inf = ModelDecimal(0, 0, 0, 1)
+        neg_inf = ModelDecimal(1, 0, 0, 1)
+        result = pos_inf.__add__(neg_inf)
+        assert result._is_special == 2
+
+    def test_nan_propagation(self):
+        nan = ModelDecimal(0, 0, 0, 2)
+        val = ModelDecimal(0, 1, 0, 0)
+        assert nan.__add__(val)._is_special == 2
+        assert val.__add__(nan)._is_special == 2
+
+
+class TestSub:
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_sub_matches_cpython(self, a, b):
+        with cpython_decimal.localcontext() as ctx:
+            ctx.traps[cpython_decimal.Inexact] = False
+            cpython_result = a - b
+            assume(not ctx.flags[cpython_decimal.Inexact])
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.__sub__(mb)
+        expected = cpython_to_model(cpython_result)
+        assert values_equal(result, expected)
+
+
+class TestMul:
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_mul_matches_cpython(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.__mul__(mb)
+        expected = cpython_to_model(a * b)
+        assert (result._sign, result._int, result._exp, result._is_special) == expected
+
+    def test_inf_times_zero_is_nan(self):
+        inf = ModelDecimal(0, 0, 0, 1)
+        zero = ModelDecimal(0, 0, 0, 0)
+        assert inf.__mul__(zero)._is_special == 2
+        assert zero.__mul__(inf)._is_special == 2
+
+
+class TestTrueDiv:
+    @given(a=finite_decimals, b=nonzero_finite_decimals)
+    @settings(max_examples=200)
+    def test_truediv_sign_matches_cpython(self, a, b):
+        """Sign of result matches CPython (exact coefficient may differ due to precision)."""
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.__truediv__(mb)
+        cpython_result = a / b
+        cp_sign, _, _, _ = cpython_to_model(cpython_result)
+        if result._int == 0:
+            pass  # zero can have either sign
+        else:
+            assert result._sign == cp_sign
+
+    def test_zero_div_zero_is_nan(self):
+        zero = ModelDecimal(0, 0, 0, 0)
+        assert zero.__truediv__(zero)._is_special == 2
+
+    def test_x_div_zero_is_inf(self):
+        x = ModelDecimal(0, 5, 0, 0)
+        zero = ModelDecimal(0, 0, 0, 0)
+        result = x.__truediv__(zero)
+        assert result._is_special == 1
+
+    def test_inf_div_inf_is_nan(self):
+        inf = ModelDecimal(0, 0, 0, 1)
+        assert inf.__truediv__(inf)._is_special == 2
+
+
+class TestFloorDiv:
+    @given(a=small_finite_decimals, b=small_nonzero_finite_decimals)
+    @settings(max_examples=200, suppress_health_check=[HealthCheck.filter_too_much])
+    def test_floordiv_matches_cpython(self, a, b):
+        with cpython_decimal.localcontext() as ctx:
+            ctx.traps[cpython_decimal.InvalidOperation] = False
+            cpython_result = a // b
+            assume(not cpython_result.is_nan())
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.__floordiv__(mb)
+        expected = cpython_to_model(cpython_result)
+        assert values_equal(result, expected)
+
+
+class TestMod:
+    @given(a=small_finite_decimals, b=small_nonzero_finite_decimals)
+    @settings(max_examples=200, suppress_health_check=[HealthCheck.filter_too_much])
+    def test_mod_matches_cpython(self, a, b):
+        with cpython_decimal.localcontext() as ctx:
+            ctx.traps[cpython_decimal.InvalidOperation] = False
+            cpython_result = a % b
+            assume(not cpython_result.is_nan())
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.__mod__(mb)
+        expected = cpython_to_model(cpython_result)
+        assert values_equal(result, expected)

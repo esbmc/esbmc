@@ -2108,6 +2108,12 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     return is_empty;
   }
 
+  {
+    exprt dunder_result = dispatch_unary_dunder_operator(op, unary_sub);
+    if (!dunder_result.is_nil())
+      return dunder_result;
+  }
+
   exprt unary_expr(map_operator(op, type), type);
   unary_expr.operands().push_back(unary_sub);
 
@@ -3029,6 +3035,53 @@ exprt python_converter::dispatch_dunder_operator(
   call.type() = method_type.return_type();
   call.arguments().push_back(gen_address_of(lhs));
   call.arguments().push_back(gen_address_of(rhs));
+  return call;
+}
+
+exprt python_converter::dispatch_unary_dunder_operator(
+  const std::string &op,
+  exprt &operand)
+{
+  typet operand_type = operand.type();
+  if (operand.is_symbol())
+  {
+    const symbolt *sym = symbol_table_.find_symbol(operand.identifier());
+    if (sym)
+      operand_type = sym->type;
+  }
+  if (operand_type.id() == "symbol")
+    operand_type = ns.follow(operand_type);
+
+  if (!operand_type.is_struct())
+    return nil_exprt();
+
+  const struct_typet &struct_type = to_struct_type(operand_type);
+  std::string tag = struct_type.tag().as_string();
+
+  if (
+    tag.find("dict_") != std::string::npos ||
+    tag.find("tag-dict") != std::string::npos ||
+    tag.rfind("tag-Optional_", 0) == 0 ||
+    tag.rfind("tag-tuple", 0) == 0 || tag == "__python_dict__")
+    return nil_exprt();
+
+  static const std::map<std::string, std::string> unary_dunder_map = {
+    {"USub", "__neg__"},
+  };
+  auto it = unary_dunder_map.find(op);
+  if (it == unary_dunder_map.end())
+    return nil_exprt();
+
+  std::string class_name = extract_class_name_from_tag(tag);
+  symbolt *method = find_dunder_method(class_name, it->second);
+  if (!method)
+    return nil_exprt();
+
+  const code_typet &method_type = to_code_type(method->type);
+  side_effect_expr_function_callt call;
+  call.function() = symbol_expr(*method);
+  call.type() = method_type.return_type();
+  call.arguments().push_back(gen_address_of(operand));
   return call;
 }
 
