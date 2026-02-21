@@ -1296,11 +1296,13 @@ void goto_symext::intrinsic_get_thread_id(
   statet &state = art.get_cur_state().get_active_state();
 
   unsigned int thread_id = art.get_cur_state().get_active_state_number();
-  expr2tc tid = constant_int2tc(call.ret->type, BigInt(thread_id));
 
-  state.value_set.assign(call.ret, tid);
-
-  symex_assign(code_assign2tc(call.ret, tid), true);
+  if (!is_nil_expr(call.ret))
+  {
+    expr2tc tid = constant_int2tc(call.ret->type, BigInt(thread_id));
+    state.value_set.assign(call.ret, tid);
+    symex_assign(code_assign2tc(call.ret, tid), true);
+  }
 }
 
 void goto_symext::intrinsic_set_thread_data(
@@ -1321,7 +1323,7 @@ void goto_symext::intrinsic_set_thread_data(
 
   if (!is_constant_int2t(threadid))
   {
-    log_error("__ESBMC_set_start_data received nonconstant thread id");
+    log_error("__ESBMC_set_thread_internal_data received nonconstant thread id");
     abort();
   }
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
@@ -1342,17 +1344,20 @@ void goto_symext::intrinsic_get_thread_data(
 
   if (!is_constant_int2t(threadid))
   {
-    log_error("__ESBMC_get_start_data received nonconstant thread id");
+    log_error("__ESBMC_get_thread_internal_data received nonconstant thread id");
     abort();
   }
 
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
-  assert(base_type_eq(call.ret->type, startdata->type, ns));
+  if (!is_nil_expr(call.ret))
+  {
+    assert(base_type_eq(call.ret->type, startdata->type, ns));
 
-  state.value_set.assign(call.ret, startdata);
-  symex_assign(code_assign2tc(call.ret, startdata), true);
+    state.value_set.assign(call.ret, startdata);
+    symex_assign(code_assign2tc(call.ret, startdata), true);
+  }
 }
 
 void goto_symext::intrinsic_spawn_thread(
