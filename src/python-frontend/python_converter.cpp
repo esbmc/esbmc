@@ -933,6 +933,21 @@ exprt python_converter::handle_none_comparison(
       // For != or is not: return True
       return gen_boolean(!is_eq);
     }
+
+    if (non_none.is_symbol())
+    {
+      exprt sentinel = from_integer(
+        BigInt(std::numeric_limits<int64_t>::min()), non_none.type());
+      exprt cond("=", bool_type());
+      cond.copy_to_operands(non_none, sentinel);
+      if (!is_eq)
+      {
+        exprt not_expr("not", bool_type());
+        not_expr.move_to_operands(cond);
+        return not_expr;
+      }
+      return cond;
+    }
   }
 
   // Create isnone expression with unwrapped operands
@@ -6404,6 +6419,16 @@ void python_converter::get_return_statements(
     // If we're returning an array but the function expects a pointer,
     // convert the array to a pointer (for string literals)
     const typet &expected_return_type = current_element_type;
+
+    if (return_value.type() == none_type())
+    {
+      code_returnt return_code;
+      return_code.return_value() = from_integer(
+        BigInt(std::numeric_limits<int64_t>::min()), expected_return_type);
+      return_code.location() = location;
+      target_block.copy_to_operands(return_code);
+      return;
+    }
 
     if (expected_return_type.is_pointer() && return_value.type().is_array())
     {
