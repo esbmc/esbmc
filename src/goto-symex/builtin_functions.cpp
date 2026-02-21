@@ -2709,9 +2709,10 @@ bool goto_symext::run_builtin(
   {
     expr2tc op1 = func_call.operands[0];
     cur_state->rename(op1);
-    symex_assign(code_assign2tc(
-      func_call.ret,
-      is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
+    if (!is_nil_expr(func_call.ret))
+      symex_assign(code_assign2tc(
+        func_call.ret,
+        is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
     return true;
   }
 
