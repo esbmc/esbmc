@@ -2787,11 +2787,17 @@ private:
         }
       }
 
-      // Check if LHS was previously annotated
+      // Check if LHS was previously annotated.  If so, skip the
+      // Assign→AnnAssign conversion so that the converter's dynamic-typing
+      // path can handle the reassignment while the cached annotation type
+      // is used for optional type-assertion checks.
       if (
         element.contains("targets") && element["targets"][0]["_type"] == "Name")
       {
-        inferred_type = get_type_from_lhs(element["targets"][0]["id"], body);
+        std::string prior_annotation =
+          get_type_from_lhs(element["targets"][0]["id"], body);
+        if (!prior_annotation.empty())
+          continue;
       }
 
       if (infer_type(element, body, inferred_type) == InferResult::UNKNOWN)
