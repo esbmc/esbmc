@@ -1419,37 +1419,6 @@ void goto_symext::intrinsic_terminate_thread(reachability_treet &art)
   // end and the switcher to be invoked.
 }
 
-void goto_symext::intrinsic_get_thread_state(
-  const code_function_call2t &call,
-  reachability_treet &art)
-{
-  statet &state = art.get_cur_state().get_active_state();
-  expr2tc threadid = call.operands[0];
-  state.level2.rename(threadid);
-
-  while (is_typecast2t(threadid))
-    threadid = to_typecast2t(threadid).from;
-
-  if (!is_constant_int2t(threadid))
-  {
-    log_error("__ESBMC_get_thread_state received nonconstant thread id");
-    abort();
-  }
-
-  unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
-  // Possibly we should handle this error; but meh.
-  assert(art.get_cur_state().threads_state.size() >= tid);
-
-  // Thread state is simply whether the thread is ended or not.
-  unsigned int flags =
-    (art.get_cur_state().threads_state[tid].thread_ended) ? 1 : 0;
-
-  // Reuse threadid
-  expr2tc flag_expr =
-    constant_int2tc(get_uint_type(config.ansi_c.int_width), flags);
-  symex_assign(code_assign2tc(call.ret, flag_expr), true);
-}
-
 void goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
 {
   art.get_cur_state().increment_active_atomic_number();

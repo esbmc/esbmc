@@ -576,12 +576,6 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  if (symname == "c:@F@__ESBMC_get_thread_state")
-  {
-    intrinsic_get_thread_state(func_call, art);
-    return;
-  }
-
   if (symname == "c:@F@__ESBMC_really_atomic_begin")
   {
     intrinsic_really_atomic_begin(art);
