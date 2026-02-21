@@ -1419,7 +1419,7 @@ private:
     throw std::runtime_error(oss.str());
   }
 
-  std::string get_type_from_lhs(const std::string &id, Json &body)
+  std::string get_type_from_lhs(const std::string &id, const Json &body)
   {
     // Search for LHS annotation in the current scope (e.g., while/if block)
     Json node = find_annotated_assign(id, body["body"]);
@@ -1660,6 +1660,52 @@ private:
       rhs_var_name = get_base_var_name(element["value"]["value"]);
 
     assert(!rhs_var_name.empty());
+
+    auto extract_lhs_name = [](const Json &stmt) -> std::string {
+      if (
+        stmt.contains("_type") && stmt["_type"] == "Assign" &&
+        stmt.contains("targets") && !stmt["targets"].empty() &&
+        stmt["targets"][0].contains("_type") &&
+        stmt["targets"][0]["_type"] == "Name" &&
+        stmt["targets"][0].contains("id"))
+        return stmt["targets"][0]["id"].template get<std::string>();
+
+      if (
+        stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+        stmt.contains("target") && stmt["target"].contains("_type") &&
+        stmt["target"]["_type"] == "Name" && stmt["target"].contains("id"))
+        return stmt["target"]["id"].template get<std::string>();
+
+      return "";
+    };
+
+    const std::string lhs_name = extract_lhs_name(element);
+    if (!lhs_name.empty() && lhs_name == rhs_var_name)
+    {
+      std::string lhs_type = get_type_from_lhs(lhs_name, body);
+      if (!lhs_type.empty())
+        return lhs_type;
+      return "Any";
+    }
+
+    if (resolving_rhs_vars_.contains(rhs_var_name))
+    {
+      std::string lhs_type = get_type_from_lhs(rhs_var_name, body);
+      if (!lhs_type.empty())
+        return lhs_type;
+      return "Any";
+    }
+
+    resolving_rhs_vars_.insert(rhs_var_name);
+    struct erase_guardt
+    {
+      std::set<std::string> &vars;
+      std::string key;
+      ~erase_guardt()
+      {
+        vars.erase(key);
+      }
+    } erase_guard{resolving_rhs_vars_, rhs_var_name};
 
     // Find RHS variable declaration in the current scope (e.g.: while/if block)
     Json rhs_node = find_annotated_assign(rhs_var_name, body["body"]);
@@ -3105,6 +3151,7 @@ private:
   bool filter_global_elements_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
+  std::set<std::string> resolving_rhs_vars_;
   std::string current_func_name_context_;
   std::string current_class_name_;
 };
