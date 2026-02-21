@@ -13,9 +13,9 @@ name: "CodeQL Advanced"
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "intrigus/feat/codeql-setup" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "intrigus/feat/codeql-setup" ]
   schedule:
     - cron: '45 7 * * 6'
 
