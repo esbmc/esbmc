@@ -4542,13 +4542,12 @@ void python_converter::get_var_assign(
       lhs.type() != rhs.type() && !annotation_candidates.empty())
     {
       bool compatible = false;
-      for (const auto& expected : annotation_candidates)
+      for (const auto &expected : annotation_candidates)
       {
-        bool both_numeric =
-          (type_utils::is_integer_type(rhs.type()) ||
-            rhs.type().is_floatbv() || rhs.type().is_bool()) &&
-          (type_utils::is_integer_type(expected) || expected.is_floatbv() ||
-            expected.is_bool());
+        bool both_numeric = (type_utils::is_integer_type(rhs.type()) ||
+                             rhs.type().is_floatbv() || rhs.type().is_bool()) &&
+                            (type_utils::is_integer_type(expected) ||
+                             expected.is_floatbv() || expected.is_bool());
 
         if (base_type_eq(rhs.type(), expected, name_space()) || both_numeric)
         {
