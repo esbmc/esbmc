@@ -44,6 +44,130 @@ class Decimal:
             other_exp = other_exp - 1
         return self_int == other_int
 
+    def __lt__(self, other: "Decimal") -> bool:
+        if self._is_special >= 2:
+            return False
+        if other._is_special >= 2:
+            return False
+        if self._is_special == 1 and other._is_special == 1:
+            if self._sign == other._sign:
+                return False
+            return self._sign == 1
+        if self._is_special == 1:
+            return self._sign == 1
+        if other._is_special == 1:
+            return other._sign == 0
+        if self._int == 0 and other._int == 0:
+            return False
+        if self._sign != other._sign:
+            return self._sign == 1
+        self_int: int = self._int
+        other_int: int = other._int
+        self_exp: int = self._exp
+        other_exp: int = other._exp
+        while self_exp > other_exp:
+            self_int = self_int * 10
+            self_exp = self_exp - 1
+        while other_exp > self_exp:
+            other_int = other_int * 10
+            other_exp = other_exp - 1
+        if self._sign == 1:
+            return self_int > other_int
+        return self_int < other_int
+
+    def __le__(self, other: "Decimal") -> bool:
+        if self._is_special >= 2:
+            return False
+        if other._is_special >= 2:
+            return False
+        if self._is_special == 1 and other._is_special == 1:
+            if self._sign == other._sign:
+                return True
+            return self._sign == 1
+        if self._is_special == 1:
+            return self._sign == 1
+        if other._is_special == 1:
+            return other._sign == 0
+        if self._int == 0 and other._int == 0:
+            return True
+        if self._sign != other._sign:
+            return self._sign == 1
+        self_int: int = self._int
+        other_int: int = other._int
+        self_exp: int = self._exp
+        other_exp: int = other._exp
+        while self_exp > other_exp:
+            self_int = self_int * 10
+            self_exp = self_exp - 1
+        while other_exp > self_exp:
+            other_int = other_int * 10
+            other_exp = other_exp - 1
+        if self._sign == 1:
+            return self_int >= other_int
+        return self_int <= other_int
+
+    def __gt__(self, other: "Decimal") -> bool:
+        if self._is_special >= 2:
+            return False
+        if other._is_special >= 2:
+            return False
+        if self._is_special == 1 and other._is_special == 1:
+            if self._sign == other._sign:
+                return False
+            return self._sign == 0
+        if self._is_special == 1:
+            return self._sign == 0
+        if other._is_special == 1:
+            return other._sign == 1
+        if self._int == 0 and other._int == 0:
+            return False
+        if self._sign != other._sign:
+            return self._sign == 0
+        self_int: int = self._int
+        other_int: int = other._int
+        self_exp: int = self._exp
+        other_exp: int = other._exp
+        while self_exp > other_exp:
+            self_int = self_int * 10
+            self_exp = self_exp - 1
+        while other_exp > self_exp:
+            other_int = other_int * 10
+            other_exp = other_exp - 1
+        if self._sign == 1:
+            return self_int < other_int
+        return self_int > other_int
+
+    def __ge__(self, other: "Decimal") -> bool:
+        if self._is_special >= 2:
+            return False
+        if other._is_special >= 2:
+            return False
+        if self._is_special == 1 and other._is_special == 1:
+            if self._sign == other._sign:
+                return True
+            return self._sign == 0
+        if self._is_special == 1:
+            return self._sign == 0
+        if other._is_special == 1:
+            return other._sign == 1
+        if self._int == 0 and other._int == 0:
+            return True
+        if self._sign != other._sign:
+            return self._sign == 0
+        self_int: int = self._int
+        other_int: int = other._int
+        self_exp: int = self._exp
+        other_exp: int = other._exp
+        while self_exp > other_exp:
+            self_int = self_int * 10
+            self_exp = self_exp - 1
+        while other_exp > self_exp:
+            other_int = other_int * 10
+            other_exp = other_exp - 1
+        if self._sign == 1:
+            return self_int <= other_int
+        return self_int >= other_int
+
     def __ne__(self, other: "Decimal") -> bool:
         if self._is_special >= 2:
             return True

@@ -225,3 +225,144 @@ class TestEquality:
 
     def test_pos_inf_not_equal_neg_inf(self):
         assert ModelDecimal(0, 0, 0, 1).__eq__(ModelDecimal(1, 0, 0, 1)) == False
+
+
+class TestOrdering:
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_lt_matches_cpython(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        assert ma.__lt__(mb) == (a < b)
+
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_le_matches_cpython(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        assert ma.__le__(mb) == (a <= b)
+
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_gt_matches_cpython(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        assert ma.__gt__(mb) == (a > b)
+
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_ge_matches_cpython(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        assert ma.__ge__(mb) == (a >= b)
+
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_lt_nan_always_false(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        nan = ModelDecimal(0, 0, 0, 2)
+        assert m.__lt__(nan) == False
+        assert nan.__lt__(m) == False
+
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_gt_nan_always_false(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        nan = ModelDecimal(0, 0, 0, 2)
+        assert m.__gt__(nan) == False
+        assert nan.__gt__(m) == False
+
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_le_nan_always_false(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        nan = ModelDecimal(0, 0, 0, 2)
+        assert m.__le__(nan) == False
+        assert nan.__le__(m) == False
+
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_ge_nan_always_false(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        nan = ModelDecimal(0, 0, 0, 2)
+        assert m.__ge__(nan) == False
+        assert nan.__ge__(m) == False
+
+    def test_snan_ordering_always_false(self):
+        snan = ModelDecimal(0, 0, 0, 3)
+        val = ModelDecimal(0, 1, 0, 0)
+        assert snan.__lt__(val) == False
+        assert snan.__le__(val) == False
+        assert snan.__gt__(val) == False
+        assert snan.__ge__(val) == False
+        assert val.__lt__(snan) == False
+        assert val.__le__(snan) == False
+        assert val.__gt__(snan) == False
+        assert val.__ge__(snan) == False
+
+    def test_infinity_ordering(self):
+        pos_inf = ModelDecimal(0, 0, 0, 1)
+        neg_inf = ModelDecimal(1, 0, 0, 1)
+        finite = ModelDecimal(0, 42, 0, 0)
+        assert pos_inf.__gt__(finite) == True
+        assert pos_inf.__ge__(finite) == True
+        assert pos_inf.__lt__(finite) == False
+        assert pos_inf.__le__(finite) == False
+        assert neg_inf.__lt__(finite) == True
+        assert neg_inf.__le__(finite) == True
+        assert neg_inf.__gt__(finite) == False
+        assert neg_inf.__ge__(finite) == False
+        assert neg_inf.__lt__(pos_inf) == True
+        assert pos_inf.__gt__(neg_inf) == True
+        assert pos_inf.__lt__(pos_inf) == False
+        assert pos_inf.__le__(pos_inf) == True
+        assert pos_inf.__ge__(pos_inf) == True
+
+    def test_neg_zero_ordering(self):
+        neg_zero = ModelDecimal(1, 0, 0, 0)
+        pos_zero = ModelDecimal(0, 0, 0, 0)
+        assert neg_zero.__lt__(pos_zero) == False
+        assert neg_zero.__gt__(pos_zero) == False
+        assert neg_zero.__le__(pos_zero) == True
+        assert neg_zero.__ge__(pos_zero) == True
+
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_ordering_consistency(self, a, b):
+        """a < b iff b > a, a <= b iff b >= a."""
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        assert ma.__lt__(mb) == mb.__gt__(ma)
+        assert ma.__le__(mb) == mb.__ge__(ma)
+
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_le_is_lt_or_eq(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        assert ma.__le__(mb) == (ma.__lt__(mb) or ma.__eq__(mb))
+
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_ge_is_gt_or_eq(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        assert ma.__ge__(mb) == (ma.__gt__(mb) or ma.__eq__(mb))
