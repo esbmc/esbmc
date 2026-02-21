@@ -395,9 +395,14 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
             return true;
 
           t.set("alignment", alignment);
-        } else
+        }
+        else
         {
-          t.set("alignment", constant_exprt(BigInt(ASTContext->getTargetDefaultAlignForAttributeAligned()), uint_type()));
+          t.set(
+            "alignment",
+            constant_exprt(
+              BigInt(ASTContext->getTargetDefaultAlignForAttributeAligned()),
+              uint_type()));
         }
       }
     }
