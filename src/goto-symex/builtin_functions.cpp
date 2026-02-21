@@ -2720,7 +2720,8 @@ bool goto_symext::run_builtin(
     }
 
     // Perform overflow check and assign it to the return object
-    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
+    if (!is_nil_expr(func_call.ret))
+      symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
 
     // Assign result of the two arguments to the dereferenced third argument
     symex_assign(code_assign2tc(
