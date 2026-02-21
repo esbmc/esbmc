@@ -2435,8 +2435,11 @@ void goto_symext::intrinsic_memset(
   }
 
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
+  }
 }
 
 void goto_symext::intrinsic_builtin_object_size(
