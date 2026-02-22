@@ -192,7 +192,7 @@ prepare_platform_config() {
         -DCMAKE_INSTALL_PREFIX:PATH=$ROOT_DIR/release \
       "
 
-      SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON"
+      SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_GOTO_CONTRACTOR=OFF -DENABLE_Z3=ON"
       ;;
 
     *)
