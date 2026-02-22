@@ -171,7 +171,6 @@ prepare_platform_config() {
         log "Detected ARM64 Linux"
         SOLVER_FLAGS="$SOLVER_FLAGS \
             -DENABLE_GOTO_CONTRACTOR=OFF \
-            -DENABLE_BITWUZLA=OFF \
         "
       fi
       ;;
