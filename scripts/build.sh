@@ -167,13 +167,12 @@ prepare_platform_config() {
       BASE_ARGS="$BASE_ARGS -DBUILD_STATIC=$STATIC"
       SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON -DENABLE_CVC5=On"
 
-    #   if [[ "$ARCH" == "aarch64" ]]; then
-    #     log "Detected ARM64 Linux"
-    #     SOLVER_FLAGS="$SOLVER_FLAGS \
-    #         -DENABLE_GOTO_CONTRACTOR=OFF \
-    #         -DENABLE_BITWUZLA=OFF \
-    #     "
-    #   fi
+      if [[ "$ARCH" == "aarch64" ]]; then
+        log "Detected ARM64 Linux"
+        SOLVER_FLAGS="$SOLVER_FLAGS \
+            -DENABLE_GOTO_CONTRACTOR=OFF \
+        "
+      fi
       ;;
 
     Darwin)
