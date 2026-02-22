@@ -42,6 +42,11 @@ def __ESBMC_assume(cond: bool) -> None:
     pass
 
 
+def assume(cond: bool) -> None:
+    """ESBMC intrinsic: path constraint"""
+    __ESBMC_assume(cond)
+
+
 def __ESBMC_assert(cond: bool, msg: str) -> None:
     """ESBMC intrinsic: verification assertion"""
     pass
