@@ -222,7 +222,6 @@ collect_ubuntu_packages() {
     cmake
     bison
     flex
-    g++-multilib
     linux-libc-dev
     libboost-date-time-dev
     libboost-program-options-dev
@@ -238,6 +237,12 @@ collect_ubuntu_packages() {
     tar
     xz-utils
   )
+
+  if [[ "$ARCH" != "aarch64" ]]; then
+    UBUNTU_PACKAGES+=(g++-multilib)
+  else
+    log "Skipping g++-multilib on aarch64"
+  fi
 
   if [[ "$STATIC" == "OFF" ]]; then
     UBUNTU_PACKAGES+=(
