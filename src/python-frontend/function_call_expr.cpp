@@ -672,7 +672,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
       is_constant = true;
     }
     else
-      return converter_.get_exception_handler().gen_exception_raise("TypeError", "Unsupported UnaryOp in chr()");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "Unsupported UnaryOp in chr()");
   }
 
   // Handle integer input
@@ -698,7 +699,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (const std::invalid_argument &)
     {
-      return converter_.get_exception_handler().gen_exception_raise("TypeError", "invalid string passed to chr()");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "invalid string passed to chr()");
     }
   }
 
@@ -756,7 +758,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (std::invalid_argument &)
     {
-      return converter_.get_exception_handler().gen_exception_raise("TypeError", "must be of type int");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "must be of type int");
     }
 
     arg["_type"] = "Constant";
@@ -775,7 +778,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (const std::out_of_range &e)
     {
-      return converter_.get_exception_handler().gen_exception_raise("ValueError", "chr()");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "chr()");
     }
 
     // Build a proper character array, not a single char
@@ -940,7 +944,8 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
         return typecast_exprt(var_expr, int_type());
       }
 
-      return converter_.get_exception_handler().gen_exception_raise("ValueError", "ord() requires a character");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "ord() requires a character");
     }
 
     // Compile-time extraction for constant symbols
@@ -959,7 +964,8 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     arg.erase("ctx");
   }
   else
-    return converter_.get_exception_handler().gen_exception_raise("TypeError", "ord() argument must be a string");
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "ord() argument must be a string");
 
   // Replace the arg with the integer value
   arg["value"] = code_point;
@@ -1412,13 +1418,15 @@ exprt function_call_expr::build_constant_from_arg() const
       {
         std::string m = "could not convert string to float : '" +
                         arg["value"].get<std::string>() + "'";
-        return converter_.get_exception_handler().gen_exception_raise("ValueError", m);
+        return converter_.get_exception_handler().gen_exception_raise(
+          "ValueError", m);
       }
       catch (const std::out_of_range &)
       {
         std::string m = "could not convert string to float : '" +
                         arg["value"].get<std::string>() + "' (out of range)";
-        return converter_.get_exception_handler().gen_exception_raise("ValueError", m);
+        return converter_.get_exception_handler().gen_exception_raise(
+          "ValueError", m);
       }
     }
   }
@@ -1439,7 +1447,8 @@ exprt function_call_expr::build_constant_from_arg() const
         std::string m = "float() conversion may fail - variable" + var_name +
                         "may contain non-float string";
 
-        return converter_.get_exception_handler().gen_exception_raise("ValueError", m);
+        return converter_.get_exception_handler().gen_exception_raise(
+          "ValueError", m);
       }
     }
   }
@@ -2061,7 +2070,8 @@ exprt function_call_expr::validate_re_module_args() const
       std::ostringstream msg;
       msg << "expected string or bytes-like object, got '"
           << type_handler_.type_to_string(arg_type) << "'";
-      return converter_.get_exception_handler().gen_exception_raise("TypeError", msg.str());
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", msg.str());
     }
   }
 
@@ -2405,7 +2415,8 @@ function_call_expr::get_dispatch_table()
 
          // Create the exception raise as a code expression
          exprt raise_expr =
-           converter_.get_exception_handler().gen_exception_raise("ValueError", "math domain error");
+           converter_.get_exception_handler().gen_exception_raise(
+             "ValueError", "math domain error");
          locationt loc = converter_.get_location_from_decl(call_);
          raise_expr.location() = loc;
          raise_expr.location().user_provided(true);
@@ -3392,7 +3403,9 @@ exprt function_call_expr::handle_general_function_call()
         msg << func_name << "() missing required positional argument: '"
             << param_name << "'";
 
-        exprt exception = converter_.get_exception_handler().gen_exception_raise("TypeError", msg.str());
+        exprt exception =
+          converter_.get_exception_handler().gen_exception_raise(
+            "TypeError", msg.str());
         locationt loc = converter_.get_location_from_decl(call_);
         exception.location() = loc;
         exception.location().user_provided(true);
@@ -3680,7 +3693,8 @@ exprt function_call_expr::check_argument_types(
       msg << "TypeError: Argument " << (i + 1) << " has incompatible type '"
           << actual_str << "'; expected '" << expected_str << "'";
 
-      exprt exception = converter_.get_exception_handler().gen_exception_raise("TypeError", msg.str());
+      exprt exception = converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", msg.str());
 
       // Add location information from the call
       locationt loc = converter_.get_location_from_decl(call_);
@@ -3727,7 +3741,9 @@ exprt function_call_expr::check_argument_types(
             << "' has incompatible type '" << actual_str << "'; expected '"
             << expected_str << "'";
 
-        exprt exception = converter_.get_exception_handler().gen_exception_raise("TypeError", msg.str());
+        exprt exception =
+          converter_.get_exception_handler().gen_exception_raise(
+            "TypeError", msg.str());
 
         locationt loc = converter_.get_location_from_decl(call_);
         exception.location() = loc;

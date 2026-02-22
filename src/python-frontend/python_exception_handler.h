@@ -64,9 +64,8 @@ public:
    * @param element  The AST node with _type == "ExceptHandler".
    * @param block    The target code block to receive the converted statement.
    */
-  void get_except_handler_statement(
-    const nlohmann::json &element,
-    codet &block);
+  void
+  get_except_handler_statement(const nlohmann::json &element, codet &block);
 
   // -----------------------------------------------------------------------
   // Assertion helpers (previously python_converter private methods)
@@ -121,9 +120,8 @@ public:
    * @param message Human-readable message string.
    * @return        A side_effect_exprt of type cpp-throw.
    */
-  exprt gen_exception_raise(
-    const std::string &exc,
-    const std::string &message) const;
+  exprt
+  gen_exception_raise(const std::string &exc, const std::string &message) const;
 
 private:
   python_converter &converter_;

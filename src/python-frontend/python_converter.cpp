@@ -6576,7 +6576,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       if (
         test.type() == type_handler_.get_list_type() ||
         (test.type().is_pointer() &&
-        test.type().subtype() == type_handler_.get_list_type()))
+         test.type().subtype() == type_handler_.get_list_type()))
       {
         exception_handler_->handle_list_assertion(
           element, test, block, attach_assert_message);

@@ -83,9 +83,7 @@ void python_exception_handler::get_raise_statement(
   std::string exc_name;
 
   // Try to extract the exception name from different AST shapes
-  if (
-    element["exc"].contains("func") &&
-    element["exc"]["func"].contains("id"))
+  if (element["exc"].contains("func") && element["exc"]["func"].contains("id"))
     exc_name = element["exc"]["func"]["id"].get<std::string>();
   else if (element["exc"].contains("id"))
     exc_name = element["exc"]["id"].get<std::string>();
@@ -122,8 +120,7 @@ void python_exception_handler::get_raise_statement(
     exprt arg;
     const auto &exc = element["exc"];
     if (
-      exc.contains("args") && !exc["args"].empty() &&
-      !exc["args"][0].is_null())
+      exc.contains("args") && !exc["args"].empty() && !exc["args"][0].is_null())
     {
       const auto &json_arg = exc["args"][0];
       exprt tmp = converter_.get_expr(json_arg);
