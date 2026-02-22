@@ -360,11 +360,6 @@ install_system_dependencies() {
 }
 
 install_gmp_linux() {
-  if [[ "$ARCH" == "aarch64" ]]; then
-    log "Skipping GMP source build on ARM64 Linux"
-    return
-  fi
-
   if command -v pkg-config >/dev/null 2>&1; then
     local installed_version
     installed_version="$(pkg-config --modversion gmp 2>/dev/null || true)"
