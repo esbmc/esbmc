@@ -1,6 +1,7 @@
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
@@ -671,7 +672,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
       is_constant = true;
     }
     else
-      return gen_exception_raise("TypeError", "Unsupported UnaryOp in chr()");
+      return converter_.get_exception_handler().gen_exception_raise("TypeError", "Unsupported UnaryOp in chr()");
   }
 
   // Handle integer input
@@ -683,7 +684,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
 
   // Reject float input
   else if (arg.contains("value") && arg["value"].is_number_float())
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "chr() argument must be int, not float");
 
   // Try converting string input to integer
@@ -697,7 +698,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (const std::invalid_argument &)
     {
-      return gen_exception_raise("TypeError", "invalid string passed to chr()");
+      return converter_.get_exception_handler().gen_exception_raise("TypeError", "invalid string passed to chr()");
     }
   }
 
@@ -750,12 +751,12 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (std::out_of_range &)
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "ValueError", "chr() argument outside of Unicode range");
     }
     catch (std::invalid_argument &)
     {
-      return gen_exception_raise("TypeError", "must be of type int");
+      return converter_.get_exception_handler().gen_exception_raise("TypeError", "must be of type int");
     }
 
     arg["_type"] = "Constant";
@@ -774,7 +775,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (const std::out_of_range &e)
     {
-      return gen_exception_raise("ValueError", "chr()");
+      return converter_.get_exception_handler().gen_exception_raise("ValueError", "chr()");
     }
 
     // Build a proper character array, not a single char
@@ -827,7 +828,7 @@ exprt function_call_expr::handle_base_conversion(
     }
     else
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "TypeError", "Unsupported UnaryOp in " + func_name + "()");
     }
   }
@@ -839,7 +840,7 @@ exprt function_call_expr::handle_base_conversion(
   }
   else
   {
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", func_name + "() argument must be an integer");
   }
 
@@ -887,7 +888,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     if (!sym)
     {
       std::string var_name = arg["id"].get<std::string>();
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "NameError", "variable '" + var_name + "' is not defined");
     }
 
@@ -896,7 +897,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 
     if (operand_type != char_type() && py_type != "str")
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "TypeError",
         "ord() expected string of length 1, but " + py_type + " found");
     }
@@ -939,14 +940,14 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
         return typecast_exprt(var_expr, int_type());
       }
 
-      return gen_exception_raise("ValueError", "ord() requires a character");
+      return converter_.get_exception_handler().gen_exception_raise("ValueError", "ord() requires a character");
     }
 
     // Compile-time extraction for constant symbols
     auto value_opt = extract_string_from_symbol(sym);
     if (!value_opt)
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "ValueError", "failed to extract string from symbol");
     }
 
@@ -958,7 +959,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     arg.erase("ctx");
   }
   else
-    return gen_exception_raise("TypeError", "ord() argument must be a string");
+    return converter_.get_exception_handler().gen_exception_raise("TypeError", "ord() argument must be a string");
 
   // Replace the arg with the integer value
   arg["value"] = code_point;
@@ -1120,7 +1121,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 
   // Reject strings early
   if (is_string_arg(arg))
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "bad operand type for abs(): 'str'");
 
   // If the argument is a numeric literal, evaluate abs() at compile time
@@ -1159,7 +1160,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     }
     catch (const std::exception &e)
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "TypeError", "failed to infer operand type for abs()");
     }
   }
@@ -1183,7 +1184,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     else
     {
       // Variable could not be resolved
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "NameError", "variable '" + var_name + "' is not defined");
     }
   }
@@ -1191,12 +1192,12 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   // Final fallback if no type is available
   std::string arg_type = arg.value("type", "");
   if (arg_type.empty())
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "operand to abs() is missing a type");
 
   // Only numeric types are valid operands for abs()
   if (arg_type != "int" && arg_type != "float" && arg_type != "complex")
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "bad operand type for abs(): '" + arg_type + "'");
 
   // Fallback for unsupported symbolic expressions (e.g., complex)
@@ -1411,13 +1412,13 @@ exprt function_call_expr::build_constant_from_arg() const
       {
         std::string m = "could not convert string to float : '" +
                         arg["value"].get<std::string>() + "'";
-        return gen_exception_raise("ValueError", m);
+        return converter_.get_exception_handler().gen_exception_raise("ValueError", m);
       }
       catch (const std::out_of_range &)
       {
         std::string m = "could not convert string to float : '" +
                         arg["value"].get<std::string>() + "' (out of range)";
-        return gen_exception_raise("ValueError", m);
+        return converter_.get_exception_handler().gen_exception_raise("ValueError", m);
       }
     }
   }
@@ -1438,7 +1439,7 @@ exprt function_call_expr::build_constant_from_arg() const
         std::string m = "float() conversion may fail - variable" + var_name +
                         "may contain non-float string";
 
-        return gen_exception_raise("ValueError", m);
+        return converter_.get_exception_handler().gen_exception_raise("ValueError", m);
       }
     }
   }
@@ -2060,7 +2061,7 @@ exprt function_call_expr::validate_re_module_args() const
       std::ostringstream msg;
       msg << "expected string or bytes-like object, got '"
           << type_handler_.type_to_string(arg_type) << "'";
-      return gen_exception_raise("TypeError", msg.str());
+      return converter_.get_exception_handler().gen_exception_raise("TypeError", msg.str());
     }
   }
 
@@ -2185,7 +2186,7 @@ exprt function_call_expr::handle_math_comb() const
   // Type checking: both arguments must be integers
   if (!n_expr.type().is_signedbv() && !n_expr.type().is_unsignedbv())
   {
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError",
       "'" + type_handler_.type_to_string(n_expr.type()) +
         "' object cannot be interpreted as an integer");
@@ -2193,7 +2194,7 @@ exprt function_call_expr::handle_math_comb() const
 
   if (!k_expr.type().is_signedbv() && !k_expr.type().is_unsignedbv())
   {
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError",
       "'" + type_handler_.type_to_string(k_expr.type()) +
         "' object cannot be interpreted as an integer");
@@ -2404,7 +2405,7 @@ function_call_expr::get_dispatch_table()
 
          // Create the exception raise as a code expression
          exprt raise_expr =
-           gen_exception_raise("ValueError", "math domain error");
+           converter_.get_exception_handler().gen_exception_raise("ValueError", "math domain error");
          locationt loc = converter_.get_location_from_decl(call_);
          raise_expr.location() = loc;
          raise_expr.location().user_provided(true);
@@ -3391,7 +3392,7 @@ exprt function_call_expr::handle_general_function_call()
         msg << func_name << "() missing required positional argument: '"
             << param_name << "'";
 
-        exprt exception = gen_exception_raise("TypeError", msg.str());
+        exprt exception = converter_.get_exception_handler().gen_exception_raise("TypeError", msg.str());
         locationt loc = converter_.get_location_from_decl(call_);
         exception.location() = loc;
         exception.location().user_provided(true);
@@ -3452,14 +3453,6 @@ function_call_expr::strip_ctor_self_parameters(const exprt::operandst &args)
     }
   }
   return new_args;
-}
-
-exprt function_call_expr::gen_exception_raise(
-  std::string exc,
-  std::string message) const
-{
-  return python_exception_utils::make_exception_raise(
-    type_handler_, exc, message, nullptr);
 }
 
 std::vector<std::string>
@@ -3687,7 +3680,7 @@ exprt function_call_expr::check_argument_types(
       msg << "TypeError: Argument " << (i + 1) << " has incompatible type '"
           << actual_str << "'; expected '" << expected_str << "'";
 
-      exprt exception = gen_exception_raise("TypeError", msg.str());
+      exprt exception = converter_.get_exception_handler().gen_exception_raise("TypeError", msg.str());
 
       // Add location information from the call
       locationt loc = converter_.get_location_from_decl(call_);
@@ -3734,7 +3727,7 @@ exprt function_call_expr::check_argument_types(
             << "' has incompatible type '" << actual_str << "'; expected '"
             << expected_str << "'";
 
-        exprt exception = gen_exception_raise("TypeError", msg.str());
+        exprt exception = converter_.get_exception_handler().gen_exception_raise("TypeError", msg.str());
 
         locationt loc = converter_.get_location_from_decl(call_);
         exception.location() = loc;
