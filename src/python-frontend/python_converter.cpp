@@ -6822,16 +6822,48 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::TRY:
     {
-      exprt new_expr = codet("cpp-catch");
-      exprt try_block = get_block(element["body"]);
-      exprt handler = get_block(element["handlers"]);
-      new_expr.move_to_operands(try_block);
+        // Check if this try block wraps a failed import (module_not_found = true)
+        // and has an ImportError handler. If so, statically take the except branch.
+        bool has_missing_import = false;
+        for (const auto &stmt : element["body"])
+        {
+            if (
+                (stmt["_type"] == "Import" || stmt["_type"] == "ImportFrom") &&
+                stmt.value("module_not_found", false))
+            {
+                has_missing_import = true;
+                break;
+            }
+        }
 
-      for (const auto &op : handler.operands())
-        new_expr.copy_to_operands(op);
+        if (has_missing_import)
+        {
+            for (const auto &handler : element["handlers"])
+            {
+                if (
+                    !handler["type"].is_null() &&
+                    handler["type"].value("id", "") == "ImportError")
+                {
+                    // Directly emit only the except-handler body
+                    exprt except_body = get_block(handler["body"]);
+                    for (const auto &op : except_body.operands())
+                        block.copy_to_operands(op);
+                    break;
+                }
+            }
+            break;
+        }
 
-      block.move_to_operands(new_expr);
-      break;
+        exprt new_expr = codet("cpp-catch");
+        exprt try_block = get_block(element["body"]);
+        exprt handler = get_block(element["handlers"]);
+        new_expr.move_to_operands(try_block);
+
+        for (const auto &op : handler.operands())
+            new_expr.copy_to_operands(op);
+
+        block.move_to_operands(new_expr);
+        break;
     }
     case StatementType::EXCEPTHANDLER:
     {

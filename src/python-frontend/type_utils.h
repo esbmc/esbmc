@@ -124,7 +124,8 @@ public:
       name == "ZeroDivisionError" || name == "AssertionError" ||
       name == "NameError" || name == "OSError" || name == "FileNotFoundError" ||
       name == "FileExistsError" || name == "PermissionError" ||
-      name == "NotImplementedError");
+      name == "NotImplementedError" || name == "ImportError" ||
+      name == "ModuleNotFoundError" || name == "RuntimeError");
   }
 
   static bool is_c_model_func(const std::string &func_name)
