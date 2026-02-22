@@ -1,6 +1,20 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-# Set arguments that should be available for every OS
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT_DIR"
+
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+
+SUDO=""
+if [[ "$(id -u)" -ne 0 ]]; then
+  SUDO="sudo"
+fi
+
+# Set arguments that should be available for every OS.
 BASE_ARGS="\
     -DDOWNLOAD_DEPENDENCIES=On \
     -GNinja \
@@ -10,7 +24,7 @@ BASE_ARGS="\
     -DENABLE_SOLIDITY_FRONTEND=On \
     -DENABLE_JIMPLE_FRONTEND=On \
     -DENABLE_PYTHON_FRONTEND=On \
-    -DCMAKE_INSTALL_PREFIX:PATH=$PWD/release \
+    -DCMAKE_INSTALL_PREFIX:PATH=$ROOT_DIR/release \
 "
 
 SOLVER_FLAGS="\
@@ -23,214 +37,522 @@ SOLVER_FLAGS="\
 
 COMPILER_ARGS=''
 
-STATIC=
+STATIC=""
 CLANG_VERSION=16
 
-ARCH=`uname -m`
+GMP_VERSION="6.3.0"
+GMP_TARBALL="gmp-${GMP_VERSION}.tar.xz"
+DEPS_CACHE_DIR="$ROOT_DIR/.deps"
+GMP_ARCHIVE_PATH="$DEPS_CACHE_DIR/$GMP_TARBALL"
+
+PLATFORM_CONFIGURED=0
+FETCH_DONE=0
+
+PACKAGE_INSTALL_CMD=()
 
 error() {
-    echo "error: $*" >&2
-    exit 1
+  echo "error: $*" >&2
+  exit 1
 }
 
-# Ubuntu setup (pre-config)
-ubuntu_setup () {
-    # Tested on ubuntu 22.04
-    PKGS="\
-        python-is-python3 csmith python3 libbz2-dev liblzma-dev \
-        git unzip wget curl libcsmith-dev gperf \
-        cmake bison flex g++-multilib linux-libc-dev \
-        libboost-date-time-dev libboost-program-options-dev \
-        libboost-iostreams-dev libboost-system-dev \
-        libboost-filesystem-dev ninja-build python3-setuptools \
-        libtinfo-dev python3-pip python3-toml \
-        openjdk-11-jdk tar xz-utils \
-    "
-    if [ -z "$STATIC" ]; then STATIC=ON; fi
-    if [ $STATIC = OFF ]; then
-        PKGS="$PKGS \
-            llvm-$CLANG_VERSION-dev \
-            libclang-$CLANG_VERSION-dev \
-            libclang-cpp$CLANG_VERSION-dev \
-            libz3-dev \
-        "
+log() {
+  echo "[~] $*"
+}
+
+run_with_sudo() {
+  if [[ -n "$SUDO" ]]; then
+    "$SUDO" "$@"
+  else
+    "$@"
+  fi
+}
+
+ensure_build_dir() {
+  mkdir -p build
+}
+
+configure_project() {
+  ensure_build_dir
+  cd build
+  printf "Running CMake:"
+  printf " '%s'" $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  echo
+  $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  cd "$ROOT_DIR"
+}
+
+check_configured_build() {
+  [[ -f "$ROOT_DIR/build/CMakeCache.txt" ]] || error "build is not configured. Run '$0 deps [flags]' first"
+}
+
+download_file_with_fallback() {
+  local output="$1"
+  shift
+  local url
+
+  for url in "$@"; do
+    echo "Trying $url ..."
+    if command -v wget >/dev/null 2>&1; then
+      if wget -q --show-progress -O "$output" "$url"; then
+        return 0
+      fi
+    fi
+  done
+
+  return 1
+}
+
+fetch_gmp_source() {
+  mkdir -p "$DEPS_CACHE_DIR"
+
+  if [[ -f "$GMP_ARCHIVE_PATH" ]]; then
+    log "Using cached $GMP_TARBALL"
+    return
+  fi
+
+  log "Fetching $GMP_TARBALL"
+  download_file_with_fallback \
+    "$GMP_ARCHIVE_PATH" \
+    "https://ftp.gnu.org/gnu/gmp/$GMP_TARBALL" \
+    "https://mirrors.kernel.org/gnu/gmp/$GMP_TARBALL" \
+    "https://ftpmirror.gnu.org/gmp/$GMP_TARBALL" \
+    || error "failed to download $GMP_TARBALL"
+}
+
+# Configure flags once per invocation.
+prepare_platform_config() {
+  if [[ "$PLATFORM_CONFIGURED" -eq 1 ]]; then
+    return
+  fi
+
+  case "$OS" in
+    Linux)
+      if [[ -z "$STATIC" ]]; then
+        STATIC=ON
+      fi
+
+      if [[ "$STATIC" == "OFF" ]]; then
         BASE_ARGS="$BASE_ARGS \
             -DClang_DIR=/usr/lib/cmake/clang-$CLANG_VERSION \
             -DLLVM_DIR=/usr/lib/llvm-$CLANG_VERSION/lib/cmake/llvm \
             -DZ3_DIR=/usr \
         "
-        echo "Configuring shared Ubuntu build with Clang-$CLANG_VERSION frontend"
-    else
-        echo "Configuring static Ubuntu build"
-    fi
+        log "Configuring shared Ubuntu build with Clang-$CLANG_VERSION frontend"
+      else
+        log "Configuring static Ubuntu build"
+      fi
 
-    if [ $ARCH = "aarch64" ]
-    then
-        echo "Detected ARM64 Linux!"
-        # TODO: We should start using container builds in actions!
+      BASE_ARGS="$BASE_ARGS -DBUILD_STATIC=$STATIC"
+      SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON -DENABLE_CVC5=On"
+
+      if [[ "$ARCH" == "aarch64" ]]; then
+        log "Detected ARM64 Linux"
         SOLVER_FLAGS="$SOLVER_FLAGS \
-            -DENABLE_Z3=On -DZ3_DIR=/usr \
             -DENABLE_GOTO_CONTRACTOR=OFF \
             -DENABLE_BITWUZLA=OFF \
         "
-        return
-    fi
+      fi
+      ;;
 
-    sudo apt-get update &&
-    sudo apt-get install -y $PKGS &&
-
-    # Install GMP 6.3.0 from source (needed for bitwuzla)
-    echo "Installing GMP 6.3.0 from source..." &&
-    ORIGINAL_DIR="$PWD" &&
-    cd /tmp &&
-
-    URLS="https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz \
-        https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz \
-        https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz \
-    "
-
-    for url in $URLS; do
-        echo "Trying $url ..."
-        if wget -q --show-progress "$url"; then
-            SUCCESS=1
-            break
-        fi
-    done &&
-
-    [ "$SUCCESS" -eq 1 ] || { echo "ERROR: Failed to download GMP"; exit 1; } &&
-
-    tar -xf gmp-6.3.0.tar.xz &&
-    cd gmp-6.3.0 &&
-    ./configure --prefix=/usr/local --enable-cxx --enable-static &&
-    make -j"$(nproc)" &&
-    sudo make install &&
-    sudo ldconfig &&
-    echo "GMP 6.3.0 installed successfully" &&
-    cd "$ORIGINAL_DIR" &&
-
-    echo "Installing Python dependencies" &&
-    pip3 install --user meson ast2json mypy &&
-    pip3 install --user pyparsing toml &&
-    pip3 install --user pyparsing tomli &&
-    meson --version &&
-
-    # Set environment variables for cmake to find the new GMP
-    export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH" &&
-    export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH" &&
-    export CMAKE_PREFIX_PATH="/usr/local:$CMAKE_PREFIX_PATH" &&
-
-    # Verify GMP installation
-    echo "Verifying GMP installation..." &&
-    pkg-config --modversion gmp || echo "Warning: GMP not found in pkg-config" &&
-    ls -la /usr/local/lib/libgmp* || echo "Warning: GMP libraries not found" &&
-
-    BASE_ARGS="$BASE_ARGS \
-        -DBUILD_STATIC=$STATIC \
-    " &&
-    SOLVER_FLAGS="$SOLVER_FLAGS \
-        -DENABLE_Z3=ON \
-        -DENABLE_CVC5=On \
-    "
-}
-
-ubuntu_post_setup () {
-  echo "No further steps needed for ubuntu"
-}
-
-# macOS setup (pre-config)
-macos_setup () {
-    echo "Configuring macOS build"
-    if [ -z "$STATIC" ]; then STATIC=OFF; fi
-    if [ $STATIC = ON ]; then
+    Darwin)
+      if [[ -z "$STATIC" ]]; then
+        STATIC=OFF
+      fi
+      if [[ "$STATIC" == "ON" ]]; then
         error "static macOS build is currently not supported"
-    fi
-    brew install \
-        z3 gmp csmith boost ninja python@3.12 automake bison flex \
-        llvm@$CLANG_VERSION &&
-    echo "Installing Python dependencies" &&
-    # Use Python 3.12 for compatibility (Python 3.14 removed ast.Str/ast.Num)
-    # Always use Python 3.12 on macOS (fixed version for CI compatibility)
-    PYTHON312_PATH=$(brew --prefix python@3.12)/bin/python3.12
-    export Python3_EXECUTABLE=$PYTHON312_PATH
-    PYTHON312_BIN=$(brew --prefix python@3.12)/bin
-    # Create python3 symlink to python3.12 in Python 3.12 bin directory (for ESBMC)
-    if [ ! -f "$PYTHON312_BIN/python3" ]; then
-        ln -sf python3.12 "$PYTHON312_BIN/python3"
-    fi
-    # Add Python 3.12 to PATH so that 'python3' command finds Python 3.12 (for ESBMC)
-    export PATH="$PYTHON312_BIN:$PATH"
-    # If virtual environment is available, use it for pip install; otherwise use system Python 3.12
-    if [ -n "$VIRTUAL_ENV" ]; then
-        pip install meson ast2json mypy pyparsing toml tomli jira
-    else
-        $PYTHON312_PATH -m pip install --user --break-system-packages meson ast2json mypy pyparsing toml tomli jira
-        # Add user Python bin directory to PATH for meson and other tools
-        export PATH="$HOME/Library/Python/3.12/bin:$PATH"
-    fi &&
-    meson --version &&
-    BASE_ARGS="$BASE_ARGS \
+      fi
+
+      BASE_ARGS="$BASE_ARGS \
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
         -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
         -DCMAKE_BUILD_TYPE=Debug \
-        -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release \
-        -DPython3_EXECUTABLE=$Python3_EXECUTABLE \
-    " &&
-    # macOS: Use Z3 solver (installed via brew)
-    SOLVER_FLAGS="\
+        -DCMAKE_INSTALL_PREFIX:PATH=$ROOT_DIR/release \
+      "
+
+      SOLVER_FLAGS="\
         -DENABLE_Z3=On \
-        -DZ3_DIR=$(brew --prefix z3) \
         -DENABLE_BOOLECTOR=Off \
         -DENABLE_BITWUZLA=Off \
         -DENABLE_GOTO_CONTRACTOR=Off \
-    "
+      "
+      ;;
+
+    *)
+      error "unsupported OS '$OS'"
+      ;;
+  esac
+
+  PLATFORM_CONFIGURED=1
 }
 
-macos_post_setup () {
-  echo "No further steps needed for macOS"
+collect_ubuntu_packages() {
+  prepare_platform_config
+
+  UBUNTU_PACKAGES=(
+    python-is-python3
+    csmith
+    python3
+    libbz2-dev
+    liblzma-dev
+    git
+    unzip
+    wget
+    curl
+    libcsmith-dev
+    gperf
+    cmake
+    bison
+    flex
+    g++-multilib
+    linux-libc-dev
+    libboost-date-time-dev
+    libboost-program-options-dev
+    libboost-iostreams-dev
+    libboost-system-dev
+    libboost-filesystem-dev
+    ninja-build
+    python3-setuptools
+    libtinfo-dev
+    python3-pip
+    python3-toml
+    openjdk-11-jdk
+    tar
+    xz-utils
+  )
+
+  if [[ "$STATIC" == "OFF" ]]; then
+    UBUNTU_PACKAGES+=(
+      "llvm-$CLANG_VERSION-dev"
+      "libclang-$CLANG_VERSION-dev"
+      "libclang-cpp${CLANG_VERSION}-dev"
+      libz3-dev
+    )
+  fi
 }
 
+collect_macos_formulae() {
+  prepare_platform_config
+
+  MACOS_FORMULAE=(
+    cmake
+    z3
+    gmp
+    csmith
+    boost
+    ninja
+    python@3.12
+    automake
+    bison
+    flex
+    "llvm@$CLANG_VERSION"
+  )
+}
+
+set_linux_install_command_for_missing() {
+  local missing=("$@")
+  PACKAGE_INSTALL_CMD=(apt-get install -y "${missing[@]}")
+  if [[ -n "$SUDO" ]]; then
+    PACKAGE_INSTALL_CMD=("$SUDO" "${PACKAGE_INSTALL_CMD[@]}")
+  fi
+}
+
+set_macos_install_command_for_missing() {
+  local missing=("$@")
+  PACKAGE_INSTALL_CMD=(brew install "${missing[@]}")
+}
+
+check_ubuntu_packages() {
+  command -v apt-get >/dev/null 2>&1 || error "unsupported Linux distribution: apt-get not found"
+
+  collect_ubuntu_packages
+
+  local missing=()
+  local pkg
+  for pkg in "${UBUNTU_PACKAGES[@]}"; do
+    if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+      missing+=("$pkg")
+    fi
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    PACKAGE_INSTALL_CMD=()
+    log "OK: Ubuntu packages required for build are installed"
+    return 0
+  fi
+
+  set_linux_install_command_for_missing "${missing[@]}"
+  echo "[!] Missing Ubuntu packages: ${missing[*]}"
+  echo "[?] Install with: ${PACKAGE_INSTALL_CMD[*]}"
+  return 1
+}
+
+check_macos_formulae() {
+  command -v brew >/dev/null 2>&1 || error "Homebrew is required"
+
+  collect_macos_formulae
+
+  local missing=()
+  local formula
+  for formula in "${MACOS_FORMULAE[@]}"; do
+    if ! brew list --versions "$formula" >/dev/null 2>&1; then
+      missing+=("$formula")
+    fi
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    PACKAGE_INSTALL_CMD=()
+    log "OK: macOS brew formulae required for build are installed"
+    return 0
+  fi
+
+  set_macos_install_command_for_missing "${missing[@]}"
+  echo "[!] Missing brew formulae: ${missing[*]}"
+  echo "[?] Install with: ${PACKAGE_INSTALL_CMD[*]}"
+  return 1
+}
+
+check_system_dependencies() {
+  case "$OS" in
+    Linux)
+      check_ubuntu_packages
+      ;;
+    Darwin)
+      check_macos_formulae
+      ;;
+    *)
+      error "unsupported OS '$OS'"
+      ;;
+  esac
+}
+
+install_system_dependencies() {
+  if check_system_dependencies; then
+    return
+  fi
+
+  [[ ${#PACKAGE_INSTALL_CMD[@]} -gt 0 ]] || error "no package installation command prepared"
+  log "Installing missing system dependencies"
+  "${PACKAGE_INSTALL_CMD[@]}"
+}
+
+install_gmp_linux() {
+  if [[ "$ARCH" == "aarch64" ]]; then
+    log "Skipping GMP source build on ARM64 Linux"
+    return
+  fi
+
+  if command -v pkg-config >/dev/null 2>&1; then
+    local installed_version
+    installed_version="$(pkg-config --modversion gmp 2>/dev/null || true)"
+    if [[ "$installed_version" == "$GMP_VERSION" ]]; then
+      log "GMP $GMP_VERSION already installed"
+      return
+    fi
+  fi
+
+  fetch_gmp_source
+
+  log "Installing GMP $GMP_VERSION from source"
+  local build_root
+  build_root="$(mktemp -d)"
+  tar -xf "$GMP_ARCHIVE_PATH" -C "$build_root"
+  cd "$build_root/gmp-$GMP_VERSION"
+  ./configure --prefix=/usr/local --enable-cxx --enable-static
+  make -j"$(nproc)"
+  run_with_sudo make install
+  run_with_sudo ldconfig || true
+  cd "$ROOT_DIR"
+  rm -rf "$build_root"
+}
+
+install_python_deps_linux() {
+  log "Installing Python dependencies"
+  python3 -m pip install --user meson ast2json mypy pyparsing toml tomli
+  meson --version
+}
+
+install_python_deps_macos() {
+  log "Installing Python dependencies"
+
+  local py312
+  local py312_bin
+  py312="$(brew --prefix python@3.12)/bin/python3.12"
+  py312_bin="$(brew --prefix python@3.12)/bin"
+
+  export Python3_EXECUTABLE="$py312"
+
+  # Ensure python3 points to python3.12 in brew's Python 3.12 bin directory.
+  if [[ ! -f "$py312_bin/python3" ]]; then
+    ln -sf python3.12 "$py312_bin/python3"
+  fi
+
+  export PATH="$py312_bin:$HOME/Library/Python/3.12/bin:$PATH"
+
+  if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+    pip install meson ast2json mypy pyparsing toml tomli jira
+  else
+    "$py312" -m pip install --user --break-system-packages meson ast2json mypy pyparsing toml tomli jira
+  fi
+
+  meson --version
+
+  SOLVER_FLAGS="$SOLVER_FLAGS -DZ3_DIR=$(brew --prefix z3)"
+  BASE_ARGS="$BASE_ARGS -DPython3_EXECUTABLE=$Python3_EXECUTABLE"
+}
+
+run_fetch() {
+  if [[ "$FETCH_DONE" -eq 1 ]]; then
+    return
+  fi
+
+  case "$OS" in
+    Linux)
+      run_with_sudo apt-get update
+      fetch_gmp_source
+      ;;
+    Darwin)
+      brew update
+      ;;
+    *)
+      error "unsupported OS '$OS'"
+      ;;
+  esac
+
+  FETCH_DONE=1
+}
+
+run_check() {
+  log "Checking dependency prerequisites"
+  check_system_dependencies
+
+  if [[ -f "$ROOT_DIR/build/CMakeCache.txt" ]]; then
+    log "Configured build directory detected"
+  else
+    log "No configured build directory detected (expected before first install)"
+  fi
+}
+
+run_install_deps() {
+  prepare_platform_config
+
+  # Keep install independent from whether fetch was called explicitly.
+  if [[ "$FETCH_DONE" -eq 0 ]]; then
+    run_fetch
+  fi
+
+  install_system_dependencies
+
+  case "$OS" in
+    Linux)
+      install_gmp_linux
+      install_python_deps_linux
+      export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+      export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"
+      export CMAKE_PREFIX_PATH="/usr/local:${CMAKE_PREFIX_PATH:-}"
+      ;;
+    Darwin)
+      install_python_deps_macos
+      ;;
+    *)
+      error "unsupported OS '$OS'"
+      ;;
+  esac
+
+  configure_project
+}
+
+run_build_esbmc() {
+  check_configured_build
+  cd build
+  cmake --build .
+  cd "$ROOT_DIR"
+}
+
+run_install_esbmc() {
+  check_configured_build
+  cd build
+  cmake --install .
+  cd "$ROOT_DIR"
+
+  case "$OS" in
+    Linux)
+      log "No further steps needed for Ubuntu"
+      ;;
+    Darwin)
+      log "No further steps needed for macOS"
+      ;;
+    *)
+      error "unsupported OS '$OS'"
+      ;;
+  esac
+}
 
 usage() {
-    echo "$0 [-OPTS]"
-    echo
-    echo "Options [defaults]:"
-    echo "  -h         display this help message"
-    echo "  -b BTYPE   set cmake build type to BTYPE [RelWithDebInfo]"
-    echo "  -s STYPE   enable sanitizer STYPE and compile with clang [disabled]"
-    echo "  -e ON|OFF  enable/disable -Werror [OFF]"
-    echo "  -r ON|OFF  enable/disable 'benchbringup' [OFF]"
-    echo "  -d         enable debug output for this script and c2goto"
-    echo "  -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]"
-    echo "  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [11]"
-    echo "  -C         build an SV-COMP version [disabled]"
-    echo "  -B ON|OFF  enable/disable esbmc bundled libc [ON]"
-    echo "  -x ON|OFF  enable/disable esbmc cheri [OFF]"
-    echo
-    echo "This script prepares the environment, downloads dependencies, configures"
-    echo "the ESBMC build and runs the commands to compile and install ESBMC into"
-    echo "the directory: $PWD/release"
-    echo "Needs to be executed from the top-level directory of ESBMC's source tree."
-    echo "The build directory 'build' must not exist and will be created by this script."
-    echo
-    echo "Supported environments are: Ubuntu-22.04 and macOS."
+  cat <<USAGE
+$0 [-OPTS] [deps] [build] [install]
+
+Options [defaults]:
+  -h         display this help message
+  -b BTYPE   set cmake build type to BTYPE [RelWithDebInfo]
+  -s STYPE   enable sanitizer STYPE and compile with clang [disabled]
+  -e ON|OFF  enable/disable -Werror [OFF]
+  -r ON|OFF  enable/disable 'benchbringup' [OFF]
+  -d         enable debug output for this script and c2goto
+  -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]
+  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [16]
+  -C         build an SV-COMP version [disabled]
+  -B ON|OFF  enable/disable esbmc bundled libc [ON]
+  -x ON|OFF  enable/disable esbmc cheri [OFF]
+
+Commands:
+  fetch-deps         fetch dependency metadata and source archives [internal]
+  check-deps         check required system dependencies and print install command when missing [internal]
+  install-deps       install dependencies and configure the build directory [internal]
+  deps               run 'fetch-deps', 'install-deps' and 'check-deps' in sequence
+  build              build ESBMC (does not install dependencies)
+  install            install ESBMC from the configured build directory
+
+Default behavior (when no command is given): deps build install
+
+Needs to be executed from the top-level directory of ESBMC's source tree.
+Supported environments are: Ubuntu-22.04 and macOS.
+USAGE
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts hb:s:e:r:dS:c:CB:x flag
-do
-    case "${flag}" in
-    h) usage; exit 0 ;;
-    b) BASE_ARGS="$BASE_ARGS -DCMAKE_BUILD_TYPE=${OPTARG}" ;;
-    s) BASE_ARGS="$BASE_ARGS -DSANITIZER_TYPE=${OPTARG}"
-       COMPILER_ARGS="$COMPILER_ARGS CC=clang CXX=clang++" ;;
-    e) BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=${OPTARG}" ;;
-    r) BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=${OPTARG}" ;;
-    d) set -x; export ESBMC_OPTS='--verbosity 9' ;;
-    S) STATIC=$OPTARG ;; # should be capital ON or OFF
-    c) CLANG_VERSION=$OPTARG ;; # LLVM/Clang major version
-    C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
-       SOLVER_FLAGS="\
+while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
+  case "$flag" in
+    h)
+      usage
+      exit 0
+      ;;
+    b)
+      BASE_ARGS="$BASE_ARGS -DCMAKE_BUILD_TYPE=${OPTARG}"
+      ;;
+    s)
+      BASE_ARGS="$BASE_ARGS -DSANITIZER_TYPE=${OPTARG}"
+      COMPILER_ARGS="$COMPILER_ARGS CC=clang CXX=clang++"
+      ;;
+    e)
+      BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=${OPTARG}"
+      ;;
+    r)
+      BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=${OPTARG}"
+      ;;
+    d)
+      set -x
+      export ESBMC_OPTS='--verbosity 9'
+      ;;
+    S)
+      STATIC="$OPTARG"
+      ;;
+    c)
+      CLANG_VERSION="$OPTARG"
+      ;;
+    C)
+      BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
+      SOLVER_FLAGS="\
           -DENABLE_BOOLECTOR=On \
           -DENABLE_YICES=On \
           -DENABLE_CVC4=OFF \
@@ -238,57 +560,63 @@ do
           -DENABLE_Z3=On \
           -DENABLE_MATHSAT=ON \
           -DENABLE_GOTO_CONTRACTOR=OFF \
-          -DACADEMIC_BUILD=ON"  ;;
-    B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
-    x) BASE_ARGS="\
-          $BASE_ARGS \
+          -DACADEMIC_BUILD=ON"
+      ;;
+    B)
+      BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG"
+      ;;
+    x)
+      BASE_ARGS="$BASE_ARGS \
           -DENABLE_SOLIDITY_FRONTEND=OFF \
           -DENABLE_JIMPLE_FRONTEND=OFF \
           -DENABLE_PYTHON_FRONTEND=OFF \
           -DESBMC_CHERI=ON"
-        SOLVER_FLAGS="\
+      SOLVER_FLAGS="\
           -DENABLE_BOOLECTOR=On \
-          -DENABLE_Z3=On" ;;
-    *) exit 1 ;;
-    esac
+          -DENABLE_Z3=On"
+      ;;
+    *)
+      error "invalid option"
+      ;;
+  esac
 done
-if [ $# -ge $OPTIND ]; then
-    shift $((OPTIND-1))
-    error "unknown trailing parameters: $*"
+shift $((OPTIND - 1))
+
+ACTIONS=("$@")
+if [[ ${#ACTIONS[@]} -eq 0 ]]; then
+  ACTIONS=(deps build install)
 fi
 
-# Detect the platform ($OSTYPE was not working on github actions for ubuntu)
-# Note: Linux here means Ubuntu, this will mostly not work anywhere else.
-OS=`uname`
-
-# Create build directory
-mkdir -p build && cd build || exit $?
-
-case $OS in
-  'Linux')
-    ubuntu_setup
-    ;;
-  'Darwin')
-    macos_setup
-    ;;
-  *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
-esac || exit $?
-
-
-# Configure ESBMC
-printf "Running CMake:"
-printf " '%s'" $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS
-echo
-$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
-# Compile ESBMC
-cmake --build . && ninja install || exit $?
-
-case $OS in
-  'Linux')
-    ubuntu_post_setup
-    ;;
-  'Darwin')
-    macos_post_setup
-    ;;
-  *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
-esac || exit $?
+for action in "${ACTIONS[@]}"; do
+  case "$action" in
+    deps)
+      run_fetch
+      run_install_deps
+      run_check
+      ;;
+    fetch-deps)
+      run_fetch
+      ;;
+    check-deps)
+      run_check
+      ;;
+    install-deps)
+      run_install_deps
+      ;;
+    build)
+      run_build_esbmc
+      ;;
+    install)
+      run_install_esbmc
+      ;;
+    help)
+      usage
+      exit 0
+      ;;
+    *)
+      log "unknown command: $action"
+      usage
+      exit 1
+      ;;
+  esac
+done
