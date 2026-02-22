@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+on_error() {
+  local line="$1"
+  local cmd="$2"
+  echo "[x] build.sh failed at line ${line}: ${cmd}" >&2
+}
+trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
@@ -39,6 +46,11 @@ COMPILER_ARGS=''
 
 STATIC=""
 CLANG_VERSION=16
+MIN_MACOS_CLANG_VERSION=17
+
+if [[ "$OS" == "Darwin" ]]; then
+  CLANG_VERSION="$MIN_MACOS_CLANG_VERSION"
+fi
 
 GMP_VERSION="6.3.0"
 GMP_TARBALL="gmp-${GMP_VERSION}.tar.xz"
@@ -57,6 +69,16 @@ error() {
 
 log() {
   echo "[~] $*"
+}
+
+validate_clang_version() {
+  if ! [[ "$CLANG_VERSION" =~ ^[0-9]+$ ]]; then
+    error "invalid clang version '$CLANG_VERSION': expected numeric major version"
+  fi
+
+  if [[ "$OS" == "Darwin" ]] && (( CLANG_VERSION < MIN_MACOS_CLANG_VERSION )); then
+    error "macOS requires llvm/clang >= ${MIN_MACOS_CLANG_VERSION}; got $CLANG_VERSION"
+  fi
 }
 
 run_with_sudo() {
@@ -161,6 +183,7 @@ prepare_platform_config() {
       if [[ "$STATIC" == "ON" ]]; then
         error "static macOS build is currently not supported"
       fi
+      log "Configuring macOS build with llvm/clang ${CLANG_VERSION}"
 
       BASE_ARGS="$BASE_ARGS \
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
@@ -500,7 +523,7 @@ Options [defaults]:
   -r ON|OFF  enable/disable 'benchbringup' [OFF]
   -d         enable debug output for this script and c2goto
   -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]
-  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [16]
+  -c VERS    use packaged clang-VERS [16 on Linux, >=17 required on macOS]
   -C         build an SV-COMP version [disabled]
   -B ON|OFF  enable/disable esbmc bundled libc [ON]
   -x ON|OFF  enable/disable esbmc cheri [OFF]
@@ -581,6 +604,8 @@ while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
   esac
 done
 shift $((OPTIND - 1))
+
+validate_clang_version
 
 ACTIONS=("$@")
 if [[ ${#ACTIONS[@]} -eq 0 ]]; then
