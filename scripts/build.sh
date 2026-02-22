@@ -213,7 +213,7 @@ collect_ubuntu_packages() {
     libboost-filesystem-dev
     ninja-build
     python3-setuptools
-    libtinfo-dev
+    libncurses-dev
     python3-pip
     python3-toml
     openjdk-11-jdk
