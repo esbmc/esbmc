@@ -216,7 +216,7 @@ collect_ubuntu_packages() {
     libncurses-dev
     python3-pip
     python3-toml
-    openjdk-11-jdk
+    default-jdk
     tar
     xz-utils
   )
