@@ -26,24 +26,24 @@ def __ESBMC_hypot(x: float, y: float) -> float:
     ...
 
 
-pi: float = 3.14153
-e: float = 2.71828
+pi: float = 3.141592653589793
+e: float = 2.718281828459045
 inf: float = float('inf')
-tau: float = 6.28306
+tau: float = 6.283185307179586
 nan: float = float('nan')
 
 
 def comb(n: int, k: int) -> int:
     """
     Calculate binomial coefficient C(n, k) = n! / (k! * (n-k)!)
-    
+
     Args:
         n: Total number of items (non-negative integer)
         k: Number of items to choose (non-negative integer)
-    
+
     Returns:
         The binomial coefficient, or 0 if k > n
-        
+
     Raises:
         ValueError: If n or k are negative
         TypeError: If n or k are not integers
