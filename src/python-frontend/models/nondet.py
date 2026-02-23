@@ -104,16 +104,13 @@ def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
             k: int = nondet_int()
         else:
             k1: Any = key_type
-        # TODO here we should do like
+        # TODO here we should improve like
         # elif key_type is bool:
-        #   k_bool: Any = nondet_bool()
+        #   k: Any = nondet_bool()
         # elif key_type is float:
-        #   k_float: Any = nondet_float()
-        # but for now we dont int/bool... keys,
-        # so we just return key_type directly if it is not None
+        #   k: Any = nondet_float()
 
         # Generate new value each iteration
-        # TODO same as key_type
         if value_type is None:
             v: int = nondet_int()
         else:
