@@ -81,6 +81,14 @@ validate_clang_version() {
   fi
 }
 
+require_on_off() {
+  local opt_name="$1"
+  local opt_value="$2"
+  if [[ "$opt_value" != "ON" && "$opt_value" != "OFF" ]]; then
+    error "invalid value '$opt_value' for $opt_name: expected ON or OFF"
+  fi
+}
+
 run_with_sudo() {
   if [[ -n "$SUDO" ]]; then
     "$SUDO" "$@"
@@ -566,9 +574,11 @@ while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
       COMPILER_ENV=(CC=clang CXX=clang++)
       ;;
     e)
+      require_on_off "-e" "$OPTARG"
       BASE_ARGS+=("-DENABLE_WERROR=${OPTARG}")
       ;;
     r)
+      require_on_off "-r" "$OPTARG"
       BASE_ARGS+=("-DBENCHBRINGUP=${OPTARG}")
       ;;
     d)
@@ -576,6 +586,7 @@ while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
       export ESBMC_OPTS='--verbosity 9'
       ;;
     S)
+      require_on_off "-S" "$OPTARG"
       STATIC="$OPTARG"
       ;;
     c)
@@ -595,9 +606,11 @@ while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
       )
       ;;
     B)
+      require_on_off "-B" "$OPTARG"
       BASE_ARGS+=("-DESBMC_BUNDLE_LIBC=$OPTARG")
       ;;
     x)
+      require_on_off "-x" "$OPTARG"
       BASE_ARGS+=("-DESBMC_CHERI=$OPTARG")
       if [[ "$OPTARG" == "ON" ]]; then
         BASE_ARGS+=(
