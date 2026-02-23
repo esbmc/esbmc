@@ -25,7 +25,7 @@ def check_usage():
         sys.exit(2)
 
 def is_imported_model(module_name):
-    models = ["math", "os", "numpy"]
+    models = ["math", "os", "numpy", "esbmc"]
     return module_name in models
 
 def is_unsupported_module(module_name):
@@ -78,7 +78,7 @@ def import_module_by_name(module_name, output_dir):
 
         print("ERROR: Module '{}' not found.".format(module_name))
         print("Please install it with: pip3 install {}".format(module_name))
-        sys.exit(4)
+        return None
 
 
 def encode_bytes(value):
@@ -214,7 +214,8 @@ def process_imports(node, output_dir):
         else:
             module = import_module_by_name(module_name, output_dir)
             if module is None:
-                # Module doesn't need processing (e.g., typing) - don't set full_path
+                # Mark this import node so the C++ frontend knows the module was not found
+                node.module_not_found = True
                 continue
 
             # Check if module has __file__ attribute (built-in C extensions don't)

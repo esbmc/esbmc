@@ -28,6 +28,7 @@ class tuple_handler;
 class python_typechecking;
 class python_class_builder;
 class python_lambda;
+class python_exception_handler;
 
 /**
  * @class python_converter
@@ -96,6 +97,16 @@ public:
     return dict_handler_;
   }
 
+  python_exception_handler &get_exception_handler()
+  {
+    return *exception_handler_;
+  }
+
+  const python_exception_handler &get_exception_handler() const
+  {
+    return *exception_handler_;
+  }
+
   python_math &get_math_handler()
   {
     return math_handler_;
@@ -131,6 +142,11 @@ public:
   const std::string &python_file() const
   {
     return current_python_file;
+  }
+
+  const std::string &main_python_filename() const
+  {
+    return main_python_file;
   }
 
   const std::string &current_function_name() const
@@ -214,6 +230,7 @@ private:
   friend class python_class_builder;
   friend class python_dict_handler;
   friend class python_set;
+  friend class python_exception_handler;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -257,8 +274,6 @@ private:
   exprt get_function_constant_return(const exprt &func_value);
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
-
-  symbolt create_assert_temp_variable(const locationt &location);
 
   exprt get_lambda_expr(const nlohmann::json &element);
 
@@ -430,48 +445,6 @@ private:
 
   void
   get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
-
-  // =========================================================================
-  // Assertion helper methods
-  // =========================================================================
-
-  /**
-   * @brief Handles assertions on list expressions.
-   *
-   * In Python, empty lists are falsy, so `assert []` should fail.
-   * This method converts `assert list_var` to `assert len(list_var) > 0`
-   * by calling __ESBMC_list_size and checking the result.
-   *
-   * @param element The assertion AST node.
-   * @param test The test expression (a list or list-returning function call).
-   * @param block The code block to add generated statements to.
-   * @param attach_assert_message Lambda to attach user assertion messages.
-   */
-  void handle_list_assertion(
-    const nlohmann::json &element,
-    const exprt &test,
-    code_blockt &block,
-    const std::function<void(code_assertt &)> &attach_assert_message);
-
-  /**
-   * @brief Handles assertions on function call expressions.
-   *
-   * Materializes function calls in assertions.
-   * For None-returning functions, executes the call and asserts False.
-   * For other functions, stores result in temp var and asserts on that.
-   *
-   * @param element The assertion AST node.
-   * @param func_call_expr The function call expression to assert on.
-   * @param is_negated Whether the assertion is negated (assert not func()).
-   * @param block The code block to add generated statements to.
-   * @param attach_assert_message Lambda to attach user assertion messages.
-   */
-  void handle_function_call_assertion(
-    const nlohmann::json &element,
-    const exprt &func_call_expr,
-    bool is_negated,
-    code_blockt &block,
-    const std::function<void(code_assertt &)> &attach_assert_message);
 
   // =========================================================================
   // Helper methods for get_var_assign
@@ -859,6 +832,7 @@ private:
   python_dict_handler *dict_handler_;
   python_typechecking *typechecker_ = nullptr;
   python_lambda *lambda_handler_;
+  python_exception_handler *exception_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;

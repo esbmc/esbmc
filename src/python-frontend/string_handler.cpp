@@ -3028,8 +3028,10 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list argument (the iterable to join)
   const nlohmann::json &list_arg = call_json["args"][0];
 
-  // Currently only support Name references (e.g., variable names)
-  // TODO: Support direct List literals such as " ".join(["a", "b"])
+  // Resolve the list JSON node from either a Name reference or a direct List literal
+  const nlohmann::json *list_node = nullptr;
+  nlohmann::json var_decl;
+
   if (
     list_arg.contains("_type") && list_arg["_type"] == "Name" &&
     list_arg.contains("id"))
@@ -3037,81 +3039,73 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     std::string var_name = list_arg["id"].get<std::string>();
 
     // Look up the variable in the AST to get its initialization value
-    nlohmann::json var_decl = json_utils::find_var_decl(
+    var_decl = json_utils::find_var_decl(
       var_name, converter_.get_current_func_name(), converter_.get_ast_json());
 
     if (var_decl.empty())
       throw std::runtime_error(
         "NameError: name '" + var_name + "' is not defined");
 
-    // Ensure the variable is a list with elements array
     if (!var_decl.contains("value"))
       throw std::runtime_error("join() requires a list");
 
-    const nlohmann::json &list_value = var_decl["value"];
-
-    if (
-      !list_value.contains("_type") || list_value["_type"] != "List" ||
-      !list_value.contains("elts"))
-      throw std::runtime_error("join() requires a list");
-
-    // Get the list elements from the AST
-    const auto &elements = list_value["elts"];
-
-    // Edge case: empty list returns empty string
-    if (elements.empty())
-    {
-      // Create a proper null-terminated empty string
-      typet empty_string_type = type_handler_.build_array(char_type(), 1);
-      exprt empty_str = gen_zero(empty_string_type);
-      // Explicitly set the first (and only) element to null terminator
-      empty_str.operands().at(0) = from_integer(0, char_type());
-      return empty_str;
-    }
-
-    // Convert JSON elements to ESBMC expressions
-    std::vector<exprt> elem_exprs;
-    for (const auto &elem : elements)
-    {
-      exprt elem_expr = converter_.get_expr(elem);
-      ensure_string_array(elem_expr);
-      elem_exprs.push_back(elem_expr);
-    }
-
-    // Edge case: single element returns the element itself (no separator)
-    if (elem_exprs.size() == 1)
-      return elem_exprs[0];
-
-    // Main algorithm: Build the joined string by extracting characters
-    // from all elements and separators, then constructing a single string.
-    // This avoids multiple concatenation operations which could cause
-    // null terminator issues.
-    std::vector<exprt> all_chars;
-
-    // Start with the first element
-    std::vector<exprt> first_chars =
-      string_builder_->extract_string_chars(elem_exprs[0]);
-    all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
-
-    // For each remaining element: add separator, then add element
-    for (size_t i = 1; i < elem_exprs.size(); ++i)
-    {
-      // Insert separator characters
-      std::vector<exprt> sep_chars =
-        string_builder_->extract_string_chars(separator);
-      all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
-
-      // Insert element characters
-      std::vector<exprt> elem_chars =
-        string_builder_->extract_string_chars(elem_exprs[i]);
-      all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
-    }
-
-    // Build final null-terminated string from all collected characters
-    return string_builder_->build_null_terminated_string(all_chars);
+    list_node = &var_decl["value"];
+  }
+  else if (list_arg.contains("_type") && list_arg["_type"] == "List")
+  {
+    list_node = &list_arg;
   }
 
-  throw std::runtime_error("join() argument must be a list of strings");
+  if (
+    !list_node || !list_node->contains("_type") ||
+    (*list_node)["_type"] != "List" || !list_node->contains("elts"))
+    throw std::runtime_error("join() argument must be a list of strings");
+
+  // Get the list elements from the AST
+  const auto &elements = (*list_node)["elts"];
+
+  // Edge case: empty list returns empty string
+  if (elements.empty())
+  {
+    typet empty_string_type = type_handler_.build_array(char_type(), 1);
+    exprt empty_str = gen_zero(empty_string_type);
+    empty_str.operands().at(0) = from_integer(0, char_type());
+    return empty_str;
+  }
+
+  // Convert JSON elements to ESBMC expressions
+  std::vector<exprt> elem_exprs;
+  for (const auto &elem : elements)
+  {
+    exprt elem_expr = converter_.get_expr(elem);
+    ensure_string_array(elem_expr);
+    elem_exprs.push_back(elem_expr);
+  }
+
+  // Edge case: single element returns the element itself (no separator)
+  if (elem_exprs.size() == 1)
+    return elem_exprs[0];
+
+  // Build the joined string by extracting characters from all elements
+  // and separators, then constructing a single string.
+  std::vector<exprt> all_chars;
+
+  std::vector<exprt> first_chars =
+    string_builder_->extract_string_chars(elem_exprs[0]);
+  all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
+
+  for (size_t i = 1; i < elem_exprs.size(); ++i)
+  {
+    std::vector<exprt> sep_chars =
+      string_builder_->extract_string_chars(separator);
+    all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+
+    std::vector<exprt> elem_chars =
+      string_builder_->extract_string_chars(elem_exprs[i]);
+    all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
+  }
+
+  return string_builder_->build_null_terminated_string(all_chars);
 }
 
 exprt string_handler::create_char_comparison_expr(

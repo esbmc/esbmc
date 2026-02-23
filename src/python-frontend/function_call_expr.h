@@ -234,12 +234,6 @@ private:
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
-  /*
-   * Convert the exception type to the constructor call
-   * Returns cpp-throw
-   */
-  exprt gen_exception_raise(std::string exc, std::string message) const;
-
   // Dict method detection and handling
   bool is_dict_method_call() const;
   exprt handle_dict_method() const;

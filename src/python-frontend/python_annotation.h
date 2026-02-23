@@ -1419,7 +1419,7 @@ private:
     throw std::runtime_error(oss.str());
   }
 
-  std::string get_type_from_lhs(const std::string &id, Json &body)
+  std::string get_type_from_lhs(const std::string &id, const Json &body)
   {
     // Search for LHS annotation in the current scope (e.g., while/if block)
     Json node = find_annotated_assign(id, body["body"]);
@@ -1660,6 +1660,52 @@ private:
       rhs_var_name = get_base_var_name(element["value"]["value"]);
 
     assert(!rhs_var_name.empty());
+
+    auto extract_lhs_name = [](const Json &stmt) -> std::string {
+      if (
+        stmt.contains("_type") && stmt["_type"] == "Assign" &&
+        stmt.contains("targets") && !stmt["targets"].empty() &&
+        stmt["targets"][0].contains("_type") &&
+        stmt["targets"][0]["_type"] == "Name" &&
+        stmt["targets"][0].contains("id"))
+        return stmt["targets"][0]["id"].template get<std::string>();
+
+      if (
+        stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+        stmt.contains("target") && stmt["target"].contains("_type") &&
+        stmt["target"]["_type"] == "Name" && stmt["target"].contains("id"))
+        return stmt["target"]["id"].template get<std::string>();
+
+      return "";
+    };
+
+    const std::string lhs_name = extract_lhs_name(element);
+    if (!lhs_name.empty() && lhs_name == rhs_var_name)
+    {
+      std::string lhs_type = get_type_from_lhs(lhs_name, body);
+      if (!lhs_type.empty())
+        return lhs_type;
+      return "Any";
+    }
+
+    if (resolving_rhs_vars_.contains(rhs_var_name))
+    {
+      std::string lhs_type = get_type_from_lhs(rhs_var_name, body);
+      if (!lhs_type.empty())
+        return lhs_type;
+      return "Any";
+    }
+
+    resolving_rhs_vars_.insert(rhs_var_name);
+    struct erase_guardt
+    {
+      std::set<std::string> &vars;
+      std::string key;
+      ~erase_guardt()
+      {
+        vars.erase(key);
+      }
+    } erase_guard{resolving_rhs_vars_, rhs_var_name};
 
     // Find RHS variable declaration in the current scope (e.g.: while/if block)
     Json rhs_node = find_annotated_assign(rhs_var_name, body["body"]);
@@ -1962,6 +2008,30 @@ private:
     return json_utils::get_object_alias(ast_, obj_name);
   }
 
+  std::string get_string_method_return_type(const std::string &method) const
+  {
+    if (
+      method == "join" || method == "lower" || method == "upper" ||
+      method == "strip" || method == "lstrip" || method == "rstrip" ||
+      method == "format" || method == "replace")
+      return "str";
+
+    if (
+      method == "startswith" || method == "endswith" || method == "isdigit" ||
+      method == "isalpha" || method == "isspace" || method == "islower" ||
+      method == "isupper")
+      return "bool";
+
+    if (method == "find" || method == "rfind")
+      return "int";
+
+    if (method == "split")
+      return "list";
+
+    // Keep previous behavior for unmapped string methods.
+    return "str";
+  }
+
   std::string get_type_from_method(const Json &call)
   {
     std::string type("");
@@ -1980,27 +2050,26 @@ private:
       if (obj_type == "str" && call["func"].contains("attr"))
       {
         const std::string &method = call["func"]["attr"];
-        // Methods that return str
-        if (
-          method == "join" || method == "lower" || method == "upper" ||
-          method == "strip" || method == "lstrip" || method == "rstrip" ||
-          method == "format" || method == "replace")
-          return "str";
-        // Methods that return bool
-        else if (
-          method == "startswith" || method == "endswith" ||
-          method == "isdigit" || method == "isalpha" || method == "isspace" ||
-          method == "islower" || method == "isupper")
-          return "bool";
-        else if (method == "find" || method == "rfind")
-          return "int";
-        else if (method == "split")
-          return "list";
-        // Default for string methods
-        return "str";
+        return get_string_method_return_type(method);
       }
 
       return obj_type;
+    }
+
+    // Handle method calls on binary expressions like (s + ",end").split(",", 1)
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"]["_type"] == "BinOp")
+    {
+      std::string obj_type =
+        get_type_from_binary_expr(call["func"]["value"], ast_);
+      if (obj_type == "str" && call["func"].contains("attr"))
+      {
+        const std::string &method = call["func"]["attr"];
+        return get_string_method_return_type(method);
+      }
+      if (!obj_type.empty())
+        return obj_type;
     }
 
     const std::string &obj = get_object_name(call["func"], std::string());
@@ -3082,6 +3151,7 @@ private:
   bool filter_global_elements_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
+  std::set<std::string> resolving_rhs_vars_;
   std::string current_func_name_context_;
   std::string current_class_name_;
 };

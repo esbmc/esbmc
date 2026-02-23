@@ -293,6 +293,10 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "BinaryIO" || ast_type == "TextIO" || ast_type == "IO")
     return any_type();
 
+  // object — top type in Python; accept any value
+  if (ast_type == "object")
+    return any_type();
+
   // NoneType — represents Python's None value
   // Use a pointer type to void to represent None/null properly
   if (ast_type == "NoneType")
@@ -449,6 +453,37 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   return empty_typet();
 }
 
+typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
+{
+  std::string func_name;
+  if (func.contains("id"))
+  {
+    func_name = func["id"].get<std::string>();
+    if (type_utils::is_builtin_type(func_name))
+      return get_typet(func_name);
+  }
+  else if (func["_type"] == "Attribute" && func.contains("attr"))
+  {
+    func_name = func["attr"].get<std::string>();
+    if (func_name == "randint" || func_name == "randrange")
+      return long_long_int_type();
+    if (func_name == "random" || func_name == "uniform")
+      return double_type();
+    if (type_utils::is_builtin_type(func_name))
+      return get_typet(func_name);
+  }
+
+  const std::string nondet_prefix = "nondet_";
+  if (!func_name.empty() && func_name.rfind(nondet_prefix, 0) == 0)
+  {
+    typet t = get_typet(func_name.substr(nondet_prefix.size()));
+    if (t != empty_typet())
+      return t;
+  }
+
+  throw std::runtime_error("Invalid type");
+}
+
 typet type_handler::get_typet(const nlohmann::json &elem) const
 {
   // Handle null/empty values
@@ -545,38 +580,19 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 
     if (!var.empty() && var.contains("value") && !var["value"].is_null())
     {
-      if (var["value"]["_type"] == "Call")
-      {
-        // Try to handle known patterns before giving up
-        if (var["value"].contains("func"))
-        {
-          const auto &func = var["value"]["func"];
+      if (var["value"]["_type"] != "Call")
+        return get_typet(var["value"]["value"]);
 
-          // Handle simple function calls: func_name()
-          if (func.contains("id") && type_utils::is_builtin_type(func["id"]))
-            return get_typet(func["id"].get<std::string>());
+      if (var["value"].contains("func"))
+        return get_typet_from_call_func(var["value"]["func"]);
 
-          // Handle attribute calls: module.func_name()
-          if (func["_type"] == "Attribute" && func.contains("attr"))
-          {
-            std::string attr_name = func["attr"].get<std::string>();
-            // Handle common cases like random.randint, math.sqrt, etc.
-            if (attr_name == "randint" || attr_name == "randrange")
-              return long_long_int_type();
-            if (attr_name == "random" || attr_name == "uniform")
-              return double_type();
-            if (type_utils::is_builtin_type(attr_name))
-              return get_typet(attr_name);
-          }
-        }
-        throw std::runtime_error("Invalid type");
-      }
-      return get_typet(var["value"]["value"]);
+      throw std::runtime_error("Invalid type");
     }
-
-    // Fallback for cases where variable declaration has no value or is null
     return empty_typet();
   }
+
+  if (elem["_type"] == "Call")
+    return get_typet_from_call_func(elem["func"]);
 
   throw std::runtime_error("Invalid type");
 }

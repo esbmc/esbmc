@@ -12,6 +12,18 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <climits>
+#include <optional>
+
+static size_t utf8_codepoint_count(const std::string &text)
+{
+  size_t count = 0;
+  for (unsigned char c : text)
+  {
+    if ((c & 0xC0) != 0x80)
+      ++count;
+  }
+  return count;
+}
 
 bool function_call_builder::is_nondet_str_call(const nlohmann::json &node) const
 {
@@ -477,10 +489,249 @@ exprt function_call_builder::build() const
 
   if (is_len_call(function_id) && !call_["args"].empty())
   {
+    auto const_string_len_from_symbol =
+      [this](const std::string &name) -> std::optional<BigInt> {
+      // Be conservative with named symbols; only __name__ is known constant.
+      if (name != "__name__")
+        return std::nullopt;
+
+      std::string name_value;
+      if (converter_.python_file() == converter_.main_python_filename())
+        name_value = "__main__";
+      else
+      {
+        const std::string &file = converter_.python_file();
+        size_t last_slash = file.find_last_of("/\\");
+        size_t last_dot = file.find_last_of(".");
+        if (
+          last_slash != std::string::npos && last_dot != std::string::npos &&
+          last_dot > last_slash)
+        {
+          name_value = file.substr(last_slash + 1, last_dot - last_slash - 1);
+        }
+        else if (last_dot != std::string::npos)
+          name_value = file.substr(0, last_dot);
+        else
+          name_value = file;
+      }
+
+      return BigInt(utf8_codepoint_count(name_value));
+    };
+
+    auto joinedstr_len =
+      [&const_string_len_from_symbol](
+        const nlohmann::json &joined) -> std::optional<BigInt> {
+      if (!joined.contains("values") || !joined["values"].is_array())
+        return std::nullopt;
+
+      BigInt total = BigInt(0);
+
+      for (const auto &part : joined["values"])
+      {
+        if (
+          part["_type"] == "Constant" && part.contains("value") &&
+          part["value"].is_string())
+        {
+          const std::string text = part["value"].get<std::string>();
+          total += BigInt(utf8_codepoint_count(text));
+          continue;
+        }
+
+        if (part["_type"] == "FormattedValue" && part.contains("value"))
+        {
+          const auto &value = part["value"];
+          if (value["_type"] == "Name" && value.contains("id"))
+          {
+            if (
+              auto len =
+                const_string_len_from_symbol(value["id"].get<std::string>()))
+            {
+              total += *len;
+              continue;
+            }
+          }
+
+          // Cannot prove constant length
+          return std::nullopt;
+        }
+
+        // Unsupported part type for constant length folding
+        return std::nullopt;
+      }
+
+      return total;
+    };
+
+    // Fast path for literal strings: len("...") is known at compile time.
+    if (
+      call_["args"][0].contains("_type") &&
+      call_["args"][0]["_type"] == "Constant" &&
+      call_["args"][0].contains("value") &&
+      call_["args"][0]["value"].is_string())
+    {
+      const std::string text = call_["args"][0]["value"].get<std::string>();
+      return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
+    }
+
     exprt arg_expr = converter_.get_expr(call_["args"][0]);
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
       return from_integer(1, long_long_int_type());
+
+    // If the argument is a named variable initialized with a constant string
+    // or f-string, compute its length from the initializer to avoid strlen.
+    if (
+      call_["args"][0].contains("_type") &&
+      call_["args"][0]["_type"] == "Name" && call_["args"][0].contains("id"))
+    {
+      const std::string var_name = call_["args"][0]["id"].get<std::string>();
+      bool has_augassign = false;
+      auto count_assignments = [&](
+                                 const nlohmann::json &node,
+                                 const std::string &name,
+                                 auto &&self) -> int {
+        int count = 0;
+        if (!node.is_object() && !node.is_array())
+          return 0;
+
+        if (node.is_object() && node.contains("_type"))
+        {
+          const std::string type = node["_type"].get<std::string>();
+          if (type == "Assign" && node.contains("targets"))
+          {
+            for (const auto &tgt : node["targets"])
+            {
+              if (
+                tgt.contains("_type") && tgt["_type"] == "Name" &&
+                tgt.contains("id") && tgt["id"] == name)
+                count++;
+            }
+          }
+          else if (type == "AnnAssign" && node.contains("target"))
+          {
+            const auto &tgt = node["target"];
+            if (
+              tgt.contains("_type") && tgt["_type"] == "Name" &&
+              tgt.contains("id") && tgt["id"] == name)
+              count++;
+          }
+          else if (type == "AugAssign" && node.contains("target"))
+          {
+            const auto &tgt = node["target"];
+            if (
+              tgt.contains("_type") && tgt["_type"] == "Name" &&
+              tgt.contains("id") && tgt["id"] == name)
+            {
+              has_augassign = true;
+              count++;
+            }
+          }
+        }
+
+        if (node.is_array())
+        {
+          for (const auto &elem : node)
+            count += self(elem, name, self);
+        }
+        else if (node.is_object())
+        {
+          for (const auto &item : node.items())
+            count += self(item.value(), name, self);
+        }
+
+        return count;
+      };
+
+      int assign_count = 0;
+      const nlohmann::json &ast = converter_.get_ast_json();
+      if (converter_.get_current_func_name().empty())
+        assign_count =
+          count_assignments(ast["body"], var_name, count_assignments);
+      else
+      {
+        std::vector<std::string> function_path =
+          json_utils::split_function_path(converter_.get_current_func_name());
+        nlohmann::json func_node =
+          json_utils::find_function_by_path(ast, function_path);
+        if (!func_node.empty() && func_node.contains("body"))
+          assign_count =
+            count_assignments(func_node["body"], var_name, count_assignments);
+      }
+
+      // Only fold len() for variables assigned exactly once and never augmented.
+      if (assign_count == 1 && !has_augassign)
+      {
+        nlohmann::json var_value = json_utils::get_var_value(
+          var_name,
+          converter_.get_current_func_name(),
+          converter_.get_ast_json());
+
+        if (!var_value.empty() && var_value.contains("value"))
+        {
+          if (
+            var_value["value"].contains("_type") &&
+            var_value["value"]["_type"] == "JoinedStr")
+          {
+            if (auto len = joinedstr_len(var_value["value"]))
+              return from_integer(*len, size_type());
+          }
+          else if (
+            var_value["value"].contains("_type") &&
+            var_value["value"]["_type"] == "Constant" &&
+            var_value["value"].contains("value") &&
+            var_value["value"]["value"].is_string())
+          {
+            const std::string text =
+              var_value["value"]["value"].get<std::string>();
+            return from_integer(
+              BigInt(utf8_codepoint_count(text)), size_type());
+          }
+        }
+      }
+    }
+
+    // If this is a symbol with a constant string array value, compute length
+    // directly from the array size to avoid strlen unwinding.
+    if (arg_expr.is_symbol())
+    {
+      symbolt *arg_symbol = converter_.find_symbol(
+        to_symbol_expr(arg_expr).get_identifier().as_string());
+      if (
+        arg_symbol && arg_symbol->value.is_not_nil() &&
+        arg_symbol->value.type().is_array() && arg_symbol->value.is_constant())
+      {
+        const array_typet &arr_type = to_array_type(arg_symbol->value.type());
+        if (
+          type_utils::is_char_type(arr_type.subtype()) &&
+          arr_type.size().is_constant())
+        {
+          BigInt sz;
+          if (!to_integer(arr_type.size(), sz) && sz > 0)
+            return from_integer(sz - 1, size_type());
+        }
+      }
+    }
+
+    // If this is a fixed-size char array, compute length at compile time
+    // to avoid strlen unwinding.
+    typet actual_type = arg_expr.type();
+    if (actual_type.is_pointer())
+      actual_type = actual_type.subtype();
+    if (actual_type.id() == "symbol")
+      actual_type = converter_.ns.follow(actual_type);
+
+    if (actual_type.id() == "array")
+    {
+      const array_typet &arr_type = to_array_type(actual_type);
+      if (
+        type_utils::is_char_type(arr_type.subtype()) &&
+        arr_type.size().is_constant())
+      {
+        BigInt sz;
+        if (!to_integer(arr_type.size(), sz) && sz > 0)
+          return from_integer(sz - 1, size_type());
+      }
+    }
   }
 
   // Special handling for single character len() calls
@@ -1202,6 +1453,56 @@ exprt function_call_builder::build() const
         {
           // If count is not constant, use -1 (split all)
           count = -1;
+        }
+      }
+
+      if (
+        !separator.empty() && count == 1 &&
+        call_["func"]["value"].contains("_type") &&
+        call_["func"]["value"]["_type"] == "BinOp" &&
+        call_["func"]["value"].contains("op") &&
+        call_["func"]["value"]["op"].contains("_type") &&
+        call_["func"]["value"]["op"]["_type"] == "Add")
+      {
+        const auto &binop = call_["func"]["value"];
+        std::string right_operand_str;
+        if (
+          string_handler::extract_constant_string(
+            binop["right"], converter_, right_operand_str) &&
+          right_operand_str.rfind(separator, 0) == 0)
+        {
+          bool safe_boundary = true;
+          std::string left_const;
+          if (string_handler::extract_constant_string(
+                binop["left"], converter_, left_const))
+          {
+            // For constant left operands, preserve Python split semantics:
+            // the separator at the boundary must be the first occurrence.
+            safe_boundary = left_const.find(separator) == std::string::npos;
+          }
+
+          if (safe_boundary)
+          {
+            std::string right_suffix =
+              right_operand_str.substr(separator.size());
+            nlohmann::json list_node;
+            list_node["_type"] = "List";
+            list_node["elts"] = nlohmann::json::array();
+            converter_.copy_location_fields_from_decl(call_, list_node);
+
+            nlohmann::json left_node = binop["left"];
+            converter_.copy_location_fields_from_decl(call_, left_node);
+            nlohmann::json right_node;
+            right_node["_type"] = "Constant";
+            right_node["value"] = right_suffix;
+            converter_.copy_location_fields_from_decl(call_, right_node);
+
+            list_node["elts"].push_back(left_node);
+            list_node["elts"].push_back(right_node);
+
+            python_list list(converter_, list_node);
+            return list.get();
+          }
         }
       }
 

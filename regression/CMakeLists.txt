@@ -104,6 +104,7 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_HUMANEVAL humaneval)
     set(REGRESSIONS_QUIXBUGS quixbugs)
     set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
+    set(REGRESSIONS_AI_GENERATED_CODE ai-generated-code)
 endif()
 
 if(ESBMC_CHERI_CLANG)
@@ -205,6 +206,7 @@ if(APPLE)
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_AI_GENERATED_CODE}
                     ${TEST_GENERATION}
                     ltl
                     goto-transcoder
@@ -272,6 +274,7 @@ else()
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_AI_GENERATED_CODE}
                     ${TEST_GENERATION}
                     ltl
                     goto-coverage
