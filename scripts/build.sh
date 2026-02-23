@@ -598,16 +598,18 @@ while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
       BASE_ARGS+=("-DESBMC_BUNDLE_LIBC=$OPTARG")
       ;;
     x)
-      BASE_ARGS+=(
-        "-DENABLE_SOLIDITY_FRONTEND=OFF"
-        "-DENABLE_JIMPLE_FRONTEND=OFF"
-        "-DENABLE_PYTHON_FRONTEND=OFF"
-        "-DESBMC_CHERI=ON"
-      )
-      SOLVER_FLAGS=(
-        "-DENABLE_BOOLECTOR=On"
-        "-DENABLE_Z3=On"
-      )
+      BASE_ARGS+=("-DESBMC_CHERI=$OPTARG")
+      if [[ "$OPTARG" == "ON" ]]; then
+        BASE_ARGS+=(
+          "-DENABLE_SOLIDITY_FRONTEND=OFF"
+          "-DENABLE_JIMPLE_FRONTEND=OFF"
+          "-DENABLE_PYTHON_FRONTEND=OFF"
+        )
+        SOLVER_FLAGS=(
+          "-DENABLE_BOOLECTOR=On"
+          "-DENABLE_Z3=On"
+        )
+      fi
       ;;
     *)
       error "invalid option"
