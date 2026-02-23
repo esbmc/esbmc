@@ -4599,6 +4599,33 @@ void python_converter::get_var_assign(
       return;
     }
 
+    // Type-incompatible reassignment: scalar variable assigned a
+    // string/array value. Must check BEFORE adjust_statement_types
+    // which would coerce rhs type to match lhs, hiding the mismatch.
+    // Only enforce when type assertions are enabled (--is-instance-check).
+    if (
+      type_assertions_enabled() &&
+      lhs.type() != rhs.type() && !rhs.type().is_code() &&
+      !rhs.type().is_empty() && rhs.type().is_array() &&
+      !lhs.type().is_array() && !lhs.type().is_pointer())
+    {
+      code_assertt type_assert(gen_boolean(false));
+      type_assert.location() = location_begin;
+      type_assert.location().comment(
+        "Type violation: incompatible types in assignment");
+      target_block.copy_to_operands(type_assert);
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
+          lhs,
+          annotated_type,
+          annotation_types,
+          annotated_name,
+          annotation_location,
+          target_block);
+      current_lhs = nullptr;
+      return;
+    }
+
     adjust_statement_types(lhs, rhs);
 
     // Handle list type info propagation
@@ -4642,30 +4669,6 @@ void python_converter::get_var_assign(
       current_lhs = nullptr;
       return;
     }
-    else if (
-      lhs.type() != rhs.type() && !rhs.type().is_code() &&
-      !rhs.type().is_empty() && rhs.type().is_array() &&
-      !lhs.type().is_array() && !lhs.type().is_pointer())
-    {
-      // Type-incompatible reassignment: scalar variable assigned a
-      // string/array value. Emit assertion failure to prevent BMC crash.
-      code_assertt type_assert(gen_boolean(false));
-      type_assert.location() = location_begin;
-      type_assert.location().comment(
-        "Type violation: incompatible types in assignment");
-      target_block.copy_to_operands(type_assert);
-      if (type_assertions_enabled() && can_emit_annotation_check)
-        get_typechecker().emit_type_annotation_assertion(
-          lhs,
-          annotated_type,
-          annotation_types,
-          annotated_name,
-          annotation_location,
-          target_block);
-      current_lhs = nullptr;
-      return;
-    }
-
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
