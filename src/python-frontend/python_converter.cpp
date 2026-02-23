@@ -3784,8 +3784,19 @@ void python_converter::handle_assignment_type_adjustments(
     {
       if (!rhs.type().is_empty())
       {
-        lhs_symbol->type = rhs.type();
-        lhs.type() = rhs.type();
+        // Prevent type change from scalar (int/float/bool) to string/array
+        // when a prior declaration exists with the scalar type, as this
+        // creates a type inconsistency in the GOTO program.
+        bool is_incompatible =
+          rhs.type().is_array() && !lhs_symbol->type.is_array() &&
+          !lhs_symbol->type.is_pointer() && !lhs_symbol->type.id().empty() &&
+          !lhs_symbol->type.is_nil() &&
+          lhs_symbol->type != type_handler_.get_list_type();
+        if (!is_incompatible)
+        {
+          lhs_symbol->type = rhs.type();
+          lhs.type() = rhs.type();
+        }
       }
     }
     else if (rhs.type() == none_type())
@@ -4620,6 +4631,29 @@ void python_converter::get_var_assign(
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
       decl.location() = location_begin;
       target_block.copy_to_operands(decl);
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
+          lhs,
+          annotated_type,
+          annotation_types,
+          annotated_name,
+          annotation_location,
+          target_block);
+      current_lhs = nullptr;
+      return;
+    }
+    else if (
+      lhs.type() != rhs.type() && !rhs.type().is_code() &&
+      !rhs.type().is_empty() && rhs.type().is_array() &&
+      !lhs.type().is_array() && !lhs.type().is_pointer())
+    {
+      // Type-incompatible reassignment: scalar variable assigned a
+      // string/array value. Emit assertion failure to prevent BMC crash.
+      code_assertt type_assert(gen_boolean(false));
+      type_assert.location() = location_begin;
+      type_assert.location().comment(
+        "Type violation: incompatible types in assignment");
+      target_block.copy_to_operands(type_assert);
       if (type_assertions_enabled() && can_emit_annotation_check)
         get_typechecker().emit_type_annotation_assertion(
           lhs,
