@@ -22,27 +22,27 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 # Set arguments that should be available for every OS.
-BASE_ARGS="\
-    -DDOWNLOAD_DEPENDENCIES=On \
-    -GNinja \
-    -DENABLE_CSMITH=On \
-    -DBUILD_TESTING=On \
-    -DENABLE_REGRESSION=On \
-    -DENABLE_SOLIDITY_FRONTEND=On \
-    -DENABLE_JIMPLE_FRONTEND=On \
-    -DENABLE_PYTHON_FRONTEND=On \
-    -DCMAKE_INSTALL_PREFIX:PATH=$ROOT_DIR/release \
-"
+BASE_ARGS=(
+  "-DDOWNLOAD_DEPENDENCIES=On"
+  "-GNinja"
+  "-DENABLE_CSMITH=On"
+  "-DBUILD_TESTING=On"
+  "-DENABLE_REGRESSION=On"
+  "-DENABLE_SOLIDITY_FRONTEND=On"
+  "-DENABLE_JIMPLE_FRONTEND=On"
+  "-DENABLE_PYTHON_FRONTEND=On"
+  "-DCMAKE_INSTALL_PREFIX:PATH=$ROOT_DIR/release"
+)
 
-SOLVER_FLAGS="\
-    -DENABLE_BOOLECTOR=On \
-    -DENABLE_YICES=Off \
-    -DENABLE_BITWUZLA=On \
-    -DENABLE_GOTO_CONTRACTOR=On \
-    -DACADEMIC_BUILD=Off \
-"
+SOLVER_FLAGS=(
+  "-DENABLE_BOOLECTOR=On"
+  "-DENABLE_YICES=Off"
+  "-DENABLE_BITWUZLA=On"
+  "-DENABLE_GOTO_CONTRACTOR=On"
+  "-DACADEMIC_BUILD=Off"
+)
 
-COMPILER_ARGS=''
+COMPILER_ENV=()
 
 STATIC=""
 CLANG_VERSION=16
@@ -96,10 +96,22 @@ ensure_build_dir() {
 configure_project() {
   ensure_build_dir
   cd build
+  local cmake_args=(
+    "${BASE_ARGS[@]}"
+    "${SOLVER_FLAGS[@]}"
+    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+  )
+  local cmd=()
+  if [[ ${#COMPILER_ENV[@]} -gt 0 ]]; then
+    cmd=(env "${COMPILER_ENV[@]}" cmake .. "${cmake_args[@]}")
+  else
+    cmd=(cmake .. "${cmake_args[@]}")
+  fi
+
   printf "Running CMake:"
-  printf " '%s'" $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  printf " %q" "${cmd[@]}"
   echo
-  $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  "${cmd[@]}"
   cd "$ROOT_DIR"
 }
 
@@ -154,25 +166,25 @@ prepare_platform_config() {
       fi
 
       if [[ "$STATIC" == "OFF" ]]; then
-        BASE_ARGS="$BASE_ARGS \
-            -DClang_DIR=/usr/lib/cmake/clang-$CLANG_VERSION \
-            -DLLVM_DIR=/usr/lib/llvm-$CLANG_VERSION/lib/cmake/llvm \
-            -DZ3_DIR=/usr \
-        "
+        BASE_ARGS+=(
+          "-DClang_DIR=/usr/lib/cmake/clang-$CLANG_VERSION"
+          "-DLLVM_DIR=/usr/lib/llvm-$CLANG_VERSION/lib/cmake/llvm"
+          "-DZ3_DIR=/usr"
+        )
         log "Configuring shared Ubuntu build with Clang-$CLANG_VERSION frontend"
       else
         log "Configuring static Ubuntu build"
       fi
 
-      BASE_ARGS="$BASE_ARGS -DBUILD_STATIC=$STATIC"
-      SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=ON -DENABLE_CVC5=On"
+      BASE_ARGS+=("-DBUILD_STATIC=$STATIC")
+      SOLVER_FLAGS+=("-DENABLE_Z3=ON" "-DENABLE_CVC5=On")
 
       if [[ "$ARCH" == "aarch64" ]]; then
         log "Detected ARM64 Linux"
-        SOLVER_FLAGS="$SOLVER_FLAGS \
-            -DENABLE_GOTO_CONTRACTOR=OFF \
-            -DENABLE_CVC5=Off \
-        "
+        SOLVER_FLAGS+=(
+          "-DENABLE_GOTO_CONTRACTOR=OFF"
+          "-DENABLE_CVC5=Off"
+        )
       fi
       ;;
 
@@ -185,15 +197,15 @@ prepare_platform_config() {
       fi
       log "Configuring macOS build with llvm/clang ${CLANG_VERSION}"
 
-      BASE_ARGS="$BASE_ARGS \
-        -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
-        -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
-        -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
-        -DCMAKE_BUILD_TYPE=Debug \
-        -DCMAKE_INSTALL_PREFIX:PATH=$ROOT_DIR/release \
-      "
+      BASE_ARGS+=(
+        "-DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
+        "-DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
+        "-DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+        "-DCMAKE_BUILD_TYPE=Debug"
+        "-DCMAKE_INSTALL_PREFIX:PATH=$ROOT_DIR/release"
+      )
 
-      SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_GOTO_CONTRACTOR=OFF -DENABLE_Z3=ON"
+      SOLVER_FLAGS+=("-DENABLE_GOTO_CONTRACTOR=OFF" "-DENABLE_Z3=ON")
       ;;
 
     *)
@@ -416,8 +428,8 @@ install_python_deps_macos() {
 
   meson --version
 
-  SOLVER_FLAGS="$SOLVER_FLAGS -DZ3_DIR=$(brew --prefix z3)"
-  BASE_ARGS="$BASE_ARGS -DPython3_EXECUTABLE=$Python3_EXECUTABLE"
+  SOLVER_FLAGS+=("-DZ3_DIR=$(brew --prefix z3)")
+  BASE_ARGS+=("-DPython3_EXECUTABLE=$Python3_EXECUTABLE")
 }
 
 run_fetch() {
@@ -547,17 +559,17 @@ while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
       exit 0
       ;;
     b)
-      BASE_ARGS="$BASE_ARGS -DCMAKE_BUILD_TYPE=${OPTARG}"
+      BASE_ARGS+=("-DCMAKE_BUILD_TYPE=${OPTARG}")
       ;;
     s)
-      BASE_ARGS="$BASE_ARGS -DSANITIZER_TYPE=${OPTARG}"
-      COMPILER_ARGS="$COMPILER_ARGS CC=clang CXX=clang++"
+      BASE_ARGS+=("-DSANITIZER_TYPE=${OPTARG}")
+      COMPILER_ENV=(CC=clang CXX=clang++)
       ;;
     e)
-      BASE_ARGS="$BASE_ARGS -DENABLE_WERROR=${OPTARG}"
+      BASE_ARGS+=("-DENABLE_WERROR=${OPTARG}")
       ;;
     r)
-      BASE_ARGS="$BASE_ARGS -DBENCHBRINGUP=${OPTARG}"
+      BASE_ARGS+=("-DBENCHBRINGUP=${OPTARG}")
       ;;
     d)
       set -x
@@ -570,29 +582,32 @@ while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
       CLANG_VERSION="$OPTARG"
       ;;
     C)
-      BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
-      SOLVER_FLAGS="\
-          -DENABLE_BOOLECTOR=On \
-          -DENABLE_YICES=On \
-          -DENABLE_CVC4=OFF \
-          -DENABLE_BITWUZLA=On \
-          -DENABLE_Z3=On \
-          -DENABLE_MATHSAT=ON \
-          -DENABLE_GOTO_CONTRACTOR=OFF \
-          -DACADEMIC_BUILD=ON"
+      BASE_ARGS+=("-DESBMC_SVCOMP=ON")
+      SOLVER_FLAGS=(
+        "-DENABLE_BOOLECTOR=On"
+        "-DENABLE_YICES=On"
+        "-DENABLE_CVC4=OFF"
+        "-DENABLE_BITWUZLA=On"
+        "-DENABLE_Z3=On"
+        "-DENABLE_MATHSAT=ON"
+        "-DENABLE_GOTO_CONTRACTOR=OFF"
+        "-DACADEMIC_BUILD=ON"
+      )
       ;;
     B)
-      BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG"
+      BASE_ARGS+=("-DESBMC_BUNDLE_LIBC=$OPTARG")
       ;;
     x)
-      BASE_ARGS="$BASE_ARGS \
-          -DENABLE_SOLIDITY_FRONTEND=OFF \
-          -DENABLE_JIMPLE_FRONTEND=OFF \
-          -DENABLE_PYTHON_FRONTEND=OFF \
-          -DESBMC_CHERI=ON"
-      SOLVER_FLAGS="\
-          -DENABLE_BOOLECTOR=On \
-          -DENABLE_Z3=On"
+      BASE_ARGS+=(
+        "-DENABLE_SOLIDITY_FRONTEND=OFF"
+        "-DENABLE_JIMPLE_FRONTEND=OFF"
+        "-DENABLE_PYTHON_FRONTEND=OFF"
+        "-DESBMC_CHERI=ON"
+      )
+      SOLVER_FLAGS=(
+        "-DENABLE_BOOLECTOR=On"
+        "-DENABLE_Z3=On"
+      )
       ;;
     *)
       error "invalid option"
