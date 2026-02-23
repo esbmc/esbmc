@@ -8,6 +8,7 @@
 #include <python-frontend/python_class_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_typechecking.h>
@@ -6446,166 +6447,6 @@ void python_converter::get_return_statements(
   }
 }
 
-symbolt python_converter::create_assert_temp_variable(const locationt &location)
-{
-  symbol_id temp_sid = create_symbol_id();
-  temp_sid.set_object("__assert_temp");
-  std::string temp_sid_str = temp_sid.to_string();
-
-  symbolt temp_symbol;
-  temp_symbol.id = temp_sid_str;
-  temp_symbol.name = temp_sid_str;
-  temp_symbol.type = bool_type();
-  temp_symbol.lvalue = true;
-  temp_symbol.static_lifetime = false;
-  temp_symbol.location = location;
-
-  return temp_symbol;
-}
-
-// function to create function call statement from function call expression
-code_function_callt create_function_call_statement(
-  const exprt &func_call_expr,
-  const exprt &lhs_var,
-  const locationt &location)
-{
-  code_function_callt function_call;
-  function_call.lhs() = lhs_var;
-  function_call.function() = func_call_expr.operands()[1];
-
-  const exprt &args_operand = func_call_expr.operands()[2];
-  code_function_callt::argumentst arguments;
-  for (const auto &arg : args_operand.operands())
-  {
-    arguments.push_back(arg);
-  }
-  function_call.arguments() = arguments;
-  function_call.location() = location;
-
-  return function_call;
-}
-
-void python_converter::handle_list_assertion(
-  const nlohmann::json &element,
-  const exprt &test,
-  code_blockt &block,
-  const std::function<void(code_assertt &)> &attach_assert_message)
-{
-  locationt location = get_location_from_decl(element);
-
-  // Materialize function call if needed
-  exprt list_expr = test;
-  if (test.is_function_call())
-  {
-    // Create temp variable to store function result (pointer to list)
-    symbolt &list_temp =
-      create_tmp_symbol(element, "$list_assert_temp$", test.type(), exprt());
-    code_declt list_decl(symbol_expr(list_temp));
-    list_decl.location() = location;
-    block.move_to_operands(list_decl);
-
-    // Execute function call
-    code_function_callt &func_call =
-      static_cast<code_function_callt &>(const_cast<exprt &>(test));
-    func_call.lhs() = symbol_expr(list_temp);
-    block.move_to_operands(func_call);
-
-    list_expr = symbol_expr(list_temp);
-  }
-
-  // Get list size using __ESBMC_list_size
-  const symbolt *size_sym = symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
-  if (!size_sym)
-    throw std::runtime_error("__ESBMC_list_size function not found");
-
-  // Create temp var to store size
-  symbolt &size_result = create_tmp_symbol(
-    element, "$list_size_result$", size_type(), gen_zero(size_type()));
-  code_declt size_decl(symbol_expr(size_result));
-  size_decl.location() = location;
-  block.move_to_operands(size_decl);
-
-  // Call list_size(list)
-  code_function_callt size_func_call;
-  size_func_call.function() = symbol_expr(*size_sym);
-  if (list_expr.type().is_pointer())
-    size_func_call.arguments().push_back(list_expr);
-  else
-    size_func_call.arguments().push_back(address_of_exprt(list_expr));
-  size_func_call.lhs() = symbol_expr(size_result);
-  size_func_call.type() = size_type();
-  size_func_call.location() = location;
-  block.move_to_operands(size_func_call);
-
-  // Assert size > 0
-  exprt assertion(">", bool_type());
-  assertion.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
-
-  code_assertt assert_code;
-  assert_code.assertion() = assertion;
-  assert_code.location() = location;
-  attach_assert_message(assert_code);
-  block.move_to_operands(assert_code);
-}
-
-void python_converter::handle_function_call_assertion(
-  const nlohmann::json &element,
-  const exprt &func_call_expr,
-  bool is_negated,
-  code_blockt &block,
-  const std::function<void(code_assertt &)> &attach_assert_message)
-{
-  locationt location = get_location_from_decl(element);
-
-  // Check if function returns None
-  const typet &return_type = func_call_expr.type();
-
-  if (return_type == none_type() || return_type.id() == "empty")
-  {
-    // Function returns None: execute call and assert False
-    exprt func_call_copy = func_call_expr;
-    codet code_stmt = convert_expression_to_code(func_call_copy);
-    block.move_to_operands(code_stmt);
-
-    code_assertt assert_code;
-    assert_code.assertion() = false_exprt();
-    assert_code.location() = location;
-    assert_code.location().comment("Assertion on None-returning function");
-    attach_assert_message(assert_code);
-    block.move_to_operands(assert_code);
-    return;
-  }
-
-  // Create temporary variable
-  symbolt temp_symbol = create_assert_temp_variable(location);
-  symbol_table_.add(temp_symbol);
-  exprt temp_var_expr = symbol_expr(temp_symbol);
-
-  // Create function call statement
-  code_function_callt function_call =
-    create_function_call_statement(func_call_expr, temp_var_expr, location);
-  block.move_to_operands(function_call);
-
-  // Create assertion based on negation
-  exprt assertion_expr;
-  if (is_negated)
-  {
-    assertion_expr = not_exprt(temp_var_expr);
-  }
-  else
-  {
-    exprt cast_expr = typecast_exprt(temp_var_expr, signedbv_typet(32));
-    exprt one_expr = constant_exprt("1", signedbv_typet(32));
-    assertion_expr = equality_exprt(cast_expr, one_expr);
-  }
-
-  code_assertt assert_code;
-  assert_code.assertion() = assertion_expr;
-  assert_code.location() = location;
-  attach_assert_message(assert_code);
-  block.move_to_operands(assert_code);
-}
-
 exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
   code_blockt block, *old_block = current_block;
@@ -6737,7 +6578,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         (test.type().is_pointer() &&
          test.type().subtype() == type_handler_.get_list_type()))
       {
-        handle_list_assertion(element, test, block, attach_assert_message);
+        exception_handler_->handle_list_assertion(
+          element, test, block, attach_assert_message);
         break;
       }
 
@@ -6763,7 +6605,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
       if (func_call_expr != nullptr)
       {
-        handle_function_call_assertion(
+        exception_handler_->handle_function_call_assertion(
           element, *func_call_expr, is_negated, block, attach_assert_message);
       }
       else
@@ -6822,208 +6664,17 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::TRY:
     {
-      // Check if this try block wraps a failed import (module_not_found = true)
-      // and has an ImportError handler. If so, statically take the except branch.
-      bool has_missing_import = false;
-      for (const auto &stmt : element["body"])
-      {
-        if (
-          (stmt["_type"] == "Import" || stmt["_type"] == "ImportFrom") &&
-          stmt.value("module_not_found", false))
-        {
-          has_missing_import = true;
-          break;
-        }
-      }
-
-      if (has_missing_import)
-      {
-        for (const auto &handler : element["handlers"])
-        {
-          if (
-            !handler["type"].is_null() &&
-            handler["type"].value("id", "") == "ImportError")
-          {
-            // Directly emit only the except-handler body
-            exprt except_body = get_block(handler["body"]);
-            for (const auto &op : except_body.operands())
-              block.copy_to_operands(op);
-            break;
-          }
-        }
-        break;
-      }
-
-      exprt new_expr = codet("cpp-catch");
-      exprt try_block = get_block(element["body"]);
-      exprt handler = get_block(element["handlers"]);
-      new_expr.move_to_operands(try_block);
-
-      for (const auto &op : handler.operands())
-        new_expr.copy_to_operands(op);
-
-      block.move_to_operands(new_expr);
+      exception_handler_->get_try_statement(element, block);
       break;
     }
     case StatementType::EXCEPTHANDLER:
     {
-      symbolt *exception_symbol = nullptr;
-      typet exception_type;
-
-      // Create exception variable symbol before processing body
-      if (!element["type"].is_null())
-      {
-        exception_type =
-          type_handler_.get_typet(element["type"]["id"].get<std::string>());
-
-        std::string name;
-        symbol_id sid = create_symbol_id();
-        locationt location = get_location_from_decl(element);
-        std::string module_name = location.get_file().as_string();
-        // Check if the exception handler binds the exception to a variable
-        if (!element["name"].is_null())
-          name = element["name"].get<std::string>();
-        else
-          name = "__anon_exc_var_" + location.get_line().as_string();
-
-        sid.set_object(name);
-        // Create and add symbol to symbol table
-        symbolt symbol = create_symbol(
-          module_name,
-          current_func_name_,
-          sid.to_string(),
-          location,
-          exception_type);
-        symbol.name = name;
-        symbol.lvalue = true;
-        symbol.is_extern = false;
-        symbol.file_local = false;
-        exception_symbol = symbol_table_.move_symbol_to_context(symbol);
-      }
-
-      // Process exception handler body (symbol now exists)
-      exprt catch_block = get_block(element["body"]);
-
-      // Add type and declaration if exception variable was created
-      if (exception_symbol != nullptr)
-      {
-        catch_block.type() = exception_type;
-        exprt sym = symbol_expr(*exception_symbol);
-        code_declt decl(sym);
-        exprt decl_code = convert_expression_to_code(decl);
-        decl_code.location() = exception_symbol->location;
-
-        codet::operandst &ops = catch_block.operands();
-        ops.insert(ops.begin(), decl_code);
-      }
-
-      block.move_to_operands(catch_block);
+      exception_handler_->get_except_handler_statement(element, block);
       break;
     }
     case StatementType::RAISE:
     {
-      std::string exc_name;
-      // Try to extract the exception name from different AST shapes
-      if (
-        element["exc"].contains("func") &&
-        element["exc"]["func"].contains("id"))
-        exc_name = element["exc"]["func"]["id"].get<std::string>();
-      else if (element["exc"].contains("id"))
-        exc_name = element["exc"]["id"].get<std::string>();
-      else if (element["exc"].is_string())
-        exc_name = element["exc"].get<std::string>();
-      else
-        exc_name = ""; // fallback
-
-      locationt location = get_location_from_decl(element);
-      typet type = type_handler_.get_typet(exc_name);
-
-      if (exc_name == "AssertionError")
-      {
-        code_assertt assert_code{false_exprt()};
-        assert_code.location() = location;
-        if (
-          element["exc"].contains("args") && !element["exc"]["args"].empty() &&
-          !element["exc"]["args"][0].is_null())
-        {
-          const std::string msg =
-            string_handler_.process_format_spec(element["exc"]["args"][0]);
-          assert_code.location().comment(msg);
-        }
-        block.move_to_operands(assert_code);
-        break;
-      }
-
-      exprt raise;
-      if (type_utils::is_python_exceptions(exc_name))
-      {
-        // Construct a constant struct to throw:
-        // raise { .message=&"Error message" }
-
-        exprt arg;
-        // Check if args exists and is not empty before accessing
-        const auto &exc = element["exc"];
-        if (
-          exc.contains("args") && !exc["args"].empty() &&
-          !exc["args"][0].is_null())
-        {
-          const auto &json_arg = exc["args"][0];
-          exprt tmp = get_expr(json_arg);
-          arg = string_constantt(
-            string_handler_.process_format_spec(json_arg),
-            tmp.type(),
-            string_constantt::k_default);
-        }
-        else
-        {
-          // No arguments provided, create default empty message
-          arg = string_constantt(
-            "",
-            type_handler_.build_array(char_type(), 1),
-            string_constantt::k_default);
-        }
-
-        raise.id("struct");
-        raise.type() = type;
-        raise.copy_to_operands(address_of_exprt(arg));
-      }
-      else
-      {
-        // For custom exceptions:
-        // DECL MyException return_value;
-        // FUNCTION_CALL:  MyException(&return_value, &"message");
-        // Throw MyException return_value;
-        raise = get_expr(element["exc"]);
-        // Check if this is a constructor call
-        if (raise.is_code() && raise.get("statement") == "function_call")
-        {
-          code_function_callt call =
-            to_code_function_call(convert_expression_to_code(raise));
-          side_effect_expr_function_callt tmp;
-          tmp.function() = call.function();
-          tmp.arguments() = call.arguments();
-          tmp.type() = type;
-          tmp.location() = location;
-          raise = tmp;
-        }
-        else
-        {
-          // Use a generic type if no specific type was found
-          if (type.is_empty())
-            type = any_type();
-          // Typecast to match throw type
-          if (raise.type() != type)
-            raise = typecast_exprt(raise, type);
-        }
-      }
-
-      side_effect_exprt side("cpp-throw", type);
-      side.location() = location;
-      side.move_to_operands(raise);
-
-      codet code_expr("expression");
-      code_expr.operands().push_back(side);
-      block.move_to_operands(code_expr);
+      exception_handler_->get_raise_statement(element, block);
       break;
     }
     case StatementType::DELETE:
@@ -7096,7 +6747,8 @@ python_converter::python_converter(
     tuple_handler_(new tuple_handler(*this, type_handler_)),
     dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_)),
     typechecker_(new python_typechecking(*this)),
-    lambda_handler_(new python_lambda(*this, _context, type_handler_))
+    lambda_handler_(new python_lambda(*this, _context, type_handler_)),
+    exception_handler_(new python_exception_handler(*this, type_handler_))
 {
 }
 
@@ -7107,6 +6759,7 @@ python_converter::~python_converter()
   delete dict_handler_;
   delete typechecker_;
   delete lambda_handler_;
+  delete exception_handler_;
 }
 
 python_typechecking &python_converter::get_typechecker()
