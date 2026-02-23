@@ -1035,15 +1035,13 @@ exprt python_list::handle_range_slice(
       // lower = max(0, min(lower, logical_len))
       exprt lower_ge_len(">=", bool_type());
       lower_ge_len.copy_to_operands(lower_expr, logical_len);
-      lower_expr =
-        if_exprt(lower_ge_len, logical_len, lower_expr);
+      lower_expr = if_exprt(lower_ge_len, logical_len, lower_expr);
       lower_expr.type() = size_type();
 
       // upper = max(0, min(upper, logical_len))
       exprt upper_ge_len(">=", bool_type());
       upper_ge_len.copy_to_operands(upper_expr, logical_len);
-      upper_expr =
-        if_exprt(upper_ge_len, logical_len, upper_expr);
+      upper_expr = if_exprt(upper_ge_len, logical_len, upper_expr);
       upper_expr.type() = size_type();
     }
 
