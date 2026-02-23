@@ -318,7 +318,8 @@ void python_converter::update_symbol(const exprt &expr) const
     // solely of '0' and '1' characters (i.e., it is a valid binary string).
     // Character or decimal values stored in the symbol will not satisfy this
     // check and must be left unchanged to avoid a stoll conversion failure.
-    bool is_binary_string = !binary_value_str.empty() &&
+    bool is_binary_string =
+      !binary_value_str.empty() &&
       binary_value_str.find_first_not_of("01") == std::string::npos;
 
     if (is_binary_string)
