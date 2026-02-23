@@ -4604,10 +4604,10 @@ void python_converter::get_var_assign(
     // which would coerce rhs type to match lhs, hiding the mismatch.
     // Only enforce when type assertions are enabled (--is-instance-check).
     if (
-      type_assertions_enabled() &&
-      lhs.type() != rhs.type() && !rhs.type().is_code() &&
-      !rhs.type().is_empty() && rhs.type().is_array() &&
-      !lhs.type().is_array() && !lhs.type().is_pointer())
+      type_assertions_enabled() && lhs.type() != rhs.type() &&
+      !rhs.type().is_code() && !rhs.type().is_empty() &&
+      rhs.type().is_array() && !lhs.type().is_array() &&
+      !lhs.type().is_pointer())
     {
       code_assertt type_assert(gen_boolean(false));
       type_assert.location() = location_begin;
