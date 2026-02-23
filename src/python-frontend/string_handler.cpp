@@ -3059,14 +3059,13 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Handle split() calls: resolve the result to a JSON List at compile time
   nlohmann::json resolved_split_list;
   {
-    const nlohmann::json* call_to_resolve = nullptr;
+    const nlohmann::json *call_to_resolve = nullptr;
     if (
       list_node && list_node->contains("_type") &&
       (*list_node)["_type"] == "Call")
       call_to_resolve = list_node;
     else if (
-      !list_node && list_arg.contains("_type") &&
-      list_arg["_type"] == "Call")
+      !list_node && list_arg.contains("_type") && list_arg["_type"] == "Call")
       call_to_resolve = &list_arg;
 
     if (
@@ -3079,7 +3078,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     {
       std::string input;
       if (extract_constant_string(
-        (*call_to_resolve)["func"]["value"], converter_, input))
+            (*call_to_resolve)["func"]["value"], converter_, input))
       {
         std::string sep;
         if (
@@ -3094,16 +3093,14 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
           size_t i = 0;
           while (i < input.size())
           {
-            while (
-              i < input.size() &&
-              std::isspace(static_cast<unsigned char>(input[i])))
+            while (i < input.size() &&
+                   std::isspace(static_cast<unsigned char>(input[i])))
               i++;
             if (i >= input.size())
               break;
             size_t start = i;
-            while (
-              i < input.size() &&
-              !std::isspace(static_cast<unsigned char>(input[i])))
+            while (i < input.size() &&
+                   !std::isspace(static_cast<unsigned char>(input[i])))
               i++;
             parts.push_back(input.substr(start, i - start));
           }
@@ -3126,7 +3123,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 
         resolved_split_list["_type"] = "List";
         resolved_split_list["elts"] = nlohmann::json::array();
-        for (const auto& part : parts)
+        for (const auto &part : parts)
         {
           nlohmann::json elem;
           elem["_type"] = "Constant";
