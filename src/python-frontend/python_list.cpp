@@ -966,8 +966,8 @@ exprt python_list::handle_range_slice(
     else // pointer case
     {
       elem_type = array.type().subtype();
-      array_len = exprt();   // Not used for pointers
-      logical_len = exprt(); // Will use explicit bounds only
+      array_len = nil_exprt();   // Not used for pointers
+      logical_len = nil_exprt(); // Will use explicit bounds only
     }
 
     // Process slice bounds (handles null, negative indices)
@@ -1026,6 +1026,24 @@ exprt python_list::handle_range_slice(
     }
     else
       upper_expr = process_bound("upper", logical_len);
+
+    // Clamp bounds to [0, logical_len] to match Python semantics.
+    // In Python, slice indices are silently clamped to the valid range,
+    // so s[10:] on a 6-char string returns "" (lower clamped to 6).
+    if (!logical_len.is_nil())
+    {
+      // lower = max(0, min(lower, logical_len))
+      exprt lower_ge_len(">=", bool_type());
+      lower_ge_len.copy_to_operands(lower_expr, logical_len);
+      lower_expr = if_exprt(lower_ge_len, logical_len, lower_expr);
+      lower_expr.type() = size_type();
+
+      // upper = max(0, min(upper, logical_len))
+      exprt upper_ge_len(">=", bool_type());
+      upper_ge_len.copy_to_operands(upper_expr, logical_len);
+      upper_expr = if_exprt(upper_ge_len, logical_len, upper_expr);
+      upper_expr.type() = size_type();
+    }
 
     // Calculate slice length
     minus_exprt slice_len(upper_expr, lower_expr);
