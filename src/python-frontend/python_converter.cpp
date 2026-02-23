@@ -314,25 +314,35 @@ void python_converter::update_symbol(const exprt &expr) const
   {
     const std::string &binary_value_str = sym->value.value().c_str();
 
-    try
-    {
-      // Convert binary string to integer.
-      int64_t int_val = std::stoll(binary_value_str, nullptr, 2);
+    // Only attempt binary conversion if the string is non-empty and consists
+    // solely of '0' and '1' characters (i.e., it is a valid binary string).
+    // Character or decimal values stored in the symbol will not satisfy this
+    // check and must be left unchanged to avoid a stoll conversion failure.
+    bool is_binary_string = !binary_value_str.empty() &&
+      binary_value_str.find_first_not_of("01") == std::string::npos;
 
-      // Create a new constant expression with the converted value and type.
-      exprt new_value = from_integer(int_val, expr_type);
-
-      // Assign the new value to the symbol.
-      sym->value = new_value;
-    }
-    catch (const std::exception &e)
+    if (is_binary_string)
     {
-      log_error(
-        "update_symbol: Failed to convert binary value '{}' to integer for "
-        "symbol '{}'. Error: {}",
-        binary_value_str,
-        sid.to_string(),
-        e.what());
+      try
+      {
+        // Convert binary string to integer.
+        int64_t int_val = std::stoll(binary_value_str, nullptr, 2);
+
+        // Create a new constant expression with the converted value and type.
+        exprt new_value = from_integer(int_val, expr_type);
+
+        // Assign the new value to the symbol.
+        sym->value = new_value;
+      }
+      catch (const std::exception &e)
+      {
+        log_error(
+          "update_symbol: Failed to convert binary value '{}' to integer for "
+          "symbol '{}'. Error: {}",
+          binary_value_str,
+          sid.to_string(),
+          e.what());
+      }
     }
   }
 }
