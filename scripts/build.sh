@@ -374,14 +374,15 @@ install_gmp_linux() {
   log "Installing GMP $GMP_VERSION from source"
   local build_root
   build_root="$(mktemp -d)"
-  tar -xf "$GMP_ARCHIVE_PATH" -C "$build_root"
-  cd "$build_root/gmp-$GMP_VERSION"
-  ./configure --prefix=/usr/local --enable-cxx --enable-static
-  make -j"$(nproc)"
-  run_with_sudo make install
-  run_with_sudo ldconfig || true
-  cd "$ROOT_DIR"
-  rm -rf "$build_root"
+  (
+    trap 'rm -rf -- "$build_root"' EXIT
+    tar -xf "$GMP_ARCHIVE_PATH" -C "$build_root"
+    cd "$build_root/gmp-$GMP_VERSION"
+    ./configure --prefix=/usr/local --enable-cxx --enable-static
+    make -j"$(nproc)"
+    run_with_sudo make install
+    run_with_sudo ldconfig || true
+  )
 }
 
 install_python_deps_linux() {
