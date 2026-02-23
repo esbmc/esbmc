@@ -1,0 +1,6 @@
+CORE
+main.c
+--replace-call-with-contract "*"
+^VERIFICATION SUCCESSFUL$
+
+

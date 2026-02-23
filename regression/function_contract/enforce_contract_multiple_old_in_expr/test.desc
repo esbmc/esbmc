@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract "fib_reaction_timer" --function "fib_reaction_timer" --assume-nonnull-valid
+^VERIFICATION SUCCESSFUL$
+

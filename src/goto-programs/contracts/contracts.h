@@ -58,6 +58,16 @@
 class code_contractst
 {
 public:
+  // ========== __ESBMC_is_fresh support for ensures ==========
+
+  /// \brief Structure to store is_fresh mapping information
+  struct is_fresh_mapping_t
+  {
+    irep_idt
+      temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
+    expr2tc ptr_expr; ///< Pointer expression (dereferenced from &ptr)
+  };
+
   code_contractst(
     goto_functionst &goto_functions,
     contextt &context,
@@ -67,21 +77,38 @@ public:
   /// Renames function F to __ESBMC_contracts_original_F and generates a new wrapper function F
   /// Wrapper function: assume requires -> call original function -> assert ensures
   /// \param to_enforce Set of function names to enforce contracts for
-  void enforce_contracts(const std::set<std::string> &to_enforce);
+  /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
+  /// \param entry_function The --function entry point name (empty if using main).
+  ///        When a function is the entry point AND called from the harness with nil arguments,
+  ///        pointer parameters need valid_object assumptions for correct ensures checking.
+  void enforce_contracts(
+    const std::set<std::string> &to_enforce,
+    bool assume_nonnull_valid = false,
+    const std::string &entry_function = "");
 
   /// \brief Replace function calls with contracts
-  /// Replaces function calls with: assert requires -> havoc assigns targets -> assume ensures
+  /// Replaces function calls with contract semantics:
+  ///   1. Assert requires clause (check precondition)
+  ///   2. Havoc all potentially modified locations:
+  ///      - Assigns clause targets (if specified)
+  ///      - Static lifetime global variables (conservative)
+  ///      - Memory locations through pointer parameters (TODO)
+  ///   3. Assume ensures clause (assume postcondition)
+  ///
+  /// CRITICAL: We must havoc everything the function might modify,
+  /// otherwise the effects cannot propagate from the removed function body.
   /// \param to_replace Set of function names to replace with contracts
   void replace_calls(const std::set<std::string> &to_replace);
-
-  /// \brief Scan all functions and create contract symbols
-  /// Scans goto programs for contract annotations and creates contract symbols
-  void build_contract_symbols();
 
   /// \brief Quick check if function has any contracts
   /// \param function_body Function goto program
   /// \return True if function has any contract clauses
   bool has_contracts(const goto_programt &function_body) const;
+
+  /// \brief Check if function is marked with __attribute__((annotate("__ESBMC_contract")))
+  /// \param func_sym Function symbol to check
+  /// \return True if function has the contract annotation
+  bool is_annotated_contract_function(const symbolt &func_sym) const;
 
 private:
   goto_functionst &goto_functions;
@@ -92,11 +119,6 @@ private:
   /// \param function_name Function name or ID
   /// \return True if function should be skipped (destructor, constructor, etc.)
   bool is_compiler_generated(const std::string &function_name) const;
-
-  /// \brief Find contract symbol (with contract:: prefix)
-  /// \param function_name Function name
-  /// \return Pointer to contract symbol, or nullptr if not found
-  symbolt *find_contract_symbol(const std::string &function_name);
 
   /// \brief Find function symbol
   /// \param function_name Function name (can be full ID or simple name)
@@ -114,22 +136,28 @@ private:
   /// \param ensures_clause Ensures expression
   /// \param original_func_id ID of the renamed original function
   /// \param original_body Original function body (before renaming)
+  /// \param is_fresh_mappings Mappings for is_fresh temp variables in ensures
+  /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
   /// \return Generated wrapper function body
   goto_programt generate_checking_wrapper(
     const symbolt &original_func,
     const expr2tc &requires_clause,
     const expr2tc &ensures_clause,
     const irep_idt &original_func_id,
-    const goto_programt &original_body);
+    const goto_programt &original_body,
+    const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
+    bool assume_nonnull_valid = false);
 
   /// \brief Generate replacement code at function call site
-  /// \param contract_symbol Contract symbol
+  /// \param function_symbol Function symbol being called
+  /// \param function_body Function body (to extract contracts from)
   /// \param call_instruction Function call instruction
-  /// \param function_body Function body containing the call
+  /// \param caller_body Function body containing the call
   void generate_replacement_at_call(
-    const symbolt &contract_symbol,
+    const symbolt &function_symbol,
+    const goto_programt &function_body,
     goto_programt::targett call_instruction,
-    goto_programt &function_body);
+    goto_programt &caller_body);
 
   /// \brief Extract requires clause from contract symbol
   /// \param contract_symbol Contract symbol
@@ -151,6 +179,12 @@ private:
   /// \return Ensures expression (conjunction of all ensures), or true_exprt() if none
   expr2tc extract_ensures_from_body(const goto_programt &function_body);
 
+  /// \brief Extract assigns clause from function body
+  /// \param function_body Function goto program
+  /// \return Vector of assign target expressions from __ESBMC_assigns()
+  std::vector<expr2tc>
+  extract_assigns_from_body(const goto_programt &function_body);
+
   /// \brief Extract assigns clause from contract symbol
   /// \param contract_symbol Contract symbol
   /// \return Assigns expression, or nil_exprt() if not present
@@ -160,8 +194,34 @@ private:
   /// \param expr Expression to replace symbols in
   /// \param ret_val Actual return value expression
   /// \return Expression with __ESBMC_return_value replaced
-  expr2tc
-  replace_return_value_in_expr(const expr2tc &expr, const expr2tc &ret_val);
+  expr2tc replace_return_value_in_expr(
+    const expr2tc &expr,
+    const expr2tc &ret_val) const;
+
+  /// \brief Extract struct/union member accesses to temporary variables
+  /// For struct return values, accessing members directly (ret_val.x) can cause
+  /// symbolic execution issues when ret_val's value is a 'with' expression.
+  /// This function extracts member accesses to temporary variables to avoid dereference failures.
+  /// \param expr Expression containing member accesses
+  /// \param ret_val Return value symbol (must be struct/union type)
+  /// \param wrapper GOTO program to add temporary variable declarations and assignments
+  /// \param location Source location for generated instructions
+  /// \return Expression with member accesses replaced by temporary variables
+  expr2tc extract_struct_members_to_temps(
+    const expr2tc &expr,
+    const expr2tc &ret_val,
+    goto_programt &wrapper,
+    const locationt &location);
+
+  /// \brief Replace a symbol in expression with another expression
+  /// \param expr Expression to replace symbols in
+  /// \param old_symbol Symbol to replace
+  /// \param new_expr Expression to replace with
+  /// \return Expression with old_symbol replaced by new_expr
+  expr2tc replace_symbol_in_expr(
+    const expr2tc &expr,
+    const expr2tc &old_symbol,
+    const expr2tc &new_expr) const;
 
   // ========== __ESBMC_old support ==========
 
@@ -185,7 +245,7 @@ private:
   expr2tc create_snapshot_variable(
     const expr2tc &expr,
     const std::string &func_name,
-    size_t index);
+    size_t index) const;
 
   /// \brief Replace __ESBMC_old() calls with snapshot variables
   /// \param expr Expression containing old() calls
@@ -194,6 +254,94 @@ private:
   expr2tc replace_old_in_expr(
     const expr2tc &expr,
     const std::vector<old_snapshot_t> &snapshots) const;
+
+  /// \brief Collect old_snapshot assignments from function body
+  /// \param function_body GOTO program to scan for old_snapshot sideeffects
+  /// \return Vector of old_snapshot_t structures (original_expr, temp_var)
+  std::vector<old_snapshot_t>
+  collect_old_snapshots_from_body(const goto_programt &function_body) const;
+
+  /// \brief Materialize old snapshots in wrapper function (enforce-contract mode)
+  /// Creates DECL and ASSIGN instructions for snapshot variables before function call
+  /// \param old_snapshots Vector of snapshots to materialize (modified in-place)
+  /// \param wrapper GOTO program to add snapshot instructions to
+  /// \param func_name Function name for unique variable naming
+  /// \param location Source location for generated instructions
+  void materialize_old_snapshots_at_wrapper(
+    std::vector<old_snapshot_t> &old_snapshots,
+    goto_programt &wrapper,
+    const std::string &func_name,
+    const locationt &location) const;
+
+  /// \brief Materialize old snapshots at call site (replace-call mode)
+  /// Creates DECL and ASSIGN instructions for snapshot variables at call location
+  /// \param old_snapshots Vector of snapshots from function body
+  /// \param function_symbol Function symbol for parameter substitution
+  /// \param actual_args Actual arguments at call site
+  /// \param replacement GOTO program to add snapshot instructions to
+  /// \param call_location Source location for generated instructions
+  /// \return Vector of call-site snapshots (with parameter substitution applied)
+  std::vector<old_snapshot_t> materialize_old_snapshots_at_callsite(
+    const std::vector<old_snapshot_t> &old_snapshots,
+    const symbolt &function_symbol,
+    const std::vector<expr2tc> &actual_args,
+    goto_programt &replacement,
+    const locationt &call_location) const;
+
+  // ========== Type fixing for return value comparisons ==========
+
+  /// \brief Check if a symbol represents a return value variable
+  /// \param sym Symbol to check
+  /// \return True if symbol is a return value variable (matches patterns like "return_value", "__ESBMC_return_value", etc.)
+  bool is_return_value_symbol(const symbol2t &sym) const;
+
+  /// \brief Remove incorrect typecasts on return value symbols
+  /// \param expr Expression to process
+  /// \param ret_val Return value symbol with correct type
+  /// \return Expression with incorrect casts removed
+  expr2tc
+  remove_incorrect_casts(const expr2tc &expr, const expr2tc &ret_val) const;
+
+  /// \brief Fix type mismatches in comparison expressions involving return values
+  /// \param expr Expression to fix (typically an ensures guard)
+  /// \param ret_val Return value symbol with correct type
+  /// \return Expression with corrected type casts
+  expr2tc
+  fix_comparison_types(const expr2tc &expr, const expr2tc &ret_val) const;
+
+  /// \brief Normalize floating-point addition in contract expressions to use IEEE semantics
+  /// This ensures contracts use IEEE_ADD (matching implementation) instead of regular +
+  /// \param expr Expression to normalize (typically an ensures guard)
+  /// \return Expression with floating-point add2t replaced by ieee_add2t
+  expr2tc normalize_fp_add_in_ensures(const expr2tc &expr) const;
+
+  /// \brief Normalize ensures guard expression for return value handling
+  /// This is a unified helper that applies all return_value-related transformations:
+  /// 1. Replaces __ESBMC_return_value with actual ret_val symbol
+  /// 2. Fixes type mismatches in comparisons (removes incorrect casts, adds correct casts)
+  /// 3. Normalizes floating-point operations to use IEEE semantics
+  /// \param ensures_clause Original ensures clause expression
+  /// \param ret_val Return value symbol (may be nil if function returns void)
+  /// \return Normalized ensures guard ready for ASSERT/ASSUME
+  expr2tc normalize_ensures_guard_for_return_value(
+    const expr2tc &ensures_clause,
+    const expr2tc &ret_val) const;
+
+  // ========== __ESBMC_is_fresh support for ensures ==========
+
+  /// \brief Extract is_fresh mappings from function body
+  /// \param function_body Function goto program
+  /// \return Vector of is_fresh mappings (temp var name -> pointer expr)
+  std::vector<is_fresh_mapping_t>
+  extract_is_fresh_mappings_from_body(const goto_programt &function_body) const;
+
+  /// \brief Replace is_fresh temporary variables in ensures with verification expressions
+  /// \param expr Expression containing is_fresh temp variables
+  /// \param mappings Vector of is_fresh mappings
+  /// \return Expression with is_fresh temp variables replaced by verification expressions
+  expr2tc replace_is_fresh_in_ensures_expr(
+    const expr2tc &expr,
+    const std::vector<is_fresh_mapping_t> &mappings) const;
 
   /// \brief Havoc assigns targets (similar to loop invariant approach)
   /// \param assigns_clause Assigns clause expression
@@ -222,6 +370,16 @@ private:
   /// \param dest Destination goto program (wrapper body)
   /// \param location Location information
   void havoc_static_globals(goto_programt &dest, const locationt &location);
+
+  /// \brief Add pointer validity assumptions for non-null pointer parameters
+  /// Used with --assume-nonnull-valid flag in enforce-contract mode
+  /// \param wrapper Destination goto program (wrapper body)
+  /// \param func Function symbol
+  /// \param location Location information
+  void add_pointer_validity_assumptions(
+    goto_programt &wrapper,
+    const symbolt &func,
+    const locationt &location);
 };
 
 #endif // ESBMC_CONTRACTS_H

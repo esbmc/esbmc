@@ -688,6 +688,22 @@ bool clang_c_convertert::get_function(
   if (get_function_params(fd, type.arguments()))
     return true;
 
+  // Check for __ESBMC_contract annotation
+  if (fd.hasAttrs())
+  {
+    for (const auto *attr : fd.getAttrs())
+    {
+      if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      {
+        if (annot->getAnnotation().str() == "__ESBMC_contract")
+        {
+          type.set("#annotated_contract", true);
+          break;
+        }
+      }
+    }
+  }
+
   added_symbol.type = type;
   new_expr.type() = type;
 

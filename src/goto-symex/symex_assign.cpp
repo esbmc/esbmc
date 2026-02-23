@@ -264,6 +264,12 @@ void goto_symext::handle_sideeffect(
       symex_assign(assign_code, true, guard);
     }
     break;
+  case sideeffect2t::assigns_target:
+    // __ESBMC_assigns() targets are handled during contract processing
+    // In --enforce-contract mode, the assigns clause is extracted and checked,
+    // but we don't need to execute anything here during symex.
+    // Simply ignore the assigns_target side effect.
+    break;
   default:
     assert(0 && "unexpected side effect");
   }
