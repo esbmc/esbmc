@@ -25,7 +25,6 @@ ignored_dirs=(
   "convert-byte-update2"
   "constants"
   "decimal"
-  "decimal_fail"
   "dict_del12_fail"
   "dict_del13_fail"
   "dict_del14"
