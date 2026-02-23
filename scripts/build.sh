@@ -209,7 +209,6 @@ prepare_platform_config() {
         "-DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
         "-DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
         "-DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-        "-DCMAKE_BUILD_TYPE=Debug"
         "-DCMAKE_INSTALL_PREFIX:PATH=$ROOT_DIR/release"
       )
 
