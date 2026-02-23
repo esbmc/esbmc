@@ -1323,7 +1323,8 @@ void goto_symext::intrinsic_set_thread_data(
 
   if (!is_constant_int2t(threadid))
   {
-    log_error("__ESBMC_set_thread_internal_data received nonconstant thread id");
+    log_error(
+      "__ESBMC_set_thread_internal_data received nonconstant thread id");
     abort();
   }
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
@@ -1344,7 +1345,8 @@ void goto_symext::intrinsic_get_thread_data(
 
   if (!is_constant_int2t(threadid))
   {
-    log_error("__ESBMC_get_thread_internal_data received nonconstant thread id");
+    log_error(
+      "__ESBMC_get_thread_internal_data received nonconstant thread id");
     abort();
   }
 
