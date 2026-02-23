@@ -47,6 +47,15 @@ protected:
   virtual bool
   output_goto_program(optionst &options, goto_functionst &goto_functions);
 
+  /// \brief Process function contracts if enabled
+  /// \param goto_functions GOTO functions
+  /// \param has_replace Whether to replace calls with contracts
+  /// \param has_enforce Whether to enforce contracts
+  void process_function_contracts(
+    goto_functionst &goto_functions,
+    bool has_replace,
+    bool has_enforce);
+
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
 
   int doit_k_induction_parallel();

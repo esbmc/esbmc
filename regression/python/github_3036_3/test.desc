@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+--no-bounds-check --no-align-check --unwind 9 --no-pointer-check --smt-during-symex --smt-symex-guard --z3
+^VERIFICATION SUCCESSFUL$

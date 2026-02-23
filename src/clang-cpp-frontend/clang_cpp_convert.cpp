@@ -272,11 +272,17 @@ bool clang_cpp_convertert::get_type(
       return true;
 
     typet class_type;
+#if CLANG_VERSION_MAJOR >= 21
+    if (get_type(*mpt.getQualifier()->getAsType(), class_type))
+      return true;
+#else
     if (get_type(*mpt.getClass(), class_type))
       return true;
+#endif
 
     new_type = gen_pointer_type(sub_type);
-    new_type.set("to-member", class_type);
+    if (!mpt.isMemberFunctionPointer())
+      new_type.set("to-member", class_type);
     break;
   }
 
@@ -659,17 +665,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
 
     new_expr = call;
-    break;
-  }
-
-  case clang::Stmt::ExprWithCleanupsClass:
-  {
-    const clang::ExprWithCleanups &ewc =
-      static_cast<const clang::ExprWithCleanups &>(stmt);
-
-    if (get_expr(*ewc.getSubExpr(), new_expr))
-      return true;
-
     break;
   }
 

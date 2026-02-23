@@ -7,7 +7,7 @@ jobs:
 
   # Check testing tool suite
   testing-tool:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-slim
     steps:
     - uses: actions/checkout@v4
     - name: Runs testing tool unit test
@@ -17,6 +17,6 @@ jobs:
   build-unix:
     uses: ./.github/workflows/build-unix.yml
     with:
-      operating-system: ubuntu-22.04
+      operating-system: ubuntu-24.04
       build-flags: '-b Debug'
       testing: true

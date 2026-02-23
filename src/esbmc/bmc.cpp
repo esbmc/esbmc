@@ -38,7 +38,6 @@
 #include <util/time_stopping.h>
 #include <util/cache.h>
 #include <atomic>
-#include <goto-symex/witnesses.h>
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
@@ -61,16 +60,20 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
   // The next block will initialize the algorithms used for the analysis.
   {
+    // Run cache if user has specified the option
+    if (
+      !options.get_bool_option("no-cache-asserts") &&
+      !options.get_bool_option("forward-condition") &&
+      !options.get_bool_option("k-induction") &&
+      !options.get_bool_option("ltl"))
+      // Store the set between runs
+      algorithms.emplace_back(
+        std::make_unique<assertion_cache>(config.ssa_caching_db));
+
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
     else
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
-
-    // Run cache if user has specified the option
-    if (options.get_bool_option("cache-asserts"))
-      // Store the set between runs
-      algorithms.emplace_back(std::make_unique<assertion_cache>(
-        config.ssa_caching_db, !options.get_bool_option("forward-condition")));
 
     if (opts.get_bool_option("ssa-features-dump"))
       algorithms.emplace_back(std::make_unique<ssa_features>());
@@ -103,19 +106,18 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   if (options.get_bool_option("result-only"))
     return;
 
-  std::string witness_output = options.get_option("witness-output");
+  std::string witness_graphml_output =
+    options.get_option("witness-output-graphml");
   std::string witness_yaml_output = options.get_option("witness-output-yaml");
-  if (witness_output != "")
-  {
-    goto_tracet goto_trace;
-    log_progress("Building successful trace");
-    // correctness witness, why did goto trace ignore it in the past?
-    // build_successful_goto_trace(eq, ns, goto_trace);
-    if (witness_yaml_output == "")
-      correctness_graphml_goto_trace(options, ns, goto_trace);
-    else
-      correctness_yaml_goto_trace(options, ns, goto_trace);
-  }
+
+  goto_tracet goto_trace;
+  // correctness witness, why did goto trace ignore it in the past?
+  // build_successful_goto_trace(eq, ns, goto_trace);
+  if (witness_graphml_output != "")
+    correctness_graphml_goto_trace(options, ns, goto_trace);
+
+  if (witness_yaml_output != "")
+    correctness_yaml_goto_trace(options, ns, goto_trace);
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
@@ -141,21 +143,34 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     show_goto_trace(out, ns, goto_trace);
   }
 
-  std::string witness_output = options.get_option("witness-output");
+  std::string witness_graphml_output =
+    options.get_option("witness-output-graphml");
   std::string witness_yaml_output = options.get_option("witness-output-yaml");
-  if (witness_output != "")
-  {
-    log_progress("Building error trace");
-    if (witness_yaml_output == "")
-      violation_graphml_goto_trace(options, ns, goto_trace);
-    else
-      violation_yaml_goto_trace(options, ns, goto_trace);
-  }
+  if (witness_graphml_output != "")
+    violation_graphml_goto_trace(options, ns, goto_trace);
+
+  if (witness_yaml_output != "")
+    violation_yaml_goto_trace(options, ns, goto_trace);
 
   if (options.get_bool_option("generate-testcase"))
   {
     generate_testcase_metadata();
     generate_testcase("testcase.xml", eq, smt_conv);
+  }
+
+  if (options.get_bool_option("generate-pytest-testcase"))
+  {
+    // Generate pytest filename based on source file: test_<module>.py
+    std::string input_file = options.get_option("input-file");
+    std::string module_name = pytest_generator::extract_module_name(input_file);
+    std::string pytest_filename =
+      pytest_generator::generate_pytest_filename(module_name);
+    pytest_gen.generate_single(pytest_filename, eq, smt_conv, ns);
+  }
+
+  if (options.get_bool_option("generate-ctest-testcase"))
+  {
+    ctest_gen.generate_single(".", eq, smt_conv, ns);
   }
 
   if (options.get_bool_option("generate-html-report"))
@@ -233,7 +248,33 @@ smt_convt::resultt bmct::run_decision_procedure(
     options.get_bool_option("smt-formula-too") ||
     options.get_bool_option("smt-formula-only"))
   {
-    smt_conv.dump_smt();
+    std::string smt_formula = smt_conv.dump_smt();
+
+    // Print the SMT formula to stdout or file
+    if (!smt_formula.empty())
+    {
+      const std::string &output_path = options.get_option("output");
+
+      if (output_path.empty() || output_path == "-")
+      {
+        // Print to stdout
+        fprintf(stdout, "%s", smt_formula.c_str());
+      }
+      else
+      {
+        // Print to file
+        FILE *file = fopen(output_path.c_str(), "w");
+        if (!file)
+          log_error("Could not open output file '{}'", output_path);
+        else
+        {
+          fprintf(file, "%s", smt_formula.c_str());
+          fclose(file);
+          log_status("SMT formula dumped to file: {}", output_path);
+        }
+      }
+    }
+
     if (options.get_bool_option("smt-formula-only"))
       return smt_convt::P_SMTLIB;
   }
@@ -479,7 +520,9 @@ void bmct::report_multi_property_trace(
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
-  const std::unordered_multiset<std::string> &reached_mul_claims)
+  const std::unordered_multiset<std::string> &reached_mul_claims,
+  pytest_generator &pytest_gen,
+  ctest_generator &ctest_gen)
 {
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -703,6 +746,22 @@ void report_coverage(
     else
       log_result("Branch Coverage: 0%");
   }
+
+  // Generate pytest test case from collected data (for coverage mode)
+  if (options.get_bool_option("generate-pytest-testcase"))
+  {
+    std::string input_file = options.get_option("input-file");
+    std::string module_name = pytest_generator::extract_module_name(input_file);
+    std::string pytest_filename =
+      pytest_generator::generate_pytest_filename(module_name);
+    pytest_gen.generate(pytest_filename);
+  }
+
+  // Generate CTest test cases from collected data (for coverage mode)
+  if (options.get_bool_option("generate-ctest-testcase"))
+  {
+    ctest_gen.generate();
+  }
 }
 
 // Output coverage information whenever an instrumented assertion is found violated.
@@ -894,6 +953,11 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     if (++interleaving_number > 1)
       log_status("Thread interleavings {}", interleaving_number);
 
+    // Clear the cache between thread interleavings to prevent
+    // incorrect caching of assertions with different thread contexts
+    if (!options.get_bool_option("no-cache-asserts"))
+      config.ssa_caching_db.clear();
+
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
 
@@ -1073,6 +1137,14 @@ void bmct::bidirectional_search(
 
 smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 {
+  // Clear collected pytest test data at the start of coverage run
+  if (options.get_bool_option("generate-pytest-testcase"))
+    pytest_gen.clear();
+
+  // Clear collected ctest test data at the start of coverage run
+  if (options.get_bool_option("generate-ctest-testcase"))
+    ctest_gen.clear();
+
   fine_timet symex_start = current_time();
   try
   {
@@ -1100,6 +1172,14 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       ignored += a->ignored();
     }
 
+    // Count remaining assertions after all algorithms have run
+    BigInt remaining_asserts = 0;
+    for (const auto &step : eq->SSA_steps)
+    {
+      if (step.is_assert() && !step.ignore)
+        ++remaining_asserts;
+    }
+
     if (
       options.get_bool_option("program-only") ||
       options.get_bool_option("program-too"))
@@ -1109,9 +1189,10 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_SMTLIB;
 
     log_status(
-      "Generated {} VCC(s), {} remaining after simplification ({} assignments)",
+      "Generated {} VCC(s), {} remaining after simplification ({} "
+      "assignments)",
       solver_result.total_claims,
-      solver_result.remaining_claims,
+      remaining_asserts,
       BigInt(eq->SSA_steps.size()) - ignored);
 
     if (options.get_bool_option("document-subgoals"))
@@ -1271,7 +1352,10 @@ smt_convt::resultt bmct::multi_property_check(
 
   // Add summary tracking
   SimpleSummary summary;
-  summary.total_properties = remaining_claims;
+  summary.simplified_properties = symex->get_cur_state().simplified_claims;
+  summary.total_properties = remaining_claims + summary.simplified_properties;
+  summary.passed_properties =
+    summary.passed_properties + summary.simplified_properties;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
@@ -1496,6 +1580,14 @@ smt_convt::resultt bmct::multi_property_check(
       goto_tracet goto_trace;
       build_goto_trace(local_eq, *solver_ptr, goto_trace, is_compact_trace);
 
+      // Collect pytest test data if requested (for coverage mode)
+      if (options.get_bool_option("generate-pytest-testcase"))
+        pytest_gen.collect(local_eq, *solver_ptr);
+
+      // Collect ctest test data if requested (for coverage mode)
+      if (options.get_bool_option("generate-ctest-testcase"))
+        ctest_gen.collect(local_eq, *solver_ptr, ns);
+
       // Store claim signature
       if (is_assert_cov)
       {
@@ -1600,7 +1692,8 @@ smt_convt::resultt bmct::multi_property_check(
   if (
     bs && !fc && !is && !options.get_bool_option("k-induction") &&
     !options.get_bool_option("incremental-bmc"))
-    report_coverage(options, reached_claims, reached_mul_claims);
+    report_coverage(
+      options, reached_claims, reached_mul_claims, pytest_gen, ctest_gen);
 
   return final_result;
 }

@@ -71,6 +71,8 @@ static const char *expr_names[] = {
   "byte_update",
   "with",
   "member",
+  "member_ref",
+  "ptr_mem",
   "index",
   "isnan",
   "overflow",
@@ -117,7 +119,9 @@ static const char *expr_names[] = {
   "capability_top",
   "forall",
   "exists",
-};
+  "isinstance",
+  "hasattr",
+  "isnone"};
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
 static_assert(

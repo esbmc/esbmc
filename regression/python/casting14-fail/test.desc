@@ -1,4 +1,4 @@
 CORE
 main.py
-
-^ERROR: TypeError: invalid string passed to chr\(\): 'hello'$
+--incremental-bmc
+^VERIFICATION FAILED$

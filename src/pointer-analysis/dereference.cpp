@@ -642,6 +642,9 @@ expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
   expr2tc byte_offset =
     pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
 
+  // simplify pointer offset expression
+  simplify(byte_offset);
+
   // Convert from bytes to bits for check_alignment
   return mul2tc(
     bitsize_type2(),
@@ -746,6 +749,8 @@ expr2tc dereferencet::build_reference_to(
 
     final_offset =
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
+    // simplify pointer offset expression
+    simplify(final_offset);
   }
 
   type2tc offset_type = bitsize_type2();
@@ -939,9 +944,7 @@ void dereferencet::build_reference_rec(
 
   // All accesses to code need no further construction
   if (is_code_type(value) || is_code_type(type))
-  {
     return;
-  }
 
   if (is_struct_type(type))
     flags |= flag_dst_struct;
@@ -1078,6 +1081,16 @@ void dereferencet::build_reference_rec(
   case flag_src_union | flag_dst_struct | flag_is_dyn_offs:
   {
     const union_type2t &uni_type = to_union_type(value->type);
+
+    // Handle empty unions (size == 0, no members)
+    if (uni_type.members.size() == 0)
+    {
+      dereference_failure(
+        "Bad dereference", "Cannot dereference through empty union", guard);
+      value = make_failed_symbol(type);
+      break;
+    }
+
     assert(uni_type.members.size() != 0);
     BigInt union_total_size = type_byte_size(value->type);
     // Let's find a member with the biggest size
@@ -1464,16 +1477,6 @@ void dereferencet::construct_from_dyn_struct_offset(
       extract_list.emplace_back(field_guard, field);
     }
     else if (
-      access_sz > field_size && type->get_width() != config.ansi_c.char_width)
-    {
-      guardt newguard(guard);
-      newguard.add(field_guard);
-      dereference_failure(
-        "pointer dereference", "Oversized field offset", newguard);
-      // Push nothing back, allow fall-through of the if-then-else chain to
-      // resolve to a failed deref symbol.
-    }
-    else if (
       alignment >= config.ansi_c.word_size &&
       it->get_width() == type->get_width())
     {
@@ -1747,7 +1750,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   for (std::list<std::pair<expr2tc, expr2tc>>::const_iterator it =
          resolved_list.begin();
        it != resolved_list.end();
-       it++)
+       ++it)
   {
     result = if2tc(type, it->first, it->second, result);
   }
@@ -1760,7 +1763,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   for (std::list<std::pair<expr2tc, expr2tc>>::const_iterator it =
          resolved_list.begin();
        it != resolved_list.end();
-       it++)
+       ++it)
   {
     accuml = or2tc(accuml, it->first);
   }
@@ -1805,12 +1808,17 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     // (offs >= 0 && offs < size_of_this_array)
     expr2tc new_offset = mod;
     expr2tc gte = greaterthanequal2tc(offs, gen_long(offs->type, 0));
-    expr2tc array_size = arr_type.array_size;
-    if (array_size->type != sub_size->type)
-      array_size = typecast2tc(sub_size->type, array_size);
-    expr2tc arr_size_in_bits = mul2tc(sub_size->type, array_size, sub_size);
-    expr2tc lt = lessthan2tc(offs, arr_size_in_bits);
-    expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
+    expr2tc range_guard = and2tc(accuml_guard, gte);
+
+    if (!arr_type.size_is_infinite)
+    {
+      expr2tc array_size = arr_type.array_size;
+      if (array_size->type != sub_size->type)
+        array_size = typecast2tc(sub_size->type, array_size);
+      expr2tc arr_size_in_bits = mul2tc(sub_size->type, array_size, sub_size);
+      expr2tc lt = lessthan2tc(offs, arr_size_in_bits);
+      range_guard = and2tc(accuml_guard, lt);
+    }
     simplify(range_guard);
 
     construct_struct_ref_from_dyn_offs_rec(
@@ -1868,6 +1876,40 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     return;
   }
 
+  if (is_union_type(value->type))
+  {
+    // Handle union types. All members of a union are at offset 0.
+    // If target type matches, guard that offset is zero and return.
+    expr2tc tmp = value;
+    if (dereference_type_compare(tmp, type))
+    {
+      expr2tc offs_is_zero =
+        and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+      output.emplace_back(offs_is_zero, tmp);
+    }
+
+    // For union members, all are at offset 0, so recurse into each member
+    // that could contain the target type.
+    const union_type2t &union_type = to_union_type(value->type);
+    unsigned int i = 0;
+    for (auto const &it : union_type.members)
+    {
+      if (is_scalar_type(it))
+      {
+        i++;
+        continue;
+      }
+
+      // All union members are at offset 0
+      expr2tc memb = member2tc(it, value, union_type.member_names[i]);
+
+      construct_struct_ref_from_dyn_offs_rec(
+        memb, offs, type, accuml_guard, mode, output);
+      i++;
+    }
+    return;
+  }
+
   if (
     is_array_type(value->type) &&
     get_base_array_subtype(value->type)->get_width() == 8)
@@ -1884,33 +1926,48 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     if (is_symbol2t(value))
       bounds_check(value, offs, type, tmp);
 
-    // We are left with constructing a structure from a byte array. XXX, this
-    // is duplicated from above, refactor?
-    std::vector<expr2tc> fields;
-    assert(is_struct_type(type));
-    const struct_type2t &structtype = to_struct_type(type);
-    expr2tc array_offset = offs;
-    for (const type2tc &target_type : structtype.members)
+    // We are left with constructing a structure/union from a byte array.
+    if (is_struct_type(type))
     {
-      expr2tc target = value; // The byte array;
+      std::vector<expr2tc> fields;
+      const struct_type2t &structtype = to_struct_type(type);
+      expr2tc array_offset = offs;
+      for (const type2tc &target_type : structtype.members)
+      {
+        expr2tc target = value; // The byte array;
 
-      simplify(array_offset);
-      if (is_array_type(target_type))
-        construct_from_array(target, array_offset, target_type, tmp, mode);
-      else
-        build_reference_rec(target, array_offset, target_type, tmp, mode);
-      fields.push_back(target);
+        simplify(array_offset);
+        if (is_array_type(target_type))
+          construct_from_array(target, array_offset, target_type, tmp, mode);
+        else
+          build_reference_rec(target, array_offset, target_type, tmp, mode);
+        fields.push_back(target);
 
-      // Update dynamic offset into array
-      array_offset = add2tc(
-        array_offset->type,
-        array_offset,
-        gen_long(array_offset->type, type_byte_size_bits(target_type)));
+        // Update dynamic offset into array
+        array_offset = add2tc(
+          array_offset->type,
+          array_offset,
+          gen_long(array_offset->type, type_byte_size_bits(target_type)));
+      }
+
+      // We now have a vector of fields reconstructed from the byte array
+      expr2tc the_struct = constant_struct2tc(type, std::move(fields));
+      output.emplace_back(accuml_guard, the_struct);
     }
+    else if (is_union_type(type))
+    {
+      // For unions from byte arrays, read the first member at offset
+      const union_type2t &uniontype = to_union_type(type);
+      expr2tc target = value; // The byte array
+      expr2tc union_offs = offs;
+      simplify(union_offs);
+      build_reference_rec(target, union_offs, uniontype.members[0], tmp, mode);
 
-    // We now have a vector of fields reconstructed from the byte array
-    expr2tc the_struct = constant_struct2tc(type, std::move(fields));
-    output.emplace_back(accuml_guard, the_struct);
+      std::vector<expr2tc> members = {target};
+      expr2tc the_union =
+        constant_union2tc(type, uniontype.member_names[0], members);
+      output.emplace_back(accuml_guard, the_union);
+    }
     return;
   }
 }

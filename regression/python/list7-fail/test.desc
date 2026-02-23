@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
-
-^VERIFICATION FAILED$
+--unwind 9
+^ERROR: List out of bounds at\b

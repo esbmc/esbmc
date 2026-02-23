@@ -1,4 +1,4 @@
 CORE
 main.py
-
-^WARNING: Undefined function: sub$
+--incremental-bmc
+^VERIFICATION FAILED$

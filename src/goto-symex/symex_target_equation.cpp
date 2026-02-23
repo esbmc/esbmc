@@ -67,6 +67,27 @@ void symex_target_equationt::output(
     debug_print_step(SSA_step);
 }
 
+void symex_target_equationt::branching(
+  const expr2tc &guard,
+  const expr2tc &cond,
+  const sourcet &source,
+  const bool hidden,
+  unsigned loop_number)
+{
+  SSA_steps.emplace_back();
+  SSA_stept &SSA_step = SSA_steps.back();
+
+  SSA_step.guard = guard;
+  SSA_step.cond = cond;
+  SSA_step.hidden = hidden;
+  SSA_step.type = goto_trace_stept::BREANCHING;
+  SSA_step.source = source;
+  SSA_step.loop_number = loop_number;
+
+  if (debug_print)
+    debug_print_step(SSA_step);
+}
+
 void symex_target_equationt::assumption(
   const expr2tc &guard,
   const expr2tc &cond,
@@ -167,7 +188,7 @@ void symex_target_equationt::convert_internal_step(
 
   step.guard_ast = smt_conv.convert_ast(step.guard);
 
-  if (step.is_assume() || step.is_assert())
+  if (step.is_assume() || step.is_assert() || step.is_branching())
   {
     expr2tc tmp(step.cond);
     step.cond_ast = smt_conv.convert_ast(tmp);
@@ -189,7 +210,7 @@ void symex_target_equationt::convert_internal_step(
   {
     for (std::list<expr2tc>::const_iterator o_it = step.output_args.begin();
          o_it != step.output_args.end();
-         o_it++)
+         ++o_it)
     {
       const expr2tc &tmp = *o_it;
       if (is_constant_expr(tmp) || is_constant_string2t(tmp))
@@ -280,7 +301,10 @@ void symex_target_equationt::SSA_stept::output(
     out << "OUTPUT"
         << "\n";
     break;
-
+  case goto_trace_stept::BREANCHING:
+    out << "BRANCHING"
+        << "\n";
+    break;
   case goto_trace_stept::ASSIGNMENT:
     out << "ASSIGNMENT (";
     out << (hidden ? "HIDDEN" : "") << ")\n";
@@ -291,7 +315,7 @@ void symex_target_equationt::SSA_stept::output(
       type == goto_trace_stept::SKIP && config.options.get_bool_option("ltl"));
   }
 
-  if (is_assert() || is_assume() || is_assignment())
+  if (is_assert() || is_assume() || is_assignment() || is_branching())
     out << from_expr(ns, "", migrate_expr_back(cond)) << "\n";
 
   if (is_assert())
@@ -370,7 +394,7 @@ unsigned int symex_target_equationt::clear_assertions()
     if (it->type == goto_trace_stept::ASSERT)
     {
       SSA_stepst::iterator it2 = it;
-      it--;
+      --it;
       SSA_steps.erase(it2);
       num_asserts++;
     }

@@ -21,9 +21,8 @@ bool assertion_cache::run(symex_target_equationt::SSA_stepst &eq)
     run_on_step(step);
   fine_timet algorithm_stop = current_time();
   log_status(
-    "Caching time: {}s (removed {}/{} assertions)",
+    "Caching time: {}s (removed {} assertions)",
     time2string(algorithm_stop - algorithm_start),
-    hits,
-    total);
+    hits);
   return true;
 }

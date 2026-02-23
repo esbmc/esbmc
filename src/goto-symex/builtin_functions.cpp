@@ -41,114 +41,461 @@ expr2tc goto_symext::symex_alloca(
   return symex_mem(false, lhs, code, guard);
 }
 
+expr2tc goto_symext::create_dynamic_memory_symbol(
+  const type2tc &elem_type,
+  const expr2tc &size_expr,
+  const std::string &name_prefix)
+{
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  symbolt symbol;
+  symbol.name = name_prefix + "_" + i2string(dynamic_counter) + "_array";
+  symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
+  symbol.lvalue = true;
+  symbol.mode = "C";
+
+  typet renamedtype = ns.follow(migrate_type_back(elem_type));
+  symbol.type = typet(typet::t_array);
+  symbol.type.subtype() = renamedtype;
+  symbol.type.size(migrate_expr_back(size_expr));
+  symbol.type.dynamic(true);
+  symbol.type.set(
+    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+
+  new_context.add(symbol);
+  type2tc new_type = migrate_type(symbol.type);
+  return symbol2tc(new_type, symbol.id);
+}
+
+void goto_symext::copy_memory_content(
+  const expr2tc &old_base_array,
+  const expr2tc &new_array,
+  const expr2tc &old_elem_count,
+  const expr2tc &new_elem_count,
+  const type2tc &elem_type,
+  bool old_is_array,
+  const guardt &guard)
+{
+  if (
+    is_nil_expr(old_base_array) || is_nil_expr(old_elem_count) ||
+    is_nil_expr(new_elem_count))
+    return;
+
+  type2tc new_elem_type = to_array_type(new_array->type).subtype;
+
+  expr2tc copy_count = if2tc(
+    size_type2(),
+    lessthan2tc(old_elem_count, new_elem_count),
+    old_elem_count,
+    new_elem_count);
+
+  // default value
+  uint64_t max_symbolic_copy = 128;
+  std::string option_value = options.get_option("max-symbolic-realloc-copy");
+  if (!option_value.empty())
+    max_symbolic_copy = std::stoull(option_value);
+
+  if (is_constant_int2t(copy_count))
+  {
+    uint64_t const_copy_count = to_constant_int2t(copy_count).value.to_uint64();
+    uint64_t actual_copy_count = std::min(const_copy_count, max_symbolic_copy);
+
+    for (uint64_t i = 0; i < actual_copy_count; i++)
+    {
+      expr2tc idx = constant_int2tc(size_type2(), BigInt(i));
+      copy_single_element(
+        old_base_array,
+        new_array,
+        idx,
+        elem_type,
+        new_elem_type,
+        old_is_array,
+        guard);
+    }
+  }
+  else
+  {
+    for (uint64_t i = 0; i < max_symbolic_copy; i++)
+    {
+      expr2tc idx = constant_int2tc(size_type2(), BigInt(i));
+      expr2tc should_copy = lessthan2tc(idx, copy_count);
+      guardt copy_guard = guard;
+      copy_guard.add(should_copy);
+
+      if (!copy_guard.is_false())
+        copy_single_element(
+          old_base_array,
+          new_array,
+          idx,
+          elem_type,
+          new_elem_type,
+          old_is_array,
+          copy_guard);
+    }
+  }
+}
+
+void goto_symext::copy_single_element(
+  const expr2tc &old_base_array,
+  const expr2tc &new_array,
+  const expr2tc &idx,
+  const type2tc &elem_type,
+  const type2tc &new_elem_type,
+  bool old_is_array,
+  const guardt &guard)
+{
+  expr2tc old_elem =
+    old_is_array ? index2tc(elem_type, old_base_array, idx) : old_base_array;
+  expr2tc new_elem = index2tc(new_elem_type, new_array, idx);
+
+  cur_state->rename(old_elem);
+  symex_assign(code_assign2tc(new_elem, old_elem), false, guard);
+}
+
 void goto_symext::symex_realloc(
   const expr2tc &lhs,
   const sideeffect2t &code,
   const guardt &guard)
 {
   expr2tc src_ptr = code.operand;
-  expr2tc realloc_size = code.size;
+  expr2tc realloc_size = code.size; // This is in bytes
+  cur_state->rename(realloc_size);
 
-  // Check if realloc size is zero
+  // ===== handle reallocC(ptr, 0) - free and return NULL =====
+  if (handle_realloc_zero_size(lhs, code, guard, realloc_size))
+    return;
+
+  // ===== determine element type and old object info =====
+  type2tc elem_type;
+  expr2tc old_base_array;
+  bool old_is_array = false;
+  expr2tc old_elem_count;
+
+  if (!analyze_old_object(
+        src_ptr, elem_type, old_base_array, old_is_array, old_elem_count))
+  {
+    // Fallback element type determination
+    elem_type = determine_fallback_element_type(code, lhs);
+  }
+
+  // calculate new element count
+  expr2tc elem_size = type_byte_size_expr(elem_type);
+  cur_state->rename(elem_size);
+  do_simplify(elem_size);
+
+  expr2tc new_elem_count = calculate_element_count(realloc_size, elem_size);
+
+  // allocate new memory
+  expr2tc new_array =
+    create_dynamic_memory_symbol(elem_type, realloc_size, "realloc");
+
+  // copy data
+  copy_memory_content(
+    old_base_array,
+    new_array,
+    old_elem_count,
+    new_elem_count,
+    elem_type,
+    old_is_array,
+    guard);
+
+  // create result and handle failure modelling
+  expr2tc result = create_result_pointer(new_array, lhs->type);
+  result = model_allocation_failure(result, code.operand, guard);
+
+  // finalize assignment and tracking
+  finalize_realloc_result(lhs, result, new_array, guard, realloc_size);
+}
+
+bool goto_symext::handle_realloc_zero_size(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guardt &guard,
+  const expr2tc &realloc_size)
+{
   expr2tc zero_size = gen_zero(realloc_size->type);
-
-  // Create equality expression
   expr2tc is_zero_size = equality2tc(realloc_size, zero_size);
   do_simplify(is_zero_size);
 
-  // If realloc size is 0, free ptr and return NULL
   if (is_true(is_zero_size))
   {
-    // Free the pointer
-    expr2tc fr = code_free2tc(src_ptr);
-    symex_free(fr);
-
-    // Assign NULL to lhs
+    symex_free(code_free2tc(code.operand));
     expr2tc null_ptr = gen_zero(lhs->type);
     symex_assign(code_assign2tc(lhs, null_ptr), true, guard);
-    return;
+    return true;
   }
+  return false;
+}
 
+bool goto_symext::analyze_old_object(
+  const expr2tc &src_ptr,
+  type2tc &elem_type,
+  expr2tc &old_base_array,
+  bool &old_is_array,
+  expr2tc &old_elem_count)
+{
   internal_deref_items.clear();
-  expr2tc deref = dereference2tc(get_empty_type(), src_ptr);
+  expr2tc deref = dereference2tc(get_uint8_type(), src_ptr);
   dereference(deref, dereferencet::INTERNAL);
-  // src_ptr is now invalidated.
 
-  // Free the given pointer. This just uses the pointer object from the pointer
-  // variable that's the argument to realloc. It also leads to pointer validity
-  // checking, and checks that the offset is zero.
-  expr2tc fr = code_free2tc(code.operand);
-  symex_free(fr);
+  if (internal_deref_items.empty())
+    return false;
 
-  // We now have a list of things to work on. Recurse into them, build a result,
-  // and then switch between those results afterwards.
-  // Result list is the address of the reallocated piece of data, and the guard.
-  std::list<std::pair<expr2tc, expr2tc>> result_list;
-  for (auto &item : internal_deref_items)
+  expr2tc old_obj = internal_deref_items.front().object;
+
+  // Determine element type and base array from old object
+  if (is_index2t(old_obj))
   {
-    expr2tc g = item.guard;
-    cur_state->rename_address(item.object);
-    cur_state->guard.guard_expr(g);
-    target->renumber(g, item.object, realloc_size, cur_state->source);
-    type2tc new_ptr = pointer_type2tc(item.object->type);
-    expr2tc addrof = address_of2tc(new_ptr, item.object);
-    result_list.emplace_back(addrof, item.guard);
+    old_base_array = to_index2t(old_obj).source_value;
+    old_is_array = is_array_type(old_base_array->type);
+    elem_type = old_is_array ? to_array_type(old_base_array->type).subtype
+                             : old_base_array->type;
+  }
+  else if (is_array_type(old_obj->type))
+  {
+    old_base_array = old_obj;
+    old_is_array = true;
+    elem_type = to_array_type(old_obj->type).subtype;
+  }
+  else
+  {
+    old_base_array = old_obj;
+    old_is_array = false;
+    elem_type = old_obj->type;
+  }
 
-    // Bump the realloc-numbering of the object. This ensures that, after
-    // renaming, the address_of we just generated compares differently to
-    // previous address_of's before the realloc.
-    unsigned int cur_num = 0;
-    if (
-      cur_state->realloc_map.find(item.object) != cur_state->realloc_map.end())
+  // Calculate old element count
+  old_elem_count =
+    calculate_old_element_count(old_base_array, elem_type, old_is_array);
+
+  return true;
+}
+
+type2tc goto_symext::determine_fallback_element_type(
+  const sideeffect2t &code,
+  const expr2tc &lhs)
+{
+  if (!is_nil_type(code.alloctype) && !is_empty_type(code.alloctype))
+    return code.alloctype;
+  else if (is_pointer_type(lhs->type))
+  {
+    type2tc subtype = to_pointer_type(lhs->type).subtype;
+    if (is_empty_type(subtype))
+      return get_uint8_type();
+    return subtype;
+  }
+  else
+    return get_uint8_type();
+}
+
+expr2tc goto_symext::calculate_element_count(
+  const expr2tc &size_bytes,
+  const expr2tc &elem_size)
+{
+  if (
+    is_constant_int2t(elem_size) &&
+    to_constant_int2t(elem_size).value.to_uint64() > 0)
+  {
+    expr2tc count = div2tc(size_type2(), size_bytes, elem_size);
+    cur_state->rename(count);
+    do_simplify(count);
+    return count;
+  }
+  return expr2tc(); // nil expr for invalid cases
+}
+
+expr2tc goto_symext::calculate_old_element_count(
+  const expr2tc &old_base_array,
+  const type2tc &elem_type,
+  bool old_is_array)
+{
+  if (old_is_array && is_array_type(old_base_array->type))
+  {
+    const array_type2t &arr_type = to_array_type(old_base_array->type);
+    if (!is_nil_expr(arr_type.array_size))
     {
-      cur_num = cur_state->realloc_map[item.object];
+      expr2tc size_bytes = arr_type.array_size;
+      cur_state->rename(size_bytes);
+      do_simplify(size_bytes);
+
+      expr2tc elem_size = type_byte_size_expr(elem_type);
+      cur_state->rename(elem_size);
+      do_simplify(elem_size);
+
+      return calculate_element_count(size_bytes, elem_size);
     }
-
-    cur_num++;
-    std::map<expr2tc, unsigned>::value_type v(item.object, cur_num);
-    cur_state->realloc_map.insert(v);
   }
-
-  // Rebuild a gigantic if-then-else chain from the result list.
-  expr2tc result;
-  if (result_list.size() == 0)
+  else if (!old_is_array)
   {
-    // Nothing happened; there was nothing, or only null, to point at.
-    // In this case, just return right now and leave the pointer free. The
-    // symex_free that occurred above should trigger a dereference failure.
-    return;
+    return constant_int2tc(size_type2(), BigInt(1));
   }
 
-  for (auto const &it : result_list)
-  {
-    if (is_nil_expr(result))
-      result = it.first;
-    else
-      result = if2tc(result->type, it.second, it.first, result);
-  }
+  return expr2tc(); // nil expr for unhandled cases
+}
 
-  // Introduce a symbolic condition to model allocation failure
-  expr2tc alloc_fail = sideeffect2tc(
-    get_bool_type(),
-    expr2tc(),
-    expr2tc(),
-    std::vector<expr2tc>(),
-    type2tc(),
-    sideeffect2t::nondet);
-  replace_nondet(alloc_fail);
+expr2tc goto_symext::create_result_pointer(
+  const expr2tc &new_array,
+  const type2tc &lhs_type)
+{
+  type2tc new_elem_type = to_array_type(new_array->type).subtype;
+  expr2tc idx_val = gen_long(size_type2(), 0L);
+  expr2tc idx = index2tc(new_elem_type, new_array, idx_val);
+  expr2tc result = address_of2tc(new_elem_type, idx);
 
+  if (result->type != lhs_type)
+    result = typecast2tc(lhs_type, result);
+
+  cur_state->rename(result);
+  return result;
+}
+
+expr2tc goto_symext::model_allocation_failure(
+  const expr2tc &result,
+  const expr2tc &old_ptr,
+  const guardt &guard)
+{
   if (!options.get_bool_option("force-realloc-success"))
   {
-    // Model memory exhaustion: if alloc_fail is true, return NULL
-    expr2tc null_ptr = symbol2tc(lhs->type, "NULL");
-    result = if2tc(result->type, alloc_fail, null_ptr, result);
+    expr2tc alloc_fail = sideeffect2tc(
+      get_bool_type(),
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::nondet);
+    replace_nondet(alloc_fail);
+
+    expr2tc null_ptr = symbol2tc(result->type, "NULL");
+    expr2tc conditional_result =
+      if2tc(result->type, alloc_fail, null_ptr, result);
+
+    // Update validity array conditionally
+    update_pointer_validity(old_ptr, alloc_fail, guard);
+
+    return conditional_result;
+  }
+  else
+  {
+    // Always free old pointer when forced success
+    symex_free(code_free2tc(old_ptr));
   }
 
-  // Install pointer modelling data into the relevant arrays.
-  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), result);
-  track_new_pointer(ptr_obj, type2tc(), guard, realloc_size);
+  return result;
+}
 
+void goto_symext::update_pointer_validity(
+  const expr2tc &old_ptr,
+  const expr2tc &alloc_fail,
+  const guardt &guard)
+{
+  expr2tc old_ptr_obj = pointer_object2tc(pointer_type2(), old_ptr);
+  dereference(old_ptr_obj, dereferencet::READ);
+
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
+  expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);
+  expr2tc valid_index_expr = index2tc(get_bool_type(), valid_sym, old_ptr_obj);
+
+  // If realloc fails (alloc_fail=true), keep old pointer valid (true)
+  // If realloc succeeds (alloc_fail=false), invalidate old pointer (false)
+  expr2tc new_validity =
+    if2tc(get_bool_type(), alloc_fail, gen_true_expr(), gen_false_expr());
+  symex_assign(code_assign2tc(valid_index_expr, new_validity), true, guard);
+}
+
+void goto_symext::finalize_realloc_result(
+  const expr2tc &lhs,
+  const expr2tc &result,
+  const expr2tc &new_array,
+  const guardt &guard,
+  const expr2tc &realloc_size)
+{
+  expr2tc result_copy(result);
+
+  // Assign result to lhs
   symex_assign(code_assign2tc(lhs, result), true, guard);
+
+  // Track the new pointer
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), result);
+  track_new_pointer(ptr_obj, new_array->type, guard, realloc_size);
+
+  // Add to dynamic memory tracking
+  guardt alloc_guard = cur_state->guard;
+  alloc_guard.append(guard);
+
+  unsigned int dynamic_counter = get_dynamic_counter();
+  std::string symbol_name = "dynamic_" + i2string(dynamic_counter) + "_array";
+  dynamic_memory.emplace_back(result_copy, alloc_guard, false, symbol_name);
+}
+
+expr2tc goto_symext::symex_mem_inf(
+  const expr2tc &lhs,
+  const type2tc &base_type,
+  const guardt &guard)
+{
+  if (is_nil_expr(lhs))
+    return expr2tc(); // ignore
+
+  // size
+  type2tc type = base_type;
+
+  assert(!is_nil_type(base_type));
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  // value
+  symbolt symbol;
+
+  symbol.name = "dynamic_" + i2string(dynamic_counter) + "_inf_array";
+
+  symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
+  symbol.lvalue = true;
+
+  typet renamedtype = ns.follow(migrate_type_back(type));
+
+  symbol.type = array_typet(renamedtype, exprt("infinity", size_type()));
+  symbol.type.dynamic(true);
+  symbol.type.set(
+    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+  symbol.mode = "C";
+  new_context.add(symbol);
+
+  type2tc new_type = migrate_type(symbol.type);
+
+  type2tc rhs_type;
+  expr2tc rhs_ptr_obj;
+
+  type2tc subtype = migrate_type(symbol.type.subtype());
+  expr2tc sym = symbol2tc(new_type, symbol.id);
+  expr2tc idx_val = gen_long(size_type2(), 0L);
+  expr2tc idx = index2tc(subtype, sym, idx_val);
+  do_simplify(idx);
+  rhs_type = migrate_type(symbol.type.subtype());
+  rhs_ptr_obj = idx;
+
+  expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
+  expr2tc rhs = rhs_addrof;
+  expr2tc ptr_rhs = rhs;
+  guardt alloc_guard = cur_state->guard;
+
+  if (rhs->type != lhs->type)
+    rhs = typecast2tc(lhs->type, rhs);
+
+  cur_state->rename(rhs);
+  expr2tc rhs_copy(rhs);
+
+  symex_assign(code_assign2tc(lhs, rhs), true, guard);
+
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+
+  track_new_pointer(ptr_obj, new_type, guard, gen_one(size_type2()));
+
+  alloc_guard.append(guard);
+  dynamic_memory.emplace_back(
+    rhs_copy, alloc_guard, true, symbol.name.as_string());
+
+  return to_address_of2t(rhs_addrof).ptr_obj;
 }
 
 expr2tc goto_symext::symex_mem(
@@ -232,11 +579,13 @@ expr2tc goto_symext::symex_mem(
     expr2tc sym = symbol2tc(new_type, symbol.id);
     expr2tc idx_val = gen_long(size->type, 0L);
     expr2tc idx = index2tc(subtype, sym, idx_val);
+    do_simplify(idx);
     rhs_type = migrate_type(symbol.type.subtype());
     rhs_ptr_obj = idx;
   }
 
   expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
 
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
@@ -296,6 +645,10 @@ void goto_symext::track_new_pointer(
   const guardt &guard,
   const expr2tc &size)
 {
+  // Simplify ptr_obj before using it in any expressions
+  expr2tc simplified_ptr_obj = ptr_obj;
+  do_simplify(simplified_ptr_obj);
+
   // Also update all the accounting data.
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
@@ -481,6 +834,134 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   else
     abort();
 
+  // Check format specifiers against original operands before renaming/conversion
+  if (options.get_bool_option("printf-check"))
+  {
+    const code_printf2t &original_rhs = to_code_printf2t(rhs);
+    std::string format_str = fmt.as_string();
+    size_t arg_idx = 0;
+
+    for (size_t i = 0; i < format_str.length(); i++)
+    {
+      if (format_str[i] == '%')
+      {
+        if (i + 1 < format_str.length() && format_str[i + 1] == '%')
+        {
+          i++; // Skip %%
+          continue;
+        }
+
+        // Skip flags, width, precision
+        i++;
+        while (i < format_str.length() &&
+               (format_str[i] == '-' || format_str[i] == '+' ||
+                format_str[i] == ' ' || format_str[i] == '#' ||
+                format_str[i] == '0'))
+          i++;
+        while (i < format_str.length() && isdigit(format_str[i]))
+          i++;
+        if (i < format_str.length() && format_str[i] == '.')
+        {
+          i++;
+          while (i < format_str.length() && isdigit(format_str[i]))
+            i++;
+        }
+
+        // Skip length modifiers
+        while (i < format_str.length() &&
+               (format_str[i] == 'h' || format_str[i] == 'l' ||
+                format_str[i] == 'L' || format_str[i] == 'z' ||
+                format_str[i] == 'j' || format_str[i] == 't'))
+          i++;
+
+        // Check conversion specifier against original operands
+        if (i < format_str.length())
+        {
+          char spec = format_str[i];
+          size_t actual_arg_idx = idx + arg_idx;
+
+          // Check if we have enough arguments (skip %n and %*)
+          if (spec != 'n' && spec != '*')
+          {
+            if (actual_arg_idx >= original_rhs.operands.size())
+            {
+              claim(
+                gen_false_expr(),
+                "printf has more format specifiers than arguments");
+            }
+            else
+            {
+              const expr2tc &arg = original_rhs.operands[actual_arg_idx];
+
+              if (arg)
+              {
+                if (spec == 's' || spec == 'p')
+                {
+                  // %s and %p require pointer types
+                  if (!is_pointer_type(arg->type))
+                  {
+                    claim(
+                      gen_false_expr(),
+                      spec == 's'
+                        ? "printf format specifier %s requires pointer argument"
+                        : "printf format specifier %p requires pointer "
+                          "argument");
+                  }
+                }
+              }
+            }
+            arg_idx++;
+          }
+        }
+      }
+    }
+  }
+
+  // Only perform dereference checks if printf-check is enabled
+  if (options.get_bool_option("printf-check"))
+  {
+    // Dereference check all pointer arguments after the format string
+    for (size_t i = idx; i < new_rhs.operands.size(); i++)
+    {
+      expr2tc &arg = new_rhs.operands[i];
+
+      if (!arg)
+        continue;
+
+      if (!is_pointer_type(arg->type))
+        continue;
+
+      if (cur_state->guard.is_false())
+        continue;
+
+      // Check the entire expression tree for L2 symbols, not just top-level
+      bool has_l2_symbols = false;
+      arg->foreach_operand([&has_l2_symbols](const expr2tc &e) {
+        if (is_symbol2t(e))
+        {
+          const symbol2t &sym = to_symbol2t(e);
+          if (
+            sym.rlevel == symbol2t::renaming_level::level2 ||
+            sym.rlevel == symbol2t::renaming_level::level2_global)
+          {
+            has_l2_symbols = true;
+          }
+        }
+      });
+
+      if (has_l2_symbols)
+        continue;
+
+      type2tc subtype = to_pointer_type(arg->type).subtype;
+
+      if (is_empty_type(subtype) || is_nil_type(subtype))
+        continue;
+
+      expr2tc deref_expr = dereference2tc(subtype, arg);
+      dereference(deref_expr, dereferencet::READ);
+    }
+  }
+
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
     new_rhs.operands.erase(new_rhs.operands.begin());
@@ -541,37 +1022,122 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 {
   assert(is_symbol2t(func_call.function));
 
-  unsigned number_of_format_args, fmt_idx;
+  unsigned fmt_idx;
   const irep_idt func_name = to_symbol2t(func_call.function).thename;
 
   if (func_name == "c:@F@scanf")
   {
     assert(func_call.operands.size() >= 2 && "Wrong scanf signature");
     fmt_idx = 0;
-    number_of_format_args = func_call.operands.size() - 1;
   }
   else if (func_name == "c:@F@fscanf" || func_name == "c:@F@sscanf")
   {
     assert(func_call.operands.size() >= 3 && "Wrong fscanf/sscanf signature");
     fmt_idx = 1;
-    number_of_format_args = func_call.operands.size() - 2;
   }
   else
     abort();
 
   cur_state->source.pc--;
 
+  // Get the format string and count actual format specifiers
+  expr2tc fmt_operand = func_call.operands[fmt_idx];
+  cur_state->rename(fmt_operand);
+
+  unsigned actual_format_count = 0;
+
+  // Try to get the format string value to count specifiers
+  const expr2tc &base_expr = get_base_object(fmt_operand);
+  if (is_constant_string2t(base_expr))
+  {
+    std::string format_str = to_constant_string2t(base_expr).value.as_string();
+
+    // Count format specifiers in the string
+    // This is a simplified parser - handles %d, %s, %c, %f, etc.
+    // but not complex cases like %*d (ignored), %10d (width), etc.
+    for (size_t i = 0; i < format_str.length(); ++i)
+    {
+      if (format_str[i] == '%')
+      {
+        if (i + 1 < format_str.length())
+        {
+          if (format_str[i + 1] == '%')
+          {
+            // %% is an escaped %, not a format specifier
+            ++i; // skip the second %
+            continue;
+          }
+          else
+          {
+            // Skip any flags, width, precision specifiers
+            ++i;
+            while (i < format_str.length() &&
+                   (format_str[i] == '-' || format_str[i] == '+' ||
+                    format_str[i] == ' ' || format_str[i] == '#' ||
+                    format_str[i] == '0'))
+              ++i;
+
+            // Skip width
+            while (i < format_str.length() && isdigit(format_str[i]))
+              ++i;
+
+            // Skip precision
+            if (i < format_str.length() && format_str[i] == '.')
+            {
+              ++i;
+              while (i < format_str.length() && isdigit(format_str[i]))
+                ++i;
+            }
+
+            // Skip length modifiers (h, l, ll, etc.)
+            while (i < format_str.length() &&
+                   (format_str[i] == 'h' || format_str[i] == 'l' ||
+                    format_str[i] == 'L' || format_str[i] == 'z' ||
+                    format_str[i] == 'j' || format_str[i] == 't'))
+              ++i;
+            // Check for actual conversion specifier
+            if (i < format_str.length())
+            {
+              char spec = format_str[i];
+              if (
+                spec == 'd' || spec == 'i' || spec == 'o' || spec == 'u' ||
+                spec == 'x' || spec == 'X' || spec == 'f' || spec == 'F' ||
+                spec == 'e' || spec == 'E' || spec == 'g' || spec == 'G' ||
+                spec == 'a' || spec == 'A' || spec == 'c' || spec == 's' ||
+                spec == 'p' || spec == 'n')
+              {
+                // Skip %n since it doesn't consume input but still needs a pointer
+                if (spec != 'n')
+                  actual_format_count++;
+                else
+                  actual_format_count++; // %n still needs a parameter
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    // If we can't determine the format string statically,
+    // fall back to processing all provided arguments
+    actual_format_count = func_call.operands.size() - (fmt_idx + 1);
+  }
+
+  // Limit to available arguments
+  unsigned available_args = func_call.operands.size() - (fmt_idx + 1);
+  unsigned args_to_process = std::min(actual_format_count, available_args);
+
   if (func_call.ret)
     symex_assign(code_assign2tc(
-      func_call.ret,
-      constant_int2tc(int_type2(), BigInt(number_of_format_args))));
+      func_call.ret, constant_int2tc(int_type2(), BigInt(args_to_process))));
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
-  for (long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
-       i++)
+  for (unsigned i = 0; i < args_to_process; i++)
   {
-    expr2tc operand = func_call.operands[i];
+    expr2tc operand = func_call.operands[fmt_idx + 1 + i];
     internal_deref_items.clear();
     expr2tc deref = dereference2tc(get_empty_type(), operand);
     dereference(deref, dereferencet::INTERNAL);
@@ -1149,15 +1715,7 @@ static inline expr2tc gen_value_by_byte(
   /* TODO: Bitwise operations are valid for floats, but we don't have an
    * implementation, yet. Give up. */
   if (is_floatbv_type(type) || is_fixedbv_type(type))
-  {
-    unsigned int type_size = type_byte_size(type).to_uint64();
-    // HACK: this should fix the NN-benchmarks (see #1508)
-    if (
-      is_constant_int2t(value) && to_constant_int2t(value).value.is_zero() &&
-      num_of_bytes == type_size && offset == 0)
-      return gen_zero(type);
     return expr2tc();
-  }
 
   if (is_scalar_type(type) && type->get_width() == 8 && offset == 0)
     return typecast2tc(type, value);
@@ -1317,6 +1875,367 @@ static inline expr2tc gen_value_by_byte(
 
   // Found a primitive! Just apply the function
   return gen_byte_expression(type, src, value, num_of_bytes, offset);
+}
+
+expr2tc goto_symex_utils::gen_byte_memcpy(
+  const expr2tc &src,
+  const expr2tc &dst,
+  const size_t num_of_bytes,
+  const size_t src_offset,
+  const size_t dst_offset)
+{
+  // Technically we already did all these checks before, this is just
+  // an extra for DEBUG builds.
+  assert(
+    (src->type->get_width() - src_offset) >= num_of_bytes &&
+    (dst->type->get_width() - dst_offset) >= num_of_bytes);
+
+  if (is_pointer_type(src) || is_pointer_type(dst))
+    return expr2tc();
+
+  // TODO: Not sure how to deal with different types
+  if (src->type != dst->type)
+    return expr2tc();
+
+  expr2tc src_mask = gen_zero(src->type);
+  expr2tc dst_mask = gen_zero(dst->type);
+
+  const expr2tc eight = constant_int2tc(dst->type, BigInt(8));
+  const expr2tc one = constant_int2tc(dst->type, BigInt(1));
+
+  for (unsigned i = 0; i < num_of_bytes; i++)
+    for (int m = 0; m < 8; m++)
+    {
+      src_mask = shl2tc(dst->type, src_mask, one);
+      src_mask = bitor2tc(dst->type, src_mask, one);
+      dst_mask = shl2tc(dst->type, dst_mask, one);
+      dst_mask = bitor2tc(dst->type, dst_mask, one);
+    }
+
+  for (unsigned i = 0; i < dst_offset; i++)
+    dst_mask = shl2tc(dst->type, dst_mask, eight);
+
+  dst_mask = bitnot2tc(dst->type, dst_mask);
+  dst_mask = bitand2tc(dst->type, dst, dst_mask);
+
+  for (unsigned i = 0; i < src_offset; i++)
+    src_mask = shl2tc(dst->type, src_mask, eight);
+
+  src_mask = bitand2tc(dst->type, src, src_mask);
+
+  // When dst_offset > src_offset
+  for (unsigned i = src_offset; i < dst_offset; i++)
+    src_mask = shl2tc(dst->type, src_mask, eight);
+
+  // When dst_offsett < src_offset
+  for (unsigned i = dst_offset; i < src_offset; i++)
+    src_mask = lshr2tc(dst->type, src_mask, eight);
+
+  expr2tc result = bitor2tc(dst->type, dst_mask, src_mask);
+  simplify(result);
+  return result;
+}
+
+static inline expr2tc do_memcpy_expression(
+  const expr2tc &dst,
+  const size_t &dst_offset,
+  const expr2tc &src,
+  const size_t &src_offset,
+  const size_t num_of_bytes)
+{
+  if (num_of_bytes == 0)
+    return dst;
+
+  // Short-circuit
+  if (
+    dst->type == src->type && !dst_offset && !src_offset &&
+    type_byte_size(dst->type).to_uint64() == num_of_bytes)
+    return src;
+
+  if (
+    is_array_type(src->type) || is_array_type(dst->type) ||
+    is_struct_type(dst->type) || is_union_type(dst->type) ||
+    is_struct_type(src->type) || is_union_type(src->type))
+  {
+    log_debug("memcpy", "Only primitives are supported for now");
+    return expr2tc();
+  }
+
+  // Base-case. Primitives!
+  return goto_symex_utils::gen_byte_memcpy(
+    src, dst, num_of_bytes, src_offset, dst_offset);
+}
+
+void offset_simplifier(expr2tc &e)
+{
+  simplify(e);
+  if (is_div2t(e))
+  {
+    auto as_div = to_div2t(e);
+    if (is_mul2t(as_div.side_1) && is_constant_int2t(as_div.side_2))
+    {
+      auto as_mul = to_mul2t(as_div.side_1);
+      if (
+        is_constant_int2t(as_mul.side_2) &&
+        (to_constant_int2t(as_mul.side_2).as_ulong() ==
+         to_constant_int2t(as_div.side_2).as_ulong()))
+        // if side_1 of mult is a pointer_offset, then it is just zero
+        if (is_pointer_offset2t(as_mul.side_1))
+          e = constant_int2tc(get_uint64_type(), BigInt(0));
+    }
+  }
+}
+
+void goto_symext::intrinsic_memcpy(
+
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  assert(func_call.operands.size() == 3 && "Wrong memcpy signature");
+
+  using namespace std::string_literals;
+  const auto bump_name = "c:@F@__memcpy_impl"s;
+
+  if (options.get_bool_option("no-simplify"))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  const execution_statet &ex_state = art.get_cur_state();
+  if (ex_state.cur_state->guard.is_false())
+    return;
+
+  expr2tc dst_arg = func_call.operands[0];
+  expr2tc src_arg = func_call.operands[1];
+  expr2tc n_arg = func_call.operands[2];
+
+  // Three steps:
+  // 1. Check if n_arg is constant;
+  // 2. Compute all SRC addresses and memory checks
+  // 3. Compute all DST addresses, memory check and compute operation result
+
+  cur_state->rename(n_arg);
+  if (!n_arg || is_symbol2t(n_arg))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  simplify(n_arg);
+  if (!is_constant_int2t(n_arg))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  const unsigned long number_of_bytes = to_constant_int2t(n_arg).as_ulong();
+
+  // Now grab all sources
+
+  std::list<dereference_callbackt::internal_item> src_items;
+  expr2tc src_deref = dereference2tc(get_empty_type(), src_arg);
+  internal_deref_items.clear();
+  dereference(src_deref, dereferencet::INTERNAL);
+
+  if (!internal_deref_items.size())
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  src_items.splice(src_items.end(), internal_deref_items);
+  assert(internal_deref_items.size() == 0);
+
+  // Sane checks here
+  for (dereference_callbackt::internal_item &item : src_items)
+  {
+    guardt guard = ex_state.cur_state->guard;
+    guard.add(item.guard);
+    expr2tc &item_object = item.object;
+    expr2tc &item_offset = item.offset;
+
+    cur_state->rename(item_object);
+    cur_state->rename(item_offset);
+
+    if (!item_object || !item_offset)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    offset_simplifier(item_offset);
+    if (!is_constant_int2t(item_offset))
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    const uint64_t number_of_offset =
+      to_constant_int2t(item_offset).value.to_uint64();
+
+    uint64_t type_size;
+    try
+    {
+      type_size = type_byte_size(item_object->type).to_uint64();
+    }
+    catch (const array_type2t::dyn_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    catch (const array_type2t::inf_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    if (is_code_type(item_object->type))
+    {
+      if (config.options.get_bool_option("enable-unreachability-intrinsic"))
+      {
+        // Workaround:
+        // linux-3.10-rc1-43_1a-bitvector-drivers--net--ethernet--broadcom--b44.ko--ldv_main0.cil.out.i
+        // generates an INVALID address pointing to both a struct and
+        // initializes an extern global function ptr with. Resulting in this
+        // being triggered wrongly. Need to check if it's a VSA issue or ESBMC
+        // initialization issue.
+        bump_call(func_call, bump_name);
+        return;
+      }
+
+      std::string error_msg =
+        fmt::format("dereference failure: trying to deref a ptr code");
+
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
+      continue;
+    }
+
+    // Over reading?
+    bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
+                         (number_of_offset > type_size);
+    if (
+      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      std::string error_msg = fmt::format(
+        "dereference failure on memcpy: reading memory segment of size {} with "
+        "{} "
+        "bytes",
+        type_size - number_of_offset,
+        number_of_bytes);
+
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
+      continue;
+    }
+  }
+
+  // Readings are sorted... now go for writings
+  expr2tc dst_deref = dereference2tc(get_empty_type(), dst_arg);
+  dereference(dst_deref, dereferencet::INTERNAL);
+
+  for (dereference_callbackt::internal_item &item : internal_deref_items)
+  {
+    guardt guard = ex_state.cur_state->guard;
+    guard.add(item.guard);
+    // expr2tc &item_object = item.object;
+    // expr2tc &item_offset = item.offset;
+
+    cur_state->rename(item.guard);
+    cur_state->rename(item.offset);
+
+    offset_simplifier(item.offset);
+    if (!is_constant_int2t(item.offset))
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    const uint64_t number_of_offset =
+      to_constant_int2t(item.offset).value.to_uint64();
+
+    uint64_t type_size;
+    try
+    {
+      type_size = type_byte_size(item.object->type).to_uint64();
+    }
+    catch (const array_type2t::dyn_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    catch (const array_type2t::inf_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
+                         (number_of_offset > type_size);
+    if (
+      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      std::string error_msg = fmt::format(
+        "dereference failure on memcpy: writing memory segment of size {} with "
+        "{} "
+        "bytes",
+        type_size - number_of_offset,
+        number_of_bytes);
+
+      // SAME_OBJECT(ptr, item) => DEREF ERROR
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
+      continue;
+    }
+
+    // Time to do the actual copy
+    for (const auto &src_item : src_items)
+    {
+      // Offset is garanteed to be a constant
+      const uint64_t src_offset =
+        to_constant_int2t(src_item.offset).value.to_uint64();
+      const expr2tc new_object = do_memcpy_expression(
+        item.object,
+        number_of_offset,
+        src_item.object,
+        src_offset,
+        number_of_bytes);
+
+      if (!new_object)
+      {
+        bump_call(func_call, bump_name);
+        return;
+      }
+
+      guardt assignment_guard = guard;
+      assignment_guard.add(src_item.guard);
+
+      symex_assign(
+        code_assign2tc(item.object, new_object), false, assignment_guard);
+    }
+  }
+  if (!options.get_bool_option("no-pointer-check"))
+  {
+    expr2tc null_sym = symbol2tc(dst_arg->type, "NULL");
+
+    expr2tc dst_same = same_object2tc(dst_arg, null_sym);
+    expr2tc dst_null_check = not2tc(same_object2tc(dst_arg, null_sym));
+    ex_state.cur_state->guard.guard_expr(dst_null_check);
+    claim(dst_null_check, " dereference failure: NULL pointer on DST");
+
+    expr2tc src_same = same_object2tc(src_arg, null_sym);
+    expr2tc src_null_check = not2tc(same_object2tc(src_arg, null_sym));
+    ex_state.cur_state->guard.guard_expr(src_null_check);
+    claim(src_null_check, " dereference failure: NULL pointer on SRC");
+  }
+
+  expr2tc ret_ref = func_call.ret;
+  dereference(ret_ref, dereferencet::READ);
+  symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
 }
 
 /**
@@ -1551,6 +2470,163 @@ void goto_symext::intrinsic_memset(
   symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
 }
 
+void goto_symext::intrinsic_builtin_object_size(
+  const code_function_call2t &func_call,
+  reachability_treet &)
+{
+  assert(
+    func_call.operands.size() == 2 && "Wrong __builtin_object_size signature");
+  expr2tc ptr = func_call.operands[0];
+  expr2tc type_param = func_call.operands[1];
+
+  // Extract type parameter
+  size_t type_value = 0;
+  cur_state->rename(type_param);
+  if (is_constant_int2t(type_param))
+  {
+    int64_t param_val = to_constant_int2t(type_param).value.to_int64();
+    if (param_val < 0 || param_val > 3)
+    {
+      // Invalid type parameter - treat as type 0 (GCC behavior)
+      type_value = 0;
+    }
+    else
+      type_value = static_cast<size_t>(param_val);
+  }
+
+  // Work out what the ptr points at.
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_empty_type(), ptr);
+  dereference(deref, dereferencet::INTERNAL);
+
+  bool use_zero_for_unknown = (type_value == 2 || type_value == 3);
+  bool consider_offset = (type_value == 1 || type_value == 3);
+
+  // Helper lambda for creating fallback size values.
+  // GCC's __builtin_object_size returns:
+  //   - (size_t)-1 if the object cannot be determined (for type=0 or 1),
+  //   - 0 if the object cannot be determined (for type=2 or 3).
+  // The type parameter encodes whether we want the full size (0/2)
+  // or remaining size after pointer offset (1/3).
+  auto create_fallback_size = [&](bool use_zero) {
+    return use_zero ? constant_int2tc(size_type2(), BigInt(0))
+                    : constant_int2tc(
+                        size_type2(),
+                        BigInt((1ULL << (config.ansi_c.word_size - 1)) - 1));
+  };
+
+  expr2tc obj_size;
+
+  if (internal_deref_items.empty())
+  {
+    // Unable to determine the underlying object.
+    // Fall back to GCC semantics depending on type:
+    //   type 0/1 → (size_t)-1
+    //   type 2/3 → 0
+    obj_size = create_fallback_size(use_zero_for_unknown);
+  }
+  else
+  {
+    type2tc addressed_type;
+
+    // Determine addressed type from address_of expressions
+    if (is_address_of2t(ptr))
+    {
+      const address_of2t &addrof = to_address_of2t(ptr);
+      if (is_index2t(addrof.ptr_obj))
+      {
+        const index2t &idx = to_index2t(addrof.ptr_obj);
+        if (is_symbol2t(idx.source_value) || is_member2t(idx.source_value))
+          addressed_type = idx.source_value->type;
+      }
+      else if (is_member2t(addrof.ptr_obj) || is_symbol2t(addrof.ptr_obj))
+        addressed_type = addrof.ptr_obj->type;
+    }
+
+    // Handle nil addressed type cases
+    if (is_nil_type(addressed_type))
+    {
+      if (is_pointer_type(ptr->type))
+      {
+        type2tc ptr_subtype = to_pointer_type(ptr->type).subtype;
+        const auto &item = internal_deref_items.front();
+
+        if (
+          is_constant_int2t(item.offset) && is_struct_type(item.object->type) &&
+          !is_nil_expr(deref) && !is_empty_type(deref->type))
+        {
+          addressed_type = deref->type;
+        }
+
+        if (is_nil_type(addressed_type))
+        {
+          if (is_symbol_type(ptr_subtype))
+          {
+            const symbol_type2t &symtype = to_symbol_type(ptr_subtype);
+            const symbolt *symbol = ns.lookup(symtype.symbol_name);
+            addressed_type = (symbol != nullptr)
+                               ? migrate_type(symbol->type)
+                               : internal_deref_items.front().object->type;
+          }
+          else
+          {
+            addressed_type =
+              is_array_type(internal_deref_items.front().object->type)
+                ? internal_deref_items.front().object->type
+                : ptr_subtype;
+          }
+        }
+      }
+      else
+        addressed_type = internal_deref_items.front().object->type;
+    }
+
+    // Note: type_byte_size returns the allocated object size, not just the sum
+    // of fields. For structs/unions this includes alignment and padding, which
+    // matches GCC's __builtin_object_size semantics.
+    BigInt total_size = type_byte_size(addressed_type);
+
+    if (consider_offset)
+    {
+      // Type 1 or 3: calculate remaining bytes from offset
+      expr2tc offset_expr = pointer_offset2tc(get_int64_type(), ptr);
+      cur_state->rename(offset_expr);
+      do_simplify(offset_expr);
+
+      if (is_constant_int2t(offset_expr))
+      {
+        BigInt offset = to_constant_int2t(offset_expr).value;
+        BigInt remaining =
+          (total_size > offset) ? (total_size - offset) : BigInt(0);
+        obj_size = constant_int2tc(size_type2(), remaining);
+      }
+      else
+      {
+        // Offset is symbolic - can't determine remaining size statically
+        const expr2tc total_size_expr =
+          constant_int2tc(get_int64_type(), total_size);
+        obj_size = if2tc(
+          size_type2(),
+          greaterthan2tc(total_size_expr, offset_expr),
+          sub2tc(size_type2(), total_size_expr, offset_expr),
+          gen_zero(size_type2()));
+      }
+    }
+    else
+    {
+      // Type 0 or 2: return full object size of the addressed object
+      obj_size = constant_int2tc(size_type2(), total_size);
+    }
+  }
+
+  expr2tc ret_ref = func_call.ret;
+  dereference(ret_ref, dereferencet::READ);
+  symex_assign(
+    code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
+    false,
+    cur_state->guard);
+}
+
 void goto_symext::intrinsic_get_object_size(
   const code_function_call2t &func_call,
   reachability_treet &)
@@ -1643,15 +2719,15 @@ bool goto_symext::run_builtin(
       abort();
     }
 
+    // Perform overflow check and assign it to the return object
+    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
+
     // Assign result of the two arguments to the dereferenced third argument
     symex_assign(code_assign2tc(
       dereference2tc(
         to_pointer_type(func_call.operands[2]->type).subtype,
         func_call.operands[2]),
       op));
-
-    // Perform overflow check and assign it to the return object
-    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
 
     return true;
   }
@@ -1735,13 +2811,243 @@ void goto_symext::replace_races_check(expr2tc &expr)
 
   if (is_races_check2t(expr))
   {
-    // replace with __ESBMC_races_flag[address_of(var)]
+    // replace with __ESBMC_races_flag[index]
     const races_check2t &obj = to_races_check2t(expr);
 
     expr2tc flag;
     migrate_expr(symbol_expr(*ns.lookup("c:@F@__ESBMC_races_flag")), flag);
 
-    expr2tc index_expr = index2tc(get_bool_type(), flag, obj.value);
+    expr2tc max_offset =
+      constant_int2tc(get_uint_type(config.ansi_c.address_width), 1000);
+    // The reason for not using address directly is that address
+    // is modeled as an nondet value, which depends on the address space constraints.
+    // VCC becomes complex and inefficient in this case.
+
+    // The current method is similar to a two-dimensional array: array[obj][offset]
+    // But we flatten it out: obj * MAX_VALUE + offset
+    // In theory, this should create a unique index for variables.
+    // We need to think carefully about the value of MAX_VALUE
+    // XL: Should we let the user choose this value?
+    expr2tc mul = mul2tc(
+      size_type2(), pointer_object2tc(pointer_type2(), obj.value), max_offset);
+    expr2tc add = add2tc(
+      size_type2(),
+      mul,
+      pointer_offset2tc(get_int_type(config.ansi_c.address_width), obj.value));
+
+    expr2tc index_expr = index2tc(get_bool_type(), flag, add);
+
     expr = index_expr;
+  }
+}
+
+void goto_symext::simplify_python_builtins(expr2tc &expr)
+{
+  expr->Foreach_operand([this](expr2tc &e) {
+    if (!is_nil_expr(e))
+      simplify_python_builtins(e);
+  });
+
+  if (is_isinstance2t(expr))
+  {
+    const isinstance2t &obj = to_isinstance2t(expr);
+    expr2tc value = obj.side_1;
+    expr2tc expect_type = obj.side_2;
+
+    value_setst::valuest value_set;
+    cur_state->value_set.get_value_set(value, value_set);
+
+    // Find the last value from the value set
+    for (const auto &obj : value_set)
+    {
+      if (is_object_descriptor2t(obj))
+      {
+        const object_descriptor2t &o = to_object_descriptor2t(obj);
+        value = o.object;
+      }
+    }
+
+    cur_state->rename(value);
+    // Remove all typecast to get the original type
+    while (is_typecast2t(value))
+      value = to_typecast2t(value).from;
+
+    if (is_address_of2t(value))
+      value = to_address_of2t(value).ptr_obj;
+
+    if (is_struct_type(value))
+    {
+      // Check if this is a tuple by examining the tag
+      if (is_nil_expr(expect_type))
+      {
+        // find tuple type
+        const struct_type2t &struct_type = to_struct_type(value->type);
+        if (struct_type.name.as_string().find("tag-tuple") == 0)
+          expr = gen_true_expr();
+        else
+          expr = gen_false_expr();
+
+        return;
+      }
+
+      // Check sub class
+      if (
+        base_type_eq(expect_type->type, value->type, ns) ||
+        is_subclass_of(expect_type->type, value->type, ns))
+        expr = gen_true_expr();
+      else
+        expr = gen_false_expr();
+
+      return;
+    }
+
+    // Basic type comparison
+    // int, str, bool
+    type2tc t;
+    if (is_index2t(value))
+      // Special case, str is modeled as a array, we need to get its subtype
+      t = to_index2t(value).source_value->type;
+    else
+      t = value->type;
+
+    if (base_type_eq(t, expect_type->type, ns))
+      expr = gen_true_expr();
+    else
+      expr = gen_false_expr();
+
+    if (!is_nil_expr(expect_type) && is_array_type(expect_type->type))
+    {
+      // In the memory model, an array of size 1 is simplified to a single element
+      // Therefore, here we specifically check whether the subtypes of the arrays are the same
+      // s:str = "" ----> 0 with char type
+      // This should be safe because int, bool and char have different widths,
+      // so there will be no confusion
+      if (to_array_type(expect_type->type).subtype == value->type)
+        expr = gen_true_expr();
+    }
+
+    return;
+  }
+  else if (is_hasattr2t(expr))
+  {
+    const hasattr2t &obj = to_hasattr2t(expr);
+    expr2tc value = obj.side_1;
+    expr2tc attr = obj.side_2;
+
+    // Only simplify when the attribute name is a constant string.
+    if (!is_constant_string2t(attr))
+      return;
+
+    const auto &attr_const = to_constant_string2t(attr);
+    std::string attr_name = attr_const.value.as_string();
+
+    cur_state->rename(value);
+    while (is_typecast2t(value))
+      value = to_typecast2t(value).from;
+    if (is_address_of2t(value))
+      value = to_address_of2t(value).ptr_obj;
+
+    type2tc obj_type = value->type;
+    if (is_pointer_type(obj_type))
+      obj_type = to_pointer_type(obj_type).subtype;
+
+    if (is_struct_type(obj_type))
+    {
+      const struct_type2t &st = to_struct_type(obj_type);
+      const auto &members = st.get_structure_member_names();
+      const bool has_member =
+        std::any_of(members.begin(), members.end(), [&](const irep_idt &memb) {
+          return memb.as_string() == attr_name;
+        });
+      expr = has_member ? gen_true_expr() : gen_false_expr();
+    }
+    else
+      expr = gen_false_expr();
+
+    return;
+  }
+  else if (is_isnone2t(expr))
+  {
+    const isnone2t &cmp = to_isnone2t(expr);
+    expr2tc lhs = cmp.side_1;
+    expr2tc rhs = cmp.side_2;
+
+    cur_state->rename(lhs);
+    cur_state->rename(rhs);
+
+    // Remove typecasts to get original types
+    while (is_typecast2t(lhs))
+      lhs = to_typecast2t(lhs).from;
+    while (is_typecast2t(rhs))
+      rhs = to_typecast2t(rhs).from;
+
+    auto is_none_type = [](const expr2tc &e) -> bool {
+      // Check for pointer to bool or pointer to empty (void*)
+      if (is_pointer_type(e))
+      {
+        const pointer_type2t &ptr_type = to_pointer_type(e->type);
+        return is_bool_type(ptr_type.subtype) ||
+               is_empty_type(ptr_type.subtype);
+      }
+
+      return false;
+    };
+
+    const bool lhs_is_none = is_none_type(lhs);
+    const bool rhs_is_none = is_none_type(rhs);
+
+    // Handle Optional[T] vs None
+    auto handle_optional_side =
+      [&](const expr2tc &side, bool other_is_none) -> std::optional<expr2tc> {
+      if (is_struct_type(side))
+      {
+        const struct_type2t &struct_type = to_struct_type(side->type);
+        const std::string &tag = struct_type.name.as_string();
+        if (tag.starts_with("tag-Optional_") && other_is_none)
+        {
+          // Access is_none field from Optional struct
+          // isnone always checks equality, so return the field directly
+          return member2tc(get_bool_type(), side, "is_none");
+        }
+      }
+      return std::nullopt;
+    };
+
+    if (!lhs_is_none)
+    {
+      if (auto res = handle_optional_side(lhs, rhs_is_none))
+      {
+        expr = *res;
+        return;
+      }
+    }
+    if (!rhs_is_none)
+    {
+      if (auto res = handle_optional_side(rhs, lhs_is_none))
+      {
+        expr = *res;
+        return;
+      }
+    }
+
+    // Handle None vs None pointer comparisons (identity check)
+    if (lhs_is_none && rhs_is_none)
+    {
+      const expr2tc &ptr_expr = lhs;
+      expr2tc null_ptr = gen_zero(ptr_expr->type);
+      expr = equality2tc(ptr_expr, null_ptr);
+      return;
+    }
+
+    // Handle None vs non-None comparison
+    if ((lhs_is_none && !rhs_is_none) || (rhs_is_none && !lhs_is_none))
+    {
+      // None is never equal to non-None values
+      expr = gen_false_expr();
+      return;
+    }
+
+    // Handle non-None comparisons
+    expr = gen_true_expr();
   }
 }

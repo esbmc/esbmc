@@ -5,6 +5,8 @@
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
 
+#include <langapi/language_util.h>
+
 #include <pointer-analysis/value_set_analysis.h>
 
 #include <util/c_types.h>
@@ -14,7 +16,6 @@
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/pretty.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
 
@@ -75,6 +76,18 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   if (is_true(new_expr))
   {
+    if (options.get_bool_option("multi-property"))
+    {
+      // Log that this assertion was trivially verified
+      log_success(
+        "✓ PASSED: '{}' at {}",
+        msg,
+        cur_state->source.pc->location.as_string());
+
+      // Track trivially verified claims
+      ++simplified_claims;
+    }
+
     // Strengthen the claim by assuming it when trivially true
     assume(claim_expr);
     return;
@@ -168,7 +181,8 @@ void goto_symext::assume(const expr2tc &the_assumption)
 
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
-  return goto_symext::symex_resultt(target, total_claims, remaining_claims);
+  return goto_symext::symex_resultt(
+    target, total_claims, remaining_claims, simplified_claims);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -228,6 +242,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
     dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
+    simplify_python_builtins(tmp);
 
     symex_goto(tmp);
   }
@@ -457,14 +472,23 @@ void goto_symext::symex_assume()
   // of constant propagation in some cases
   if (is_equality2t(c))
   {
+    // In the IEEE-754 floating-point number semantics,
+    // there can be situations where the numerical comparison is equal,
+    // but the internal bit patterns are different: +0.0 and -0.0
+
+    // We don't perform constant propagation on it.
+    expr2tc lhs = to_equality2t(c).side_1;
+    expr2tc rhs = to_equality2t(c).side_2;
     if (
-      is_symbol2t(to_equality2t(c).side_1) &&
-      is_constant_expr(to_equality2t(c).side_2))
-      cur_state->assignment(to_equality2t(c).side_1, to_equality2t(c).side_2);
+      is_symbol2t(lhs) && is_constant_expr(rhs) &&
+      !(is_constant_floatbv2t(rhs) &&
+        to_constant_floatbv2t(rhs).value.is_zero()))
+      cur_state->assignment(lhs, rhs);
     else if (
-      is_symbol2t(to_equality2t(c).side_2) &&
-      is_constant_expr(to_equality2t(c).side_1))
-      cur_state->assignment(to_equality2t(c).side_2, to_equality2t(c).side_1);
+      is_symbol2t(rhs) && is_constant_expr(lhs) &&
+      !(is_constant_floatbv2t(lhs) &&
+        to_constant_floatbv2t(lhs).value.is_zero()))
+      cur_state->assignment(rhs, lhs);
   }
 }
 
@@ -478,11 +502,14 @@ void goto_symext::symex_assert()
   if (cur_state->source.pc->location.user_provided() && no_assertions)
     return;
 
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+
   std::string msg = cur_state->source.pc->location.comment().as_string();
   if (msg == "")
-    msg = "assertion";
-
-  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  {
+    exprt guard = migrate_expr_back(instruction.guard);
+    msg = "assertion " + from_expr(ns, "", guard);
+  }
 
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
@@ -491,6 +518,7 @@ void goto_symext::symex_assert()
   replace_dynamic_allocation(tmp);
 
   replace_races_check(tmp);
+  simplify_python_builtins(tmp);
 
   claim(tmp, msg);
 }
@@ -596,9 +624,21 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_memcpy")
+  {
+    intrinsic_memcpy(art, func_call);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_get_object_size")
   {
     intrinsic_get_object_size(func_call, art);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_builtin_object_size")
+  {
+    intrinsic_builtin_object_size(func_call, art);
     return;
   }
 
@@ -776,12 +816,12 @@ void goto_symext::run_intrinsic(
       {
         type_byte_size(item.object->type).to_int64();
       }
-      catch (array_type2t::dyn_sized_array_excp *e)
+      catch (const array_type2t::dyn_sized_array_excp &e)
       {
         log_error("__ESBMC_init_object does not support VLAs");
         abort();
       }
-      catch (array_type2t::inf_sized_array_excp *e)
+      catch (const array_type2t::inf_sized_array_excp &e)
       {
         log_error(
           "__ESBMC_init_object does not support infinite-length arrays");
@@ -943,6 +983,29 @@ void goto_symext::run_intrinsic(
      */
     symex_assign(code_assign2tc(cap_base, addr), true);
     symex_assign(code_assign2tc(cap_top, addr_end), true);
+    return;
+  }
+
+  // PythonList methods
+  if (
+    has_prefix(symname, "c:@F@__ESBMC_list") ||
+    has_prefix(symname, "c:@F@__ESBMC_dict"))
+  {
+    bump_call(func_call, symname);
+    return;
+  }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_obj"))
+  {
+    assert(func_call.operands.size() == 0 && "Wrong signature");
+
+    const symbolt *list_object_symbol =
+      new_context.find_symbol("tag-struct __ESBMC_PyObj");
+    assert(list_object_symbol);
+
+    symex_mem_inf(
+      func_call.ret, migrate_type(list_object_symbol->type), cur_state->guard);
+
     return;
   }
 
@@ -1400,8 +1463,11 @@ void goto_symext::symex_loop_invariant()
   // Get the loop invariant
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
+  auto num_invariants = instruction.get_loop_invariants().size();
   log_status(
-    "Processing {} loop invariant", instruction.get_loop_invariants().size());
+    "Processing {} loop invariant{}",
+    num_invariants,
+    num_invariants == 1 ? "" : "s");
   for (auto &invariant : instruction.get_loop_invariants())
   {
     // rename the variables to match the current symbolic execution state

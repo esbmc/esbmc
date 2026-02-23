@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <fmt/format.h>
 #include <fmt/color.h>
+#include <fmt/ranges.h>
 #include <util/message/format.h>
 #include <ctime>
 #include <chrono>
@@ -143,8 +144,3 @@ struct messaget
     __LINE__,                                                                  \
     FMT_STRING(fmt),                                                           \
     ##__VA_ARGS__)
-
-// TODO: Eventually this will be removed
-#ifdef ENABLE_OLD_FRONTEND
-#  define err_location(E) (E).location().dump()
-#endif

@@ -1,4 +1,5 @@
 #include <cassert>
+#include <climits>
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
@@ -6,9 +7,9 @@
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
+#include <util/usr_utils.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 
 goto_symext::goto_symext(
@@ -22,6 +23,7 @@ goto_symext::goto_symext(
     first_loop(0),
     total_claims(0),
     remaining_claims(0),
+    simplified_claims(0),
     max_unwind(options.get_option("unwind").c_str()),
     constant_propagation(!options.get_bool_option("no-propagation")),
     ns(_ns),
@@ -61,6 +63,94 @@ goto_symext::goto_symext(
     idx = next;
   }
 
+  // Parse --unwindsetname option (name:loop_index:bound,...)
+  const std::string &func_set = options.get_option("unwindsetname");
+  if (!func_set.empty())
+  {
+    std::string::size_type start = 0;
+    while (start < func_set.length())
+    {
+      std::string::size_type comma = func_set.find(",", start);
+      std::string val = func_set.substr(
+        start, comma == std::string::npos ? std::string::npos : comma - start);
+
+      // Parse name:index:bound format
+      std::string::size_type first_colon = val.find(":");
+      std::string::size_type second_colon = first_colon != std::string::npos
+                                              ? val.find(":", first_colon + 1)
+                                              : std::string::npos;
+
+      if (first_colon != std::string::npos && second_colon != std::string::npos)
+      {
+        std::string user_name = val.substr(0, first_colon);
+        unsigned loop_index = atoi(
+          val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
+        BigInt bound(val.substr(second_colon + 1).c_str());
+
+        // Convert user syntax to internal USR format with trailing #
+        std::string usr_name = user_name_to_usr(user_name);
+
+        // Only add valid entries (must have function name)
+        if (!usr_name.empty())
+          unwind_func_set[std::make_pair(usr_name, loop_index)] = bound;
+      }
+
+      if (comma == std::string::npos)
+        break;
+      start = comma + 1;
+    }
+  }
+
+  // Build mapping: global_loop_id -> (function_name, per-function loop index)
+  // Also populate unwind_set from #pragma unroll annotations
+  for (const auto &func_pair : _goto_functions.function_map)
+  {
+    unsigned loop_index = 0;
+    for (const auto &instruction : func_pair.second.body.instructions)
+    {
+      if (instruction.is_backwards_goto())
+      {
+        loop_id_to_func_index[instruction.loop_number] =
+          std::make_pair(func_pair.first.as_string(), loop_index);
+        loop_index++;
+
+        // Handle #pragma unroll annotations
+        // pragma_unroll_count: 0 = not specified, UINT_MAX = unlimited, else = specific count
+        if (instruction.pragma_unroll_count > 0)
+        {
+          if (instruction.pragma_unroll_count == UINT_MAX)
+          {
+            // #pragma unroll (no N) - unlimited unrolling (0 means no limit in ESBMC)
+            unwind_set[instruction.loop_number] = 0;
+            log_status(
+              "Applying #pragma unroll (unlimited) to loop {} in file {} line "
+              "{} column {} function {}",
+              instruction.loop_number,
+              instruction.location.get_file(),
+              instruction.location.get_line(),
+              instruction.location.get_column(),
+              instruction.location.get_function());
+          }
+          else
+          {
+            // #pragma unroll N - use specified count
+            unwind_set[instruction.loop_number] =
+              BigInt(instruction.pragma_unroll_count);
+            log_status(
+              "Applying #pragma unroll {} to loop {} in file {} line {} column "
+              "{} function {}",
+              instruction.pragma_unroll_count,
+              instruction.loop_number,
+              instruction.location.get_file(),
+              instruction.location.get_line(),
+              instruction.location.get_column(),
+              instruction.location.get_function());
+          }
+        }
+      }
+    }
+  }
+
   art1 = nullptr;
 
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
@@ -88,10 +178,13 @@ goto_symext::goto_symext(const goto_symext &sym)
 goto_symext &goto_symext::operator=(const goto_symext &sym)
 {
   unwind_set = sym.unwind_set;
+  unwind_func_set = sym.unwind_func_set;
+  loop_id_to_func_index = sym.loop_id_to_func_index;
   max_unwind = sym.max_unwind;
   constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
+  simplified_claims = sym.simplified_claims;
   guard_identifier_s = sym.guard_identifier_s;
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
@@ -155,6 +248,21 @@ void goto_symext::handle_sideeffect(
     break;
   case sideeffect2t::printf2:
     // Do nothing for printf
+    break;
+  case sideeffect2t::old_snapshot:
+    // __ESBMC_old() snapshots are handled during contract processing
+    // If we encounter one here, it means we're in the original function body
+    // where the ensures clause is still present. We simply evaluate the
+    // inner expression (the current value) as a placeholder.
+    {
+      expr2tc result = effect.operand;
+      replace_nondet(result);
+      dereference(result, dereferencet::READ);
+
+      // Create a simple assignment from the evaluated expression to lhs
+      expr2tc assign_code = code_assign2tc(lhs, result);
+      symex_assign(assign_code, true, guard);
+    }
     break;
   default:
     assert(0 && "unexpected side effect");
@@ -227,6 +335,7 @@ void goto_symext::symex_assign(
   replace_dynamic_allocation(rhs);
 
   replace_races_check(lhs);
+  simplify_python_builtins(rhs);
 
   // If rhs is a printf expression, handle it specially
   if (is_code_printf2t(rhs))
@@ -309,6 +418,10 @@ void goto_symext::symex_assign_rec(
   {
     symex_assign_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
+  else if (is_constant_union2t(lhs))
+  {
+    symex_assign_union(lhs, full_lhs, rhs, full_rhs, guard, hidden);
+  }
   else if (is_extract2t(lhs))
   {
     symex_assign_extract(lhs, full_lhs, rhs, full_rhs, guard, hidden);
@@ -355,6 +468,13 @@ void goto_symext::symex_assign_symbol(
   if (is_index2t(new_lhs))
     cur_state->rename(to_index2t(new_lhs).index);
 
+  if (is_member_ref2t(rhs))
+    // In pointer-to-member, the following assignment will occur:
+    // int S::* pm = &S::x;
+    // This assignment is static and we do not need to generate an SSA for it,
+    // we can simply skip it - constant propagation can handle it.
+    return;
+
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
@@ -394,6 +514,22 @@ void goto_symext::symex_assign_structure(
     symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     i++;
   }
+}
+
+void goto_symext::symex_assign_union(
+  const expr2tc &lhs,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  expr2tc &full_rhs,
+  guardt &guard,
+  const bool hidden)
+{
+  // For unions, assign through the active member
+  const constant_union2t &the_union = to_constant_union2t(lhs);
+  const expr2tc &lhs_memb = the_union.datatype_members[0];
+  expr2tc rhs_memb = member2tc(lhs_memb->type, rhs, the_union.init_field);
+
+  symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
 }
 
 void goto_symext::symex_assign_typecast(

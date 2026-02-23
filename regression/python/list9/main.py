@@ -1,7 +1,6 @@
 def esbmc_choice(seq: list[int]) -> int:
     assert len(seq) > 0
     
-    # Get a nondeterministic index
     idx = nondet_int()
     
     # Restrict the nondet index to valid range

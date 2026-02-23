@@ -104,6 +104,11 @@ public:
   std::string dump_smt() override;
   void print_model() override;
 
+  smt_astt mk_quantifier(
+    bool is_forall,
+    std::vector<smt_astt> lhs,
+    smt_astt rhs) override;
+
   // Members
   Bitwuzla *bitw;
   BitwuzlaOptions *bitw_options;

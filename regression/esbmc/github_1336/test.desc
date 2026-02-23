@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 gh-1336.c
 --unwind 1 --no-unwinding-assertion
 ^VERIFICATION SUCCESSFUL$

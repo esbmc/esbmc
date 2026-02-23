@@ -427,7 +427,44 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   }
   else if (has_prefix(identifier.as_string(), "c:@F@__atomic_exchange_n"))
   {
-    // TODO
+    // This atomic builtin follows GCC's __atomic built-in functions specification.
+    // See https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html.
+    const typet &type = code_type.return_type();
+
+    const exprt &result =
+      symbol_expr(result_symbol(identifier_with_type, type, context));
+
+    code_declt decl(result);
+    block.operands().push_back(decl);
+
+    code_typet::argumentt arg0 = code_type.arguments()[0];
+    code_typet::argumentt arg1 = code_type.arguments()[1];
+
+    dereference_exprt arg0_deref(
+      symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
+
+    // Store old value in result
+    code_assignt assign_old(result, arg0_deref);
+    assign_old.location() = new_loc;
+    block.operands().push_back(assign_old);
+
+    // Store new value at pointer location
+    code_assignt assign_new(
+      arg0_deref, symbol_exprt(arg1.cmt_identifier(), arg1.type()));
+    assign_new.location() = new_loc;
+    block.operands().push_back(assign_new);
+
+    // atomic scope end
+    side_effect_expr_function_callt atomic_end;
+    atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
+    convert_expression_to_code(atomic_end);
+    block.operands().push_back(atomic_end);
+
+    // Return old value
+    code_returnt ret;
+    ret.return_value() = result;
+    ret.location() = new_loc;
+    block.operands().push_back(ret);
   }
   else if (has_prefix(identifier.as_string(), "c:@F@__atomic_load"))
   {

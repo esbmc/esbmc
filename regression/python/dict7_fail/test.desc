@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+--unwind 12 --no-bounds-check --no-pointer-check
+^VERIFICATION FAILED$

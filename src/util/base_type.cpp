@@ -408,12 +408,12 @@ static std::string reformat_class_name(const std::string &from)
   std::string classname;
   if (pos == std::string::npos)
   {
-    classname = "tag." + from;
+    classname = "tag-" + from;
   }
   else
   {
     pos++;
-    classname = from.substr(0, pos) + "tag." + from.substr(pos);
+    classname = from.substr(0, pos) + "tag-" + from.substr(pos);
   }
 
   return classname;

@@ -152,6 +152,10 @@ std::string with2t::field_names[esbmct::num_type_fields] =
   {"source_value", "update_field", "update_value", "", ""};
 std::string member2t::field_names[esbmct::num_type_fields] =
   {"source_value", "member_name", "", "", ""};
+std::string member_ref2t::field_names[esbmct::num_type_fields] =
+  {"member_name", "", "", "", ""};
+std::string ptr_mem2t::field_names[esbmct::num_type_fields] =
+  {"source_value", "member_pointer", "", "", ""};
 std::string index2t::field_names[esbmct::num_type_fields] =
   {"source_value", "index", "", "", ""};
 std::string isnan2t::field_names[esbmct::num_type_fields] =
@@ -251,6 +255,12 @@ std::string forall2t::field_names[esbmct::num_type_fields] =
   {"symbol", "predicate", "", "", ""};
 std::string exists2t::field_names[esbmct::num_type_fields] =
   {"symbol", "predicate", "", "", ""};
+std::string isinstance2t::field_names[esbmct::num_type_fields] =
+  {"value", "type", "", "", ""};
+std::string hasattr2t::field_names[esbmct::num_type_fields] =
+  {"value", "attr", "", "", ""};
+std::string isnone2t::field_names[esbmct::num_type_fields] =
+  {"lhs", "rhs", "", "", ""};
 
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr

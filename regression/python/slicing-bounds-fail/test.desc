@@ -1,4 +1,4 @@
 CORE
 main.py
-
-^VERIFICATION FAILED$
+--unwind 9
+^  out-of-bounds read in list$

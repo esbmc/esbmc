@@ -12,7 +12,6 @@
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/string2array.h>
 #include <vector>
@@ -826,6 +825,9 @@ void execution_statet::get_expr_globals(
   const expr2tc &expr,
   std::set<expr2tc> &globals_list)
 {
+  if (options.get_bool_option("data-races-check-only"))
+    return;
+
   if (is_nil_expr(expr))
     return;
 
@@ -1322,18 +1324,20 @@ void schedule_execution_statet::claim(
   const expr2tc &expr,
   const std::string &msg)
 {
-  unsigned int tmp_total, tmp_remaining;
+  unsigned int tmp_total, tmp_remaining, tmp_simplified;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
-
+  tmp_simplified = simplified_claims;
   execution_statet::claim(expr, msg);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;
+  tmp_simplified = simplified_claims - tmp_simplified;
 
   *ptotal_claims += tmp_total;
   *premaining_claims += tmp_remaining;
+  *psimplified_claims += tmp_simplified;
 }
 
 execution_statet::state_hashing_level2t::state_hashing_level2t(

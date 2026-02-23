@@ -6,33 +6,17 @@
  */
 
 #include <big-int/bigint.hh>
-#include <boost/bind/placeholders.hpp>
 #include <boost/crc.hpp>
 #include <boost/functional/hash_fwd.hpp>
-#include <boost/fusion/include/equal_to.hpp>
-#include <boost/mpl/bool.hpp>
-#include <boost/mpl/empty.hpp>
-#include <boost/mpl/equal.hpp>
-#include <boost/mpl/front.hpp>
-#include <boost/mpl/if.hpp>
-#include <boost/mpl/insert.hpp>
-#include <boost/mpl/not.hpp>
-#include <boost/mpl/pop_front.hpp>
-#include <boost/mpl/push_front.hpp>
-#include <boost/mpl/set.hpp>
-#include <boost/mpl/size.hpp>
-#include <boost/mpl/transform.hpp>
-#include <boost/mpl/vector.hpp>
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
-#include <cstdarg>
+#include <boost/mp11.hpp>
 #include <functional>
 #include <mutex>
 #include <util/compiler_defs.h>
 #include <util/crypto_hash.h>
 #include <util/dstring.h>
 #include <util/irep.h>
-#include <vector>
 
 // Ahead of time: a list of all expressions and types, in a preprocessing
 // list, for enumerating later. Should avoid manually enumerating anywhere
@@ -101,6 +85,8 @@
   BOOST_PP_LIST_CONS(byte_update,                                              \
   BOOST_PP_LIST_CONS(with,                                                     \
   BOOST_PP_LIST_CONS(member,                                                   \
+  BOOST_PP_LIST_CONS(member_ref,                                               \
+  BOOST_PP_LIST_CONS(ptr_mem,                                                  \
   BOOST_PP_LIST_CONS(index,                                                    \
   BOOST_PP_LIST_CONS(isnan,                                                    \
   BOOST_PP_LIST_CONS(overflow,                                                 \
@@ -147,24 +133,10 @@
   BOOST_PP_LIST_CONS(capability_top,                                           \
   BOOST_PP_LIST_CONS(forall,                                                   \
   BOOST_PP_LIST_CONS(exists,                                                   \
-  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-
-#define ESBMC_LIST_OF_TYPES                                                    \
-  BOOST_PP_LIST_CONS(bool,                                                     \
-  BOOST_PP_LIST_CONS(empty,                                                    \
-  BOOST_PP_LIST_CONS(symbol,                                                   \
-  BOOST_PP_LIST_CONS(struct,                                                   \
-  BOOST_PP_LIST_CONS(union,                                                    \
-  BOOST_PP_LIST_CONS(code,                                                     \
-  BOOST_PP_LIST_CONS(array,                                                    \
-  BOOST_PP_LIST_CONS(vector,                                                   \
-  BOOST_PP_LIST_CONS(pointer,                                                  \
-  BOOST_PP_LIST_CONS(unsignedbv,                                               \
-  BOOST_PP_LIST_CONS(signedbv,                                                 \
-  BOOST_PP_LIST_CONS(fixedbv,                                                  \
-  BOOST_PP_LIST_CONS(string,                                                   \
-  BOOST_PP_LIST_CONS(cpp_name,                                                 \
-  BOOST_PP_LIST_NIL))))))))))))))
+  BOOST_PP_LIST_CONS(isinstance,                                               \
+  BOOST_PP_LIST_CONS(hasattr,                                                  \
+  BOOST_PP_LIST_CONS(isnone,                                                   \
+  BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 // clang-format on
 
 // Even crazier forward decls,
@@ -182,10 +154,10 @@ class constant_array2t;
 class constant_vector2t;
 
 /** Reference counted container for expr2t based classes.
- *  This class extends boost shared_ptr's to contain anything that's a subclass
+ *  This class extends  shared_ptr's to contain anything that's a subclass
  *  of expr2t. It provides several ways of accessing the contained pointer;
  *  crucially it ensures that the only way to get a non-const reference or
- *  pointer is via the get() method, which call the detach() method.
+ *  pointer is via the get() method, which calls the detach() method. COW behaviour.
  *
  *  This exists to ensure that we honor the model set forth by the old string
  *  based internal representation - specifically, that if you performed a const
@@ -905,7 +877,7 @@ static inline std::string get_expr_id(const expr2tc &expr)
 /** Template for providing templated methods to irep classes (type2t/expr2t).
  *
  *  What this does: we give irep_methods2 a type trait record that contains
- *  a boost::mpl::vector, the elements of which describe each field in the
+ *  a boost::mp11::mp_list, the elements of which describe each field in the
  *  class we're operating on. For each field we get:
  *
  *    - The type of the field
@@ -1020,8 +992,9 @@ class type2t_traits
 public:
   typedef field_traits<type2t::type_ids, type2t, &type2t::type_id>
     type_id_field;
-  typedef typename boost::mpl::
-    push_front<boost::mpl::vector<Args...>, type_id_field>::type fields;
+  typedef typename boost::mp11::
+    mp_push_front<boost::mp11::mp_list<Args...>, type_id_field>
+      fields;
   typedef type2t base2t;
 };
 
@@ -1037,12 +1010,13 @@ public:
   typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
     expr_id_field;
   typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
-  typedef typename boost::mpl::push_front<
-    typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::
-      type,
-    expr_id_field>::type fields;
+  typedef typename boost::mp11::mp_push_front<
+    typename boost::mp11::
+      mp_push_front<boost::mp11::mp_list<Args...>, type_field>,
+    expr_id_field>
+    fields;
   static constexpr unsigned int num_fields =
-    boost::mpl::size<fields>::type::value;
+    boost::mp11::mp_size<fields>::value;
   typedef expr2t base2t;
 };
 
@@ -1056,10 +1030,11 @@ class expr2t_traits_notype
 public:
   typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
     expr_id_field;
-  typedef typename boost::mpl::
-    push_front<boost::mpl::vector<Args...>, expr_id_field>::type fields;
+  typedef typename boost::mp11::
+    mp_push_front<boost::mp11::mp_list<Args...>, expr_id_field>
+      fields;
   static constexpr unsigned int num_fields =
-    boost::mpl::size<fields>::type::value;
+    boost::mp11::mp_size<fields>::value;
   typedef expr2t base2t;
 };
 
@@ -1127,14 +1102,14 @@ class irep_methods2 : public irep_methods2<
                         derived,
                         baseclass,
                         traits,
-                        typename boost::mpl::pop_front<fields>::type>
+                        typename boost::mp11::mp_pop_front<fields>>
 {
 public:
   typedef irep_methods2<
     derived,
     baseclass,
     traits,
-    typename boost::mpl::pop_front<fields>::type>
+    typename boost::mp11::mp_pop_front<fields>>
     superclass;
   typedef typename baseclass::base_type base2t;
   typedef irep_container<base2t> base_container2tc;
@@ -1166,9 +1141,9 @@ public:
 protected:
   // Fetch the type information about the field we are concerned with out
   // of the current type trait we're working on.
-  typedef typename boost::mpl::front<fields>::type::result_type cur_type;
-  typedef typename boost::mpl::front<fields>::type::source_class base_class;
-  typedef typename boost::mpl::front<fields>::type membr_ptr;
+  typedef typename boost::mp11::mp_front<fields>::result_type cur_type;
+  typedef typename boost::mp11::mp_front<fields>::source_class base_class;
+  typedef typename boost::mp11::mp_front<fields> membr_ptr;
 
   // Recursive instances of boilerplate methods.
   void tostring_rec(
@@ -1196,7 +1171,7 @@ protected:
 };
 
 // Base instance of irep_methods2. This is a template specialization that
-// matches (via boost::enable_if) when the list of fields to operate on is
+// matches (via std::enable_if) when the list of fields to operate on is
 // now empty. Finish up the remaining computation, if any.
 template <class derived, class baseclass, typename traits, typename fields>
 class irep_methods2<
@@ -1204,8 +1179,7 @@ class irep_methods2<
   baseclass,
   traits,
   fields,
-  typename boost::enable_if<typename boost::mpl::empty<fields>::type>::type>
-  : public baseclass
+  std::enable_if_t<boost::mp11::mp_empty<fields>::value>> : public baseclass
 {
 public:
   template <typename... Args>

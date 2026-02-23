@@ -834,6 +834,54 @@ public:
   typedef esbmct::expr2t_traits<source_value_field, member_field> traits;
 };
 
+class member_ref_data : public datatype_ops
+{
+public:
+  member_ref_data(
+    const type2tc &t,
+    datatype_ops::expr_ids id,
+    const irep_idt &m)
+    : datatype_ops(t, id), member(m)
+  {
+  }
+  member_ref_data(const member_ref_data &ref) = default;
+
+  irep_idt member;
+
+  // Type mangling:
+  typedef esbmct::
+    field_traits<irep_idt, member_ref_data, &member_ref_data::member>
+      member_field;
+  typedef esbmct::expr2t_traits<member_field> traits;
+};
+
+class ptr_mem_data : public datatype_ops
+{
+public:
+  ptr_mem_data(
+    const type2tc &t,
+    datatype_ops::expr_ids id,
+    const expr2tc &s,
+    const expr2tc &p)
+    : datatype_ops(t, id), source_value(s), member_pointer(p)
+  {
+  }
+  ptr_mem_data(const ptr_mem_data &ref) = default;
+
+  expr2tc source_value;
+  expr2tc member_pointer;
+
+  // Type mangling:
+  typedef esbmct::
+    field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::source_value>
+      source_value_field;
+  typedef esbmct::
+    field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::member_pointer>
+      member_pointer_field;
+  typedef esbmct::expr2t_traits<source_value_field, member_pointer_field>
+    traits;
+};
+
 class index_data : public datatype_ops
 {
 public:
@@ -1002,7 +1050,8 @@ public:
     preincrement,
     postincrement,
     predecrement,
-    postdecrement
+    postdecrement,
+    old_snapshot // For __ESBMC_old() in function contracts
   };
 
   sideeffect_data(
@@ -1481,6 +1530,8 @@ irep_typedefs(byte_extract, byte_extract_data);
 irep_typedefs(byte_update, byte_update_data);
 irep_typedefs(with, with_data);
 irep_typedefs(member, member_data);
+irep_typedefs(member_ref, member_ref_data);
+irep_typedefs(ptr_mem, ptr_mem_data);
 irep_typedefs(index, index_data);
 irep_typedefs(isnan, bool_1op);
 irep_typedefs(overflow, overflow_ops);
@@ -1530,6 +1581,9 @@ irep_typedefs(capability_base, object_ops);
 irep_typedefs(capability_top, object_ops);
 irep_typedefs(forall, logic_2ops);
 irep_typedefs(exists, logic_2ops);
+irep_typedefs(isinstance, logic_2ops);
+irep_typedefs(hasattr, logic_2ops);
+irep_typedefs(isnone, logic_2ops);
 
 class exists2t : public exists_expr_methods
 {
@@ -1758,6 +1812,7 @@ public:
   constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_array_expr_methods(type, constant_array_id, members)
   {
+    assert(type->type_id == type2t::array_id);
   }
   constant_array2t(const constant_array2t &ref) = default;
 
@@ -2748,6 +2803,8 @@ public:
   }
   pointer_object2t(const pointer_object2t &ref) = default;
 
+  expr2tc do_simplify() const override;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2913,6 +2970,40 @@ public:
   member2t(const member2t &ref) = default;
 
   expr2tc do_simplify() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Member reference
+ *  @extends member_ref_data */
+class member_ref2t : public member_ref_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of extracted member.
+   *  @param memb Name of member to extract.  */
+  member_ref2t(const type2tc &type, const irep_idt &memb)
+    : member_ref_expr_methods(type, member_ref_id, memb)
+  {
+  }
+  member_ref2t(const member_ref2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Member pointer
+ *  @extends ptr_mem_data */
+class ptr_mem2t : public ptr_mem_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param source Data structure to extract from.
+   *  @param pointer Pointer to member.  */
+  ptr_mem2t(const type2tc &type, const expr2tc &source, const expr2tc &pointer)
+    : ptr_mem_expr_methods(type, ptr_mem_id, source, pointer)
+  {
+  }
+  ptr_mem2t(const ptr_mem2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3130,6 +3221,43 @@ public:
   {
   }
   races_check2t(const races_check2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isinstance2t : public isinstance_expr_methods
+{
+public:
+  isinstance2t(const expr2tc &value, const expr2tc &type)
+    : isinstance_expr_methods(get_bool_type(), isinstance_id, value, type)
+  {
+  }
+  isinstance2t(const isinstance2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class hasattr2t : public hasattr_expr_methods
+{
+public:
+  hasattr2t(const expr2tc &value, const expr2tc &attr)
+    : hasattr_expr_methods(get_bool_type(), hasattr_id, value, attr)
+  {
+  }
+  hasattr2t(const hasattr2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isnone2t : public isnone_expr_methods
+{
+public:
+  isnone2t(const expr2tc &lhs, const expr2tc &rhs)
+    : isnone_expr_methods(get_bool_type(), isnone_id, lhs, rhs)
+  {
+  }
+
+  isnone2t(const isnone2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };

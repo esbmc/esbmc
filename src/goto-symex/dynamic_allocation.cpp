@@ -114,7 +114,9 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc obj_expr = pointer_object2tc(pointer_type2(), size.value);
 
     expr2tc alloc_arr_2;
-    migrate_expr(symbol_expr(*ns.lookup(alloc_size_arr_name)), alloc_arr_2);
+    const symbolt *alloc_size_symbol = ns.lookup(alloc_size_arr_name);
+    assert(alloc_size_symbol);
+    migrate_expr(symbol_expr(*alloc_size_symbol), alloc_arr_2);
 
     expr2tc index_expr = index2tc(size_type2(), alloc_arr_2, obj_expr);
     expr = index_expr;
@@ -132,5 +134,28 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     const capability_top2t &size = to_capability_top2t(expr);
 
     convert_capability_member(expr, size.value, irep_idt("top"), ns);
+  }
+  else if (is_ptr_mem2t(expr))
+  {
+    const ptr_mem2t &ptr = to_ptr_mem2t(expr);
+
+    expr2tc source = ptr.source_value;
+    expr2tc member = ptr.member_pointer;
+
+    cur_state->rename(member);
+
+    if (is_member_ref2t(member))
+    {
+      const member_ref2t &ref = to_member_ref2t(member);
+
+      // give the pm = &S::x and s.*pm
+      // convert the s.*pm into s.x
+      expr = member2tc(to_pointer_type(ref.type).subtype, source, ref.member);
+    }
+    else
+    {
+      log_error("pointer-to-member: constant propagation failed");
+      abort();
+    }
   }
 }

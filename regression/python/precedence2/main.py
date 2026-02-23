@@ -4,7 +4,7 @@ c = 8
 
 # Exponentiation
 assert a ** b == 16
-x:int =  -a ** b
+x =  -a ** b
 assert x == -16  # Unary minus binds less tightly than **
 assert (-a) ** b == 16
 assert x is not b

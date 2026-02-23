@@ -157,6 +157,28 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     }
     assert(new_comp.size() == ops.size());
   }
+  else if (expr.id() == "ptr_mem")
+  {
+    adjust_operands(expr);
+
+    exprt &base = expr.op0();
+    if (base.type().is_pointer())
+    {
+      exprt deref("dereference");
+      deref.type() = base.type().subtype();
+      deref.move_to_operands(base);
+      base.swap(deref);
+    }
+
+    if (expr.type().id() == "ptrmem")
+    {
+      exprt func = expr.op1();
+      code_typet &code_type = to_code_type(func.type().subtype());
+      exprt arg0 = address_of_exprt(expr.op0());
+      code_type.arguments().push_back(arg0.type());
+      expr.swap(func);
+    }
+  }
   else
   {
     // Just check operands of everything else
@@ -222,6 +244,7 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
       statement == "preincrement" || statement == "predecrement" ||
       statement == "postincrement" || statement == "postdecrement")
     {
+      adjust_reference(expr);
     }
     else if (has_prefix(id2string(statement), "assign"))
     {
@@ -822,14 +845,14 @@ void clang_c_adjust::adjust_function_call_arguments(
 }
 
 static inline bool
-compare_float_suffix(const irep_idt &identifier, const std::string name)
+compare_float_suffix(const irep_idt &identifier, const std::string &name)
 {
   return (identifier == name) || ((identifier == (name + "f"))) ||
          ((identifier == (name + "d"))) || ((identifier == (name + "l")));
 }
 
 static inline bool
-compare_unscore_builtin(const irep_idt &identifier, const std::string name)
+compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
 {
   // compare a given identifier with a set of possible names, e.g,
   //
@@ -1126,9 +1149,13 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if (compare_float_suffix(identifier, "sqrt"))
     {
-      exprt new_expr("ieee_sqrt", expr.type());
-      new_expr.operands() = expr.arguments();
-      expr.swap(new_expr);
+      // Skip Python user-defined functions
+      if (!has_prefix(id2string(to_symbol_expr(f_op).identifier()), "py:"))
+      {
+        exprt new_expr("ieee_sqrt", expr.type());
+        new_expr.operands() = expr.arguments();
+        expr.swap(new_expr);
+      }
     }
     else if (identifier == "__builtin_nontemporal_load")
     {
@@ -1145,8 +1172,33 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       exprt new_expr = false_exprt();
       expr.swap(new_expr);
     }
+    // intrinsics headers
+    else if (
+      (identifier == "__builtin_elementwise_add_sat" ||
+       identifier == "__builtin_elementwise_sub_sat" ||
+       identifier == "__builtin_elementwise_max" ||
+       identifier == "__builtin_elementwise_min" ||
+       identifier == "__builtin_elementwise_abs" ||
+       identifier == "__builtin_elementwise_popcount" ||
+       identifier == "__builtin_reduce_add" ||
+       identifier == "__builtin_reduce_mul" ||
+       identifier == "__builtin_reduce_and" ||
+       identifier == "__builtin_reduce_or" ||
+       identifier == "__builtin_reduce_max" ||
+       identifier == "__builtin_reduce_min") &&
+      config.options.get_bool_option("dont-care-about-missing-extensions"))
+    {
+      auto nondet = sideeffect2tc(
+        migrate_type(expr.type()),
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        type2tc(),
+        sideeffect2t::nondet);
+      exprt new_expr = migrate_expr_back(nondet);
+      expr.swap(new_expr);
+    }
   }
-
   // Restore location
   expr.location() = location;
 }

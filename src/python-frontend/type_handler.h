@@ -70,6 +70,25 @@ public:
    */
   typet get_list_type(const nlohmann::json &list_value) const;
 
+  const typet get_list_type() const;
+
+  typet get_list_element_type() const;
+
+  /*
+   * Gets the generic dictionary type from the symbol table.
+   * @return A pointer to the generic __python_dict__ struct type.
+   */
+  const typet get_dict_type() const;
+
+  /*
+   * Infers the specific dictionary type from a JSON value.
+   * @param dict_value The JSON node representing the dict value.
+   * @return The inferred dictionary type based on the value's structure.
+   */
+  typet get_dict_type(const nlohmann::json &dict_value) const;
+
+  typet get_tuple_type(const nlohmann::json &tuple_node) const;
+
   /*
    * Determines the type of an operand in binary operations.
    * @param operand The JSON node representing the operand.
@@ -81,11 +100,40 @@ public:
    * Checks whether the given JSON object represents a 2D array (list of lists).
    * @param arr The JSON object to check.
    * @return true if it's a 2D array, false otherwise.
-  */
+   */
   bool is_2d_array(const nlohmann::json &arr) const;
 
   int get_array_dimensions(const nlohmann::json &arr) const;
 
+  /*
+   * Determines the numeric width (in bits) of a given type.
+   * @param type The type object to analyze for width determination.
+   * @return The width of the type in bits as a size_t value.
+   */
+  size_t get_type_width(const typet &type) const;
+
+  typet build_optional_type(const typet &base_type);
+
+  /*
+   * Returns true if `class_name` is the same as, or derives (directly or
+   * indirectly) from, `expected_base` in the current AST.
+   */
+  bool class_derives_from(
+    const std::string &class_name,
+    const std::string &expected_base) const;
+
 private:
+  /// Encapsulate the const_cast in one place with clear documentation
+  exprt get_expr_helper(const nlohmann::json &json) const;
+
+  /// Check if two types are compatible for list homogeneity checking
+  bool are_types_compatible(const typet &t1, const typet &t2) const;
+
+  /// Get a normalized/canonical type for list element type inference
+  typet get_canonical_string_type(const typet &t) const;
+
+  /// Resolves a Call's func node (id or Attribute) to a typet
+  typet get_typet_from_call_func(const nlohmann::json &func) const;
+
   const python_converter &converter_;
 };

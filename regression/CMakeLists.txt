@@ -2,14 +2,28 @@
 include(CTest)
 enable_testing()
 
-find_package(Python)
-# TODO: Use add dependency
+# Use Python3_EXECUTABLE if set (from build.sh), otherwise find Python
+if(DEFINED Python3_EXECUTABLE)
+    set(Python_EXECUTABLE ${Python3_EXECUTABLE})
+    message(STATUS "Using Python3_EXECUTABLE: ${Python_EXECUTABLE}")
+else()
+    find_package(Python)
+    # TODO: Use add dependency
+endif()
 
 if(ENABLE_PYTHON_FRONTEND)
 # Install Jira package with pip before running tests (needed by regression/python/try-fail)
+# Use --break-system-packages for externally-managed Python environments (PEP 668)
 execute_process(
-    COMMAND ${Python_EXECUTABLE} -m pip install jira
+    COMMAND ${Python_EXECUTABLE} -m pip install --break-system-packages jira
+    RESULT_VARIABLE pip_result
 )
+if(pip_result)
+    # Fallback: try without --break-system-packages (for older Python or non-externally-managed)
+    execute_process(
+        COMMAND ${Python_EXECUTABLE} -m pip install jira
+    )
+endif()
 endif()
 
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
@@ -46,6 +60,9 @@ endfunction()
 
 function(add_esbmc_regression folder modes)
     SUBDIRLIST(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
+    if(${folder} STREQUAL "quixbugs")
+        list(REMOVE_ITEM SUBDIRS bucketsort)
+    endif()
     foreach(test ${SUBDIRS})
         add_esbmc_regression_test(${folder} "${modes}" ${test})
     endforeach()
@@ -56,6 +73,9 @@ if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)
 endif()
 if(ENABLE_CVC4)
+    set(REGRESSIONS_CVC cvc)
+endif()
+if(ENABLE_CVC5)
     set(REGRESSIONS_CVC cvc)
 endif()
 if(ENABLE_MATHSAT)
@@ -73,15 +93,17 @@ endif()
 if(ENABLE_GOTO_CONTRACTOR)
     set(REGRESSIONS_GOTO_CONTRACTOR Interval-analysis-ibex-contractor)
 endif()
-if(ENABLE_OLD_FRONTEND)
-    set(REGRESSIONS_OLD_FRONTEND esbmc-old)
-endif()
 if(ENABLE_JIMPLE_FRONTEND)
     set(REGRESSIONS_JIMPLE jimple)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
+    set(REGRESSIONS_PYTHON_INTENSIVE python-intensive)
+    set(REGRESSIONS_MOPSA mopsa)
     set(REGRESSIONS_NUMPY numpy)
+    set(REGRESSIONS_HUMANEVAL humaneval)
+    set(REGRESSIONS_QUIXBUGS quixbugs)
+    set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
 endif()
 
 if(ESBMC_CHERI_CLANG)
@@ -120,6 +142,7 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/try_catch
                       esbmc-cpp/functional
                       esbmc-cpp/bitset
+                      esbmc-cpp/unwindsetname
                       )
 # list of C++11 test suites
 set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
@@ -147,6 +170,9 @@ set(REGRESSIONS_CPP17 esbmc-cpp17/cpp
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
 
+# enable test case geeneration
+set(TEST_GENERATION witnesses/test_case_generation)
+
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
     set(REGRESSIONS esbmc-unix
@@ -173,7 +199,13 @@ if(APPLE)
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_PYTHON_INTENSIVE}
+                    ${REGRESSIONS_MOPSA}
                     ${REGRESSIONS_NUMPY}
+                    ${REGRESSIONS_HUMANEVAL}
+                    ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${TEST_GENERATION}
                     ltl
                     goto-transcoder
                     loop-invariants
@@ -234,12 +266,19 @@ else()
                     linux
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_PYTHON_INTENSIVE}
+                    ${REGRESSIONS_MOPSA}
                     ${REGRESSIONS_NUMPY}
+                    ${REGRESSIONS_HUMANEVAL}
+                    ${REGRESSIONS_QUIXBUGS}
+                    ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${TEST_GENERATION}
                     ltl
                     goto-coverage
                     goto-transcoder
                     parallel-solving
                     loop-invariants
+                    function_contract
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
@@ -255,7 +294,8 @@ foreach(regression IN LISTS REGRESSIONS)
     else()
         set(MODES CORE KNOWNBUG FUTURE THOROUGH)
     endif()
+    if(CORE_REGRESSION_ONLY)
+      set(MODES CORE)
+    endif()
     add_esbmc_regression("${regression}" "${MODES}")
 endforeach()
-
-

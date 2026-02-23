@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^TypeError: foo\(\) missing 2 required positional arguments: \'x\' and \'y\'$

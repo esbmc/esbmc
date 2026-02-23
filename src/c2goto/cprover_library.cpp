@@ -1,10 +1,15 @@
+#include <c2goto/cprover_library.h>
+
+#include "util/symbolic_types.h"
+
 #include <ac_config.h>
 #include <boost/filesystem.hpp>
-#include <c2goto/cprover_library.h>
 #include <cstdlib>
 #include <fstream>
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/goto_functions.h>
+#include <util/context.h>
+#include <util/message.h>
 #include <util/c_link.h>
 #include <util/config.h>
 #include <util/language.h>
@@ -53,11 +58,19 @@ static const struct buffer
 #ifdef ESBMC_BUNDLE_LIBC
   {
     {
+#  ifdef ESBMC_BUNDLE_LIBC_32BIT
       {&clib32_buf[0], clib32_buf_size},
+#  else
+      {NULL, 0},
+#  endif
       {&clib64_buf[0], clib64_buf_size},
     },
     {
+#  ifdef ESBMC_BUNDLE_LIBC_32BIT
       {&clib32_fp_buf[0], clib32_fp_buf_size},
+#  else
+      {NULL, 0},
+#  endif
       {&clib64_fp_buf[0], clib64_fp_buf_size},
     },
   },
@@ -88,7 +101,21 @@ static const struct buffer
 #endif
 };
 
+// The goto reader will only pick up symbols for these functions and their dependencies
+// This is a Python-specific whitelist invoked when you use set_functions_to_read
 const static std::vector<std::string> python_c_models = {
+  "__ESBMC_list_create",
+  "list_in_bounds",
+  "__ESBMC_list_at",
+  "__ESBMC_list_clear",
+  "__ESBMC_list_push",
+  "__ESBMC_list_extend",
+  "__ESBMC_list_insert",
+  "__ESBMC_list_push_object",
+  "__ESBMC_list_size",
+  "list_hash_string",
+  "__ESBMC_list_eq",
+  "__ESBMC_list_set_eq",
   "strncmp",
   "strcmp",
   "strlen",
@@ -105,6 +132,7 @@ const static std::vector<std::string> python_c_models = {
   "exp",
   "expm1",
   "expm1_taylor",
+  "exp2",
   "fmod",
   "sqrt",
   "fmin",
@@ -113,6 +141,12 @@ const static std::vector<std::string> python_c_models = {
   "frexp",
   "round",
   "copysign",
+  "tan",
+  "asin",
+  "sinh",
+  "cosh",
+  "tanh",
+  "log10",
   "arctan",
   "atan",
   "_atan",
@@ -131,9 +165,82 @@ const static std::vector<std::string> python_c_models = {
   "log",
   "pow_by_squaring",
   "log2",
+  "log1p",
   "ldexp",
-  "log1p_taylor"};
-
+  "log1p_taylor",
+  "asinh",
+  "acosh",
+  "atanh",
+  "hypot",
+  "strstr",
+  "strchr",
+  "__ESBMC_list_contains",
+  "__python_str_isdigit",
+  "__python_char_isdigit",
+  "__python_str_isalpha",
+  "__python_char_isalpha",
+  "__python_str_isspace",
+  "isspace",
+  "__python_str_lstrip",
+  "__python_str_rstrip",
+  "__python_str_strip",
+  "__python_str_lstrip_chars",
+  "__python_str_rstrip_chars",
+  "__python_str_strip_chars",
+  "__python_char_islower",
+  "__python_str_islower",
+  "__python_char_lower",
+  "__python_str_lower",
+  "__python_char_upper",
+  "__python_str_upper",
+  "__python_str_find",
+  "__python_str_find_range",
+  "__python_str_rfind",
+  "__python_str_rfind_range",
+  "__python_str_replace",
+  "__python_str_split",
+  "__ESBMC_create_inf_obj",
+  "__python_int",
+  "__python_chr",
+  "__python_str_concat",
+  "__python_str_repeat",
+  "__ESBMC_list_find_index",
+  "__ESBMC_list_remove_at",
+  "__ESBMC_list_set_at",
+  "__ESBMC_list_pop",
+  "__ESBMC_list_try_find_index",
+  "__ESBMC_dict_eq",
+  "__ESBMC_sin",
+  "__ESBMC_cos",
+  "__ESBMC_sqrt",
+  "__ESBMC_exp",
+  "__ESBMC_log",
+  "__ESBMC_list_copy",
+  "__ESBMC_tan",
+  "__ESBMC_asin",
+  "__ESBMC_sinh",
+  "__ESBMC_cosh",
+  "__ESBMC_tanh",
+  "__ESBMC_log10",
+  "__ESBMC_inf",
+  "__ESBMC_nan",
+  "__ESBMC_expm1",
+  "__ESBMC_log1p",
+  "__ESBMC_exp2",
+  "__ESBMC_asinh",
+  "__ESBMC_acosh",
+  "__ESBMC_atanh",
+  "__ESBMC_hypot",
+  "__ESBMC_acos",
+  "__ESBMC_atan",
+  "__ESBMC_atan2",
+  "__ESBMC_log2",
+  "__ESBMC_pow",
+  "__ESBMC_fabs",
+  "__ESBMC_trunc",
+  "__ESBMC_fmod",
+  "__ESBMC_copysign",
+  "__ESBMC_list_remove"};
 } // namespace
 
 static void generate_symbol_deps(
@@ -147,28 +254,37 @@ static void generate_symbol_deps(
   {
     type = std::pair<irep_idt, irep_idt>(name, irep.identifier());
     deps.insert(type);
-    return;
+
+    /* Cannot return here just yet
+     * Symbol identifier may point to variable identifier
+     * Further traversal needed to find type identifier if exists
+     */
   }
 
   forall_irep (irep_it, irep.get_sub())
   {
-    if (irep_it->id() == "symbol")
-    {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
-      deps.insert(type);
-      generate_symbol_deps(name, *irep_it, deps);
-    }
-    else if (irep_it->id() == "argument")
+    if (irep_it->id() == "argument")
     {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->cmt_identifier());
       deps.insert(type);
     }
     else
     {
+      /* Even if symbol & identifier found, further traversal might be needed for type identifier
+       * Continue traversing to find symbol dependencies
+       * The subcall will add the symbol identifier before traversing named and unnamed ireps so does not need to be done explicitly here
+       */
       generate_symbol_deps(name, *irep_it, deps);
     }
   }
 
+  /* The case where symbol identifier is reached but there are more nested type symbols
+   * has only been seen so far when these higher-level symbols are unnamed ireps.
+   *        (in particular inside an "operands" named_irep the layer above that)
+   * Therefore named_irep iterator should be able to terminate on named_irep symbols
+   * If there are future symbol resolution issues, consider changing this to also keep traversing
+   *        For debugging, you can look at the nested structure via irept::pretty()
+   */
   forall_named_irep (irep_it, irep.get_named_sub())
   {
     if (irep_it->second.id() == "symbol")
@@ -228,6 +344,11 @@ void add_cprover_library(contextt &context, const languaget *language)
       "this version of ESBMC does not have a C library for 16 bit machines");
     return;
   case 32:
+#ifndef ESBMC_BUNDLE_LIBC_32BIT
+    log_warning(
+      "this version of ESBMC does not have a C library for 32 bit machines");
+    return;
+#endif
   case 64:
     break;
   default:
@@ -241,7 +362,11 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (clib->size == 0)
   {
     if (language)
-      return add_bundled_library_sources(context, *language);
+    {
+      // C library sources must be parsed with C frontend, not the current language
+      std::unique_ptr<languaget> c_lang(new_language(language_idt::C));
+      return add_bundled_library_sources(context, *c_lang);
+    }
     log_error("Zero-lengthed internal C library");
     abort();
   }
@@ -251,10 +376,19 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (language && language->id() == "python")
     goto_reader.set_functions_to_read(python_c_models);
 
+  /* Python: actively has a function filter
+   *    - not everything makes it into new_ctx
+   *    - ignored symbols go into ignored_ctx
+   * Other languages: no function filter
+   *    - everything makes it into new_ctx
+   *    - ignored_ctx empty
+   */
+  contextt ignored_ctx;
   if (goto_reader.read_goto_binary_array(
-        clib->start, clib->size, new_ctx, goto_functions))
+        clib->start, clib->size, new_ctx, ignored_ctx, goto_functions))
     abort();
 
+  // Traverse symbols and get dependencies from both their nested types and values
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
     generate_symbol_deps(s.id, s.value, symbol_deps);
     generate_symbol_deps(s.id, s.type, symbol_deps);
@@ -274,40 +408,112 @@ void add_cprover_library(contextt &context, const languaget *language)
     dstring("pthread_join"), dstring("pthread_join_noswitch"));
   symbol_deps.insert(joincheck);
 
-  /* The code just pulled into store_ctx might use other symbols in the C
-   * library. So, repeatedly search for new C library symbols that we use but
-   * haven't pulled in, then pull them in. We finish when we've made a pass
-   * that adds no new symbols. */
+  /* Iterate through the new_ctx symbols, figure out which ones to go into store_ctx
+   *    For Python this is everything: new_ctx already has a filtering layer
+   *    For other frontends, only add symbols that exist already in context but value empty
+   * store_ctx is what actually gets merged into the existing, final context
+   */
 
-  new_ctx.foreach_operand(
-    [&context, &store_ctx, &symbol_deps, &to_include, &language](
-      const symbolt &s) {
-      const symbolt *symbol = context.find_symbol(s.id);
-      if (
-        (language && language->id() == "python") ||
-        (symbol != nullptr && symbol->value.is_nil()))
-      {
-        store_ctx.add(s);
-        ingest_symbol(s.id, symbol_deps, to_include);
-      }
-    });
+  new_ctx.foreach_operand([&context,
+                           &store_ctx,
+                           &symbol_deps,
+                           &to_include,
+                           &language](const symbolt &s) {
+    const symbolt *symbol = context.find_symbol(s.id);
+    if (
+      (language && language->id() == "python") ||
+      (symbol != nullptr && symbol->value.is_nil()))
+    {
+      store_ctx.add(s);
 
+      // ingest_symbol takes this added symbol and goes through symbol_deps
+      // it only moves dependencies from symbol_deps to to_include
+      //    if they're dependencies for a symbol that is definitely being included
+      //    (i.e. in store_ctx)
+      ingest_symbol(s.id, symbol_deps, to_include);
+    }
+  });
+
+  /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
+   * These will be symbols that didn't make it into store_ctx
+   *
+   * For Python:
+   *    - symbols that didn't make it into store_ctx didn't make it because they're not in new_ctx
+   *    - they will be found in ignored_ctx
+   *
+   * For other frontends:
+   *    - every symbol made it into new_ctx (no ignored_ctx)
+   *    - not every symbol made it into store_ctx from new_ctx
+   *    - they will be found in new_ctx
+   */
   for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
        nameit != to_include.end();
        nameit++)
   {
-    symbolt *s = new_ctx.find_symbol(*nameit);
+    symbolt *s;
+
+    // Look in the appropriate place for this symbol
+    if ((language && language->id() == "python"))
+    {
+      s = ignored_ctx.find_symbol(*nameit);
+    }
+    else
+    {
+      s = new_ctx.find_symbol(*nameit);
+    }
+
     if (s != nullptr)
     {
       store_ctx.add(*s);
+
+      /* Python frontend hasn't looked for dependencies for symbols that aren't in
+       * the function whitelist, (since they're not put in new_ctx); other frontends
+       * have these dependencies already available in symbol_deps.
+       * Therefore add dependencies that result from this new symbol
+       */
+      if (language && language->id() == "python")
+      {
+        generate_symbol_deps(s->id, s->value, symbol_deps);
+        generate_symbol_deps(s->id, s->type, symbol_deps);
+      }
+
       ingest_symbol(*nameit, symbol_deps, to_include);
     }
   }
 
+  // Bring store_ctx symbols into context
   if (c_link(context, store_ctx, "<built-in-library>"))
   {
     // Merging failed
     log_error("Failed to merge C library");
     abort();
   }
+  // We basically need a place where we know that ESBMC produces the "main" executable that will be run.
+  // This is the best place that I've found and mimics how a real compiler would work:
+  // First compile all source files to objects files, then link them together and then link with the libc
+  // library. Only when linking to the libc library, we know that all unresolved extern symbols (those whose
+  // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
+  // those and initialize the extern variables to nondet.
+  context.Foreach_operand([&context](symbolt &s) {
+    if (s.is_extern && !s.type.is_code())
+    {
+      if (s.value.is_nil())
+      {
+        log_warning(
+          "extern variable with id {} not found, initializing value to nondet! "
+          "This code would not compile with an actual compiler.",
+          s.id);
+        exprt value =
+          exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
+        value.statement("nondet");
+        s.value = value;
+      }
+      else
+      {
+        log_error("extern variable with id {} is not nil.", s.id);
+        s.dump();
+        abort();
+      }
+    }
+  });
 }

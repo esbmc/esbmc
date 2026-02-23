@@ -85,6 +85,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_vector_type(expr))
     return true;
 
+  if (is_member_ref2t(expr))
+    return true;
+
   // It's fine to constant propagate something that's absent.
   if (is_nil_expr(expr))
     return true;
@@ -136,14 +139,110 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   // important benchmarks (i.e. TACAS) work better with some propagation
   if (is_with2t(expr))
   {
-    const with2t &with = to_with2t(expr);
-    // For now, we focus on propagating constants for structs only.
-    // TODO: enable other type will regress performance, need a TC
-    // to reproduce
     if (
-      is_symbol2t(with.source_value) && is_struct_type(with.source_value) &&
-      is_constant_expr(with.update_value))
-      return true;
+      config.options.get_bool_option("incremental-bmc") ||
+      config.options.get_bool_option("k-induction"))
+      // When this option is enabled, the constant propagation
+      // with feature will significantly impact performance.
+      // More importantly, the use of incremental-BMC / k-induction does not heavily
+      // rely on constants to determine the boundaries. Even if there is a known
+      // loop size, esbmc starts unwinding from min k
+      return false;
+
+    // Handle WITH chains for structs where all updates are constants
+    if (is_struct_type(expr->type))
+    {
+      // Check if this is a chain of WITHs with all constant updates
+      bool all_constant_updates = true;
+      expr2tc current = expr;
+
+      while (is_with2t(current))
+      {
+        const with2t &w = to_with2t(current);
+        if (!is_constant_expr(w.update_value))
+        {
+          all_constant_updates = false;
+          break;
+        }
+        current = w.source_value;
+      }
+
+      // If we reached a symbol and all updates were constants, propagate
+      if (all_constant_updates && !is_member2t(current))
+        return true;
+    }
+
+    // Handle WITH chains for structs where all updates are constants
+    if (is_array_type(expr->type))
+    {
+      // Check if this is a chain of WITHs with all constant updates
+      bool all_constant_updates = true;
+      expr2tc current = expr;
+
+      while (is_with2t(current))
+      {
+        const with2t &w = to_with2t(current);
+        if (!constant_propagation(w.update_value))
+        {
+          all_constant_updates = false;
+          break;
+        }
+        current = w.source_value;
+      }
+
+      // If we reached a symbol and all updates were constants, propagate
+      if (all_constant_updates)
+        return true;
+    }
+
+    // Handle WITH chains for unions where all updates are constants
+    if (is_union_type(expr->type))
+    {
+      // For unions, we can only safely propagate if all updates in the chain
+      // are to the SAME field and are all constants.
+      // If different fields are updated, we must not propagate because
+      // union members alias each other in memory: writing to one field
+      // affects what you read from another field.
+
+      bool all_constant_updates = true;
+      bool all_same_field = true;
+      std::string first_field;
+      expr2tc current = expr;
+
+      while (is_with2t(current))
+      {
+        const with2t &w = to_with2t(current);
+
+        if (!is_constant_expr(w.update_value))
+        {
+          all_constant_updates = false;
+          break;
+        }
+
+        if (is_constant_string2t(w.update_field))
+        {
+          std::string field_name =
+            to_constant_string2t(w.update_field).value.as_string();
+
+          if (first_field.empty())
+            first_field = field_name;
+          else if (field_name != first_field)
+          {
+            // Different field accessed: cannot constant propagate
+            all_same_field = false;
+            break;
+          }
+        }
+
+        current = w.source_value;
+      }
+
+      // Only allow propagation if all updates are constants and to the same field
+      if (all_constant_updates && all_same_field)
+        return true;
+
+      return false;
+    }
 
     return false;
   }

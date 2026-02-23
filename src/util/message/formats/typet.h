@@ -21,8 +21,8 @@ struct fmt::formatter<typet>
 
   // This will teach fmt how to convert typet into a str.
   template <typename FormatContext>
-  auto format(const typet &p, FormatContext &ctx)
+  auto format(const typet &p, FormatContext &ctx) const
   {
-    return format_to(ctx.out(), "{}", p.pretty(0));
+    return fmt::format_to(ctx.out(), "{}", p.pretty(0));
   }
 };

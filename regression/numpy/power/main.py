@@ -1,7 +1,13 @@
 import numpy as np
 
-x = np.power(2, 3)
-assert x == 8
+result1 = np.power(2, 3)
+assert result1 == 8
+
+result2 = np.power(2, -1)
+assert result2 == 0.5
+
+result3 = np.power(-2, 3)
+assert result3 == -8
 
 y = np.power(2,7, dtype=np.int8)
 assert y == -128
@@ -15,4 +21,3 @@ assert np.power(2, 3) == 8
 assert np.power(5, 0) == 1
 assert np.power(10, 1) == 10
 assert np.power(3, 4) == 81
-

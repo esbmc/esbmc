@@ -1,4 +1,4 @@
-def f(x:str) -> str:
+def f(x):
     return x
 
 assert f("abc") == "abc"

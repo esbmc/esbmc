@@ -16,7 +16,6 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
-#include <clang-c-frontend/symbolic_types.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
@@ -28,6 +27,8 @@ CC_DIAGNOSTIC_POP()
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/symbolic_types.h>
+
 #include <boost/algorithm/string/replace.hpp>
 
 clang_c_convertert::clang_c_convertert(
@@ -259,21 +260,17 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::Typedef:
     break;
 
+  // We pretty much ignore this information, clang does the expansion for us.
+  // Will keep the warning just in case we eventually make a nondet use.
   case clang::Decl::BuiltinTemplate:
   {
-    // expanded by clang itself
+    // expanded by clang itself (e.g. make_seq<int,5> ==> [0,1,2,3,4])
     const clang::BuiltinTemplateDecl &btd =
       static_cast<const clang::BuiltinTemplateDecl &>(decl);
-    if (
-      btd.getBuiltinTemplateKind() !=
-      clang::BuiltinTemplateKind::BTK__make_integer_seq)
-    {
-      log_error(
-        "Unsupported builtin template kind id: {}",
-        (int)btd.getBuiltinTemplateKind());
-      abort();
-    }
-
+    log_debug(
+      "[CPP]",
+      "Unsupported builtin template kind id: {}",
+      (int)btd.getBuiltinTemplateKind());
     break;
   }
   default:
@@ -391,11 +388,14 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        exprt alignment;
-        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
-          return true;
+        if (aattr.getAlignmentExpr())
+        {
+          exprt alignment;
+          if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+            return true;
 
-        t.set("alignment", alignment);
+          t.set("alignment", alignment);
+        }
       }
     }
   }
@@ -512,12 +512,16 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.lvalue = true;
   symbol.static_lifetime =
     (vd.getStorageClass() == clang::SC_Static) || vd.hasGlobalStorage();
-  symbol.is_extern = vd.hasExternalStorage();
+  // extern variables with initializers are no longer considered extern
+  // in the resulting object file by at least gcc.
+  // See TC linking-8 or try readelf -s on main_init_extern.o
+  symbol.is_extern = vd.hasExternalStorage() && !vd.hasInit();
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
+  symbol.is_thread_local = vd.getTLSKind() != clang::VarDecl::TLS_None;
 
   if (
-    symbol.static_lifetime &&
+    symbol.static_lifetime && !symbol.is_extern &&
     (!vd.hasInit() || is_aggregate_type(vd.getType())))
   {
     // the type might contains symbolic types,
@@ -525,17 +529,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    if (symbol.is_extern)
-    {
-      exprt value = exprt("sideeffect", get_complete_type(t, ns));
-      value.statement("nondet");
-      symbol.value = value;
-    }
-    else
-    {
-      symbol.value = gen_zero(get_complete_type(t, ns), true);
-      symbol.value.zero_initializer(true);
-    }
+    symbol.value = gen_zero(get_complete_type(t, ns), true);
+    symbol.value.zero_initializer(true);
   }
 
   symbolt *added_symbol = nullptr;
@@ -1306,6 +1301,15 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
+    // Unsupported extensions (optional don't care)
+  case clang::Type::Complex:
+  {
+    // Ok, complex numbers are not really an extension, but it is only
+    // used by extensions though.
+    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
+      break;
+  }
+  // fall through
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
@@ -1459,6 +1463,21 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "unsigned __intcap";
     break;
 #endif
+
+  // Unsupported extensions (optional don't care)
+  case clang::BuiltinType::BFloat16:
+    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
+    {
+      new_type = half_float_type();
+      c_type = "_Float16";
+      break;
+    }
+    // fallthrough
+
+  case clang::BuiltinType::BoundMember:
+    new_type = ptrmem_typet();
+    c_type = "_ptrmem";
+    break;
 
   default:
   {
@@ -2751,7 +2770,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       type.id() == typet::t_bool || type.id() == typet::t_signedbv ||
       type.id() == typet::t_unsignedbv);
 
-    if (tte.getValue())
+    bool value;
+#if CLANG_VERSION_MAJOR >= 21
+    value = tte.getBoolValue();
+#else
+    value = tte.getValue();
+#endif
+    if (value)
       new_expr = true_exprt();
     else
       new_expr = false_exprt();
@@ -2789,10 +2814,87 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::AttributedStmt &astmt =
       static_cast<const clang::AttributedStmt &>(stmt);
 
-    /* ignore attributes for now */
+    // First, convert the sub-statement
     if (get_expr(*astmt.getSubStmt(), new_expr))
       return true;
 
+    // Check for loop unroll attributes
+    for (const auto *attr : astmt.getAttrs())
+    {
+      if (const auto *lha = llvm::dyn_cast<clang::LoopHintAttr>(attr))
+      {
+        if (
+          lha->getOption() == clang::LoopHintAttr::Unroll ||
+          lha->getOption() == clang::LoopHintAttr::UnrollCount)
+        {
+          unsigned unroll_count = 0;
+
+          auto state = lha->getState();
+          if (
+            state == clang::LoopHintAttr::Full ||
+            state == clang::LoopHintAttr::Enable)
+          {
+            // Full unroll - use sentinel to indicate "no limit"
+            unroll_count = UINT_MAX;
+          }
+          else if (state == clang::LoopHintAttr::Numeric)
+          {
+            if (clang::Expr *val = lha->getValue())
+            {
+              clang::Expr::EvalResult result;
+              if (val->EvaluateAsInt(result, *ASTContext))
+                unroll_count = result.Val.getInt().getZExtValue();
+            }
+          }
+
+          if (unroll_count > 0)
+            new_expr.set(
+              "#pragma_unroll", irep_idt(std::to_string(unroll_count)));
+        }
+      }
+    }
+    break;
+  }
+
+  case clang::Stmt::ExprWithCleanupsClass:
+  {
+    const clang::ExprWithCleanups &ewc =
+      static_cast<const clang::ExprWithCleanups &>(stmt);
+
+    if (get_expr(*ewc.getSubExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::MaterializeTemporaryExprClass:
+  {
+    const clang::MaterializeTemporaryExpr &mtemp =
+      static_cast<const clang::MaterializeTemporaryExpr &>(stmt);
+
+    // In newer Clang, the C frontend introduces this node,
+    // and it is not certain that it is necessary to create a
+    // temporary object as it is in C++ frontend, need more TCs
+    if (get_expr(*mtemp.getSubExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
+  // Unsupported extensions (optional don't care)
+  case clang::Stmt::BuiltinBitCastExprClass:
+  {
+    const clang::BuiltinBitCastExpr &cast =
+      static_cast<const clang::BuiltinBitCastExpr &>(stmt);
+
+    typet t;
+    if (get_type(cast.getType(), t))
+      return true;
+
+    if (get_expr(*cast.getSubExpr(), new_expr))
+      return true;
+
+    gen_typecast(ns, new_expr, t);
     break;
   }
 
@@ -2855,8 +2957,21 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
     rewrite_builtin_ref(d, name, id);
 
     typet type;
-    if (get_type(nd->getType(), type))
-      return true;
+
+    // Special handling for __ESBMC_return_value: use function return type if available
+    // This allows __ESBMC_return_value to have a semi-dynamic type matching the function
+    if (name == "__ESBMC_return_value" && current_functionDecl)
+    {
+      // Use the current function's return type instead of the declared type
+      if (get_type(current_functionDecl->getReturnType(), type))
+        return true;
+    }
+    else
+    {
+      // Normal case: use the declared type
+      if (get_type(nd->getType(), type))
+        return true;
+    }
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
@@ -2971,6 +3086,11 @@ bool clang_c_convertert::get_cast_expr(
     /* both should not be generated in purecap mode */
     break;
 #endif
+
+  case clang::CK_NonAtomicToAtomic:
+    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
+      break;
+    [[fallthrough]];
 
   default:
   {
@@ -3179,6 +3299,11 @@ bool clang_c_convertert::get_binary_operator_expr(
 
   case clang::BO_Comma:
     new_expr = exprt("comma", t);
+    break;
+
+  case clang::BO_PtrMemI:
+  case clang::BO_PtrMemD:
+    new_expr = exprt("ptr_mem", t);
     break;
 
   default:

@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: All parameters in function "list_comp" must be type annotated$
+

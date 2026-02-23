@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include <list>
+#include <vector>
 #include <util/config.h>
 #include <util/expr.h>
 #include <util/location.h>
@@ -23,7 +24,11 @@ public:
   bool is_type, is_macro, is_parameter;
 
   // ANSI-C
-  bool lvalue, static_lifetime, file_local, is_extern;
+  bool lvalue, static_lifetime, file_local, is_extern, is_thread_local;
+
+  // For python use
+  bool is_set;
+  std::vector<typet> python_annotation_types;
 
   symbolt();
 

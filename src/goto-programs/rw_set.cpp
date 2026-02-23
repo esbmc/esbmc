@@ -34,20 +34,27 @@ void rw_sett::compute(const exprt &expr)
     {
       assert(code.operands().size());
       read_write_rec(code.op0(), false, true, "", guardt(), nil_exprt());
-      // check args of function call
-      if (
-        !has_prefix(instruction.location.function(), "ESBMC_execute_kernel") &&
-        !has_prefix(instruction.location.function(), "ESBMC_verify_kernel"))
-        Forall_operands (it, code.op2())
-          if (!(*it).type().is_pointer())
-            read_rec(*it);
+      // For function calls, we first check to see if the function has a body available,
+      // and if so, we skip it because we also check inside the function
+      // If not, we need check these args
+      if (code.op1().is_symbol())
+      {
+        const symbol_exprt &symbol_expr = to_symbol_expr(code.op1());
+        const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
+        if (symbol->value.is_nil() || symbol->name == "__VERIFIER_assert")
+          Forall_operands (it, code.op2())
+          {
+            if (it->is_address_of())
+              read_rec(it->op0());
+            else
+              read_rec(*it);
+          }
+      }
     }
   }
   else if (
     instruction.is_goto() || instruction.is_assert() || instruction.is_assume())
-  {
     read_rec(expr);
-  }
 }
 
 void rw_sett::assign(const exprt &lhs, const exprt &rhs)
@@ -72,7 +79,8 @@ void rw_sett::read_write_rec(
     const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
     if (symbol)
     {
-      if (!symbol->static_lifetime && !dereferenced)
+      if (
+        (!symbol->static_lifetime && !dereferenced) || symbol->is_thread_local)
       {
         return; // ignore for now
       }
