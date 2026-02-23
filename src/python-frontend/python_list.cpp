@@ -1,5 +1,6 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_exception_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/symbol_id.h>
@@ -1618,24 +1619,36 @@ exprt python_list::handle_index_access(
     return extract_pyobject_value(list_at_call, elem_type);
   }
 
-  // Handle static string indexing with safe null fallback
+  // Handle static string indexing with IndexError on out-of-bounds
   if (array.type().is_array() && array.type().subtype() == char_type())
   {
     exprt idx = pos_expr;
     if (idx.type() != size_type())
       idx = typecast_exprt(idx, size_type());
 
-    exprt bound = to_array_type(array.type()).size();
-    if (bound.type() != size_type())
-      bound = typecast_exprt(bound, size_type());
+    // Logical string length excludes the null terminator
+    exprt array_size = to_array_type(array.type()).size();
+    if (array_size.type() != size_type())
+      array_size = typecast_exprt(array_size, size_type());
+    exprt one = from_integer(1, size_type());
+    exprt str_len = exprt("-", size_type());
+    str_len.copy_to_operands(array_size, one);
 
-    exprt cond("<", bool_type());
-    cond.copy_to_operands(idx, bound);
+    // Emit: if (idx >= str_len) throw IndexError("string index out of range")
+    exprt oob_cond(">=", bool_type());
+    oob_cond.copy_to_operands(idx, str_len);
 
-    index_exprt in_bounds(array, idx, char_type());
-    if_exprt result(cond, in_bounds, gen_zero(char_type()));
-    result.type() = char_type();
-    return result;
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "string index out of range");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = oob_cond;
+    guard.then_case() = throw_code;
+    converter_.add_instruction(guard);
+
+    return index_exprt(array, idx, char_type());
   }
 
   // Handle static arrays
