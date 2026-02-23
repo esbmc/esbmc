@@ -3056,6 +3056,88 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     list_node = &list_arg;
   }
 
+  // Handle split() calls: resolve the result to a JSON List at compile time
+  nlohmann::json resolved_split_list;
+  {
+    const nlohmann::json* call_to_resolve = nullptr;
+    if (
+      list_node && list_node->contains("_type") &&
+      (*list_node)["_type"] == "Call")
+      call_to_resolve = list_node;
+    else if (
+      !list_node && list_arg.contains("_type") &&
+      list_arg["_type"] == "Call")
+      call_to_resolve = &list_arg;
+
+    if (
+      call_to_resolve && call_to_resolve->contains("func") &&
+      (*call_to_resolve)["func"].contains("_type") &&
+      (*call_to_resolve)["func"]["_type"] == "Attribute" &&
+      (*call_to_resolve)["func"].contains("attr") &&
+      (*call_to_resolve)["func"]["attr"] == "split" &&
+      (*call_to_resolve)["func"].contains("value"))
+    {
+      std::string input;
+      if (extract_constant_string(
+        (*call_to_resolve)["func"]["value"], converter_, input))
+      {
+        std::string sep;
+        if (
+          call_to_resolve->contains("args") &&
+          !(*call_to_resolve)["args"].empty())
+          extract_constant_string(
+            (*call_to_resolve)["args"][0], converter_, sep);
+
+        std::vector<std::string> parts;
+        if (sep.empty())
+        {
+          size_t i = 0;
+          while (i < input.size())
+          {
+            while (
+              i < input.size() &&
+              std::isspace(static_cast<unsigned char>(input[i])))
+              i++;
+            if (i >= input.size())
+              break;
+            size_t start = i;
+            while (
+              i < input.size() &&
+              !std::isspace(static_cast<unsigned char>(input[i])))
+              i++;
+            parts.push_back(input.substr(start, i - start));
+          }
+        }
+        else
+        {
+          size_t start = 0;
+          while (true)
+          {
+            size_t pos = input.find(sep, start);
+            if (pos == std::string::npos)
+            {
+              parts.push_back(input.substr(start));
+              break;
+            }
+            parts.push_back(input.substr(start, pos - start));
+            start = pos + sep.size();
+          }
+        }
+
+        resolved_split_list["_type"] = "List";
+        resolved_split_list["elts"] = nlohmann::json::array();
+        for (const auto& part : parts)
+        {
+          nlohmann::json elem;
+          elem["_type"] = "Constant";
+          elem["value"] = part;
+          resolved_split_list["elts"].push_back(elem);
+        }
+        list_node = &resolved_split_list;
+      }
+    }
+  }
+
   if (
     !list_node || !list_node->contains("_type") ||
     (*list_node)["_type"] != "List" || !list_node->contains("elts"))
