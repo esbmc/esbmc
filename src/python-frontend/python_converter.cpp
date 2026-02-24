@@ -5795,7 +5795,7 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
               flags.has_none = true;
             else
             {
-              std::string type_name = constant_val.is_string() ? "string"
+              std::string type_name = constant_val.is_string()   ? "string"
                                       : constant_val.is_object() ? "object"
                                       : constant_val.is_array()  ? "array"
                                                                  : "unknown";
@@ -6517,9 +6517,10 @@ void python_converter::get_return_statements(
     // Wrap return value in Optional if the function returns Optional
     if (current_func_return_type_.is_struct())
     {
-      const struct_typet& st = to_struct_type(current_func_return_type_);
+      const struct_typet &st = to_struct_type(current_func_return_type_);
       if (st.tag().as_string().starts_with("tag-Optional_"))
-        return_value = wrap_in_optional(return_value, current_func_return_type_);
+        return_value =
+          wrap_in_optional(return_value, current_func_return_type_);
     }
 
     code_returnt return_code;

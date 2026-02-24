@@ -287,9 +287,9 @@ private:
   }
 
   // Check if the function body contains any explicit 'return None' statement
-  bool has_return_none(const Json& body)
+  bool has_return_none(const Json &body)
   {
-    for (const Json& stmt : body)
+    for (const Json &stmt : body)
     {
       if (stmt["_type"] == "Return")
       {
@@ -901,8 +901,7 @@ private:
         // Check if there are also None returns (mixed value+None)
         // If so, leave the annotation as null for the converter to handle
         // via Optional wrapping
-        bool has_none_return =
-          has_return_none(function_element["body"]);
+        bool has_none_return = has_return_none(function_element["body"]);
 
         if (!has_none_return)
         {
@@ -916,7 +915,7 @@ private:
             {"end_lineno", function_element["lineno"]},
             {"end_col_offset",
              function_element["col_offset"].template get<int>() +
-               inferred_type.size()} };
+               inferred_type.size()}};
         }
       }
       else if (inferred_type == "NoneType")
@@ -929,7 +928,7 @@ private:
           {"col_offset", function_element["col_offset"]},
           {"end_lineno", function_element["lineno"]},
           {"end_col_offset",
-           function_element["col_offset"].template get<int>() + 4} };
+           function_element["col_offset"].template get<int>() + 4}};
       }
       // If no return type could be inferred, leave returns as null
       // (function has no explicit return statement)
