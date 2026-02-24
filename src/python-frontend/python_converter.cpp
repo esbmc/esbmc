@@ -314,25 +314,36 @@ void python_converter::update_symbol(const exprt &expr) const
   {
     const std::string &binary_value_str = sym->value.value().c_str();
 
-    try
-    {
-      // Convert binary string to integer.
-      int64_t int_val = std::stoll(binary_value_str, nullptr, 2);
+    // Only attempt binary conversion if the string is non-empty and consists
+    // solely of '0' and '1' characters (i.e., it is a valid binary string).
+    // Character or decimal values stored in the symbol will not satisfy this
+    // check and must be left unchanged to avoid a stoll conversion failure.
+    bool is_binary_string =
+      !binary_value_str.empty() &&
+      binary_value_str.find_first_not_of("01") == std::string::npos;
 
-      // Create a new constant expression with the converted value and type.
-      exprt new_value = from_integer(int_val, expr_type);
-
-      // Assign the new value to the symbol.
-      sym->value = new_value;
-    }
-    catch (const std::exception &e)
+    if (is_binary_string)
     {
-      log_error(
-        "update_symbol: Failed to convert binary value '{}' to integer for "
-        "symbol '{}'. Error: {}",
-        binary_value_str,
-        sid.to_string(),
-        e.what());
+      try
+      {
+        // Convert binary string to integer.
+        int64_t int_val = std::stoll(binary_value_str, nullptr, 2);
+
+        // Create a new constant expression with the converted value and type.
+        exprt new_value = from_integer(int_val, expr_type);
+
+        // Assign the new value to the symbol.
+        sym->value = new_value;
+      }
+      catch (const std::exception &e)
+      {
+        log_error(
+          "update_symbol: Failed to convert binary value '{}' to integer for "
+          "symbol '{}'. Error: {}",
+          binary_value_str,
+          sid.to_string(),
+          e.what());
+      }
     }
   }
 }
@@ -3784,8 +3795,19 @@ void python_converter::handle_assignment_type_adjustments(
     {
       if (!rhs.type().is_empty())
       {
-        lhs_symbol->type = rhs.type();
-        lhs.type() = rhs.type();
+        // Prevent type change from scalar (int/float/bool) to string/array
+        // when a prior declaration exists with the scalar type, as this
+        // creates a type inconsistency in the GOTO program.
+        bool is_incompatible =
+          rhs.type().is_array() && !lhs_symbol->type.is_array() &&
+          !lhs_symbol->type.is_pointer() && !lhs_symbol->type.id().empty() &&
+          !lhs_symbol->type.is_nil() &&
+          lhs_symbol->type != type_handler_.get_list_type();
+        if (!is_incompatible)
+        {
+          lhs_symbol->type = rhs.type();
+          lhs.type() = rhs.type();
+        }
       }
     }
     else if (rhs.type() == none_type())
@@ -4588,6 +4610,33 @@ void python_converter::get_var_assign(
       return;
     }
 
+    // Type-incompatible reassignment: scalar variable assigned a
+    // string/array value. Must check BEFORE adjust_statement_types
+    // which would coerce rhs type to match lhs, hiding the mismatch.
+    // Only enforce when type assertions are enabled (--is-instance-check).
+    if (
+      type_assertions_enabled() && lhs.type() != rhs.type() &&
+      !rhs.type().is_code() && !rhs.type().is_empty() &&
+      rhs.type().is_array() && !lhs.type().is_array() &&
+      !lhs.type().is_pointer())
+    {
+      code_assertt type_assert(gen_boolean(false));
+      type_assert.location() = location_begin;
+      type_assert.location().comment(
+        "Type violation: incompatible types in assignment");
+      target_block.copy_to_operands(type_assert);
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
+          lhs,
+          annotated_type,
+          annotation_types,
+          annotated_name,
+          annotation_location,
+          target_block);
+      current_lhs = nullptr;
+      return;
+    }
+
     adjust_statement_types(lhs, rhs);
 
     // Handle list type info propagation
@@ -4631,7 +4680,6 @@ void python_converter::get_var_assign(
       current_lhs = nullptr;
       return;
     }
-
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
