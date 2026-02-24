@@ -3019,8 +3019,8 @@ exprt python_converter::dispatch_dunder_operator(
   if (
     tag.find("dict_") != std::string::npos ||
     tag.find("tag-dict") != std::string::npos ||
-    tag.rfind("tag-Optional_", 0) == 0 ||
-    tag.rfind("tag-tuple", 0) == 0 || tag == "__python_dict__")
+    tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
+    tag == "__python_dict__")
     return nil_exprt();
 
   // Verify rhs is the same struct type
@@ -3082,8 +3082,8 @@ exprt python_converter::dispatch_unary_dunder_operator(
   if (
     tag.find("dict_") != std::string::npos ||
     tag.find("tag-dict") != std::string::npos ||
-    tag.rfind("tag-Optional_", 0) == 0 ||
-    tag.rfind("tag-tuple", 0) == 0 || tag == "__python_dict__")
+    tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
+    tag == "__python_dict__")
     return nil_exprt();
 
   static const std::map<std::string, std::string> unary_dunder_map = {
