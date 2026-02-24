@@ -57,7 +57,7 @@ jobs:
         cd build/
         # On macOS, only run Python tests; on other systems, run all tests
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
-          ctest -j4 --output-on-failure --progress -L python
+          ctest -j4 --output-on-failure -D Experimental --progress -L python
         else
-          ctest -j4 --output-on-failure --progress .
+          ctest -j4 --output-on-failure -D Experimental --progress .
         fi

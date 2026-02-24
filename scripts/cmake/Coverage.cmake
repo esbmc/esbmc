@@ -14,8 +14,8 @@ if(ENABLE_COVERAGE)
             message(FATAL_ERROR "genhtml not found! Aborting...")
         endif()
 
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
+       add_compile_options(--coverage -fprofile-arcs -ftest-coverage)
+       add_link_options(--coverage)
 
         
     else()
