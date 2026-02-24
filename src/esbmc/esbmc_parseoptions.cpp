@@ -56,6 +56,7 @@ extern "C"
 #include <util/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <goto-programs/contracts/contracts.h>
+#include <util/yaml_parser.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
@@ -2088,6 +2089,24 @@ bool esbmc_parseoptionst::process_goto_program(
       log_status("Adding Data Race Checks");
       options.set_option("data-races-check", true);
       add_race_assertions(context, goto_functions);
+    }
+
+    if (cmdline.isset("validate-correctness-witness"))
+    {
+      log_status("Enable correctness witness validation");
+      std::string path = cmdline.getval("witness");
+      boost::filesystem::path n(path);
+
+      if (n.extension() != ".yaml" && n.extension() != ".yml")
+      {
+        // Unexpected extension
+        log_error("Unsupported witness format");
+        return true;
+      }
+
+      yaml_parser parser(path);
+      if (parser.load_file())
+        return true;
     }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
