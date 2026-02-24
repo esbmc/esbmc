@@ -1860,6 +1860,104 @@ exprt function_call_expr::handle_list_remove() const
   return result;
 }
 
+exprt function_call_expr::handle_list_sort() const
+{
+  const auto &args = call_["args"];
+  if (!args.empty())
+    throw std::runtime_error(
+      "sort() positional arguments are not supported; "
+      "use sort() with no arguments");
+
+  std::string list_name = get_object_name();
+
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  const std::string &list_id = list_symbol->id.as_string();
+
+  // ── Determine type_flag and float_type_id ─────────────────────────────────
+  //
+  // type_flag:
+  //   0 = all-integer          → int64_t comparison    (SMT-fast, no FP)
+  //   1 = all-float            → *(double*) bit-read
+  //   2 = string/lexicographic → memcmp
+  //   3 = mixed int + float    → per-element dispatch via float_type_id
+
+  int type_flag = 0;
+  size_t float_type_id = 0;
+
+  {
+    const type_handler &th = converter_.get_type_handler();
+    bool has_float = false;
+    bool has_int = false;
+    bool is_string = false;
+
+    const size_t map_size =
+      python_list::get_list_type_map_size(list_id);
+
+    for (size_t k = 0; k < map_size; ++k)
+    {
+      const typet elem_type =
+        python_list::get_list_element_type(list_id, k);
+
+      if (elem_type.is_floatbv())
+      {
+        if (!has_float)
+        {
+          // Same hash used by python_list::get_list_element_info:
+          //   std::hash<std::string>{}(type_handler_.type_to_string(elem))
+          const std::string type_name = th.type_to_string(elem_type);
+          float_type_id = std::hash<std::string>{}(type_name);
+          has_float = true;
+        }
+      }
+      else if (
+        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
+        (elem_type.is_array() && elem_type.subtype() == char_type()))
+      {
+        is_string = true;
+      }
+      else
+      {
+        has_int = true;
+      }
+    }
+
+    if (is_string)
+      type_flag = 2;
+    else if (has_float && has_int)
+      type_flag = 3; // mixed → per-element dispatch in C model
+    else if (has_float)
+      type_flag = 1; // all-float
+    else
+      type_flag = 0; // all-integer (default, most common)
+  }
+
+  // ── Locate the C model function ────────────────────────────────────────────
+  const symbolt *sort_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_sort");
+  if (!sort_func)
+    throw std::runtime_error(
+      "__ESBMC_list_sort function not found in symbol table");
+
+  // ── Emit the call: __ESBMC_list_sort(list, type_flag, float_type_id) ──────
+  code_function_callt sort_call;
+  sort_call.function() = symbol_expr(*sort_func);
+  sort_call.arguments().push_back(symbol_expr(*list_symbol));
+  sort_call.arguments().push_back(from_integer(type_flag, int_type()));
+  sort_call.arguments().push_back(
+    from_integer(float_type_id, unsignedbv_typet(config.ansi_c.address_width)));
+  sort_call.type() = empty_typet();
+  sort_call.location() = converter_.get_location_from_decl(call_);
+
+  return sort_call;
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1871,7 +1969,7 @@ bool function_call_expr::is_list_method_call() const
   return method_name == "append" || method_name == "pop" ||
          method_name == "insert" || method_name == "remove" ||
          method_name == "clear" || method_name == "extend" ||
-         method_name == "copy";
+         method_name == "copy" || method_name == "sort";
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -1892,6 +1990,8 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_copy();
   if (method_name == "remove")
     return handle_list_remove();
+  if (method_name == "sort")
+    return handle_list_sort();
 
   // Add other methods as needed
 

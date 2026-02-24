@@ -3006,3 +3006,11 @@ exprt python_list::build_remove_list_call(
 
   return converter_.convert_expression_to_code(remove_call);
 }
+
+size_t python_list::get_list_type_map_size(const std::string &list_id)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end())
+    return 0;
+  return it->second.size();
+}

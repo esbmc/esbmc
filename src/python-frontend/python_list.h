@@ -180,6 +180,19 @@ public:
     const nlohmann::json &op,
     const exprt &elem);
 
+  /**
+   * @brief Return the number of type entries recorded for a list.
+   *
+   * Provides a safe, bounded count of the elements stored in list_type_map
+   * for the given list identifier.
+   *
+   * @param list_id  The internal symbol identifier of the list (e.g.
+   *                 "c:main.py@42@F@main@lst").
+   * @return  Number of type entries in the map for this list, or 0 if the
+   *          list is unknown or was constructed with no recorded elements.
+   */
+  static size_t get_list_type_map_size(const std::string &list_id);
+
 private:
   friend class python_dict_handler;
 

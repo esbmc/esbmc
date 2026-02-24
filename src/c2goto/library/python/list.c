@@ -620,3 +620,95 @@ bool __ESBMC_list_remove(
   __ESBMC_assert(0, "ValueError: list.remove(x): x not in list");
   return false;
 }
+
+void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
+{
+  if (!l || l->size <= 1)
+    return;
+
+  size_t n = l->size;
+
+  size_t i = 1;
+  while (i < n)
+  {
+    PyObject tmp = l->items[i];
+    size_t j = i;
+
+    while (j > 0)
+    {
+      PyObject *prev = &l->items[j - 1];
+
+      // For numeric types both sizes must match (same storage width).
+      // For strings sizes may differ ("apple"=6 vs "banana"=7), so only
+      // reject mismatched sizes for non-string (non-type_flag-2) lists.
+      if (prev->size != tmp.size && type_flag != 2)
+        break;
+
+      bool prev_greater = false;
+
+      if (prev->size == 8 && type_flag == 0)
+      {
+        // All-integer list: compare as int64_t.
+        // Stays entirely in integer arithmetic — fast for the SMT solver.
+        int64_t a = *(const int64_t *)prev->value;
+        int64_t b = *(const int64_t *)tmp.value;
+        prev_greater = (a > b);
+      }
+      else if (prev->size == 8 && type_flag == 1)
+      {
+        // All-float list: read bits directly as IEEE 754 double.
+        double a = *(const double *)prev->value;
+        double b = *(const double *)tmp.value;
+        prev_greater = (a > b);
+      }
+      else if (prev->size == 8 && type_flag == 3)
+      {
+        // Mixed int + float list.
+        // Per-element dispatch: check each element's own type_id.
+        //   float element → read bits as double
+        //   int element   → numeric cast (double)(int64_t)  [exact up to 2^53]
+        double a = (prev->type_id == float_type_id)
+                     ? (*(const double *)prev->value)
+                     : ((double)(*(const int64_t *)prev->value));
+        double b = (tmp.type_id == float_type_id)
+                     ? (*(const double *)tmp.value)
+                     : ((double)(*(const int64_t *)tmp.value));
+        prev_greater = (a > b);
+      }
+      else if (prev->size == 1)
+      {
+        // bool / single-byte
+        uint8_t a = *(const uint8_t *)prev->value;
+        uint8_t b = *(const uint8_t *)tmp.value;
+        prev_greater = (a > b);
+      }
+      else
+      {
+        // type_flag == 2: string / lexicographic comparison.
+        //
+        // Must use min(prev->size, tmp->size) as the memcmp length.
+        // Using prev->size alone reads past the end of tmp's buffer when
+        // prev is longer than tmp — ESBMC models that out-of-bounds byte as
+        // a symbolic value, making the comparison nondeterministic.
+        //
+        // After the shared prefix compares equal, the shorter string is
+        // lesser (matching Python / C string ordering).
+        size_t min_size =
+          (prev->size < tmp.size) ? prev->size : tmp.size;
+        int cmp = memcmp(prev->value, tmp.value, min_size);
+        if (cmp == 0)
+          cmp = (prev->size > tmp.size) - (prev->size < tmp.size);
+        prev_greater = (cmp > 0);
+      }
+
+      if (!prev_greater)
+        break;
+
+      l->items[j] = l->items[j - 1];
+      j--;
+    }
+
+    l->items[j] = tmp;
+    i++;
+  }
+}
