@@ -8,4 +8,4 @@ def test(flag: bool) -> None:
     y: Any = x
     assert y == False
 
-test(True)
+test(False)
