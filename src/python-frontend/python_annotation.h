@@ -286,6 +286,34 @@ private:
     return ""; // Couldn't infer
   }
 
+  // Check if the function body contains any explicit 'return None' statement
+  bool has_return_none(const Json& body)
+  {
+    for (const Json& stmt : body)
+    {
+      if (stmt["_type"] == "Return")
+      {
+        if (stmt["value"].is_null())
+          return true; // bare 'return'
+        if (
+          stmt["value"]["_type"] == "Constant" &&
+          stmt["value"]["value"].is_null())
+          return true; // 'return None'
+      }
+      if (stmt.contains("body") && stmt["body"].is_array())
+      {
+        if (has_return_none(stmt["body"]))
+          return true;
+      }
+      if (stmt.contains("orelse") && stmt["orelse"].is_array())
+      {
+        if (has_return_none(stmt["orelse"]))
+          return true;
+      }
+    }
+    return false;
+  }
+
   // Method to infer and annotate unannotated function parameters
   void infer_parameter_types(Json &function_element)
   {
@@ -867,19 +895,41 @@ private:
         infer_from_return_statements(function_element["body"], func_name);
 
       // Only add annotation if we successfully inferred a type from return statements
-      if (!inferred_type.empty())
+      // and the function does not have mixed value+None returns
+      if (!inferred_type.empty() && inferred_type != "NoneType")
       {
-        // Update the function node to include the return type annotation
+        // Check if there are also None returns (mixed value+None)
+        // If so, leave the annotation as null for the converter to handle
+        // via Optional wrapping
+        bool has_none_return =
+          has_return_none(function_element["body"]);
+
+        if (!has_none_return)
+        {
+          // Update the function node to include the return type annotation
+          function_element["returns"] = {
+            {"_type", "Name"},
+            {"id", inferred_type},
+            {"ctx", {{"_type", "Load"}}},
+            {"lineno", function_element["lineno"]},
+            {"col_offset", function_element["col_offset"]},
+            {"end_lineno", function_element["lineno"]},
+            {"end_col_offset",
+             function_element["col_offset"].template get<int>() +
+               inferred_type.size()} };
+        }
+      }
+      else if (inferred_type == "NoneType")
+      {
+        // Function only returns None - annotate as None
         function_element["returns"] = {
-          {"_type", "Name"},
-          {"id", inferred_type},
-          {"ctx", {{"_type", "Load"}}},
+          {"_type", "Constant"},
+          {"value", nullptr},
           {"lineno", function_element["lineno"]},
           {"col_offset", function_element["col_offset"]},
           {"end_lineno", function_element["lineno"]},
           {"end_col_offset",
-           function_element["col_offset"].template get<int>() +
-             inferred_type.size()}};
+           function_element["col_offset"].template get<int>() + 4} };
       }
       // If no return type could be inferred, leave returns as null
       // (function has no explicit return statement)
@@ -1335,13 +1385,31 @@ private:
       }
 
       // Try to infer return type from actual return statements
+      // Use recursive inference to find return types in all blocks
+      std::string inferred_type =
+        infer_from_return_statements(func_elem["body"], func_name);
+
+      if (!inferred_type.empty() && inferred_type != "NoneType")
+      {
+        // Found a non-None return type; check for mixed value+None returns
+        if (has_return_none(func_elem["body"]))
+        {
+          // Mixed returns: leave unannotated so converter handles via Optional
+          functions_in_analysis_.erase(func_name);
+          return "";
+        }
+        functions_in_analysis_.erase(func_name);
+        return inferred_type;
+      }
+
+      // Check top-level returns as fallback
       auto return_node = json_utils::find_return_node(func_elem["body"]);
       if (!return_node.empty())
       {
-        std::string inferred_type;
-        infer_type(return_node, func_elem, inferred_type);
+        std::string fallback_type;
+        infer_type(return_node, func_elem, fallback_type);
         functions_in_analysis_.erase(func_name);
-        return inferred_type;
+        return fallback_type;
       }
 
       // If function has no explicit return statements, assume void/None
@@ -2577,6 +2645,8 @@ private:
       !type_utils::is_python_model_func(stmt["value"]["func"]["id"]))
     {
       inferred_type = get_type_from_call(stmt);
+      if (inferred_type.empty())
+        return InferResult::UNKNOWN;
     }
 
     // Get type from methods and class methods

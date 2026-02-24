@@ -819,6 +819,7 @@ private:
 
   namespacet ns;
   typet current_element_type;
+  typet current_func_return_type_;
   std::string main_python_file;
   std::string current_python_file;
   nlohmann::json imported_module_json;
