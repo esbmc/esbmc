@@ -1923,9 +1923,7 @@ exprt function_call_expr::handle_list_sort() const
         is_string = true;
       }
       else
-      {
         has_int = true;
-      }
     }
 
     if (is_string)
