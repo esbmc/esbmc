@@ -5940,47 +5940,97 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
 {
   TypeFlags flags;
 
-  std::function<void(const nlohmann::json &)> scan =
-    [&](const nlohmann::json &body) {
-      for (const auto &stmt : body)
+  std::function<void(const nlohmann::json &)> scan = [&](const nlohmann::json
+                                                           &body) {
+    for (const auto &stmt : body)
+    {
+      if (stmt["_type"] == "Return" && stmt["value"].is_null())
       {
-        if (stmt["_type"] == "Return" && !stmt["value"].is_null())
-        {
-          const auto &val = stmt["value"];
+        // Bare "return" (no value) is semantically "return None"
+        flags.has_none = true;
+      }
+      else if (stmt["_type"] == "Return" && !stmt["value"].is_null())
+      {
+        const auto &val = stmt["value"];
 
-          if (val["_type"] == "Constant")
+        if (val["_type"] == "Constant")
+        {
+          const auto &constant_val = val["value"];
+          if (constant_val.is_number_float())
+            flags.has_float = true;
+          else if (constant_val.is_number_integer())
+            flags.has_int = true;
+          else if (constant_val.is_boolean())
+            flags.has_bool = true;
+          else if (constant_val.is_null())
+            flags.has_none = true;
+          else
           {
-            const auto &constant_val = val["value"];
-            if (constant_val.is_number_float())
-              flags.has_float = true;
-            else if (constant_val.is_number_integer())
-              flags.has_int = true;
-            else if (constant_val.is_boolean())
-              flags.has_bool = true;
-            else if (constant_val.is_null())
-              flags.has_none = true;
-            else
-            {
-              std::string type_name = constant_val.is_string()   ? "string"
-                                      : constant_val.is_object() ? "object"
-                                      : constant_val.is_array()  ? "array"
-                                                                 : "unknown";
-              throw std::runtime_error(
-                "Unsupported return type '" + type_name + "' detected");
-            }
-          }
-          else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
-          {
-            flags.has_float = true; // Default for expressions
+            std::string type_name = constant_val.is_string()   ? "string"
+                                    : constant_val.is_object() ? "object"
+                                    : constant_val.is_array()  ? "array"
+                                                               : "unknown";
+            throw std::runtime_error(
+              "Unsupported return type '" + type_name + "' detected");
           }
         }
-
-        if (stmt.contains("body") && stmt["body"].is_array())
-          scan(stmt["body"]);
-        if (stmt.contains("orelse") && stmt["orelse"].is_array())
-          scan(stmt["orelse"]);
+        else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
+        {
+          flags.has_float = true; // Default for expressions
+        }
+        else if (val["_type"] == "Call")
+        {
+          // For return <func_call>(), look up the called function's returns
+          // to infer the value type being propagated through the call
+          const auto &func = val["func"];
+          bool resolved = false;
+          if (func.contains("id") && ast_json)
+          {
+            std::string called_name = func["id"].get<std::string>();
+            const auto &module_body = (*ast_json)["body"];
+            for (const auto &item : module_body)
+            {
+              if (item["_type"] == "FunctionDef" && item["name"] == called_name)
+              {
+                // Scan the called function's return statements directly
+                // (one level only to avoid infinite recursion)
+                for (const auto &s : item["body"])
+                {
+                  if (
+                    s["_type"] == "Return" && !s["value"].is_null() &&
+                    s["value"]["_type"] == "Constant" &&
+                    !s["value"]["value"].is_null())
+                  {
+                    const auto &cv = s["value"]["value"];
+                    if (cv.is_number_float())
+                      flags.has_float = true;
+                    else if (cv.is_number_integer())
+                      flags.has_int = true;
+                    else if (cv.is_boolean())
+                      flags.has_bool = true;
+                    resolved = true;
+                  }
+                }
+                break;
+              }
+            }
+          }
+          if (!resolved)
+            flags.has_int = true; // Default to int for unresolvable calls
+        }
+        else if (val["_type"] == "Name")
+        {
+          // return <variable> — indicates a value return of unknown type
+          flags.has_int = true;
+        }
       }
-    };
+
+      if (stmt.contains("body") && stmt["body"].is_array())
+        scan(stmt["body"]);
+      if (stmt.contains("orelse") && stmt["orelse"].is_array())
+        scan(stmt["orelse"]);
+    }
+  };
 
   scan(function_body);
   return flags;
@@ -6550,6 +6600,19 @@ void python_converter::get_return_statements(
     locationt location = get_location_from_decl(ast_node);
     code_returnt return_code;
     return_code.location() = location;
+
+    // If the function returns Optional, wrap None in Optional struct
+    if (current_func_return_type_.is_struct())
+    {
+      const struct_typet &st = to_struct_type(current_func_return_type_);
+      if (st.tag().as_string().starts_with("tag-Optional_"))
+      {
+        constant_exprt none_expr(none_type());
+        return_code.return_value() =
+          wrap_in_optional(none_expr, current_func_return_type_);
+      }
+    }
+
     target_block.copy_to_operands(return_code);
     return;
   }
@@ -6634,9 +6697,18 @@ void python_converter::get_return_statements(
     // Add the function call statement to the block
     target_block.copy_to_operands(return_value);
 
+    // Wrap in Optional if the function returns Optional
+    exprt ret_expr = temp_var_expr;
+    if (current_func_return_type_.is_struct())
+    {
+      const struct_typet &st = to_struct_type(current_func_return_type_);
+      if (st.tag().as_string().starts_with("tag-Optional_"))
+        ret_expr = wrap_in_optional(ret_expr, current_func_return_type_);
+    }
+
     // Return the temporary variable
     code_returnt return_code;
-    return_code.return_value() = temp_var_expr;
+    return_code.return_value() = ret_expr;
     return_code.location() = location;
     target_block.copy_to_operands(return_code);
   }
