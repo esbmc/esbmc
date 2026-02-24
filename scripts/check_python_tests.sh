@@ -55,6 +55,7 @@ ignored_dirs=(
   "github_3560_1"
   "github_3560_3"
   "github_3560_4"
+  "github_3563_1"
   "global"
   "infer-func-no-return_fail"
   "integer_squareroot_fail"
