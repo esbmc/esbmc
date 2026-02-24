@@ -22,6 +22,7 @@ tags
 release
 .gdbinit
 compile_commands.json
+.deps/
 
 # custom init scripts
 init.sh
