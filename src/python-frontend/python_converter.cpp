@@ -1571,7 +1571,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Dispatch dunder methods for user-defined struct types
   {
-    exprt dunder_result = dispatch_dunder_operator(op, lhs, rhs);
+    exprt dunder_result =
+      dispatch_dunder_operator(op, lhs, rhs, get_location_from_decl(element));
     if (!dunder_result.is_nil())
       return dunder_result;
   }
@@ -2109,7 +2110,8 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   }
 
   {
-    exprt dunder_result = dispatch_unary_dunder_operator(op, unary_sub);
+    exprt dunder_result = dispatch_unary_dunder_operator(
+      op, unary_sub, get_location_from_decl(element));
     if (!dunder_result.is_nil())
       return dunder_result;
   }
@@ -2995,7 +2997,8 @@ symbolt *python_converter::find_dunder_method(
 exprt python_converter::dispatch_dunder_operator(
   const std::string &op,
   exprt &lhs,
-  exprt &rhs)
+  exprt &rhs,
+  const locationt &loc)
 {
   typet lhs_type = lhs.type();
   if (lhs.is_symbol())
@@ -3020,6 +3023,22 @@ exprt python_converter::dispatch_dunder_operator(
     tag.rfind("tag-tuple", 0) == 0 || tag == "__python_dict__")
     return nil_exprt();
 
+  // Verify rhs is the same struct type
+  typet rhs_type = rhs.type();
+  if (rhs.is_symbol())
+  {
+    const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
+    if (sym)
+      rhs_type = sym->type;
+  }
+  if (rhs_type.id() == "symbol")
+    rhs_type = ns.follow(rhs_type);
+  if (!rhs_type.is_struct())
+    return nil_exprt();
+  const struct_typet &rhs_struct = to_struct_type(rhs_type);
+  if (rhs_struct.tag() != struct_type.tag())
+    return nil_exprt();
+
   std::string dunder = op_to_dunder(op);
   if (dunder.empty())
     return nil_exprt();
@@ -3033,6 +3052,7 @@ exprt python_converter::dispatch_dunder_operator(
   side_effect_expr_function_callt call;
   call.function() = symbol_expr(*method);
   call.type() = method_type.return_type();
+  call.location() = loc;
   call.arguments().push_back(gen_address_of(lhs));
   call.arguments().push_back(gen_address_of(rhs));
   return call;
@@ -3040,7 +3060,8 @@ exprt python_converter::dispatch_dunder_operator(
 
 exprt python_converter::dispatch_unary_dunder_operator(
   const std::string &op,
-  exprt &operand)
+  exprt &operand,
+  const locationt &loc)
 {
   typet operand_type = operand.type();
   if (operand.is_symbol())
@@ -3067,6 +3088,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
 
   static const std::map<std::string, std::string> unary_dunder_map = {
     {"USub", "__neg__"},
+    {"abs", "__abs__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())
@@ -3081,6 +3103,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
   side_effect_expr_function_callt call;
   call.function() = symbol_expr(*method);
   call.type() = method_type.return_type();
+  call.location() = loc;
   call.arguments().push_back(gen_address_of(operand));
   return call;
 }

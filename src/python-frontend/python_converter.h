@@ -817,10 +817,12 @@ private:
   exprt dispatch_dunder_operator(
     const std::string &op,
     exprt &lhs,
-    exprt &rhs);
+    exprt &rhs,
+    const locationt &loc);
   exprt dispatch_unary_dunder_operator(
     const std::string &op,
-    exprt &operand);
+    exprt &operand,
+    const locationt &loc);
 
   // =========================================================================
   // Member variables
