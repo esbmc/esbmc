@@ -1128,3 +1128,55 @@ __ESBMC_HIDE:;
   buffer[pos] = '\0';
   return buffer;
 }
+
+char* __python_str_slice(const char* s, long long start, long long end, long long step)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char*)0;
+
+  size_t len = __python_strnlen_bounded(s, ESBMC_PY_STRNLEN_BOUND);
+
+  // Clamp bounds following Python slice semantics
+  if (start < 0)
+    start = (long long)len + start;
+  if (start < 0)
+    start = (step > 0) ? 0 : -1;
+  if (start >= 0 && (size_t)start > len)
+    start = (step > 0) ? (long long)len : (long long)len - 1;
+
+  if (end < 0)
+    end = (long long)len + end;
+  if (end < 0)
+    end = (step > 0) ? 0 : -1;
+  if (end >= 0 && (size_t)end > len)
+    end = (long long)len;
+
+  // Calculate result length
+  long long result_len = 0;
+  if (step > 0 && end > start)
+    result_len = (end - start + step - 1) / step;
+  else if (step < 0 && start > end)
+    result_len = (start - end + (-step) - 1) / (-step);
+
+  if (result_len <= 0)
+  {
+    char* empty = __ESBMC_alloca(1);
+    empty[0] = '\0';
+    return empty;
+  }
+
+  char* buffer = __ESBMC_alloca((size_t)result_len + 1);
+
+  long long src_idx = start;
+  size_t dst_idx = 0;
+  while (dst_idx < (size_t)result_len)
+  {
+    buffer[dst_idx] = s[src_idx];
+    src_idx += step;
+    dst_idx++;
+  }
+
+  buffer[dst_idx] = '\0';
+  return buffer;
+}
