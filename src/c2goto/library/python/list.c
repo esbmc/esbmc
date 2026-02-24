@@ -693,8 +693,7 @@ void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
         //
         // After the shared prefix compares equal, the shorter string is
         // lesser (matching Python / C string ordering).
-        size_t min_size =
-          (prev->size < tmp.size) ? prev->size : tmp.size;
+        size_t min_size = (prev->size < tmp.size) ? prev->size : tmp.size;
         int cmp = memcmp(prev->value, tmp.value, min_size);
         if (cmp == 0)
           cmp = (prev->size > tmp.size) - (prev->size < tmp.size);
