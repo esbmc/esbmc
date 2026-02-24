@@ -1563,6 +1563,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       bitcast.copy_to_operands(as_uint);
       lhs = bitcast;
     }
+    else if (rhs.type().is_array())
+    {
+      // Decay array to pointer; cast void* to same pointer type.
+      typet elem_ptr = pointer_typet(rhs.type().subtype());
+      lhs = typecast_exprt(lhs, elem_ptr);
+      rhs = string_handler_.get_array_base_address(rhs);
+    }
     else
       lhs = typecast_exprt(lhs, rhs.type());
   }
@@ -1577,6 +1584,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt bitcast("bitcast", lhs.type());
       bitcast.copy_to_operands(as_uint);
       rhs = bitcast;
+    }
+    else if (lhs.type().is_array())
+    {
+      // Decay array to pointer; cast void* to same pointer type.
+      typet elem_ptr = pointer_typet(lhs.type().subtype());
+      rhs = typecast_exprt(rhs, elem_ptr);
+      lhs = string_handler_.get_array_base_address(lhs);
     }
     else
       rhs = typecast_exprt(rhs, lhs.type());
