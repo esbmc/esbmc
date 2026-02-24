@@ -2842,29 +2842,49 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           else if (state == clang::LoopHintAttr::Numeric)
           {
              log_status("Processing an attribute (numeric)");
-            if (clang::Expr *val = lha->getValue())
+            log_status("[DEBUG] About to call lha->getValue()");
+            clang::Expr *val = lha->getValue();
+            log_status("[DEBUG] lha->getValue() returned: {}", val ? "non-null" : "null");
+            if (val)
             {
+              log_status("[DEBUG] val Stmt class: {}", val->getStmtClassName());
               clang::Expr::EvalResult result;
-              if (val->EvaluateAsInt(result, *ASTContext))
+              log_status("[DEBUG] About to call val->EvaluateAsInt()");
+              bool eval_ok = val->EvaluateAsInt(result, *ASTContext);
+              log_status("[DEBUG] EvaluateAsInt returned: {}", eval_ok);
+              if (eval_ok)
               {
-                log_status("Result value.getInt().getZExtValue(); {}", result.Val.getInt().getZExtValue());
-                unroll_count = result.Val.getInt().getZExtValue();
+                log_status("[DEBUG] About to call result.Val.getInt().getZExtValue()");
+                auto int_val = result.Val.getInt().getZExtValue();
+                log_status("Result value.getInt().getZExtValue(); {}", int_val);
+                unroll_count = int_val;
               }
+              else
+              {
+                log_status("[DEBUG] EvaluateAsInt failed - value could not be evaluated as integer constant");
+              }
+            }
+            else
+            {
+              log_status("[DEBUG] lha->getValue() returned null - no value expression");
             }
           }
           else {
-            log_status("should be unreachable");
+            log_status("should be unreachable, state={}", static_cast<int>(state));
             abort();
           }
 
+          log_status("[DEBUG] unroll_count = {}", unroll_count);
           if (unroll_count > 0)
           {
             log_status(
               "[!DEBUG!] [pragma_unroll] clang_c_convert.cpp:{} Clang frontend: parsed #pragma unroll with count={}",
               __LINE__,
               unroll_count == UINT_MAX ? "unlimited" : std::to_string(unroll_count));
+            log_status("[DEBUG] About to call new_expr.set(\"#pragma_unroll\", \"{}\"))", std::to_string(unroll_count));
             new_expr.set(
               "#pragma_unroll", irep_idt(std::to_string(unroll_count)));
+            log_status("[DEBUG] new_expr.set() completed");
           }
 
           log_status("Done attribute processing");
