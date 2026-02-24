@@ -2846,10 +2846,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             {
               clang::Expr::EvalResult result;
               if (val->EvaluateAsInt(result, *ASTContext))
-                log_status("Result value: {} {}", result, result.Val);
-                log_status("Result value.getInt() {}", result.Val.getInt());
+              {
                 log_status("Result value.getInt().getZExtValue(); {}", result.Val.getInt().getZExtValue());
                 unroll_count = result.Val.getInt().getZExtValue();
+              }
             }
           }
           else {
