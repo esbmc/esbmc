@@ -1897,13 +1897,11 @@ exprt function_call_expr::handle_list_sort() const
     bool has_int = false;
     bool is_string = false;
 
-    const size_t map_size =
-      python_list::get_list_type_map_size(list_id);
+    const size_t map_size = python_list::get_list_type_map_size(list_id);
 
     for (size_t k = 0; k < map_size; ++k)
     {
-      const typet elem_type =
-        python_list::get_list_element_type(list_id, k);
+      const typet elem_type = python_list::get_list_element_type(list_id, k);
 
       if (elem_type.is_floatbv())
       {
