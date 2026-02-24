@@ -1160,6 +1160,13 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     {
       exprt inferred_expr = converter_.get_expr(arg);
       typet inferred_type = inferred_expr.type();
+
+      exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+        "abs", inferred_expr, converter_.get_location_from_decl(call_));
+      if (!dunder_result.is_nil())
+        return dunder_result;
+
+      // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", inferred_type);
       abs_expr.copy_to_operands(inferred_expr);
       return abs_expr;
@@ -1178,10 +1185,15 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     const symbolt *sym = lookup_python_symbol(var_name);
     if (sym)
     {
-      // Build a symbolic abs() expression with the resolved operand type
       exprt operand_expr = converter_.get_expr(arg);
       typet operand_type = operand_expr.type();
 
+      exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+        "abs", operand_expr, converter_.get_location_from_decl(call_));
+      if (!dunder_result.is_nil())
+        return dunder_result;
+
+      // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", operand_type);
       abs_expr.copy_to_operands(operand_expr);
 
