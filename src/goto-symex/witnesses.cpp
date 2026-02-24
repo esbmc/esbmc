@@ -115,6 +115,19 @@ void yamlt::generate_yaml(optionst &options)
       yaml_emitter << YAML::EndMap;
     }
   }
+  else if (!this->invariants.empty())
+  {
+    for (auto &invariant : this->invariants)
+    {
+      yaml_emitter << YAML::BeginMap;
+      yaml_emitter << YAML::Key << "invariant" << YAML::Value << YAML::BeginMap;
+
+      create_invariant(invariant, yaml_emitter);
+
+      yaml_emitter << YAML::EndMap;
+      yaml_emitter << YAML::EndMap;
+    }
+  }
 
   yaml_emitter << YAML::EndSeq;
 
@@ -222,6 +235,32 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
 
   waypoint << YAML::EndMap;
   waypoint << YAML::EndMap;
+}
+
+void create_invariant(const invariant &i, YAML::Emitter &invariant)
+{
+  if (i.type == invariant::loop_invariant)
+    invariant << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+              << "loop_invariant";
+
+  // location
+  invariant << YAML::Key << "location" << YAML::Value << YAML::BeginMap;
+  invariant << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
+            << i.file;
+  invariant << YAML::Key << "line" << YAML::Value << integer2string(i.line);
+
+  invariant << YAML::Key << "column" << YAML::Value << integer2string(i.column);
+
+  invariant << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
+            << i.function;
+  invariant << YAML::EndMap;
+
+  invariant << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
+            << i.value;
+
+  invariant << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+            << "c_expression";
+  invariant << YAML::EndMap;
 }
 
 void create_node_node(nodet &node, xmlnodet &nodenode)
@@ -1031,6 +1070,8 @@ static const std::regex regex_invariants(
   "+)?(__((VERIFIER|ESBMC))_)?(assume|assert)\\([a-zA-Z(-?(0-9))\\[\\]_>=+/"
   "*<~.&! \\(\\)]+\\);( +)?");
 
+static const std::regex regex_loop(R"(\b(while|for)\b)");
+
 std::string
 get_invariant(std::string verified_file, BigInt line_number, optionst &options)
 {
@@ -1048,6 +1089,8 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
       get_line_number(verified_file, line_number, options);
     line_code = read_line(program_file, program_file_line_number);
   }
+
+#if 0
   if (std::regex_match(line_code, regex_invariants))
   {
     std::regex re("(\\([a-zA-Z(-?(0-9))\\[\\]_>=+/*<~.&! \\(\\)]+\\))");
@@ -1059,6 +1102,13 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options)
       break;
     }
   }
+#endif
+
+  if (std::regex_search(line_code, regex_loop))
+  {
+    invariant = "1";
+  }
+
   return invariant;
 }
 

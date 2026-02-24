@@ -495,14 +495,47 @@ void correctness_yaml_goto_trace(
   log_progress(
     "Generating Correctness Yaml Witness for: {}", yml.verified_file);
 
-#if 0
   for (const auto &step : goto_trace.steps)
   {
     /* checking restrictions for correctness yaml */
     if (
       (!(is_valid_witness_step(ns, step))) ||
-      (!(step.is_assume() || step.is_assert())))
+      (!(step.is_assume() || step.is_assert() || step.is_branching())))
       continue;
+
+    switch (step.type)
+    {
+    case goto_trace_stept::BREANCHING:
+      if (step.pc->is_backwards_goto())
+      {
+        std::string in = get_invariant(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+
+        if (in.empty())
+          continue;
+
+        invariant i;
+        i.type = invariant::loop_invariant;
+        i.file = yml.verified_file;
+        i.value = get_invariant(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+        i.line = get_line_number(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+        i.column = step.pc->location.get_column().c_str();
+        i.function = step.pc->location.function().c_str();
+        yml.invariants.push_back(i);
+      }
+      break;
+
+    default:
+      break;
+    }
 
     std::string invariant = get_invariant(
       yml.verified_file,
@@ -518,7 +551,6 @@ void correctness_yaml_goto_trace(
       std::atoi(step.pc->location.get_line().c_str()),
       options);
   }
-#endif
 
   yml.generate_yaml(options);
 }

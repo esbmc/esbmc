@@ -111,8 +111,8 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   std::string witness_yaml_output = options.get_option("witness-output-yaml");
 
   goto_tracet goto_trace;
-  // correctness witness, why did goto trace ignore it in the past?
-  // build_successful_goto_trace(eq, ns, goto_trace);
+
+  build_successful_goto_trace(eq, ns, goto_trace);
   if (witness_graphml_output != "")
     correctness_graphml_goto_trace(options, ns, goto_trace);
 
