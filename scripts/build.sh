@@ -274,6 +274,14 @@ case $OS in
   *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
 esac || exit $?
 
+# Enable ccache if available.
+if command -v ccache >/dev/null 2>&1; then
+    BASE_ARGS="$BASE_ARGS \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    "
+fi
+
 
 # Configure ESBMC
 printf "Running CMake:"
