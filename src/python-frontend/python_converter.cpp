@@ -1548,6 +1548,38 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
+  // Handle Any-typed (void*) operands
+  // typecast to the concrete type of the other operand(SMT solver doesn't see pointer vs scalar).
+  // Float targets need pointer→uint→bitcast→float to preserve bit patterns(due to SMT part don't support direct float↔pointer casts).
+  if (lhs.type() == any_type() && rhs.type() != any_type() && !rhs.type().is_empty())
+  {
+    if (rhs.type().is_floatbv())
+    {
+      unsigned width =
+        static_cast<const bv_typet &>(rhs.type()).get_width();
+      exprt as_uint = typecast_exprt(lhs, unsignedbv_typet(width));
+      exprt bitcast("bitcast", rhs.type());
+      bitcast.copy_to_operands(as_uint);
+      lhs = bitcast;
+    }
+    else
+      lhs = typecast_exprt(lhs, rhs.type());
+  }
+  else if (rhs.type() == any_type() && lhs.type() != any_type() && !lhs.type().is_empty())
+  {
+    if (lhs.type().is_floatbv())
+    {
+      unsigned width =
+        static_cast<const bv_typet &>(lhs.type()).get_width();
+      exprt as_uint = typecast_exprt(rhs, unsignedbv_typet(width));
+      exprt bitcast("bitcast", lhs.type());
+      bitcast.copy_to_operands(as_uint);
+      rhs = bitcast;
+    }
+    else
+      rhs = typecast_exprt(rhs, lhs.type());
+  }
+
   // Handle set operations (difference, intersection, union)
   typet list_type = type_handler_.get_list_type();
   if (
@@ -3920,6 +3952,38 @@ void python_converter::handle_assignment_type_adjustments(
   }
   else if (lhs_symbol)
   {
+    // Handle Any-typed variables
+    // preserve the any_type() (void*) for the symbol
+    // and only perform necessary RHS conversions.
+    // This prevents type corruption when the same Any-annotated variable is assigned different
+    // types in different conditional branches. See testcases: issue github_3533
+    if (lhs_type == "Any")
+    {
+      if (lhs.type().is_pointer() && rhs.type().is_array())
+      {
+        // Array to pointer conversion for strings assigned to Any variables
+        rhs = string_handler_.get_array_base_address(rhs);
+      }
+      else if (lhs.type().is_pointer() && !rhs.type().is_pointer())
+      {
+        // Typecast non-pointer RHS (int, float, bool) to void* so
+        // the generated assignment is type-consistent in the GOTO program.
+        // Float types need a two-step conversion (float→bitcast→uint→pointer)
+        // using bitcast to preserve the exact bit pattern of the float value.
+        if (rhs.type().is_floatbv())
+        {
+          unsigned width =
+            static_cast<const bv_typet &>(rhs.type()).get_width();
+          exprt bitcast("bitcast", unsignedbv_typet(width));
+          bitcast.copy_to_operands(rhs);
+          rhs = bitcast;
+        }
+        rhs = typecast_exprt(rhs, lhs.type());
+      }
+      if (!rhs.type().is_empty() && !is_ctor_call)
+        lhs_symbol->value = rhs;
+      return;
+    }
     // Handle string-to-string variable assignments
     if (lhs_type == "str" && rhs.is_symbol())
     {
@@ -3973,6 +4037,14 @@ void python_converter::handle_assignment_type_adjustments(
         {
           lhs_symbol->type = rhs.type();
           lhs.type() = rhs.type();
+        }
+        else
+        {
+          // Dynamic typing: variable was a scalar, now assigned a string/array.
+          // Convert array RHS to pointer, then typecast
+          // to the existing LHS type to maintain type consistency.
+          rhs = string_handler_.get_array_base_address(rhs);
+          rhs = typecast_exprt(rhs, lhs.type());
         }
       }
     }
@@ -4927,7 +4999,12 @@ void python_converter::get_var_assign(
       return;
     }
 
-    adjust_statement_types(lhs, rhs);
+    // Skip numeric type adjustments for Any-typed variables
+    // Becouse the width-comparison logic in adjust_statement_types would incorrectly
+    // change a void* (any_type) to match a numeric RHS type, corrupting
+    // the symbol type when the variable appears in conditional branches.
+    if (lhs_type != "Any")
+      adjust_statement_types(lhs, rhs);
 
     // Handle list type info propagation
     if (lhs.type() == rhs.type() && lhs.type() == type_handler_.get_list_type())
