@@ -5791,10 +5791,11 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
               flags.has_int = true;
             else if (constant_val.is_boolean())
               flags.has_bool = true;
+            else if (constant_val.is_null())
+              flags.has_none = true;
             else
             {
               std::string type_name = constant_val.is_string()   ? "string"
-                                      : constant_val.is_null()   ? "null"
                                       : constant_val.is_object() ? "object"
                                       : constant_val.is_array()  ? "array"
                                                                  : "unknown";
@@ -6174,8 +6175,33 @@ void python_converter::get_function_definition(
 
   symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
+  // Pre-scan: for unannotated functions, detect mixed value+None returns
+  // and set return type to Optional so None checks work correctly at runtime
+  if (type.return_type().is_empty())
+  {
+    TypeFlags return_flags = infer_types_from_returns(function_node["body"]);
+    bool has_value_return =
+      return_flags.has_int || return_flags.has_float || return_flags.has_bool;
+    if (has_value_return && return_flags.has_none)
+    {
+      typet value_type =
+        type_utils::select_widest_type(return_flags, long_long_int_type());
+      typet optional_type = type_handler_.build_optional_type(value_type);
+      type.return_type() = optional_type;
+      current_element_type = optional_type;
+      added_symbol->type = type;
+    }
+  }
+
+  // Save function return type for use in get_return_statements
+  typet saved_func_return_type = current_func_return_type_;
+  current_func_return_type_ = type.return_type();
+
   // Process function body
   exprt function_body = get_block(function_node["body"]);
+
+  // Restore saved function return type (for nested function defs)
+  current_func_return_type_ = saved_func_return_type;
 
   // If return type is empty/unannotated, try to infer from return statements
   if (type.return_type().is_empty())
@@ -6486,6 +6512,15 @@ void python_converter::get_return_statements(
         // For non-constant arrays (variables), convert to pointer
         return_value = string_handler_.get_array_base_address(return_value);
       }
+    }
+
+    // Wrap return value in Optional if the function returns Optional
+    if (current_func_return_type_.is_struct())
+    {
+      const struct_typet &st = to_struct_type(current_func_return_type_);
+      if (st.tag().as_string().starts_with("tag-Optional_"))
+        return_value =
+          wrap_in_optional(return_value, current_func_return_type_);
     }
 
     code_returnt return_code;

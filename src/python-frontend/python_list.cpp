@@ -1324,6 +1324,7 @@ exprt python_list::handle_index_access(
   }
 
   exprt pos_expr = converter_.get_expr(slice_node);
+  pos_expr = converter_.unwrap_optional_if_needed(pos_expr);
   size_t index = 0;
 
   // Validate index type
