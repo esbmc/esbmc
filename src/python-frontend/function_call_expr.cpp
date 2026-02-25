@@ -1516,7 +1516,7 @@ std::string function_call_expr::get_object_name() const
   if (subelement["_type"] == "Attribute")
   {
     /* For attribute chains, use the class name resolved by build_function_id()
-     * 
+     *
      * When we have self.f.foo(), the function ID builder has already determined
      * that f's type is Foo and stored it in function_id_. We reuse that result
      * rather than re-extracting "f" which would be incorrect.
@@ -2556,6 +2556,47 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "acos" || func_name == "__ESBMC_acos")
        {
          exprt arg_expr = require_one_arg();
+         // Domain check for acos: operand must be in [-1.0, 1.0]
+         exprt double_operand = arg_expr;
+         if (!arg_expr.type().is_floatbv())
+         {
+           double_operand =
+             exprt("typecast", type_handler_.get_typet("float", 0));
+           double_operand.copy_to_operands(arg_expr);
+         }
+
+         typet float_type = type_handler_.get_typet("float", 0);
+         typet bool_t = type_handler_.get_typet("bool", 0);
+         exprt neg_one = from_integer(-1, signedbv_typet(64));
+         neg_one = exprt("typecast", float_type);
+         neg_one.copy_to_operands(from_integer(-1, signedbv_typet(64)));
+         exprt pos_one = exprt("typecast", float_type);
+         pos_one.copy_to_operands(from_integer(1, signedbv_typet(64)));
+
+         exprt lt_neg = exprt("<", bool_t);
+         lt_neg.copy_to_operands(double_operand, neg_one);
+         exprt gt_pos = exprt(">", bool_t);
+         gt_pos.copy_to_operands(double_operand, pos_one);
+         exprt domain_check = exprt("or", bool_t);
+         domain_check.copy_to_operands(lt_neg, gt_pos);
+
+         exprt raise_expr =
+           converter_.get_exception_handler().gen_exception_raise(
+             "ValueError", "math domain error");
+         locationt loc = converter_.get_location_from_decl(call_);
+         raise_expr.location() = loc;
+         raise_expr.location().user_provided(true);
+
+         code_expressiont raise_code(raise_expr);
+         raise_code.location() = loc;
+
+         code_ifthenelset guard;
+         guard.cond() = domain_check;
+         guard.then_case() = raise_code;
+         guard.location() = loc;
+
+         converter_.current_block->copy_to_operands(guard);
+
          return converter_.get_math_handler().handle_acos(arg_expr, call_);
        }
        else if (func_name == "atan" || func_name == "__ESBMC_atan")
