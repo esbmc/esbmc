@@ -2552,35 +2552,29 @@ function_call_expr::get_dispatch_table()
        {
          exprt arg_expr = require_one_arg();
          // Domain check for log: operand must be > 0
-         exprt double_operand = arg_expr;
+         exprt fp_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
          {
-           double_operand =
+           fp_operand =
              exprt("typecast", type_handler_.get_typet("float", 0));
-           double_operand.copy_to_operands(arg_expr);
+           fp_operand.copy_to_operands(arg_expr);
          }
-
-         exprt zero = gen_zero(double_operand.type());
+         exprt zero = gen_zero(fp_operand.type());
          exprt domain_check = exprt("<=", type_handler_.get_typet("bool", 0));
-         domain_check.copy_to_operands(double_operand, zero);
-
+         domain_check.copy_to_operands(fp_operand, zero);
          exprt raise_expr =
            converter_.get_exception_handler().gen_exception_raise(
              "ValueError", "math domain error");
          locationt loc = converter_.get_location_from_decl(call_);
          raise_expr.location() = loc;
          raise_expr.location().user_provided(true);
-
          code_expressiont raise_code(raise_expr);
          raise_code.location() = loc;
-
          code_ifthenelset guard;
          guard.cond() = domain_check;
          guard.then_case() = raise_code;
          guard.location() = loc;
-
          converter_.current_block->copy_to_operands(guard);
-
          return converter_.get_math_handler().handle_log(arg_expr, call_);
        }
        else if (func_name == "acos" || func_name == "__ESBMC_acos")
