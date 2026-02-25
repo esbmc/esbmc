@@ -4078,15 +4078,46 @@ void python_converter::handle_list_literal_unpacking(
   const auto &elements = value_node["elts"];
   const auto &targets = target["elts"];
 
-  if (elements.size() != targets.size())
+  // Find starred target (if any)
+  int star_idx = -1;
+  for (size_t i = 0; i < targets.size(); i++)
   {
-    throw std::runtime_error(
-      "Cannot unpack list: expected " + std::to_string(targets.size()) +
-      " values, got " + std::to_string(elements.size()));
+    if (targets[i]["_type"] == "Starred")
+    {
+      star_idx = static_cast<int>(i);
+      break;
+    }
   }
 
-  // Create assignments directly from list elements
-  for (size_t i = 0; i < targets.size(); i++)
+  if (star_idx < 0)
+  {
+    // No starred target: strict size check
+    if (elements.size() != targets.size())
+    {
+      throw std::runtime_error(
+        "Cannot unpack list: expected " + std::to_string(targets.size()) +
+        " values, got " + std::to_string(elements.size()));
+    }
+  }
+  else
+  {
+    size_t non_star_count = targets.size() - 1;
+    if (elements.size() < non_star_count)
+    {
+      throw std::runtime_error(
+        "Cannot unpack list: not enough values (expected at least " +
+        std::to_string(non_star_count) + ", got " +
+        std::to_string(elements.size()) + ")");
+    }
+  }
+
+  size_t before_star =
+    (star_idx >= 0) ? static_cast<size_t>(star_idx) : targets.size();
+  size_t after_star =
+    (star_idx >= 0) ? targets.size() - static_cast<size_t>(star_idx) - 1 : 0;
+
+  // Assign targets before the star
+  for (size_t i = 0; i < before_star; i++)
   {
     if (targets[i]["_type"] != "Name")
     {
@@ -4101,7 +4132,6 @@ void python_converter::handle_list_literal_unpacking(
 
     symbolt *var_symbol = find_symbol(var_sid.to_string());
 
-    // Convert the element expression
     is_converting_rhs = true;
     exprt elem_expr = get_expr(elements[i]);
     is_converting_rhs = false;
@@ -4109,6 +4139,100 @@ void python_converter::handle_list_literal_unpacking(
     if (!var_symbol)
     {
       locationt loc = get_location_from_decl(targets[i]);
+
+      symbolt new_symbol = create_symbol(
+        loc.get_file().as_string(),
+        var_name,
+        var_sid.to_string(),
+        loc,
+        elem_expr.type());
+      new_symbol.lvalue = true;
+      new_symbol.file_local = true;
+      new_symbol.is_extern = false;
+      var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
+    }
+
+    code_assignt assign(symbol_expr(*var_symbol), elem_expr);
+    assign.location() = get_location_from_decl(ast_node);
+    target_block.copy_to_operands(assign);
+  }
+
+  // Handle starred target: collect remaining elements into a list
+  if (star_idx >= 0)
+  {
+    const auto &starred_node = targets[static_cast<size_t>(star_idx)];
+    const auto &star_value = starred_node["value"];
+
+    if (star_value["_type"] != "Name")
+    {
+      throw std::runtime_error(
+        "Starred unpacking only supports simple names, not " +
+        star_value["_type"].get<std::string>());
+    }
+
+    // Build a synthetic list JSON node with the starred elements
+    nlohmann::json star_list_node = value_node;
+    star_list_node["_type"] = "List";
+    star_list_node["elts"] = nlohmann::json::array();
+    for (size_t j = before_star; j < elements.size() - after_star; j++)
+      star_list_node["elts"].push_back(elements[j]);
+
+    python_list star_list(*this, star_list_node);
+    exprt list_expr = star_list.get();
+
+    std::string var_name = star_value["id"].get<std::string>();
+    symbol_id var_sid = create_symbol_id();
+    var_sid.set_object(var_name);
+
+    symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+    if (!var_symbol)
+    {
+      locationt loc = get_location_from_decl(star_value);
+
+      symbolt new_symbol = create_symbol(
+        loc.get_file().as_string(),
+        var_name,
+        var_sid.to_string(),
+        loc,
+        list_expr.type());
+      new_symbol.lvalue = true;
+      new_symbol.file_local = true;
+      new_symbol.is_extern = false;
+      var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
+    }
+
+    code_assignt assign(symbol_expr(*var_symbol), list_expr);
+    assign.location() = get_location_from_decl(ast_node);
+    target_block.copy_to_operands(assign);
+  }
+
+  // Assign targets after the star (from the end)
+  for (size_t i = 0; i < after_star; i++)
+  {
+    size_t target_idx = static_cast<size_t>(star_idx) + 1 + i;
+    size_t elem_idx = elements.size() - after_star + i;
+
+    if (targets[target_idx]["_type"] != "Name")
+    {
+      throw std::runtime_error(
+        "List unpacking only supports simple names, not " +
+        targets[target_idx]["_type"].get<std::string>());
+    }
+
+    std::string var_name = targets[target_idx]["id"].get<std::string>();
+    symbol_id var_sid = create_symbol_id();
+    var_sid.set_object(var_name);
+
+    symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+    is_converting_rhs = true;
+    exprt elem_expr = get_expr(elements[elem_idx]);
+    is_converting_rhs = false;
+
+    if (!var_symbol)
+    {
+      locationt loc = get_location_from_decl(targets[target_idx]);
 
       symbolt new_symbol = create_symbol(
         loc.get_file().as_string(),
