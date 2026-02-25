@@ -2560,7 +2560,7 @@ function_call_expr::get_dispatch_table()
            double_operand.copy_to_operands(arg_expr);
          }
 
-         exprt zero = gen_zero(type_handler_.get_typet("float", 0));
+         exprt zero = gen_zero(double_operand.type());
          exprt domain_check = exprt("<=", type_handler_.get_typet("bool", 0));
          domain_check.copy_to_operands(double_operand, zero);
 
