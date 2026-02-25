@@ -1216,10 +1216,7 @@ exprt python_math::handle_hypot(
   return hypot_call;
 }
 
-exprt python_math::handle_dist(
-  exprt p,
-  exprt q,
-  const nlohmann::json &element)
+exprt python_math::handle_dist(exprt p, exprt q, const nlohmann::json &element)
 {
   // Both arguments must be tuples (struct types with tag-tuple prefix)
   if (!p.type().is_struct() || !q.type().is_struct())
@@ -1245,8 +1242,7 @@ exprt python_math::handle_dist(
 
   // Build sum of squared differences: (p[0]-q[0])^2 + (p[1]-q[1])^2 + ...
   // Use ieee_* operations for floating-point arithmetic
-  exprt rounding_mode =
-    symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  exprt rounding_mode = symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
 
   exprt total = exprt();
   for (size_t i = 0; i < p_size; i++)
