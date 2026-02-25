@@ -1,0 +1,5 @@
+CORE
+main.c
+--volatile-check
+
+^VERIFICATION FAILED$
