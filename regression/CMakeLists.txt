@@ -146,14 +146,15 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/unwindsetname
                       )
 # list of C++11 test suites
-set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
+set(REGRESSIONS_CPP11 esbmc-cpp11/alignas
+                      esbmc-cpp11/array
                       esbmc-cpp11/constructors
+                      esbmc-cpp11/cpp
+                      esbmc-cpp11/lambda
                       esbmc-cpp11/new-delete
                       esbmc-cpp11/reference
                       esbmc-cpp11/template
                       esbmc-cpp11/tuple
-                      esbmc-cpp11/array
-                      esbmc-cpp11/lambda
                       )
 
 # list of C++14 test suites
