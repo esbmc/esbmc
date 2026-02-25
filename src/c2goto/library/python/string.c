@@ -495,16 +495,30 @@ __ESBMC_HIDE:;
   char *buffer = __ESBMC_alloca(256);
 
   int i = 0;
-  while (i < 255 && s[i])
+  int j = 0;
+  while (j < 254 && s[i])
   {
-    if (s[i] >= 'a' && s[i] <= 'z')
-      buffer[i] = s[i] - ('a' - 'A');
+    /* Handle ß (UTF-8: 0xC3 0x9F) -> "SS" */
+    if ((unsigned char)s[i] == 0xC3 && (unsigned char)s[i + 1] == 0x9F)
+    {
+      buffer[j++] = 'S';
+      if (j < 255)
+        buffer[j++] = 'S';
+      i += 2;
+    }
+    else if (s[i] >= 'a' && s[i] <= 'z')
+    {
+      buffer[j++] = s[i] - ('a' - 'A');
+      i++;
+    }
     else
-      buffer[i] = s[i];
-    i++;
+    {
+      buffer[j++] = s[i];
+      i++;
+    }
   }
 
-  buffer[i] = '\0';
+  buffer[j] = '\0';
 
   return buffer;
 }
