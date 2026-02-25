@@ -562,7 +562,7 @@ exprt python_list::build_list_at_call(
   if (index.is_constant() && index.type().is_signedbv())
   {
     BigInt idx_value;
-    if (to_integer(index, idx_value) && idx_value >= 0)
+    if (!to_integer(index, idx_value) && idx_value >= 0)
     {
       // Index is constant and non-negative, use directly
       side_effect_expr_function_callt list_at_call;
@@ -1474,9 +1474,12 @@ exprt python_list::handle_index_access(
     }
     else
     {
+      // Compute index for compile-time type lookup only.
+      // Do NOT overwrite pos_expr: the list may have been mutated
+      // (append/insert/extend), so we must resolve the negative index
+      // at runtime via build_list_at_call using __ESBMC_list_size.
       index = slice_node["operand"]["value"].get<size_t>();
       index = list_node["value"]["elts"].size() - index;
-      pos_expr = from_integer(index, size_type());
     }
   }
   else if (slice_node["_type"] == "Constant")
