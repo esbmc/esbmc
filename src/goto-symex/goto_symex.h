@@ -517,6 +517,8 @@ protected:
 
   void simplify_python_builtins(expr2tc &expr);
 
+  void volatile_check(expr2tc &expr);
+
   /* Check if thrown_type in Python inherits from catch_type */
   bool is_python_exception_subtype(
     const irep_idt &thrown_type,

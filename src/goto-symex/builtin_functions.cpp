@@ -3041,3 +3041,29 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     expr = gen_true_expr();
   }
 }
+
+void goto_symext::volatile_check(expr2tc &expr)
+{
+  if (!options.get_bool_option("volatile-check"))
+    return;
+
+  if (is_symbol2t(expr))
+  {
+    const symbol2t &s = to_symbol2t(expr);
+    const symbolt *sym = new_context.find_symbol(s.thename);
+    if (sym && sym->type.cmt_volatile())
+    {
+      log_debug("volatile check", "variable: {}", sym->name.as_string());
+      unsigned int &nondet_count = get_nondet_counter();
+      expr = symbol2tc(
+        expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
+    }
+  }
+  else
+  {
+    expr->Foreach_operand([this](expr2tc &e) {
+      if (!is_nil_expr(e))
+        volatile_check(e);
+    });
+  }
+}
