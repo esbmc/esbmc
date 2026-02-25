@@ -401,6 +401,11 @@ public:
    * @brief Handle hypot function (math.hypot)
    */
   exprt handle_hypot(exprt lhs, exprt rhs, const nlohmann::json &element);
+
+  /**
+   * @brief Handle dist function (math.dist) for tuple arguments
+   */
+  exprt handle_dist(exprt p, exprt q, const nlohmann::json &element);
 };
 
 #endif

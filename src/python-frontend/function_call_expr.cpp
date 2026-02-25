@@ -2469,7 +2469,7 @@ function_call_expr::get_dispatch_table()
                 func_name == "gamma" || func_name == "ldexp" ||
                 func_name == "lgamma" || func_name == "nextafter" ||
                 func_name == "remainder" || func_name == "sumprod" ||
-                func_name == "ulp")) ||
+                func_name == "ulp" || func_name == "dist")) ||
               is_math_wrapper;
      },
      [this]() -> exprt {
@@ -2730,6 +2730,33 @@ function_call_expr::get_dispatch_table()
          auto [lhs_expr, rhs_expr] = require_two_args();
          return converter_.get_math_handler().handle_hypot(
            lhs_expr, rhs_expr, call_);
+       }
+       else if (func_name == "dist")
+       {
+         auto [lhs_expr, rhs_expr] = require_two_args();
+         // Native handler for tuple arguments; lists use the model
+         if (lhs_expr.type().is_struct() && rhs_expr.type().is_struct())
+         {
+           // If either argument is a constant struct (tuple literal), store it
+           // in a temporary local variable so that the GOTO IR has a proper
+           // symbol whose address the solver can track.
+           auto materialize = [&](exprt &arg) {
+             if (arg.is_constant())
+             {
+               symbolt &tmp = converter_.create_tmp_symbol(
+                 call_, "$dist_arg$", arg.type(), arg);
+               code_declt decl(symbol_expr(tmp));
+               decl.location() = converter_.get_location_from_decl(call_);
+               converter_.current_block->copy_to_operands(decl);
+               arg = symbol_expr(tmp);
+             }
+           };
+           materialize(lhs_expr);
+           materialize(rhs_expr);
+           return converter_.get_math_handler().handle_dist(
+             lhs_expr, rhs_expr, call_);
+         }
+         return handle_general_function_call();
        }
        else if (
          func_name == "cbrt" || func_name == "erf" || func_name == "erfc" ||
