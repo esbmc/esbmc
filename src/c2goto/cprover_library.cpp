@@ -204,6 +204,7 @@ const static std::vector<std::string> python_c_models = {
   "__python_chr",
   "__python_str_concat",
   "__python_str_repeat",
+  "__python_str_slice",
   "__ESBMC_list_find_index",
   "__ESBMC_list_remove_at",
   "__ESBMC_list_set_at",
@@ -501,7 +502,8 @@ void add_cprover_library(contextt &context, const languaget *language)
       if (s.value.is_nil())
       {
         log_warning(
-          "extern variable with id {} not found, initializing value to nondet! "
+          "extern variable with id {} not found, initializing value to "
+          "nondet! "
           "This code would not compile with an actual compiler.",
           s.id);
         exprt value =

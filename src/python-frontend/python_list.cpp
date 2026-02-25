@@ -948,12 +948,105 @@ exprt python_list::handle_range_slice(
   {
     locationt location = converter_.get_location_from_decl(slice_node);
 
+    // Determine step value (default 1)
+    bool has_step =
+      slice_node.contains("step") && !slice_node["step"].is_null();
+    long long step_val = 1;
+    if (has_step)
+    {
+      const auto &step_node = slice_node["step"];
+      if (step_node["_type"] == "UnaryOp" && step_node["op"]["_type"] == "USub")
+      {
+        step_val =
+          -(long long)step_node["operand"]["value"].get<std::int64_t>();
+      }
+      else if (step_node["_type"] == "Constant")
+      {
+        step_val = step_node["value"].get<std::int64_t>();
+      }
+    }
+    bool negative_step = (step_val < 0);
+
+    // For pointer types (function parameters), delegate to __python_str_slice
+    // which uses __ESBMC_alloca and survives function returns.
+    if (array.type().is_pointer() && array.type().subtype() == char_type())
+    {
+      std::string slice_func_id = "c:@F@__python_str_slice";
+      symbolt *slice_func =
+        converter_.symbol_table().find_symbol(slice_func_id);
+      if (!slice_func)
+      {
+        // Create the function symbol if it doesn't exist
+        symbolt new_symbol;
+        new_symbol.name = "__python_str_slice";
+        new_symbol.id = slice_func_id;
+        new_symbol.mode = "C";
+        new_symbol.is_extern = true;
+
+        // char* __python_str_slice(const char*, long long, long long, long long)
+        code_typet slice_type;
+        typet char_ptr = gen_pointer_type(char_type());
+        typet ll_type = signedbv_typet(64);
+        slice_type.return_type() = char_ptr;
+        slice_type.arguments().push_back(code_typet::argumentt(char_ptr));
+        slice_type.arguments().push_back(code_typet::argumentt(ll_type));
+        slice_type.arguments().push_back(code_typet::argumentt(ll_type));
+        slice_type.arguments().push_back(code_typet::argumentt(ll_type));
+        new_symbol.type = slice_type;
+
+        converter_.symbol_table().add(new_symbol);
+        slice_func = converter_.symbol_table().find_symbol(slice_func_id);
+      }
+
+      // Extract start/end bounds from slice node
+      auto get_bound_expr =
+        [&](const std::string &name, long long default_val) -> exprt {
+        if (!slice_node.contains(name) || slice_node[name].is_null())
+          return from_integer(default_val, signedbv_typet(64));
+
+        const auto &bound = slice_node[name];
+        if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
+        {
+          exprt abs_value = converter_.get_expr(bound["operand"]);
+          exprt neg("-", signedbv_typet(64));
+          neg.copy_to_operands(
+            from_integer(0, signedbv_typet(64)),
+            typecast_exprt(abs_value, signedbv_typet(64)));
+          return neg;
+        }
+        exprt e = converter_.get_expr(bound);
+        e = remove_function_calls_recursive(e, slice_node);
+        return typecast_exprt(e, signedbv_typet(64));
+      };
+
+      // Defaults: for positive step start=0,end=MAX; for negative step start=MAX,end=MIN
+      // We use large sentinel values; __python_str_slice clamps them
+      long long start_default = negative_step ? 999999 : 0;
+      long long end_default = negative_step ? -999999 : 999999;
+
+      exprt start_expr = get_bound_expr("lower", start_default);
+      exprt end_expr = get_bound_expr("upper", end_default);
+      exprt step_expr = from_integer(step_val, signedbv_typet(64));
+
+      // Call __python_str_slice(s, start, end, step) as side-effect expression
+      side_effect_expr_function_callt slice_call;
+      slice_call.function() = symbol_expr(*slice_func);
+      slice_call.arguments().push_back(array);
+      slice_call.arguments().push_back(start_expr);
+      slice_call.arguments().push_back(end_expr);
+      slice_call.arguments().push_back(step_expr);
+      slice_call.location() = location;
+      slice_call.type() = pointer_typet(char_type());
+
+      return slice_call;
+    }
+
+    // For array types (local string literals), generate inline loop
     // Determine element type and logical length
     typet elem_type;
     exprt array_len;
     exprt logical_len;
 
-    if (array.type().is_array())
     {
       const array_typet &src_type = to_array_type(array.type());
       elem_type = src_type.subtype();
@@ -962,12 +1055,6 @@ exprt python_list::handle_range_slice(
       logical_len = (elem_type == char_type())
                       ? minus_exprt(array_len, gen_one(size_type()))
                       : array_len;
-    }
-    else // pointer case
-    {
-      elem_type = array.type().subtype();
-      array_len = nil_exprt();   // Not used for pointers
-      logical_len = nil_exprt(); // Will use explicit bounds only
     }
 
     // Process slice bounds (handles null, negative indices)
@@ -982,55 +1069,32 @@ exprt python_list::handle_range_slice(
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
       {
         exprt abs_value = converter_.get_expr(bound["operand"]);
-        return logical_len.is_nil() ? abs_value
-                                    : minus_exprt(logical_len, abs_value);
+        return minus_exprt(logical_len, abs_value);
       }
 
       exprt e = converter_.get_expr(bound);
       return remove_function_calls_recursive(e, slice_node);
     };
 
-    // Process bounds
-    exprt lower_expr = process_bound("lower", gen_zero(size_type()));
-
-    // For pointer types with no upper bound, compute length using strlen
-    exprt upper_expr;
-    if (array.type().is_pointer() && elem_type == char_type())
+    // Process bounds: defaults depend on step direction
+    exprt lower_expr, upper_expr;
+    if (negative_step)
     {
-      if (!slice_node.contains("upper") || slice_node["upper"].is_null())
-      {
-        // Call strlen to get the length
-        const symbolt *strlen_symbol =
-          converter_.symbol_table().find_symbol("c:@F@strlen");
-        if (!strlen_symbol)
-          throw std::runtime_error("strlen function not found in symbol table");
-
-        symbolt &strlen_result = converter_.create_tmp_symbol(
-          slice_node, "$strlen_result$", size_type(), gen_zero(size_type()));
-        code_declt strlen_decl(symbol_expr(strlen_result));
-        strlen_decl.location() = location;
-        converter_.add_instruction(strlen_decl);
-
-        code_function_callt strlen_call;
-        strlen_call.function() = symbol_expr(*strlen_symbol);
-        strlen_call.lhs() = symbol_expr(strlen_result);
-        strlen_call.arguments().push_back(array);
-        strlen_call.type() = size_type();
-        strlen_call.location() = location;
-        converter_.add_instruction(strlen_call);
-
-        upper_expr = symbol_expr(strlen_result);
-      }
-      else
-        upper_expr = process_bound("upper", logical_len);
+      // For negative step: default lower = len-1, default upper = -1 (before 0)
+      lower_expr =
+        process_bound("lower", minus_exprt(logical_len, gen_one(size_type())));
     }
     else
+    {
+      lower_expr = process_bound("lower", gen_zero(size_type()));
+    }
+
+    // Upper bound
+    if (!negative_step)
       upper_expr = process_bound("upper", logical_len);
 
     // Clamp bounds to [0, logical_len] to match Python semantics.
-    // In Python, slice indices are silently clamped to the valid range,
-    // so s[10:] on a 6-char string returns "" (lower clamped to 6).
-    if (!logical_len.is_nil())
+    if (!negative_step)
     {
       // lower = max(0, min(lower, logical_len))
       exprt lower_ge_len(">=", bool_type());
@@ -1046,7 +1110,33 @@ exprt python_list::handle_range_slice(
     }
 
     // Calculate slice length
-    minus_exprt slice_len(upper_expr, lower_expr);
+    exprt slice_len;
+    if (negative_step)
+    {
+      // For [::-1]: length = lower + 1 (e.g., lower=len-1 → length=len)
+      if (
+        (!slice_node.contains("lower") || slice_node["lower"].is_null()) &&
+        (!slice_node.contains("upper") || slice_node["upper"].is_null()))
+      {
+        slice_len = logical_len;
+      }
+      else
+      {
+        slice_len = plus_exprt(lower_expr, gen_one(size_type()));
+      }
+    }
+    else if (step_val != 1)
+    {
+      // For step > 1: length = ceil((upper - lower) / step)
+      exprt range = minus_exprt(upper_expr, lower_expr);
+      exprt step_const = from_integer(step_val, size_type());
+      exprt step_minus_one = from_integer(step_val - 1, size_type());
+      slice_len = div_exprt(plus_exprt(range, step_minus_one), step_const);
+    }
+    else
+    {
+      slice_len = minus_exprt(upper_expr, lower_expr);
+    }
 
     // Create result array type with extra space for null terminator
     plus_exprt result_size(slice_len, gen_one(size_type()));
@@ -1060,7 +1150,7 @@ exprt python_list::handle_range_slice(
     result_decl.location() = location;
     converter_.add_instruction(result_decl);
 
-    // Create loop: for i = 0; i < (upper-lower); i++
+    // Create loop: for i = 0; i < slice_len; i++
     symbolt &idx = converter_.create_tmp_symbol(
       slice_node, "$i$", size_type(), gen_zero(size_type()));
     code_assignt idx_init(symbol_expr(idx), gen_zero(size_type()));
@@ -1070,8 +1160,35 @@ exprt python_list::handle_range_slice(
     cond.copy_to_operands(symbol_expr(idx), slice_len);
 
     code_blockt body;
-    // result[i] = array[lower + i]
-    plus_exprt src_idx(lower_expr, symbol_expr(idx));
+
+    // Compute source index based on step direction
+    exprt src_idx;
+    if (negative_step)
+    {
+      // result[i] = array[lower - i] (for step=-1)
+      // For other negative steps: result[i] = array[lower - i * |step|]
+      if (step_val == -1)
+        src_idx = minus_exprt(lower_expr, symbol_expr(idx));
+      else
+      {
+        exprt abs_step = from_integer(-step_val, size_type());
+        src_idx =
+          minus_exprt(lower_expr, mult_exprt(symbol_expr(idx), abs_step));
+      }
+    }
+    else if (step_val != 1)
+    {
+      // result[i] = array[lower + i * step]
+      exprt step_const = from_integer(step_val, size_type());
+      src_idx =
+        plus_exprt(lower_expr, mult_exprt(symbol_expr(idx), step_const));
+    }
+    else
+    {
+      // result[i] = array[lower + i]
+      src_idx = plus_exprt(lower_expr, symbol_expr(idx));
+    }
+
     index_exprt src(array, src_idx, elem_type);
     index_exprt dst(symbol_expr(result), symbol_expr(idx), elem_type);
     code_assignt assign(dst, src);
