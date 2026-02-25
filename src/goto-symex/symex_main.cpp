@@ -239,6 +239,7 @@ void goto_symext::symex_step(reachability_treet &art)
   {
     expr2tc tmp(instruction.guard);
     replace_nondet(tmp);
+    volatile_check(tmp);
 
     dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
