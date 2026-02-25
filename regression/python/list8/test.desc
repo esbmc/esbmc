@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
---unwind 5 --no-standard-checks
+--unwind 8 --no-standard-checks
 ^VERIFICATION SUCCESSFUL$
