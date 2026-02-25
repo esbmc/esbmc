@@ -334,6 +334,7 @@ void goto_symext::symex_assign(
 
   replace_nondet(lhs);
   replace_nondet(rhs);
+  volatile_check(rhs);
 
   dereference(lhs, dereferencet::WRITE);
   dereference(rhs, dereferencet::READ);
@@ -997,7 +998,7 @@ void goto_symext::replace_nondet(expr2tc &expr)
   if (
     is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
-    unsigned int &nondet_count = get_dynamic_counter();
+    unsigned int &nondet_count = get_nondet_counter();
     expr =
       symbol2tc(expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
   }
