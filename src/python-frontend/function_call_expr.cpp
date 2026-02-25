@@ -2740,17 +2740,17 @@ function_call_expr::get_dispatch_table()
            // If either argument is a constant struct (tuple literal), store it
            // in a temporary local variable so that the GOTO IR has a proper
            // symbol whose address the solver can track.
-           auto materialize = [&](exprt& arg) {
+           auto materialize = [&](exprt &arg) {
              if (arg.is_constant())
              {
-               symbolt& tmp = converter_.create_tmp_symbol(
+               symbolt &tmp = converter_.create_tmp_symbol(
                  call_, "$dist_arg$", arg.type(), arg);
                code_declt decl(symbol_expr(tmp));
                decl.location() = converter_.get_location_from_decl(call_);
                converter_.current_block->copy_to_operands(decl);
                arg = symbol_expr(tmp);
              }
-             };
+           };
            materialize(lhs_expr);
            materialize(rhs_expr);
            return converter_.get_math_handler().handle_dist(
