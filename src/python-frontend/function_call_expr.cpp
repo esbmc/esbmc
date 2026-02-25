@@ -2567,11 +2567,10 @@ function_call_expr::get_dispatch_table()
 
          typet float_type = type_handler_.get_typet("float", 0);
          typet bool_t = type_handler_.get_typet("bool", 0);
-         exprt neg_one = from_integer(-1, signedbv_typet(64));
-         neg_one = exprt("typecast", float_type);
-         neg_one.copy_to_operands(from_integer(-1, signedbv_typet(64)));
-         exprt pos_one = exprt("typecast", float_type);
-         pos_one.copy_to_operands(from_integer(1, signedbv_typet(64)));
+
+         exprt pos_one = gen_one(float_type);
+         exprt neg_one("unary-", float_type);
+         neg_one.copy_to_operands(pos_one);
 
          exprt lt_neg = exprt("<", bool_t);
          lt_neg.copy_to_operands(double_operand, neg_one);
