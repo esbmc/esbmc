@@ -33,7 +33,7 @@ jobs:
     name: static llvm-21 DebugOpt
     with:
       operating-system: ubuntu-24.04
-      build-flags: '-b DebugOpt -e On'
+      build-flags: '-b DebugOpt -e ON'
       testing: true
 
   build-windows:
@@ -41,7 +41,7 @@ jobs:
     name: static llvm-16 DebugOpt
     with:
       operating-system: windows-latest
-      build-flags: '-b DebugOpt -e On'
+      build-flags: '-b DebugOpt -e ON'
       testing: true
 
   build-arm:
@@ -57,7 +57,7 @@ jobs:
     name: arm64 darwin build
     with:
       operating-system: macos-latest
-      build-flags: '-c 21'
+      build-flags: '-b DebugOpt -c 21'
       testing: true
 
   # Check project with clang-format
