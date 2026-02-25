@@ -2555,8 +2555,7 @@ function_call_expr::get_dispatch_table()
          exprt fp_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
          {
-           fp_operand =
-             exprt("typecast", type_handler_.get_typet("float", 0));
+           fp_operand = exprt("typecast", type_handler_.get_typet("float", 0));
            fp_operand.copy_to_operands(arg_expr);
          }
          exprt zero = gen_zero(fp_operand.type());
