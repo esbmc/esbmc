@@ -1129,11 +1129,15 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
-char* __python_str_slice(const char* s, long long start, long long end, long long step)
+char *__python_str_slice(
+  const char *s,
+  long long start,
+  long long end,
+  long long step)
 {
 __ESBMC_HIDE:;
   if (!s)
-    return (char*)0;
+    return (char *)0;
 
   size_t len = __python_strnlen_bounded(s, ESBMC_PY_STRNLEN_BOUND);
 
@@ -1161,12 +1165,12 @@ __ESBMC_HIDE:;
 
   if (result_len <= 0)
   {
-    char* empty = __ESBMC_alloca(1);
+    char *empty = __ESBMC_alloca(1);
     empty[0] = '\0';
     return empty;
   }
 
-  char* buffer = __ESBMC_alloca((size_t)result_len + 1);
+  char *buffer = __ESBMC_alloca((size_t)result_len + 1);
 
   long long src_idx = start;
   size_t dst_idx = 0;

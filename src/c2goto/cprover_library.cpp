@@ -391,10 +391,12 @@ void add_cprover_library(contextt &context, const languaget *language)
     abort();
 
   // Traverse symbols and get dependencies from both their nested types and values
-  new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
-    generate_symbol_deps(s.id, s.value, symbol_deps);
-    generate_symbol_deps(s.id, s.type, symbol_deps);
-  });
+  new_ctx.foreach_operand(
+    [&symbol_deps](const symbolt &s)
+    {
+      generate_symbol_deps(s.id, s.value, symbol_deps);
+      generate_symbol_deps(s.id, s.type, symbol_deps);
+    });
 
   // Add two hacks; we might use either pthread_mutex_lock or the checked
   // variant; so if one version is used, pull in the other too.
@@ -416,25 +418,24 @@ void add_cprover_library(contextt &context, const languaget *language)
    * store_ctx is what actually gets merged into the existing, final context
    */
 
-  new_ctx.foreach_operand([&context,
-                           &store_ctx,
-                           &symbol_deps,
-                           &to_include,
-                           &language](const symbolt &s) {
-    const symbolt *symbol = context.find_symbol(s.id);
-    if (
-      (language && language->id() == "python") ||
-      (symbol != nullptr && symbol->value.is_nil()))
+  new_ctx.foreach_operand(
+    [&context, &store_ctx, &symbol_deps, &to_include, &language](
+      const symbolt &s)
     {
-      store_ctx.add(s);
+      const symbolt *symbol = context.find_symbol(s.id);
+      if (
+        (language && language->id() == "python") ||
+        (symbol != nullptr && symbol->value.is_nil()))
+      {
+        store_ctx.add(s);
 
-      // ingest_symbol takes this added symbol and goes through symbol_deps
-      // it only moves dependencies from symbol_deps to to_include
-      //    if they're dependencies for a symbol that is definitely being included
-      //    (i.e. in store_ctx)
-      ingest_symbol(s.id, symbol_deps, to_include);
-    }
-  });
+        // ingest_symbol takes this added symbol and goes through symbol_deps
+        // it only moves dependencies from symbol_deps to to_include
+        //    if they're dependencies for a symbol that is definitely being included
+        //    (i.e. in store_ctx)
+        ingest_symbol(s.id, symbol_deps, to_include);
+      }
+    });
 
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
    * These will be symbols that didn't make it into store_ctx
@@ -496,26 +497,29 @@ void add_cprover_library(contextt &context, const languaget *language)
   // library. Only when linking to the libc library, we know that all unresolved extern symbols (those whose
   // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
   // those and initialize the extern variables to nondet.
-  context.Foreach_operand([&context](symbolt &s) {
-    if (s.is_extern && !s.type.is_code())
+  context.Foreach_operand(
+    [&context](symbolt &s)
     {
-      if (s.value.is_nil())
+      if (s.is_extern && !s.type.is_code())
       {
-        log_warning(
-          "extern variable with id {} not found, initializing value to nondet! "
-          "This code would not compile with an actual compiler.",
-          s.id);
-        exprt value =
-          exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
-        value.statement("nondet");
-        s.value = value;
+        if (s.value.is_nil())
+        {
+          log_warning(
+            "extern variable with id {} not found, initializing value to "
+            "nondet! "
+            "This code would not compile with an actual compiler.",
+            s.id);
+          exprt value =
+            exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
+          value.statement("nondet");
+          s.value = value;
+        }
+        else
+        {
+          log_error("extern variable with id {} is not nil.", s.id);
+          s.dump();
+          abort();
+        }
       }
-      else
-      {
-        log_error("extern variable with id {} is not nil.", s.id);
-        s.dump();
-        abort();
-      }
-    }
-  });
+    });
 }
