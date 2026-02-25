@@ -531,17 +531,6 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     return convert_identifier_pointer(obj.ptr_obj, ss.str(), nullptr);
   }
 
-  if (is_constant_struct2t(obj.ptr_obj))
-  {
-    // Similar to constant_array above: the frontend may propagate a constant
-    // struct (e.g. a Python tuple) through a pointer/reference, dropping the
-    // original symbol. We assign a unique identifier so SMT can track it.
-    static unsigned int conststruct_num = 0;
-    std::stringstream ss;
-    ss << "address_of_struct_const(" << conststruct_num++ << ")";
-    return convert_identifier_pointer(obj.ptr_obj, ss.str(), nullptr);
-  }
-
   if (is_if2t(obj.ptr_obj))
   {
     // We can't nondeterministically take the address of something; So instead
