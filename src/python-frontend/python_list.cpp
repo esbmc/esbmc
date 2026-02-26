@@ -1791,7 +1791,8 @@ exprt python_list::handle_index_access(
         }
         else if (
           slice_node["_type"] == "UnaryOp" && slice_node.contains("op") &&
-          slice_node["op"]["_type"] == "USub" && slice_node.contains("operand") &&
+          slice_node["op"]["_type"] == "USub" &&
+          slice_node.contains("operand") &&
           slice_node["operand"]["_type"] == "Constant")
         {
           has_const_index = true;
