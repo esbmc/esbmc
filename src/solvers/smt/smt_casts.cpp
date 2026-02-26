@@ -5,7 +5,6 @@
 #include <util/message.h>
 #include <util/message/format.h>
 
-
 smt_astt smt_convt::convert_typecast_to_bool(const typecast2t &cast)
 {
   if (is_pointer_type(cast.from))
@@ -687,30 +686,34 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
-  // fp -> fp under --ir/--ir-ra
+  // Under integer encoding (--ir/--ir-ra), fp values are represented as reals.
+  // The following three cases handle fp<->int casts explicitly because the
+  // generic bitvector-based path is incorrect when operands are real-encoded.
+
+  // fp -> fp: reals are exact, no conversion needed
   if (int_encoding && is_floatbv_type(cast.from->type) && is_floatbv_type(cast.type))
     return convert_ast(cast.from);
 
-// fp -> int under --ir/--ir-ra
-if (
-  int_encoding && is_floatbv_type(cast.from->type) &&
-  (is_bv_type(cast.type) || is_fixedbv_type(cast.type))
-)
-{
-  smt_astt from_real = convert_ast(cast.from);
-
-  if (is_signedbv_type(cast.type))
-    return round_real_to_int(from_real);
-  else
+  // fp -> int: round the real to the nearest integer
+  if (
+    int_encoding && is_floatbv_type(cast.from->type) &&
+    (is_bv_type(cast.type) || is_fixedbv_type(cast.type)))
   {
-    smt_astt int_val = round_real_to_int(from_real);
-    smt_astt zero = mk_smt_int(BigInt(0));
-    smt_astt is_negative = mk_lt(int_val, zero); // ok if you keep this
-    return mk_ite(is_negative, zero, int_val);
-  }
-}
+    smt_astt from_real = convert_ast(cast.from);
 
-  // int -> fp under --ir/--ir-ra
+    if (is_signedbv_type(cast.type))
+      return round_real_to_int(from_real);
+    else
+    {
+      // Unsigned: clamp negative values to zero
+      smt_astt int_val = round_real_to_int(from_real);
+      smt_astt zero = mk_smt_int(BigInt(0));
+      smt_astt is_negative = mk_lt(int_val, zero);
+      return mk_ite(is_negative, zero, int_val);
+    }
+  }
+
+  // int -> fp: lift integer to real
   if (
     int_encoding &&
     (is_bv_type(cast.from->type) || is_fixedbv_type(cast.from->type)) &&

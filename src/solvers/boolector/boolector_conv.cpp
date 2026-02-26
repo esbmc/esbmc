@@ -881,10 +881,3 @@ smt_astt boolector_convt::mk_quantifier(
   abort();
   return nullptr;
 }
-bool boolector_convt::get_rational(
-  [[maybe_unused]] smt_astt a,
-  [[maybe_unused]] BigInt &numerator,
-  [[maybe_unused]] BigInt &denominator)
-{
-  return false;
-}

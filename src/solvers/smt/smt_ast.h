@@ -2,7 +2,6 @@
 #define SOLVERS_SMT_SMT_AST_H_
 
 #include <solvers/smt/smt_sort.h>
-#include <util/message.h>
 
 #include <irep2/irep2_expr.h>
 

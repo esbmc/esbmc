@@ -1299,10 +1299,4 @@ void cvc_convt::pop_ctx()
   smt.pop();
   smt_convt::pop_ctx();
 }
-bool cvc_convt::get_rational(
-  [[maybe_unused]] smt_astt a,
-  [[maybe_unused]] BigInt &numerator,
-  [[maybe_unused]] BigInt &denominator)
-{
-  return false;
-}
+

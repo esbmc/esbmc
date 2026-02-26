@@ -13,19 +13,25 @@
 #include <util/type_byte_size.h>
 #include <cmath>
 
-
-
-
 namespace {
+  // Derive significand precision (p) and minimum exponent (emin) for a
+  // floating-point type, using ieee_float_spect for consistency with the FP API.
   static void detect_fp_params(const type2tc &ty, unsigned &p, int &emin) {
+    const auto single_spec = ieee_float_spect::single_precision();
+    const auto double_spec = ieee_float_spect::double_precision();
     if (is_floatbv_type(ty)) {
       const auto &fb = to_floatbv_type(ty);
-      const unsigned w = fb.get_width();
-      if (w == 32) { p = 24; emin = -126; }
-      else if (w == 64) { p = 53; emin = -1022; }
-      else { p = 53; emin = -1022; }
+      if (fb.exponent == single_spec.e && fb.fraction == single_spec.f) {
+        p = single_spec.f + 1;                  // 24 (includes hidden bit)
+        emin = 2 - (1 << (single_spec.e - 1)); // -126
+      } else {
+        // Default to double precision for all other widths
+        p = double_spec.f + 1;                  // 53
+        emin = 2 - (1 << (double_spec.e - 1)); // -1022
+      }
     } else {
-      p = 53; emin = -1022;
+      p = double_spec.f + 1;
+      emin = 2 - (1 << (double_spec.e - 1));
     }
   }
 
@@ -348,7 +354,7 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   return side2;
 }
 
-  smt_astt smt_convt::get_zero_real()
+smt_astt smt_convt::get_zero_real()
 {
   return mk_smt_real("0");
 }
@@ -368,13 +374,12 @@ smt_astt smt_convt::get_double_min_subnormal()
 
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
-  const floatbv_type2t & /*fbv_type*/,
-  smt_astt /*operand_is_zero*/)
+  const floatbv_type2t &fbv_type,
+  smt_astt operand_zero_check)
 {
-  smt_astt final_result = real_result;
-
   if (this->options.get_bool_option("ir-ra"))
   {
+    smt_astt final_result = real_result;
     smt_sortt rs = mk_real_sort();
     smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
     smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
@@ -382,9 +387,99 @@ smt_astt smt_convt::apply_ieee754_semantics(
     assert_ast(mk_le(ra_lo, final_result));
     assert_ast(mk_le(final_result, ra_hi));
     assert_ast(mk_le(ra_lo, ra_hi));
-  }
 
-  return final_result;
+    return final_result;
+  }
+  else
+  {
+    unsigned int fraction_bits = fbv_type.fraction;
+    unsigned int exponent_bits = fbv_type.exponent;
+
+    auto double_spec = ieee_float_spect::double_precision();
+    auto single_spec = ieee_float_spect::single_precision();
+
+    smt_astt min_normal, min_subnormal, max_normal;
+
+    // IEEE 754 double precision (64-bit): 11 exponent bits, 52 fraction bits
+    if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+    {
+      min_normal = mk_smt_real("2.2250738585072014e-308");    // 2^(-1022)
+      min_subnormal = mk_smt_real("4.9406564584124654e-324"); // 2^(-1074)
+      max_normal = mk_smt_real("1.7976931348623157e+308");    // ~(2-2^(-52)) * 2^1023
+    }
+    // IEEE 754 single precision (32-bit): 8 exponent bits, 23 fraction bits
+    else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
+    {
+      min_normal = mk_smt_real("1.1754943508222875e-38");     // 2^(-126)
+      min_subnormal = mk_smt_real("1.4012984643248171e-45");  // 2^(-149)
+      max_normal = mk_smt_real("3.4028234663852886e+38");     // ~(2-2^(-23)) * 2^127
+    }
+    // Unsupported format - return original result
+    else
+    {
+      log_warning(
+        "Unsupported IEEE 754 format: exponent bits = {}, fraction bits = {}",
+        exponent_bits,
+        fraction_bits);
+      return real_result;
+    }
+
+    smt_astt zero = mk_smt_real("0.0");
+
+    // Get absolute value of result
+    smt_astt abs_result = mk_ite(
+      mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+
+    // Check for overflow
+    smt_astt overflows = mk_gt(abs_result, max_normal);
+
+    // Check for underflow to zero
+    smt_astt underflows_to_zero = mk_and(
+      mk_lt(abs_result, min_subnormal),
+      mk_not(mk_eq(real_result, zero)));
+
+    // If we have a special zero check (like for multiplication), use it
+    if (operand_zero_check)
+      underflows_to_zero =
+        mk_and(underflows_to_zero, mk_not(operand_zero_check));
+
+    // Check if result is in subnormal range
+    smt_astt is_subnormal =
+      mk_and(mk_ge(abs_result, min_subnormal), mk_lt(abs_result, min_normal));
+
+    // Handle subnormal rounding (simplified round-to-nearest)
+    smt_astt subnormal_step =
+      (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+        ? mk_smt_real("4.9406564584124654e-324")  // Double precision
+        : mk_smt_real("1.4012984643248171e-45");  // Single precision
+    smt_astt quotient = mk_div(abs_result, subnormal_step);
+    smt_astt rounded_quotient = mk_add(quotient, mk_smt_real("0.5"));
+    smt_astt subnormal_magnitude = mk_mul(rounded_quotient, subnormal_step);
+
+    smt_astt subnormal_result = mk_ite(
+      mk_lt(real_result, zero),
+      mk_sub(zero, subnormal_magnitude),
+      subnormal_magnitude);
+
+    // Overflow result (approximate infinity)
+    smt_astt overflow_result = mk_ite(
+      mk_lt(real_result, zero), mk_sub(zero, max_normal), max_normal);
+
+    // Apply IEEE 754 semantics: overflow > underflow > subnormal > normal
+    smt_astt ieee_result = mk_ite(
+      overflows,
+      overflow_result,
+      mk_ite(
+        underflows_to_zero,
+        zero,
+        mk_ite(is_subnormal, subnormal_result, real_result)));
+
+    // Handle special operand zero case for multiplication
+    if (operand_zero_check)
+      return mk_ite(operand_zero_check, zero, ieee_result);
+
+    return ieee_result;
+  }
 }
 
 
@@ -580,9 +675,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       a = array_create(flat_expr);
     break;
   }
-
-
-   /* case expr2t::add_id:
+  case expr2t::add_id:
   {
     const add2t &add = to_add2t(expr);
     if (
@@ -591,7 +684,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_pointer_arith(expr, expr->type);
     }
-
     else if (int_encoding)
     {
       a = mk_add(args[0], args[1]);
@@ -601,10 +693,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       a = mk_bvadd(args[0], args[1]);
     }
     break;
-  }*/
-
-
-  /*case expr2t::sub_id:
+  }
+  case expr2t::sub_id:
   {
     const sub2t &sub = to_sub2t(expr);
     if (
@@ -613,7 +703,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_pointer_arith(expr, expr->type);
     }
-
     else if (int_encoding)
     {
       a = mk_sub(args[0], args[1]);
@@ -623,49 +712,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       a = mk_bvsub(args[0], args[1]);
     }
     break;
-  }*/
-
-  case expr2t::add_id:
-{
-  const add2t &add = to_add2t(expr);
-  if (
-    is_pointer_type(expr->type) || is_pointer_type(add.side_1) ||
-    is_pointer_type(add.side_2))
-  {
-    a = convert_pointer_arith(expr, expr->type);
   }
-  else if (int_encoding)
-  {
-    
-    a = mk_add(args[0], args[1]);
-  }
-  else
-  {
-    a = mk_bvadd(args[0], args[1]);
-  }
-  break;
-}
-
-  case expr2t::sub_id:
-  { 
-  const sub2t &sub = to_sub2t(expr);
-  if (
-    is_pointer_type(expr->type) || is_pointer_type(sub.side_1) ||
-    is_pointer_type(sub.side_2))
-   {
-    a = convert_pointer_arith(expr, expr->type);
-   }
-  else if (int_encoding)
-   {
-    
-    a = mk_sub(args[0], args[1]);
-   }
-  else
-   {
-    a = mk_bvsub(args[0], args[1]);
-   }
-  break;
-}
 
 
   case expr2t::mul_id:
@@ -732,146 +779,114 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
 
-case expr2t::ieee_add_id:
-{
-  assert(is_floatbv_type(expr));
-
-  if (int_encoding)
+  case expr2t::ieee_add_id:
   {
-    smt_astt side1 = convert_ast(to_ieee_add2t(expr).side_1);
-    smt_astt side2 = convert_ast(to_ieee_add2t(expr).side_2);
-    smt_astt real_result = mk_add(side1, side2);
-
-    if (this->options.get_bool_option("ir-ra"))
+    assert(is_floatbv_type(expr));
+    if (int_encoding)
     {
-      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      smt_astt side1 = convert_ast(to_ieee_add2t(expr).side_1);
+      smt_astt side2 = convert_ast(to_ieee_add2t(expr).side_2);
+      smt_astt real_result = mk_add(side1, side2);
+      if (this->options.get_bool_option("ir-ra"))
+      {
+        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+        a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      }
+      else
+      {
+        a = real_result;
+      }
     }
     else
     {
-      a = real_result;
+      a = fp_api->mk_smt_fpbv_add(
+        convert_ast(to_ieee_add2t(expr).side_1),
+        convert_ast(to_ieee_add2t(expr).side_2),
+        convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
     }
+    break;
   }
-  else
+  case expr2t::ieee_sub_id:
   {
-    a = fp_api->mk_smt_fpbv_add(
-      convert_ast(to_ieee_add2t(expr).side_1),
-      convert_ast(to_ieee_add2t(expr).side_2),
-      convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
-  }
-
-  break;
-}
-
-case expr2t::ieee_sub_id:
-{
-  assert(is_floatbv_type(expr));
-  if(int_encoding)
-  {
-    smt_astt side1 = convert_ast(to_ieee_sub2t(expr).side_1);
-    smt_astt side2 = convert_ast(to_ieee_sub2t(expr).side_2);
-    smt_astt real_result = mk_sub(side1, side2);
-
-    if(this->options.get_bool_option("ir-ra"))
+    assert(is_floatbv_type(expr));
+    if (int_encoding)
     {
       smt_astt side1 = convert_ast(to_ieee_sub2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_sub2t(expr).side_2);
       smt_astt real_result = mk_sub(side1, side2);
-
-      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      if (this->options.get_bool_option("ir-ra"))
+      {
+        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+        a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      }
+      else
+        a = real_result;
     }
     else
-      a = real_result;
+    {
+      a = fp_api->mk_smt_fpbv_sub(
+        convert_ast(to_ieee_sub2t(expr).side_1),
+        convert_ast(to_ieee_sub2t(expr).side_2),
+        convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
+    }
+    break;
   }
-  else
-  {
-    a = fp_api->mk_smt_fpbv_sub(
-      convert_ast(to_ieee_sub2t(expr).side_1),
-      convert_ast(to_ieee_sub2t(expr).side_2),
-      convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
-  }
-  break;
-}
-
-
   case expr2t::ieee_mul_id:
-{
-  assert(is_floatbv_type(expr));
-  if(int_encoding)
   {
-    smt_astt side1 = convert_ast(to_ieee_mul2t(expr).side_1);
-    smt_astt side2 = convert_ast(to_ieee_mul2t(expr).side_2);
-    smt_astt real_result = mk_mul(side1, side2);
-
-    if(this->options.get_bool_option("ir-ra"))
+    assert(is_floatbv_type(expr));
+    if (int_encoding)
     {
       smt_astt side1 = convert_ast(to_ieee_mul2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_mul2t(expr).side_2);
       smt_astt real_result = mk_mul(side1, side2);
-
-      // Special handling for multiplication: check if either operand is zero
-      smt_astt zero = mk_smt_real("0.0");
-      smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
-
-      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(real_result, fbv_type, operand_is_zero);
+      if (this->options.get_bool_option("ir-ra"))
+      {
+        // Check if either operand is zero for special-case handling
+        smt_astt zero = mk_smt_real("0.0");
+        smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
+        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+        a = apply_ieee754_semantics(real_result, fbv_type, operand_is_zero);
+      }
+      else
+      {
+        a = real_result;
+      }
     }
     else
     {
-      a = real_result;
+      a = fp_api->mk_smt_fpbv_mul(
+        convert_ast(to_ieee_mul2t(expr).side_1),
+        convert_ast(to_ieee_mul2t(expr).side_2),
+        convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
     }
+    break;
   }
-  else
-  {
-    a = fp_api->mk_smt_fpbv_mul(
-      convert_ast(to_ieee_mul2t(expr).side_1),
-      convert_ast(to_ieee_mul2t(expr).side_2),
-      convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
-  }
-  break;
-}
-
-   case expr2t::ieee_div_id:
+  case expr2t::ieee_div_id:
   {
     assert(is_floatbv_type(expr));
     if (int_encoding)
     {
       smt_astt side1 = convert_ast(to_ieee_div2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_div2t(expr).side_2);
-
-      smt_astt zero = get_zero_real();
-      smt_astt div_by_zero = mk_eq(side2, zero);
-
-      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      auto double_spec = ieee_float_spect::double_precision();
-      auto single_spec = ieee_float_spect::single_precision();
-
-      if (
-        (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f) ||
-        (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f))
+      if (this->options.get_bool_option("ir-ra"))
       {
+        smt_astt zero = get_zero_real();
+        smt_astt div_by_zero = mk_eq(side2, zero);
+        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+        const auto double_spec = ieee_float_spect::double_precision();
+        const auto single_spec = ieee_float_spect::single_precision();
         smt_astt max_val =
-          (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
-            ? get_double_max_normal()
-            : get_single_max_normal();
-
-        smt_astt inf_result = mk_ite(
-          mk_lt(side1, zero),
-          mk_sub(zero, max_val),
-          max_val);
-
+          (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+            ? get_single_max_normal()
+            : get_double_max_normal();
+        smt_astt inf_result = mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
         smt_astt real_result = mk_div(side1, side2);
         smt_astt ieee_result = apply_ieee754_semantics(real_result, fbv_type, nullptr);
-
         a = mk_ite(div_by_zero, inf_result, ieee_result);
       }
       else
       {
-        log_error(
-          "Unsupported IEEE 754 format for division: exponent bits = {}, fraction bits = {}",
-          fbv_type.exponent, fbv_type.fraction);
-        abort();
+        a = mk_div(side1, side2);
       }
     }
     else
@@ -883,48 +898,37 @@ case expr2t::ieee_sub_id:
     }
     break;
   }
-
   case expr2t::ieee_fma_id:
-{
-  assert(is_floatbv_type(expr));
-  if (int_encoding)
   {
-    smt_astt val1 = convert_ast(to_ieee_fma2t(expr).value_1);
-    smt_astt val2 = convert_ast(to_ieee_fma2t(expr).value_2);
-    smt_astt val3 = convert_ast(to_ieee_fma2t(expr).value_3);
-
-    smt_astt intermediate = mk_mul(val1, val2);
-    smt_astt real_result = mk_add(intermediate, val3);
-
-    if (this->options.get_bool_option("ir-ra"))
+    assert(is_floatbv_type(expr));
+    if (int_encoding)
     {
       smt_astt val1 = convert_ast(to_ieee_fma2t(expr).value_1);
       smt_astt val2 = convert_ast(to_ieee_fma2t(expr).value_2);
       smt_astt val3 = convert_ast(to_ieee_fma2t(expr).value_3);
-
       // Fused multiply-add: (val1 * val2) + val3
-      // In true FMA, the intermediate result isn't rounded
       smt_astt intermediate = mk_mul(val1, val2);
       smt_astt real_result = mk_add(intermediate, val3);
-
-      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      if (this->options.get_bool_option("ir-ra"))
+      {
+        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+        a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      }
+      else
+      {
+        a = real_result;
+      }
     }
     else
     {
-      a = real_result;
+      a = fp_api->mk_smt_fpbv_fma(
+        convert_ast(to_ieee_fma2t(expr).value_1),
+        convert_ast(to_ieee_fma2t(expr).value_2),
+        convert_ast(to_ieee_fma2t(expr).value_3),
+        convert_rounding_mode(to_ieee_fma2t(expr).rounding_mode));
     }
+    break;
   }
-  else
-  {
-    a = fp_api->mk_smt_fpbv_fma(
-      convert_ast(to_ieee_fma2t(expr).value_1),
-      convert_ast(to_ieee_fma2t(expr).value_2),
-      convert_ast(to_ieee_fma2t(expr).value_3),
-      convert_rounding_mode(to_ieee_fma2t(expr).rounding_mode));
-  }
-  break;
-}
 
   case expr2t::ieee_sqrt_id:
   {

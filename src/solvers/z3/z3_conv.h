@@ -4,7 +4,6 @@
 #include <solvers/smt/smt_conv.h>
 #include <z3++.h>
 #include <fstream>
-#include <z3.h>
 
 class z3_smt_ast : public solver_smt_ast<z3::expr>
 {
