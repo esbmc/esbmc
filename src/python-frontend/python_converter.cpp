@@ -1631,18 +1631,17 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Handle Any-typed (void*) operands in comparisons: cast the concrete side
   // to void* make sure like `y == False` work when y is Any-typed.
-  if (type_utils::is_relational_op(op) || op == "Is" || op == "IsNot" ||
-      op == "In" || op == "NotIn")
+  if (
+    type_utils::is_relational_op(op) || op == "Is" || op == "IsNot" ||
+    op == "In" || op == "NotIn")
   {
     auto is_any_ptr = [](const exprt &e) {
-      return e.type().is_pointer() &&
-             e.type().subtype().id() == "empty";
+      return e.type().is_pointer() && e.type().subtype().id() == "empty";
     };
     auto cast_to_void_ptr = [](exprt &e, const typet &ptr_type) {
       if (e.type().is_floatbv())
       {
-        unsigned width =
-          static_cast<const bv_typet &>(e.type()).get_width();
+        unsigned width = static_cast<const bv_typet &>(e.type()).get_width();
         exprt bitcast("bitcast", unsignedbv_typet(width));
         bitcast.copy_to_operands(e);
         e = bitcast;
@@ -3953,8 +3952,8 @@ void python_converter::handle_assignment_type_adjustments(
     // with Any annotation are excluded.
     if (
       ast_node.contains("_type") && ast_node["_type"] == "AnnAssign" &&
-      !ast_node.value("_inferred_annotation", false) &&
-      has_annotation && ast_node["annotation"].contains("id") &&
+      !ast_node.value("_inferred_annotation", false) && has_annotation &&
+      ast_node["annotation"].contains("id") &&
       ast_node["annotation"]["id"] == "Any" && lhs.type().is_pointer() &&
       [this]() {
         // Check if "from typing import Any" exists in the source file
