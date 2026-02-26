@@ -1069,7 +1069,11 @@ exprt python_list::handle_range_slice(
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
       {
         exprt abs_value = converter_.get_expr(bound["operand"]);
-        return minus_exprt(logical_len, abs_value);
+        // Clamp to 0 when abs_value > logical_len (avoids unsigned underflow)
+        exprt overflow(">", bool_type());
+        overflow.copy_to_operands(abs_value, logical_len);
+        exprt converted = minus_exprt(logical_len, abs_value);
+        return if_exprt(overflow, gen_zero(size_type()), converted);
       }
 
       exprt e = converter_.get_expr(bound);
