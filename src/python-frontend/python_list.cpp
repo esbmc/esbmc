@@ -1309,8 +1309,8 @@ exprt python_list::handle_range_slice(
   const exprt lower_expr = get_list_bound("lower", false);
   exprt upper_expr = get_list_bound("upper", true);
 
-  // Clamp upper bound to the runtime list size to preserve Python slicing
-  // semantics for oversized bounds, e.g., l[0:100].
+  // Clamp upper bound to the current list size to match Python slicing
+  // semantics (e.g., l[0:100] on a 5-element list).
   {
     const symbolt *size_func =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
