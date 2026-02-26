@@ -36,6 +36,10 @@ struct PyConstValue
   {
     return {INT, false, v, 0.0, ""};
   }
+  static PyConstValue make_float(double v)
+  {
+    return { FLOAT, false, 0, v, "" };
+  }
   static PyConstValue make_string(const std::string &s)
   {
     return {STRING, false, 0, 0.0, s};
@@ -74,12 +78,12 @@ private:
   {
     enum Type
     {
-      CONTINUE,
+      NORMAL,
       RETURN,
       BREAK_STMT,
       CONTINUE_STMT
     };
-    Type type = CONTINUE;
+    Type type = NORMAL;
     PyConstValue value;
   };
 

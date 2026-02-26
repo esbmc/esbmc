@@ -2641,6 +2641,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         }
         else if (
           arg_node["_type"] == "Constant" &&
+          arg_node["value"].is_number_float())
+        {
+          const_args.push_back(PyConstValue::make_float(
+            arg_node["value"].get<double>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" &&
           arg_node["value"].is_boolean())
         {
           const_args.push_back(PyConstValue::make_bool(
@@ -2660,6 +2667,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           const_args.push_back(PyConstValue::make_int(
             -arg_node["operand"]["value"].get<long long>()));
         }
+        else if (
+          arg_node["_type"] == "UnaryOp" &&
+          arg_node["op"]["_type"] == "USub" &&
+          arg_node["operand"]["_type"] == "Constant" &&
+          arg_node["operand"]["value"].is_number_float())
+        {
+          const_args.push_back(PyConstValue::make_float(
+            -arg_node["operand"]["value"].get<double>()));
+        }
         else
         {
           all_const = false;
@@ -2667,7 +2683,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         }
       }
 
-      if (all_const && !const_args.empty())
+      if (all_const)
       {
         python_consteval evaluator(*ast_json);
         auto result = evaluator.try_eval_call(callee, const_args);

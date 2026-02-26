@@ -43,12 +43,42 @@ python_consteval::find_function(const std::string &name) const
   return nullptr;
 }
 
+/// Returns true if the JSON array of statements (or nested blocks) contains
+/// Assert or control-flow statements (If/For/While). Used to decline
+/// const-folding for functions whose structure matters for verification,
+/// coverage analysis, or branch/condition checking.
+static bool body_has_verification_relevant_stmts(const nlohmann::json& body)
+{
+  for (const auto& stmt : body)
+  {
+    if (!stmt.contains("_type"))
+      continue;
+    const std::string& t = stmt["_type"];
+    if (t == "Assert" || t == "If" || t == "For" || t == "While")
+      return true;
+    if (stmt.contains("body") && stmt["body"].is_array())
+      if (body_has_verification_relevant_stmts(stmt["body"]))
+        return true;
+    if (stmt.contains("orelse") && stmt["orelse"].is_array())
+      if (body_has_verification_relevant_stmts(stmt["orelse"]))
+        return true;
+  }
+  return false;
+}
+
 std::optional<PyConstValue> python_consteval::try_eval_call(
   const std::string &func_name,
   const std::vector<PyConstValue> &args)
 {
   const nlohmann::json *func_node = find_function(func_name);
   if (!func_node)
+    return std::nullopt;
+
+  // Don't fold functions containing asserts or control flow — they must
+  // be preserved for verification, coverage, and branch/condition analysis.
+  if (
+    func_node->contains("body") && (*func_node)["body"].is_array() &&
+    body_has_verification_relevant_stmts((*func_node)["body"]))
     return std::nullopt;
 
   if (!func_node->contains("args") || !(*func_node)["args"].contains("args"))
@@ -63,6 +93,29 @@ std::optional<PyConstValue> python_consteval::try_eval_call(
   for (size_t i = 0; i < args.size(); ++i)
   {
     std::string param_name = func_args[i]["arg"].get<std::string>();
+
+    // Check type annotation if present — decline folding on mismatch
+    // so that --strict-types and similar checks can still detect errors.
+    if (func_args[i].contains("annotation"))
+    {
+      const auto& ann = func_args[i]["annotation"];
+      if (ann.contains("id"))
+      {
+        const std::string& ann_type = ann["id"].get<std::string>();
+        bool mismatch = false;
+        if (ann_type == "int" && args[i].kind != PyConstValue::INT)
+          mismatch = true;
+        else if (ann_type == "str" && args[i].kind != PyConstValue::STRING)
+          mismatch = true;
+        else if (ann_type == "float" && args[i].kind != PyConstValue::FLOAT)
+          mismatch = true;
+        else if (ann_type == "bool" && args[i].kind != PyConstValue::BOOL)
+          mismatch = true;
+        if (mismatch)
+          return std::nullopt;
+      }
+    }
+
     env[param_name] = args[i];
   }
 
@@ -95,10 +148,10 @@ std::optional<python_consteval::StmtResult> python_consteval::exec_block(
     auto result = exec_stmt(stmt, env);
     if (!result)
       return std::nullopt;
-    if (result->type != StmtResult::CONTINUE)
+    if (result->type != StmtResult::NORMAL)
       return result;
   }
-  return StmtResult{StmtResult::CONTINUE, {}};
+  return StmtResult{ StmtResult::NORMAL, {} };
 }
 
 std::optional<python_consteval::StmtResult> python_consteval::exec_stmt(
@@ -140,7 +193,7 @@ std::optional<python_consteval::StmtResult> python_consteval::exec_stmt(
         return std::nullopt; // Only support simple variable assignment
       env[target["id"].get<std::string>()] = *val;
     }
-    return StmtResult{StmtResult::CONTINUE, {}};
+    return StmtResult{ StmtResult::NORMAL, {} };
   }
 
   if (type == "AnnAssign")
@@ -155,7 +208,7 @@ std::optional<python_consteval::StmtResult> python_consteval::exec_stmt(
         return std::nullopt;
       env[stmt["target"]["id"].get<std::string>()] = *val;
     }
-    return StmtResult{StmtResult::CONTINUE, {}};
+    return StmtResult{ StmtResult::NORMAL, {} };
   }
 
   // Augmented assignment: x += expr, x -= expr, etc.
@@ -205,7 +258,7 @@ std::optional<python_consteval::StmtResult> python_consteval::exec_stmt(
     else
       return std::nullopt;
 
-    return StmtResult{StmtResult::CONTINUE, {}};
+    return StmtResult{ StmtResult::NORMAL, {} };
   }
 
   // If statement
@@ -220,7 +273,7 @@ std::optional<python_consteval::StmtResult> python_consteval::exec_stmt(
     else if (stmt.contains("orelse") && !stmt["orelse"].empty())
       return exec_block(stmt["orelse"], env);
 
-    return StmtResult{StmtResult::CONTINUE, {}};
+    return StmtResult{ StmtResult::NORMAL, {} };
   }
 
   // While loop
@@ -248,7 +301,7 @@ std::optional<python_consteval::StmtResult> python_consteval::exec_stmt(
         break;
       // CONTINUE_STMT just continues to next iteration
     }
-    return StmtResult{StmtResult::CONTINUE, {}};
+    return StmtResult{ StmtResult::NORMAL, {} };
   }
 
   // For loop: for var in iterable
@@ -290,7 +343,7 @@ std::optional<python_consteval::StmtResult> python_consteval::exec_stmt(
         if (result->type == StmtResult::BREAK_STMT)
           break;
       }
-      return StmtResult{StmtResult::CONTINUE, {}};
+      return StmtResult{ StmtResult::NORMAL, {} };
     }
 
     return std::nullopt;
@@ -302,7 +355,7 @@ std::optional<python_consteval::StmtResult> python_consteval::exec_stmt(
     auto val = eval_expr(stmt["value"], env);
     if (!val)
       return std::nullopt;
-    return StmtResult{StmtResult::CONTINUE, {}};
+    return StmtResult{ StmtResult::NORMAL, {} };
   }
 
   // Break/Continue
@@ -313,11 +366,22 @@ std::optional<python_consteval::StmtResult> python_consteval::exec_stmt(
 
   // Pass
   if (type == "Pass")
-    return StmtResult{StmtResult::CONTINUE, {}};
+    return StmtResult{ StmtResult::NORMAL, {} };
 
-  // Assert — evaluate but don't enforce (we're just computing the result)
+  // Assert — decline const-eval if the assertion would fail, so the
+  // normal verification path can detect the bug.
   if (type == "Assert")
-    return StmtResult{StmtResult::CONTINUE, {}};
+  {
+    if (stmt.contains("test"))
+    {
+      auto test_val = eval_expr(stmt["test"], env);
+      if (!test_val)
+        return std::nullopt; // Unsupported expression — decline folding
+      if (!test_val->is_truthy())
+        return std::nullopt; // Assert would fail — decline folding
+    }
+    return StmtResult{ StmtResult::NORMAL, {} };
+  }
 
   return std::nullopt; // Unsupported statement type
 }
@@ -425,10 +489,15 @@ std::optional<PyConstValue> python_consteval::eval_expr(
     {
       if (right->int_val <= 0)
         return PyConstValue::make_string("");
+      const std::size_t unit_len = left->string_val.size();
+      if (unit_len == 0)
+        return PyConstValue::make_string("");
+      const long long repeat = right->int_val;
+      if (repeat > static_cast<long long>(10000 / unit_len))
+        return std::nullopt; // Result too large for safe constant-folding
       std::string result;
-      for (long long i = 0;
-           i < right->int_val && result.size() < 10000;
-           ++i)
+      result.reserve(unit_len * static_cast<std::size_t>(repeat));
+      for (long long i = 0; i < repeat; ++i)
         result += left->string_val;
       return PyConstValue::make_string(result);
     }
@@ -463,8 +532,10 @@ std::optional<PyConstValue> python_consteval::eval_expr(
       {
         if (r < 0)
           return std::nullopt; // Would produce float
+        if (r > 64)
+          return std::nullopt; // Exponent too large for safe const-eval
         long long result = 1;
-        for (long long i = 0; i < r && i < 64; ++i)
+        for (long long i = 0; i < r; ++i)
           result *= l;
         return PyConstValue::make_int(result);
       }
