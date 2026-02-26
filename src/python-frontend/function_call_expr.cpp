@@ -1,6 +1,7 @@
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
@@ -13,6 +14,7 @@
 #include <util/ieee_float.h>
 #include <util/message.h>
 #include <util/python_types.h>
+#include <util/std_expr.h>
 #include <util/string_constant.h>
 
 #include <regex>
@@ -227,15 +229,49 @@ static int get_nondet_str_length()
 exprt function_call_expr::handle_input() const
 {
   // input() returns a non-deterministic string
-  // We'll model input() as returning a non-deterministic string
-  // with a reasonable maximum length (e.g., 16 characters)
-  // This is an under-approximation to model the input function
+  // Model as a bounded C-string without embedded nulls.
   int max_str_length = get_nondet_str_length();
   typet string_type = type_handler_.get_typet("str", max_str_length);
-  exprt rhs = exprt("sideeffect", string_type);
-  rhs.statement("nondet");
 
-  return rhs;
+  symbolt &input_sym =
+    converter_.create_tmp_symbol(call_, "$input_str$", string_type, exprt());
+  code_declt decl(symbol_expr(input_sym));
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+
+  exprt nondet_value("sideeffect", string_type);
+  nondet_value.statement("nondet");
+  code_assignt nondet_assign(symbol_expr(input_sym), nondet_value);
+  nondet_assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(nondet_assign);
+
+  symbolt &len_sym =
+    converter_.create_tmp_symbol(call_, "$input_len$", size_type(), exprt());
+  code_declt len_decl(symbol_expr(len_sym));
+  len_decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(len_decl);
+
+  exprt len_nondet("sideeffect", size_type());
+  len_nondet.statement("nondet");
+  code_assignt len_assign(symbol_expr(len_sym), len_nondet);
+  len_assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(len_assign);
+
+  exprt len_bound("<", bool_type());
+  len_bound.copy_to_operands(
+    symbol_expr(len_sym), from_integer(max_str_length, size_type()));
+  codet assume_len("assume");
+  assume_len.copy_to_operands(len_bound);
+  assume_len.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(assume_len);
+
+  index_exprt term_pos(
+    symbol_expr(input_sym), symbol_expr(len_sym), char_type());
+  code_assignt term_assign(term_pos, from_integer(0, char_type()));
+  term_assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(term_assign);
+
+  return symbol_expr(input_sym);
 }
 
 exprt function_call_expr::build_nondet_call() const
@@ -636,7 +672,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
       is_constant = true;
     }
     else
-      return gen_exception_raise("TypeError", "Unsupported UnaryOp in chr()");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "Unsupported UnaryOp in chr()");
   }
 
   // Handle integer input
@@ -648,7 +685,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
 
   // Reject float input
   else if (arg.contains("value") && arg["value"].is_number_float())
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "chr() argument must be int, not float");
 
   // Try converting string input to integer
@@ -662,7 +699,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (const std::invalid_argument &)
     {
-      return gen_exception_raise("TypeError", "invalid string passed to chr()");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "invalid string passed to chr()");
     }
   }
 
@@ -715,12 +753,13 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (std::out_of_range &)
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "ValueError", "chr() argument outside of Unicode range");
     }
     catch (std::invalid_argument &)
     {
-      return gen_exception_raise("TypeError", "must be of type int");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "must be of type int");
     }
 
     arg["_type"] = "Constant";
@@ -739,7 +778,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (const std::out_of_range &e)
     {
-      return gen_exception_raise("ValueError", "chr()");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "chr()");
     }
 
     // Build a proper character array, not a single char
@@ -792,7 +832,7 @@ exprt function_call_expr::handle_base_conversion(
     }
     else
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "TypeError", "Unsupported UnaryOp in " + func_name + "()");
     }
   }
@@ -804,7 +844,7 @@ exprt function_call_expr::handle_base_conversion(
   }
   else
   {
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", func_name + "() argument must be an integer");
   }
 
@@ -852,7 +892,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     if (!sym)
     {
       std::string var_name = arg["id"].get<std::string>();
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "NameError", "variable '" + var_name + "' is not defined");
     }
 
@@ -861,7 +901,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 
     if (operand_type != char_type() && py_type != "str")
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "TypeError",
         "ord() expected string of length 1, but " + py_type + " found");
     }
@@ -904,14 +944,15 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
         return typecast_exprt(var_expr, int_type());
       }
 
-      return gen_exception_raise("ValueError", "ord() requires a character");
+      return converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "ord() requires a character");
     }
 
     // Compile-time extraction for constant symbols
     auto value_opt = extract_string_from_symbol(sym);
     if (!value_opt)
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "ValueError", "failed to extract string from symbol");
     }
 
@@ -923,7 +964,8 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     arg.erase("ctx");
   }
   else
-    return gen_exception_raise("TypeError", "ord() argument must be a string");
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "ord() argument must be a string");
 
   // Replace the arg with the integer value
   arg["value"] = code_point;
@@ -1085,7 +1127,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 
   // Reject strings early
   if (is_string_arg(arg))
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "bad operand type for abs(): 'str'");
 
   // If the argument is a numeric literal, evaluate abs() at compile time
@@ -1118,13 +1160,20 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     {
       exprt inferred_expr = converter_.get_expr(arg);
       typet inferred_type = inferred_expr.type();
+
+      exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+        "abs", inferred_expr, converter_.get_location_from_decl(call_));
+      if (!dunder_result.is_nil())
+        return dunder_result;
+
+      // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", inferred_type);
       abs_expr.copy_to_operands(inferred_expr);
       return abs_expr;
     }
     catch (const std::exception &e)
     {
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "TypeError", "failed to infer operand type for abs()");
     }
   }
@@ -1136,10 +1185,15 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     const symbolt *sym = lookup_python_symbol(var_name);
     if (sym)
     {
-      // Build a symbolic abs() expression with the resolved operand type
       exprt operand_expr = converter_.get_expr(arg);
       typet operand_type = operand_expr.type();
 
+      exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+        "abs", operand_expr, converter_.get_location_from_decl(call_));
+      if (!dunder_result.is_nil())
+        return dunder_result;
+
+      // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", operand_type);
       abs_expr.copy_to_operands(operand_expr);
 
@@ -1148,7 +1202,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     else
     {
       // Variable could not be resolved
-      return gen_exception_raise(
+      return converter_.get_exception_handler().gen_exception_raise(
         "NameError", "variable '" + var_name + "' is not defined");
     }
   }
@@ -1156,12 +1210,12 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   // Final fallback if no type is available
   std::string arg_type = arg.value("type", "");
   if (arg_type.empty())
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "operand to abs() is missing a type");
 
   // Only numeric types are valid operands for abs()
   if (arg_type != "int" && arg_type != "float" && arg_type != "complex")
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "bad operand type for abs(): '" + arg_type + "'");
 
   // Fallback for unsupported symbolic expressions (e.g., complex)
@@ -1376,13 +1430,15 @@ exprt function_call_expr::build_constant_from_arg() const
       {
         std::string m = "could not convert string to float : '" +
                         arg["value"].get<std::string>() + "'";
-        return gen_exception_raise("ValueError", m);
+        return converter_.get_exception_handler().gen_exception_raise(
+          "ValueError", m);
       }
       catch (const std::out_of_range &)
       {
         std::string m = "could not convert string to float : '" +
                         arg["value"].get<std::string>() + "' (out of range)";
-        return gen_exception_raise("ValueError", m);
+        return converter_.get_exception_handler().gen_exception_raise(
+          "ValueError", m);
       }
     }
   }
@@ -1403,7 +1459,8 @@ exprt function_call_expr::build_constant_from_arg() const
         std::string m = "float() conversion may fail - variable" + var_name +
                         "may contain non-float string";
 
-        return gen_exception_raise("ValueError", m);
+        return converter_.get_exception_handler().gen_exception_raise(
+          "ValueError", m);
       }
     }
   }
@@ -1459,7 +1516,7 @@ std::string function_call_expr::get_object_name() const
   if (subelement["_type"] == "Attribute")
   {
     /* For attribute chains, use the class name resolved by build_function_id()
-     * 
+     *
      * When we have self.f.foo(), the function ID builder has already determined
      * that f's type is Foo and stored it in function_id_. We reuse that result
      * rather than re-extracting "f" which would be incorrect.
@@ -1803,6 +1860,100 @@ exprt function_call_expr::handle_list_remove() const
   return result;
 }
 
+exprt function_call_expr::handle_list_sort() const
+{
+  const auto &args = call_["args"];
+  if (!args.empty())
+    throw std::runtime_error(
+      "sort() positional arguments are not supported; "
+      "use sort() with no arguments");
+
+  std::string list_name = get_object_name();
+
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  const std::string &list_id = list_symbol->id.as_string();
+
+  // ── Determine type_flag and float_type_id ─────────────────────────────────
+  //
+  // type_flag:
+  //   0 = all-integer          → int64_t comparison    (SMT-fast, no FP)
+  //   1 = all-float            → *(double*) bit-read
+  //   2 = string/lexicographic → memcmp
+  //   3 = mixed int + float    → per-element dispatch via float_type_id
+
+  int type_flag = 0;
+  size_t float_type_id = 0;
+
+  {
+    const type_handler &th = converter_.get_type_handler();
+    bool has_float = false;
+    bool has_int = false;
+    bool is_string = false;
+
+    const size_t map_size = python_list::get_list_type_map_size(list_id);
+
+    for (size_t k = 0; k < map_size; ++k)
+    {
+      const typet elem_type = python_list::get_list_element_type(list_id, k);
+
+      if (elem_type.is_floatbv())
+      {
+        if (!has_float)
+        {
+          // Same hash used by python_list::get_list_element_info:
+          //   std::hash<std::string>{}(type_handler_.type_to_string(elem))
+          const std::string type_name = th.type_to_string(elem_type);
+          float_type_id = std::hash<std::string>{}(type_name);
+          has_float = true;
+        }
+      }
+      else if (
+        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
+        (elem_type.is_array() && elem_type.subtype() == char_type()))
+      {
+        is_string = true;
+      }
+      else
+        has_int = true;
+    }
+
+    if (is_string)
+      type_flag = 2;
+    else if (has_float && has_int)
+      type_flag = 3; // mixed → per-element dispatch in C model
+    else if (has_float)
+      type_flag = 1; // all-float
+    else
+      type_flag = 0; // all-integer (default, most common)
+  }
+
+  // ── Locate the C model function ────────────────────────────────────────────
+  const symbolt *sort_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_sort");
+  if (!sort_func)
+    throw std::runtime_error(
+      "__ESBMC_list_sort function not found in symbol table");
+
+  // ── Emit the call: __ESBMC_list_sort(list, type_flag, float_type_id) ──────
+  code_function_callt sort_call;
+  sort_call.function() = symbol_expr(*sort_func);
+  sort_call.arguments().push_back(symbol_expr(*list_symbol));
+  sort_call.arguments().push_back(from_integer(type_flag, int_type()));
+  sort_call.arguments().push_back(
+    from_integer(float_type_id, unsignedbv_typet(config.ansi_c.address_width)));
+  sort_call.type() = empty_typet();
+  sort_call.location() = converter_.get_location_from_decl(call_);
+
+  return sort_call;
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1814,7 +1965,7 @@ bool function_call_expr::is_list_method_call() const
   return method_name == "append" || method_name == "pop" ||
          method_name == "insert" || method_name == "remove" ||
          method_name == "clear" || method_name == "extend" ||
-         method_name == "copy";
+         method_name == "copy" || method_name == "sort";
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -1835,6 +1986,8 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_copy();
   if (method_name == "remove")
     return handle_list_remove();
+  if (method_name == "sort")
+    return handle_list_sort();
 
   // Add other methods as needed
 
@@ -2025,7 +2178,8 @@ exprt function_call_expr::validate_re_module_args() const
       std::ostringstream msg;
       msg << "expected string or bytes-like object, got '"
           << type_handler_.type_to_string(arg_type) << "'";
-      return gen_exception_raise("TypeError", msg.str());
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", msg.str());
     }
   }
 
@@ -2150,7 +2304,7 @@ exprt function_call_expr::handle_math_comb() const
   // Type checking: both arguments must be integers
   if (!n_expr.type().is_signedbv() && !n_expr.type().is_unsignedbv())
   {
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError",
       "'" + type_handler_.type_to_string(n_expr.type()) +
         "' object cannot be interpreted as an integer");
@@ -2158,7 +2312,7 @@ exprt function_call_expr::handle_math_comb() const
 
   if (!k_expr.type().is_signedbv() && !k_expr.type().is_unsignedbv())
   {
-    return gen_exception_raise(
+    return converter_.get_exception_handler().gen_exception_raise(
       "TypeError",
       "'" + type_handler_.type_to_string(k_expr.type()) +
         "' object cannot be interpreted as an integer");
@@ -2315,7 +2469,7 @@ function_call_expr::get_dispatch_table()
                 func_name == "gamma" || func_name == "ldexp" ||
                 func_name == "lgamma" || func_name == "nextafter" ||
                 func_name == "remainder" || func_name == "sumprod" ||
-                func_name == "ulp")) ||
+                func_name == "ulp" || func_name == "dist")) ||
               is_math_wrapper;
      },
      [this]() -> exprt {
@@ -2369,7 +2523,8 @@ function_call_expr::get_dispatch_table()
 
          // Create the exception raise as a code expression
          exprt raise_expr =
-           gen_exception_raise("ValueError", "math domain error");
+           converter_.get_exception_handler().gen_exception_raise(
+             "ValueError", "math domain error");
          locationt loc = converter_.get_location_from_decl(call_);
          raise_expr.location() = loc;
          raise_expr.location().user_provided(true);
@@ -2396,11 +2551,74 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "log" || func_name == "__ESBMC_log")
        {
          exprt arg_expr = require_one_arg();
+         // Domain check for log: operand must be > 0
+         exprt fp_operand = arg_expr;
+         if (!arg_expr.type().is_floatbv())
+         {
+           fp_operand = exprt("typecast", type_handler_.get_typet("float", 0));
+           fp_operand.copy_to_operands(arg_expr);
+         }
+         exprt zero = gen_zero(fp_operand.type());
+         exprt domain_check = exprt("<=", type_handler_.get_typet("bool", 0));
+         domain_check.copy_to_operands(fp_operand, zero);
+         exprt raise_expr =
+           converter_.get_exception_handler().gen_exception_raise(
+             "ValueError", "math domain error");
+         locationt loc = converter_.get_location_from_decl(call_);
+         raise_expr.location() = loc;
+         raise_expr.location().user_provided(true);
+         code_expressiont raise_code(raise_expr);
+         raise_code.location() = loc;
+         code_ifthenelset guard;
+         guard.cond() = domain_check;
+         guard.then_case() = raise_code;
+         guard.location() = loc;
+         converter_.current_block->copy_to_operands(guard);
          return converter_.get_math_handler().handle_log(arg_expr, call_);
        }
        else if (func_name == "acos" || func_name == "__ESBMC_acos")
        {
          exprt arg_expr = require_one_arg();
+         // Domain check for acos: operand must be in [-1.0, 1.0]
+         exprt double_operand = arg_expr;
+         if (!arg_expr.type().is_floatbv())
+         {
+           double_operand =
+             exprt("typecast", type_handler_.get_typet("float", 0));
+           double_operand.copy_to_operands(arg_expr);
+         }
+
+         typet float_type = type_handler_.get_typet("float", 0);
+         typet bool_t = type_handler_.get_typet("bool", 0);
+
+         exprt pos_one = gen_one(float_type);
+         exprt neg_one("unary-", float_type);
+         neg_one.copy_to_operands(pos_one);
+
+         exprt lt_neg = exprt("<", bool_t);
+         lt_neg.copy_to_operands(double_operand, neg_one);
+         exprt gt_pos = exprt(">", bool_t);
+         gt_pos.copy_to_operands(double_operand, pos_one);
+         exprt domain_check = exprt("or", bool_t);
+         domain_check.copy_to_operands(lt_neg, gt_pos);
+
+         exprt raise_expr =
+           converter_.get_exception_handler().gen_exception_raise(
+             "ValueError", "math domain error");
+         locationt loc = converter_.get_location_from_decl(call_);
+         raise_expr.location() = loc;
+         raise_expr.location().user_provided(true);
+
+         code_expressiont raise_code(raise_expr);
+         raise_code.location() = loc;
+
+         code_ifthenelset guard;
+         guard.cond() = domain_check;
+         guard.then_case() = raise_code;
+         guard.location() = loc;
+
+         converter_.current_block->copy_to_operands(guard);
+
          return converter_.get_math_handler().handle_acos(arg_expr, call_);
        }
        else if (func_name == "atan" || func_name == "__ESBMC_atan")
@@ -2512,6 +2730,33 @@ function_call_expr::get_dispatch_table()
          auto [lhs_expr, rhs_expr] = require_two_args();
          return converter_.get_math_handler().handle_hypot(
            lhs_expr, rhs_expr, call_);
+       }
+       else if (func_name == "dist")
+       {
+         auto [lhs_expr, rhs_expr] = require_two_args();
+         // Native handler for tuple arguments; lists use the model
+         if (lhs_expr.type().is_struct() && rhs_expr.type().is_struct())
+         {
+           // If either argument is a constant struct (tuple literal), store it
+           // in a temporary local variable so that the GOTO IR has a proper
+           // symbol whose address the solver can track.
+           auto materialize = [&](exprt &arg) {
+             if (arg.is_constant())
+             {
+               symbolt &tmp = converter_.create_tmp_symbol(
+                 call_, "$dist_arg$", arg.type(), arg);
+               code_declt decl(symbol_expr(tmp));
+               decl.location() = converter_.get_location_from_decl(call_);
+               converter_.current_block->copy_to_operands(decl);
+               arg = symbol_expr(tmp);
+             }
+           };
+           materialize(lhs_expr);
+           materialize(rhs_expr);
+           return converter_.get_math_handler().handle_dist(
+             lhs_expr, rhs_expr, call_);
+         }
+         return handle_general_function_call();
        }
        else if (
          func_name == "cbrt" || func_name == "erf" || func_name == "erfc" ||
@@ -3356,7 +3601,9 @@ exprt function_call_expr::handle_general_function_call()
         msg << func_name << "() missing required positional argument: '"
             << param_name << "'";
 
-        exprt exception = gen_exception_raise("TypeError", msg.str());
+        exprt exception =
+          converter_.get_exception_handler().gen_exception_raise(
+            "TypeError", msg.str());
         locationt loc = converter_.get_location_from_decl(call_);
         exception.location() = loc;
         exception.location().user_provided(true);
@@ -3417,14 +3664,6 @@ function_call_expr::strip_ctor_self_parameters(const exprt::operandst &args)
     }
   }
   return new_args;
-}
-
-exprt function_call_expr::gen_exception_raise(
-  std::string exc,
-  std::string message) const
-{
-  return python_exception_utils::make_exception_raise(
-    type_handler_, exc, message, nullptr);
 }
 
 std::vector<std::string>
@@ -3652,7 +3891,8 @@ exprt function_call_expr::check_argument_types(
       msg << "TypeError: Argument " << (i + 1) << " has incompatible type '"
           << actual_str << "'; expected '" << expected_str << "'";
 
-      exprt exception = gen_exception_raise("TypeError", msg.str());
+      exprt exception = converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", msg.str());
 
       // Add location information from the call
       locationt loc = converter_.get_location_from_decl(call_);
@@ -3699,7 +3939,9 @@ exprt function_call_expr::check_argument_types(
             << "' has incompatible type '" << actual_str << "'; expected '"
             << expected_str << "'";
 
-        exprt exception = gen_exception_raise("TypeError", msg.str());
+        exprt exception =
+          converter_.get_exception_handler().gen_exception_raise(
+            "TypeError", msg.str());
 
         locationt loc = converter_.get_location_from_decl(call_);
         exception.location() = loc;

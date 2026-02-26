@@ -264,6 +264,12 @@ void goto_symext::handle_sideeffect(
       symex_assign(assign_code, true, guard);
     }
     break;
+  case sideeffect2t::assigns_target:
+    // __ESBMC_assigns() targets are handled during contract processing
+    // In --enforce-contract mode, the assigns clause is extracted and checked,
+    // but we don't need to execute anything here during symex.
+    // Simply ignore the assigns_target side effect.
+    break;
   default:
     assert(0 && "unexpected side effect");
   }
@@ -328,6 +334,7 @@ void goto_symext::symex_assign(
 
   replace_nondet(lhs);
   replace_nondet(rhs);
+  volatile_check(rhs);
 
   dereference(lhs, dereferencet::WRITE);
   dereference(rhs, dereferencet::READ);
@@ -991,7 +998,7 @@ void goto_symext::replace_nondet(expr2tc &expr)
   if (
     is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
-    unsigned int &nondet_count = get_dynamic_counter();
+    unsigned int &nondet_count = get_nondet_counter();
     expr =
       symbol2tc(expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
   }

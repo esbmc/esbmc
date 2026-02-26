@@ -1,0 +1,4 @@
+CORE
+main.c
+--function parse_message --enforce-contract parse_message --replace-call-with-contract "*" --no-align-check
+^VERIFICATION SUCCESSFUL$

@@ -203,6 +203,8 @@ const static std::vector<std::string> python_c_models = {
   "__python_int",
   "__python_chr",
   "__python_str_concat",
+  "__python_str_repeat",
+  "__python_str_slice",
   "__ESBMC_list_find_index",
   "__ESBMC_list_remove_at",
   "__ESBMC_list_set_at",
@@ -239,7 +241,8 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_trunc",
   "__ESBMC_fmod",
   "__ESBMC_copysign",
-  "__ESBMC_list_remove"};
+  "__ESBMC_list_remove",
+  "__ESBMC_list_sort"};
 } // namespace
 
 static void generate_symbol_deps(
@@ -496,23 +499,15 @@ void add_cprover_library(contextt &context, const languaget *language)
   context.Foreach_operand([&context](symbolt &s) {
     if (s.is_extern && !s.type.is_code())
     {
-      if (s.value.is_nil())
-      {
-        log_warning(
-          "extern variable with id {} not found, initializing value to nondet! "
-          "This code would not compile with an actual compiler.",
-          s.id);
-        exprt value =
-          exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
-        value.statement("nondet");
-        s.value = value;
-      }
-      else
-      {
-        log_error("extern variable with id {} is not nil.", s.id);
-        s.dump();
-        abort();
-      }
+      log_warning(
+        "extern variable with id {} not found, initializing value to "
+        "nondet! "
+        "This code would not compile with an actual compiler.",
+        s.id);
+      exprt value =
+        exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
+      value.statement("nondet");
+      s.value = value;
     }
   });
 }

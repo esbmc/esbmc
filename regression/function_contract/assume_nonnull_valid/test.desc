@@ -1,0 +1,5 @@
+CORE
+main.c
+--function f --enforce-contract f --assume-nonnull-valid
+^VERIFICATION SUCCESSFUL$
+

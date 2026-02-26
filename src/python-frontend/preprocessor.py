@@ -16,6 +16,10 @@ class Preprocessor(ast.NodeTransformer):
         self.functionKwonlyParams = {}
         self.listcomp_counter = 0  # Counter for list comprehension temporaries
         self.variable_annotations = {}  # Store full AST annotations
+        self.decimal_imported = False
+        self.decimal_module_imported = False
+        self.decimal_class_alias = None
+        self.decimal_module_alias = None
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -309,6 +313,18 @@ class Preprocessor(ast.NodeTransformer):
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
         node.test = self._transform_list_truthiness(node.test, node)
+        if prefix:
+            return prefix + [node]
+        return node
+
+    def visit_Assert(self, node):
+        node = self.generic_visit(node)
+        prefix, new_test = self._lower_listcomp_in_expr(node.test)
+        node.test = new_test
+        if node.msg:
+            msg_prefix, new_msg = self._lower_listcomp_in_expr(node.msg)
+            node.msg = new_msg
+            prefix.extend(msg_prefix)
         if prefix:
             return prefix + [node]
         return node
@@ -804,10 +820,10 @@ class Preprocessor(ast.NodeTransformer):
         """Transform range-based for loops to while loops"""
         # Add validation for range arguments
         if len(node.iter.args) == 0:
-            raise SyntaxError(f"range expected at least 1 argument, got 0", 
+            raise SyntaxError(f"range expected at least 1 argument, got 0",
                              (self.module_name, node.lineno, node.col_offset, ""))
         if len(node.iter.args) > 3:
-            raise SyntaxError(f"range expected at most 3 arguments, got {len(node.iter.args)}", 
+            raise SyntaxError(f"range expected at most 3 arguments, got {len(node.iter.args)}",
                              (self.module_name, node.lineno, node.col_offset, ""))
         # Check if step (third argument) is zero
         if len(node.iter.args) == 3:
@@ -1462,6 +1478,75 @@ class Preprocessor(ast.NodeTransformer):
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
+        # Rewrite Decimal(...) constructor calls to internal 4-arg form
+        is_decimal_call = False
+        decimal_names = {"Decimal"}
+        if self.decimal_class_alias:
+            decimal_names.add(self.decimal_class_alias)
+
+        if self.decimal_imported and isinstance(node.func, ast.Name) and node.func.id in decimal_names:
+            is_decimal_call = True
+            if node.func.id != "Decimal":
+                node.func = ast.Name(id="Decimal", ctx=ast.Load())
+        elif self.decimal_module_imported and isinstance(node.func, ast.Attribute):
+            module_names = {"decimal"}
+            if self.decimal_module_alias:
+                module_names.add(self.decimal_module_alias)
+            if isinstance(node.func.value, ast.Name) and node.func.value.id in module_names and node.func.attr == "Decimal":
+                is_decimal_call = True
+                node.func = ast.Name(id="Decimal", ctx=ast.Load())
+
+        if is_decimal_call:
+            if node.keywords:
+                raise NotImplementedError("Decimal() with keyword arguments is not supported")
+            import decimal as _decimal_mod
+            if len(node.args) == 0:
+                d = _decimal_mod.Decimal()
+            elif len(node.args) == 1:
+                arg = node.args[0]
+                if isinstance(arg, ast.Constant):
+                    d = _decimal_mod.Decimal(arg.value)
+                elif isinstance(arg, ast.UnaryOp) and isinstance(arg.op, ast.USub) and isinstance(arg.operand, ast.Constant):
+                    d = _decimal_mod.Decimal(-arg.operand.value)
+                else:
+                    raise NotImplementedError("Decimal() with non-constant arguments is not supported")
+            else:
+                raise NotImplementedError("Decimal() with multiple arguments is not supported")
+
+            t = d.as_tuple()
+            sign = t.sign
+            if t.exponent == 'n':
+                is_special = 2
+                int_val = 0
+                exp = 0
+            elif t.exponent == 'N':
+                is_special = 3
+                int_val = 0
+                exp = 0
+            elif t.exponent == 'F':
+                is_special = 1
+                int_val = 0
+                exp = 0
+            else:
+                is_special = 0
+                int_val = 0
+                power = 1
+                i = len(t.digits) - 1
+                while i >= 0:
+                    int_val = int_val + t.digits[i] * power
+                    power = power * 10
+                    i = i - 1
+                exp = t.exponent
+
+            node.args = [
+                ast.Constant(value=sign),
+                ast.Constant(value=int_val),
+                ast.Constant(value=exp),
+                ast.Constant(value=is_special),
+            ]
+            ast.fix_missing_locations(node)
+            return node
+
         # Transformation for int.from_bytes calls
         if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) and node.func.value.id == "int" and node.func.attr == "from_bytes":
             # Replace 'big' argument with True and anything else with False
@@ -1677,6 +1762,25 @@ class Preprocessor(ast.NodeTransformer):
         self.generic_visit(node)
 
         self.current_class_name = old_class_name
+        return node
+
+    def visit_ImportFrom(self, node):
+        if node.module == "decimal":
+            for alias in node.names:
+                if alias.name == "Decimal" or alias.name == "*":
+                    self.decimal_imported = True
+                    if alias.asname:
+                        self.decimal_class_alias = alias.asname
+        self.generic_visit(node)
+        return node
+
+    def visit_Import(self, node):
+        for alias in node.names:
+            if alias.name == "decimal":
+                self.decimal_module_imported = True
+                if alias.asname:
+                    self.decimal_module_alias = alias.asname
+        self.generic_visit(node)
         return node
 
     def _infer_type_from_subscript(self, subscript_node):

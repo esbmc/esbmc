@@ -390,6 +390,14 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
+// Contract predicate: indicates that a pointer points to freshly allocated memory
+// Signature: __ESBMC_is_fresh(void **ptr, size_t size)
+// - ptr: Address of the pointer variable (semantically void**, declared as void* to avoid Clang USR issues)
+// - size: Size in bytes of the memory region
+// Returns: true when memory is successfully allocated (in contract enforcement mode)
+// Note: Used in requires clauses to specify fresh memory allocation requirements
+_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
+
 _Bool __ESBMC_is_little_endian();
 
 extern int __ESBMC_rounding_mode;
@@ -497,6 +505,8 @@ void __ESBMC_loop_invariant(_Bool);
 
 #define __builtin_object_size(ptr, type) \
     __ESBMC_builtin_object_size(ptr, type)
+
+#define __ESBMC_contract __attribute__((annotate("__ESBMC_contract")))
     )";
 
   if (config.ansi_c.cheri)
@@ -522,11 +532,13 @@ struct cap_info __ESBMC_cheri_info[1];
   }
 
   // Function contract support - only add symbols when contract processing is enabled
-  // Check if enforce-contract or replace-call-with-contract options are set
   std::string enforce_opt = config.options.get_option("enforce-contract");
   std::string replace_opt =
     config.options.get_option("replace-call-with-contract");
-  if (!enforce_opt.empty() || !replace_opt.empty())
+  bool enforce_all = config.options.get_bool_option("enforce-all-contracts");
+  bool replace_all = config.options.get_bool_option("replace-all-contracts");
+  if (
+    !enforce_opt.empty() || !replace_opt.empty() || enforce_all || replace_all)
   {
     intrinsics += R"(
 /* Function contract support
@@ -552,8 +564,50 @@ extern int __ESBMC_return_value;
  * Note: Declared as returning int, but at IR level the actual return type
  * is automatically inherited from the argument type. C's type system will
  * perform implicit conversions as needed, similar to __ESBMC_return_value.
+ *
+ * IMPORTANT: When using __ESBMC_old in complex boolean expressions with
+ * && and ||, C's short-circuit evaluation may cause issues. Use bitwise
+ * operators & and | instead, or use the __ESBMC_and/__ESBMC_or macros:
+ *   __ESBMC_ensures((a > 0) & (b == __ESBMC_old(b)));  // OK: no short-circuit
+ *   __ESBMC_ensures(__ESBMC_and(a > 0, b == __ESBMC_old(b)));  // Also OK
  */
 int __ESBMC_old(int);
+
+/* Helper macros for ensures clauses that avoid short-circuit evaluation.
+ * Use these instead of && and || when __ESBMC_old is involved:
+ *   __ESBMC_ensures(__ESBMC_and(cond1, cond2));        // instead of cond1 && cond2
+ *   __ESBMC_ensures(__ESBMC_or(cond1, cond2));         // instead of cond1 || cond2
+ *   __ESBMC_ensures(__ESBMC_implies(pre, post));       // instead of !pre || post
+ */
+#define __ESBMC_and(a, b) ((a) & (b))
+#define __ESBMC_or(a, b) ((a) | (b))
+#define __ESBMC_implies(a, b) ((!(a)) | (b))
+
+/* __ESBMC_assigns: specifies memory locations a function may modify
+ * This is used in replace-call mode for havoc generation.
+ * 
+ * Unified interface for all assignable locations:
+ *   __ESBMC_assigns(arr);        // havoc entire array
+ *   __ESBMC_assigns(arr[i]);     // havoc only arr[i]
+ *   __ESBMC_assigns(x);          // havoc scalar variable x
+ *   __ESBMC_assigns(node->field);// havoc only node->field
+ *   __ESBMC_assigns(x, y, z);    // multiple targets
+ * 
+ * For pure functions (no side effects), use empty assigns:
+ *   __ESBMC_assigns();           // function has no side effects
+ * 
+ * Implementation: Uses address-of to accept any lvalue expression.
+ * The backend unwraps address_of to recover the original expression.
+ */
+void __ESBMC_assigns_impl(const void *, ...);
+#define __ESBMC_assigns_0() __ESBMC_assigns_impl((void*)0)
+#define __ESBMC_assigns_1(a) __ESBMC_assigns_impl(&(a))
+#define __ESBMC_assigns_2(a,b) __ESBMC_assigns_impl(&(a),&(b))
+#define __ESBMC_assigns_3(a,b,c) __ESBMC_assigns_impl(&(a),&(b),&(c))
+#define __ESBMC_assigns_4(a,b,c,d) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d))
+#define __ESBMC_assigns_5(a,b,c,d,e) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d),&(e))
+#define __ESBMC_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_assigns_##N
+#define __ESBMC_assigns(...) __ESBMC_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
     )";
   }
 

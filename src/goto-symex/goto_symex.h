@@ -439,10 +439,6 @@ protected:
     reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
-  /** Perform get_thead_state... defunct. */
-  void intrinsic_get_thread_state(
-    const code_function_call2t &call,
-    reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */
   void intrinsic_really_atomic_begin(reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */
@@ -520,6 +516,8 @@ protected:
   void replace_races_check(expr2tc &expr);
 
   void simplify_python_builtins(expr2tc &expr);
+
+  void volatile_check(expr2tc &expr);
 
   /* Check if thrown_type in Python inherits from catch_type */
   bool is_python_exception_subtype(

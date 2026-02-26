@@ -1,5 +1,5 @@
 ---
-title: Counterexample Guided Abstract Refinement Integer vs Bit-Vector Encoding
+title: Counterexample Guided Abstract Refinement: Integer vs Bit-Vector Encoding
 ---
 
 ### Example 1: Checking the Pythagorean Theorem
@@ -184,7 +184,7 @@ Aborted (core dumped)
 
 ## Key Observations:
 
-* Bit-vector encoding can detect overflow but may require additional explicit checks to handle cases such as integer overflow.
+* Bit-vector encoding can detect overflow, but may require additional explicit checks to handle cases such as integer overflow.
 * The integer encoding efficiently verifies the correctness of the program once overflow checks are introduced, ensuring safe behavior.
 
 ## Pseudocode for Counterexample-Guided Abstraction Refinement
@@ -215,7 +215,7 @@ Function VerifyProgram(c_program):
             # Verification is complete (counterexample is valid)
             Print("Verification complete. Assertion violated.")
         else:
-            # Step 8: Add assume statement to the original program to remove spurious counterexample
+            # Step 8: Add an assume statement to the original program to remove a spurious counterexample
             updated_program = AddAssumeStatement(c_program, counterexample)
             
             # Go back to Step 2 with the updated program

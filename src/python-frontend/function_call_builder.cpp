@@ -14,6 +14,17 @@
 #include <climits>
 #include <optional>
 
+static size_t utf8_codepoint_count(const std::string &text)
+{
+  size_t count = 0;
+  for (unsigned char c : text)
+  {
+    if ((c & 0xC0) != 0x80)
+      ++count;
+  }
+  return count;
+}
+
 bool function_call_builder::is_nondet_str_call(const nlohmann::json &node) const
 {
   return node.contains("_type") && node["_type"] == "Call" &&
@@ -504,7 +515,7 @@ exprt function_call_builder::build() const
           name_value = file;
       }
 
-      return BigInt(name_value.size());
+      return BigInt(utf8_codepoint_count(name_value));
     };
 
     auto joinedstr_len =
@@ -522,7 +533,7 @@ exprt function_call_builder::build() const
           part["value"].is_string())
         {
           const std::string text = part["value"].get<std::string>();
-          total += BigInt(text.size());
+          total += BigInt(utf8_codepoint_count(text));
           continue;
         }
 
@@ -559,7 +570,7 @@ exprt function_call_builder::build() const
       call_["args"][0]["value"].is_string())
     {
       const std::string text = call_["args"][0]["value"].get<std::string>();
-      return from_integer(BigInt(text.size()), size_type());
+      return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
     }
 
     exprt arg_expr = converter_.get_expr(call_["args"][0]);
@@ -672,7 +683,8 @@ exprt function_call_builder::build() const
           {
             const std::string text =
               var_value["value"]["value"].get<std::string>();
-            return from_integer(BigInt(text.size()), size_type());
+            return from_integer(
+              BigInt(utf8_codepoint_count(text)), size_type());
           }
         }
       }
@@ -1441,6 +1453,56 @@ exprt function_call_builder::build() const
         {
           // If count is not constant, use -1 (split all)
           count = -1;
+        }
+      }
+
+      if (
+        !separator.empty() && count == 1 &&
+        call_["func"]["value"].contains("_type") &&
+        call_["func"]["value"]["_type"] == "BinOp" &&
+        call_["func"]["value"].contains("op") &&
+        call_["func"]["value"]["op"].contains("_type") &&
+        call_["func"]["value"]["op"]["_type"] == "Add")
+      {
+        const auto &binop = call_["func"]["value"];
+        std::string right_operand_str;
+        if (
+          string_handler::extract_constant_string(
+            binop["right"], converter_, right_operand_str) &&
+          right_operand_str.rfind(separator, 0) == 0)
+        {
+          bool safe_boundary = true;
+          std::string left_const;
+          if (string_handler::extract_constant_string(
+                binop["left"], converter_, left_const))
+          {
+            // For constant left operands, preserve Python split semantics:
+            // the separator at the boundary must be the first occurrence.
+            safe_boundary = left_const.find(separator) == std::string::npos;
+          }
+
+          if (safe_boundary)
+          {
+            std::string right_suffix =
+              right_operand_str.substr(separator.size());
+            nlohmann::json list_node;
+            list_node["_type"] = "List";
+            list_node["elts"] = nlohmann::json::array();
+            converter_.copy_location_fields_from_decl(call_, list_node);
+
+            nlohmann::json left_node = binop["left"];
+            converter_.copy_location_fields_from_decl(call_, left_node);
+            nlohmann::json right_node;
+            right_node["_type"] = "Constant";
+            right_node["value"] = right_suffix;
+            converter_.copy_location_fields_from_decl(call_, right_node);
+
+            list_node["elts"].push_back(left_node);
+            list_node["elts"].push_back(right_node);
+
+            python_list list(converter_, list_node);
+            return list.get();
+          }
         }
       }
 

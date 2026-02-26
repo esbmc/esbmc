@@ -349,6 +349,7 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
 - **Multiple Exception Handlers**: Supports multiple except clauses to handle different exception types.
 - **Exception Catching**: Supports catching exceptions with variable binding using except ExceptionType as variable syntax.
   - **Improved Variable Scope Handling**: Exception variables are declared and scoped within their catch blocks, ensuring correct symbol table management during verification.
+- **ImportError Handling**: Imports guarded by try/except ImportError are handled statically.
 - **Exception Hierarchy**: Implements Python's exception hierarchy where all exceptions inherit from BaseException.
 - **Built-in Exception Classes**:
   - **BaseException**: Base class for all exceptions.
@@ -359,6 +360,7 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
   - **IndexError**: Raised for sequence index out of range.
   - **KeyError**: Raised for missing dictionary keys.
   - **ZeroDivisionError**: Raised for division by zero operations.
+  - **ImportError**: Raised when a module cannot be found or imported.
   - **OSError**: Base class for I/O related errors.
   - **FileNotFoundError**: Raised when a file or directory is not found (inherits from OSError).
   - **FileExistsError**: Raised when trying to create a file or directory that already exists (inherits from OSError).

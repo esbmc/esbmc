@@ -388,14 +388,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        if (aattr.getAlignmentExpr())
-        {
-          exprt alignment;
-          if (get_expr(*(aattr.getAlignmentExpr()), alignment))
-            return true;
-
-          t.set("alignment", alignment);
-        }
+        if (process_aligned_attribute(aattr, t))
+          return true;
       }
     }
   }
@@ -479,11 +473,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        exprt alignment;
-        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+        if (process_aligned_attribute(aattr, t))
           return true;
-
-        t.set("alignment", alignment);
       }
       else
         continue;
@@ -687,6 +678,22 @@ bool clang_c_convertert::get_function(
   // before converting the body, as they may appear on the function body
   if (get_function_params(fd, type.arguments()))
     return true;
+
+  // Check for __ESBMC_contract annotation
+  if (fd.hasAttrs())
+  {
+    for (const auto *attr : fd.getAttrs())
+    {
+      if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      {
+        if (annot->getAnnotation().str() == "__ESBMC_contract")
+        {
+          type.set("#annotated_contract", true);
+          break;
+        }
+      }
+    }
+  }
 
   added_symbol.type = type;
   new_expr.type() = type;
@@ -1473,6 +1480,11 @@ bool clang_c_convertert::get_builtin_type(
       break;
     }
     // fallthrough
+
+  case clang::BuiltinType::BoundMember:
+    new_type = ptrmem_typet();
+    c_type = "_ptrmem";
+    break;
 
   default:
   {
@@ -3975,6 +3987,28 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   return nullptr;
 }
 
+bool clang_c_convertert::process_aligned_attribute(
+  const clang::AlignedAttr &aattr,
+  typet &t) const
+{
+  unsigned alignment_bits = aattr.getAlignment(*ASTContext);
+
+  // Clang should report alignment in bits; require a non-zero multiple of `char_width`
+  // to safely convert to bytes. If this is not the case, emit a diagnostic.
+  if (alignment_bits == 0 || alignment_bits % config.ansi_c.char_width != 0)
+  {
+    log_error(
+      "unsupported or invalid aligned attribute: expected non-zero "
+      "multiple of {} bits, got {} bits",
+      config.ansi_c.char_width,
+      alignment_bits);
+    return true;
+  }
+  const unsigned alignment = alignment_bits / config.ansi_c.char_width;
+  t.set("alignment", constant_exprt(BigInt(alignment), size_type()));
+  return false;
+}
+
 bool clang_c_convertert::check_alignment_attributes(
   const clang::FieldDecl *field,
   struct_typet::componentt &comp)
@@ -3989,26 +4023,8 @@ bool clang_c_convertert::check_alignment_attributes(
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        if (aattr.isAlignmentExpr())
-        {
-          // This is usually a constant
-          clang::Expr *alignExpr = aattr.getAlignmentExpr();
-          exprt alignment;
-          if (alignExpr && get_expr(*(aattr.getAlignmentExpr()), alignment))
-            return true;
-          comp.type().set("alignment", alignment);
-        }
-        else
-        {
-          // I was not able to find an example to test this, so abort for now
-          log_error("ESBMC currently does not support type alignments");
-          std::ostringstream oss;
-          llvm::raw_os_ostream ross(oss);
-          aattr.getAlignmentType()->getType()->dump(ross, *ASTContext);
-          ross.flush();
-          log_error("{}", oss.str());
+        if (process_aligned_attribute(aattr, comp.type()))
           return true;
-        }
       }
     }
   }

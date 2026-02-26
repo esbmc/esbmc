@@ -286,6 +286,34 @@ private:
     return ""; // Couldn't infer
   }
 
+  // Check if the function body contains any explicit 'return None' statement
+  bool has_return_none(const Json &body)
+  {
+    for (const Json &stmt : body)
+    {
+      if (stmt["_type"] == "Return")
+      {
+        if (stmt["value"].is_null())
+          return true; // bare 'return'
+        if (
+          stmt["value"]["_type"] == "Constant" &&
+          stmt["value"]["value"].is_null())
+          return true; // 'return None'
+      }
+      if (stmt.contains("body") && stmt["body"].is_array())
+      {
+        if (has_return_none(stmt["body"]))
+          return true;
+      }
+      if (stmt.contains("orelse") && stmt["orelse"].is_array())
+      {
+        if (has_return_none(stmt["orelse"]))
+          return true;
+      }
+    }
+    return false;
+  }
+
   // Method to infer and annotate unannotated function parameters
   void infer_parameter_types(Json &function_element)
   {
@@ -867,19 +895,40 @@ private:
         infer_from_return_statements(function_element["body"], func_name);
 
       // Only add annotation if we successfully inferred a type from return statements
-      if (!inferred_type.empty())
+      // and the function does not have mixed value+None returns
+      if (!inferred_type.empty() && inferred_type != "NoneType")
       {
-        // Update the function node to include the return type annotation
+        // Check if there are also None returns (mixed value+None)
+        // If so, leave the annotation as null for the converter to handle
+        // via Optional wrapping
+        bool has_none_return = has_return_none(function_element["body"]);
+
+        if (!has_none_return)
+        {
+          // Update the function node to include the return type annotation
+          function_element["returns"] = {
+            {"_type", "Name"},
+            {"id", inferred_type},
+            {"ctx", {{"_type", "Load"}}},
+            {"lineno", function_element["lineno"]},
+            {"col_offset", function_element["col_offset"]},
+            {"end_lineno", function_element["lineno"]},
+            {"end_col_offset",
+             function_element["col_offset"].template get<int>() +
+               inferred_type.size()}};
+        }
+      }
+      else if (inferred_type == "NoneType")
+      {
+        // Function only returns None - annotate as None
         function_element["returns"] = {
-          {"_type", "Name"},
-          {"id", inferred_type},
-          {"ctx", {{"_type", "Load"}}},
+          {"_type", "Constant"},
+          {"value", nullptr},
           {"lineno", function_element["lineno"]},
           {"col_offset", function_element["col_offset"]},
           {"end_lineno", function_element["lineno"]},
           {"end_col_offset",
-           function_element["col_offset"].template get<int>() +
-             inferred_type.size()}};
+           function_element["col_offset"].template get<int>() + 4}};
       }
       // If no return type could be inferred, leave returns as null
       // (function has no explicit return statement)
@@ -1335,13 +1384,31 @@ private:
       }
 
       // Try to infer return type from actual return statements
+      // Use recursive inference to find return types in all blocks
+      std::string inferred_type =
+        infer_from_return_statements(func_elem["body"], func_name);
+
+      if (!inferred_type.empty() && inferred_type != "NoneType")
+      {
+        // Found a non-None return type; check for mixed value+None returns
+        if (has_return_none(func_elem["body"]))
+        {
+          // Mixed returns: leave unannotated so converter handles via Optional
+          functions_in_analysis_.erase(func_name);
+          return "";
+        }
+        functions_in_analysis_.erase(func_name);
+        return inferred_type;
+      }
+
+      // Check top-level returns as fallback
       auto return_node = json_utils::find_return_node(func_elem["body"]);
       if (!return_node.empty())
       {
-        std::string inferred_type;
-        infer_type(return_node, func_elem, inferred_type);
+        std::string fallback_type;
+        infer_type(return_node, func_elem, fallback_type);
         functions_in_analysis_.erase(func_name);
-        return inferred_type;
+        return fallback_type;
       }
 
       // If function has no explicit return statements, assume void/None
@@ -1419,7 +1486,7 @@ private:
     throw std::runtime_error(oss.str());
   }
 
-  std::string get_type_from_lhs(const std::string &id, Json &body)
+  std::string get_type_from_lhs(const std::string &id, const Json &body)
   {
     // Search for LHS annotation in the current scope (e.g., while/if block)
     Json node = find_annotated_assign(id, body["body"]);
@@ -1660,6 +1727,52 @@ private:
       rhs_var_name = get_base_var_name(element["value"]["value"]);
 
     assert(!rhs_var_name.empty());
+
+    auto extract_lhs_name = [](const Json &stmt) -> std::string {
+      if (
+        stmt.contains("_type") && stmt["_type"] == "Assign" &&
+        stmt.contains("targets") && !stmt["targets"].empty() &&
+        stmt["targets"][0].contains("_type") &&
+        stmt["targets"][0]["_type"] == "Name" &&
+        stmt["targets"][0].contains("id"))
+        return stmt["targets"][0]["id"].template get<std::string>();
+
+      if (
+        stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+        stmt.contains("target") && stmt["target"].contains("_type") &&
+        stmt["target"]["_type"] == "Name" && stmt["target"].contains("id"))
+        return stmt["target"]["id"].template get<std::string>();
+
+      return "";
+    };
+
+    const std::string lhs_name = extract_lhs_name(element);
+    if (!lhs_name.empty() && lhs_name == rhs_var_name)
+    {
+      std::string lhs_type = get_type_from_lhs(lhs_name, body);
+      if (!lhs_type.empty())
+        return lhs_type;
+      return "Any";
+    }
+
+    if (resolving_rhs_vars_.contains(rhs_var_name))
+    {
+      std::string lhs_type = get_type_from_lhs(rhs_var_name, body);
+      if (!lhs_type.empty())
+        return lhs_type;
+      return "Any";
+    }
+
+    resolving_rhs_vars_.insert(rhs_var_name);
+    struct erase_guardt
+    {
+      std::set<std::string> &vars;
+      std::string key;
+      ~erase_guardt()
+      {
+        vars.erase(key);
+      }
+    } erase_guard{resolving_rhs_vars_, rhs_var_name};
 
     // Find RHS variable declaration in the current scope (e.g.: while/if block)
     Json rhs_node = find_annotated_assign(rhs_var_name, body["body"]);
@@ -1962,6 +2075,30 @@ private:
     return json_utils::get_object_alias(ast_, obj_name);
   }
 
+  std::string get_string_method_return_type(const std::string &method) const
+  {
+    if (
+      method == "join" || method == "lower" || method == "upper" ||
+      method == "strip" || method == "lstrip" || method == "rstrip" ||
+      method == "format" || method == "replace")
+      return "str";
+
+    if (
+      method == "startswith" || method == "endswith" || method == "isdigit" ||
+      method == "isalpha" || method == "isspace" || method == "islower" ||
+      method == "isupper")
+      return "bool";
+
+    if (method == "find" || method == "rfind")
+      return "int";
+
+    if (method == "split")
+      return "list";
+
+    // Keep previous behavior for unmapped string methods.
+    return "str";
+  }
+
   std::string get_type_from_method(const Json &call)
   {
     std::string type("");
@@ -1980,27 +2117,26 @@ private:
       if (obj_type == "str" && call["func"].contains("attr"))
       {
         const std::string &method = call["func"]["attr"];
-        // Methods that return str
-        if (
-          method == "join" || method == "lower" || method == "upper" ||
-          method == "strip" || method == "lstrip" || method == "rstrip" ||
-          method == "format" || method == "replace")
-          return "str";
-        // Methods that return bool
-        else if (
-          method == "startswith" || method == "endswith" ||
-          method == "isdigit" || method == "isalpha" || method == "isspace" ||
-          method == "islower" || method == "isupper")
-          return "bool";
-        else if (method == "find" || method == "rfind")
-          return "int";
-        else if (method == "split")
-          return "list";
-        // Default for string methods
-        return "str";
+        return get_string_method_return_type(method);
       }
 
       return obj_type;
+    }
+
+    // Handle method calls on binary expressions like (s + ",end").split(",", 1)
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"]["_type"] == "BinOp")
+    {
+      std::string obj_type =
+        get_type_from_binary_expr(call["func"]["value"], ast_);
+      if (obj_type == "str" && call["func"].contains("attr"))
+      {
+        const std::string &method = call["func"]["attr"];
+        return get_string_method_return_type(method);
+      }
+      if (!obj_type.empty())
+        return obj_type;
     }
 
     const std::string &obj = get_object_name(call["func"], std::string());
@@ -2508,6 +2644,8 @@ private:
       !type_utils::is_python_model_func(stmt["value"]["func"]["id"]))
     {
       inferred_type = get_type_from_call(stmt);
+      if (inferred_type.empty())
+        return InferResult::UNKNOWN;
     }
 
     // Get type from methods and class methods
@@ -2877,6 +3015,9 @@ private:
   {
     // Update type field
     element["_type"] = "AnnAssign";
+    // Mark as inferred to distinguish from explicit
+    // annotations like `x: Any = ...` during assignment type handling.
+    element["_inferred_annotation"] = true;
 
     auto target = element["targets"][0];
     std::string id;
@@ -3082,6 +3223,7 @@ private:
   bool filter_global_elements_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
+  std::set<std::string> resolving_rhs_vars_;
   std::string current_func_name_context_;
   std::string current_class_name_;
 };

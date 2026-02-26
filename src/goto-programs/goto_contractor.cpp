@@ -251,7 +251,7 @@ bool goto_contractort::initialize_main_function_loops()
 
 void goto_contractort::insert_assume_at(
   goto_functiont goto_function,
-  std::_List_iterator<goto_programt::instructiont> instruction)
+  goto_programt::targett instruction)
 {
   /// Here we build an assume instruction with a conjunction of multiple conditions.
   /// We start with a true expression and add other conditions with and2tc

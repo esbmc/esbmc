@@ -11,7 +11,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
- 
+
   # Build developer doc
   build-developer-doc:
     runs-on: ubuntu-latest
@@ -26,14 +26,14 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Developer-Manual
-        path: manual.pdf    
+        path: manual.pdf
 
   build-ubuntu:
     uses: ./.github/workflows/build-unix.yml
     name: static llvm-21 DebugOpt
     with:
       operating-system: ubuntu-24.04
-      build-flags: '-b DebugOpt -e On'
+      build-flags: '-b DebugOpt -e ON'
       testing: true
 
   build-windows:
@@ -41,15 +41,15 @@ jobs:
     name: static llvm-16 DebugOpt
     with:
       operating-system: windows-latest
-      build-flags: '-b DebugOpt -e On'
+      build-flags: '-b DebugOpt -e ON'
       testing: true
 
   build-arm:
     uses: ./.github/workflows/build-unix.yml
     name: ARM64 linux build
     with:
-      operating-system: ARM64
-      build-flags: '-b DebugOpt -S OFF -B OFF -c 13'
+      operating-system: ubuntu-24.04-arm
+      build-flags: '-b DebugOpt -S OFF -B OFF'
       testing: false
 
   build-macos-arm:
@@ -57,7 +57,7 @@ jobs:
     name: arm64 darwin build
     with:
       operating-system: macos-latest
-      build-flags: '-c 21'
+      build-flags: '-b DebugOpt -c 21'
       testing: true
 
   # Check project with clang-format
