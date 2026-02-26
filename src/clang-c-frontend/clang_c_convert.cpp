@@ -2847,7 +2847,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             log_status("[DEBUG] lha->getValue() returned: {}", val ? "non-null" : "null");
             if (val)
             {
-              log_status("[DEBUG] val Stmt class: {}", val->getStmtClassName());
+              const char *class_name = val->getStmtClassName();
+              log_status(
+                "[DEBUG] val Stmt class: {}",
+                class_name ? class_name : "(null)");
+              log_status(
+                "[DEBUG] val StmtClass enum: {}",
+                static_cast<int>(val->getStmtClass()));
+              val->dump();
               clang::Expr::EvalResult result;
               log_status("[DEBUG] About to call val->EvaluateAsInt()");
               bool eval_ok = val->EvaluateAsInt(result, *ASTContext);
