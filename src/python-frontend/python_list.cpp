@@ -1771,8 +1771,9 @@ exprt python_list::handle_index_access(
         "Invalid list access: could not resolve position or element type");
     }
 
-    // Preserve historical frontend OOB diagnostics when the current list size
-    // is known from the type map (including reassigned lists).
+    // Preserve historical frontend OOB diagnostics only when we can prove we
+    // are indexing a stable list literal (not a reassigned/mutated/derived
+    // list). Using the type map alone is too broad and causes false positives.
     if (array.is_symbol())
     {
       const std::string &list_name = array.identifier().as_string();
@@ -1803,7 +1804,20 @@ exprt python_list::handle_index_access(
           list_node["value"].contains("_type") &&
           list_node["value"]["_type"] == "Subscript";
 
-        if (has_const_index && !is_slice_derived_var)
+        bool is_stable_list_literal = false;
+        if (
+          !list_node.is_null() && list_node.contains("value") &&
+          list_node["value"].contains("_type") &&
+          list_node["value"]["_type"] == "List" &&
+          list_node["value"].contains("elts") &&
+          list_node["value"]["elts"].is_array())
+        {
+          // If sizes diverge, the symbol was likely reassigned/mutated.
+          is_stable_list_literal =
+            it->second.size() == list_node["value"]["elts"].size();
+        }
+
+        if (has_const_index && !is_slice_derived_var && is_stable_list_literal)
         {
           const size_t known_size = it->second.size();
           const bool oob = negative_index ? (index_abs > known_size)
