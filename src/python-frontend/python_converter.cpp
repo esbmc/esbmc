@@ -1629,6 +1629,31 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (!type_mismatch_result.is_nil())
     return type_mismatch_result;
 
+  // Handle Any-typed (void*) operands in comparisons: cast the concrete side
+  // to void* make sure like `y == False` work when y is Any-typed.
+  if (
+    type_utils::is_relational_op(op) || op == "Is" || op == "IsNot" ||
+    op == "In" || op == "NotIn")
+  {
+    auto is_any_ptr = [](const exprt &e) {
+      return e.type().is_pointer() && e.type().subtype().id() == "empty";
+    };
+    auto cast_to_void_ptr = [](exprt &e, const typet &ptr_type) {
+      if (e.type().is_floatbv())
+      {
+        unsigned width = static_cast<const bv_typet &>(e.type()).get_width();
+        exprt bitcast("bitcast", unsignedbv_typet(width));
+        bitcast.copy_to_operands(e);
+        e = bitcast;
+      }
+      e = typecast_exprt(e, ptr_type);
+    };
+    if (is_any_ptr(lhs) && !is_any_ptr(rhs) && !rhs.type().is_pointer())
+      cast_to_void_ptr(rhs, lhs.type());
+    else if (is_any_ptr(rhs) && !is_any_ptr(lhs) && !lhs.type().is_pointer())
+      cast_to_void_ptr(lhs, rhs.type());
+  }
+
   // Handle special mathematical operations
   if (op == "Pow" || op == "power")
     return math_handler_.handle_power(lhs, rhs);
@@ -3920,6 +3945,58 @@ void python_converter::handle_assignment_type_adjustments(
   }
   else if (lhs_symbol)
   {
+    // Handle explicit Any-typed annotation assignments
+    // Only applies when the user explicitly wrote `from typing import Any`
+    // and annotated `x: Any = value`.
+    // Preprocessor-generated AnnAssign nodes
+    // with Any annotation are excluded.
+    if (
+      ast_node.contains("_type") && ast_node["_type"] == "AnnAssign" &&
+      !ast_node.value("_inferred_annotation", false) && has_annotation &&
+      ast_node["annotation"].contains("id") &&
+      ast_node["annotation"]["id"] == "Any" && lhs.type().is_pointer() &&
+      [this]() {
+        // Check if "from typing import Any" exists in the source file
+        const auto &body = (*ast_json)["body"];
+        for (const auto &stmt : body)
+        {
+          if (
+            stmt.contains("_type") && stmt["_type"] == "ImportFrom" &&
+            stmt.contains("module") && stmt["module"] == "typing" &&
+            stmt.contains("names"))
+          {
+            for (const auto &name : stmt["names"])
+            {
+              if (name.contains("name") && name["name"] == "Any")
+                return true;
+            }
+          }
+        }
+        return false;
+      }())
+    {
+      if (rhs.type().is_array())
+      {
+        rhs = string_handler_.get_array_base_address(rhs);
+        if (rhs.type() != lhs.type())
+          rhs = typecast_exprt(rhs, lhs.type());
+      }
+      else if (!rhs.type().is_pointer() && !rhs.type().is_empty())
+      {
+        if (rhs.type().is_floatbv())
+        {
+          unsigned width =
+            static_cast<const bv_typet &>(rhs.type()).get_width();
+          exprt bitcast("bitcast", unsignedbv_typet(width));
+          bitcast.copy_to_operands(rhs);
+          rhs = bitcast;
+        }
+        rhs = typecast_exprt(rhs, lhs.type());
+      }
+      if (!rhs.type().is_empty() && !is_ctor_call)
+        lhs_symbol->value = rhs;
+      return;
+    }
     // Handle string-to-string variable assignments
     if (lhs_type == "str" && rhs.is_symbol())
     {
