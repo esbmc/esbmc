@@ -1,6 +1,7 @@
 #include <python-frontend/char_utils.h>
 #include <python-frontend/convert_float_literal.h>
 #include <python-frontend/function_call_builder.h>
+#include <python-frontend/python_consteval.h>
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module_locator.h>
@@ -2599,6 +2600,89 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       const auto &func_node = find_function((*ast_json)["body"], func_name);
       assert(!func_node.empty());
       get_function_definition(func_node);
+    }
+  }
+
+  // Compile-time evaluation: if the function is user-defined and all
+  // arguments are constants, try to evaluate the call entirely at
+  // conversion time, eliminating loops from the GOTO program.
+  if (
+    element["func"]["_type"] == "Name" && ast_json &&
+    element.contains("args") &&
+    (!element.contains("keywords") || element["keywords"].empty()))
+  {
+    const std::string& callee =
+      element["func"]["id"].get<std::string>();
+
+    // Skip builtins / models — only try user-defined functions
+    if (
+      !type_utils::is_builtin_type(callee) &&
+      !type_utils::is_python_model_func(callee) &&
+      !find_function((*ast_json)["body"], callee).empty())
+    {
+      // Collect constant arguments
+      bool all_const = true;
+      std::vector<PyConstValue> const_args;
+      for (const auto& arg_node : element["args"])
+      {
+        if (
+          arg_node["_type"] == "Constant" &&
+          arg_node["value"].is_string())
+        {
+          const_args.push_back(PyConstValue::make_string(
+            arg_node["value"].get<std::string>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" &&
+          arg_node["value"].is_number_integer())
+        {
+          const_args.push_back(PyConstValue::make_int(
+            arg_node["value"].get<long long>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" &&
+          arg_node["value"].is_boolean())
+        {
+          const_args.push_back(PyConstValue::make_bool(
+            arg_node["value"].get<bool>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" && arg_node["value"].is_null())
+        {
+          const_args.push_back(PyConstValue::make_none());
+        }
+        else if (
+          arg_node["_type"] == "UnaryOp" &&
+          arg_node["op"]["_type"] == "USub" &&
+          arg_node["operand"]["_type"] == "Constant" &&
+          arg_node["operand"]["value"].is_number_integer())
+        {
+          const_args.push_back(PyConstValue::make_int(
+            -arg_node["operand"]["value"].get<long long>()));
+        }
+        else
+        {
+          all_const = false;
+          break;
+        }
+      }
+
+      if (all_const && !const_args.empty())
+      {
+        python_consteval evaluator(*ast_json);
+        auto result = evaluator.try_eval_call(callee, const_args);
+        if (result.has_value())
+        {
+          if (result->kind == PyConstValue::STRING)
+            return string_builder_->build_string_literal(
+              result->string_val);
+          if (result->kind == PyConstValue::INT)
+            return from_integer(result->int_val, long_long_int_type());
+          if (result->kind == PyConstValue::BOOL)
+            return gen_boolean(result->bool_val);
+          // NONE and FLOAT fall through to normal call
+        }
+      }
     }
   }
 
