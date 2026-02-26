@@ -54,7 +54,9 @@ static bool body_has_verification_relevant_stmts(const nlohmann::json& body)
     if (!stmt.contains("_type"))
       continue;
     const std::string& t = stmt["_type"];
-    if (t == "Assert" || t == "If" || t == "For" || t == "While")
+    if (
+      t == "Assert" || t == "If" || t == "For" || t == "While" ||
+      t == "FunctionDef")
       return true;
     if (stmt.contains("body") && stmt["body"].is_array())
       if (body_has_verification_relevant_stmts(stmt["body"]))
@@ -133,7 +135,32 @@ std::optional<PyConstValue> python_consteval::try_eval_call(
     return std::nullopt;
 
   if (result->type == StmtResult::RETURN)
+  {
+    // Check return type annotation — decline folding on mismatch
+    if (func_node->contains("returns") && !(*func_node)["returns"].is_null())
+    {
+      const auto& ret_ann = (*func_node)["returns"];
+      if (ret_ann.contains("id"))
+      {
+        const std::string& ret_type = ret_ann["id"].get<std::string>();
+        bool mismatch = false;
+        if (ret_type == "int" && result->value.kind != PyConstValue::INT)
+          mismatch = true;
+        else if (
+          ret_type == "str" && result->value.kind != PyConstValue::STRING)
+          mismatch = true;
+        else if (
+          ret_type == "float" && result->value.kind != PyConstValue::FLOAT)
+          mismatch = true;
+        else if (
+          ret_type == "bool" && result->value.kind != PyConstValue::BOOL)
+          mismatch = true;
+        if (mismatch)
+          return std::nullopt;
+      }
+    }
     return result->value;
+  }
 
   // Function didn't return explicitly → returns None
   return PyConstValue::make_none();

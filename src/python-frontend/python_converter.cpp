@@ -2614,9 +2614,55 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     const std::string& callee =
       element["func"]["id"].get<std::string>();
 
+    // Check if the callee is shadowed by a local FunctionDef inside
+    // the current enclosing function.  Consteval only knows about
+    // top-level definitions, so folding a shadowed name would resolve
+    // to the wrong function.
+    bool locally_shadowed = false;
+    if (!current_func_name_.empty())
+    {
+      // Walk the function nesting path (split on "@F@").
+      // Use const ref so the non-throwing find_function overload
+      // (returns empty JSON on miss) is selected instead of the
+      // mutable-ref overload that throws.
+      const nlohmann::json& ast_body = (*ast_json)["body"];
+      nlohmann::json cur_body = ast_body;
+      std::string remaining = current_func_name_;
+      while (!remaining.empty() && !locally_shadowed)
+      {
+        std::string part;
+        auto sep = remaining.find("@F@");
+        if (sep != std::string::npos)
+        {
+          part = remaining.substr(0, sep);
+          remaining = remaining.substr(sep + 3);
+        }
+        else
+        {
+          part = remaining;
+          remaining.clear();
+        }
+        auto fn =
+          find_function(static_cast<const nlohmann::json&>(cur_body), part);
+        if (fn.empty() || !fn.contains("body") || !fn["body"].is_array())
+          break;
+        for (const auto& stmt : fn["body"])
+        {
+          if (
+            stmt.contains("_type") && stmt["_type"] == "FunctionDef" &&
+            stmt.contains("name") && stmt["name"] == callee)
+          {
+            locally_shadowed = true;
+            break;
+          }
+        }
+        cur_body = fn["body"];
+      }
+    }
+
     // Skip builtins / models — only try user-defined functions
     if (
-      !type_utils::is_builtin_type(callee) &&
+      !locally_shadowed && !type_utils::is_builtin_type(callee) &&
       !type_utils::is_python_model_func(callee) &&
       !find_function((*ast_json)["body"], callee).empty())
     {
