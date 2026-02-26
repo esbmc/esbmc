@@ -317,6 +317,18 @@ class Preprocessor(ast.NodeTransformer):
             return prefix + [node]
         return node
 
+    def visit_Assert(self, node):
+        node = self.generic_visit(node)
+        prefix, new_test = self._lower_listcomp_in_expr(node.test)
+        node.test = new_test
+        if node.msg:
+            msg_prefix, new_msg = self._lower_listcomp_in_expr(node.msg)
+            node.msg = new_msg
+            prefix.extend(msg_prefix)
+        if prefix:
+            return prefix + [node]
+        return node
+
     def _extract_type_from_annotation(self, annotation):
         """Extract a simplified type string from a type annotation AST node"""
         if annotation is None:
@@ -808,10 +820,10 @@ class Preprocessor(ast.NodeTransformer):
         """Transform range-based for loops to while loops"""
         # Add validation for range arguments
         if len(node.iter.args) == 0:
-            raise SyntaxError(f"range expected at least 1 argument, got 0", 
+            raise SyntaxError(f"range expected at least 1 argument, got 0",
                              (self.module_name, node.lineno, node.col_offset, ""))
         if len(node.iter.args) > 3:
-            raise SyntaxError(f"range expected at most 3 arguments, got {len(node.iter.args)}", 
+            raise SyntaxError(f"range expected at most 3 arguments, got {len(node.iter.args)}",
                              (self.module_name, node.lineno, node.col_offset, ""))
         # Check if step (third argument) is zero
         if len(node.iter.args) == 3:
