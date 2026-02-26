@@ -1307,7 +1307,35 @@ exprt python_list::handle_range_slice(
   };
 
   const exprt lower_expr = get_list_bound("lower", false);
-  const exprt upper_expr = get_list_bound("upper", true);
+  exprt upper_expr = get_list_bound("upper", true);
+
+  // Clamp upper bound to the runtime list size to preserve Python slicing
+  // semantics for oversized bounds, e.g., l[0:100].
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    assert(size_func);
+
+    side_effect_expr_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    if (array.type().is_pointer())
+      size_call.arguments().push_back(array);
+    else
+      size_call.arguments().push_back(address_of_exprt(array));
+    size_call.type() = size_type();
+    size_call.location() = location;
+
+    symbolt &size_sym = converter_.create_tmp_symbol(
+      list_value_, "$slice_size$", size_type(), exprt());
+    code_declt size_decl(symbol_expr(size_sym));
+    size_decl.copy_to_operands(size_call);
+    converter_.add_instruction(size_decl);
+
+    exprt upper_ge_size(">=", bool_type());
+    upper_ge_size.copy_to_operands(upper_expr, symbol_expr(size_sym));
+    upper_expr = if_exprt(upper_ge_size, symbol_expr(size_sym), upper_expr);
+    upper_expr.type() = size_type();
+  }
 
   // Initialize counter: int counter = lower
   symbolt &counter = converter_.create_tmp_symbol(
@@ -1384,7 +1412,11 @@ exprt python_list::handle_range_slice(
       list_node["value"].contains("elts") &&
       list_node["value"]["elts"].is_array())
     {
-      for (size_t i = lower_bound; i < upper_bound; ++i)
+      const size_t elts_size = list_node["value"]["elts"].size();
+      const size_t begin = std::min(lower_bound, elts_size);
+      const size_t end = std::min(upper_bound, elts_size);
+
+      for (size_t i = begin; i < end; ++i)
       {
         const exprt element =
           converter_.get_expr(list_node["value"]["elts"][i]);
@@ -1556,22 +1588,6 @@ exprt python_list::handle_index_access(
         }
         catch (const std::out_of_range &)
         {
-          // Only throw compile-time error if this is a static list with known elements
-          // For constant indices on static lists, this is a definite out-of-bounds error
-          if (
-            (slice_node["_type"] == "Constant" ||
-             (slice_node["_type"] == "UnaryOp" &&
-              slice_node["operand"]["_type"] == "Constant")) &&
-            !list_node.is_null() && list_node.contains("value") &&
-            list_node["value"].contains("elts") &&
-            list_node["value"]["elts"].is_array())
-          {
-            const locationt l = converter_.get_location_from_decl(list_value_);
-            throw std::runtime_error(
-              "List out of bounds at " + l.get_file().as_string() +
-              " line: " + l.get_line().as_string());
-          }
-
           // Use the known element type for homogeneous dynamic lists.
           if (!list_type_map[list_name].empty())
           {
@@ -1753,6 +1769,54 @@ exprt python_list::handle_index_access(
     {
       throw std::runtime_error(
         "Invalid list access: could not resolve position or element type");
+    }
+
+    // Preserve historical frontend OOB diagnostics when the current list size
+    // is known from the type map (including reassigned lists).
+    if (array.is_symbol())
+    {
+      const std::string &list_name = array.identifier().as_string();
+      auto it = list_type_map.find(list_name);
+      if (it != list_type_map.end() && !it->second.empty())
+      {
+        bool has_const_index = false;
+        bool negative_index = false;
+        size_t index_abs = 0;
+
+        if (slice_node["_type"] == "Constant" && slice_node.contains("value"))
+        {
+          has_const_index = true;
+          index_abs = slice_node["value"].get<size_t>();
+        }
+        else if (
+          slice_node["_type"] == "UnaryOp" && slice_node.contains("op") &&
+          slice_node["op"]["_type"] == "USub" && slice_node.contains("operand") &&
+          slice_node["operand"]["_type"] == "Constant")
+        {
+          has_const_index = true;
+          negative_index = true;
+          index_abs = slice_node["operand"]["value"].get<size_t>();
+        }
+
+        const bool is_slice_derived_var =
+          !list_node.is_null() && list_node.contains("value") &&
+          list_node["value"].contains("_type") &&
+          list_node["value"]["_type"] == "Subscript";
+
+        if (has_const_index && !is_slice_derived_var)
+        {
+          const size_t known_size = it->second.size();
+          const bool oob = negative_index ? (index_abs > known_size)
+                                          : (index_abs >= known_size);
+          if (oob)
+          {
+            const locationt l = converter_.get_location_from_decl(list_value_);
+            throw std::runtime_error(
+              "List out of bounds at " + l.get_file().as_string() +
+              " line: " + l.get_line().as_string());
+          }
+        }
+      }
     }
 
     // Build list access and cast result
