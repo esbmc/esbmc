@@ -1,5 +1,6 @@
 # The ESBMC model checker
 
+[![Zulip](https://img.shields.io/badge/social_chat-zulip-blue?logo=zulip)](https://systemsandsoftwaresecurity.zulipchat.com/#narrow/channel/575165-esbmc)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 [![GitHub All Releases](https://img.shields.io/github/downloads/esbmc/esbmc/total.svg)](https://github.com/esbmc/esbmc/releases)
