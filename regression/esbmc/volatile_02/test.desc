@@ -1,4 +1,5 @@
 CORE
-main.py
---unwind 8
+main.c
+--volatile-check
+
 ^VERIFICATION FAILED$

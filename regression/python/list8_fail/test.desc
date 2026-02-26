@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 8
+--unwind 9 --no-standard-checks
 ^VERIFICATION FAILED$

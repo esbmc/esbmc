@@ -5,6 +5,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/std_code.h>
+#include <util/std_types.h>
 #include <util/message.h>
 
 #include <cmath>
@@ -1213,4 +1214,85 @@ exprt python_math::handle_hypot(
   hypot_call.location() = converter.get_location_from_decl(element);
 
   return hypot_call;
+}
+
+exprt python_math::handle_dist(exprt p, exprt q, const nlohmann::json &element)
+{
+  // Both arguments must be tuples (struct types with tag-tuple prefix)
+  if (!p.type().is_struct() || !q.type().is_struct())
+    throw std::runtime_error("math.dist() arguments must be tuples");
+
+  const struct_typet &p_type = to_struct_type(p.type());
+  const struct_typet &q_type = to_struct_type(q.type());
+
+  if (
+    p_type.tag().as_string().find("tag-tuple") != 0 ||
+    q_type.tag().as_string().find("tag-tuple") != 0)
+    throw std::runtime_error("math.dist() arguments must be tuples");
+
+  size_t p_size = p_type.components().size();
+  size_t q_size = q_type.components().size();
+
+  if (p_size != q_size)
+    throw std::runtime_error(
+      "math.dist() requires both points to have the same number of dimensions");
+
+  if (p_size == 0)
+    throw std::runtime_error("math.dist() requires non-empty points");
+
+  // Build sum of squared differences: (p[0]-q[0])^2 + (p[1]-q[1])^2 + ...
+  // Use ieee_* operations for floating-point arithmetic
+  exprt rounding_mode = symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+
+  exprt total = exprt();
+  for (size_t i = 0; i < p_size; i++)
+  {
+    std::string member_name = "element_" + std::to_string(i);
+    const typet &comp_type = p_type.components()[i].type();
+
+    exprt pi = member_exprt(p, member_name, comp_type);
+    exprt qi = member_exprt(q, member_name, q_type.components()[i].type());
+
+    // Cast to double if needed
+    if (!pi.type().is_floatbv())
+    {
+      exprt casted = exprt("typecast", double_type());
+      casted.copy_to_operands(pi);
+      pi = casted;
+    }
+    if (!qi.type().is_floatbv())
+    {
+      exprt casted = exprt("typecast", double_type());
+      casted.copy_to_operands(qi);
+      qi = casted;
+    }
+
+    // d = p[i] - q[i]
+    exprt diff("ieee_sub", double_type());
+    diff.copy_to_operands(pi, qi);
+    diff.add("rounding_mode") = rounding_mode;
+
+    // d * d
+    exprt sq("ieee_mul", double_type());
+    sq.copy_to_operands(diff, diff);
+    sq.add("rounding_mode") = rounding_mode;
+
+    if (i == 0)
+      total = sq;
+    else
+    {
+      exprt sum("ieee_add", double_type());
+      sum.copy_to_operands(total, sq);
+      sum.add("rounding_mode") = rounding_mode;
+      total = sum;
+    }
+  }
+
+  // Return sqrt(total) using ieee_sqrt (SMT-level intrinsic)
+  exprt sqrt_expr("ieee_sqrt", double_type());
+  sqrt_expr.copy_to_operands(total);
+  sqrt_expr.add("rounding_mode") = rounding_mode;
+  sqrt_expr.location() = converter.get_location_from_decl(element);
+
+  return sqrt_expr;
 }
