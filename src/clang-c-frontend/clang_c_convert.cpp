@@ -2808,6 +2808,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     const clang::AttributedStmt &astmt =
       static_cast<const clang::AttributedStmt &>(stmt);
+    astmt.dump();
 
     log_status("Processing an attribute");
 
