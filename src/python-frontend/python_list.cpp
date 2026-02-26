@@ -1588,6 +1588,10 @@ exprt python_list::handle_index_access(
         }
         catch (const std::out_of_range &)
         {
+          // Do not emit a frontend conversion error for constant OOB indices.
+          // The runtime list access model can raise IndexError, which is
+          // observable by Python try/except code.
+
           // Use the known element type for homogeneous dynamic lists.
           if (!list_type_map[list_name].empty())
           {
@@ -1774,6 +1778,8 @@ exprt python_list::handle_index_access(
     // Preserve historical frontend OOB diagnostics only when we can prove we
     // are indexing a stable list literal (not a reassigned/mutated/derived
     // list). Using the type map alone is too broad and causes false positives.
+    // Emit an IndexError raise instead of a C++ exception so Python
+    // try/except(IndexError) can observe the error.
     if (array.is_symbol())
     {
       const std::string &list_name = array.identifier().as_string();
@@ -1825,10 +1831,14 @@ exprt python_list::handle_index_access(
                                           : (index_abs >= known_size);
           if (oob)
           {
-            const locationt l = converter_.get_location_from_decl(list_value_);
-            throw std::runtime_error(
-              "List out of bounds at " + l.get_file().as_string() +
-              " line: " + l.get_line().as_string());
+            exprt raise =
+              converter_.get_exception_handler().gen_exception_raise(
+                "IndexError", "list index out of range");
+            codet throw_code("expression");
+            throw_code.operands().push_back(raise);
+            converter_.add_instruction(throw_code);
+            // Short-circuit: the raise makes the rest unreachable.
+            return gen_zero(elem_type);
           }
         }
       }
