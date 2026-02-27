@@ -1401,7 +1401,8 @@ exprt python_list::handle_range_slice(
     nlohmann::json list_node;
     if (
       list_value_.contains("value") && list_value_["value"].is_object() &&
-      list_value_["value"].contains("id") && list_value_["value"]["id"].is_string())
+      list_value_["value"].contains("id") &&
+      list_value_["value"]["id"].is_string())
     {
       list_node = json_utils::get_var_value(
         list_value_["value"]["id"],
@@ -1804,8 +1805,8 @@ exprt python_list::handle_index_access(
       {
         const locationt l = converter_.get_location_from_decl(list_value_);
         throw std::runtime_error(
-          "List out of bounds at " + l.get_file().as_string() + " line: " +
-          l.get_line().as_string());
+          "List out of bounds at " + l.get_file().as_string() +
+          " line: " + l.get_line().as_string());
       }
 
       // Keep historical frontend diagnostic for literal lists with
@@ -1846,8 +1847,8 @@ exprt python_list::handle_index_access(
           {
             const locationt l = converter_.get_location_from_decl(list_value_);
             throw std::runtime_error(
-              "List out of bounds at " + l.get_file().as_string() + " line: " +
-              l.get_line().as_string());
+              "List out of bounds at " + l.get_file().as_string() +
+              " line: " + l.get_line().as_string());
           }
         }
       }
