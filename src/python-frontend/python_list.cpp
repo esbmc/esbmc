@@ -1398,10 +1398,17 @@ exprt python_list::handle_range_slice(
     slice_node.contains("lower") && !slice_node["lower"].is_null() &&
     slice_node.contains("upper") && !slice_node["upper"].is_null())
   {
-    const auto &list_node = json_utils::get_var_value(
-      list_value_["value"]["id"],
-      converter_.current_function_name(),
-      converter_.ast());
+    nlohmann::json list_node;
+    if (
+      list_value_.contains("value") && list_value_["value"].is_object() &&
+      list_value_["value"].contains("id") &&
+      list_value_["value"]["id"].is_string())
+    {
+      list_node = json_utils::get_var_value(
+        list_value_["value"]["id"],
+        converter_.current_function_name(),
+        converter_.ast());
+    }
 
     const size_t lower_bound = slice_node["lower"]["value"].get<size_t>();
     const size_t upper_bound = slice_node["upper"]["value"].get<size_t>();
@@ -1468,7 +1475,9 @@ exprt python_list::handle_index_access(
 {
   // Find list node for type information
   nlohmann::json list_node;
-  if (list_value_["value"].contains("id"))
+  if (
+    list_value_.contains("value") && list_value_["value"].is_object() &&
+    list_value_["value"].contains("id"))
   {
     list_node = json_utils::find_var_decl(
       list_value_["value"]["id"],
@@ -1552,7 +1561,7 @@ exprt python_list::handle_index_access(
     }
 
     // Determine element type
-    if (list_node["_type"] == "arg")
+    if (list_node.contains("_type") && list_node["_type"] == "arg")
     {
       elem_type =
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
@@ -1567,18 +1576,27 @@ exprt python_list::handle_index_access(
       if (list_type_map[list_name].empty())
       {
         /* Fall back to annotation for function parameters */
-        const nlohmann::json list_value_node = json_utils::get_var_value(
-          list_value_["value"]["id"],
-          converter_.current_function_name(),
-          converter_.ast());
+        if (
+          list_value_.contains("value") && list_value_["value"].is_object() &&
+          list_value_["value"].contains("id") &&
+          list_value_["value"]["id"].is_string())
+        {
+          const nlohmann::json list_value_node = json_utils::get_var_value(
+            list_value_["value"]["id"],
+            converter_.current_function_name(),
+            converter_.ast());
 
-        elem_type = get_elem_type_from_annotation(
-          list_value_node, converter_.get_type_handler());
+          elem_type = get_elem_type_from_annotation(
+            list_value_node, converter_.get_type_handler());
+        }
       }
       else
       {
         size_t type_index =
-          (!list_node.is_null() && list_node["value"]["_type"] == "BinOp")
+          (!list_node.is_null() && list_node.contains("value") &&
+           list_node["value"].is_object() &&
+           list_node["value"].contains("_type") &&
+           list_node["value"]["_type"] == "BinOp")
             ? 0
             : index;
 
@@ -1588,6 +1606,10 @@ exprt python_list::handle_index_access(
         }
         catch (const std::out_of_range &)
         {
+          // Do not emit a frontend conversion error for constant OOB indices.
+          // The runtime list access model can raise IndexError, which is
+          // observable by Python try/except code.
+
           // Use the known element type for homogeneous dynamic lists.
           if (!list_type_map[list_name].empty())
           {
@@ -1681,10 +1703,16 @@ exprt python_list::handle_index_access(
         else if (!list_node.is_null() && list_node.contains("value"))
         {
           // Check if the value is a Subscript (such as d['a'])
-          if (list_node["value"]["_type"] == "Subscript")
+          if (
+            list_node["value"].contains("_type") &&
+            list_node["value"]["_type"] == "Subscript")
           {
             // For ESBMC_iter_0 = d['a'], get element type from dict's actual value
-            if (list_node["value"]["value"]["_type"] == "Name")
+            if (
+              list_node["value"].contains("value") &&
+              list_node["value"]["value"].is_object() &&
+              list_node["value"]["value"].contains("_type") &&
+              list_node["value"]["value"]["_type"] == "Name")
             {
               std::string dict_var_name =
                 list_node["value"]["value"]["id"].get<std::string>();
@@ -1767,6 +1795,64 @@ exprt python_list::handle_index_access(
 
     if (pos_expr == exprt() || elem_type == typet())
     {
+      const bool has_const_index =
+        (slice_node["_type"] == "Constant" && slice_node.contains("value")) ||
+        (slice_node["_type"] == "UnaryOp" && slice_node.contains("op") &&
+         slice_node["op"]["_type"] == "USub" &&
+         slice_node.contains("operand") &&
+         slice_node["operand"]["_type"] == "Constant");
+      if (has_const_index)
+      {
+        const locationt l = converter_.get_location_from_decl(list_value_);
+        throw std::runtime_error(
+          "List out of bounds at " + l.get_file().as_string() +
+          " line: " + l.get_line().as_string());
+      }
+
+      // Keep historical frontend diagnostic for literal lists with
+      // compile-time constant OOB indexing (including nested accesses).
+      if (
+        array.is_symbol() && !list_node.is_null() &&
+        list_node.contains("value") && list_node["value"].is_object() &&
+        list_node["value"].contains("elts") &&
+        list_node["value"]["elts"].is_array())
+      {
+        bool has_const_index = false;
+        bool negative_index = false;
+        size_t index_abs = 0;
+
+        if (slice_node["_type"] == "Constant" && slice_node.contains("value"))
+        {
+          has_const_index = true;
+          index_abs = slice_node["value"].get<size_t>();
+        }
+        else if (
+          slice_node["_type"] == "UnaryOp" && slice_node.contains("op") &&
+          slice_node["op"]["_type"] == "USub" &&
+          slice_node.contains("operand") &&
+          slice_node["operand"]["_type"] == "Constant")
+        {
+          has_const_index = true;
+          negative_index = true;
+          index_abs = slice_node["operand"]["value"].get<size_t>();
+        }
+
+        if (has_const_index)
+        {
+          const size_t list_size = list_node["value"]["elts"].size();
+          const bool out_of_bounds =
+            (!negative_index && index_abs >= list_size) ||
+            (negative_index && index_abs > list_size);
+          if (out_of_bounds)
+          {
+            const locationt l = converter_.get_location_from_decl(list_value_);
+            throw std::runtime_error(
+              "List out of bounds at " + l.get_file().as_string() +
+              " line: " + l.get_line().as_string());
+          }
+        }
+      }
+
       throw std::runtime_error(
         "Invalid list access: could not resolve position or element type");
     }
@@ -1774,6 +1860,8 @@ exprt python_list::handle_index_access(
     // Preserve historical frontend OOB diagnostics only when we can prove we
     // are indexing a stable list literal (not a reassigned/mutated/derived
     // list). Using the type map alone is too broad and causes false positives.
+    // Emit an IndexError raise instead of a C++ exception so Python
+    // try/except(IndexError) can observe the error.
     if (array.is_symbol())
     {
       const std::string &list_name = array.identifier().as_string();
@@ -1825,10 +1913,14 @@ exprt python_list::handle_index_access(
                                           : (index_abs >= known_size);
           if (oob)
           {
-            const locationt l = converter_.get_location_from_decl(list_value_);
-            throw std::runtime_error(
-              "List out of bounds at " + l.get_file().as_string() +
-              " line: " + l.get_line().as_string());
+            exprt raise =
+              converter_.get_exception_handler().gen_exception_raise(
+                "IndexError", "list index out of range");
+            codet throw_code("expression");
+            throw_code.operands().push_back(raise);
+            converter_.add_instruction(throw_code);
+            // Short-circuit: the raise makes the rest unreachable.
+            return gen_zero(elem_type);
           }
         }
       }
