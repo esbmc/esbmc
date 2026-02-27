@@ -1268,7 +1268,7 @@ exprt python_list::handle_range_slice(
 
         // Compute resolved = list_size + bound_expr (bound_expr is negative)
         // detect underflow by signed arithmetic.
-        typet signed_t = signedbv_typet(config.ansi_c.int_width);
+        typet signed_t = signed_size_type();
         exprt size_signed = typecast_exprt(symbol_expr(size_sym), signed_t);
         exprt bound_signed = typecast_exprt(bound_expr, signed_t);
         exprt resolved_signed("+", signed_t);
