@@ -1280,8 +1280,7 @@ exprt python_list::handle_range_slice(
       const symbolt *size_func =
         converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
       if (!size_func)
-        throw std::runtime_error(
-          "__ESBMC_list_size not found in symbol table");
+        throw std::runtime_error("__ESBMC_list_size not found in symbol table");
 
       side_effect_expr_function_callt size_call;
       size_call.function() = symbol_expr(*size_func);
@@ -1319,8 +1318,7 @@ exprt python_list::handle_range_slice(
     const symbolt *size_func =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
     if (!size_func)
-      throw std::runtime_error(
-        "__ESBMC_list_size not found in symbol table");
+      throw std::runtime_error("__ESBMC_list_size not found in symbol table");
 
     side_effect_expr_function_callt size_call;
     size_call.function() = symbol_expr(*size_func);
