@@ -38,7 +38,7 @@ struct PyConstValue
   }
   static PyConstValue make_float(double v)
   {
-    return { FLOAT, false, 0, v, "" };
+    return {FLOAT, false, 0, v, ""};
   }
   static PyConstValue make_string(const std::string &s)
   {
@@ -87,15 +87,10 @@ private:
     PyConstValue value;
   };
 
-  std::optional<StmtResult> exec_block(
-    const nlohmann::json &body,
-    Env &env);
-  std::optional<StmtResult> exec_stmt(
-    const nlohmann::json &stmt,
-    Env &env);
-  std::optional<PyConstValue> eval_expr(
-    const nlohmann::json &node,
-    const Env &env);
+  std::optional<StmtResult> exec_block(const nlohmann::json &body, Env &env);
+  std::optional<StmtResult> exec_stmt(const nlohmann::json &stmt, Env &env);
+  std::optional<PyConstValue>
+  eval_expr(const nlohmann::json &node, const Env &env);
 
   // String slice with full Python semantics
   static std::string slice_string(

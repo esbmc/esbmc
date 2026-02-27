@@ -48,7 +48,8 @@ static typet get_elem_type_from_annotation(
   const type_handler &type_handler_)
 {
   // Extract element type from a Subscript node such as list[T]
-  auto extract_subscript_elem = [&](const nlohmann::json &ann) -> typet {
+  auto extract_subscript_elem = [&](const nlohmann::json &ann) -> typet
+  {
     if (
       ann.contains("slice") && ann["slice"].is_object() &&
       ann["slice"].contains("id") && ann["slice"]["id"].is_string())
@@ -397,7 +398,8 @@ exprt python_list::build_concat_list_call(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   assert(size_sym && at_sym && push_obj_sym);
 
-  auto copy_list = [&](const exprt &src_list) {
+  auto copy_list = [&](const exprt &src_list)
+  {
     // size_t n = list_size(src_list);
     symbolt &n_sym = converter_.create_tmp_symbol(
       element, "$n$", size_type(), gen_zero(size_type()));
@@ -483,7 +485,8 @@ exprt python_list::build_concat_list_call(
   const std::string dst_id = dst_list.id.as_string();
 
   // Copy type info from source list if it's a symbol
-  auto copy_type_info_from_expr = [&](const exprt &src_list) {
+  auto copy_type_info_from_expr = [&](const exprt &src_list)
+  {
     if (!src_list.is_symbol())
       return;
     copy_type_map_entries(src_list.identifier().as_string(), dst_id);
@@ -633,9 +636,8 @@ exprt python_list::build_split_list(
   if (separator.empty())
   {
     // Whitespace split: split on any whitespace and collapse runs.
-    auto is_space = [](char c) {
-      return std::isspace(static_cast<unsigned char>(c)) != 0;
-    };
+    auto is_space = [](char c)
+    { return std::isspace(static_cast<unsigned char>(c)) != 0; };
 
     if (count == 0)
     {
@@ -676,12 +678,14 @@ exprt python_list::build_split_list(
     size_t i = 0;
     const size_t n = input.size();
 
-    auto skip_ws = [&](size_t &idx) {
+    auto skip_ws = [&](size_t &idx)
+    {
       while (idx < n && is_space(input[idx]))
         ++idx;
     };
 
-    auto scan_token = [&](size_t &idx) {
+    auto scan_token = [&](size_t &idx)
+    {
       while (idx < n && !is_space(input[idx]))
         ++idx;
     };
@@ -911,7 +915,8 @@ exprt python_list::remove_function_calls_recursive(
   const nlohmann::json &node)
 {
   // Bounds might generate intermediate calls, we need to add lhs to all of them.
-  const auto add_lhs_var_bound = [&](exprt &foo) -> exprt {
+  const auto add_lhs_var_bound = [&](exprt &foo) -> exprt
+  {
     if (!foo.is_function_call())
       return foo;
     code_function_callt &call = static_cast<code_function_callt &>(foo);
@@ -1000,7 +1005,8 @@ exprt python_list::handle_range_slice(
 
       // Extract start/end bounds from slice node
       auto get_bound_expr =
-        [&](const std::string &name, long long default_val) -> exprt {
+        [&](const std::string &name, long long default_val) -> exprt
+      {
         if (!slice_node.contains(name) || slice_node[name].is_null())
           return from_integer(default_val, signedbv_typet(64));
 
@@ -1059,7 +1065,8 @@ exprt python_list::handle_range_slice(
 
     // Process slice bounds (handles null, negative indices)
     auto process_bound =
-      [&](const std::string &bound_name, const exprt &default_value) -> exprt {
+      [&](const std::string &bound_name, const exprt &default_value) -> exprt
+    {
       if (!slice_node.contains(bound_name) || slice_node[bound_name].is_null())
         return default_value;
 
@@ -1222,7 +1229,8 @@ exprt python_list::handle_range_slice(
   const locationt location = converter_.get_location_from_decl(list_value_);
 
   auto get_list_bound =
-    [&](const std::string &bound_name, bool is_upper) -> exprt {
+    [&](const std::string &bound_name, bool is_upper) -> exprt
+  {
     if (slice_node.contains(bound_name) && !slice_node[bound_name].is_null())
     {
       const auto &bound_node = slice_node[bound_name];
@@ -1979,7 +1987,8 @@ exprt python_list::compare(
   assert(list_eq_func_sym);
 
   // Convert member expressions into temporary symbols
-  auto materialize_if_needed = [&](const exprt &e) -> exprt {
+  auto materialize_if_needed = [&](const exprt &e) -> exprt
+  {
     if (e.id() == "member")
     {
       // Extract member expression to a temporary variable
@@ -2164,7 +2173,8 @@ exprt python_list::list_repetition(
   exprt list_elem;
   symbolt *list_symbol = nullptr;
 
-  auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
+  auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool
+  {
     if (
       size_var->value.is_code() || size_var->value.is_nil() ||
       !size_var->value.is_constant())
@@ -2979,7 +2989,8 @@ typet python_list::check_homogeneous_list_types(
   typet elem_type = type_info[0].second;
 
   // Check whether a type is a string type (char array or char pointer)
-  auto is_string_type = [](const typet &t) -> bool {
+  auto is_string_type = [](const typet &t) -> bool
+  {
     return (t.is_array() && t.subtype() == char_type()) ||
            (t.is_pointer() && t.subtype() == char_type());
   };
@@ -3018,7 +3029,8 @@ exprt python_list::build_list_from_range(
 
   // Extract constant integer, handling UnaryOp for negative numbers
   auto extract_constant =
-    [&](const nlohmann::json &arg) -> std::optional<long long> {
+    [&](const nlohmann::json &arg) -> std::optional<long long>
+  {
     exprt expr = converter.get_expr(arg);
 
     if (expr.is_constant())
