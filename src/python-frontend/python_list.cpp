@@ -1266,10 +1266,23 @@ exprt python_list::handle_range_slice(
         size_decl.copy_to_operands(size_call);
         converter_.add_instruction(size_decl);
 
-        exprt bound_as_size = typecast_exprt(bound_expr, size_type());
-        exprt resolved("+", size_type());
-        resolved.copy_to_operands(symbol_expr(size_sym), bound_as_size);
-        return resolved;
+        // Compute resolved = list_size + bound_expr (bound_expr is negative)
+        // detect underflow by signed arithmetic.
+        typet signed_t = signedbv_typet(config.ansi_c.int_width);
+        exprt size_signed = typecast_exprt(symbol_expr(size_sym), signed_t);
+        exprt bound_signed = typecast_exprt(bound_expr, signed_t);
+        exprt resolved_signed("+", signed_t);
+        resolved_signed.copy_to_operands(size_signed, bound_signed);
+
+        // Clamp to 0 if negative
+        // list(0, list_size + bound)
+        exprt zero_signed = from_integer(0, signed_t);
+        exprt is_neg("<", bool_type());
+        is_neg.copy_to_operands(resolved_signed, zero_signed);
+        exprt clamped = if_exprt(is_neg, zero_signed, resolved_signed);
+        clamped.type() = signed_t;
+
+        return typecast_exprt(clamped, size_type());
       }
 
       return bound_expr;
@@ -1397,10 +1410,12 @@ exprt python_list::handle_range_slice(
   while_loop.copy_to_operands(loop_condition, loop_body);
   converter_.add_instruction(while_loop);
 
-  // Update type map for sliced elements (only if bounds are available)
+  // Update type map for sliced elements (only if both bounds are constant literals)
   if (
     slice_node.contains("lower") && !slice_node["lower"].is_null() &&
-    slice_node.contains("upper") && !slice_node["upper"].is_null())
+    slice_node["lower"]["_type"] == "Constant" &&
+    slice_node.contains("upper") && !slice_node["upper"].is_null() &&
+    slice_node["upper"]["_type"] == "Constant")
   {
     nlohmann::json list_node;
     if (
@@ -3312,12 +3327,4 @@ size_t python_list::get_list_type_map_size(const std::string &list_id)
   if (it == list_type_map.end())
     return 0;
   return it->second.size();
-}
-
-void python_list::reverse_type_info(const std::string &list_id)
-{
-  auto it = list_type_map.find(list_id);
-  if (it == list_type_map.end() || it->second.size() <= 1)
-    return;
-  std::reverse(it->second.begin(), it->second.end());
 }
