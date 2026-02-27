@@ -1,6 +1,7 @@
 #include <python-frontend/char_utils.h>
 #include <python-frontend/convert_float_literal.h>
 #include <python-frontend/function_call_builder.h>
+#include <python-frontend/python_consteval.h>
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module_locator.h>
@@ -2599,6 +2600,143 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       const auto &func_node = find_function((*ast_json)["body"], func_name);
       assert(!func_node.empty());
       get_function_definition(func_node);
+    }
+  }
+
+  // Compile-time evaluation: if the function is user-defined and all
+  // arguments are constants, try to evaluate the call entirely at
+  // conversion time, eliminating loops from the GOTO program.
+  if (
+    element["func"]["_type"] == "Name" && ast_json &&
+    element.contains("args") &&
+    (!element.contains("keywords") || element["keywords"].empty()))
+  {
+    const std::string &callee = element["func"]["id"].get<std::string>();
+
+    // Check if the callee is shadowed by a local FunctionDef inside
+    // the current enclosing function.  Consteval only knows about
+    // top-level definitions, so folding a shadowed name would resolve
+    // to the wrong function.
+    bool locally_shadowed = false;
+    if (!current_func_name_.empty())
+    {
+      // Walk the function nesting path (split on "@F@").
+      // Use const ref so the non-throwing find_function overload
+      // (returns empty JSON on miss) is selected instead of the
+      // mutable-ref overload that throws.
+      const nlohmann::json &ast_body = (*ast_json)["body"];
+      nlohmann::json cur_body = ast_body;
+      std::string remaining = current_func_name_;
+      while (!remaining.empty() && !locally_shadowed)
+      {
+        std::string part;
+        auto sep = remaining.find("@F@");
+        if (sep != std::string::npos)
+        {
+          part = remaining.substr(0, sep);
+          remaining = remaining.substr(sep + 3);
+        }
+        else
+        {
+          part = remaining;
+          remaining.clear();
+        }
+        auto fn =
+          find_function(static_cast<const nlohmann::json &>(cur_body), part);
+        if (fn.empty() || !fn.contains("body") || !fn["body"].is_array())
+          break;
+        for (const auto &stmt : fn["body"])
+        {
+          if (
+            stmt.contains("_type") && stmt["_type"] == "FunctionDef" &&
+            stmt.contains("name") && stmt["name"] == callee)
+          {
+            locally_shadowed = true;
+            break;
+          }
+        }
+        cur_body = fn["body"];
+      }
+    }
+
+    // Skip builtins / models — only try user-defined functions
+    if (
+      !locally_shadowed && !type_utils::is_builtin_type(callee) &&
+      !type_utils::is_python_model_func(callee) &&
+      !find_function((*ast_json)["body"], callee).empty())
+    {
+      // Collect constant arguments
+      bool all_const = true;
+      std::vector<PyConstValue> const_args;
+      for (const auto &arg_node : element["args"])
+      {
+        if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+        {
+          const_args.push_back(
+            PyConstValue::make_string(arg_node["value"].get<std::string>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" &&
+          arg_node["value"].is_number_integer())
+        {
+          const_args.push_back(
+            PyConstValue::make_int(arg_node["value"].get<long long>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" &&
+          arg_node["value"].is_number_float())
+        {
+          const_args.push_back(
+            PyConstValue::make_float(arg_node["value"].get<double>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" && arg_node["value"].is_boolean())
+        {
+          const_args.push_back(
+            PyConstValue::make_bool(arg_node["value"].get<bool>()));
+        }
+        else if (arg_node["_type"] == "Constant" && arg_node["value"].is_null())
+        {
+          const_args.push_back(PyConstValue::make_none());
+        }
+        else if (
+          arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
+          arg_node["operand"]["_type"] == "Constant" &&
+          arg_node["operand"]["value"].is_number_integer())
+        {
+          const_args.push_back(PyConstValue::make_int(
+            -arg_node["operand"]["value"].get<long long>()));
+        }
+        else if (
+          arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
+          arg_node["operand"]["_type"] == "Constant" &&
+          arg_node["operand"]["value"].is_number_float())
+        {
+          const_args.push_back(PyConstValue::make_float(
+            -arg_node["operand"]["value"].get<double>()));
+        }
+        else
+        {
+          all_const = false;
+          break;
+        }
+      }
+
+      if (all_const)
+      {
+        python_consteval evaluator(*ast_json);
+        auto result = evaluator.try_eval_call(callee, const_args);
+        if (result.has_value())
+        {
+          if (result->kind == PyConstValue::STRING)
+            return string_builder_->build_string_literal(result->string_val);
+          if (result->kind == PyConstValue::INT)
+            return from_integer(result->int_val, long_long_int_type());
+          if (result->kind == PyConstValue::BOOL)
+            return gen_boolean(result->bool_val);
+          // NONE and FLOAT fall through to normal call
+        }
+      }
     }
   }
 
@@ -5351,6 +5489,81 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     call_node = ast_node["test"];
   }
 
+  auto type = ast_node["_type"];
+  if (type == "While" && has_nested_call)
+  {
+    locationt location = get_location_from_decl(ast_node);
+    locationt call_location = get_location_from_decl(call_node);
+
+    code_blockt transformed;
+
+    // Reuse a single condition temporary to avoid redeclaring symbols
+    // at each iteration of the lowered loop.
+    symbolt cond_symbol =
+      create_return_temp_variable(bool_type(), call_location, "while_cond");
+    symbol_table_.add(cond_symbol);
+    exprt cond_tmp = symbol_expr(cond_symbol);
+
+    code_declt cond_decl(cond_tmp);
+    cond_decl.location() = call_location;
+    transformed.copy_to_operands(cond_decl);
+
+    code_blockt loop_body;
+
+    code_blockt *saved_block = current_block;
+    current_block = &loop_body;
+    exprt func_call = get_expr(call_node);
+    current_block = saved_block;
+
+    if (func_call.is_function_call())
+    {
+      if (!func_call.type().is_empty())
+        func_call.op0() = cond_tmp;
+      loop_body.copy_to_operands(func_call);
+    }
+    else
+    {
+      code_assignt cond_assign(cond_tmp, func_call);
+      cond_assign.location() = call_location;
+      loop_body.copy_to_operands(cond_assign);
+    }
+
+    exprt overall_cond = cond_tmp;
+    if (is_wrapped_in_unary)
+    {
+      overall_cond = exprt("not", bool_type());
+      overall_cond.copy_to_operands(cond_tmp);
+    }
+
+    exprt break_cond("not", bool_type());
+    break_cond.copy_to_operands(overall_cond);
+
+    code_breakt break_stmt;
+    break_stmt.location() = location;
+    code_ifthenelset break_if;
+    break_if.cond() = break_cond;
+    break_if.then_case() = break_stmt;
+    break_if.location() = location;
+    loop_body.copy_to_operands(break_if);
+
+    exprt body_expr;
+    if (ast_node["body"].is_array())
+      body_expr = get_block(ast_node["body"]);
+    else
+      body_expr = get_expr(ast_node["body"]);
+    body_expr.location() = location;
+    loop_body.copy_to_operands(body_expr);
+
+    codet while_code;
+    while_code.set_statement("while");
+    while_code.location() = location;
+    while_code.copy_to_operands(gen_boolean(true), loop_body);
+
+    transformed.copy_to_operands(while_code);
+    current_element_type = t;
+    return transformed;
+  }
+
   // Extract condition from AST
   exprt cond;
 
@@ -5425,8 +5638,6 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   // Recover type
   current_element_type = t;
-
-  auto type = ast_node["_type"];
 
   // Extract 'then' block from AST
   exprt then;
