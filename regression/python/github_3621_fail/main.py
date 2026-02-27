@@ -1,5 +1,5 @@
-def test_negative_index_empty_list() -> None:
-    lst: list[int] = []
+def test_negative_index_non_empty_list() -> None:
+    lst: list[int] = [1]
     try:
         _ = lst[-1]
         assert False, "IndexError not raised"
@@ -7,4 +7,4 @@ def test_negative_index_empty_list() -> None:
         pass
 
 
-test_negative_index_empty_list()
+test_negative_index_non_empty_list()
