@@ -5504,6 +5504,83 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     call_node = ast_node["test"];
   }
 
+  auto type = ast_node["_type"];
+  if (type == "While" && has_nested_call)
+  {
+    locationt location = get_location_from_decl(ast_node);
+    locationt call_location = get_location_from_decl(call_node);
+
+    code_blockt transformed;
+
+    // Reuse a single condition temporary to avoid redeclaring symbols
+    // at each iteration of the lowered loop.
+    symbolt cond_symbol = create_return_temp_variable(
+      bool_type(),
+      call_location,
+      "while_cond");
+    symbol_table_.add(cond_symbol);
+    exprt cond_tmp = symbol_expr(cond_symbol);
+
+    code_declt cond_decl(cond_tmp);
+    cond_decl.location() = call_location;
+    transformed.copy_to_operands(cond_decl);
+
+    code_blockt loop_body;
+
+    code_blockt *saved_block = current_block;
+    current_block = &loop_body;
+    exprt func_call = get_expr(call_node);
+    current_block = saved_block;
+
+    if (func_call.is_function_call())
+    {
+      if (!func_call.type().is_empty())
+        func_call.op0() = cond_tmp;
+      loop_body.copy_to_operands(func_call);
+    }
+    else
+    {
+      code_assignt cond_assign(cond_tmp, func_call);
+      cond_assign.location() = call_location;
+      loop_body.copy_to_operands(cond_assign);
+    }
+
+    exprt overall_cond = cond_tmp;
+    if (is_wrapped_in_unary)
+    {
+      overall_cond = exprt("not", bool_type());
+      overall_cond.copy_to_operands(cond_tmp);
+    }
+
+    exprt break_cond("not", bool_type());
+    break_cond.copy_to_operands(overall_cond);
+
+    code_breakt break_stmt;
+    break_stmt.location() = location;
+    code_ifthenelset break_if;
+    break_if.cond() = break_cond;
+    break_if.then_case() = break_stmt;
+    break_if.location() = location;
+    loop_body.copy_to_operands(break_if);
+
+    exprt body_expr;
+    if (ast_node["body"].is_array())
+      body_expr = get_block(ast_node["body"]);
+    else
+      body_expr = get_expr(ast_node["body"]);
+    body_expr.location() = location;
+    loop_body.copy_to_operands(body_expr);
+
+    codet while_code;
+    while_code.set_statement("while");
+    while_code.location() = location;
+    while_code.copy_to_operands(gen_boolean(true), loop_body);
+
+    transformed.copy_to_operands(while_code);
+    current_element_type = t;
+    return transformed;
+  }
+
   // Extract condition from AST
   exprt cond;
 
@@ -5578,8 +5655,6 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   // Recover type
   current_element_type = t;
-
-  auto type = ast_node["_type"];
 
   // Extract 'then' block from AST
   exprt then;
