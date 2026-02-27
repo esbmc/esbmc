@@ -1,5 +1,6 @@
 #include "irep2/irep2_expr.h"
 #include <cfloat>
+#include <cstring>
 #include <iomanip>
 #include <solvers/prop/literal.h>
 #include <solvers/smt/smt_conv.h>
@@ -12,41 +13,6 @@
 #include <util/message/format.h>
 #include <util/type_byte_size.h>
 #include <cmath>
-
-namespace {
-  // Derive significand precision (p) and minimum exponent (emin) for a
-  // floating-point type, using ieee_float_spect for consistency with the FP API.
-  static void detect_fp_params(const type2tc &ty, unsigned &p, int &emin) {
-    const auto single_spec = ieee_float_spect::single_precision();
-    const auto double_spec = ieee_float_spect::double_precision();
-    if (is_floatbv_type(ty)) {
-      const auto &fb = to_floatbv_type(ty);
-      if (fb.exponent == single_spec.e && fb.fraction == single_spec.f) {
-        p = single_spec.f + 1;                  // 24 (includes hidden bit)
-        emin = 2 - (1 << (single_spec.e - 1)); // -126
-      } else {
-        // Default to double precision for all other widths
-        p = double_spec.f + 1;                  // 53
-        emin = 2 - (1 << (double_spec.e - 1)); // -1022
-      }
-    } else {
-      p = double_spec.f + 1;
-      emin = 2 - (1 << (double_spec.e - 1));
-    }
-  }
-
-  static smt_astt mk_two_pow_real(smt_convt &C, long exp) {
-    std::ostringstream ss;
-    ss << std::setprecision(36) << std::pow(2.0L, (long double)exp);
-    return C.mk_smt_real(ss.str());
-  }
-
-  static smt_astt mk_two_pow_neg_k(smt_convt &C, unsigned k) {
-    std::ostringstream ss;
-    ss << std::setprecision(36) << std::pow(2.0L, -(long double)k);
-    return C.mk_smt_real(ss.str());
-  }
-}
 
 // Helpers extracted from z3_convt.
 
@@ -787,15 +753,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt side1 = convert_ast(to_ieee_add2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_add2t(expr).side_2);
       smt_astt real_result = mk_add(side1, side2);
-      if (this->options.get_bool_option("ir-ra"))
-      {
-        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-        a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
-      }
-      else
-      {
-        a = real_result;
-      }
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
@@ -814,13 +773,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt side1 = convert_ast(to_ieee_sub2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_sub2t(expr).side_2);
       smt_astt real_result = mk_sub(side1, side2);
-      if (this->options.get_bool_option("ir-ra"))
-      {
-        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-        a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
-      }
-      else
-        a = real_result;
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
@@ -839,18 +793,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt side1 = convert_ast(to_ieee_mul2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_mul2t(expr).side_2);
       smt_astt real_result = mk_mul(side1, side2);
-      if (this->options.get_bool_option("ir-ra"))
-      {
-        // Check if either operand is zero for special-case handling
-        smt_astt zero = mk_smt_real("0.0");
-        smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
-        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-        a = apply_ieee754_semantics(real_result, fbv_type, operand_is_zero);
-      }
-      else
-      {
-        a = real_result;
-      }
+      // Check if either operand is zero for special-case handling in IEEE mul
+      smt_astt zero = mk_smt_real("0.0");
+      smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, operand_is_zero);
     }
     else
     {
@@ -868,26 +815,18 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       smt_astt side1 = convert_ast(to_ieee_div2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_div2t(expr).side_2);
-      if (this->options.get_bool_option("ir-ra"))
-      {
-        smt_astt zero = get_zero_real();
-        smt_astt div_by_zero = mk_eq(side2, zero);
-        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-        const auto double_spec = ieee_float_spect::double_precision();
-        const auto single_spec = ieee_float_spect::single_precision();
-        smt_astt max_val =
-          (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
-            ? get_single_max_normal()
-            : get_double_max_normal();
-        smt_astt inf_result = mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
-        smt_astt real_result = mk_div(side1, side2);
-        smt_astt ieee_result = apply_ieee754_semantics(real_result, fbv_type, nullptr);
-        a = mk_ite(div_by_zero, inf_result, ieee_result);
-      }
-      else
-      {
-        a = mk_div(side1, side2);
-      }
+      smt_astt zero = get_zero_real();
+      smt_astt div_by_zero = mk_eq(side2, zero);
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      const auto single_spec = ieee_float_spect::single_precision();
+      smt_astt max_val =
+        (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+          ? get_single_max_normal()
+          : get_double_max_normal();
+      smt_astt inf_result = mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
+      smt_astt real_result = mk_div(side1, side2);
+      smt_astt ieee_result = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      a = mk_ite(div_by_zero, inf_result, ieee_result);
     }
     else
     {
@@ -909,15 +848,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       // Fused multiply-add: (val1 * val2) + val3
       smt_astt intermediate = mk_mul(val1, val2);
       smt_astt real_result = mk_add(intermediate, val3);
-      if (this->options.get_bool_option("ir-ra"))
-      {
-        const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-        a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
-      }
-      else
-      {
-        a = real_result;
-      }
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
@@ -3032,12 +2964,6 @@ double smt_convt::convert_rational_to_double(
     
     num_len = strnlen(num_buffer.data(), num_buffer.size());
     den_len = strnlen(den_buffer.data(), den_buffer.size());
-  }
-
-  if (num_len >= BUFFER_SIZE - 1 || den_len >= BUFFER_SIZE - 1)
-  {
-  constexpr size_t INITIAL_BUFFER_SIZE = 1024;
-  constexpr size_t MAX_BUFFER_SIZE = 100000;
   }
 
   // Populate the buffer with the decimal representation of `value`, growing the
