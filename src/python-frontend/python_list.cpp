@@ -561,24 +561,6 @@ exprt python_list::build_list_at_call(
 
   locationt location = converter_.get_location_from_decl(element);
 
-  // Check if index is already a constant non-negative value
-  if (index.is_constant() && index.type().is_signedbv())
-  {
-    BigInt idx_value;
-    if (!to_integer(index, idx_value) && idx_value >= 0)
-    {
-      // Index is constant and non-negative, use directly
-      side_effect_expr_function_callt list_at_call;
-      list_at_call.function() = symbol_expr(*list_at_func_sym);
-      list_at_call.arguments().push_back(
-        list.type().is_pointer() ? list : address_of_exprt(list));
-      list_at_call.arguments().push_back(typecast_exprt(index, size_type()));
-      list_at_call.type() = obj_type;
-      list_at_call.location() = location;
-      return list_at_call;
-    }
-  }
-
   // Get list size
   const symbolt *size_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
@@ -613,6 +595,28 @@ exprt python_list::build_list_at_call(
   // Choose between positive conversion or original
   if_exprt converted_index(is_negative, positive_index, index_as_size);
   converted_index.type() = size_type();
+
+  if (!config.options.get_bool_option("no-bounds-check"))
+  {
+    // Runtime guard only for negative-index normalization. This prevents
+    // underflowed indices (e.g., [] [-1]) from reaching the backend while
+    // preserving legacy behavior for non-negative accesses.
+    exprt oob_cond(">=", bool_type());
+    oob_cond.copy_to_operands(converted_index, symbol_expr(size_var));
+    exprt negative_oob("and", bool_type());
+    negative_oob.copy_to_operands(is_negative, oob_cond);
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "list index out of range");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = negative_oob;
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
 
   // Use the converted expression directly in the call
   side_effect_expr_function_callt list_at_call;
@@ -1991,54 +1995,6 @@ exprt python_list::handle_index_access(
             // Short-circuit: the raise makes the rest unreachable.
             return gen_zero(elem_type);
           }
-        }
-      }
-    }
-
-    // For direct list literals bound to symbols, emit IndexError on proven
-    // constant out-of-bounds access using the literal length itself. This
-    // covers empty-list cases (e.g. lst: list[int] = []) where type maps may
-    // be populated from annotations but the runtime list is still empty.
-    if (
-      array.is_symbol() && !list_node.is_null() &&
-      list_node.contains("value") && list_node["value"].is_object() &&
-      list_node["value"].contains("_type") &&
-      list_node["value"]["_type"] == "List" &&
-      list_node["value"].contains("elts") &&
-      list_node["value"]["elts"].is_array())
-    {
-      bool has_const_index = false;
-      bool negative_index = false;
-      size_t index_abs = 0;
-
-      if (slice_node["_type"] == "Constant" && slice_node.contains("value"))
-      {
-        has_const_index = true;
-        index_abs = slice_node["value"].get<size_t>();
-      }
-      else if (
-        slice_node["_type"] == "UnaryOp" && slice_node.contains("op") &&
-        slice_node["op"]["_type"] == "USub" && slice_node.contains("operand") &&
-        slice_node["operand"]["_type"] == "Constant")
-      {
-        has_const_index = true;
-        negative_index = true;
-        index_abs = slice_node["operand"]["value"].get<size_t>();
-      }
-
-      if (has_const_index)
-      {
-        const size_t list_size = list_node["value"]["elts"].size();
-        const bool oob =
-          negative_index ? (index_abs > list_size) : (index_abs >= list_size);
-        if (oob)
-        {
-          exprt raise = converter_.get_exception_handler().gen_exception_raise(
-            "IndexError", "list index out of range");
-          codet throw_code("expression");
-          throw_code.operands().push_back(raise);
-          converter_.add_instruction(throw_code);
-          return gen_zero(elem_type);
         }
       }
     }
