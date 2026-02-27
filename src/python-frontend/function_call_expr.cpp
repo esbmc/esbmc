@@ -1954,6 +1954,43 @@ exprt function_call_expr::handle_list_sort() const
   return sort_call;
 }
 
+exprt function_call_expr::handle_list_reverse() const
+{
+  const auto &args = call_["args"];
+
+  if (!args.empty())
+    throw std::runtime_error("reverse() takes no arguments");
+
+  // Locate the list symbol
+  std::string list_name = get_object_name();
+
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  // Locate the C model function __ESBMC_list_reverse
+  const symbolt *reverse_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_reverse");
+  assert(reverse_func);
+
+  // Emit: __ESBMC_list_reverse(list)
+  code_function_callt reverse_call;
+  reverse_call.function() = symbol_expr(*reverse_func);
+  reverse_call.arguments().push_back(symbol_expr(*list_symbol));
+  reverse_call.type() = empty_typet();
+  reverse_call.location() = converter_.get_location_from_decl(call_);
+
+  // Reverse the compile-time type-info vector to mirror the runtime
+  // reordering, so that subsequent index-based type lookups remain valid.
+  python_list::reverse_type_info(list_symbol->id.as_string());
+
+  return reverse_call;
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1965,7 +2002,8 @@ bool function_call_expr::is_list_method_call() const
   return method_name == "append" || method_name == "pop" ||
          method_name == "insert" || method_name == "remove" ||
          method_name == "clear" || method_name == "extend" ||
-         method_name == "copy" || method_name == "sort";
+         method_name == "copy" || method_name == "sort" ||
+         method_name == "reverse";
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -1988,7 +2026,8 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_remove();
   if (method_name == "sort")
     return handle_list_sort();
-
+  if (method_name == "reverse")
+    return handle_list_reverse();
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);

@@ -711,3 +711,23 @@ void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
     i++;
   }
 }
+
+void __ESBMC_list_reverse(PyListObject *l)
+{
+  if (!l || l->size <= 1)
+    return;
+
+  size_t left = 0;
+  size_t right = l->size - 1;
+
+  while (left < right)
+  {
+    /* Swap items[left] and items[right] in place */
+    PyObject tmp = l->items[left];
+    l->items[left] = l->items[right];
+    l->items[right] = tmp;
+
+    left++;
+    right--;
+  }
+}

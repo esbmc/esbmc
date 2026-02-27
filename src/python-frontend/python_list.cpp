@@ -3313,3 +3313,11 @@ size_t python_list::get_list_type_map_size(const std::string &list_id)
     return 0;
   return it->second.size();
 }
+
+void python_list::reverse_type_info(const std::string &list_id)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || it->second.size() <= 1)
+    return;
+  std::reverse(it->second.begin(), it->second.end());
+}
