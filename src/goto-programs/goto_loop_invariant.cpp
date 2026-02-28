@@ -123,14 +123,19 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   if (invariants.empty())
     return; // No invariants found, skip this loop
 
+  // Extract invariant-related DECL/FUNCTION_CALLs and re-insert before each
+  // ASSERT/ASSUME.
+  goto_programt side_effects;
+  extract_and_remove_side_effects(loop_head, invariants, side_effects);
+
   // 1. Insert ASSERT invariant before loop (base case)
-  insert_assert_before_loop(loop_head, invariants);
+  insert_assert_before_loop(loop_head, invariants, side_effects);
 
-  // // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
-  insert_havoc_and_assume_before_condition(loop_head, loop, invariants);
+  // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
+  insert_havoc_and_assume_before_condition(loop_head, loop, invariants, side_effects);
 
-  // // 3. Insert inductive step verification and loop termination
-  insert_inductive_step_and_termination(loop, invariants);
+  // 3. Insert inductive step verification and loop termination
+  insert_inductive_step_and_termination(loop, invariants, side_effects);
 }
 
 std::vector<expr2tc>
@@ -193,11 +198,120 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
   return invariants;
 }
 
+void goto_loop_invariantt::collect_symbols(
+  const expr2tc &expr,
+  std::set<irep_idt> &symbols)
+{
+  if (!expr)
+    return;
+
+  if (is_symbol2t(expr))
+  {
+    symbols.insert(to_symbol2t(expr).get_symbol_name());
+    return;
+  }
+
+  for (unsigned i = 0; i < expr->get_num_sub_exprs(); ++i)
+  {
+    const expr2tc *sub = expr->get_sub_expr(i);
+    if (sub && *sub)
+      collect_symbols(*sub, symbols);
+  }
+}
+
+void goto_loop_invariantt::extract_and_remove_side_effects(
+  goto_programt::targett loop_head,
+  const std::vector<expr2tc> &invariants,
+  goto_programt &side_effects_out)
+{
+  // Collect symbol names referenced in the invariants.
+  std::set<irep_idt> inv_symbols;
+  for (const auto &inv : invariants)
+    collect_symbols(inv, inv_symbols);
+
+  if (inv_symbols.empty())
+    return;
+
+  // Find the LOOP_INVARIANT instruction preceding loop_head.
+  goto_programt::targett loop_inv_it = loop_head;
+  const size_t max_back = 20;
+  size_t back_dist = 0;
+  while (
+    loop_inv_it != goto_function.body.instructions.begin() &&
+    back_dist < max_back)
+  {
+    --loop_inv_it;
+    ++back_dist;
+    if (loop_inv_it->is_loop_invariant())
+      break;
+  }
+  if (!loop_inv_it->is_loop_invariant())
+    return; // no LOOP_INVARIANT found
+
+  // Walk backwards from LOOP_INVARIANT, collecting consecutive DECL/
+  // FUNCTION_CALL whose defined symbol is in the invariant; stop at other
+  // instruction kinds. to_remove is reverse order; we iterate backwards
+  // when moving so side_effects_out keeps original order.
+  std::vector<goto_programt::targett> to_remove;
+
+  goto_programt::targett search = loop_inv_it;
+  while (search != goto_function.body.instructions.begin())
+  {
+    --search;
+
+    if (search->is_function_call())
+    {
+      if (!is_code_function_call2t(search->code))
+        break;
+      const code_function_call2t &fc = to_code_function_call2t(search->code);
+      if (!is_nil_expr(fc.ret) && is_symbol2t(fc.ret))
+      {
+        irep_idt sym = to_symbol2t(fc.ret).get_symbol_name();
+        if (inv_symbols.count(sym))
+        {
+          to_remove.push_back(search);
+          continue;
+        }
+      }
+      break;
+    }
+    else if (search->is_decl())
+    {
+      if (!is_code_decl2t(search->code))
+        break;
+      const code_decl2t &decl = to_code_decl2t(search->code);
+      if (inv_symbols.count(decl.value))
+      {
+        to_remove.push_back(search);
+        continue;
+      }
+      break;
+    }
+    else
+      break;
+  }
+
+  if (to_remove.empty())
+    return;
+
+  // Move collected instructions into side_effects_out (original order) and
+  // erase from the GOTO program.
+  for (auto rit = to_remove.rbegin(); rit != to_remove.rend(); ++rit)
+  {
+    side_effects_out.instructions.push_back(**rit);
+    goto_function.body.instructions.erase(*rit);
+  }
+}
+
 void goto_loop_invariantt::insert_assert_before_loop(
   goto_programt::targett &loop_head,
-  const std::vector<expr2tc> &invariants)
+  const std::vector<expr2tc> &invariants,
+  const goto_programt &side_effects)
 {
   goto_programt dest;
+
+  for (const auto &instr : side_effects.instructions)
+    dest.instructions.push_back(instr);
 
   for (const auto &invariant : invariants)
   {
@@ -215,7 +329,8 @@ void goto_loop_invariantt::insert_assert_before_loop(
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   goto_programt::targett &loop_head,
   const loopst &loop,
-  const std::vector<expr2tc> &invariants)
+  const std::vector<expr2tc> &invariants,
+  const goto_programt &side_effects)
 {
   // Find the loop condition (IF instruction) - this should be right at loop_head
   goto_programt::targett condition_it = loop_head;
@@ -252,7 +367,11 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->location.comment("loop invariant havoc");
   }
 
-  // 2. Insert ASSUME with invariants only (we'll assume we're entering the loop)
+  // 2. Emit side-effect instructions (use havoc'd variables).
+  for (const auto &instr : side_effects.instructions)
+    dest.instructions.push_back(instr);
+
+  // 3. ASSUME invariants (entering the loop).
   for (const auto &invariant : invariants)
   {
     // Create assume instruction: just the invariant
@@ -268,7 +387,8 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
 void goto_loop_invariantt::insert_inductive_step_and_termination(
   const loopst &loop,
-  const std::vector<expr2tc> &invariants)
+  const std::vector<expr2tc> &invariants,
+  const goto_programt &side_effects)
 {
   // Insert at the end of loop body (before GOTO back to loop head)
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
@@ -276,7 +396,11 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
 
   goto_programt dest;
 
-  // 1. Insert ASSERT for inductive step verification
+  // 1. Emit side-effect instructions (post-iteration values).
+  for (const auto &instr : side_effects.instructions)
+    dest.instructions.push_back(instr);
+
+  // 2. ASSERT for inductive step.
   for (const auto &invariant : invariants)
   {
     // Create assert instruction for each invariant
@@ -286,7 +410,7 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     t->location.comment("loop invariant inductive step");
   }
 
-  // 2. Insert ASSUME(FALSE) to terminate the loop
+  // 3. Insert ASSUME(FALSE) to terminate the loop
   goto_programt::targett t = dest.add_instruction(ASSUME);
   t->guard = gen_false_expr();
   t->location = loop_exit->location;
