@@ -2808,9 +2808,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     const clang::AttributedStmt &astmt =
       static_cast<const clang::AttributedStmt &>(stmt);
-    astmt.dump();
-
-    log_status("Processing an attribute");
+    log_status("Processing an attribute (dump removed - can crash on implicit attrs)");
 
     // First, convert the sub-statement
     if (get_expr(*astmt.getSubStmt(), new_expr))
@@ -2820,6 +2818,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // Check for loop unroll attributes
     for (const auto *attr : astmt.getAttrs())
     {
+      log_status(
+        "[DEBUG] Attribute: isImplicit={}", attr->isImplicit());
+      if (attr->isImplicit())
+      {
+        log_status("[DEBUG] Skipping implicit attribute to avoid dangling pointer");
+        continue;
+      }
+
       if (const auto *lha = llvm::dyn_cast<clang::LoopHintAttr>(attr))
       {
         
