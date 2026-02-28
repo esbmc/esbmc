@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --no-bounds-check --no-pointer-check --no-align-check --compact-trace
+^VERIFICATION SUCCESSFUL$
+
