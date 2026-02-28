@@ -132,7 +132,8 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   insert_assert_before_loop(loop_head, invariants, side_effects);
 
   // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
-  insert_havoc_and_assume_before_condition(loop_head, loop, invariants, side_effects);
+  insert_havoc_and_assume_before_condition(
+    loop_head, loop, invariants, side_effects);
 
   // 3. Insert inductive step verification and loop termination
   insert_inductive_step_and_termination(loop, invariants, side_effects);
@@ -236,9 +237,8 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
   goto_programt::targett loop_inv_it = loop_head;
   const size_t max_back = 20;
   size_t back_dist = 0;
-  while (
-    loop_inv_it != goto_function.body.instructions.begin() &&
-    back_dist < max_back)
+  while (loop_inv_it != goto_function.body.instructions.begin() &&
+         back_dist < max_back)
   {
     --loop_inv_it;
     ++back_dist;

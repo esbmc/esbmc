@@ -31,8 +31,7 @@ protected:
   std::vector<expr2tc> extract_loop_invariants(const loopst &loop);
 
   /** Collect all symbol names reachable from an expression tree. */
-  static void
-  collect_symbols(const expr2tc &expr, std::set<irep_idt> &symbols);
+  static void collect_symbols(const expr2tc &expr, std::set<irep_idt> &symbols);
 
   /**
    * Collect DECL/FUNCTION_CALL instructions immediately before LOOP_INVARIANT
