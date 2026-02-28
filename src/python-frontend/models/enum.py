@@ -12,18 +12,6 @@ class Enum:
     def __hash__(self) -> int:
         return self.value
 
-    def __lt__(self, other: Enum) -> bool:
-        return self.value < other.value
-
-    def __le__(self, other: Enum) -> bool:
-        return self.value <= other.value
-
-    def __gt__(self, other: Enum) -> bool:
-        return self.value > other.value
-
-    def __ge__(self, other: Enum) -> bool:
-        return self.value >= other.value
-
     def __repr__(self) -> str:
         return self.name
 
