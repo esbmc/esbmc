@@ -459,6 +459,16 @@ exprt function_call_expr::handle_isinstance() const
     if (expected_type.is_nil())
       throw std::runtime_error("Could not resolve type: " + type_name);
 
+    // If the object is already a concrete C primitive (not a PyObj pointer),
+    // the isinstance check can be determined statically by comparing C types.
+    // This avoids ill-formed ISINSTANCE(v, 0) when v is e.g. signed long int.
+    if (!obj_expr.type().is_pointer())
+    {
+      if (obj_expr.type() == expected_type)
+        return true_exprt();
+      return false_exprt();
+    }
+
     exprt t;
 
     if (expected_type.is_pointer())
