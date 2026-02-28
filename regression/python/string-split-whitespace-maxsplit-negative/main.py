@@ -5,4 +5,5 @@ def main() -> None:
     assert parts[1] == "b"
     assert parts[2] == "c"
 
+
 main()

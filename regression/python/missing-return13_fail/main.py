@@ -1,9 +1,10 @@
 import random
 
+
 def recursive_nested(n: int, depth: int) -> int:
     if n <= 0:
         return 0
-    
+
     if depth > 0:
         if n % 2 == 0:
             if depth % 2 == 0:
@@ -15,6 +16,7 @@ def recursive_nested(n: int, depth: int) -> int:
         else:
             return recursive_nested(n - 2, depth)
     # Missing return when depth <= 0 and n > 0
+
 
 x = random.randint(1, 10)
 y = random.randint(1, 10)

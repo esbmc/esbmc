@@ -1,5 +1,6 @@
 import random
 
+
 def main():
     result: int = random.randrange(0, 10, 1)
     assert result == 10
@@ -10,6 +11,6 @@ def main():
     val2: int = random.randrange(10, 0, -2)
     assert val2 >= 5
 
+
 if __name__ == "__main__":
     main()
-

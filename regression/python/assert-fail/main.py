@@ -1,3 +1,3 @@
-x : int = 1
-assert(x == 1)
-assert(x == 2)
+x: int = 1
+assert (x == 1)
+assert (x == 2)

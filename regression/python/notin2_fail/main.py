@@ -1,6 +1,6 @@
 def test_string_boundaries() -> None:
     s = "start-middle-end"
-    
+
     # Not in (substring absent)
     assert 'xyz' not in s
 
@@ -11,5 +11,6 @@ def test_string_boundaries() -> None:
     # Not in (check for 'in' at boundaries)
     assert not ('start' not in s)
     assert not ('end' not in s)
+
 
 test_string_boundaries()

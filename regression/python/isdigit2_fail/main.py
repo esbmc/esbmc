@@ -1,2 +1,2 @@
-text:str = ""
+text: str = ""
 assert text.isdigit()

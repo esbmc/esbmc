@@ -10,5 +10,6 @@ def foo(s: str | int) -> int:
 
     return -1
 
+
 assert foo(4) == 4
 assert foo('') != 42

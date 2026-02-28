@@ -1,4 +1,4 @@
-def my_max(x:list):
+def my_max(x: list):
     i = 1
     m = x[0]
 

@@ -3,6 +3,7 @@ def safe_div(a: int, b: int) -> float:
         raise ZeroDivisionError("Division by zero!")
     return a / b
 
+
 result = 10
 try:
     result = safe_div(5, 0)

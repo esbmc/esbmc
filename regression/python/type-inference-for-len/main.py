@@ -9,6 +9,7 @@ def is_valid_parenthesization(parens):
                 return False
     return depth == 0
 
+
 assert is_valid_parenthesization("((()()))()") == True
 assert is_valid_parenthesization(")()(") == False
 assert is_valid_parenthesization("((") == False

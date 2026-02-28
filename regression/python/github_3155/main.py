@@ -1,4 +1,5 @@
 class Foo:
+
     def __init__(self) -> None:
         pass
 
@@ -9,6 +10,7 @@ class Foo:
 
     def bar(self) -> str:
         return "bar"
+
 
 f = Foo()
 assert f.foo("foo") == "bar"

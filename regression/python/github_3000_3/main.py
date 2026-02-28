@@ -2,4 +2,3 @@
 l: list[str] = []
 s = " ".join(l)
 assert s == ""
-

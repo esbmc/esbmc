@@ -1,13 +1,17 @@
 class Log:
+
     def info(self, msg: str) -> None:
         print(msg)
 
+
 class Agents:
+
     def use_inline_agent(self, has_boolean: bool) -> dict:
         response = {}
         if has_boolean:
             response["has_price_text"] = True
         return response
+
 
 agents = Agents()
 log = Log()

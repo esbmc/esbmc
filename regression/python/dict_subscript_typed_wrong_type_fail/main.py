@@ -4,4 +4,3 @@ x = d[1]
 
 # This assertion must fail because x is *not* a float
 assert isinstance(x, float)
-

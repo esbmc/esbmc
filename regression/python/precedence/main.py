@@ -3,7 +3,7 @@ b = 4
 c = 8
 
 # Exponentiation
-assert a ** b == 16
+assert a**b == 16
 
 # Unary operations
 assert -a == -2
@@ -56,4 +56,3 @@ assert x == 8
 assert not False
 assert a == 2 and b == 4
 assert a == 2 or c == 100
-

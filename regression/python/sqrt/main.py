@@ -1,9 +1,11 @@
 import math
 
+
 def test_sqrt_basic():
     """Test: sqrt(4) = 2.0"""
     result: float = math.sqrt(4)
     assert result == 2.0
+
 
 def test_sqrt_variable():
     """Test: sqrt of variable"""
@@ -11,15 +13,18 @@ def test_sqrt_variable():
     result: float = math.sqrt(x)
     assert result == 4.0
 
+
 def test_sqrt_zero():
     """Test: sqrt(0) = 0.0"""
     result: float = math.sqrt(0)
     assert result == 0.0
 
+
 def test_sqrt_one():
     """Test: sqrt(1) = 1.0"""
     result: float = math.sqrt(1)
     assert result == 1.0
+
 
 def test_sqrt_expression():
     """Test: sqrt used in larger expression"""
@@ -29,11 +34,13 @@ def test_sqrt_expression():
     c: float = math.sqrt(a * a + b * b)
     assert c == 5.0
 
+
 def test_sqrt_float():
     """Test: sqrt with float input"""
     x: float = 2.25
     result: float = math.sqrt(x)
     assert result == 1.5
+
 
 def test_sqrt_conditional():
     """Test: sqrt result used in conditional"""
@@ -44,11 +51,13 @@ def test_sqrt_conditional():
     else:
         assert False, "sqrt(9) should be 3.0"
 
+
 def test_sqrt_return_type():
     """Test: sqrt always returns float even with perfect squares"""
     result: float = math.sqrt(4)  # Should be 2.0, not 2
     # In Python, sqrt always returns float
     assert isinstance(result, float)
+
 
 def test_sqrt_assignment():
     """Test: sqrt result assigned to variable"""
@@ -57,11 +66,13 @@ def test_sqrt_assignment():
     z: float = y * 2
     assert z == 10.0  # sqrt(25) * 2 = 5 * 2 = 10
 
+
 def test_sqrt_large():
     """Test: sqrt of large number"""
     x: int = 1000000
     result: float = math.sqrt(x)
     assert result == 1000.0
+
 
 def test_sqrt_comparison():
     """Test: Comparing sqrt results"""
@@ -69,23 +80,28 @@ def test_sqrt_comparison():
     sqrt_9: float = math.sqrt(9)
     assert sqrt_4 < sqrt_9
 
+
 def compute_sqrt(n: int) -> float:
     """Helper function that computes sqrt"""
     return math.sqrt(n)
+
 
 def test_sqrt_parameter():
     """Test: sqrt with function parameter"""
     result: float = compute_sqrt(64)
     assert result == 8.0
 
+
 def get_sqrt(value: int) -> float:
     """Function that returns sqrt directly"""
     return math.sqrt(value)
+
 
 def test_sqrt_return():
     """Test: sqrt in return statement"""
     result: float = get_sqrt(49)
     assert result == 7.0
+
 
 def main():
     test_sqrt_basic()
@@ -101,6 +117,7 @@ def main():
     test_sqrt_comparison()
     test_sqrt_parameter()
     test_sqrt_return()
-    
+
+
 if __name__ == "__main__":
     main()

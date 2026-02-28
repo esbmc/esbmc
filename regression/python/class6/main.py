@@ -1,20 +1,22 @@
 class Person:
+
     def __init__(self, name: int, age: int):
         self.name = name
         self.age = age
-    
+
     def greet(self) -> str:
         return "Hello"
-    
+
     def have_birthday(self) -> str:
         return "Happy birthday!"
-    
+
     def get_old(self) -> int:
-      self.age += 1
-      return self.age
- 
+        self.age += 1
+        return self.age
+
     def is_adult(self) -> bool:
         return self.age >= 18
+
 
 # Person just under adulthood
 person3 = Person(303, 17)
@@ -45,4 +47,3 @@ person6 = Person(606, 17)
 assert not person6.is_adult()
 person6.get_old()  # Now 18
 assert person6.is_adult()
-

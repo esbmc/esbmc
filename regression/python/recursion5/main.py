@@ -3,6 +3,7 @@ def foo() -> None:
     while x < 3:
         x = 3
 
+
 def main() -> None:
     count: int = 0
 
@@ -11,5 +12,6 @@ def main() -> None:
 
     div: float = 1 / count
     foo()
+
 
 main()

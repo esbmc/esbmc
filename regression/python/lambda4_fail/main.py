@@ -4,4 +4,5 @@ def test() -> None:
     mul = lambda a, b, c: a * b * c
     assert mul(2, 3, 4) != 24
 
+
 test()

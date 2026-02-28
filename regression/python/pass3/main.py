@@ -1,4 +1,5 @@
 class NeedsBody:
+
     def method(self) -> None:
         pass
 
@@ -6,7 +7,7 @@ class NeedsBody:
     def another() -> None:
         pass
 
+
 obj: NeedsBody = NeedsBody()
 obj.method()
 NeedsBody.another()
-

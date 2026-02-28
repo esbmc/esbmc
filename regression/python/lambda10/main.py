@@ -17,4 +17,5 @@ def test_lambda_expressions():
     assert is_in_range(5, 1, 10) == True
     assert is_in_range(15, 1, 10) == False
 
+
 test_lambda_expressions()

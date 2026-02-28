@@ -1,13 +1,11 @@
 class Person:
-    def __init__(self, name:str, age:int):
+
+    def __init__(self, name: str, age: int):
         self.name = name
         self.age = age
 
-people = [
-    Person("Alice", 25),
-    Person("Bob", 30),
-    Person("Charlie", 22)
-]
+
+people = [Person("Alice", 25), Person("Bob", 30), Person("Charlie", 22)]
 
 # Check if a person named 'Alice' exists
 assert any(p.name == "Alice" for p in people), "Alice is missing!"

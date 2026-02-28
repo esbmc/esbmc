@@ -10,4 +10,5 @@ def search(x, seq) -> int:
             if x > seq[i] and x <= seq[i + 1]:
                 return i + 1
 
+
 assert search(40, [10, 20, 30]) == 3

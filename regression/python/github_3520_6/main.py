@@ -3,4 +3,6 @@ def f():
     y = int
     assert isinstance(x, type)
     assert isinstance(y, type)
+
+
 f()

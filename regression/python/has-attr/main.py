@@ -1,4 +1,5 @@
 class Foo:
+
     def __init__(self):
         self.x = 10
 
@@ -9,7 +10,7 @@ f = Foo()
 assert hasattr(f, "x")
 
 # Missing attribute returns False.
-assert not hasattr(f, "y") # This should pass
+assert not hasattr(f, "y")  # This should pass
 
 # After adding dynamically, hasattr turns true.
 #f.y = 42

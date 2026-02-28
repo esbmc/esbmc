@@ -3,5 +3,5 @@ def test_not_in_behavior() -> None:
     assert 'x' not in ['y', 'z']
     assert not ('a' not in 'abc')
 
-test_not_in_behavior()
 
+test_not_in_behavior()

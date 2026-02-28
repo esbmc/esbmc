@@ -7,6 +7,5 @@ assert t2 == (1, 2, 3)
 t3 = 1, 2, 3
 assert t3 == (1, 2, 3)
 
-single = (5,)
-assert single == (5,)
-
+single = (5, )
+assert single == (5, )

@@ -5,6 +5,7 @@ def process_data(x: int) -> int:
         raise ZeroDivisionError("Zero value")
     return x
 
+
 try:
     process_data(-1)
 except Exception as e:

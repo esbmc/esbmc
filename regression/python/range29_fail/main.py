@@ -6,4 +6,5 @@ def test_range_uneven_step():
     assert l[2] == 6
     assert l[3] == 9
 
+
 test_range_uneven_step()

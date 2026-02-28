@@ -1,7 +1,6 @@
-from esbmc import (
-    nondet_int, nondet_float, nondet_bool, nondet_str, nondet_list, nondet_dict,
-    __ESBMC_assume, __ESBMC_assert
-)
+from esbmc import (nondet_int, nondet_float, nondet_bool, nondet_str, nondet_list, nondet_dict,
+                   __ESBMC_assume, __ESBMC_assert)
+
 
 def test_nondet_all() -> None:
     """Verify all symbolic intrinsics in one unified regression."""
@@ -32,8 +31,9 @@ def test_nondet_all() -> None:
     if len(lst) > 0:
         elem = lst[0]
         # Type check: allow int, float, or string
-        __ESBMC_assert(isinstance(elem, int) or isinstance(elem, float) or isinstance(elem, str),
-                       "List element type valid")
+        __ESBMC_assert(
+            isinstance(elem, int) or isinstance(elem, float) or isinstance(elem, str),
+            "List element type valid")
 
     # --- Dict ---
     d = nondet_dict()
@@ -43,6 +43,7 @@ def test_nondet_all() -> None:
         for k in d.keys():
             # Keys are expected to be strings
             __ESBMC_assert(isinstance(k, str), "Dict key type valid")
+
 
 # Run the test
 test_nondet_all()

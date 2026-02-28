@@ -2,10 +2,11 @@ def foo() -> None:
     x = 1
     arr = [1] * x
     assert arr[0] == 1
-    y = [1,2,3]
+    y = [1, 2, 3]
     n = len(y)
     z = [2] * n
     assert z[0] == 2
+
 
 a = [1] * 5
 assert a[0] == 1
@@ -32,7 +33,7 @@ assert d[0] == 2
 assert d[1] == 2
 assert d[2] == 2
 
-e = [1,2,3]
+e = [1, 2, 3]
 f = len(e)
 assert f == 3
 g = [3] * f
@@ -49,4 +50,3 @@ i = [float("inf")] * f
 assert i[0] == float("inf")
 assert i[1] == float("inf")
 assert i[2] == float("inf")
-

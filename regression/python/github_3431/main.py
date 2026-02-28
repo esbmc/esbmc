@@ -6,6 +6,7 @@ class Schema(TypedDict):
 
 
 class API:
+
     def method(self, schema: Schema) -> None:
         pass
 

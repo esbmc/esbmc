@@ -22,4 +22,4 @@ def f(numbers: List[float]) -> float:
 
 
 if __name__ == "__main__":
-    assert abs(f([1.0, 2.0, 3.0]) - 2.0/3.0) < 1e-6
+    assert abs(f([1.0, 2.0, 3.0]) - 2.0 / 3.0) < 1e-6

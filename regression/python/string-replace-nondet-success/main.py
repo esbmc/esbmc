@@ -1,4 +1,3 @@
-
 def main() -> None:
     text = nondet_str()
     # Assuming text is "hello world"
@@ -9,5 +8,6 @@ def main() -> None:
     result = text.replace("world", "Python")
     assert len(result) == 12
     assert result == "hello Python"
+
 
 main()

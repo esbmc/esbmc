@@ -5,4 +5,3 @@ import mod5
 c = mod5.MyClass()
 # Verify constructor call succeeds even with null return type handling
 assert True
-

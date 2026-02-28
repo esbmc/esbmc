@@ -6,9 +6,10 @@ def main() -> None:
     # If x is 50 or less then y is 50
     __ESBMC_assume(not (x <= 50) or y == 50)
     # If x is greater than 50 then y = x
-    __ESBMC_assume(not (x >  50) or y == x)
+    __ESBMC_assume(not (x > 50) or y == x)
     # At the end of the loop x is not <100
     __ESBMC_assume(x >= 100)
-    assert(y == 100)
+    assert (y == 100)
+
 
 main()

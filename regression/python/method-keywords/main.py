@@ -1,9 +1,11 @@
 class myClass:
+
     def __init__(self):
         pass
 
-    def foo(self,value:int) -> int:
+    def foo(self, value: int) -> int:
         return value
+
 
 myInstance = myClass()
 
