@@ -236,9 +236,8 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
   // backward passes are consistent.
   goto_programt::targett loop_inv_it = loop_head;
   size_t back_dist = 0;
-  while (
-    loop_inv_it != goto_function.body.instructions.begin() &&
-    back_dist < kMaxInvariantSearchBack)
+  while (loop_inv_it != goto_function.body.instructions.begin() &&
+         back_dist < kMaxInvariantSearchBack)
   {
     --loop_inv_it;
     ++back_dist;
