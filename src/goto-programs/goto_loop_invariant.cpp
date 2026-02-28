@@ -154,12 +154,10 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
   // Search backwards from loop head to find LOOP_INVARIANT
   goto_programt::targett search_it = loop_head;
 
-  // Search up to 10 instructions before the loop head
-  const size_t max_search_distance = 10;
   size_t search_distance = 0;
 
   while (search_it != goto_function.body.instructions.begin() &&
-         search_distance < max_search_distance)
+         search_distance < kMaxInvariantSearchBack)
   {
     --search_it;
     ++search_distance;
@@ -234,11 +232,13 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
     return;
 
   // Find the LOOP_INVARIANT instruction preceding loop_head.
+  // Uses the same search limit as extract_loop_invariants so the two
+  // backward passes are consistent.
   goto_programt::targett loop_inv_it = loop_head;
-  const size_t max_back = 20;
   size_t back_dist = 0;
-  while (loop_inv_it != goto_function.body.instructions.begin() &&
-         back_dist < max_back)
+  while (
+    loop_inv_it != goto_function.body.instructions.begin() &&
+    back_dist < kMaxInvariantSearchBack)
   {
     --loop_inv_it;
     ++back_dist;
@@ -248,11 +248,21 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
   if (!loop_inv_it->is_loop_invariant())
     return; // no LOOP_INVARIANT found
 
-  // Walk backwards from LOOP_INVARIANT, collecting consecutive DECL/
-  // FUNCTION_CALL whose defined symbol is in the invariant; stop at other
-  // instruction kinds. to_remove is reverse order; we iterate backwards
-  // when moving so side_effects_out keeps original order.
+  // Walk backwards from LOOP_INVARIANT collecting consecutive DECL /
+  // FUNCTION_CALL pairs that define compiler-generated temporaries used in
+  // the invariant.  Stop at the first instruction of any other kind.
+  //
+  // We track fc_return_syms separately so that DECL instructions are only
+  // collected when they correspond to a FUNCTION_CALL return value we have
+  // already identified.  This prevents accidentally extracting DECLs of
+  // ordinary user variables that happen to appear in the invariant expression
+  // but are not compiler-generated temporaries.
+  //
+  // Note: the C frontend does not emit DEAD instructions for these
+  // temporaries (confirmed by GOTO dump inspection), so no DEAD/undead
+  // mismatch arises from moving the DECLs.
   std::vector<goto_programt::targett> to_remove;
+  std::set<irep_idt> fc_return_syms;
 
   goto_programt::targett search = loop_inv_it;
   while (search != goto_function.body.instructions.begin())
@@ -269,6 +279,7 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
         irep_idt sym = to_symbol2t(fc.ret).get_symbol_name();
         if (inv_symbols.count(sym))
         {
+          fc_return_syms.insert(sym);
           to_remove.push_back(search);
           continue;
         }
@@ -280,7 +291,10 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
       if (!is_code_decl2t(search->code))
         break;
       const code_decl2t &decl = to_code_decl2t(search->code);
-      if (inv_symbols.count(decl.value))
+      // Only collect the DECL if its variable is a known FC return value.
+      // Ordinary variables (e.g. loop counters) that appear in the invariant
+      // expression must not be extracted from their original declaration site.
+      if (fc_return_syms.count(decl.value))
       {
         to_remove.push_back(search);
         continue;

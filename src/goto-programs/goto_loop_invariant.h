@@ -23,6 +23,12 @@ public:
   }
 
 protected:
+  /// Maximum number of instructions to search backwards from the loop head
+  /// when locating the LOOP_INVARIANT instruction or its extracted side
+  /// effects.  Both extract_loop_invariants and extract_and_remove_side_effects
+  /// use this same limit so their searches are consistent.
+  static constexpr size_t kMaxInvariantSearchBack = 10;
+
   void goto_loop_invariant();
 
   void convert_loop_with_invariant(loopst &loop);
