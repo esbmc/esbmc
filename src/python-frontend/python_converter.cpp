@@ -91,14 +91,13 @@ static StatementType get_statement_type(const nlohmann::json &element)
 }
 
 // Returns true if the named class inherits from Python's Enum
-static bool is_enum_class(
-  const std::string &class_name,
-  const nlohmann::json &ast_json)
+static bool
+is_enum_class(const std::string &class_name, const nlohmann::json &ast_json)
 {
-  const nlohmann::json class_node =
-    find_class(ast_json["body"], class_name);
-  if (class_node.empty() || !class_node.contains("bases") ||
-      !class_node["bases"].is_array())
+  const nlohmann::json class_node = find_class(ast_json["body"], class_name);
+  if (
+    class_node.empty() || !class_node.contains("bases") ||
+    !class_node["bases"].is_array())
     return false;
   for (const auto &base : class_node["bases"])
     if (base.is_object() && base.contains("id"))
@@ -121,8 +120,7 @@ exprt python_converter::make_enum_member_struct_expr(
   const symbolt *type_sym = symbol_table_.find_symbol("tag-" + class_name);
   if (!type_sym || !type_sym->type.is_struct())
   {
-    log_error(
-      "Enum class '{}' has no struct type in symbol table", class_name);
+    log_error("Enum class '{}' has no struct type in symbol table", class_name);
     abort();
   }
 
@@ -137,8 +135,8 @@ exprt python_converter::make_enum_member_struct_expr(
   }
 
   // Create (or reuse) a static char-array symbol for the member name string.
-  const std::string str_id = "py:" + current_python_file + "@C@" + class_name +
-                             "@_name_" + member_name;
+  const std::string str_id =
+    "py:" + current_python_file + "@C@" + class_name + "@_name_" + member_name;
   if (!symbol_table_.find_symbol(str_id))
   {
     exprt str_val = string_builder_->build_string_literal(member_name);
@@ -3570,8 +3568,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         // (enabling reliable constant-folding in string comparisons) even after
         // enum members have been re-typed as their enclosing struct.
         if (
-          element["value"].is_object() &&
-          element["value"].contains("value") &&
+          element["value"].is_object() && element["value"].contains("value") &&
           element["value"]["value"].is_object() &&
           element["value"]["value"].contains("_type") &&
           element["value"]["value"]["_type"] == "Name" &&
