@@ -101,8 +101,14 @@ static bool is_enum_class(
       !class_node["bases"].is_array())
     return false;
   for (const auto &base : class_node["bases"])
-    if (base.is_object() && base.contains("id") && base["id"] == "Enum")
-      return true;
+    if (base.is_object() && base.contains("id"))
+    {
+      // Resolve any import alias (e.g. "from enum import Enum as E" → "Enum")
+      const std::string resolved =
+        get_object_alias(ast_json, base["id"].get<std::string>());
+      if (resolved == "Enum")
+        return true;
+    }
   return false;
 }
 

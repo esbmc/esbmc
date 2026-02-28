@@ -44,7 +44,10 @@ bool python_class_builder::get_bases(struct_typet &st)
 
   for (const auto &bfull : pc_.bases())
   {
-    std::string base = leaf(bfull);
+    // Resolve any import alias before further processing
+    // e.g. "from enum import Enum as E" → leaf("E") → get_object_alias → "Enum"
+    std::string base =
+      leaf(json_utils::get_object_alias(conv_.ast(), leaf(bfull)));
     if (
       type_utils::is_builtin_type(base) ||
       type_utils::is_consensus_type(base) || type_utils::is_typeddict(base))
