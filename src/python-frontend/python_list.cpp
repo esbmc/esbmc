@@ -2965,13 +2965,19 @@ exprt python_list::extract_pyobject_value(
     return tc;
   }
 
-  // For char* strings and None (_Bool*), the void* already contains the pointer value
-  // For all other types, the void* contains a pointer to the value
+  // For char* strings, None (_Bool*), and Any (void*), the void* already
+  // contains the pointer value — cast directly, no extra dereference.
+  // any_type() == pointer_typet(empty_typet()) == void*, so its subtype is
+  // empty_typet(). Treating it like char* avoids a double-dereference that
+  // would read 8 bytes from a storage object that may be smaller (e.g. the
+  // 2-byte char array for a string key), producing a false-positive bounds
+  // violation.
   if (
     elem_type.is_pointer() &&
-    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
+    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type() ||
+     elem_type.subtype() == empty_typet()))
   {
-    // String and None case: cast void* directly to the pointer type (no dereference needed)
+    // Cast void* directly to the pointer type (no dereference needed)
     typecast_exprt tc(obj_value, elem_type);
     return tc;
   }

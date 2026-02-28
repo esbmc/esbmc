@@ -1038,14 +1038,20 @@ class Preprocessor(ast.NodeTransformer):
 
     def _create_dict_list_assign(self, node, var_name, dict_node, method, elem_type):
         """Create: var_name: list[elem_type] = dict_node.method()"""
-        if elem_type and elem_type != 'Any':
-            annotation = ast.Subscript(
-                value=ast.Name(id='list', ctx=ast.Load()),
-                slice=ast.Name(id=elem_type, ctx=ast.Load()),
-                ctx=ast.Load()
-            )
-        else:
-            annotation = ast.Name(id='list', ctx=ast.Load())
+        # Always use list[T] Subscript form (never bare 'list' Name).
+        # If the element type is unknown, use 'Any'.  The C++ list subscript
+        # handler resolves elem_type from the slice id: a bare 'list' Name
+        # annotation resolves to list_type (pointer), which then causes
+        # extract_pyobject_value to dereference a small char array as a
+        # large struct — producing a false-positive array bounds violation.
+        # Using 'Any' resolves to any_type(), the safe fallback already used
+        # in the C++ handler for unannotated lists.
+        actual_elem = elem_type if elem_type and elem_type != 'Any' else 'Any'
+        annotation = ast.Subscript(
+            value=ast.Name(id='list', ctx=ast.Load()),
+            slice=ast.Name(id=actual_elem, ctx=ast.Load()),
+            ctx=ast.Load()
+        )
         method_call = ast.Call(
             func=ast.Attribute(value=dict_node, attr=method, ctx=ast.Load()),
             args=[],
