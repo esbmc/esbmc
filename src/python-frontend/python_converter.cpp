@@ -120,11 +120,21 @@ exprt python_converter::make_enum_member_struct_expr(
   // Get the struct type for the enum class (e.g. tag-TrafficLight)
   const symbolt *type_sym = symbol_table_.find_symbol("tag-" + class_name);
   if (!type_sym || !type_sym->type.is_struct())
-    return symbol_expr(int_sym); // fallback: return plain int expression
+  {
+    log_error(
+      "Enum class '{}' has no struct type in symbol table", class_name);
+    abort();
+  }
 
   const struct_typet &st = to_struct_type(type_sym->type);
   if (st.components().size() < 2)
-    return symbol_expr(int_sym);
+  {
+    log_error(
+      "Enum class '{}' struct has fewer than 2 components (expected 'value' "
+      "and 'name')",
+      class_name);
+    abort();
+  }
 
   // Create (or reuse) a static char-array symbol for the member name string.
   const std::string str_id = "py:" + current_python_file + "@C@" + class_name +
