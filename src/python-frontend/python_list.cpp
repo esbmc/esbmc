@@ -2981,6 +2981,22 @@ exprt python_list::extract_pyobject_value(
     typecast_exprt tc(obj_value, elem_type);
     return tc;
   }
+  else if (elem_type.is_struct())
+  {
+    // Struct values (dict, class instances) are stored as pointer-to-struct:
+    //   list_push(..., &struct_ptr, size_of_pointer)
+    // so pyobj->value = &struct_ptr (a struct**).
+    // Double dereference: *(*(struct**)pyobj->value)
+    //   Step 1: read the stored pointer — *(void**)pyobj->value → void* (struct*)
+    typet void_ptr = gen_pointer_type(empty_typet());
+    typet void_ptr_ptr = gen_pointer_type(void_ptr);
+    typecast_exprt cast_pp(obj_value, void_ptr_ptr);   // (void**)pyobj->value
+    dereference_exprt deref_ptr(cast_pp, void_ptr);    // *(void**) = void* (struct ptr)
+    //   Step 2: cast to struct* and dereference
+    typecast_exprt cast_p(deref_ptr, pointer_typet(elem_type));
+    dereference_exprt deref_struct(cast_p, elem_type);
+    return deref_struct;
+  }
   else
   {
     // All other types: cast void* to pointer-to-type, then dereference

@@ -468,11 +468,44 @@ class Preprocessor(ast.NodeTransformer):
     #     start = ESBMC_range_next_(start, 1)
     #     has_next = ESBMC_range_has_next_(start, 5, 1)
 
+    def _pre_annotate_items_loop_vars(self, node):
+        """Pre-populate variable_annotations for the loop variables of a dict.items() for loop.
+
+        Called before generic_visit so that nested inner loops can look up
+        the type of the outer loop's value variable (e.g. 'inner' for
+        dict[str, dict[str, int]]) and resolve their own K/V types correctly.
+        """
+        dict_expr = node.iter.func.value
+        if isinstance(dict_expr, ast.Name):
+            key_ann, val_ann = self._get_dict_kv_types(dict_expr.id)
+        elif isinstance(dict_expr, ast.Attribute):
+            key_ann, val_ann = self._get_kv_types_from_attribute(dict_expr)
+        else:
+            key_ann, val_ann = self._get_kv_types_from_call(dict_expr)
+
+        target = node.target
+        if isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2:
+            k_var, v_var = target.elts[0], target.elts[1]
+            if isinstance(k_var, ast.Name):
+                self.variable_annotations[k_var.id] = key_ann
+            if isinstance(v_var, ast.Name):
+                self.variable_annotations[v_var.id] = val_ann
+        elif hasattr(target, 'id'):
+            self.variable_annotations[target.id] = key_ann
+
     def visit_For(self, node):
         """
         Transform for loops into while loops.
         Handles range() calls, enumerate() calls, dict.items(), and general iterables.
         """
+        # Pre-populate variable_annotations for items() loop variables before
+        # generic_visit, so that inner loops can resolve the type of outer loop
+        # variables (e.g. 'inner: dict[str, int]') when they are visited.
+        if (isinstance(node.iter, ast.Call) and
+                isinstance(node.iter.func, ast.Attribute) and
+                node.iter.func.attr == "items"):
+            self._pre_annotate_items_loop_vars(node)
+
         # First, recursively visit any nested nodes
         node = self.generic_visit(node)
 
@@ -984,14 +1017,14 @@ class Preprocessor(ast.NodeTransformer):
         if isinstance(dict_expr, ast.Name):
             # Simple variable: use directly and look up its annotation
             dict_node = dict_expr
-            key_type, val_type = self._get_dict_kv_types(dict_node.id)
+            key_ann, val_ann = self._get_dict_kv_types(dict_node.id)
         elif isinstance(dict_expr, ast.Attribute):
             # Attribute access (e.g., c.d.items()): materialize into a temp variable
             # and look up K/V types from the class attribute annotation.
             dict_temp_var = f'ESBMC_dict_{loop_id}'
             dict_node = ast.Name(id=dict_temp_var, ctx=ast.Load())
             self.ensure_all_locations(dict_node, node)
-            key_type, val_type = self._get_kv_types_from_attribute(dict_expr)
+            key_ann, val_ann = self._get_kv_types_from_attribute(dict_expr)
             dict_assign = ast.AnnAssign(
                 target=ast.Name(id=dict_temp_var, ctx=ast.Store()),
                 annotation=ast.Name(id='dict', ctx=ast.Load()),
@@ -1007,7 +1040,7 @@ class Preprocessor(ast.NodeTransformer):
             dict_temp_var = f'ESBMC_dict_{loop_id}'
             dict_node = ast.Name(id=dict_temp_var, ctx=ast.Load())
             self.ensure_all_locations(dict_node, node)
-            key_type, val_type = self._get_kv_types_from_call(dict_expr)
+            key_ann, val_ann = self._get_kv_types_from_call(dict_expr)
             dict_assign = ast.AnnAssign(
                 target=ast.Name(id=dict_temp_var, ctx=ast.Store()),
                 annotation=ast.Name(id='dict', ctx=ast.Load()),
@@ -1017,10 +1050,11 @@ class Preprocessor(ast.NodeTransformer):
             self.ensure_all_locations(dict_assign, node)
             setup_stmts.append(dict_assign)
 
-        # Intermediate list variables: ESBMC_keys_N: list[K] = d.keys()
-        # These carry type annotations the C++ list subscript handler can read.
-        keys_assign = self._create_dict_list_assign(node, keys_var, dict_node, 'keys', key_type)
-        vals_assign = self._create_dict_list_assign(node, vals_var, dict_node, 'values', val_type)
+        # Intermediate list variables: ESBMC_keys_N: list[base(K)] = d.keys()
+        # The list slice uses the BASE type name only (e.g. 'dict' for dict[str,int])
+        # so the C++ list subscript handler can call get_typet("dict") correctly.
+        keys_assign = self._create_dict_list_assign(node, keys_var, dict_node, 'keys', key_ann)
+        vals_assign = self._create_dict_list_assign(node, vals_var, dict_node, 'values', val_ann)
 
         # Setup: index = 0 and length = len(ESBMC_keys_N)
         index_assign = self._create_index_assignment(node, index_var)
@@ -1036,14 +1070,14 @@ class Preprocessor(ast.NodeTransformer):
             key_var_name = target.elts[0].id
             val_var_name = target.elts[1].id
             body.append(self._create_var_subscript_assign(
-                node, key_var_name, keys_var, index_var, key_type))
+                node, key_var_name, keys_var, index_var, key_ann))
             body.append(self._create_var_subscript_assign(
-                node, val_var_name, vals_var, index_var, val_type))
+                node, val_var_name, vals_var, index_var, val_ann))
         else:
             # Single variable: assign the key (matches Python's dict iteration semantics)
             single_var = target.id if hasattr(target, 'id') else 'ESBMC_loop_var'
             body.append(self._create_var_subscript_assign(
-                node, single_var, keys_var, index_var, key_type))
+                node, single_var, keys_var, index_var, key_ann))
 
         body.append(self._create_index_increment(node, index_var))
         body.extend(node.body)
@@ -1062,37 +1096,54 @@ class Preprocessor(ast.NodeTransformer):
 
         return result
 
+    def _any_ann(self):
+        """Return a fresh ast.Name(id='Any') annotation node."""
+        return ast.Name(id='Any', ctx=ast.Load())
+
     def _kv_types_from_annotation(self, annotation):
-        """Extract (key_type, val_type) from an ast.Subscript dict[K, V] node."""
+        """Extract (key_ann, val_ann) AST nodes from a dict[K, V] annotation node.
+
+        Returns the raw AST slice elements so nested types like dict[str, int]
+        are preserved intact (not flattened to a string).
+        """
         if (isinstance(annotation, ast.Subscript) and
                 isinstance(annotation.slice, ast.Tuple) and
                 len(annotation.slice.elts) >= 2):
-            elts = annotation.slice.elts
-            key_type = elts[0].id if isinstance(elts[0], ast.Name) else 'Any'
-            val_type = elts[1].id if isinstance(elts[1], ast.Name) else 'Any'
-            return key_type, val_type
-        return 'Any', 'Any'
+            return annotation.slice.elts[0], annotation.slice.elts[1]
+        return self._any_ann(), self._any_ann()
+
+    def _get_base_type_name(self, ann_node):
+        """Return the base type name string from an annotation node.
+
+        For simple names (int, str, dict) returns the id.
+        For subscripts (dict[str, int]) returns the outer name ('dict').
+        """
+        if isinstance(ann_node, ast.Name):
+            return ann_node.id
+        if isinstance(ann_node, ast.Subscript) and isinstance(ann_node.value, ast.Name):
+            return ann_node.value.id
+        return 'Any'
 
     def _get_dict_kv_types(self, dict_var_name):
-        """Return (key_type, val_type) from a variable's dict[K, V] annotation."""
+        """Return (key_ann, val_ann) annotation nodes from a variable's dict[K, V] annotation."""
         if dict_var_name and dict_var_name in self.variable_annotations:
             return self._kv_types_from_annotation(self.variable_annotations[dict_var_name])
-        return 'Any', 'Any'
+        return self._any_ann(), self._any_ann()
 
     def _get_kv_types_from_call(self, call_node):
-        """Return (key_type, val_type) from a function call's return annotation."""
+        """Return (key_ann, val_ann) annotation nodes from a function call's return annotation."""
         if isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name):
             func_name = call_node.func.id
             if func_name in self.function_return_annotations:
                 return self._kv_types_from_annotation(
                     self.function_return_annotations[func_name])
-        return 'Any', 'Any'
+        return self._any_ann(), self._any_ann()
 
     def _get_kv_types_from_attribute(self, attr_node):
-        """Return (key_type, val_type) from c.d by looking up c's class and d's annotation."""
+        """Return (key_ann, val_ann) annotation nodes from c.d via class attribute lookup."""
         if not (isinstance(attr_node, ast.Attribute) and
                 isinstance(attr_node.value, ast.Name)):
-            return 'Any', 'Any'
+            return self._any_ann(), self._any_ann()
         var_name = attr_node.value.id
         attr_name = attr_node.attr
 
@@ -1104,27 +1155,27 @@ class Preprocessor(ast.NodeTransformer):
         if class_name is None:
             class_name = self.instance_class_map.get(var_name)
         if class_name is None:
-            return 'Any', 'Any'
+            return self._any_ann(), self._any_ann()
 
         attr_ann = self.class_attr_annotations.get(class_name, {}).get(attr_name)
         if attr_ann is not None:
             return self._kv_types_from_annotation(attr_ann)
-        return 'Any', 'Any'
+        return self._any_ann(), self._any_ann()
 
-    def _create_dict_list_assign(self, node, var_name, dict_node, method, elem_type):
-        """Create: var_name: list[elem_type] = dict_node.method()"""
-        # Always use list[T] Subscript form (never bare 'list' Name).
-        # If the element type is unknown, use 'Any'.  The C++ list subscript
-        # handler resolves elem_type from the slice id: a bare 'list' Name
-        # annotation resolves to list_type (pointer), which then causes
-        # extract_pyobject_value to dereference a small char array as a
-        # large struct — producing a false-positive array bounds violation.
-        # Using 'Any' resolves to any_type(), the safe fallback already used
-        # in the C++ handler for unannotated lists.
-        actual_elem = elem_type if elem_type and elem_type != 'Any' else 'Any'
+    def _create_dict_list_assign(self, node, var_name, dict_node, method, elem_ann):
+        """Create: var_name: list[base(elem_ann)] = dict_node.method()
+
+        The list annotation uses only the BASE type name (e.g. 'dict' for
+        dict[str, int]) so the C++ list subscript handler can call
+        get_typet("dict") and correctly extract a dict struct from the PyObj.
+        Full nested type info is preserved via the loop variable's own annotation
+        (produced by _create_var_subscript_assign).
+        """
+        base_name = self._get_base_type_name(elem_ann)
+        actual_base = base_name if base_name and base_name != 'Any' else 'Any'
         annotation = ast.Subscript(
             value=ast.Name(id='list', ctx=ast.Load()),
-            slice=ast.Name(id=actual_elem, ctx=ast.Load()),
+            slice=ast.Name(id=actual_base, ctx=ast.Load()),
             ctx=ast.Load()
         )
         method_call = ast.Call(
@@ -1142,12 +1193,14 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(assign, node)
         return assign
 
-    def _create_var_subscript_assign(self, node, var_name, list_var, index_var, elem_type):
-        """Create: var_name: elem_type = list_var[index_var]"""
-        annotation = ast.Name(
-            id=elem_type if elem_type and elem_type != 'Any' else 'Any',
-            ctx=ast.Load()
-        )
+    def _create_var_subscript_assign(self, node, var_name, list_var, index_var, elem_ann):
+        """Create: var_name: elem_ann = list_var[index_var]
+
+        Uses the FULL annotation node (e.g. dict[str, int]) so that
+        variable_annotations[var_name] carries nested type information for
+        subsequent inner-loop type resolution.
+        """
+        annotation = elem_ann  # full AST annotation node
         subscript = ast.Subscript(
             value=ast.Name(id=list_var, ctx=ast.Load()),
             slice=ast.Name(id=index_var, ctx=ast.Load()),
