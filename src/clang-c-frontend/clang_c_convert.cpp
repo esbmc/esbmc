@@ -2848,8 +2848,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           {
             if (clang::Expr *val = lha->getValue())
             {
-              if (const auto *lit =
-                    llvm::dyn_cast<clang::IntegerLiteral>(val))
+              if (const auto *lit = llvm::dyn_cast<clang::IntegerLiteral>(val))
                 unroll_count = lit->getValue().getZExtValue();
               else
               {
