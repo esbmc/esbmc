@@ -2828,6 +2828,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // Check for loop unroll attributes
     for (const auto *attr : astmt.getAttrs())
     {
+      // Skip implicit (compiler-synthesized) attributes, we only consider
+      // explicitly defined attributes.
+      if (attr->isImplicit())
+        continue;
+
       if (const auto *lha = llvm::dyn_cast<clang::LoopHintAttr>(attr))
       {
         if (
