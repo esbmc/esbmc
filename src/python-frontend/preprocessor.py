@@ -17,6 +17,8 @@ class Preprocessor(ast.NodeTransformer):
         self.listcomp_counter = 0  # Counter for list comprehension temporaries
         self.variable_annotations = {}  # Store full AST annotations
         self.function_return_annotations = {}  # Store function return type annotations
+        self.class_attr_annotations = {}  # {class_name: {attr_name: annotation_node}}
+        self.instance_class_map = {}  # {var_name: class_name} from c = C()
         self.decimal_imported = False
         self.decimal_module_imported = False
         self.decimal_class_alias = None
@@ -983,10 +985,25 @@ class Preprocessor(ast.NodeTransformer):
             # Simple variable: use directly and look up its annotation
             dict_node = dict_expr
             key_type, val_type = self._get_dict_kv_types(dict_node.id)
+        elif isinstance(dict_expr, ast.Attribute):
+            # Attribute access (e.g., c.d.items()): materialize into a temp variable
+            # and look up K/V types from the class attribute annotation.
+            dict_temp_var = f'ESBMC_dict_{loop_id}'
+            dict_node = ast.Name(id=dict_temp_var, ctx=ast.Load())
+            self.ensure_all_locations(dict_node, node)
+            key_type, val_type = self._get_kv_types_from_attribute(dict_expr)
+            dict_assign = ast.AnnAssign(
+                target=ast.Name(id=dict_temp_var, ctx=ast.Store()),
+                annotation=ast.Name(id='dict', ctx=ast.Load()),
+                value=dict_expr,
+                simple=1
+            )
+            self.ensure_all_locations(dict_assign, node)
+            setup_stmts.append(dict_assign)
         else:
-            # Complex expression (e.g., a function call): materialize into a temp
-            # symbol so the C++ converter gets a stable lvalue for member access.
-            # Accessing a member of an rvalue (e.g., make().keys) crashes ESBMC.
+            # Other complex expression (e.g., a function call: make().items()):
+            # materialize into a temp symbol so the C++ converter gets a stable
+            # lvalue for member access. Accessing a member of an rvalue crashes ESBMC.
             dict_temp_var = f'ESBMC_dict_{loop_id}'
             dict_node = ast.Name(id=dict_temp_var, ctx=ast.Load())
             self.ensure_all_locations(dict_node, node)
@@ -1065,6 +1082,29 @@ class Preprocessor(ast.NodeTransformer):
             if func_name in self.function_return_annotations:
                 return self._kv_types_from_annotation(
                     self.function_return_annotations[func_name])
+        return 'Any', 'Any'
+
+    def _get_kv_types_from_attribute(self, attr_node):
+        """Return (key_type, val_type) from c.d by looking up c's class and d's annotation."""
+        if not (isinstance(attr_node, ast.Attribute) and
+                isinstance(attr_node.value, ast.Name)):
+            return 'Any', 'Any'
+        var_name = attr_node.value.id
+        attr_name = attr_node.attr
+
+        # Get class name from explicit annotation (c: C = ...) or from c = C()
+        class_name = None
+        ann = self.variable_annotations.get(var_name)
+        if isinstance(ann, ast.Name):
+            class_name = ann.id
+        if class_name is None:
+            class_name = self.instance_class_map.get(var_name)
+        if class_name is None:
+            return 'Any', 'Any'
+
+        attr_ann = self.class_attr_annotations.get(class_name, {}).get(attr_name)
+        if attr_ann is not None:
+            return self._kv_types_from_annotation(attr_ann)
         return 'Any', 'Any'
 
     def _create_dict_list_assign(self, node, var_name, dict_node, method, elem_type):
@@ -1574,6 +1614,10 @@ class Preprocessor(ast.NodeTransformer):
                     annotation_node = self._create_annotation_node_from_value(node.value)
                     if annotation_node:
                         self.variable_annotations[target.id] = annotation_node
+                    # Track class instantiations: c = C()
+                    if (isinstance(node.value, ast.Call) and
+                            isinstance(node.value.func, ast.Name)):
+                        self.instance_class_map[target.id] = node.value.func.id
                 return node
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
@@ -1948,10 +1992,27 @@ class Preprocessor(ast.NodeTransformer):
         old_class_name = getattr(self, 'current_class_name', None)
         self.current_class_name = node.name
 
+        self._collect_class_attr_annotations(node)
         self.generic_visit(node)
 
         self.current_class_name = old_class_name
         return node
+
+    def _collect_class_attr_annotations(self, class_node):
+        """Scan __init__ for self.attr: T = ... and cache attribute annotations."""
+        for item in class_node.body:
+            if isinstance(item, ast.FunctionDef) and item.name == '__init__':
+                for stmt in item.body:
+                    if (isinstance(stmt, ast.AnnAssign) and
+                            isinstance(stmt.target, ast.Attribute) and
+                            isinstance(stmt.target.value, ast.Name) and
+                            stmt.target.value.id == 'self' and
+                            stmt.annotation is not None):
+                        class_name = class_node.name
+                        attr_name = stmt.target.attr
+                        if class_name not in self.class_attr_annotations:
+                            self.class_attr_annotations[class_name] = {}
+                        self.class_attr_annotations[class_name][attr_name] = stmt.annotation
 
     def visit_ImportFrom(self, node):
         if node.module == "decimal":

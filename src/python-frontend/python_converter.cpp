@@ -7039,6 +7039,28 @@ void python_converter::get_attributes_from_self(
         // Extract just the class name (the attribute part)
         annotated_type = stmt["annotation"]["attr"].get<std::string>();
       }
+      else if (
+        stmt["annotation"].contains("_type") &&
+        stmt["annotation"]["_type"] == "Subscript")
+      {
+        // Subscript annotation like dict[str, int] or list[int]
+        typet type = get_type_from_annotation(stmt["annotation"], stmt);
+        if (type.is_nil())
+        {
+          log_warning(
+            "Skipping attribute '{}' with unsupported annotation type",
+            attr_name);
+          continue;
+        }
+        struct_typet::componentt comp =
+          build_component(current_class_name_, attr_name, type);
+        auto &class_components = clazz.components();
+        if (
+          std::find(class_components.begin(), class_components.end(), comp) ==
+          class_components.end())
+          class_components.push_back(comp);
+        continue;
+      }
       else
       {
         log_warning(

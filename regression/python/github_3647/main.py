@@ -13,6 +13,15 @@ def g() -> None:
     for k, v in make().items():
         assert v == 1
 
+class C:
+    def __init__(self):
+        self.d: dict[str, int] = {"a": 1}
+
+def h() -> None:
+    c = C()
+    for k, v in c.d.items():
+        assert v == 1
+
 inventory: dict[str, int] = {"apples": 10, "bananas": 5}
 check_inventory(inventory)
 
@@ -20,3 +29,4 @@ d = {"a": 1, "b": 2}
 f(d)
 
 g()
+h()
