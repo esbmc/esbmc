@@ -16,6 +16,7 @@ class Preprocessor(ast.NodeTransformer):
         self.functionKwonlyParams = {}
         self.listcomp_counter = 0  # Counter for list comprehension temporaries
         self.variable_annotations = {}  # Store full AST annotations
+        self.function_return_annotations = {}  # Store function return type annotations
         self.decimal_imported = False
         self.decimal_module_imported = False
         self.decimal_class_alias = None
@@ -974,12 +975,30 @@ class Preprocessor(ast.NodeTransformer):
         keys_var = f'ESBMC_keys_{loop_id}'
         vals_var = f'ESBMC_vals_{loop_id}'
 
-        # Get the dict node (e.g., 'd' in d.items())
-        dict_node = node.iter.func.value
-        dict_var_name = dict_node.id if isinstance(dict_node, ast.Name) else None
+        # Get the dict expression (e.g., 'd' in d.items(), or 'make()' in make().items())
+        dict_expr = node.iter.func.value
+        setup_stmts = []
 
-        # Get key/value types from annotation if available
-        key_type, val_type = self._get_dict_kv_types(dict_var_name)
+        if isinstance(dict_expr, ast.Name):
+            # Simple variable: use directly and look up its annotation
+            dict_node = dict_expr
+            key_type, val_type = self._get_dict_kv_types(dict_node.id)
+        else:
+            # Complex expression (e.g., a function call): materialize into a temp
+            # symbol so the C++ converter gets a stable lvalue for member access.
+            # Accessing a member of an rvalue (e.g., make().keys) crashes ESBMC.
+            dict_temp_var = f'ESBMC_dict_{loop_id}'
+            dict_node = ast.Name(id=dict_temp_var, ctx=ast.Load())
+            self.ensure_all_locations(dict_node, node)
+            key_type, val_type = self._get_kv_types_from_call(dict_expr)
+            dict_assign = ast.AnnAssign(
+                target=ast.Name(id=dict_temp_var, ctx=ast.Store()),
+                annotation=ast.Name(id='dict', ctx=ast.Load()),
+                value=dict_expr,
+                simple=1
+            )
+            self.ensure_all_locations(dict_assign, node)
+            setup_stmts.append(dict_assign)
 
         # Intermediate list variables: ESBMC_keys_N: list[K] = d.keys()
         # These carry type annotations the C++ list subscript handler can read.
@@ -1015,25 +1034,37 @@ class Preprocessor(ast.NodeTransformer):
         while_stmt = ast.While(test=while_cond, body=body, orelse=[])
         self.ensure_all_locations(while_stmt, node)
 
-        result = [keys_assign, vals_assign, index_assign, length_assign, while_stmt]
+        result = setup_stmts + [keys_assign, vals_assign, index_assign, length_assign, while_stmt]
         for stmt in result:
             self.ensure_all_locations(stmt, node)
             ast.fix_missing_locations(stmt)
 
         return result
 
+    def _kv_types_from_annotation(self, annotation):
+        """Extract (key_type, val_type) from an ast.Subscript dict[K, V] node."""
+        if (isinstance(annotation, ast.Subscript) and
+                isinstance(annotation.slice, ast.Tuple) and
+                len(annotation.slice.elts) >= 2):
+            elts = annotation.slice.elts
+            key_type = elts[0].id if isinstance(elts[0], ast.Name) else 'Any'
+            val_type = elts[1].id if isinstance(elts[1], ast.Name) else 'Any'
+            return key_type, val_type
+        return 'Any', 'Any'
+
     def _get_dict_kv_types(self, dict_var_name):
-        """Return (key_type, val_type) strings from a dict[K, V] annotation, or ('Any', 'Any')."""
-        if (dict_var_name and hasattr(self, 'variable_annotations') and
-                dict_var_name in self.variable_annotations):
-            annotation = self.variable_annotations[dict_var_name]
-            if (isinstance(annotation, ast.Subscript) and
-                    isinstance(annotation.slice, ast.Tuple) and
-                    len(annotation.slice.elts) >= 2):
-                elts = annotation.slice.elts
-                key_type = elts[0].id if isinstance(elts[0], ast.Name) else 'Any'
-                val_type = elts[1].id if isinstance(elts[1], ast.Name) else 'Any'
-                return key_type, val_type
+        """Return (key_type, val_type) from a variable's dict[K, V] annotation."""
+        if dict_var_name and dict_var_name in self.variable_annotations:
+            return self._kv_types_from_annotation(self.variable_annotations[dict_var_name])
+        return 'Any', 'Any'
+
+    def _get_kv_types_from_call(self, call_node):
+        """Return (key_type, val_type) from a function call's return annotation."""
+        if isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name):
+            func_name = call_node.func.id
+            if func_name in self.function_return_annotations:
+                return self._kv_types_from_annotation(
+                    self.function_return_annotations[func_name])
         return 'Any', 'Any'
 
     def _create_dict_list_assign(self, node, var_name, dict_node, method, elem_type):
@@ -1856,6 +1887,10 @@ class Preprocessor(ast.NodeTransformer):
 
 
     def visit_FunctionDef(self, node):
+        # Store return type annotation so call-expression iterables can resolve types
+        if node.returns is not None:
+            self.function_return_annotations[node.name] = node.returns
+
         # Extract parameter type annotations and store them
         for arg in node.args.args:
             if arg.annotation is not None:
