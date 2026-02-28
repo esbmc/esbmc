@@ -1047,6 +1047,10 @@ class Preprocessor(ast.NodeTransformer):
 
         body.append(self._create_index_increment(node, index_var))
         body.extend(node.body)
+        # Detect modification of the dict during iteration (Python raises RuntimeError).
+        # Since ESBMC_keys_N is a pointer alias to d.keys, list_size(ESBMC_keys_N)
+        # reflects any list_push/list_pop done by dict assignment in the loop body.
+        body.append(self._create_dict_size_assertion(node, keys_var, length_var))
 
         while_stmt = ast.While(test=while_cond, body=body, orelse=[])
         self.ensure_all_locations(while_stmt, node)
@@ -1158,6 +1162,24 @@ class Preprocessor(ast.NodeTransformer):
         )
         self.ensure_all_locations(assign, node)
         return assign
+
+    def _create_dict_size_assertion(self, node, keys_var, length_var):
+        """Create: assert len(keys_var) == length_var (detect dict modification during iteration)."""
+        size_call = ast.Call(
+            func=ast.Name(id='len', ctx=ast.Load()),
+            args=[ast.Name(id=keys_var, ctx=ast.Load())],
+            keywords=[]
+        )
+        assert_stmt = ast.Assert(
+            test=ast.Compare(
+                left=size_call,
+                ops=[ast.Eq()],
+                comparators=[ast.Name(id=length_var, ctx=ast.Load())]
+            ),
+            msg=ast.Constant(value="RuntimeError: dictionary changed size during iteration")
+        )
+        self.ensure_all_locations(assert_stmt, node)
+        return assert_stmt
 
     def _transform_iterable_for(self, node):
         """
