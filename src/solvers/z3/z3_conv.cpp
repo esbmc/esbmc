@@ -1407,7 +1407,7 @@ ieee_floatt z3_convt::get_fpbv(smt_astt a)
     else
       number.make_minus_infinity();
   }
-    else
+  else
   {
     z3::model m = solver.get_model();
     if (m)

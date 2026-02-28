@@ -39,7 +39,8 @@ public:
   bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;
   ieee_floatt get_fpbv(smt_astt a) override;
-  bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator) override;
+  bool
+  get_rational(smt_astt a, BigInt &numerator, BigInt &denominator) override;
   expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
     override;
 
