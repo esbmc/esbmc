@@ -1,4 +1,5 @@
 class Enum:
+
     def __init__(self, value: int, name: str):
         self.value: int = value
         self.name: str = name
