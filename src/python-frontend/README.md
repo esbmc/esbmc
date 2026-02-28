@@ -141,6 +141,7 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **remove()**: Remove the first occurrence of a value from the list (e.g., `l.remove(x)`).
     - **copy()**: Return a shallow copy of the list (e.g., `new_list = old_list.copy()`).
     - **extend()**: Extends a list by appending all elements from an iterable (e.g., `list1.extend(list2)` or `list1.extend([3, 4, 5])`).
+    - **reverse()**: Reverse the elements of a list in place.
     - **insert()**: Insert elements at a specific index position.
       - When the index equals the list length, the element is appended to the end.
       - When the index exceeds the list length, the element is appended to the end.

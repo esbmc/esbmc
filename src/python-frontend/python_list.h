@@ -193,6 +193,22 @@ public:
    */
   static size_t get_list_type_map_size(const std::string &list_id);
 
+  /**
+   * @brief Reverse the compile-time type-info vector for a list.
+   *
+   * Mirrors the runtime element reordering performed by
+   * __ESBMC_list_reverse, so that subsequent index-based type lookups
+   * (e.g. list[0]) continue to resolve to the correct element type
+   * after an in-place reversal.
+   *
+   * Has no effect if the list is unknown, empty, or contains only one
+   * element (those cases are already trivially reversed).
+   *
+   * @param list_id  The internal symbol identifier of the list (e.g.
+   *                 "c:main.py@42@F@main@lst").
+   */
+  static void reverse_type_info(const std::string &list_id);
+
 private:
   friend class python_dict_handler;
 

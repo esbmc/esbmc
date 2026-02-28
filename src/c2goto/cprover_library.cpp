@@ -242,7 +242,8 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_fmod",
   "__ESBMC_copysign",
   "__ESBMC_list_remove",
-  "__ESBMC_list_sort"};
+  "__ESBMC_list_sort",
+  "__ESBMC_list_reverse"};
 } // namespace
 
 static void generate_symbol_deps(
