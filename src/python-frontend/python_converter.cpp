@@ -90,6 +90,71 @@ static StatementType get_statement_type(const nlohmann::json &element)
   return (it != statement_map.end()) ? it->second : StatementType::UNKNOWN;
 }
 
+// Returns true if the named class inherits from Python's Enum
+static bool is_enum_class(
+  const std::string &class_name,
+  const nlohmann::json &ast_json)
+{
+  const nlohmann::json class_node =
+    find_class(ast_json["body"], class_name);
+  if (class_node.empty() || !class_node.contains("bases") ||
+      !class_node["bases"].is_array())
+    return false;
+  for (const auto &base : class_node["bases"])
+    if (base.is_object() && base.contains("id") && base["id"] == "Enum")
+      return true;
+  return false;
+}
+
+exprt python_converter::make_enum_member_struct_expr(
+  const symbolt &int_sym,
+  const std::string &class_name,
+  const std::string &member_name)
+{
+  // Get the struct type for the enum class (e.g. tag-TrafficLight)
+  const symbolt *type_sym = symbol_table_.find_symbol("tag-" + class_name);
+  if (!type_sym || !type_sym->type.is_struct())
+    return symbol_expr(int_sym); // fallback: return plain int expression
+
+  const struct_typet &st = to_struct_type(type_sym->type);
+  if (st.components().size() < 2)
+    return symbol_expr(int_sym);
+
+  // Create (or reuse) a static char-array symbol for the member name string.
+  const std::string str_id = "py:" + current_python_file + "@C@" + class_name +
+                             "@_name_" + member_name;
+  if (!symbol_table_.find_symbol(str_id))
+  {
+    exprt str_val = string_builder_->build_string_literal(member_name);
+    symbolt str_sym;
+    str_sym.id = str_id;
+    str_sym.name = "_name_" + member_name;
+    str_sym.type = str_val.type();
+    str_sym.value = str_val;
+    str_sym.static_lifetime = true;
+    str_sym.is_extern = false;
+    str_sym.file_local = true;
+    symbol_table_.add(str_sym);
+  }
+  const symbolt *str_sym = symbol_table_.find_symbol(str_id);
+  assert(str_sym);
+
+  // Build struct_exprt { value: int_sym, name: &str_sym[0] }
+  struct_exprt struct_val(st);
+
+  // value component: the integer value of the enum member
+  struct_val.operands().push_back(symbol_expr(int_sym));
+
+  // name component: char* pointer to the first element of the name string
+  exprt str_expr = symbol_expr(*str_sym);
+  exprt zero_idx = from_integer(0, index_type());
+  exprt name_ptr = address_of_exprt(index_exprt(str_expr, zero_idx));
+  name_ptr.type() = gen_pointer_type(char_type());
+  struct_val.operands().push_back(name_ptr);
+
+  return struct_val;
+}
+
 static std::string map_operator(const std::string &op, const typet &type)
 {
   // Convert the operator to lowercase to allow case-insensitive comparison.
@@ -3481,6 +3546,56 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (base_type.id() == "symbol")
           base_type = ns.follow(base_type);
 
+        // Handle enum member attribute access before the general struct path.
+        // e.g., TrafficLight.RED.value  -> the integer value of the member
+        // e.g., TrafficLight.RED.name   -> a constant char-array string literal
+        //
+        // We handle this first so that .name always returns a constant array
+        // (enabling reliable constant-folding in string comparisons) even after
+        // enum members have been re-typed as their enclosing struct.
+        if (
+          element["value"].is_object() &&
+          element["value"].contains("value") &&
+          element["value"]["value"].is_object() &&
+          element["value"]["value"].contains("_type") &&
+          element["value"]["value"]["_type"] == "Name" &&
+          element["value"].contains("attr"))
+        {
+          const std::string class_name =
+            element["value"]["value"]["id"].get<std::string>();
+          const std::string member_name =
+            element["value"]["attr"].get<std::string>();
+
+          if (is_enum_class(class_name, *ast_json))
+          {
+            if (attr_name == "value")
+            {
+              // If base_expr is already the enum struct, extract the value
+              // component; otherwise base_expr is the raw int value itself.
+              if (base_type.is_struct())
+              {
+                const struct_typet &st = to_struct_type(base_type);
+                if (st.has_component("value"))
+                {
+                  const typet &vt =
+                    clean_attribute_type(st.get_component("value").type());
+                  expr = member_exprt(base_expr, "value", vt);
+                  break;
+                }
+              }
+              expr = base_expr;
+              break;
+            }
+            if (attr_name == "name")
+            {
+              // Return a constant char-array so that string comparisons can be
+              // resolved at compile time via compare_constants_internal.
+              expr = string_builder_->build_string_literal(member_name);
+              break;
+            }
+          }
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -3615,6 +3730,21 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     expr = symbol_expr(*symbol);
+
+    // If the looked-up symbol is an enum class attribute with int type,
+    // wrap it in the proper enum struct expression so callers that expect
+    // the enum class type (e.g. function parameters) receive a struct value.
+    if (is_class_attr && symbol->type.is_signedbv() && element.contains("attr"))
+    {
+      std::string cn = var_name;
+      if (cn.starts_with("C@"))
+        cn = cn.substr(2);
+      if (is_enum_class(cn, *ast_json))
+      {
+        const std::string mname = element["attr"].get<std::string>();
+        expr = make_enum_member_struct_expr(*symbol, cn, mname);
+      }
+    }
 
     // Get instance attribute
     if (!is_class_attr && element["_type"] == "Attribute")
