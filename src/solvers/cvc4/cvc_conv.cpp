@@ -1299,3 +1299,4 @@ void cvc_convt::pop_ctx()
   smt.pop();
   smt_convt::pop_ctx();
 }
+
