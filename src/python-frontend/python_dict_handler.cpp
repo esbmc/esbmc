@@ -175,13 +175,13 @@ void python_dict_handler::store_nested_dict_value(
   const exprt &value_expr,
   const locationt &location)
 {
-  // Get the list_push function
+  // Get __ESBMC_list_push_dict_ptr which stores dict* directly (no byte copy)
   const symbolt *push_func =
-    symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_push_dict_ptr");
 
   if (!push_func)
   {
-    log_error("__ESBMC_list_push not found in symbol table");
+    log_error("__ESBMC_list_push_dict_ptr not found in symbol table");
     throw std::runtime_error("Required list operation function not available");
   }
 
@@ -204,16 +204,13 @@ void python_dict_handler::store_nested_dict_value(
   type_hash.set_value(
     integer2binary(type_hash_value, config.ansi_c.address_width));
 
-  // Pointer size for the storage
-  exprt ptr_size = from_integer(config.ansi_c.pointer_width() / 8, size_type());
-
-  // Call __ESBMC_list_push to store the pointer
+  // Call __ESBMC_list_push_dict_ptr(list, ptr_var, type_hash)
+  // ptr_var (dict*) is stored directly in item->value — no byte extraction needed
   code_function_callt push_call;
   push_call.function() = symbol_expr(*push_func);
   push_call.arguments().push_back(symbol_expr(values_list));
-  push_call.arguments().push_back(address_of_exprt(symbol_expr(ptr_var)));
+  push_call.arguments().push_back(symbol_expr(ptr_var));
   push_call.arguments().push_back(type_hash);
-  push_call.arguments().push_back(ptr_size);
   push_call.type() = bool_type();
   push_call.location() = location;
 
@@ -233,14 +230,13 @@ exprt python_dict_handler::retrieve_nested_dict_value(
       "retrieve_nested_dict_value: expected_type is nil");
   }
 
-  // Cast the stored pointer back to dict pointer type
+  // obj_value = item->value = the dict* stored directly by __ESBMC_list_push_dict_ptr
+  // Cast void* to dict* directly (no byte extraction needed)
   pointer_typet dict_ptr_type(expected_type);
-  exprt dict_ptr_var =
-    safe_cast_to_dict_pointer(slice_node, obj_value, dict_ptr_type, location);
+  typecast_exprt dict_ptr(obj_value, dict_ptr_type);
 
   // Dereference to get the actual dict struct
-  dereference_exprt dict_struct(dict_ptr_var, expected_type);
-  dict_struct.type() = expected_type;
+  dereference_exprt dict_struct(dict_ptr, expected_type);
 
   // Store in final temporary for return
   symbolt &result_dict = converter_.create_tmp_symbol(
