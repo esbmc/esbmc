@@ -1,5 +1,6 @@
 #include "irep2/irep2_expr.h"
 #include <cfloat>
+#include <cstring>
 #include <iomanip>
 #include <solvers/prop/literal.h>
 #include <solvers/smt/smt_conv.h>
@@ -11,6 +12,7 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/type_byte_size.h>
+#include <cmath>
 
 // Helpers extracted from z3_convt.
 
@@ -71,6 +73,8 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   tuple_api = nullptr;
   array_api = nullptr;
   fp_api = nullptr;
+  ra_api = nullptr;
+
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -128,6 +132,12 @@ void smt_convt::set_fp_conv(fp_convt *iface)
 {
   assert(fp_api == NULL && "set_fp_iface should only be called once");
   fp_api = iface;
+}
+
+void smt_convt::set_ra_conv(ra_apit *iface)
+{
+  assert(ra_api == NULL && "set_ra_conv should only be called once");
+  ra_api = iface;
 }
 
 void smt_convt::delete_all_asts()
@@ -312,7 +322,6 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
 
 smt_astt smt_convt::get_zero_real()
 {
-  // Returns SMT representation of zero (0.0)
   return mk_smt_real("0");
 }
 
@@ -327,6 +336,118 @@ smt_astt smt_convt::get_double_min_subnormal()
   // IEEE 754 double precision minimum positive subnormal value (2^-1074)
   return mk_smt_real("4.9406564584124654e-324");
 }
+
+
+smt_astt smt_convt::apply_ieee754_semantics(
+  smt_astt real_result,
+  const floatbv_type2t &fbv_type,
+  smt_astt operand_zero_check)
+{
+  if (this->options.get_bool_option("ir-ra"))
+  {
+    smt_astt final_result = real_result;
+    smt_sortt rs = mk_real_sort();
+    smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
+    smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
+
+    assert_ast(mk_le(ra_lo, final_result));
+    assert_ast(mk_le(final_result, ra_hi));
+    assert_ast(mk_le(ra_lo, ra_hi));
+
+    return final_result;
+  }
+  else
+  {
+    unsigned int fraction_bits = fbv_type.fraction;
+    unsigned int exponent_bits = fbv_type.exponent;
+
+    auto double_spec = ieee_float_spect::double_precision();
+    auto single_spec = ieee_float_spect::single_precision();
+
+    smt_astt min_normal, min_subnormal, max_normal;
+
+    // IEEE 754 double precision (64-bit): 11 exponent bits, 52 fraction bits
+    if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+    {
+      min_normal = mk_smt_real("2.2250738585072014e-308");    // 2^(-1022)
+      min_subnormal = mk_smt_real("4.9406564584124654e-324"); // 2^(-1074)
+      max_normal = mk_smt_real("1.7976931348623157e+308");    // ~(2-2^(-52)) * 2^1023
+    }
+    // IEEE 754 single precision (32-bit): 8 exponent bits, 23 fraction bits
+    else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
+    {
+      min_normal = mk_smt_real("1.1754943508222875e-38");     // 2^(-126)
+      min_subnormal = mk_smt_real("1.4012984643248171e-45");  // 2^(-149)
+      max_normal = mk_smt_real("3.4028234663852886e+38");     // ~(2-2^(-23)) * 2^127
+    }
+    // Unsupported format - return original result
+    else
+    {
+      log_warning(
+        "Unsupported IEEE 754 format: exponent bits = {}, fraction bits = {}",
+        exponent_bits,
+        fraction_bits);
+      return real_result;
+    }
+
+    smt_astt zero = mk_smt_real("0.0");
+
+    // Get absolute value of result
+    smt_astt abs_result = mk_ite(
+      mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+
+    // Check for overflow
+    smt_astt overflows = mk_gt(abs_result, max_normal);
+
+    // Check for underflow to zero
+    smt_astt underflows_to_zero = mk_and(
+      mk_lt(abs_result, min_subnormal),
+      mk_not(mk_eq(real_result, zero)));
+
+    // If we have a special zero check (like for multiplication), use it
+    if (operand_zero_check)
+      underflows_to_zero =
+        mk_and(underflows_to_zero, mk_not(operand_zero_check));
+
+    // Check if result is in subnormal range
+    smt_astt is_subnormal =
+      mk_and(mk_ge(abs_result, min_subnormal), mk_lt(abs_result, min_normal));
+
+    // Handle subnormal rounding (simplified round-to-nearest)
+    smt_astt subnormal_step =
+      (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+        ? mk_smt_real("4.9406564584124654e-324")  // Double precision
+        : mk_smt_real("1.4012984643248171e-45");  // Single precision
+    smt_astt quotient = mk_div(abs_result, subnormal_step);
+    smt_astt rounded_quotient = mk_add(quotient, mk_smt_real("0.5"));
+    smt_astt subnormal_magnitude = mk_mul(rounded_quotient, subnormal_step);
+
+    smt_astt subnormal_result = mk_ite(
+      mk_lt(real_result, zero),
+      mk_sub(zero, subnormal_magnitude),
+      subnormal_magnitude);
+
+    // Overflow result (approximate infinity)
+    smt_astt overflow_result = mk_ite(
+      mk_lt(real_result, zero), mk_sub(zero, max_normal), max_normal);
+
+    // Apply IEEE 754 semantics: overflow > underflow > subnormal > normal
+    smt_astt ieee_result = mk_ite(
+      overflows,
+      overflow_result,
+      mk_ite(
+        underflows_to_zero,
+        zero,
+        mk_ite(is_subnormal, subnormal_result, real_result)));
+
+    // Handle special operand zero case for multiplication
+    if (operand_zero_check)
+      return mk_ite(operand_zero_check, zero, ieee_result);
+
+    return ieee_result;
+  }
+}
+
 
 smt_astt smt_convt::get_double_max_normal()
 {
@@ -350,103 +471,6 @@ smt_astt smt_convt::get_single_max_normal()
 {
   // IEEE 754 single precision maximum normal positive value (~(2-2^-23)*2^127)
   return mk_smt_real("3.4028234663852886e+38");
-}
-
-// Apply IEEE 754 semantics to a real arithmetic result
-smt_astt smt_convt::apply_ieee754_semantics(
-  smt_astt real_result,
-  const floatbv_type2t &fbv_type,
-  smt_astt operand_zero_check)
-{
-  unsigned int fraction_bits = fbv_type.fraction;
-  unsigned int exponent_bits = fbv_type.exponent;
-
-  auto double_spec = ieee_float_spect::double_precision();
-  auto single_spec = ieee_float_spect::single_precision();
-
-  smt_astt min_normal, min_subnormal, max_normal;
-
-  // IEEE 754 double precision (64-bit): 11 exponent bits, 52 fraction bits
-  if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-  {
-    min_normal = get_double_min_normal();
-    min_subnormal = get_double_min_subnormal();
-    max_normal = get_double_max_normal();
-  }
-  // IEEE 754 single precision (32-bit): 8 exponent bits, 23 fraction bits
-  else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
-  {
-    min_normal = get_single_min_normal();
-    min_subnormal = get_single_min_subnormal();
-    max_normal = get_single_max_normal();
-  }
-  // Unsupported format - return original result
-  else
-  {
-    log_warning(
-      "Unsupported IEEE 754 format: exponent bits = {}, fraction bits = {}",
-      exponent_bits,
-      fraction_bits);
-    return real_result;
-  }
-
-  // Get absolute value of result
-  smt_astt abs_result = mk_ite(
-    mk_lt(real_result, get_zero_real()),
-    mk_sub(get_zero_real(), real_result),
-    real_result);
-
-  // Check for overflow
-  smt_astt overflows = mk_gt(abs_result, max_normal);
-
-  // Check for underflow to zero
-  smt_astt underflows_to_zero = mk_and(
-    mk_lt(abs_result, min_subnormal),
-    mk_not(mk_eq(real_result, get_zero_real())));
-
-  // If we have a special zero check (like for multiplication), use it
-  if (operand_zero_check)
-    underflows_to_zero = mk_and(underflows_to_zero, mk_not(operand_zero_check));
-
-  // Check if result is in subnormal range
-  smt_astt is_subnormal =
-    mk_and(mk_ge(abs_result, min_subnormal), mk_lt(abs_result, min_normal));
-
-  // Handle subnormal rounding (simplified round-to-nearest)
-  // Use the appropriate subnormal step for the format
-  smt_astt subnormal_step =
-    (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-      ? get_double_min_subnormal()  // Double precision
-      : get_single_min_subnormal(); // Single precision
-  smt_astt quotient = mk_div(abs_result, subnormal_step);
-  smt_astt rounded_quotient = mk_add(quotient, mk_smt_real("0.5"));
-  smt_astt subnormal_magnitude = mk_mul(rounded_quotient, subnormal_step);
-
-  smt_astt subnormal_result = mk_ite(
-    mk_lt(real_result, get_zero_real()),
-    mk_sub(get_zero_real(), subnormal_magnitude),
-    subnormal_magnitude);
-
-  // Overflow result (approximate infinity)
-  smt_astt overflow_result = mk_ite(
-    mk_lt(real_result, get_zero_real()),
-    mk_sub(get_zero_real(), max_normal),
-    max_normal);
-
-  // Apply IEEE 754 semantics with priority: overflow > underflow > subnormal > normal
-  smt_astt ieee_result = mk_ite(
-    overflows,
-    overflow_result,
-    mk_ite(
-      underflows_to_zero,
-      get_zero_real(),
-      mk_ite(is_subnormal, subnormal_result, real_result)));
-
-  // Handle special operand zero case for multiplication
-  if (operand_zero_check)
-    return mk_ite(operand_zero_check, get_zero_real(), ieee_result);
-
-  return ieee_result;
 }
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
@@ -655,6 +679,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+
+
   case expr2t::mul_id:
   {
     // Fixedbvs are handled separately
@@ -718,20 +744,20 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+
   case expr2t::ieee_add_id:
   {
+    assert(is_floatbv_type(expr));
     if (int_encoding)
     {
       smt_astt side1 = convert_ast(to_ieee_add2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_add2t(expr).side_2);
       smt_astt real_result = mk_add(side1, side2);
-
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
-      assert(is_floatbv_type(expr));
       a = fp_api->mk_smt_fpbv_add(
         convert_ast(to_ieee_add2t(expr).side_1),
         convert_ast(to_ieee_add2t(expr).side_2),
@@ -747,7 +773,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt side1 = convert_ast(to_ieee_sub2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_sub2t(expr).side_2);
       smt_astt real_result = mk_sub(side1, side2);
-
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
@@ -768,11 +793,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt side1 = convert_ast(to_ieee_mul2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_mul2t(expr).side_2);
       smt_astt real_result = mk_mul(side1, side2);
-
-      // Special handling for multiplication: check if either operand is zero
+      // Check if either operand is zero for special-case handling in IEEE mul
       smt_astt zero = mk_smt_real("0.0");
       smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
-
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       a = apply_ieee754_semantics(real_result, fbv_type, operand_is_zero);
     }
@@ -792,49 +815,18 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       smt_astt side1 = convert_ast(to_ieee_div2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_div2t(expr).side_2);
-      smt_astt div_by_zero = mk_eq(side2, get_zero_real());
-
-      // Handle division by zero specially
+      smt_astt zero = get_zero_real();
+      smt_astt div_by_zero = mk_eq(side2, zero);
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-
-      auto double_spec = ieee_float_spect::double_precision();
-      auto single_spec = ieee_float_spect::single_precision();
-
-      // Check if we support this IEEE 754 format
-      if (
-        (fbv_type.exponent == double_spec.e &&
-         fbv_type.fraction == double_spec.f) || // Double precision
-        (fbv_type.exponent == single_spec.e &&
-         fbv_type.fraction == single_spec.f)) // Single precision
-      {
-        // Get the appropriate max value for infinity approximation
-        smt_astt max_val = (fbv_type.exponent == double_spec.e &&
-                            fbv_type.fraction == double_spec.f)
-                             ? get_double_max_normal()  // Double precision max
-                             : get_single_max_normal(); // Single precision max
-
-        // Return signed infinity for division by zero
-        smt_astt inf_result = mk_ite(
-          mk_lt(side1, get_zero_real()),
-          mk_sub(get_zero_real(), max_val), // -infinity (approximate)
-          max_val                           // +infinity (approximate)
-        );
-
-        smt_astt real_result = mk_div(side1, side2);
-        smt_astt ieee_result =
-          apply_ieee754_semantics(real_result, fbv_type, nullptr);
-
-        a = mk_ite(div_by_zero, inf_result, ieee_result);
-      }
-      else
-      {
-        log_error(
-          "Unsupported IEEE 754 format for division: exponent bits = {}, "
-          "fraction bits = {}",
-          fbv_type.exponent,
-          fbv_type.fraction);
-        abort();
-      }
+      const auto single_spec = ieee_float_spect::single_precision();
+      smt_astt max_val =
+        (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+          ? get_single_max_normal()
+          : get_double_max_normal();
+      smt_astt inf_result = mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
+      smt_astt real_result = mk_div(side1, side2);
+      smt_astt ieee_result = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      a = mk_ite(div_by_zero, inf_result, ieee_result);
     }
     else
     {
@@ -853,12 +845,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt val1 = convert_ast(to_ieee_fma2t(expr).value_1);
       smt_astt val2 = convert_ast(to_ieee_fma2t(expr).value_2);
       smt_astt val3 = convert_ast(to_ieee_fma2t(expr).value_3);
-
       // Fused multiply-add: (val1 * val2) + val3
-      // In true FMA, the intermediate result isn't rounded
       smt_astt intermediate = mk_mul(val1, val2);
       smt_astt real_result = mk_add(intermediate, val3);
-
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
@@ -872,6 +861,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+
   case expr2t::ieee_sqrt_id:
   {
     assert(is_floatbv_type(expr));
@@ -1913,7 +1903,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
   // Extract the top bit
   auto value = convert_ast(signbit.operand);
 
-  smt_astt is_neg;
+   smt_astt is_neg;
 
   if (int_encoding)
   {
@@ -2808,6 +2798,11 @@ expr2tc smt_convt::get(const expr2tc &expr)
     else
       have_all = false;
   });
+    
+  
+  // If we have null operands, return early to avoid crashes in simplify()
+  if (has_null_operands)
+    return expr;
 
   // If we have null operands, return early to avoid crashes in simplify()
   if (has_null_operands)
@@ -2819,7 +2814,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   return res;
 }
-
+ 
 expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
 {
   switch (type->type_id)
@@ -2921,12 +2916,55 @@ double smt_convt::convert_rational_to_double(
   const BigInt &numerator,
   const BigInt &denominator)
 {
+  constexpr size_t BUFFER_SIZE = 1024;
   constexpr size_t INITIAL_BUFFER_SIZE = 1024;
   constexpr size_t MAX_BUFFER_SIZE = 100000;
 
-  // Start with the legacy fixed-size buffers.
-  std::vector<char> num_buffer(INITIAL_BUFFER_SIZE, '\0');
-  std::vector<char> den_buffer(INITIAL_BUFFER_SIZE, '\0');
+  std::vector<char> num_buffer(BUFFER_SIZE, '\0');
+  std::vector<char> den_buffer(BUFFER_SIZE, '\0');
+
+  numerator.as_string(num_buffer.data(), num_buffer.size(), 10);
+  denominator.as_string(den_buffer.data(), den_buffer.size(), 10);
+
+  num_buffer.back() = '\0';
+  den_buffer.back() = '\0';
+
+  size_t num_len = strnlen(num_buffer.data(), num_buffer.size());
+  size_t den_len = strnlen(den_buffer.data(), den_buffer.size());
+
+  // If the fixed buffer was insufficient, grow and retry safely.
+  if (num_len >= num_buffer.size() - 1 || den_len >= den_buffer.size() - 1)
+  {
+    auto ensure_string = [&](const BigInt &value, std::vector<char> &buffer) {
+      // start from the initial size
+      buffer.assign(INITIAL_BUFFER_SIZE, '\0');
+
+      while (true)
+      {
+        char *result = value.as_string(buffer.data(), buffer.size(), 10);
+        buffer.back() = '\0';
+
+        if (result != nullptr)
+          return;
+
+        size_t next_size = buffer.size() * 2;
+        if (next_size > MAX_BUFFER_SIZE)
+        {
+          log_error("BigInt string too large to convert safely");
+          abort();
+        }
+
+        buffer.assign(next_size, '\0');
+      }
+    };
+
+    ensure_string(numerator, num_buffer);
+    ensure_string(denominator, den_buffer);
+
+    
+    num_len = strnlen(num_buffer.data(), num_buffer.size());
+    den_len = strnlen(den_buffer.data(), den_buffer.size());
+  }
 
   // Populate the buffer with the decimal representation of `value`, growing the
   // buffer as needed. We keep the legacy fixed-size path to avoid extra
@@ -2992,8 +3030,7 @@ double smt_convt::convert_rational_to_double(
     }
   }
 
-  size_t num_len = strnlen(num_buffer.data(), num_buffer.size());
-  size_t den_len = strnlen(den_buffer.data(), den_buffer.size());
+
 
   if (num_len >= num_buffer.size() - 1 || den_len >= den_buffer.size() - 1)
   {
@@ -3003,6 +3040,16 @@ double smt_convt::convert_rational_to_double(
     return 0.0;
   }
 
+  try
+  {
+    double num_val = std::stod(num_buffer.data());
+    double den_val = std::stod(den_buffer.data());
+    return (den_val != 0.0) ? num_val / den_val : 0.0;
+  }
+  catch (const std::exception &)
+  {
+    return 0.0;
+  }
   bool numerator_negative = numerator.is_negative();
   bool denominator_negative = denominator.is_negative();
 
