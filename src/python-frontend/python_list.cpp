@@ -2974,8 +2974,7 @@ exprt python_list::extract_pyobject_value(
   // violation.
   if (
     elem_type.is_pointer() &&
-    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type() ||
-     elem_type.subtype() == empty_typet()))
+    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
   {
     // Cast void* directly to the pointer type (no dereference needed)
     typecast_exprt tc(obj_value, elem_type);
