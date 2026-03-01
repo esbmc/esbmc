@@ -2848,9 +2848,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           {
             if (clang::Expr *val = lha->getValue())
             {
-              clang::Expr::EvalResult result;
-              if (val->EvaluateAsInt(result, *ASTContext))
-                unroll_count = result.Val.getInt().getZExtValue();
+              if (const auto *lit = llvm::dyn_cast<clang::IntegerLiteral>(val))
+                unroll_count = lit->getValue().getZExtValue();
+              else
+              {
+                clang::Expr::EvalResult result;
+                if (val->EvaluateAsInt(result, *ASTContext))
+                  unroll_count = result.Val.getInt().getZExtValue();
+              }
             }
           }
 

@@ -1,4 +1,5 @@
 CORE
 main.c
 --unwindset 2:2 --no-unwinding-assertions
+^Applying #pragma unroll 8 to loop
 ^VERIFICATION SUCCESSFUL$
