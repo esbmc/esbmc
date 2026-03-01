@@ -23,6 +23,7 @@ class Preprocessor(ast.NodeTransformer):
         self.decimal_module_imported = False
         self.decimal_class_alias = None
         self.decimal_module_alias = None
+        self._subscript_inferred_vars = set()  # vars whose annotations came from subscript inference
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -351,6 +352,11 @@ class Preprocessor(ast.NodeTransformer):
         if not isinstance(ann, ast.Name) or ann.id == 'Any':
             return node
         if ann.id == type_node.id:
+            # Don't simplify to True if the annotation was inferred from a
+            # subscript access (e.g. x = d[k]): the dict may have been mutated
+            # with a value of a different type, so we cannot guarantee correctness.
+            if obj_node.id in self._subscript_inferred_vars:
+                return node
             return ast.Constant(value=True)
         return ast.Constant(value=False)
 
@@ -1724,6 +1730,8 @@ class Preprocessor(ast.NodeTransformer):
                     annotation_node = self._create_annotation_node_from_value(node.value)
                     if annotation_node:
                         self.variable_annotations[target.id] = annotation_node
+                        if isinstance(node.value, ast.Subscript):
+                            self._subscript_inferred_vars.add(target.id)
                     # Track class instantiations: c = C()
                     if (isinstance(node.value, ast.Call) and
                             isinstance(node.value.func, ast.Name)):
