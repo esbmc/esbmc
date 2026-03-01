@@ -803,6 +803,17 @@ private:
   /// Wrap values in Optional
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
 
+  // =========================================================================
+  // Enum support helpers
+  // =========================================================================
+
+  /// Build a struct expression for an enum member (e.g. TrafficLight.GREEN)
+  /// so that it carries the enum class type rather than a raw int.
+  exprt make_enum_member_struct_expr(
+    const symbolt &int_sym,
+    const std::string &class_name,
+    const std::string &member_name);
+
   /// Handle Optional value access
   exprt unwrap_optional_if_needed(const exprt &expr);
 
