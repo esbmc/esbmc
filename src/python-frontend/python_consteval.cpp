@@ -870,6 +870,19 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       return std::nullopt;
     }
 
+    // Built-in: round()
+    if (func_name == "round")
+    {
+      if (node["args"].size() < 1 || node["args"].size() > 2)
+        return std::nullopt;
+      auto arg = eval_expr(node["args"][0], env);
+      if (!arg)
+        return std::nullopt;
+      if (node["args"].size() == 1 && arg->kind == PyConstValue::INT)
+        return PyConstValue::make_int(arg->int_val);
+      return std::nullopt;
+    }
+
     // Built-in: min(), max() for two int arguments
     if (func_name == "min" || func_name == "max")
     {

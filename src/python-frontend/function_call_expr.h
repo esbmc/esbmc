@@ -218,6 +218,13 @@ private:
   exprt handle_abs(nlohmann::json &arg) const;
 
   /*
+   * Handles round() function calls by rounding a numeric value.
+   * round(x) returns the nearest integer (as int).
+   * round(x, n) returns x rounded to n decimal places (as float).
+   */
+  exprt handle_round(nlohmann::json& arg) const;
+
+  /*
    * Checks if the current function call is a min() or max() built-in function.
    * Returns true if the function name matches "min" or "max", false otherwise.
    */

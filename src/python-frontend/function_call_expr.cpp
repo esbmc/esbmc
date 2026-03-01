@@ -18,6 +18,7 @@
 #include <util/string_constant.h>
 
 #include <regex>
+#include <cmath>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -1224,6 +1225,91 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   return nil_exprt();
 }
 
+exprt function_call_expr::handle_round(nlohmann::json& arg) const
+{
+  const auto& args = call_["args"];
+  bool has_ndigits = args.size() >= 2;
+
+  // Reject strings early
+  if (is_string_arg(arg))
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "type str doesn't define __round__ method");
+
+  // Handle unary minus (e.g., round(-3.6))
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto& op = arg["op"];
+    const auto& operand = arg["operand"];
+    if (op["_type"] == "USub" && operand.contains("value"))
+      arg = operand;
+  }
+
+  // Compile-time evaluation for numeric literals
+  if (arg.contains("value") && arg["value"].is_number())
+  {
+    if (!has_ndigits)
+    {
+      // round(x) -> nearest integer (returns int)
+      if (arg["value"].is_number_integer())
+      {
+        arg["type"] = "int";
+      }
+      else
+      {
+        double val = arg["value"].get<double>();
+        arg["value"] = static_cast<int>(std::round(val));
+        arg["type"] = "int";
+      }
+      typet t = type_handler_.get_typet("int", 0);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
+    }
+    else
+    {
+      // round(x, n) -> float rounded to n decimals
+      auto ndigits_arg = args[1];
+      if (ndigits_arg.contains("value") && ndigits_arg["value"].is_number_integer())
+      {
+        int n = ndigits_arg["value"].get<int>();
+        double val = arg["value"].is_number_integer()
+          ? static_cast<double>(arg["value"].get<int>())
+          : arg["value"].get<double>();
+        double factor = std::pow(10.0, n);
+        double rounded = std::round(val * factor) / factor;
+        arg["value"] = rounded;
+        arg["type"] = "float";
+        typet t = type_handler_.get_typet("float", 0);
+        exprt expr = converter_.get_expr(arg);
+        expr.type() = t;
+        return expr;
+      }
+    }
+  }
+
+  // Symbolic: try to build an expression for round(x)
+  if (!has_ndigits)
+  {
+    try
+    {
+      exprt operand_expr = converter_.get_expr(arg);
+      typet result_type = type_handler_.get_typet("int", 0);
+      // Build a typecast to int (truncation after rounding in SMT)
+      exprt round_expr("round", result_type);
+      round_expr.copy_to_operands(operand_expr);
+      return round_expr;
+    }
+    catch (const std::exception&)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "failed to infer operand type for round()");
+    }
+  }
+
+  log_warning("round() with symbolic arguments not fully supported");
+  return nil_exprt();
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -1495,6 +1581,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle abs: Returns the absolute value of an integer or float literal
   else if (func_name == "abs")
     return handle_abs(arg);
+
+  // Handle round: Rounds a numeric value
+  else if (func_name == "round")
+    return handle_round(arg);
 
   else if (func_name == "str")
     arg_size = handle_str(arg);
