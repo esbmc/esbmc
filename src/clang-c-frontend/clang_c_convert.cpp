@@ -1471,6 +1471,11 @@ bool clang_c_convertert::get_builtin_type(
     break;
 #endif
 
+  case clang::BuiltinType::BoundMember:
+    new_type = ptrmem_typet();
+    c_type = "_ptrmem";
+    break;
+
   // Unsupported extensions (optional don't care)
   case clang::BuiltinType::BFloat16:
     if (config.options.get_bool_option("dont-care-about-missing-extensions"))
@@ -1480,11 +1485,6 @@ bool clang_c_convertert::get_builtin_type(
       break;
     }
     // fallthrough
-
-  case clang::BuiltinType::BoundMember:
-    new_type = ptrmem_typet();
-    c_type = "_ptrmem";
-    break;
 
   default:
   {

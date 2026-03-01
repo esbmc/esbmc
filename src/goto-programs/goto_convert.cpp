@@ -1576,9 +1576,14 @@ void goto_convertt::convert_return(
   {
     if (!new_code.has_return_value())
     {
-      code.dump();
-      log_error("function must return value");
-      abort();
+      log_warning(
+        "The return of the function {} is missing",
+        id2string(code.location().function()));
+      // This might be because the remove_sideeffect removed the undefined function
+      // We replaced it with nondet
+      exprt ret = exprt("sideeffect", code.op0().type());
+      ret.statement("nondet");
+      new_code.return_value() = ret;
     }
 
     // Now add a return node to set the return value.
