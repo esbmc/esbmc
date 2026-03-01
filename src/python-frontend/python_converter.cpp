@@ -2443,20 +2443,33 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return python_list::build_list_from_range(*this, range_args, element);
   }
 
-  // Handle dict.keys() and dict.values() methods
+  // Handle dict.keys(), dict.values(), and dict.items() methods
   if (element["func"]["_type"] == "Attribute")
   {
     const std::string &method_name = element["func"]["attr"].get<std::string>();
 
-    if (method_name == "keys" || method_name == "values")
+    if (
+      method_name == "keys" || method_name == "values" ||
+      method_name == "items")
     {
       exprt obj_expr = get_expr(element["func"]["value"]);
 
       // Check if this is a dict type
       if (dict_handler_->is_dict_type(obj_expr.type()))
       {
-        // Return the keys or values member directly
         typet list_type = type_handler_.get_list_type();
+        if (method_name == "items")
+        {
+          // For-loop uses of items() are rewritten by the preprocessor into
+          // separate keys()/values() accesses and never reach here.
+          // For standalone/discarded calls (e.g. bare `d.items()` statement),
+          // return the keys member as a harmless placeholder — the result is
+          // not consumed so soundness is unaffected.
+          // Storing and consuming d.items() outside a for-loop is not supported.
+          member_exprt member(obj_expr, "keys", list_type);
+          return member;
+        }
+        // Return the keys or values member directly
         member_exprt member(obj_expr, method_name, list_type);
         return member;
       }

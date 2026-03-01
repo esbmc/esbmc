@@ -1540,8 +1540,23 @@ std::string function_call_expr::get_object_name() const
     if (obj_name == "super")
       obj_name = "self";
   }
+  else if (subelement["_type"] == "Subscript")
+  {
+    // Method call on a subscript result, e.g. d["key"].method().
+    // We intentionally leave obj_name empty: the subscript result is a
+    // temporary value, not a named symbol, so resolving obj_name to the base
+    // variable (e.g. 'd' from d["k"]) would cause method handlers to operate
+    // on the wrong object.  For-loop uses of dict.items() are rewritten by the
+    // preprocessor into a named temp before reaching here; other methods on
+    // subscript results are not yet supported.
+  }
   else
-    obj_name = subelement["id"].get<std::string>();
+  {
+    // Expect a plain Name node with an "id" field. Guard against
+    // missing "id" to avoid nlohmann::json::type_error on unexpected node shapes.
+    if (subelement.contains("id") && !subelement["id"].is_null())
+      obj_name = subelement["id"].get<std::string>();
+  }
 
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
