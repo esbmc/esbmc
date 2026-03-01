@@ -1543,12 +1543,12 @@ std::string function_call_expr::get_object_name() const
   else if (subelement["_type"] == "Subscript")
   {
     // Method call on a subscript result, e.g. d["key"].method().
-    // Extract the base variable name from the subscript value node.
-    // For-loop uses of dict.items() are already rewritten by the preprocessor.
-    if (subelement.contains("value") && subelement["value"].contains("id"))
-      obj_name = subelement["value"]["id"].template get<std::string>();
-    // If the base is itself complex (nested subscript, attribute, etc.) leave
-    // obj_name empty so the caller falls back to AttributeError reporting.
+    // We intentionally leave obj_name empty: the subscript result is a
+    // temporary value, not a named symbol, so resolving obj_name to the base
+    // variable (e.g. 'd' from d["k"]) would cause method handlers to operate
+    // on the wrong object.  For-loop uses of dict.items() are rewritten by the
+    // preprocessor into a named temp before reaching here; other methods on
+    // subscript results are not yet supported.
   }
   else
   {

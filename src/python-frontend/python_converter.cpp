@@ -2458,10 +2458,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         typet list_type = type_handler_.get_list_type();
         if (method_name == "items")
         {
-          // items() returns (key, value) pairs. For-loop uses are handled by
-          // the preprocessor (which transforms dict.items() into separate
-          // keys()/values() accesses). For standalone calls on a dict object,
-          // return the keys member so the call is well-typed and non-crashing.
+          // For-loop uses of items() are rewritten by the preprocessor into
+          // separate keys()/values() accesses and never reach here.
+          // For standalone/discarded calls (e.g. bare `d.items()` statement),
+          // return the keys member as a harmless placeholder — the result is
+          // not consumed so soundness is unaffected.
+          // Storing and consuming d.items() outside a for-loop is not supported.
           member_exprt member(obj_expr, "keys", list_type);
           return member;
         }
