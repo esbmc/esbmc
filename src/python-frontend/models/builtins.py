@@ -142,6 +142,26 @@ def min_str(iterable: list[str]) -> str:
 #         i = i + 1
 #     return False
 
+def sum(iterable: list[int]) -> int:
+    """Return the sum of all elements in an iterable of integers."""
+    result: int = 0
+    i: int = 0
+    length: int = len(iterable)
+    while i < length:
+        result = result + iterable[i]
+        i = i + 1
+    return result
+
+
+def sum_float(iterable: list[float]) -> float:
+    """Return the sum of all elements in an iterable of floats."""
+    result: float = 0.0
+    i: int = 0
+    length: int = len(iterable)
+    while i < length:
+        result = result + iterable[i]
+        i = i + 1
+    return result
 
 def sorted(iterable: list[int]) -> list[int]:
     """Return a new sorted list from the items in iterable."""
