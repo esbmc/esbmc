@@ -87,8 +87,9 @@ git push --tags
 
 ### Creating the Release Artifacts
 
-You need to get the build artifacts that will be uploaded. Run the Release job
-on the `master` branch. Download the artifacts and prepare to upload them in the
+You need to get the build artifacts that will be uploaded. Run a new
+[Release](https://github.com/esbmc/esbmc/actions/workflows/release.yml) job on
+the `master` branch. Download the artifacts and prepare to upload them in the
 next step.
 
 ### Creating the Release on GitHub
