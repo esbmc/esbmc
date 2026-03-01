@@ -121,6 +121,19 @@ class Preprocessor(ast.NodeTransformer):
 
     def visit_Module(self, node):
         """Visit the module and inject helper functions if needed"""
+        # Pre-pass: collect global-scope variable annotations so that
+        # unannotated function parameters can be inferred from call-site types
+        # (e.g. `def f(d): for k,v in d.items()` called with a dict literal).
+        for stmt in node.body:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        annotation_node = self._create_annotation_node_from_value(stmt.value)
+                        if annotation_node:
+                            self.variable_annotations[target.id] = annotation_node
+            elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                self.variable_annotations[stmt.target.id] = stmt.annotation
+
         # Transform the module as usual
         node = self.generic_visit(node)
         # If we used range loops, inject helper functions at the beginning
@@ -320,8 +333,30 @@ class Preprocessor(ast.NodeTransformer):
             return prefix + [node]
         return node
 
+    def _simplify_isinstance(self, node):
+        """Simplify isinstance(v, T) when v has a known non-Any annotation.
+        - annotation matches T    -> True
+        - annotation mismatches T -> False
+        - annotation unknown/Any  -> leave unchanged
+        """
+        if not (isinstance(node, ast.Call) and
+                isinstance(node.func, ast.Name) and
+                node.func.id == 'isinstance' and
+                len(node.args) == 2):
+            return node
+        obj_node, type_node = node.args[0], node.args[1]
+        if not (isinstance(obj_node, ast.Name) and isinstance(type_node, ast.Name)):
+            return node
+        ann = self.variable_annotations.get(obj_node.id)
+        if not isinstance(ann, ast.Name) or ann.id == 'Any':
+            return node
+        if ann.id == type_node.id:
+            return ast.Constant(value=True)
+        return ast.Constant(value=False)
+
     def visit_Assert(self, node):
         node = self.generic_visit(node)
+        node.test = self._simplify_isinstance(node.test)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
         if node.msg:
