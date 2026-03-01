@@ -1540,8 +1540,23 @@ std::string function_call_expr::get_object_name() const
     if (obj_name == "super")
       obj_name = "self";
   }
+  else if (subelement["_type"] == "Subscript")
+  {
+    // Method call on a subscript result, e.g. d["key"].method().
+    // Extract the base variable name from the subscript value node.
+    // For-loop uses of dict.items() are already rewritten by the preprocessor.
+    if (subelement.contains("value") && subelement["value"].contains("id"))
+      obj_name = subelement["value"]["id"].template get<std::string>();
+    // If the base is itself complex (nested subscript, attribute, etc.) leave
+    // obj_name empty so the caller falls back to AttributeError reporting.
+  }
   else
-    obj_name = subelement["id"].get<std::string>();
+  {
+    // Expect a plain Name node with an "id" field. Guard against
+    // missing "id" to avoid nlohmann::json::type_error on unexpected node shapes.
+    if (subelement.contains("id") && !subelement["id"].is_null())
+      obj_name = subelement["id"].get<std::string>();
+  }
 
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }

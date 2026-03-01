@@ -521,6 +521,8 @@ class Preprocessor(ast.NodeTransformer):
             key_ann, val_ann = self._get_dict_kv_types(dict_expr.id)
         elif isinstance(dict_expr, ast.Attribute):
             key_ann, val_ann = self._get_kv_types_from_attribute(dict_expr)
+        elif isinstance(dict_expr, ast.Subscript):
+            key_ann, val_ann = self._get_kv_types_from_subscript(dict_expr)
         else:
             key_ann, val_ann = self._get_kv_types_from_call(dict_expr)
 
@@ -1074,6 +1076,21 @@ class Preprocessor(ast.NodeTransformer):
             )
             self.ensure_all_locations(dict_assign, node)
             setup_stmts.append(dict_assign)
+        elif isinstance(dict_expr, ast.Subscript):
+            # Subscript access (e.g., d["key"].items()): materialize into a temp
+            # variable and infer K/V types from the outer dict's value annotation.
+            dict_temp_var = f'ESBMC_dict_{loop_id}'
+            dict_node = ast.Name(id=dict_temp_var, ctx=ast.Load())
+            self.ensure_all_locations(dict_node, node)
+            key_ann, val_ann = self._get_kv_types_from_subscript(dict_expr)
+            dict_assign = ast.AnnAssign(
+                target=ast.Name(id=dict_temp_var, ctx=ast.Store()),
+                annotation=ast.Name(id='dict', ctx=ast.Load()),
+                value=dict_expr,
+                simple=1
+            )
+            self.ensure_all_locations(dict_assign, node)
+            setup_stmts.append(dict_assign)
         else:
             # Other complex expression (e.g., a function call: make().items()):
             # materialize into a temp symbol so the C++ converter gets a stable
@@ -1201,6 +1218,18 @@ class Preprocessor(ast.NodeTransformer):
         attr_ann = self.class_attr_annotations.get(class_name, {}).get(attr_name)
         if attr_ann is not None:
             return self._kv_types_from_annotation(attr_ann)
+        return self._any_ann(), self._any_ann()
+
+    def _get_kv_types_from_subscript(self, subscript_node):
+        """Return (key_ann, val_ann) for a subscript dict expression.
+
+        For d["key"].items() where d: dict[str, dict[K, V]], returns (K, V).
+        Uses _create_subscript_annotation to find the value type of d at the
+        subscript key, then extracts the K/V types from that inner dict type.
+        """
+        val_ann = self._create_subscript_annotation(subscript_node)
+        if val_ann is not None:
+            return self._kv_types_from_annotation(val_ann)
         return self._any_ann(), self._any_ann()
 
     def _create_dict_list_assign(self, node, var_name, dict_node, method, elem_ann):
