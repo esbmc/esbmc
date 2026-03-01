@@ -2448,7 +2448,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   {
     const std::string &method_name = element["func"]["attr"].get<std::string>();
 
-    if (method_name == "keys" || method_name == "values" || method_name == "items")
+    if (
+      method_name == "keys" || method_name == "values" ||
+      method_name == "items")
     {
       exprt obj_expr = get_expr(element["func"]["value"]);
 
