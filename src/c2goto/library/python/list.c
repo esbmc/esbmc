@@ -103,10 +103,7 @@ bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
 
 // Store a dict pointer directly in the list without byte-copying.
 // Used for nested dicts so that pointer identity is preserved in the SMT model.
-bool __ESBMC_list_push_dict_ptr(
-  PyListObject *l,
-  void *dict_ptr,
-  size_t type_id)
+bool __ESBMC_list_push_dict_ptr(PyListObject *l, void *dict_ptr, size_t type_id)
 {
   PyObject *item = &l->items[l->size];
   item->value = dict_ptr;
