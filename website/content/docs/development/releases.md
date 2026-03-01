@@ -72,10 +72,11 @@ Allow 2 other maintainers to review your PR as usual, approve and merge it.
 
 ### Tagging the Commit
 
-Create a tag for the commit with the version change:
+Create a tag for the commit with the version change, make sure to name it
+according to the version you're releasing. In this case `v8.1`:
 
 ```sh
-git tag v8.0
+git tag v8.1
 ```
 
 Push the tag to origin:
@@ -84,9 +85,25 @@ Push the tag to origin:
 git push --tags
 ```
 
+### Creating the Release Artifacts
+
+You need to get the build artifacts that will be uploaded. Run the Release job
+on the `master` branch. Download the artifacts and prepare to upload them in the
+next step.
+
 ### Creating the Release on GitHub
 
 After pushing the tag, GitHub will allow you to create the official release
 associated with that tag through the repository’s Releases page.
+
+1. Select the tag you created and title the release according to your version
+   "Release 8.1" (note the missing v, for consistency with past releases).
+2. Write the release description, which should just be a markdown version of the
+   content written in `/scripts/release-notes.txt` from earlier.
+3. You will need to upload the release artifacts created in the last step.
+
+> [!TIP]
+>
+> You can use Claude or any other LLM to prepare the release description.
 
 {{% /steps %}}
