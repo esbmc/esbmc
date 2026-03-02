@@ -1348,13 +1348,11 @@ exprt python_dict_handler::handle_dict_setdefault(
   // returns a void* that points to the first character.  Normalise any
   // non-primitive, non-dict, non-list type to char* so that retrieval is
   // done the same way as in handle_dict_subscript.
-  bool is_string_result = !result_type.is_floatbv() &&
-                          !result_type.is_signedbv() &&
-                          !result_type.is_unsignedbv() &&
-                          !result_type.is_bool() &&
-                          result_type != none_type() &&
-                          !is_dict_type(result_type) &&
-                          result_type != list_type;
+  bool is_string_result =
+    !result_type.is_floatbv() && !result_type.is_signedbv() &&
+    !result_type.is_unsignedbv() && !result_type.is_bool() &&
+    result_type != none_type() && !is_dict_type(result_type) &&
+    result_type != list_type;
   if (is_string_result)
     result_type = gen_pointer_type(char_type());
 
