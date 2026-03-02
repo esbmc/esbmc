@@ -705,6 +705,7 @@ private:
   string_builder *string_builder_;
 
   // Helper methods for internal use
+  bool try_extract_const_string_expr(const exprt &expr, std::string &out);
 
   /**
    * @brief Create a character array expression
