@@ -896,8 +896,8 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         return std::nullopt;
       int n = static_cast<int>(ndigits->int_val);
       double val = (arg->kind == PyConstValue::INT)
-        ? static_cast<double>(arg->int_val)
-        : arg->float_val;
+                     ? static_cast<double>(arg->int_val)
+                     : arg->float_val;
       double factor = std::pow(10.0, n);
       double rounded = std::nearbyint(val * factor) / factor;
       return PyConstValue::make_float(rounded);
