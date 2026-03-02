@@ -130,8 +130,7 @@ private:
    * On return, `display_name` holds a human-readable identifier suitable
    * for error messages (e.g. "mylist" or "nested[0]").
    */
-  const symbolt *
-  get_object_list_symbol(std::string &display_name) const;
+  const symbolt *get_object_list_symbol(std::string &display_name) const;
 
   /*
    * Handles int-to-str conversions (e.g., str(65)) by generating

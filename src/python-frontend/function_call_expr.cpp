@@ -1618,9 +1618,9 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
         converter_.find_symbol(subscript_expr.identifier().as_string());
       if (sym && sym->type == list_type)
       {
-        const std::string idx_str =
-          slice_node.contains("id") ? slice_node["id"].get<std::string>()
-                                    : "(expr)";
+        const std::string idx_str = slice_node.contains("id")
+                                      ? slice_node["id"].get<std::string>()
+                                      : "(expr)";
         display_name = base_name + "[" + idx_str + "]";
         return sym;
       }
