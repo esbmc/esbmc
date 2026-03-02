@@ -315,6 +315,26 @@ symbol_id function_call_builder::build_function_id() const
       var_sid.set_object(var_name);
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
+      auto symbol_points_to_list = [&](const symbolt *sym) -> bool
+      {
+        if (!sym)
+          return false;
+
+        typet actual_type = sym->type;
+        if (actual_type.is_pointer())
+          actual_type = actual_type.subtype();
+        if (actual_type.id() == "symbol")
+          actual_type = converter_.ns.follow(actual_type);
+        if (!actual_type.is_struct())
+          return false;
+
+        const struct_typet &struct_type = to_struct_type(actual_type);
+        const std::string tag = struct_type.tag().as_string();
+        return tag.find("__ESBMC_PyListObj") != std::string::npos;
+      };
+
+      const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
+
       auto is_list_slice_assignment = [&]() -> bool
       {
         nlohmann::json var_value = json_utils::get_var_value(
@@ -353,21 +373,7 @@ symbol_id function_call_builder::build_function_id() const
             python_file, current_class_name, current_function_name);
           base_sid.set_object(base_name);
           symbolt *base_symbol = converter_.find_symbol(base_sid.to_string());
-          if (!base_symbol)
-            return false;
-
-          typet actual_type = base_symbol->type;
-          if (actual_type.is_pointer())
-            actual_type = actual_type.subtype();
-          if (actual_type.id() == "symbol")
-            actual_type = converter_.ns.follow(actual_type);
-
-          if (actual_type.is_struct())
-          {
-            const struct_typet &struct_type = to_struct_type(actual_type);
-            std::string tag = struct_type.tag().as_string();
-            return tag.find("__ESBMC_PyListObj") != std::string::npos;
-          }
+          return symbol_points_to_list(base_symbol);
         }
 
         return false;
@@ -407,27 +413,16 @@ symbol_id function_call_builder::build_function_id() const
       {
         func_name = kGetObjectSize;
       }
+      else if (var_symbol_is_list)
+      {
+        // Prefer symbol type over inferred frontend type when they conflict.
+        func_name = kGetObjectSize;
+      }
       else if (var_type.empty() && is_list_slice_assignment())
       {
         // list slicing assigned to a variable may have no annotation.
         // Use list size semantics for len(sub) where sub = lst[a:b].
         func_name = kGetObjectSize;
-      }
-      else if (var_type.empty() && var_symbol)
-      {
-        typet actual_type = var_symbol->type;
-        if (actual_type.is_pointer())
-          actual_type = actual_type.subtype();
-        if (actual_type.id() == "symbol")
-          actual_type = converter_.ns.follow(actual_type);
-
-        if (actual_type.is_struct())
-        {
-          const struct_typet &struct_type = to_struct_type(actual_type);
-          std::string tag = struct_type.tag().as_string();
-          if (tag.find("__ESBMC_PyListObj") != std::string::npos)
-            func_name = kGetObjectSize;
-        }
       }
       else if (var_type == "str")
       {
