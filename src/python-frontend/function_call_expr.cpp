@@ -2870,7 +2870,8 @@ exprt function_call_expr::handle_general_function_call()
   std::string actual_func_name = func_name;
 
   if (
-    (func_name == "min" || func_name == "max" || func_name == "sorted") &&
+    (func_name == "min" || func_name == "max" || func_name == "sorted" ||
+     func_name == "sum") &&
     call_["args"].size() == 1)
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
