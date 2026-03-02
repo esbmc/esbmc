@@ -2,22 +2,25 @@ class MyClass:
     # Class attribute
     class_attr: int = 1
     mutable_attr: list = []  # Shared mutable attribute
-    
+
     def __init__(self, value: int):
         self.data: int = value
 
+
 class ChildClass(MyClass):
     child_attr: int = 100
-    
+
     def __init__(self, value: int, child_value: int = 50):
         super().__init__(value)
         self.child_data = child_value
 
+
 class GrandChildClass(ChildClass):
     class_attr: int = 999  # Override parent class attribute
-    
+
     def __init__(self, value: int):
         super().__init__(value, 75)
+
 
 # Checking if the class attribute has the expected value
 assert MyClass.class_attr == 1
@@ -97,4 +100,3 @@ MyClass.class_attr = 555
 child2 = ChildClass(300)
 assert child2.class_attr == 555  # Gets updated parent value
 print("✓ Parent class attribute changes affect children unless overridden")
-

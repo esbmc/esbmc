@@ -1,4 +1,3 @@
-
 def main() -> None:
     text = nondet_str()
     # Keep the symbolic domain small to avoid long solver runs.
@@ -10,5 +9,6 @@ def main() -> None:
     # Empty old string in Python inserts new_str between each char
     # "a".replace("", "x") -> "xax"
     assert len(result) == 3
+
 
 main()

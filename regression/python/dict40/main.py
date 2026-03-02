@@ -6,4 +6,5 @@ def test_empty_dict():
     assert not e
     assert len(d) == len(e) == 0
 
+
 test_empty_dict()

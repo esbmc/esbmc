@@ -3,30 +3,36 @@ def test_valid_positive():
     x = int("123")
     assert x == 123
 
+
 def test_valid_negative():
     """Valid negative integer string"""
     x = int("-456")
     assert x == -456
+
 
 def test_valid_explicit_positive():
     """Valid positive integer with explicit + sign"""
     x = int("+789")
     assert x == 789
 
+
 def test_valid_zero():
     """Valid zero string"""
     x = int("0")
     assert x == 0
+
 
 def test_valid_negative_zero():
     """Valid negative zero (becomes 0)"""
     x = int("-0")
     assert x == 0
 
+
 def test_valid_large_number():
     """Valid large integer within int range"""
     x = int("2147483647")  # Max 32-bit signed int
     assert x == 2147483647
+
 
 def test_valid_multiple_digits():
     """Valid multi-digit numbers"""
@@ -39,10 +45,12 @@ def test_valid_multiple_digits():
     assert c == 123
     assert d == 1234
 
+
 def test_valid_in_expressions():
     """Valid int() calls used in expressions"""
     result = int("10") + int("20")
     assert result == 30
+
 
 def test_valid_sequential():
     """Multiple valid conversions in sequence"""
@@ -52,10 +60,11 @@ def test_valid_sequential():
     total = a + b + c
     assert total == 124
 
+
 # Main execution - all these should verify successfully
 if __name__ == "__main__":
     test_valid_positive()
-    test_valid_negative() 
+    test_valid_negative()
     test_valid_explicit_positive()
     test_valid_zero()
     test_valid_negative_zero()
@@ -63,4 +72,3 @@ if __name__ == "__main__":
     test_valid_multiple_digits()
     test_valid_in_expressions()
     test_valid_sequential()
-

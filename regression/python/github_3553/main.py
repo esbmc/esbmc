@@ -13,6 +13,7 @@ def make_palindrome(string: str) -> str:
 
     return string + string[:beginning_of_suffix][::-1]
 
+
 if __name__ == "__main__":
     assert make_palindrome('') == ''
     assert make_palindrome('x') == 'x'

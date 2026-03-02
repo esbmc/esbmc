@@ -1,11 +1,13 @@
 from typing import Any
 
+
 def test(flag: bool) -> None:
     if flag:
         x: Any = 1
     else:
         x: Any = '1'
     y: Any = x
+
 
 test(True)
 test(False)

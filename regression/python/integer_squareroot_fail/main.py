@@ -6,6 +6,7 @@ def integer_squareroot(n: int) -> int:
         y = (x + n // x) // 2
     return x
 
+
 def test_integer_squareroot():
     # Edge case: smallest input
     assert integer_squareroot(0) == 0
@@ -21,10 +22,11 @@ def test_integer_squareroot():
 
     # Very large numbers
     assert integer_squareroot((1 << 64) - 1) == (1 << 32) - 1  # sqrt(2^64 - 1)
-    assert integer_squareroot((1 << 62)) == 1 << 31            # sqrt(2^62) = 2^31
+    assert integer_squareroot((1 << 62)) == 1 << 31  # sqrt(2^62) = 2^31
 
     # Large perfect square
     big = (1 << 32)
     assert integer_squareroot(big * big) == big
+
 
 test_integer_squareroot()

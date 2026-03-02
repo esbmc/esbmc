@@ -686,29 +686,26 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
-  if (
-    int_encoding && is_floatbv_type(cast.from->type) &&
-    is_floatbv_type(cast.type))
-  {
-    // When using --ir mode and --floatbv, we ignore the fp-to-fp typecasting
-    // and the just encode the original fp term using real mode
-    return convert_ast(cast.from);
-  }
+  // Under integer encoding (--ir/--ir-ra), fp values are represented as reals.
+  // The following three cases handle fp<->int casts explicitly because the
+  // generic bitvector-based path is incorrect when operands are real-encoded.
 
-  // Handle float-to-integer conversions when int_encoding is enabled
+  // fp -> fp: reals are exact, no conversion needed
+  if (int_encoding && is_floatbv_type(cast.from->type) && is_floatbv_type(cast.type))
+    return convert_ast(cast.from);
+
+  // fp -> int: round the real to the nearest integer
   if (
     int_encoding && is_floatbv_type(cast.from->type) &&
     (is_bv_type(cast.type) || is_fixedbv_type(cast.type)))
   {
-    // Convert float to real, then to integer
     smt_astt from_real = convert_ast(cast.from);
 
-    // Convert real to integer using appropriate SMT operation
     if (is_signedbv_type(cast.type))
       return round_real_to_int(from_real);
     else
     {
-      // For unsigned types, ensure non-negative conversion
+      // Unsigned: clamp negative values to zero
       smt_astt int_val = round_real_to_int(from_real);
       smt_astt zero = mk_smt_int(BigInt(0));
       smt_astt is_negative = mk_lt(int_val, zero);
@@ -716,13 +713,12 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     }
   }
 
-  // Handle integer-to-float conversions when int_encoding is enabled
+  // int -> fp: lift integer to real
   if (
     int_encoding &&
     (is_bv_type(cast.from->type) || is_fixedbv_type(cast.from->type)) &&
     is_floatbv_type(cast.type))
   {
-    // Convert integer to real (which represents float in int_encoding mode)
     smt_astt from_int = convert_ast(cast.from);
     return mk_int2real(from_int);
   }

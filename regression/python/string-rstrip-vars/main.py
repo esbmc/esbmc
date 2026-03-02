@@ -19,4 +19,5 @@ def main() -> None:
     assert s2.rstrip() == ""
     assert s3.rstrip() == "foxtrot"
 
+
 main()

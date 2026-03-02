@@ -5,4 +5,5 @@ def main() -> None:
     __ESBMC_assume(len(s) > 0)
     assert u == ""
 
+
 main()

@@ -4,4 +4,5 @@ def main() -> None:
 
     assert idx == 0
 
+
 main()

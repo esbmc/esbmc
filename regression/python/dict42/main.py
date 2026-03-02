@@ -7,5 +7,6 @@ def test_get_with_default():
     assert d.get("b", 0) == 0
     assert e.get("b", 1) == 2
     assert e.get("a", 2) == 2
-   
+
+
 test_get_with_default()

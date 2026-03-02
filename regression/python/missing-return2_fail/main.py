@@ -9,6 +9,7 @@ def calculate_grade(score: int) -> str:
         return "D"
     # Missing return for score < 60
 
+
 score = 50
 result = calculate_grade(score)
 assert result == "F"

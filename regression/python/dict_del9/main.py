@@ -4,4 +4,3 @@ try:
     assert False
 except KeyError:
     assert True
-

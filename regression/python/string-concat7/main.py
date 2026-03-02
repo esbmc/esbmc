@@ -5,4 +5,5 @@ def f():
         break
     assert s == "A"
 
+
 f()

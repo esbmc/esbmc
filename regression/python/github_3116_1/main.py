@@ -1,4 +1,4 @@
-import toml as local_toml 
+import toml as local_toml
 
 
 def main() -> None:
@@ -13,4 +13,3 @@ role = "frontend"
 
 
 main()
-

@@ -6,4 +6,5 @@ def test_dict_str_to_str():
         keys.append(k)
     assert keys == ["name", "Manchester City"]
 
+
 test_dict_str_to_str()

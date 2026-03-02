@@ -1,5 +1,6 @@
 # Test case 5: Nested attribute in conditional statements
 class Counter:
+
     def __init__(self) -> None:
         self.count: int = 0
 
@@ -10,7 +11,9 @@ class Counter:
     def get_count(self) -> int:
         return self.count
 
+
 class Manager:
+
     def __init__(self) -> None:
         self.counter: Counter = Counter()
 
@@ -21,7 +24,7 @@ class Manager:
             return result
         return self.counter.get_count()
 
+
 manager = Manager()
 result: int = manager.process()
 assert result == 1
-

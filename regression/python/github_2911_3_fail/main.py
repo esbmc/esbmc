@@ -1,2 +1,2 @@
-text:str = "esbmc-pythoniscool"
+text: str = "esbmc-pythoniscool"
 assert text.isspace()

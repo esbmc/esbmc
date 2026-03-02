@@ -5,12 +5,14 @@ class MyClass:
     def __init__(self, value: int):
         self.data: int = value
 
+
 class ChildClass(MyClass):
     child_attr: int = 100
 
     def __init__(self, value: int, child_value: int = 50):
         super().__init__(value)
         self.child_data = child_value
+
 
 assert MyClass.class_attr == 1
 obj1 = MyClass(10)

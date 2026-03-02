@@ -5,6 +5,7 @@ def g(x: int) -> int:
         return -1
     else:
         if x == 0:
-            pass   # No return here
+            pass  # No return here
+
 
 g(0)

@@ -7,4 +7,5 @@ def test_range_single_arg():
     assert l[3] == 3
     assert l[4] == 5
 
+
 test_range_single_arg()

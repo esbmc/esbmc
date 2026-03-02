@@ -5,4 +5,5 @@ def test_list_comprehension():
     # Edge case
     assert [x for x in []] == [0, 1, 4, 9]
 
+
 test_list_comprehension()

@@ -1,14 +1,15 @@
 def main():
     items = [5, 10, 15]
-    flag = True 
-  
+    flag = True
+
     if flag:
-        index = 3  
+        index = 3
     else:
         index = 1
-    
-    value = items[index] 
+
+    value = items[index]
 
     assert value > 0
-    
+
+
 main()

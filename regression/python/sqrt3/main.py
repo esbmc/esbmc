@@ -5,4 +5,5 @@ def test_sqrt_small_float():
     result: float = math.sqrt(x)
     assert abs(result - 1e-6) < 1e-12
 
+
 test_sqrt_small_float()

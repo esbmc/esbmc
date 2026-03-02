@@ -12,13 +12,13 @@ listdir(p)
 exists = os.path.exists(f)
 base = os.path.basename(f)
 if exists:
-  remove(f)
+    remove(f)
 
 exists = os.path.exists(q)
 if exists:
-  rmdir(q)
+    rmdir(q)
 
 try:
-  mkdir(q)
+    mkdir(q)
 except FileExistsError:
-  print("FileExistsError")
+    print("FileExistsError")

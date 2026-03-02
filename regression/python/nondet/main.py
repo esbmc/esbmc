@@ -6,4 +6,4 @@ if (nondet_bool()):
 else:
     x = x + 2
 
-assert(x != y and x == y+1 or x == y+2)
+assert (x != y and x == y + 1 or x == y + 2)

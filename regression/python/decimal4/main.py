@@ -1,16 +1,21 @@
 from decimal import Decimal
 
+
 def get_sign(d: Decimal) -> int:
     return d._sign
+
 
 def get_int(d: Decimal) -> int:
     return d._int
 
+
 def get_exp(d: Decimal) -> int:
     return d._exp
 
+
 def get_is_special(d: Decimal) -> int:
     return d._is_special
+
 
 # Negation
 a: Decimal = Decimal("3.0")

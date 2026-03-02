@@ -3,6 +3,7 @@ def test_value(x: int) -> int:
         raise ValueError("Negative")
     return x
 
+
 try:
     test_value(-1)
 except ValueError as e:

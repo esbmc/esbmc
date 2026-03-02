@@ -7,4 +7,5 @@ def test_dict_iteration_items():
 
     assert sum_vals == 3
 
+
 test_dict_iteration_items()

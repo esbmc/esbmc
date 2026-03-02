@@ -1,4 +1,5 @@
 class Car:
+
     def __init__(self, id_number: int, mileage: int):
         assert mileage >= 0, "mileage cannot be negative"
         self.id_number = id_number
@@ -17,6 +18,7 @@ class Car:
 
     def needs_service(self) -> bool:
         return self.mileage >= 10000
+
 
 # Create instances
 car1 = Car(101, 9500)

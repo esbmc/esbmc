@@ -5,4 +5,3 @@ while True:
     break
 
 assert count == 1
-

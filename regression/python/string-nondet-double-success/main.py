@@ -1,4 +1,3 @@
-
 s1 = nondet_string(3)
 s2 = nondet_string(3)
 assume(s1 == "abc")

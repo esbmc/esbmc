@@ -20,9 +20,11 @@ assert abs(y) == 1.000001
 
 assert x != y
 
+
 # Abs on values from another variable
 def compute():
     return -7
+
 
 val = compute()
 assert abs(val) == 7

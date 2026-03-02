@@ -47,4 +47,3 @@ assert s10[:4] == "veri"
 assert s10[-3:] == "ion"
 
 print("All string assertions passed!")
-

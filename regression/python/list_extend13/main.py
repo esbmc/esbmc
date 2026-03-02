@@ -4,5 +4,5 @@ def f():
         ret.extend([1] + r)
     return ret
 
-f()
 
+f()

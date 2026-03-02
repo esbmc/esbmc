@@ -1,7 +1,9 @@
-x:int=1
+x: int = 1
 
-def return_int(y:int=x)->int:
+
+def return_int(y: int = x) -> int:
     return y
+
 
 assert return_int() == 1
 

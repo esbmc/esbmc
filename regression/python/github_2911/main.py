@@ -1,4 +1,4 @@
-only_spaces:bool = False
+only_spaces: bool = False
 
 title = "   "
 for char in title:

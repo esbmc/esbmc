@@ -23,16 +23,18 @@ def test_float_format_spec():
     assert formatted == "3.14"
     assert len(formatted) > 0
 
+
 def test_boolean_format_spec():
     """Test boolean formatting in various ways"""
     # Basic boolean formatting (default string representation)
     true_val: bool = True
     false_val: bool = False
-    
+
     # Default boolean formatting
     assert f"{true_val}" == "True"
     assert f"{false_val}" == "False"
-    
+
+
 def run_all_tests():
     """Run all f-string format specification tests"""
     test_integer_format_spec()

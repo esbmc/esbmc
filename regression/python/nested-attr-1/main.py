@@ -1,16 +1,21 @@
 # Test case 1: Multi-level nested attribute access
 class A:
+
     def get_value(self) -> int:
         return 42
 
+
 class B:
+
     def __init__(self) -> None:
         self.a: A = A()
 
     def get_a(self) -> A:
         return self.a
 
+
 class C:
+
     def __init__(self) -> None:
         self.b: B = B()
 
@@ -20,6 +25,6 @@ class C:
         result = self.b.a.get_value()
         return result
 
+
 c = C()
 assert c.test() == 42
-

@@ -4,5 +4,6 @@ def process(val):
     else:
         return val
 
+
 result = process(None)
 assert result == 0

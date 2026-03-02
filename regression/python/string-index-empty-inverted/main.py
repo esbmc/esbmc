@@ -8,4 +8,5 @@ def main() -> None:
 
     assert got_error
 
+
 main()

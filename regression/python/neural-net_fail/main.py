@@ -4,6 +4,7 @@ def relu(x: float) -> float:
     else:
         return 0.0
 
+
 def main() -> None:
     x: float = 0.749
     y: float = 0.498
@@ -11,5 +12,6 @@ def main() -> None:
     nodeB: float = x + 4 * y
     f: float = relu(nodeA) + relu(nodeB)
     assert f >= 2.745
+
 
 main()

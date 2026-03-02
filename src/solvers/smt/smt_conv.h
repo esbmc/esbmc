@@ -17,7 +17,7 @@
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
  *  smt_convt is the base class for everything that attempts to convert the
- *  contents of an SSA program into something else, generally SMT- or SAT-based.
+ *  contents of an SSA program into something else, generally SMT or SAT based.
  *
  *  The class itself does various accounting and structuring of the conversion,
  *  however the challenge is that as we convert the SSA program into anything
@@ -35,7 +35,7 @@
  *  from the solver.
  *
  *  To do that, the user must allocate a solver converter object, which extends
- *  the class smt_convt. Currently, create_solver() will do this, in the
+ *  the class smt_convt. Current, create_solver() will do this, in the
  *  factory-pattern manner (ish). Each solver converter implements all the
  *  abstract methods of smt_convt. When handed an expression to convert,
  *  smt_convt deconstructs it into a series of function applications, which it
@@ -87,17 +87,18 @@
 // Forward dec.
 class fp_convt;
 class smt_convt;
+class ra_apit;
 
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/fp/fp_conv.h>
 
 /** The base SMT-conversion class/interface.
- *  smt_convt handles some decisions that must be made when
+ *  smt_convt handles a number of decisions that must be made when
  *  deconstructing ESBMC expressions down into SMT representation. See
- *  smt_conv.h for more high-level documentation of this.
+ *  smt_conv.h for more high level documentation of this.
  *
- *  The basic flow is thus: a class that can create an SMT formula in some solver
+ *  The basic flow is thus: a class that can create SMT formula in some solver
  *  subclasses smt_convt, implementing abstract methods, in particular
  *  mk_func_app. The rest of ESBMC then calls convert with an expression, and
  *  this class deconstructs it into a series of applications, as documented by
@@ -109,7 +110,7 @@ class smt_convt;
  *  although smt_convt posesses a cache, so they generally have a reference
  *  in there. This will probably be fixed in the future.
  *
- *  In theory, this class supports pushing and popping of solver contexts,
+ *  In theory this class supports pushing and popping of solver contexts,
  *  although of course that depends too on the subclass supporting it. However,
  *  this hasn't really been tested since everything here was rewritten from
  *  The Old Way, so don't trust it.
@@ -152,7 +153,7 @@ public:
   virtual ~smt_convt() = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
-   *  model data for tracking; however, we can't do it from the constructor because
+   *  model data for tracking, however can't do it from the constructor because
    *  the solver converter itself won't have been initialized itself at that
    *  point. So, once it's ready, the solver converter should call this from
    *  it's constructor. */
@@ -269,7 +270,6 @@ public:
     (void)denominator;
     return false;
   }
-
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -286,7 +286,7 @@ public:
   virtual const std::string solver_text() = 0;
 
   /** Fetch the value of a boolean sorted smt_ast. (The 'l' is for literal, and
-   *  is historic). Returns a three-valued result, of true, false, or
+   *  is historic). Returns a three valued result, of true, false, or
    *  unassigned.
    *  @param a The boolean sorted ast to fetch the value of.
    *  @return A three-valued return val, of the assignment to a. */
@@ -550,6 +550,25 @@ public:
    *  @param expr A neg2tc to test for overflows in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_neg(const expr2tc &expr);
+  
+  /** Applies IEEE 754 floating-point semantics to a real arithmetic result.
+   *  Handles overflow, underflow, and subnormal number behaviors that are
+   *  missing when using integer/real encoding for floating-point operations.
+   *  Supports both IEEE 754 single precision (32-bit: 8 exponent, 23 fraction)
+   *  and double precision (64-bit: 11 exponent, 52 fraction) formats.
+   *  For double precision: overflow to ±1.798e+308, underflow below 4.941e-324,
+   *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
+   *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
+   *  Other formats return the original result unchanged.
+   *  @param real_result The result of exact real arithmetic operation
+   *  @param fbv_type The floating-point type information (exponent/fraction bits)
+   *  @param operand_zero_check Optional boolean AST for special zero handling
+   *         (e.g., multiplication where either operand is zero should yield zero
+   *         regardless of the other operand, even if it would cause underflow)
+   *  @return SMT AST representing the result with IEEE 754 semantics applied */
+  virtual smt_astt apply_ieee754_semantics(smt_astt real_result, const floatbv_type2t &fbv_type, 
+                                         smt_astt operand_zero_check = nullptr);
+
 
   /** Applies IEEE 754 floating-point semantics to a real arithmetic result.
    *  Handles overflow, underflow, and subnormal number behaviors that are
@@ -566,10 +585,7 @@ public:
    *         (e.g., multiplication where either operand is zero should yield zero
    *         regardless of the other operand, even if it would cause underflow)
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
-  virtual smt_astt apply_ieee754_semantics(
-    smt_astt real_result,
-    const floatbv_type2t &fbv_type,
-    smt_astt operand_zero_check = nullptr);
+
 
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();
@@ -736,6 +752,8 @@ public:
   void set_fp_conv(fp_convt *iface);
   /** Store a new address-allocation record into the address space accounting.
    *  idx indicates the object number of this record. */
+  void set_ra_conv(ra_apit *iface);
+
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
@@ -941,12 +959,13 @@ public:
   tuple_iface *tuple_api;
   array_iface *array_api;
   fp_convt *fp_api;
+  ra_apit *ra_api;
+
 
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.
   smt_astt int_shift_op_array;
-
-private:
+  private:
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);

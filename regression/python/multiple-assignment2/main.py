@@ -10,8 +10,10 @@ flag1 = flag2 = None
 assert flag1 is None
 assert flag2 is None
 
+
 def f():
     return 42
+
 
 m = n = f()
 assert m == 42
@@ -20,5 +22,3 @@ m += 1
 n -= 1
 assert m == 43
 assert n == 41
-
-

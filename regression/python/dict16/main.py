@@ -9,12 +9,9 @@ def get_value_if_int(d: dict, key):
         return value
     return None
 
+
 if __name__ == "__main__":
-    data = {
-        "a": 10,
-        "b": "hello",
-        "c": 3.14
-    }
+    data = {"a": 10, "b": "hello", "c": 3.14}
 
     print(get_value_if_int(data, "a"))  # Expected: 10
     print(get_value_if_int(data, "b"))  # Expected: None (not int)

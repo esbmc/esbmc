@@ -1,6 +1,6 @@
 def test_nondet_list_bool_in_conditional():
     """Test nondet list behavior in conditionals."""
-    x:list[bool] = nondet_list(9, nondet_bool())
+    x: list[bool] = nondet_list(9, nondet_bool())
 
     result = False
 
@@ -13,11 +13,13 @@ def test_nondet_list_bool_in_conditional():
 
     assert result == result
 
+
 test_nondet_list_bool_in_conditional()
+
 
 def test_nondet_list_in_conditional():
     """Test nondet list behavior in conditionals."""
-    x:list[int] = nondet_list(9)
+    x: list[int] = nondet_list(9)
 
     result = 0
 
@@ -30,5 +32,6 @@ def test_nondet_list_in_conditional():
 
     # Result is always defined
     assert result == result
+
 
 test_nondet_list_in_conditional()

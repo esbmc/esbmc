@@ -1,4 +1,3 @@
-
 def main() -> None:
     text = nondet_str()
     # Assuming text is "Hello hello"
@@ -8,5 +7,6 @@ def main() -> None:
     # Test replace case-sensitivity - intentional failure
     result = text.replace("hello", "hi")
     assert result == "Hi hi"  # Wrong! Should be "Hello hi"
+
 
 main()

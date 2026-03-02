@@ -1,22 +1,31 @@
 class Vehicle:
+
     def move(self):
         raise NotImplementedError("Subclasses should implement this method.")
 
+
 class Car(Vehicle):
+
     def move(self):
         return "Driving on the road"
 
+
 class Boat(Vehicle):
+
     def move(self):
         return "Sailing on the water"
 
+
 class Airplane(Vehicle):
+
     def move(self):
         return "Flying in the sky"
 
+
 def test_vehicle_movement(vehicle, expected_movement):
-    result:str = vehicle.move()
+    result: str = vehicle.move()
     assert result == expected_movement, f"Expected '{expected_movement}', but got '{result}'"
+
 
 if __name__ == "__main__":
     # Test cases

@@ -6,4 +6,5 @@ def test_sqrt_zero_variants():
     assert pos_zero == 0.0
     assert neg_zero == 0.0
 
+
 test_sqrt_zero_variants()

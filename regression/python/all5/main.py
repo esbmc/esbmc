@@ -5,5 +5,5 @@ def f():
             xs.append(n)
     return xs
 
-f()
 
+f()

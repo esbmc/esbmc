@@ -7,5 +7,6 @@ def max(x):
         i = i + 1
     return max
 
+
 l = [1, 2, 3]
 assert max(l) == 3

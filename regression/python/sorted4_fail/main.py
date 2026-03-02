@@ -6,4 +6,5 @@ def test_sorted_string():
     assert result[2] == "zebra"
     assert result[3] == "dog"
 
+
 test_sorted_string()

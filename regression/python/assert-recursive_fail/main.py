@@ -4,4 +4,5 @@ def test_fact(n: int):
         return 1
     return n * test_fact(n - 1)
 
+
 test_fact(-1)

@@ -6,4 +6,5 @@ def test_sorted_float():
     assert result[2] == 2.8
     assert result[3] == 3.5
 
+
 test_sorted_float()

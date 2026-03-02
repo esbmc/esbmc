@@ -4,4 +4,5 @@ def main() -> None:
     result = text.lstrip(".")
     assert result == "...hello..."  # Wrong! Should be "hello..."
 
+
 main()

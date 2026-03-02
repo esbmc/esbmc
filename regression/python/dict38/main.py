@@ -3,4 +3,5 @@ def test_dict_value_for_key():
 
     assert d["a"] == 5
 
+
 test_dict_value_for_key()

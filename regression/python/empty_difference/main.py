@@ -4,4 +4,5 @@ def test_empty_difference():
     result = a - b
     assert result == set()
 
+
 test_empty_difference()
