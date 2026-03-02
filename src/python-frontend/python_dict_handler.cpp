@@ -1344,15 +1344,10 @@ exprt python_dict_handler::handle_dict_setdefault(
       result_type = long_int_type();
   }
 
-  // Strings are stored in the dict values list as char arrays, but list_at
-  // returns a void* that points to the first character.  Normalise any
-  // non-primitive, non-dict, non-list type to char* so that retrieval is
-  // done the same way as in handle_dict_subscript.
+  // Strings are stored as char arrays; list_at returns a void* to the first character.
   bool is_string_result =
-    !result_type.is_floatbv() && !result_type.is_signedbv() &&
-    !result_type.is_unsignedbv() && !result_type.is_bool() &&
-    result_type != none_type() && !is_dict_type(result_type) &&
-    result_type != list_type;
+    (result_type.is_pointer() && result_type.subtype() == char_type()) ||
+    (result_type.is_array() && result_type.subtype() == char_type());
   if (is_string_result)
     result_type = gen_pointer_type(char_type());
 
