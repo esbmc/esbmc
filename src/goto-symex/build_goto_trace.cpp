@@ -128,12 +128,14 @@ void build_successful_goto_trace(
   for (const symex_target_equationt::SSA_stept &SSA_step : target.SSA_steps)
   {
     if (
-      (SSA_step.is_assert() || SSA_step.is_assume()) &&
+      (SSA_step.is_assert() || SSA_step.is_assume() ||
+       SSA_step.is_branching()) &&
       (is_valid_witness_expr(ns, SSA_step.lhs)))
     {
       // When building the correctness witness, we only care about
       // asserts and assumes
-      if (!(SSA_step.is_assert() || SSA_step.is_assume()))
+      if (!(SSA_step.is_assert() || SSA_step.is_assume() ||
+            SSA_step.is_branching()))
         continue;
 
       goto_trace.steps.emplace_back();
