@@ -1356,6 +1356,10 @@ exprt python_dict_handler::handle_dict_setdefault(
   if (is_string_result)
     result_type = gen_pointer_type(char_type());
 
+  if (is_dict_type(result_type) || result_type == list_type)
+    throw std::runtime_error(
+      "setdefault(): dict and list value types are not supported");
+
   // Get dict members
   member_exprt keys_member(dict_expr, "keys", list_type);
   member_exprt values_member(dict_expr, "values", list_type);
