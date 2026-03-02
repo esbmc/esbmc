@@ -1310,6 +1310,38 @@ exprt python_dict_handler::handle_dict_get(
   return symbol_expr(result_var);
 }
 
+exprt python_dict_handler::handle_dict_update(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  const auto &args = call_node["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error("update() takes exactly one argument");
+
+  const nlohmann::json &arg = args[0];
+
+  if (!is_dict_literal(arg))
+    throw std::runtime_error(
+      "update() argument must be a dict literal in ESBMC model");
+
+  const auto &keys = arg["keys"];
+  const auto &values = arg["values"];
+
+  // For each key-value pair in the argument dict, update the target dict.
+  // handle_dict_subscript_assign implements:
+  //   if key exists → update value; else → insert new key-value pair.
+  for (size_t i = 0; i < keys.size(); ++i)
+  {
+    exprt value_expr = converter_.get_expr(values[i]);
+    code_blockt pair_block;
+    handle_dict_subscript_assign(dict_expr, keys[i], value_expr, pair_block);
+    converter_.add_instruction(pair_block);
+  }
+
+  return nil_exprt();
+}
+
 exprt python_dict_handler::compare(
   const exprt &lhs,
   const exprt &rhs,

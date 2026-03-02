@@ -1797,30 +1797,30 @@ bool function_call_expr::is_dict_method_call() const
   const std::string &method_name = function_id_.get_function();
 
   // Check if this is a known dict method
-  return method_name == "get";
+  return method_name == "get" || method_name == "update";
 }
 
 exprt function_call_expr::handle_dict_method() const
 {
   const std::string &method_name = function_id_.get_function();
 
+  // Resolve the dict symbol for all dict methods
+  std::string dict_name = get_object_name();
+  symbol_id dict_symbol_id = converter_.create_symbol_id();
+  dict_symbol_id.set_object(dict_name);
+  const symbolt *dict_symbol =
+    converter_.find_symbol(dict_symbol_id.to_string());
+
+  if (!dict_symbol)
+    throw std::runtime_error("Dictionary variable not found: " + dict_name);
+
   if (method_name == "get")
-  {
-    // Get the dict object
-    std::string dict_name = get_object_name();
-
-    symbol_id dict_symbol_id = converter_.create_symbol_id();
-    dict_symbol_id.set_object(dict_name);
-    const symbolt *dict_symbol =
-      converter_.find_symbol(dict_symbol_id.to_string());
-
-    if (!dict_symbol)
-      throw std::runtime_error("Dictionary variable not found: " + dict_name);
-
-    // Delegate to dict handler
     return converter_.get_dict_handler()->handle_dict_get(
       symbol_expr(*dict_symbol), call_);
-  }
+
+  if (method_name == "update")
+    return converter_.get_dict_handler()->handle_dict_update(
+      symbol_expr(*dict_symbol), call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
 }

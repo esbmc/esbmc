@@ -377,17 +377,32 @@ public:
 
   /**
    * @brief Handles dict.get() method calls
-   * 
+   *
    * Implements Python's dict.get(key, default=None) semantics:
    * - Returns value if key exists
    * - Returns default (or None) if key doesn't exist
-   * 
+   *
    * @param dict_expr The dictionary expression
    * @param call_node The function call AST node containing arguments
    * @return Expression representing the result (value or default)
    */
   exprt
   handle_dict_get(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict.update() method calls
+   *
+   * Implements Python's dict.update(other) semantics:
+   * - For each key-value pair in other: if key exists, update value;
+   *   otherwise insert the new key-value pair.
+   * - Returns nil (update() is a void operation).
+   *
+   * @param dict_expr The dictionary expression to update
+   * @param call_node The function call AST node containing the argument dict
+   * @return nil_exprt (void operation)
+   */
+  exprt
+  handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
    * @brief Compares two dictionaries for equality or inequality
