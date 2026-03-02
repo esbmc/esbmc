@@ -1583,28 +1583,49 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     if (!base_sym)
       return nullptr;
 
-    // Only constant integer indices are supported for now.
     const auto &slice_node = func_value["slice"];
-    if (
-      slice_node["_type"] != "Constant" ||
-      !slice_node["value"].is_number_integer())
-      return nullptr;
-
-    const size_t index = slice_node["value"].get<size_t>();
-
     const typet list_type = converter_.get_type_handler().get_list_type();
     const std::string &base_id = base_sym->id.as_string();
 
-    if (python_list::get_list_element_type(base_id, index) != list_type)
-      return nullptr;
+    // Constant index: resolve directly from list_type_map.
+    if (
+      slice_node["_type"] == "Constant" &&
+      slice_node["value"].is_number_integer())
+    {
+      const size_t index = slice_node["value"].get<size_t>();
 
-    const std::string inner_id =
-      python_list::get_list_element_id(base_id, index);
-    if (inner_id.empty())
-      return nullptr;
+      if (python_list::get_list_element_type(base_id, index) != list_type)
+        return nullptr;
 
-    display_name = base_name + "[" + std::to_string(index) + "]";
-    return converter_.find_symbol(inner_id);
+      const std::string inner_id =
+        python_list::get_list_element_id(base_id, index);
+      if (inner_id.empty())
+        return nullptr;
+
+      display_name = base_name + "[" + std::to_string(index) + "]";
+      return converter_.find_symbol(inner_id);
+    }
+
+    // Non-constant index (e.g. nested[i].append(v)): delegate to the existing
+    // subscript handler.  For comprehension-generated nested lists the handler
+    // hits the list_type_map early-return path and yields the template inner
+    // list symbol (the element produced inside the loop body) without emitting
+    // any runtime instructions.
+    const exprt subscript_expr = converter_.get_expr(func_value);
+    if (subscript_expr.is_symbol())
+    {
+      const symbolt *sym =
+        converter_.find_symbol(subscript_expr.identifier().as_string());
+      if (sym && sym->type == list_type)
+      {
+        const std::string idx_str =
+          slice_node.contains("id") ? slice_node["id"].get<std::string>()
+                                    : "(expr)";
+        display_name = base_name + "[" + idx_str + "]";
+        return sym;
+      }
+    }
+    return nullptr;
   }
 
   // Plain name case: e.g. mylist.append(99)
