@@ -1476,26 +1476,27 @@ exprt python_dict_handler::handle_dict_setdefault(
   // Else branch: key not found — insert (key, default) and return default
   code_blockt else_block;
 
+  // Compute a single effective default used for both insertion and return.
+  // When the caller omits the default or passes None, approximate None as
+  // zero of the result type so that both the stored value and the returned
+  // value are identical.
+  exprt effective_default =
+    (has_explicit_default && default_value.type() != none_type())
+      ? default_value
+      : gen_zero(result_type);
+
   // value_arg is the proper char* / typed pointer to the value to insert.
   // Hoisted so the default assignment below can reuse it for string results.
   exprt value_arg;
 
   {
-    // Always insert (key, value) when the key is absent — Python semantics:
-    // d.setdefault("k") inserts ("k", None) and must make "k" in d true.
-    // When no explicit default is given, approximate None as a zero integer.
-    exprt value_to_push =
-      (has_explicit_default && default_value.type() != none_type())
-        ? default_value
-        : gen_zero(long_int_type());
-
     const symbolt *push_func =
       symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
     if (!push_func)
       throw std::runtime_error("__ESBMC_list_push not found");
 
     list_elem_info value_info =
-      list_handler.get_list_element_info(call_node, value_to_push);
+      list_handler.get_list_element_info(call_node, effective_default);
 
     if (
       value_info.elem_symbol->type.is_pointer() &&
@@ -1528,25 +1529,13 @@ exprt python_dict_handler::handle_dict_setdefault(
     else_block.copy_to_operands(push_value_call);
   }
 
-  // Assign default to result
-  if (default_value.type() == none_type() && result_type != none_type())
+  // Assign effective_default to result.
+  // For strings use value_arg (the char* pointer already staged for insertion)
+  // so that the returned pointer is identical to what was pushed into the list.
+  // For all other types, effective_default already has the correct type.
   {
-    typecast_exprt casted_default(default_value, result_type);
-    code_assignt default_assign(symbol_expr(result_var), casted_default);
-    default_assign.location() = location;
-    else_block.copy_to_operands(default_assign);
-  }
-  else if (is_string_result)
-  {
-    // value_arg was set above when has_explicit_default is true; when the
-    // default is None the none_type() branch above is taken instead.
-    code_assignt default_assign(symbol_expr(result_var), value_arg);
-    default_assign.location() = location;
-    else_block.copy_to_operands(default_assign);
-  }
-  else
-  {
-    code_assignt default_assign(symbol_expr(result_var), default_value);
+    exprt result_expr = is_string_result ? value_arg : effective_default;
+    code_assignt default_assign(symbol_expr(result_var), result_expr);
     default_assign.location() = location;
     else_block.copy_to_operands(default_assign);
   }
