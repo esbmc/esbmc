@@ -593,6 +593,20 @@ exprt python_dict_handler::handle_dict_subscript(
     return result;
   }
 
+  // Handle non-char pointer types (e.g., Optional[T] stored as T*).
+  // The value was stored by-reference (value_arg = address_of(T* var)), so
+  // item->value points to a buffer holding the T* bytes.
+  // Dereference as T** to recover the stored T* value.
+  if (
+    resolved_type.is_pointer() && resolved_type.subtype() != char_type() &&
+    !resolved_type.is_nil())
+  {
+    typecast_exprt value_as_ptr_ptr(obj_value, pointer_typet(resolved_type));
+    dereference_exprt result(value_as_ptr_ptr, resolved_type);
+    result.type() = resolved_type;
+    return result;
+  }
+
   // Default: cast void* to char* for string values
   typecast_exprt value_as_string(obj_value, gen_pointer_type(char_type()));
   return value_as_string;
@@ -1456,6 +1470,15 @@ exprt python_dict_handler::handle_dict_setdefault(
   {
     typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
     retrieved_value = dereference_exprt(value_as_bool_ptr, bool_type());
+  }
+  else if (
+    result_type.is_pointer() && result_type.subtype() != char_type() &&
+    !result_type.is_nil())
+  {
+    // Non-char pointer (e.g., Optional[T] stored as T*): stored by-reference,
+    // so dereference as T** to recover the stored T* value.
+    typecast_exprt value_as_ptr_ptr(obj_value, pointer_typet(result_type));
+    retrieved_value = dereference_exprt(value_as_ptr_ptr, result_type);
   }
   else if (result_type == none_type())
   {
