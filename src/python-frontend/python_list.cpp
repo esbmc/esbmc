@@ -2620,6 +2620,15 @@ typet python_list::get_list_element_type(
   return type_map_it->second[index].second;
 }
 
+std::string
+python_list::get_list_element_id(const std::string &list_id, size_t index)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || index >= it->second.size())
+    return {};
+  return it->second[index].first;
+}
+
 exprt python_list::handle_comprehension(const nlohmann::json &element)
 {
   if (!element.contains("generators") || element["generators"].empty())

@@ -111,6 +111,13 @@ public:
   get_list_element_type(const std::string &list_id, size_t index = 0);
 
   /**
+   * Get the internal symbol id of the element stored at a given index.
+   * Returns an empty string when the list or index is not found.
+   */
+  static std::string
+  get_list_element_id(const std::string &list_id, size_t index);
+
+  /**
    * @brief Convert generator expressions and list comprehensions to lists
    * @param element The GeneratorExp or ListComp AST node
    * @return Expression representing the materialized list
