@@ -1561,7 +1561,8 @@ std::string function_call_expr::get_object_name() const
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
 
-const symbolt *function_call_expr::get_object_list_symbol() const
+const symbolt *
+function_call_expr::get_object_list_symbol(std::string &display_name) const
 {
   const auto &func_value = call_["func"]["value"];
 
@@ -1602,13 +1603,14 @@ const symbolt *function_call_expr::get_object_list_symbol() const
     if (inner_id.empty())
       return nullptr;
 
+    display_name = base_name + "[" + std::to_string(index) + "]";
     return converter_.find_symbol(inner_id);
   }
 
   // Plain name case: e.g. mylist.append(99)
-  const std::string list_name = get_object_name();
+  display_name = get_object_name();
   symbol_id list_symbol_id = converter_.create_symbol_id();
-  list_symbol_id.set_object(list_name);
+  list_symbol_id.set_object(display_name);
   return converter_.find_symbol(list_symbol_id.to_string());
 }
 
@@ -1741,10 +1743,11 @@ exprt function_call_expr::handle_list_insert() const
   if (args.size() != 2)
     throw std::runtime_error("insert() takes exactly two arguments");
 
-  const symbolt *list_symbol = get_object_list_symbol();
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found");
+    throw std::runtime_error("List variable not found: " + list_display_name);
 
   exprt index_expr = converter_.get_expr(args[0]);
   exprt value_to_insert = converter_.get_expr(args[1]);
@@ -1770,10 +1773,11 @@ exprt function_call_expr::handle_list_insert() const
 
 exprt function_call_expr::handle_list_clear() const
 {
-  const symbolt *list_symbol = get_object_list_symbol();
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found");
+    throw std::runtime_error("List variable not found: " + list_display_name);
 
   // Find the list_clear C function
   const symbolt *clear_func =
@@ -1798,10 +1802,11 @@ exprt function_call_expr::handle_list_pop() const
   if (args.size() > 1)
     throw std::runtime_error("pop() takes at most 1 argument");
 
-  const symbolt *list_symbol = get_object_list_symbol();
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found");
+    throw std::runtime_error("List variable not found: " + list_display_name);
 
   // Determine the index (default is -1 for last element)
   exprt index_expr;
@@ -1869,10 +1874,11 @@ exprt function_call_expr::handle_list_copy() const
   if (!args.empty())
     throw std::runtime_error("copy() takes no arguments");
 
-  const symbolt *list_symbol = get_object_list_symbol();
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found");
+    throw std::runtime_error("List variable not found: " + list_display_name);
 
   // Delegate to python_list to build the copy operation
   python_list list_helper(converter_, call_);
@@ -1886,10 +1892,11 @@ exprt function_call_expr::handle_list_remove() const
   if (args.size() != 1)
     throw std::runtime_error("remove() takes exactly one argument");
 
-  const symbolt *list_symbol = get_object_list_symbol();
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found");
+    throw std::runtime_error("List variable not found: " + list_display_name);
 
   exprt value_to_remove = converter_.get_expr(args[0]);
 
@@ -1908,10 +1915,11 @@ exprt function_call_expr::handle_list_sort() const
       "sort() positional arguments are not supported; "
       "use sort() with no arguments");
 
-  const symbolt *list_symbol = get_object_list_symbol();
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found");
+    throw std::runtime_error("List variable not found: " + list_display_name);
 
   const std::string &list_id = list_symbol->id.as_string();
 
@@ -1996,10 +2004,11 @@ exprt function_call_expr::handle_list_reverse() const
   if (!args.empty())
     throw std::runtime_error("reverse() takes no arguments");
 
-  const symbolt *list_symbol = get_object_list_symbol();
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found");
+    throw std::runtime_error("List variable not found: " + list_display_name);
 
   // Locate the C model function __ESBMC_list_reverse
   const symbolt *reverse_func =
@@ -2069,10 +2078,11 @@ exprt function_call_expr::handle_list_append() const
   if (args.size() != 1)
     throw std::runtime_error("append() takes exactly one argument");
 
-  const symbolt *list_symbol = get_object_list_symbol();
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found");
+    throw std::runtime_error("List variable not found: " + list_display_name);
 
   // Get the value to append
   exprt value_to_append = converter_.get_expr(args[0]);
@@ -2176,10 +2186,11 @@ exprt function_call_expr::handle_list_extend() const
   if (args.size() != 1)
     throw std::runtime_error("extend() takes exactly one argument");
 
-  const symbolt *list_symbol = get_object_list_symbol();
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found");
+    throw std::runtime_error("List variable not found: " + list_display_name);
 
   exprt other_list = converter_.get_expr(args[0]);
 
