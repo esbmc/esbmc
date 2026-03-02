@@ -1236,12 +1236,17 @@ exprt function_call_expr::handle_round(nlohmann::json& arg) const
       "TypeError", "type str doesn't define __round__ method");
 
   // Handle unary minus (e.g., round(-3.6))
+  // Unlike abs(), round() must preserve the sign.
+  bool is_negated = false;
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
   {
     const auto& op = arg["op"];
     const auto& operand = arg["operand"];
     if (op["_type"] == "USub" && operand.contains("value"))
+    {
       arg = operand;
+      is_negated = true;
+    }
   }
 
   // Compile-time evaluation for numeric literals
@@ -1252,12 +1257,18 @@ exprt function_call_expr::handle_round(nlohmann::json& arg) const
       // round(x) -> nearest integer (returns int)
       if (arg["value"].is_number_integer())
       {
+        int val = arg["value"].get<int>();
+        if (is_negated)
+          val = -val;
+        arg["value"] = val;
         arg["type"] = "int";
       }
       else
       {
         double val = arg["value"].get<double>();
-        arg["value"] = static_cast<int>(std::round(val));
+        if (is_negated)
+          val = -val;
+        arg["value"] = static_cast<int>(std::nearbyint(val));
         arg["type"] = "int";
       }
       typet t = type_handler_.get_typet("int", 0);
@@ -1275,8 +1286,10 @@ exprt function_call_expr::handle_round(nlohmann::json& arg) const
         double val = arg["value"].is_number_integer()
           ? static_cast<double>(arg["value"].get<int>())
           : arg["value"].get<double>();
+        if (is_negated)
+          val = -val;
         double factor = std::pow(10.0, n);
-        double rounded = std::round(val * factor) / factor;
+        double rounded = std::nearbyint(val * factor) / factor;
         arg["value"] = rounded;
         arg["type"] = "float";
         typet t = type_handler_.get_typet("float", 0);
@@ -1293,11 +1306,14 @@ exprt function_call_expr::handle_round(nlohmann::json& arg) const
     try
     {
       exprt operand_expr = converter_.get_expr(arg);
-      typet result_type = type_handler_.get_typet("int", 0);
-      // Build a typecast to int (truncation after rounding in SMT)
-      exprt round_expr("round", result_type);
-      round_expr.copy_to_operands(operand_expr);
-      return round_expr;
+      typet float_type = type_handler_.get_typet("float", 0);
+      typet int_type = type_handler_.get_typet("int", 0);
+
+      // Use nearbyint (round-to-nearest-even) on the float operand,
+      // then typecast to int — matching Python's round() semantics.
+      exprt nearbyint_expr("nearbyint", float_type);
+      nearbyint_expr.copy_to_operands(operand_expr);
+      return typecast_exprt(nearbyint_expr, int_type);
     }
     catch (const std::exception&)
     {
@@ -1581,10 +1597,6 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle abs: Returns the absolute value of an integer or float literal
   else if (func_name == "abs")
     return handle_abs(arg);
-
-  // Handle round: Rounds a numeric value
-  else if (func_name == "round")
-    return handle_round(arg);
 
   else if (func_name == "str")
     arg_size = handle_str(arg);
@@ -2928,6 +2940,20 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return handle_divmod(); },
      "divmod"},
+
+    // round() builtin function
+    { [this]() {
+       const std::string& func_name = function_id_.get_function();
+       return func_name == "round" && function_id_.get_prefix() == "py:";
+     },
+     [this]() {
+       if (call_["args"].empty())
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", "round() missing required argument");
+       auto arg = call_["args"][0];
+       return handle_round(arg);
+     },
+     "round() builtin" },
 
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
