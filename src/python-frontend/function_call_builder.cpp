@@ -309,9 +309,72 @@ symbol_id function_call_builder::build_function_id() const
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
+      const std::string var_name = arg["id"].get<std::string>();
       symbol_id var_sid(python_file, current_class_name, current_function_name);
-      var_sid.set_object(arg["id"].get<std::string>());
+      var_sid.set_object(var_name);
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+
+      auto symbol_points_to_list = [&](const symbolt *sym) -> bool {
+        if (!sym)
+          return false;
+
+        typet actual_type = sym->type;
+        if (actual_type.is_pointer())
+          actual_type = actual_type.subtype();
+        if (actual_type.id() == "symbol")
+          actual_type = converter_.ns.follow(actual_type);
+        if (!actual_type.is_struct())
+          return false;
+
+        const struct_typet &struct_type = to_struct_type(actual_type);
+        const std::string tag = struct_type.tag().as_string();
+        return tag.find("__ESBMC_PyListObj") != std::string::npos;
+      };
+
+      const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
+
+      auto is_list_slice_assignment = [&]() -> bool {
+        nlohmann::json var_value = json_utils::get_var_value(
+          var_name,
+          converter_.get_current_func_name(),
+          converter_.get_ast_json());
+        if (
+          var_value.empty() || !var_value.contains("value") ||
+          !var_value["value"].is_object())
+          return false;
+
+        const auto &value_node = var_value["value"];
+        if (
+          !value_node.contains("_type") || value_node["_type"] != "Subscript" ||
+          !value_node.contains("slice") || !value_node["slice"].is_object() ||
+          !value_node["slice"].contains("_type") ||
+          value_node["slice"]["_type"] != "Slice" ||
+          !value_node.contains("value") || !value_node["value"].is_object() ||
+          !value_node["value"].contains("_type"))
+          return false;
+
+        const auto &base = value_node["value"];
+        if (base["_type"] == "List")
+          return true;
+
+        if (base["_type"] == "Name" && base.contains("id"))
+        {
+          const std::string base_name = base["id"].get<std::string>();
+          const std::string base_type = th.get_var_type(base_name);
+          if (base_type == "list" || base_type == "List")
+            return true;
+          if (base_type == "str")
+            return false;
+
+          symbol_id base_sid(
+            python_file, current_class_name, current_function_name);
+          base_sid.set_object(base_name);
+          symbolt *base_symbol = converter_.find_symbol(base_sid.to_string());
+          return symbol_points_to_list(base_symbol);
+        }
+
+        return false;
+      };
 
       // Check if this is a tuple by looking up the variable's type
       if (var_type == "tuple" || var_type.empty())
@@ -347,23 +410,18 @@ symbol_id function_call_builder::build_function_id() const
       {
         func_name = kGetObjectSize;
       }
-      else if (var_type.empty() && var_symbol)
+      else if (var_symbol_is_list)
       {
-        typet actual_type = var_symbol->type;
-        if (actual_type.is_pointer())
-          actual_type = actual_type.subtype();
-        if (actual_type.id() == "symbol")
-          actual_type = converter_.ns.follow(actual_type);
-
-        if (actual_type.is_struct())
-        {
-          const struct_typet &struct_type = to_struct_type(actual_type);
-          std::string tag = struct_type.tag().as_string();
-          if (tag.find("__ESBMC_PyListObj") != std::string::npos)
-            func_name = kGetObjectSize;
-        }
+        // Prefer symbol type over inferred frontend type when they conflict.
+        func_name = kGetObjectSize;
       }
-      else if (var_type == "str" || var_type.empty())
+      else if (var_type.empty() && is_list_slice_assignment())
+      {
+        // list slicing assigned to a variable may have no annotation.
+        // Use list size semantics for len(sub) where sub = lst[a:b].
+        func_name = kGetObjectSize;
+      }
+      else if (var_type == "str")
       {
         // For string types (including optional strings), always use strlen
         // This handles both str and Optional[str] (pointer to array) cases
@@ -574,6 +632,48 @@ exprt function_call_builder::build() const
     }
 
     exprt arg_expr = converter_.get_expr(call_["args"][0]);
+
+    // If len() argument is a list-typed symbol, force list-size semantics.
+    // This avoids misrouting to strlen() when variable annotations are absent
+    // (e.g., sub = lst[a:b]; len(sub)).
+    if (arg_expr.is_symbol())
+    {
+      symbolt *arg_symbol = converter_.find_symbol(
+        to_symbol_expr(arg_expr).get_identifier().as_string());
+      if (arg_symbol)
+      {
+        typet actual_type = arg_symbol->type;
+        if (actual_type.is_pointer())
+          actual_type = actual_type.subtype();
+        if (actual_type.id() == "symbol")
+          actual_type = converter_.ns.follow(actual_type);
+
+        if (actual_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(actual_type);
+          std::string tag = struct_type.tag().as_string();
+          if (tag.find("__ESBMC_PyListObj") != std::string::npos)
+          {
+            code_typet list_size_type;
+            list_size_type.return_type() = size_type();
+            code_typet::argumentt arg_type;
+            arg_type.type() = pointer_typet(struct_type);
+            list_size_type.arguments().push_back(arg_type);
+
+            symbol_exprt list_size_func(
+              "c:@F@__ESBMC_list_size", list_size_type);
+
+            side_effect_expr_function_callt call_expr(size_type());
+            call_expr.function() = list_size_func;
+            if (arg_expr.type().is_pointer())
+              call_expr.arguments().push_back(arg_expr);
+            else
+              call_expr.arguments().push_back(address_of_exprt(arg_expr));
+            return call_expr;
+          }
+        }
+      }
+    }
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
       return from_integer(1, long_long_int_type());
