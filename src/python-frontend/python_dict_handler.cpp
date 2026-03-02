@@ -1478,19 +1478,26 @@ exprt python_dict_handler::handle_dict_setdefault(
   // Else branch: key not found — insert (key, default) and return default
   code_blockt else_block;
 
-  // value_arg is the proper char* / typed pointer to the default value.
+  // value_arg is the proper char* / typed pointer to the value to insert.
+  // Hoisted so the default assignment below can reuse it for string results.
   exprt value_arg;
 
-  if (has_explicit_default && default_value.type() != none_type())
   {
+    // Always insert (key, value) when the key is absent — Python semantics:
+    // d.setdefault("k") inserts ("k", None) and must make "k" in d true.
+    // When no explicit default is given, approximate None as a zero integer.
+    exprt value_to_push =
+      (has_explicit_default && default_value.type() != none_type())
+        ? default_value
+        : gen_zero(long_int_type());
+
     const symbolt *push_func =
       symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
     if (!push_func)
       throw std::runtime_error("__ESBMC_list_push not found");
 
-    // Get element info for the default value
     list_elem_info value_info =
-      list_handler.get_list_element_info(call_node, default_value);
+      list_handler.get_list_element_info(call_node, value_to_push);
 
     if (
       value_info.elem_symbol->type.is_pointer() &&
@@ -1510,7 +1517,7 @@ exprt python_dict_handler::handle_dict_setdefault(
     push_key_call.location() = location;
     else_block.copy_to_operands(push_key_call);
 
-    // Push default value into values list
+    // Push value into values list
     code_function_callt push_value_call;
     push_value_call.function() = symbol_expr(*push_func);
     push_value_call.arguments().push_back(values_member);
