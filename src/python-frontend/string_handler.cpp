@@ -1001,8 +1001,7 @@ exprt string_handler::handle_string_lstrip(
 
     if (all_constant)
     {
-      auto is_whitespace = [](const exprt &ch) -> bool
-      {
+      auto is_whitespace = [](const exprt &ch) -> bool {
         BigInt char_val =
           binary2integer(ch.value().as_string(), ch.type().is_signedbv());
         char c = static_cast<char>(char_val.to_uint64());
@@ -1154,8 +1153,7 @@ exprt string_handler::handle_string_strip(
 
     if (all_constant)
     {
-      auto is_whitespace = [](const exprt &ch) -> bool
-      {
+      auto is_whitespace = [](const exprt &ch) -> bool {
         BigInt char_val =
           binary2integer(ch.value().as_string(), ch.type().is_signedbv());
         char c = static_cast<char>(char_val.to_uint64());
@@ -1318,8 +1316,7 @@ exprt string_handler::handle_string_rstrip(
 
     if (all_constant)
     {
-      auto is_whitespace = [](const exprt &ch) -> bool
-      {
+      auto is_whitespace = [](const exprt &ch) -> bool {
         BigInt char_val =
           binary2integer(ch.value().as_string(), ch.type().is_signedbv());
         char c = static_cast<char>(char_val.to_uint64());
@@ -1450,8 +1447,7 @@ exprt string_handler::handle_string_membership(
   exprt rhs_str = ensure_null_terminated_string(rhs);
 
   // Obtain the actual array expression (handle both constants and symbols)
-  auto get_array_expr = [this](const exprt &e) -> const exprt *
-  {
+  auto get_array_expr = [this](const exprt &e) -> const exprt * {
     if (e.is_constant() && e.type().is_array())
       return &e;
     if (e.is_symbol())
@@ -3230,8 +3226,7 @@ exprt string_handler::handle_single_char_comparison(
   exprt &rhs)
 {
   // Dereference pointer to character if needed
-  auto maybe_dereference = [](const exprt &expr) -> exprt
-  {
+  auto maybe_dereference = [](const exprt &expr) -> exprt {
     if (
       expr.type().is_pointer() && (expr.type().subtype().is_signedbv() ||
                                    expr.type().subtype().is_unsignedbv()))
@@ -3244,8 +3239,7 @@ exprt string_handler::handle_single_char_comparison(
   };
 
   // Create comparison expression with location info
-  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt
-  {
+  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt {
     exprt comp_expr(converter_.get_op(op, bool_type()), bool_type());
     comp_expr.copy_to_operands(left, right);
 
