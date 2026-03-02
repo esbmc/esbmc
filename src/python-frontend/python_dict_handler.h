@@ -415,9 +415,8 @@ public:
    * @param call_node The function call AST node containing the argument dict
    * @return nil_exprt (void operation)
    */
-  exprt handle_dict_update(
-        const exprt &dict_expr,
-        const nlohmann::json &call_node);
+  exprt
+  handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
    * @brief Compares two dictionaries for equality or inequality
