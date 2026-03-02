@@ -2139,6 +2139,52 @@ private:
         return obj_type;
     }
 
+    // Handle method calls on subscript expressions: e.g. nested[i].pop()
+    // get_object_name() returns "" for Subscript nodes (no "id" field), which
+    // would cause a spurious "Object not found" throw further below.
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"]["_type"] == "Subscript")
+    {
+      std::string method = call["func"].contains("attr")
+                             ? call["func"]["attr"].template get<std::string>()
+                             : "";
+      if (method == "pop")
+      {
+        // Try to infer the element type of the inner list from the base list.
+        const auto &subscript = call["func"]["value"];
+        if (
+          subscript.contains("value") &&
+          subscript["value"]["_type"] == "Name" &&
+          subscript["value"].contains("id"))
+        {
+          const std::string &base_name =
+            subscript["value"]["id"].template get<std::string>();
+          Json base_decl =
+            json_utils::find_var_decl(base_name, get_current_func_name(), ast_);
+          if (!base_decl.empty() && base_decl.contains("value"))
+          {
+            const Json &rhs = base_decl["value"];
+            // List comprehension [[...] for _ in range(n)]: elt is the inner list
+            if (rhs["_type"] == "ListComp" && rhs.contains("elt"))
+            {
+              std::string inner_type = get_argument_type(rhs["elt"]);
+              // Strip "list[T]" → "T" (inner list element type is T)
+              if (
+                inner_type.size() > 5 &&
+                inner_type.substr(0, 5) == "list[" &&
+                inner_type.back() == ']')
+              {
+                return inner_type.substr(5, inner_type.size() - 6);
+              }
+            }
+          }
+        }
+      }
+      // Cannot infer type — signal unknown to caller
+      return "";
+    }
+
     const std::string &obj = get_object_name(call["func"], std::string());
     std::string attr_name = call["func"].contains("attr")
                               ? call["func"]["attr"].template get<std::string>()
@@ -2678,6 +2724,10 @@ private:
           else
             return InferResult::UNKNOWN;
         }
+        // Method call on subscript (e.g., nested[i].pop()): let converter infer
+        else if (
+          func.contains("value") && func["value"]["_type"] == "Subscript")
+          return InferResult::UNKNOWN;
       }
     }
     else
