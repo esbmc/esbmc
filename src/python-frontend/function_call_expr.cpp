@@ -1797,7 +1797,8 @@ bool function_call_expr::is_dict_method_call() const
   const std::string &method_name = function_id_.get_function();
 
   // Check if this is a known dict method
-  return method_name == "get" || method_name == "update";
+  return method_name == "get" || method_name == "setdefault" ||
+         method_name == "update";
 }
 
 exprt function_call_expr::handle_dict_method() const
@@ -1816,6 +1817,10 @@ exprt function_call_expr::handle_dict_method() const
 
   if (method_name == "get")
     return converter_.get_dict_handler()->handle_dict_get(
+      symbol_expr(*dict_symbol), call_);
+
+  if (method_name == "setdefault")
+    return converter_.get_dict_handler()->handle_dict_setdefault(
       symbol_expr(*dict_symbol), call_);
 
   if (method_name == "update")

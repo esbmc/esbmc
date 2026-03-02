@@ -179,6 +179,17 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 
     elem_size = from_integer(BigInt(total_size), size_type());
   }
+  // For non-char, non-bool pointer types (e.g., Optional[T] stored as T*):
+  // pointer_typet has no width() attribute, so we must use pointer_width here
+  // rather than falling to the generic else branch which calls width().
+  else if (
+    elem_symbol.type.is_pointer() &&
+    elem_symbol.type.subtype() != char_type() &&
+    elem_symbol.type.subtype() != bool_type())
+  {
+    const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
+    elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
+  }
   // For string pointers (char*), calculate length at runtime using strlen
   else if (
     elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == char_type())

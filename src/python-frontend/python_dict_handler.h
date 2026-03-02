@@ -390,13 +390,27 @@ public:
   handle_dict_get(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
-   * @brief Handles dict.update() method calls
+   * @brief Handles dict.setdefault() method calls
    *
+   * Implements Python's dict.setdefault(key, default=None) semantics:
+   * - If key exists in the dictionary: returns its current value (no mutation)
+   * - If key does not exist: inserts (key, default) into the dictionary
+   *   and returns default
+   *
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node containing arguments
+   * @return Expression representing the result (existing value or default)
+   */
+  exprt handle_dict_setdefault(
+    const exprt &dict_expr,
+    const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict.update() method calls.
    * Implements Python's dict.update(other) semantics:
    * - For each key-value pair in other: if key exists, update value;
    *   otherwise insert the new key-value pair.
-   * - Returns nil (update() is a void operation).
-   *
+   * - Returns nil_exprt (update() is a void operation).
    * @param dict_expr The dictionary expression to update
    * @param call_node The function call AST node containing the argument dict
    * @return nil_exprt (void operation)
