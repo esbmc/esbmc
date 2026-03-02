@@ -1821,6 +1821,8 @@ exprt function_call_expr::handle_dict_method() const
 
   if (method_name == "setdefault")
     return converter_.get_dict_handler()->handle_dict_setdefault(
+      symbol_expr(*dict_symbol), call_);
+
   if (method_name == "update")
     return converter_.get_dict_handler()->handle_dict_update(
       symbol_expr(*dict_symbol), call_);

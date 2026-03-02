@@ -405,19 +405,17 @@ public:
     const exprt &dict_expr,
     const nlohmann::json &call_node);
 
-  *@brief Handles dict.update()
-        method calls **Implements Python's dict.update(other) semantics: *
-      -For each key
-    - value pair in other : if key exists,
-    update value;
-  *otherwise insert the new key -
-    value pair.*
-      -Returns nil(update() is a void operation)
-         .**@param dict_expr The dictionary
-       expression to update *@param call_node The function call AST node
-       containing the argument dict *@ return nil_exprt(void operation) *
-      /
-      exprt handle_dict_update(
+  /**
+   * @brief Handles dict.update() method calls.
+   * Implements Python's dict.update(other) semantics:
+   * - For each key-value pair in other: if key exists, update value;
+   *   otherwise insert the new key-value pair.
+   * - Returns nil_exprt (update() is a void operation).
+   * @param dict_expr The dictionary expression to update
+   * @param call_node The function call AST node containing the argument dict
+   * @return nil_exprt (void operation)
+   */
+  exprt handle_dict_update(
         const exprt &dict_expr,
         const nlohmann::json &call_node);
 

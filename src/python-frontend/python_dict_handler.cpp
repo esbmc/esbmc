@@ -1560,7 +1560,9 @@ exprt python_dict_handler::handle_dict_setdefault(
   converter_.add_instruction(if_stmt);
 
   return symbol_expr(result_var);
-  exprt python_dict_handler::handle_dict_update(
+}
+
+exprt python_dict_handler::handle_dict_update(
     const exprt &dict_expr, const nlohmann::json &call_node)
   {
     const auto &args = call_node["args"];
