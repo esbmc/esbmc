@@ -2171,8 +2171,7 @@ private:
               std::string inner_type = get_argument_type(rhs["elt"]);
               // Strip "list[T]" → "T" (inner list element type is T)
               if (
-                inner_type.size() > 5 &&
-                inner_type.substr(0, 5) == "list[" &&
+                inner_type.size() > 5 && inner_type.substr(0, 5) == "list[" &&
                 inner_type.back() == ']')
               {
                 return inner_type.substr(5, inner_type.size() - 6);
