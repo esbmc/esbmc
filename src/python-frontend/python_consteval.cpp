@@ -870,6 +870,39 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       return std::nullopt;
     }
 
+    // Built-in: round()
+    if (func_name == "round")
+    {
+      if (node["args"].size() < 1 || node["args"].size() > 2)
+        return std::nullopt;
+      auto arg = eval_expr(node["args"][0], env);
+      if (!arg)
+        return std::nullopt;
+
+      if (node["args"].size() == 1)
+      {
+        // round(x) -> int
+        if (arg->kind == PyConstValue::INT)
+          return PyConstValue::make_int(arg->int_val);
+        if (arg->kind == PyConstValue::FLOAT)
+          return PyConstValue::make_int(
+            static_cast<long long>(std::nearbyint(arg->float_val)));
+        return std::nullopt;
+      }
+
+      // round(x, n) -> float (or int if n <= 0, but keep float for simplicity)
+      auto ndigits = eval_expr(node["args"][1], env);
+      if (!ndigits || ndigits->kind != PyConstValue::INT)
+        return std::nullopt;
+      int n = static_cast<int>(ndigits->int_val);
+      double val = (arg->kind == PyConstValue::INT)
+                     ? static_cast<double>(arg->int_val)
+                     : arg->float_val;
+      double factor = std::pow(10.0, n);
+      double rounded = std::nearbyint(val * factor) / factor;
+      return PyConstValue::make_float(rounded);
+    }
+
     // Built-in: min(), max() for two int arguments
     if (func_name == "min" || func_name == "max")
     {

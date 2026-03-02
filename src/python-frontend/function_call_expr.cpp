@@ -18,6 +18,7 @@
 #include <util/string_constant.h>
 
 #include <regex>
+#include <cmath>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -1221,6 +1222,109 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   // Fallback for unsupported symbolic expressions (e.g., complex)
   // Currently returns a nil expression to signal unsupported cases
   log_warning("Returning nil expression for abs() with type: {}", arg_type);
+  return nil_exprt();
+}
+
+exprt function_call_expr::handle_round(nlohmann::json &arg) const
+{
+  const auto &args = call_["args"];
+  bool has_ndigits = args.size() >= 2;
+
+  // Reject strings early
+  if (is_string_arg(arg))
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "type str doesn't define __round__ method");
+
+  // Handle unary minus (e.g., round(-3.6))
+  // Unlike abs(), round() must preserve the sign.
+  bool is_negated = false;
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+    if (op["_type"] == "USub" && operand.contains("value"))
+    {
+      arg = operand;
+      is_negated = true;
+    }
+  }
+
+  // Compile-time evaluation for numeric literals
+  if (arg.contains("value") && arg["value"].is_number())
+  {
+    if (!has_ndigits)
+    {
+      // round(x) -> nearest integer (returns int)
+      if (arg["value"].is_number_integer())
+      {
+        int val = arg["value"].get<int>();
+        if (is_negated)
+          val = -val;
+        arg["value"] = val;
+        arg["type"] = "int";
+      }
+      else
+      {
+        double val = arg["value"].get<double>();
+        if (is_negated)
+          val = -val;
+        arg["value"] = static_cast<int>(std::nearbyint(val));
+        arg["type"] = "int";
+      }
+      typet t = type_handler_.get_typet("int", 0);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
+    }
+    else
+    {
+      // round(x, n) -> float rounded to n decimals
+      auto ndigits_arg = args[1];
+      if (
+        ndigits_arg.contains("value") &&
+        ndigits_arg["value"].is_number_integer())
+      {
+        int n = ndigits_arg["value"].get<int>();
+        double val = arg["value"].is_number_integer()
+                       ? static_cast<double>(arg["value"].get<int>())
+                       : arg["value"].get<double>();
+        if (is_negated)
+          val = -val;
+        double factor = std::pow(10.0, n);
+        double rounded = std::nearbyint(val * factor) / factor;
+        arg["value"] = rounded;
+        arg["type"] = "float";
+        typet t = type_handler_.get_typet("float", 0);
+        exprt expr = converter_.get_expr(arg);
+        expr.type() = t;
+        return expr;
+      }
+    }
+  }
+
+  // Symbolic: try to build an expression for round(x)
+  if (!has_ndigits)
+  {
+    try
+    {
+      exprt operand_expr = converter_.get_expr(arg);
+      typet float_type = type_handler_.get_typet("float", 0);
+      typet int_type = type_handler_.get_typet("int", 0);
+
+      // Use nearbyint (round-to-nearest-even) on the float operand,
+      // then typecast to int — matching Python's round() semantics.
+      exprt nearbyint_expr("nearbyint", float_type);
+      nearbyint_expr.copy_to_operands(operand_expr);
+      return typecast_exprt(nearbyint_expr, int_type);
+    }
+    catch (const std::exception &)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "failed to infer operand type for round()");
+    }
+  }
+
+  log_warning("round() with symbolic arguments not fully supported");
   return nil_exprt();
 }
 
@@ -2838,6 +2942,20 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return handle_divmod(); },
      "divmod"},
+
+    // round() builtin function
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "round" && function_id_.get_prefix() == "py:";
+     },
+     [this]() {
+       if (call_["args"].empty())
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", "round() missing required argument");
+       auto arg = call_["args"][0];
+       return handle_round(arg);
+     },
+     "round() builtin"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
