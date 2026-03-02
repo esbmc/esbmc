@@ -433,9 +433,13 @@ class Preprocessor(ast.NodeTransformer):
                                 if method_name == 'keys':
                                     if isinstance(key_type, ast.Name):
                                         return key_type.id
+                                    elif isinstance(key_type, ast.Subscript) and isinstance(key_type.value, ast.Name):
+                                        return key_type.value.id
                                 elif method_name == 'values':
                                     if isinstance(value_type, ast.Name):
                                         return value_type.id
+                                    elif isinstance(value_type, ast.Subscript) and isinstance(value_type.value, ast.Name):
+                                        return value_type.value.id
 
         # 2. Handle direct dict iteration: for k in d:
         if isinstance(iterable_node, ast.Name):
