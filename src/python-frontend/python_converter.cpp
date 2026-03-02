@@ -1741,6 +1741,33 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
     return math_handler_.handle_modulo(lhs, rhs, element);
 
+  if (type_utils::is_relational_op(op))
+  {
+    const bool lhs_invalid = lhs.type().is_empty() || lhs.type().is_nil();
+    const bool rhs_invalid = rhs.type().is_empty() || rhs.type().is_nil();
+    locationt loc = get_location_from_decl(element);
+    if (lhs_invalid || rhs_invalid)
+    {
+      std::ostringstream msg;
+      msg << "Unsupported comparison with unresolved operand type";
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
+    const bool lhs_ptr = lhs.type().is_pointer();
+    const bool rhs_ptr = rhs.type().is_pointer();
+    if (lhs_ptr != rhs_ptr)
+    {
+      std::ostringstream msg;
+      msg << "Unsupported comparison between pointer-backed and non-pointer "
+             "values";
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+  }
+
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
@@ -2024,6 +2051,15 @@ exprt python_converter::build_binary_expression(
   exprt &lhs,
   exprt &rhs)
 {
+  auto is_bv_or_bool = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+  };
+  auto bit_width = [](const typet &t) -> unsigned {
+    if (t.is_bool())
+      return 1;
+    return static_cast<const bv_typet &>(t).get_width();
+  };
+
   // Adjust types for non-relational operations
   if (!type_utils::is_relational_op(op))
   {
@@ -2039,6 +2075,28 @@ exprt python_converter::build_binary_expression(
     {
       adjust_statement_types(lhs, rhs);
     }
+  }
+  else if (
+    (op == "Eq" || op == "NotEq" || op == "Lt" || op == "LtE" || op == "Gt" ||
+     op == "GtE") &&
+    is_bv_or_bool(lhs.type()) && is_bv_or_bool(rhs.type()) &&
+    bit_width(lhs.type()) != bit_width(rhs.type()))
+  {
+    // Defensive normalization before SMT encoding: keep both operands with a
+    // common bit-width to avoid backend assertion failures in comparisons.
+    const unsigned lhs_width = bit_width(lhs.type());
+    const unsigned rhs_width = bit_width(rhs.type());
+    const unsigned common_width = std::max(lhs_width, rhs_width);
+    const bool use_signed =
+      lhs.type().is_signedbv() || rhs.type().is_signedbv();
+    typet common_type;
+    if (use_signed)
+      common_type = signedbv_typet(common_width);
+    else
+      common_type = unsignedbv_typet(common_width);
+
+    lhs = typecast_exprt(lhs, common_type);
+    rhs = typecast_exprt(rhs, common_type);
   }
 
   // Determine result type
