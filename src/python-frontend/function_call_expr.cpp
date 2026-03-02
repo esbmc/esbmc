@@ -1797,7 +1797,8 @@ bool function_call_expr::is_dict_method_call() const
   const std::string &method_name = function_id_.get_function();
 
   // Check if this is a known dict method
-  return method_name == "get" || method_name == "setdefault" || method_name == "update";
+  return method_name == "get" || method_name == "setdefault" ||
+         method_name == "update";
 }
 
 exprt function_call_expr::handle_dict_method() const
