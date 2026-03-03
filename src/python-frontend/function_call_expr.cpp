@@ -3240,12 +3240,11 @@ exprt function_call_expr::handle_general_function_call()
 
     // Detect super().__init__() pattern: call parent ctor on current self,
     // not on a newly allocated object.
-    bool is_super_init =
-      call_["func"]["_type"] == "Attribute" &&
-      call_["func"]["value"]["_type"] == "Call" &&
-      call_["func"]["value"].contains("func") &&
-      call_["func"]["value"]["func"].contains("id") &&
-      call_["func"]["value"]["func"]["id"] == "super";
+    bool is_super_init = call_["func"]["_type"] == "Attribute" &&
+                         call_["func"]["value"]["_type"] == "Call" &&
+                         call_["func"]["value"].contains("func") &&
+                         call_["func"]["value"]["func"].contains("id") &&
+                         call_["func"]["value"]["func"]["id"] == "super";
 
     if (is_super_init)
     {
