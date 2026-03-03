@@ -896,41 +896,23 @@ exprt string_handler::handle_string_isspace(
   const exprt &str_expr,
   const locationt &location)
 {
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_isspace",
-    bool_type(),
-    {pointer_typet(char_type())},
-    location);
+  exprt string_copy = str_expr;
+  exprt str_null = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_null);
 
-  // Get the string pointer
-  exprt str_ptr = str_expr;
+  const char *isspace_str_symbol_id = "c:@F@__python_str_isspace";
+  symbolt *isspace_str_symbol =
+    symbol_table_.find_symbol(isspace_str_symbol_id);
+  if (!isspace_str_symbol)
+    throw std::runtime_error(
+      std::string(isspace_str_symbol_id) +
+      " function not found in symbol table");
 
-  if (str_expr.is_constant() && str_expr.type().is_array())
-  {
-    str_ptr = exprt("index", pointer_typet(char_type()));
-    str_ptr.copy_to_operands(str_expr);
-    str_ptr.copy_to_operands(from_integer(0, int_type()));
-  }
-  else if (str_expr.type().is_array())
-  {
-    str_ptr = exprt("address_of", pointer_typet(char_type()));
-    exprt index_expr("index", char_type());
-    index_expr.copy_to_operands(str_expr);
-    index_expr.copy_to_operands(from_integer(0, int_type()));
-    str_ptr.copy_to_operands(index_expr);
-  }
-  else if (!str_expr.type().is_pointer())
-  {
-    str_ptr = exprt("address_of", pointer_typet(char_type()));
-    str_ptr.copy_to_operands(str_expr);
-  }
-
-  // Create function call
   side_effect_expr_function_callt call;
-  call.function() = symbol_exprt(func_symbol_id, code_typet());
-  call.arguments().push_back(str_ptr);
-  call.type() = bool_type();
+  call.function() = symbol_expr(*isspace_str_symbol);
+  call.arguments().push_back(str_addr);
   call.location() = location;
+  call.type() = bool_type();
 
   return call;
 }
