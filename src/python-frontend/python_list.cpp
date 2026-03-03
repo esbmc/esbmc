@@ -2239,6 +2239,8 @@ exprt python_list::list_repetition(
   BigInt list_size;
   exprt list_elem;
   symbolt *list_symbol = nullptr;
+  // True when the list operand is a variable (not a literal).
+  bool is_variable_list = false;
 
   auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
     if (
@@ -2252,7 +2254,16 @@ exprt python_list::list_repetition(
     return true;
   };
 
-  // Get list size from lhs (e.g.: 3 * [1])
+  // Get element expression from list_type_map for a variable list.
+  auto elem_from_type_map = [&](const std::string &src_id) -> exprt {
+    const std::string &elem_id = get_list_element_id(src_id, 0);
+    assert(!elem_id.empty());
+    symbolt *elem_sym = converter_.find_symbol(elem_id);
+    assert(elem_sym);
+    return symbol_expr(*elem_sym);
+  };
+
+  // Get list size from lhs (e.g.: 3 * [1] or 3 * lst)
   if (lhs.type() != list_type)
   {
     if (lhs.is_symbol())
@@ -2270,17 +2281,31 @@ exprt python_list::list_repetition(
     else if (lhs.is_constant())
       list_size = binary2integer(lhs.value().c_str(), true);
 
-    // List element is the rhs
-    list_elem = converter_.get_expr(right_node["elts"][0]);
+    // List element comes from the rhs operand
+    if (right_node.contains("elts"))
+      list_elem = converter_.get_expr(right_node["elts"][0]);
+    else
+    {
+      // rhs is a variable list — get element from list_type_map
+      list_elem = elem_from_type_map(rhs.identifier().as_string());
+      is_variable_list = true;
+    }
   }
 
-  // Get list size from rhs (e.g.: [1] * 3)
+  // Get list size from rhs (e.g.: [1] * 3 or lst * 3)
   if (rhs.type() != list_type)
   {
-    // List element is the rhs
-    list_elem = converter_.get_expr(left_node["elts"][0]);
+    // List element comes from the lhs operand
+    if (left_node.contains("elts"))
+      list_elem = converter_.get_expr(left_node["elts"][0]);
+    else
+    {
+      // lhs is a variable list — get element from list_type_map
+      list_elem = elem_from_type_map(lhs.identifier().as_string());
+      is_variable_list = true;
+    }
 
-    if (rhs.is_symbol()) // (e.g.: [1] * n)
+    if (rhs.is_symbol()) // (e.g.: [1] * n or lst * n)
     {
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(rhs).get_identifier().as_string());
@@ -2296,7 +2321,14 @@ exprt python_list::list_repetition(
       list_size = binary2integer(rhs.value().c_str(), true);
   }
 
-  if (!list_symbol)
+  // For variable lists, allocate a fresh result list so the source is not
+  // mutated.  For literal lists the temp symbol created by get() is reused.
+  if (is_variable_list)
+  {
+    symbolt &result = create_list();
+    list_symbol = &result;
+  }
+  else if (!list_symbol)
   {
     if (lhs.type() == list_type && lhs.is_symbol())
       list_symbol = converter_.find_symbol(lhs.identifier().as_string());
@@ -2311,7 +2343,12 @@ exprt python_list::list_repetition(
   else
     list_id = list_symbol->id.as_string();
 
-  for (int64_t i = 0; i < list_size.to_int64() - 1; ++i)
+  // Literal lists already contain their first element; variable-list results
+  // start empty.  Adjust the loop bounds accordingly.
+  const int64_t push_count =
+    is_variable_list ? list_size.to_int64() : list_size.to_int64() - 1;
+
+  for (int64_t i = 0; i < push_count; ++i)
   {
     converter_.add_instruction(
       build_push_list_call(*list_symbol, list_value_, list_elem));
