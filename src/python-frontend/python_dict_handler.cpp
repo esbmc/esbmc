@@ -347,6 +347,10 @@ exprt python_dict_handler::create_dict_from_literal(
 
     exprt value_expr = converter_.get_expr(values[i]);
 
+    // Convert lambda/function symbol to function pointer for dict storage
+    if (value_expr.type().is_code() && value_expr.is_symbol())
+      value_expr = address_of_exprt(value_expr);
+
     // Check if this is a nested dict that needs special pointer storage
     if (value_expr.type().is_struct() && is_dict_type(value_expr.type()))
     {

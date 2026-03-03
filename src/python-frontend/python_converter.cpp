@@ -2660,6 +2660,47 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     process_forward_reference(element["func"], temp_block);
   }
 
+  // Handle indirect calls through subscript (e.g., {'+': lambda: 1.0}[x]())
+  if (element["func"]["_type"] == "Subscript")
+  {
+    const nlohmann::json &func_node = element["func"];
+    exprt container = get_expr(func_node["value"]);
+
+    exprt func_ptr;
+    if (container.type().is_struct() && dict_handler_->is_dict_type(container.type()))
+      func_ptr = dict_handler_->handle_dict_subscript(
+        container, func_node["slice"], gen_pointer_type(code_typet()));
+    else
+      func_ptr = get_expr(element["func"]);
+
+    // Determine return type: prefer current function's declared return type,
+    // then try to infer from any lambda body in the dict literal.
+    typet ret_type = current_func_return_type_;
+    if (ret_type.is_empty() && func_node["value"]["_type"] == "Dict")
+    {
+      for (const auto &val : func_node["value"]["values"])
+      {
+        if (val["_type"] == "Lambda" && val.contains("body"))
+        {
+          ret_type = lambda_handler_->infer_lambda_return_type(val["body"]);
+          break;
+        }
+      }
+    }
+    if (ret_type.is_empty())
+      ret_type = double_type();
+
+    side_effect_expr_function_callt call;
+    call.location() = get_location_from_decl(element);
+    call.function() = func_ptr;
+    call.type() = ret_type;
+    if (element.contains("args"))
+      for (const auto &arg : element["args"])
+        call.arguments().push_back(get_expr(arg));
+
+    return call;
+  }
+
   // Handle indirect calls through function pointer variables
   if (element["func"]["_type"] == "Name")
   {
