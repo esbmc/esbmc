@@ -4,6 +4,7 @@
 #include <python-frontend/convert_float_literal.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
+#include <util/ieee_float.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
 #include <util/message.h>
@@ -403,7 +404,47 @@ void python_math::promote_int_to_float(exprt &op, const typet &target_type)
 
 exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
 {
-  // Find the sqrt function symbol from C math library
+  // Constant folding: when operand is a compile-time constant, compute at compile time
+  exprt resolved = operand;
+  if (operand.is_symbol())
+  {
+    const symbolt *s = symbol_table.find_symbol(operand.identifier());
+    if (s && !s->value.value().empty())
+      resolved = s->value;
+  }
+
+  if (resolved.is_constant())
+  {
+    double val = 0.0;
+    bool got_val = false;
+
+    if (resolved.type().is_floatbv())
+    {
+      ieee_floatt f;
+      f.spec = to_floatbv_type(resolved.type());
+      f.unpack(binary2integer(resolved.value().as_string(), false));
+      val = f.to_double();
+      got_val = true;
+    }
+    else if (resolved.type().is_signedbv() || resolved.type().is_unsignedbv())
+    {
+      BigInt int_val = binary2integer(
+        resolved.value().as_string(), resolved.type().is_signedbv());
+      if (resolved.type().is_unsignedbv())
+        val = static_cast<double>(int_val.to_uint64());
+      else
+        val = static_cast<double>(int_val.to_int64());
+      got_val = true;
+    }
+
+    // Constant-fold when we have a concrete value that is either:
+    //  - non-negative finite, or
+    //  - NaN or +/-infinity (IEEE-754 defines std::sqrt for these)
+    if (got_val && (val >= 0.0 || std::isnan(val) || std::isinf(val)))
+      return from_double(std::sqrt(val), double_type());
+  }
+
+  // Find the sqrt function symbol from C math library (for symbolic operands)
   symbolt *sqrt_symbol = symbol_table.find_symbol("c:@F@sqrt");
   if (!sqrt_symbol)
     throw std::runtime_error("sqrt function not found in symbol table");

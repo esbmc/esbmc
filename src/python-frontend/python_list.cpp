@@ -179,6 +179,17 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 
     elem_size = from_integer(BigInt(total_size), size_type());
   }
+  // For non-char, non-bool pointer types (e.g., Optional[T] stored as T*):
+  // pointer_typet has no width() attribute, so we must use pointer_width here
+  // rather than falling to the generic else branch which calls width().
+  else if (
+    elem_symbol.type.is_pointer() &&
+    elem_symbol.type.subtype() != char_type() &&
+    elem_symbol.type.subtype() != bool_type())
+  {
+    const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
+    elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
+  }
   // For string pointers (char*), calculate length at runtime using strlen
   else if (
     elem_symbol.type.is_pointer() && elem_symbol.type.subtype() == char_type())
@@ -558,24 +569,6 @@ exprt python_list::build_list_at_call(
 
   locationt location = converter_.get_location_from_decl(element);
 
-  // Check if index is already a constant non-negative value
-  if (index.is_constant() && index.type().is_signedbv())
-  {
-    BigInt idx_value;
-    if (!to_integer(index, idx_value) && idx_value >= 0)
-    {
-      // Index is constant and non-negative, use directly
-      side_effect_expr_function_callt list_at_call;
-      list_at_call.function() = symbol_expr(*list_at_func_sym);
-      list_at_call.arguments().push_back(
-        list.type().is_pointer() ? list : address_of_exprt(list));
-      list_at_call.arguments().push_back(typecast_exprt(index, size_type()));
-      list_at_call.type() = obj_type;
-      list_at_call.location() = location;
-      return list_at_call;
-    }
-  }
-
   // Get list size
   const symbolt *size_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
@@ -610,6 +603,28 @@ exprt python_list::build_list_at_call(
   // Choose between positive conversion or original
   if_exprt converted_index(is_negative, positive_index, index_as_size);
   converted_index.type() = size_type();
+
+  if (!config.options.get_bool_option("no-bounds-check"))
+  {
+    // Runtime guard only for negative-index normalization. This prevents
+    // underflowed indices (e.g., [] [-1]) from reaching the backend while
+    // preserving legacy behavior for non-negative accesses.
+    exprt oob_cond(">=", bool_type());
+    oob_cond.copy_to_operands(converted_index, symbol_expr(size_var));
+    exprt negative_oob("and", bool_type());
+    negative_oob.copy_to_operands(is_negative, oob_cond);
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "list index out of range");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = negative_oob;
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
 
   // Use the converted expression directly in the call
   side_effect_expr_function_callt list_at_call;
@@ -1825,6 +1840,45 @@ exprt python_list::handle_index_access(
          slice_node["operand"]["_type"] == "Constant");
       if (has_const_index)
       {
+        // If we can prove out-of-bounds from a concrete list literal, raise
+        // IndexError in-model so Python try/except(IndexError) can catch it.
+        if (
+          array.is_symbol() && !list_node.is_null() &&
+          list_node.contains("value") && list_node["value"].is_object() &&
+          list_node["value"].contains("elts") &&
+          list_node["value"]["elts"].is_array())
+        {
+          bool negative_index = false;
+          size_t index_abs = 0;
+
+          if (slice_node["_type"] == "Constant" && slice_node.contains("value"))
+          {
+            index_abs = slice_node["value"].get<size_t>();
+          }
+          else
+          {
+            negative_index = true;
+            index_abs = slice_node["operand"]["value"].get<size_t>();
+          }
+
+          const size_t list_size = list_node["value"]["elts"].size();
+          const bool out_of_bounds =
+            (!negative_index && index_abs >= list_size) ||
+            (negative_index && index_abs > list_size);
+
+          if (out_of_bounds)
+          {
+            exprt raise =
+              converter_.get_exception_handler().gen_exception_raise(
+                "IndexError", "list index out of range");
+            codet throw_code("expression");
+            throw_code.operands().push_back(raise);
+            converter_.add_instruction(throw_code);
+            // Unreachable after raise, but return a placeholder expression.
+            return gen_zero(size_type());
+          }
+        }
+
         const locationt l = converter_.get_location_from_decl(list_value_);
         throw std::runtime_error(
           "List out of bounds at " + l.get_file().as_string() +
@@ -2564,6 +2618,15 @@ typet python_list::get_list_element_type(
     index = 0;
 
   return type_map_it->second[index].second;
+}
+
+std::string
+python_list::get_list_element_id(const std::string &list_id, size_t index)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || index >= it->second.size())
+    return {};
+  return it->second[index].first;
 }
 
 exprt python_list::handle_comprehension(const nlohmann::json &element)

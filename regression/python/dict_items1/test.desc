@@ -1,4 +1,4 @@
 KNOWNBUG
 main.py
---unwind 9
+--smt-during-symex --smt-symex-guard --z3
 ^VERIFICATION SUCCESSFUL$
