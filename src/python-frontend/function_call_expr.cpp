@@ -2865,11 +2865,17 @@ exprt function_call_expr::handle_general_function_call()
 {
   auto &symbol_table = converter_.symbol_table();
 
-  // Handle single-argument min/max by dispatching to typed builtins
+  // Handle single-argument min/max/sum/sorted by dispatching to typed builtins
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
 
+  // Skip builtin dispatch if the user imported a function with the same name
+  // e.g. "from other import sum" defines a user sum that shadows the builtin
+  bool is_user_imported =
+    converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
+
   if (
+    !is_user_imported &&
     (func_name == "min" || func_name == "max" || func_name == "sorted" ||
      func_name == "sum") &&
     call_["args"].size() == 1)
