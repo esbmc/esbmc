@@ -172,7 +172,8 @@ symbol_id function_call_builder::build_function_id() const
        */
 
       std::function<typet(const nlohmann::json &)> resolve_attr_type =
-        [&](const nlohmann::json &node) -> typet {
+        [&](const nlohmann::json &node) -> typet
+      {
         if (node["_type"] == "Name")
         {
           // Base case: resolve variable to its type
@@ -261,9 +262,29 @@ symbol_id function_call_builder::build_function_id() const
     }
     else if (func_json["value"]["_type"] == "Call")
     {
-      obj_name = func_json["value"]["func"]["id"];
+      const auto &inner_call = func_json["value"];
+      if (
+        inner_call.contains("func") && inner_call["func"].contains("_type") &&
+        inner_call["func"]["_type"] == "Name" &&
+        inner_call["func"].contains("id") &&
+        inner_call["func"]["id"].is_string())
+      {
+        obj_name = inner_call["func"]["id"].get<std::string>();
+      }
+      else
+      {
+        // Nested calls (e.g., u.encode(...).decode(...)) do not always have
+        // func.id. Use inferred call result type instead of indexing JSON
+        // fields that may be null.
+        obj_name = th.get_operand_type(inner_call);
+      }
+
+      if (obj_name.empty())
+        obj_name = "str";
+
       if (obj_name == "nondet_str")
         obj_name = "str";
+
       if (obj_name == "super")
       {
         symbolt *base_class_func = converter_.find_function_in_base_classes(
@@ -343,13 +364,13 @@ symbol_id function_call_builder::build_function_id() const
       var_sid.set_object(var_name);
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
-      auto symbol_points_to_list = [&](const symbolt *sym) -> bool {
-        return sym && is_pylist_object_type(sym->type, converter_.ns);
-      };
+      auto symbol_points_to_list = [&](const symbolt *sym) -> bool
+      { return sym && is_pylist_object_type(sym->type, converter_.ns); };
 
       const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
 
-      auto is_list_slice_assignment = [&]() -> bool {
+      auto is_list_slice_assignment = [&]() -> bool
+      {
         nlohmann::json var_value = json_utils::get_var_value(
           var_name,
           converter_.get_current_func_name(),
@@ -564,7 +585,8 @@ exprt function_call_builder::build() const
   if (is_len_call(function_id) && !call_["args"].empty())
   {
     auto const_string_len_from_symbol =
-      [this](const std::string &name) -> std::optional<BigInt> {
+      [this](const std::string &name) -> std::optional<BigInt>
+    {
       // Be conservative with named symbols; only __name__ is known constant.
       if (name != "__name__")
         return std::nullopt;
@@ -594,7 +616,8 @@ exprt function_call_builder::build() const
 
     auto joinedstr_len =
       [&const_string_len_from_symbol](
-        const nlohmann::json &joined) -> std::optional<BigInt> {
+        const nlohmann::json &joined) -> std::optional<BigInt>
+    {
       if (!joined.contains("values") || !joined["values"].is_array())
         return std::nullopt;
 
@@ -695,7 +718,8 @@ exprt function_call_builder::build() const
       auto count_assignments = [&](
                                  const nlohmann::json &node,
                                  const std::string &name,
-                                 auto &&self) -> int {
+                                 auto &&self) -> int
+      {
         int count = 0;
         if (!node.is_object() && !node.is_array())
           return 0;
@@ -952,6 +976,52 @@ exprt function_call_builder::build() const
   if (call_["func"]["_type"] == "Attribute")
   {
     std::string method_name = call_["func"]["attr"].get<std::string>();
+
+    if (method_name == "decode")
+    {
+      const auto &receiver = call_["func"]["value"];
+      const auto is_utf8_literal = [](const nlohmann::json &node) -> bool
+      {
+        if (
+          node.contains("_type") && node["_type"] == "Constant" &&
+          node.contains("value") && node["value"].is_string())
+        {
+          const std::string encoding = node["value"].get<std::string>();
+          return boost::iequals(encoding, "utf-8") ||
+                 boost::iequals(encoding, "utf8");
+        }
+        return false;
+      };
+
+      const bool has_args = call_.contains("args") && call_["args"].is_array();
+      bool decode_utf8 = !has_args || call_["args"].empty();
+      if (has_args && call_["args"].size() == 1)
+        decode_utf8 = is_utf8_literal(call_["args"][0]);
+
+      if (
+        decode_utf8 && receiver.contains("_type") &&
+        receiver["_type"] == "Call" && receiver.contains("func") &&
+        receiver["func"].contains("_type") &&
+        receiver["func"]["_type"] == "Attribute" &&
+        receiver["func"].contains("attr") &&
+        receiver["func"]["attr"] == "encode")
+      {
+        bool encode_utf8 =
+          !receiver.contains("args") || receiver["args"].empty();
+        if (
+          receiver.contains("args") && receiver["args"].is_array() &&
+          receiver["args"].size() == 1)
+          encode_utf8 = is_utf8_literal(receiver["args"][0]);
+
+        if (
+          encode_utf8 && receiver["func"].contains("value") &&
+          !receiver["func"]["value"].is_null())
+        {
+          // For UTF-8 roundtrip decode(encode(x)), preserve original string.
+          return converter_.get_expr(receiver["func"]["value"]);
+        }
+      }
+    }
 
     if (method_name == "startswith")
     {
@@ -1468,7 +1538,8 @@ exprt function_call_builder::build() const
         throw std::runtime_error(
           "split() requires zero, one, or two arguments in minimal support");
 
-      auto is_none_literal = [](const nlohmann::json &node) {
+      auto is_none_literal = [](const nlohmann::json &node)
+      {
         if (
           node.contains("_type") && node["_type"] == "Constant" &&
           node.contains("value") && node["value"].is_null())
@@ -1484,8 +1555,8 @@ exprt function_call_builder::build() const
         return false;
       };
 
-      auto find_keyword =
-        [&](const std::string &name) -> const nlohmann::json * {
+      auto find_keyword = [&](const std::string &name) -> const nlohmann::json *
+      {
         if (!call_.contains("keywords") || !call_["keywords"].is_array())
           return nullptr;
         for (const auto &kw : call_["keywords"])
