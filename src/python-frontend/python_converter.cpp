@@ -2667,7 +2667,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     exprt container = get_expr(func_node["value"]);
 
     exprt func_ptr;
-    if (container.type().is_struct() && dict_handler_->is_dict_type(container.type()))
+    if (
+      container.type().is_struct() &&
+      dict_handler_->is_dict_type(container.type()))
       func_ptr = dict_handler_->handle_dict_subscript(
         container, func_node["slice"], gen_pointer_type(code_typet()));
     else
