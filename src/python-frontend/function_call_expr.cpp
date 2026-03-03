@@ -3403,10 +3403,12 @@ exprt function_call_expr::handle_general_function_call()
     }
 
     if (
-      function_id_.get_function() == "__ESBMC_get_object_size" &&
+      (function_id_.get_function() == "__ESBMC_get_object_size" ||
+       function_id_.get_function() == "strlen") &&
       (arg.type() == type_handler_.get_list_type() ||
        (arg.type().is_pointer() &&
-        arg.type().subtype() == type_handler_.get_list_type())))
+        arg.type().subtype() == type_handler_.get_list_type())) &&
+      arg.is_symbol())
     {
       symbolt *list_symbol =
         converter_.find_symbol(arg.identifier().as_string());
