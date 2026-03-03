@@ -426,8 +426,7 @@ exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
       val = f.to_double();
       got_val = true;
     }
-    else if (
-      resolved.type().is_signedbv() || resolved.type().is_unsignedbv())
+    else if (resolved.type().is_signedbv() || resolved.type().is_unsignedbv())
     {
       BigInt int_val = binary2integer(
         resolved.value().as_string(), resolved.type().is_signedbv());
