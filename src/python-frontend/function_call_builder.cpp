@@ -172,8 +172,7 @@ symbol_id function_call_builder::build_function_id() const
        */
 
       std::function<typet(const nlohmann::json &)> resolve_attr_type =
-        [&](const nlohmann::json &node) -> typet
-      {
+        [&](const nlohmann::json &node) -> typet {
         if (node["_type"] == "Name")
         {
           // Base case: resolve variable to its type
@@ -364,13 +363,13 @@ symbol_id function_call_builder::build_function_id() const
       var_sid.set_object(var_name);
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
-      auto symbol_points_to_list = [&](const symbolt *sym) -> bool
-      { return sym && is_pylist_object_type(sym->type, converter_.ns); };
+      auto symbol_points_to_list = [&](const symbolt *sym) -> bool {
+        return sym && is_pylist_object_type(sym->type, converter_.ns);
+      };
 
       const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
 
-      auto is_list_slice_assignment = [&]() -> bool
-      {
+      auto is_list_slice_assignment = [&]() -> bool {
         nlohmann::json var_value = json_utils::get_var_value(
           var_name,
           converter_.get_current_func_name(),
@@ -585,8 +584,7 @@ exprt function_call_builder::build() const
   if (is_len_call(function_id) && !call_["args"].empty())
   {
     auto const_string_len_from_symbol =
-      [this](const std::string &name) -> std::optional<BigInt>
-    {
+      [this](const std::string &name) -> std::optional<BigInt> {
       // Be conservative with named symbols; only __name__ is known constant.
       if (name != "__name__")
         return std::nullopt;
@@ -616,8 +614,7 @@ exprt function_call_builder::build() const
 
     auto joinedstr_len =
       [&const_string_len_from_symbol](
-        const nlohmann::json &joined) -> std::optional<BigInt>
-    {
+        const nlohmann::json &joined) -> std::optional<BigInt> {
       if (!joined.contains("values") || !joined["values"].is_array())
         return std::nullopt;
 
@@ -718,8 +715,7 @@ exprt function_call_builder::build() const
       auto count_assignments = [&](
                                  const nlohmann::json &node,
                                  const std::string &name,
-                                 auto &&self) -> int
-      {
+                                 auto &&self) -> int {
         int count = 0;
         if (!node.is_object() && !node.is_array())
           return 0;
@@ -980,8 +976,7 @@ exprt function_call_builder::build() const
     if (method_name == "decode")
     {
       const auto &receiver = call_["func"]["value"];
-      const auto is_utf8_literal = [](const nlohmann::json &node) -> bool
-      {
+      const auto is_utf8_literal = [](const nlohmann::json &node) -> bool {
         if (
           node.contains("_type") && node["_type"] == "Constant" &&
           node.contains("value") && node["value"].is_string())
@@ -1538,8 +1533,7 @@ exprt function_call_builder::build() const
         throw std::runtime_error(
           "split() requires zero, one, or two arguments in minimal support");
 
-      auto is_none_literal = [](const nlohmann::json &node)
-      {
+      auto is_none_literal = [](const nlohmann::json &node) {
         if (
           node.contains("_type") && node["_type"] == "Constant" &&
           node.contains("value") && node["value"].is_null())
@@ -1555,8 +1549,8 @@ exprt function_call_builder::build() const
         return false;
       };
 
-      auto find_keyword = [&](const std::string &name) -> const nlohmann::json *
-      {
+      auto find_keyword =
+        [&](const std::string &name) -> const nlohmann::json * {
         if (!call_.contains("keywords") || !call_["keywords"].is_array())
           return nullptr;
         for (const auto &kw : call_["keywords"])
