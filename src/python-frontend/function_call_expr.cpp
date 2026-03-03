@@ -3238,8 +3238,23 @@ exprt function_call_expr::handle_general_function_call()
   {
     call.type() = type_handler_.get_typet(func_symbol->name.as_string());
 
+    // Detect super().__init__() pattern: call parent ctor on current self,
+    // not on a newly allocated object.
+    bool is_super_init =
+      call_["func"]["_type"] == "Attribute" &&
+      call_["func"]["value"]["_type"] == "Call" &&
+      call_["func"]["value"].contains("func") &&
+      call_["func"]["value"]["func"].contains("id") &&
+      call_["func"]["value"]["func"]["id"] == "super";
+
+    if (is_super_init)
+    {
+      if (obj_symbol)
+        call.arguments().push_back(symbol_expr(*obj_symbol));
+      param_offset = 1;
+    }
     // Self is the LHS
-    if (converter_.current_lhs)
+    else if (converter_.current_lhs)
     {
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;
