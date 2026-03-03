@@ -18,6 +18,7 @@
 #include <util/string_constant.h>
 
 #include <regex>
+#include <cmath>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -37,6 +38,58 @@ constexpr unsigned int SURROGATE_END = 0xDFFF;
 // Constants for symbol parsing
 constexpr const char *CLASS_MARKER = "@C@";
 constexpr const char *FUNCTION_MARKER = "@F@";
+
+double round_ties_to_even(const double value)
+{
+  const double lower = std::floor(value);
+  const double diff = value - lower;
+  constexpr double tie_eps = 1e-12;
+
+  if (diff < 0.5 - tie_eps)
+    return lower;
+  if (diff > 0.5 + tie_eps)
+    return lower + 1.0;
+
+  const double parity = std::fmod(std::fabs(lower), 2.0);
+  const bool lower_is_even =
+    parity < tie_eps || std::fabs(parity - 2.0) < tie_eps;
+  return lower_is_even ? lower : lower + 1.0;
+}
+
+double round_to_ndigits_ties_even(const double value, const int ndigits)
+{
+  auto round_ld_ties_even = [](const long double v) -> long double
+  {
+    const long double lower = std::floor(v);
+    const long double diff = v - lower;
+    constexpr long double tie_eps = 1e-15L;
+
+    if (diff < 0.5L - tie_eps)
+      return lower;
+    if (diff > 0.5L + tie_eps)
+      return lower + 1.0L;
+
+    const long double parity = std::fmod(std::fabs(lower), 2.0L);
+    const bool lower_is_even =
+      parity < tie_eps || std::fabs(parity - 2.0L) < tie_eps;
+    return lower_is_even ? lower : lower + 1.0L;
+  };
+
+  // Keep scaling deterministic across libm implementations.
+  long double scale = 1.0L;
+  if (ndigits >= 0)
+  {
+    for (int i = 0; i < ndigits; ++i)
+      scale *= 10.0L;
+    return static_cast<double>(
+      round_ld_ties_even(static_cast<long double>(value) * scale) / scale);
+  }
+
+  for (int i = 0; i < -ndigits; ++i)
+    scale *= 10.0L;
+  return static_cast<double>(
+    round_ld_ties_even(static_cast<long double>(value) / scale) * scale);
+}
 } // namespace
 
 function_call_expr::function_call_expr(
@@ -367,7 +420,8 @@ exprt function_call_expr::handle_isinstance() const
       // Check if this constant value is a type name
       if (type_utils::is_type_identifier(value_str))
       {
-        auto extract_type_name = [](const nlohmann::json &node) -> std::string {
+        auto extract_type_name = [](const nlohmann::json &node) -> std::string
+        {
           const std::string node_type = node["_type"];
           if (node_type == "Name")
             return node["id"];
@@ -383,7 +437,8 @@ exprt function_call_expr::handle_isinstance() const
   }
 
   // Extract type name from various AST node formats
-  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
+  auto extract_type_name = [](const nlohmann::json &node) -> std::string
+  {
     const std::string node_type = node["_type"];
 
     if (node_type == "Name")
@@ -444,7 +499,8 @@ exprt function_call_expr::handle_isinstance() const
   };
 
   // Build isinstance check for a given type name
-  auto build_isinstance = [&](const std::string &type_name) -> exprt {
+  auto build_isinstance = [&](const std::string &type_name) -> exprt
+  {
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
     {
@@ -990,7 +1046,8 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   const exprt &val = sym->value;
   std::string result;
 
-  auto decode_char = [](const exprt &expr) -> std::optional<char> {
+  auto decode_char = [](const exprt &expr) -> std::optional<char>
+  {
     try
     {
       const auto &const_expr = to_constant_expr(expr);
@@ -1227,6 +1284,108 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   // Fallback for unsupported symbolic expressions (e.g., complex)
   // Currently returns a nil expression to signal unsupported cases
   log_warning("Returning nil expression for abs() with type: {}", arg_type);
+  return nil_exprt();
+}
+
+exprt function_call_expr::handle_round(nlohmann::json &arg) const
+{
+  const auto &args = call_["args"];
+  bool has_ndigits = args.size() >= 2;
+
+  // Reject strings early
+  if (is_string_arg(arg))
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "type str doesn't define __round__ method");
+
+  // Handle unary minus (e.g., round(-3.6))
+  // Unlike abs(), round() must preserve the sign.
+  bool is_negated = false;
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+    if (op["_type"] == "USub" && operand.contains("value"))
+    {
+      arg = operand;
+      is_negated = true;
+    }
+  }
+
+  // Compile-time evaluation for numeric literals
+  if (arg.contains("value") && arg["value"].is_number())
+  {
+    if (!has_ndigits)
+    {
+      // round(x) -> nearest integer (returns int)
+      if (arg["value"].is_number_integer())
+      {
+        int val = arg["value"].get<int>();
+        if (is_negated)
+          val = -val;
+        arg["value"] = val;
+        arg["type"] = "int";
+      }
+      else
+      {
+        double val = arg["value"].get<double>();
+        if (is_negated)
+          val = -val;
+        arg["value"] = static_cast<int>(round_ties_to_even(val));
+        arg["type"] = "int";
+      }
+      typet t = type_handler_.get_typet("int", 0);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
+    }
+    else
+    {
+      // round(x, n) -> float rounded to n decimals
+      auto ndigits_arg = args[1];
+      if (
+        ndigits_arg.contains("value") &&
+        ndigits_arg["value"].is_number_integer())
+      {
+        int n = ndigits_arg["value"].get<int>();
+        double val = arg["value"].is_number_integer()
+                       ? static_cast<double>(arg["value"].get<int>())
+                       : arg["value"].get<double>();
+        if (is_negated)
+          val = -val;
+        double rounded = round_to_ndigits_ties_even(val, n);
+        arg["value"] = rounded;
+        arg["type"] = "float";
+        typet t = type_handler_.get_typet("float", 0);
+        exprt expr = converter_.get_expr(arg);
+        expr.type() = t;
+        return expr;
+      }
+    }
+  }
+
+  // Symbolic: try to build an expression for round(x)
+  if (!has_ndigits)
+  {
+    try
+    {
+      exprt operand_expr = converter_.get_expr(arg);
+      typet float_type = type_handler_.get_typet("float", 0);
+      typet int_type = type_handler_.get_typet("int", 0);
+
+      // Use nearbyint (round-to-nearest-even) on the float operand,
+      // then typecast to int — matching Python's round() semantics.
+      exprt nearbyint_expr("nearbyint", float_type);
+      nearbyint_expr.copy_to_operands(operand_expr);
+      return typecast_exprt(nearbyint_expr, int_type);
+    }
+    catch (const std::exception &)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "failed to infer operand type for round()");
+    }
+  }
+
+  log_warning("round() with symbolic arguments not fully supported");
   return nil_exprt();
 }
 
@@ -2446,7 +2605,8 @@ function_call_expr::get_dispatch_table()
 
     // Introspection functions (isinstance, hasattr)
     {[this]() { return is_introspection_call(); },
-     [this]() {
+     [this]()
+     {
        if (function_id_.get_function() == "isinstance")
          return handle_isinstance();
        else
@@ -2466,7 +2626,8 @@ function_call_expr::get_dispatch_table()
 
     // Min/Max functions
     {[this]() { return is_min_max_call(); },
-     [this]() {
+     [this]()
+     {
        const std::string &func_name = function_id_.get_function();
        if (func_name == "min")
          return handle_min_max("min", exprt::i_lt);
@@ -2486,11 +2647,13 @@ function_call_expr::get_dispatch_table()
      "dict methods"},
 
     // Math module functions (isnan, isinf)
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return func_name == "__ESBMC_isnan" || func_name == "__ESBMC_isinf";
      },
-     [this]() {
+     [this]()
+     {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
 
@@ -2518,7 +2681,8 @@ function_call_expr::get_dispatch_table()
      "isnan/isinf"},
 
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        bool is_math_module = false;
        if (call_["func"]["_type"] == "Attribute")
@@ -2566,18 +2730,21 @@ function_call_expr::get_dispatch_table()
                 func_name == "ulp" || func_name == "dist")) ||
               is_math_wrapper;
      },
-     [this]() -> exprt {
+     [this]() -> exprt
+     {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
 
-       auto require_one_arg = [&]() -> exprt {
+       auto require_one_arg = [&]() -> exprt
+       {
          if (args.size() != 1)
            throw std::runtime_error(
              func_name + "() expects exactly 1 argument");
          return converter_.get_expr(args[0]);
        };
 
-       auto require_two_args = [&]() -> std::pair<exprt, exprt> {
+       auto require_two_args = [&]() -> std::pair<exprt, exprt>
+       {
          if (args.size() != 2)
            throw std::runtime_error(
              func_name + "() expects exactly 2 arguments");
@@ -2834,7 +3001,8 @@ function_call_expr::get_dispatch_table()
            // If either argument is a constant struct (tuple literal), store it
            // in a temporary local variable so that the GOTO IR has a proper
            // symbol whose address the solver can track.
-           auto materialize = [&](exprt &arg) {
+           auto materialize = [&](exprt &arg)
+           {
              if (arg.is_constant())
              {
                symbolt &tmp = converter_.create_tmp_symbol(
@@ -2872,15 +3040,33 @@ function_call_expr::get_dispatch_table()
      "math.comb"},
 
     // divmod function
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return func_name == "divmod";
      },
      [this]() { return handle_divmod(); },
      "divmod"},
 
+    // round() builtin function
+    {[this]()
+     {
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "round" && function_id_.get_prefix() == "py:";
+     },
+     [this]()
+     {
+       if (call_["args"].empty())
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", "round() missing required argument");
+       auto arg = call_["args"][0];
+       return handle_round(arg);
+     },
+     "round() builtin"},
+
     // Built-in type constructors (int, float, str, bool, etc.)
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return type_utils::is_builtin_type(func_name) ||
               type_utils::is_consensus_type(func_name);
@@ -2890,7 +3076,8 @@ function_call_expr::get_dispatch_table()
 
     // Regex module validation
     {[this]() { return is_re_module_call(); },
-     [this]() {
+     [this]()
+     {
        exprt validation_result = validate_re_module_args();
        if (!validation_result.is_nil())
          return validation_result;
@@ -2923,6 +3110,19 @@ exprt function_call_expr::handle_general_function_call()
   // Handle single-argument min/max by dispatching to typed builtins
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
+
+  const bool has_user_round =
+    !find_function(converter_.ast()["body"], func_name).empty();
+  if (
+    func_name == "round" && call_.contains("func") &&
+    call_["func"].value("_type", "") == "Name" && !has_user_round)
+  {
+    if (call_["args"].empty())
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "round() missing required argument");
+    auto arg = call_["args"][0];
+    return handle_round(arg);
+  }
 
   if (
     (func_name == "min" || func_name == "max" || func_name == "sorted") &&
@@ -3850,7 +4050,8 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
   if (return_type == "Any" && func_node.contains("body"))
   {
     std::function<void(const nlohmann::json &)> find_returns;
-    find_returns = [&](const nlohmann::json &node) {
+    find_returns = [&](const nlohmann::json &node)
+    {
       if (!node.is_object())
         return;
 
@@ -3990,7 +4191,8 @@ exprt function_call_expr::check_argument_types(
     }
   }
 
-  auto types_match = [&](const typet &expected, const typet &actual) {
+  auto types_match = [&](const typet &expected, const typet &actual)
+  {
     return base_type_eq(expected, actual, converter_.ns) ||
            (type_utils::is_string_type(expected) &&
             type_utils::is_string_type(actual));
