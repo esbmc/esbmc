@@ -900,10 +900,11 @@ exprt string_handler::handle_string_isspace(
   exprt str_null = ensure_null_terminated_string(string_copy);
   exprt str_addr = get_array_base_address(str_null);
 
-  symbolt *isspace_str_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_isspace");
+  const char *isspace_str_symbol_id = "c:@F@__python_str_isspace";
+  symbolt *isspace_str_symbol = symbol_table_.find_symbol(isspace_str_symbol_id);
   if (!isspace_str_symbol)
-    throw std::runtime_error("str_isspace function not found in symbol table");
+    throw std::runtime_error(
+      std::string(isspace_str_symbol_id) + " function not found in symbol table");
 
   side_effect_expr_function_callt call;
   call.function() = symbol_expr(*isspace_str_symbol);
