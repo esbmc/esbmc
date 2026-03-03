@@ -2534,6 +2534,19 @@ private:
         {
           if (member["_type"] == "FunctionDef" && member["name"] == method_name)
           {
+            // Prefer the explicit return-type annotation when present.
+            if (member.contains("returns") && !member["returns"].is_null())
+            {
+              const Json &ret = member["returns"];
+              // Simple type: -> str, -> int, -> MyClass
+              if (ret.contains("id"))
+                return ret["id"].template get<std::string>();
+              // Generic type: -> dict[str, bool], -> list[int], etc.
+              if (
+                ret.contains("_type") && ret["_type"] == "Subscript" &&
+                ret.contains("value") && ret["value"].contains("id"))
+                return ret["value"]["id"].template get<std::string>();
+            }
             std::string inferred_type =
               infer_from_return_statements(member["body"], method_name);
             if (!inferred_type.empty())
