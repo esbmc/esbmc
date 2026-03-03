@@ -293,6 +293,10 @@ exprt python_dict_handler::create_dict_from_literal(
   struct_typet dict_type = get_dict_struct_type();
   typet list_type = type_handler_.get_list_type();
 
+  // Freeze the target as dict-typed lvalue so previously emitted member
+  // accesses remain valid even if the frontend later mutates the symbol type.
+  exprt dict_target = typecast_exprt(target_symbol, dict_type);
+
   // Create keys list
   symbolt &keys_list = converter_.create_tmp_symbol(
     element, dict_name + "_keys", list_type, exprt());
@@ -359,12 +363,12 @@ exprt python_dict_handler::create_dict_from_literal(
   }
 
   // Assign keys and values to target dict struct members
-  member_exprt keys_member(target_symbol, "keys", list_type);
+  member_exprt keys_member(dict_target, "keys", list_type);
   code_assignt keys_assign(keys_member, symbol_expr(keys_list));
   keys_assign.location() = location;
   converter_.add_instruction(keys_assign);
 
-  member_exprt values_member(target_symbol, "values", list_type);
+  member_exprt values_member(dict_target, "values", list_type);
   code_assignt values_assign(values_member, symbol_expr(values_list));
   values_assign.location() = location;
   converter_.add_instruction(values_assign);
