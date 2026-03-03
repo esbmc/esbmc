@@ -2322,8 +2322,9 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
     {
       // For ImportFrom, only match if the specific name was imported.
       // This prevents "from other import sum" from also hijacking "max".
-      if (obj["_type"] == "ImportFrom" && obj.contains("names") &&
-          !lookup_name.empty())
+      if (
+        obj["_type"] == "ImportFrom" && obj.contains("names") &&
+        !lookup_name.empty())
       {
         bool name_imported = false;
         for (const auto &name : obj["names"])
