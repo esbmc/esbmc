@@ -167,6 +167,12 @@ void function_call_expr::get_function_type()
       }
     }
 
+    // Detect A().f(...): method call on a temporary instance from a constructor.
+    bool obj_is_temp_instance =
+      call_["func"]["value"]["_type"] == "Call" &&
+      call_["func"]["value"].contains("func") &&
+      call_["func"]["value"]["func"]["_type"] == "Name";
+
     // Handling a function call as a class method call when:
     // (1) The caller corresponds to a class name, for example: MyClass.foo().
     // (2) Calling methods of built-in types, such as int.from_bytes()
@@ -175,6 +181,7 @@ void function_call_expr::get_function_type()
     // If the caller is a class or a built-in type, the following condition detects a class method call.
     if (
       !is_nested_instance_attr &&
+      !obj_is_temp_instance &&
       (is_class(caller, converter_.ast()) ||
        type_utils::is_builtin_type(caller) ||
        type_utils::is_builtin_type(type_handler_.get_var_type(caller))))
@@ -3256,13 +3263,42 @@ exprt function_call_expr::handle_general_function_call()
     }
     else
     {
-      // Nested attribute: build expression dynamically
+      // Nested attribute or temporary instance: build expression dynamically
       if (
         call_["func"]["_type"] == "Attribute" &&
         call_["func"].contains("value"))
       {
-        exprt obj_expr = converter_.get_expr(call_["func"]["value"]);
-        call.arguments().push_back(gen_address_of(obj_expr));
+        const auto &func_value = call_["func"]["value"];
+        if (
+          func_value["_type"] == "Call" && func_value.contains("func") &&
+          func_value["func"]["_type"] == "Name")
+        {
+          // A().f(...): create a temporary A instance and use it as self.
+          const std::string &class_name =
+            func_value["func"]["id"].get<std::string>();
+          typet class_type = type_handler_.get_typet(class_name);
+
+          symbolt &tmp =
+            converter_.create_tmp_symbol(func_value, "$inst$", class_type, exprt());
+          converter_.symbol_table().add(tmp);
+          code_declt tmp_decl(symbol_expr(tmp));
+          tmp_decl.location() = location;
+          converter_.current_block->copy_to_operands(tmp_decl);
+
+          // Call the constructor if it is defined, using tmp as self.
+          exprt *saved_lhs = converter_.current_lhs;
+          exprt tmp_expr = symbol_expr(tmp);
+          converter_.current_lhs = &tmp_expr;
+          exprt ctor_result = converter_.get_expr(func_value);
+          converter_.current_lhs = saved_lhs;
+
+          call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+        }
+        else
+        {
+          exprt obj_expr = converter_.get_expr(func_value);
+          call.arguments().push_back(gen_address_of(obj_expr));
+        }
       }
       else
       {

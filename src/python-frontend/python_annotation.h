@@ -175,10 +175,89 @@ public:
     }
   }
 
+  // Preprocess method calls on temporary instances to infer parameter types.
+  // Handles patterns such as A().method(arg1, arg2) by annotating the method's
+  // parameters from the argument types at the call site.
+  void preprocess_method_calls(const Json &node)
+  {
+    if (node.is_object())
+    {
+      // Detect: A().method(args)
+      // func._type == "Attribute", func.value._type == "Call" (the A() part),
+      // func.value.func._type == "Name" (the class name A)
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") &&
+        node["func"]["_type"] == "Attribute" &&
+        node["func"].contains("value") &&
+        node["func"]["value"]["_type"] == "Call" &&
+        node["func"]["value"].contains("func") &&
+        node["func"]["value"]["func"]["_type"] == "Name" &&
+        node["func"]["value"]["func"].contains("id") &&
+        node["func"].contains("attr"))
+      {
+        const std::string &class_name =
+          node["func"]["value"]["func"]["id"].template get<std::string>();
+        const std::string &method_name =
+          node["func"]["attr"].template get<std::string>();
+        const Json &call_args =
+          node.contains("args") ? node["args"] : Json::array();
+
+        for (Json &class_node : ast_["body"])
+        {
+          if (
+            class_node["_type"] == "ClassDef" &&
+            class_node["name"] == class_name)
+          {
+            for (Json &member : class_node["body"])
+            {
+              if (
+                member["_type"] == "FunctionDef" &&
+                member["name"] == method_name &&
+                member.contains("args") &&
+                member["args"].contains("args"))
+              {
+                Json &params = member["args"]["args"];
+                // Skip self (index 0); match remaining params to call args
+                for (
+                  size_t i = 1;
+                  i < params.size() && (i - 1) < call_args.size();
+                  ++i)
+                {
+                  Json &param = params[i];
+                  // Only annotate if the parameter is not yet annotated
+                  if (
+                    param.contains("annotation") &&
+                    !param["annotation"].is_null())
+                    continue;
+                  const Json &arg = call_args[i - 1];
+                  std::string arg_type = get_argument_type(arg);
+                  if (!arg_type.empty())
+                    add_parameter_annotation(param, arg_type);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Recursively search all object fields
+      for (auto &kv : node.items())
+        preprocess_method_calls(kv.value());
+    }
+    else if (node.is_array())
+    {
+      for (const auto &element : node)
+        preprocess_method_calls(element);
+    }
+  }
+
   void add_type_annotation()
   {
     // First pass: preprocess all constructor calls to infer parameter types
     preprocess_constructor_calls(ast_);
+    // Also preprocess method calls on temporary instances: A().method(args)
+    preprocess_method_calls(ast_);
 
     // Second pass: add type annotations to global scope variables
     annotate_global_scope();
@@ -2064,6 +2143,16 @@ private:
     if (call["value"]["_type"] == "Constant")
       return get_type_from_constant(call["value"]);
 
+    // Handle method calls on temporary instances: A().method()
+    // A() is a Call node with no "id" field; return the class name so that
+    // get_type_from_method() can look up the method in the class definition.
+    if (
+      call["value"]["_type"] == "Call" &&
+      call["value"].contains("func") &&
+      call["value"]["func"]["_type"] == "Name" &&
+      call["value"]["func"].contains("id"))
+      return call["value"]["func"]["id"].template get<std::string>();
+
     // Handle normal Name values (variable references)
     if (!call["value"].contains("id"))
       return "";
@@ -2726,6 +2815,11 @@ private:
         // Method call on subscript (e.g., nested[i].pop()): let converter infer
         else if (
           func.contains("value") && func["value"]["_type"] == "Subscript")
+          return InferResult::UNKNOWN;
+        // Method call on temporary instance (e.g., A().f()): let converter infer
+        // if get_type_from_method couldn't resolve (class not in AST etc.)
+        else if (
+          func.contains("value") && func["value"]["_type"] == "Call")
           return InferResult::UNKNOWN;
       }
     }
