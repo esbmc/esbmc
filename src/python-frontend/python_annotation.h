@@ -2535,8 +2535,7 @@ private:
           if (member["_type"] == "FunctionDef" && member["name"] == method_name)
           {
             // Prefer the explicit return-type annotation when present.
-            if (
-              member.contains("returns") && !member["returns"].is_null())
+            if (member.contains("returns") && !member["returns"].is_null())
             {
               const Json &ret = member["returns"];
               // Simple type: -> str, -> int, -> MyClass
