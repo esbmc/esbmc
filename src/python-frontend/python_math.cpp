@@ -437,7 +437,10 @@ exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
       got_val = true;
     }
 
-    if (got_val && val >= 0.0)
+    // Constant-fold when we have a concrete value that is either:
+    //  - non-negative finite, or
+    //  - NaN or +/-infinity (IEEE-754 defines std::sqrt for these)
+    if (got_val && (val >= 0.0 || std::isnan(val) || std::isinf(val)))
       return from_double(std::sqrt(val), double_type());
   }
 
