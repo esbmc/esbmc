@@ -1526,7 +1526,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       predicate = to_exists2t(expr).side_2;
     }
 
-    // We only want expressions of typecast(address_of(symbol)) or address_of(symbol)).
+    // We only want expressions of typecast(address_of(symbol)) or address_of(symbol).
     {
       if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
         symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
