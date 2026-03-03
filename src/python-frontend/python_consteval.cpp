@@ -22,8 +22,7 @@ static double round_ties_to_even_consteval(const double value)
 static double
 round_to_ndigits_ties_even_consteval(const double value, const int ndigits)
 {
-  auto round_ld_ties_even = [](const long double v) -> long double
-  {
+  auto round_ld_ties_even = [](const long double v) -> long double {
     const long double lower = std::floor(v);
     const long double diff = v - lower;
     constexpr long double tie_eps = 1e-15L;

@@ -358,8 +358,7 @@ exprt numpy_call_expr::create_expr_from_call()
   nlohmann::json expr;
 
   // Resolve variables if they are names
-  auto resolve_var = [this](nlohmann::json &var)
-  {
+  auto resolve_var = [this](nlohmann::json &var) {
     if (var["_type"] == "Name")
     {
       var = json_utils::find_var_decl(
@@ -799,8 +798,7 @@ exprt numpy_call_expr::get()
   // Handle math function calls
   if (is_math_function())
   {
-    auto is_scalar_node = [](const nlohmann::json &node)
-    {
+    auto is_scalar_node = [](const nlohmann::json &node) {
       const std::string type = node["_type"];
       return type == "Constant" || type == "UnaryOp";
     };
@@ -827,8 +825,7 @@ exprt numpy_call_expr::get()
       exprt expr = converter_.get_expr(result);
 
       auto compute_scalar_result =
-        [&](double left, double right, double &out) -> bool
-      {
+        [&](double left, double right, double &out) -> bool {
         if (function == "add")
         {
           out = left + right;

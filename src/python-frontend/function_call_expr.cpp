@@ -58,8 +58,7 @@ double round_ties_to_even(const double value)
 
 double round_to_ndigits_ties_even(const double value, const int ndigits)
 {
-  auto round_ld_ties_even = [](const long double v) -> long double
-  {
+  auto round_ld_ties_even = [](const long double v) -> long double {
     const long double lower = std::floor(v);
     const long double diff = v - lower;
     constexpr long double tie_eps = 1e-15L;
@@ -420,8 +419,7 @@ exprt function_call_expr::handle_isinstance() const
       // Check if this constant value is a type name
       if (type_utils::is_type_identifier(value_str))
       {
-        auto extract_type_name = [](const nlohmann::json &node) -> std::string
-        {
+        auto extract_type_name = [](const nlohmann::json &node) -> std::string {
           const std::string node_type = node["_type"];
           if (node_type == "Name")
             return node["id"];
@@ -437,8 +435,7 @@ exprt function_call_expr::handle_isinstance() const
   }
 
   // Extract type name from various AST node formats
-  auto extract_type_name = [](const nlohmann::json &node) -> std::string
-  {
+  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
     const std::string node_type = node["_type"];
 
     if (node_type == "Name")
@@ -499,8 +496,7 @@ exprt function_call_expr::handle_isinstance() const
   };
 
   // Build isinstance check for a given type name
-  auto build_isinstance = [&](const std::string &type_name) -> exprt
-  {
+  auto build_isinstance = [&](const std::string &type_name) -> exprt {
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
     {
@@ -1046,8 +1042,7 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   const exprt &val = sym->value;
   std::string result;
 
-  auto decode_char = [](const exprt &expr) -> std::optional<char>
-  {
+  auto decode_char = [](const exprt &expr) -> std::optional<char> {
     try
     {
       const auto &const_expr = to_constant_expr(expr);
@@ -2605,8 +2600,7 @@ function_call_expr::get_dispatch_table()
 
     // Introspection functions (isinstance, hasattr)
     {[this]() { return is_introspection_call(); },
-     [this]()
-     {
+     [this]() {
        if (function_id_.get_function() == "isinstance")
          return handle_isinstance();
        else
@@ -2626,8 +2620,7 @@ function_call_expr::get_dispatch_table()
 
     // Min/Max functions
     {[this]() { return is_min_max_call(); },
-     [this]()
-     {
+     [this]() {
        const std::string &func_name = function_id_.get_function();
        if (func_name == "min")
          return handle_min_max("min", exprt::i_lt);
@@ -2647,13 +2640,11 @@ function_call_expr::get_dispatch_table()
      "dict methods"},
 
     // Math module functions (isnan, isinf)
-    {[this]()
-     {
+    {[this]() {
        const std::string &func_name = function_id_.get_function();
        return func_name == "__ESBMC_isnan" || func_name == "__ESBMC_isinf";
      },
-     [this]()
-     {
+     [this]() {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
 
@@ -2681,8 +2672,7 @@ function_call_expr::get_dispatch_table()
      "isnan/isinf"},
 
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
-    {[this]()
-     {
+    {[this]() {
        const std::string &func_name = function_id_.get_function();
        bool is_math_module = false;
        if (call_["func"]["_type"] == "Attribute")
@@ -2730,21 +2720,18 @@ function_call_expr::get_dispatch_table()
                 func_name == "ulp" || func_name == "dist")) ||
               is_math_wrapper;
      },
-     [this]() -> exprt
-     {
+     [this]() -> exprt {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
 
-       auto require_one_arg = [&]() -> exprt
-       {
+       auto require_one_arg = [&]() -> exprt {
          if (args.size() != 1)
            throw std::runtime_error(
              func_name + "() expects exactly 1 argument");
          return converter_.get_expr(args[0]);
        };
 
-       auto require_two_args = [&]() -> std::pair<exprt, exprt>
-       {
+       auto require_two_args = [&]() -> std::pair<exprt, exprt> {
          if (args.size() != 2)
            throw std::runtime_error(
              func_name + "() expects exactly 2 arguments");
@@ -3001,8 +2988,7 @@ function_call_expr::get_dispatch_table()
            // If either argument is a constant struct (tuple literal), store it
            // in a temporary local variable so that the GOTO IR has a proper
            // symbol whose address the solver can track.
-           auto materialize = [&](exprt &arg)
-           {
+           auto materialize = [&](exprt &arg) {
              if (arg.is_constant())
              {
                symbolt &tmp = converter_.create_tmp_symbol(
@@ -3040,8 +3026,7 @@ function_call_expr::get_dispatch_table()
      "math.comb"},
 
     // divmod function
-    {[this]()
-     {
+    {[this]() {
        const std::string &func_name = function_id_.get_function();
        return func_name == "divmod";
      },
@@ -3049,13 +3034,11 @@ function_call_expr::get_dispatch_table()
      "divmod"},
 
     // round() builtin function
-    {[this]()
-     {
+    {[this]() {
        const std::string &func_name = function_id_.get_function();
        return func_name == "round" && function_id_.get_prefix() == "py:";
      },
-     [this]()
-     {
+     [this]() {
        if (call_["args"].empty())
          return converter_.get_exception_handler().gen_exception_raise(
            "TypeError", "round() missing required argument");
@@ -3065,8 +3048,7 @@ function_call_expr::get_dispatch_table()
      "round() builtin"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
-    {[this]()
-     {
+    {[this]() {
        const std::string &func_name = function_id_.get_function();
        return type_utils::is_builtin_type(func_name) ||
               type_utils::is_consensus_type(func_name);
@@ -3076,8 +3058,7 @@ function_call_expr::get_dispatch_table()
 
     // Regex module validation
     {[this]() { return is_re_module_call(); },
-     [this]()
-     {
+     [this]() {
        exprt validation_result = validate_re_module_args();
        if (!validation_result.is_nil())
          return validation_result;
@@ -4050,8 +4031,7 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
   if (return_type == "Any" && func_node.contains("body"))
   {
     std::function<void(const nlohmann::json &)> find_returns;
-    find_returns = [&](const nlohmann::json &node)
-    {
+    find_returns = [&](const nlohmann::json &node) {
       if (!node.is_object())
         return;
 
@@ -4191,8 +4171,7 @@ exprt function_call_expr::check_argument_types(
     }
   }
 
-  auto types_match = [&](const typet &expected, const typet &actual)
-  {
+  auto types_match = [&](const typet &expected, const typet &actual) {
     return base_type_eq(expected, actual, converter_.ns) ||
            (type_utils::is_string_type(expected) &&
             type_utils::is_string_type(actual));
