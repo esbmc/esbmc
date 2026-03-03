@@ -922,8 +922,7 @@ void python_dict_handler::resolve_dict_subscript_types(
   bool lhs_is_ptr = lhs.type().is_pointer();
   bool rhs_is_ptr = rhs.type().is_pointer();
 
-  auto is_primitive_type = [](const typet &t)
-  {
+  auto is_primitive_type = [](const typet &t) {
     return t.is_signedbv() || t.is_unsignedbv() || t.is_bool() ||
            t.is_floatbv();
   };
