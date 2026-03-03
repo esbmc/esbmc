@@ -533,6 +533,19 @@ class Preprocessor(ast.NodeTransformer):
         target = node.target
         if isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2:
             k_var, v_var = target.elts[0], target.elts[1]
+            # If the key type is still unknown, check the loop body for
+            # some_dict[key_var] usage patterns: using a variable as a dict
+            # subscript key implies it is a str (the common dict key type).
+            if (isinstance(key_ann, ast.Name) and key_ann.id == 'Any' and
+                    isinstance(k_var, ast.Name) and
+                    self._key_used_as_subscript(k_var.id, node.body)):
+                key_ann = ast.Name(id='str', ctx=ast.Load())
+            # If the value type is still unknown, check the loop body for
+            # val["key"] usage patterns: string subscripts imply a dict value.
+            if (isinstance(val_ann, ast.Name) and val_ann.id == 'Any' and
+                    isinstance(v_var, ast.Name) and
+                    self._uses_string_subscript(v_var.id, node.body)):
+                val_ann = ast.Name(id='dict', ctx=ast.Load())
             if isinstance(k_var, ast.Name):
                 self.variable_annotations[k_var.id] = key_ann
             if isinstance(v_var, ast.Name):
@@ -1112,6 +1125,22 @@ class Preprocessor(ast.NodeTransformer):
             self.ensure_all_locations(dict_assign, node)
             setup_stmts.append(dict_assign)
 
+        # If key or val type is still unknown (Any), scan the loop body for
+        # usage patterns that reveal the type.
+        _tgt = node.target
+        if isinstance(_tgt, (ast.Tuple, ast.List)) and len(_tgt.elts) == 2:
+            _k_elt, _v_elt = _tgt.elts[0], _tgt.elts[1]
+            # some_dict[key_var] in the body => key is str (common dict key type)
+            if (isinstance(key_ann, ast.Name) and key_ann.id == 'Any' and
+                    isinstance(_k_elt, ast.Name) and
+                    self._key_used_as_subscript(_k_elt.id, node.body)):
+                key_ann = ast.Name(id='str', ctx=ast.Load())
+            # val["str_const"] in the body => value is a dict
+            if (isinstance(val_ann, ast.Name) and val_ann.id == 'Any' and
+                    isinstance(_v_elt, ast.Name) and
+                    self._uses_string_subscript(_v_elt.id, node.body)):
+                val_ann = ast.Name(id='dict', ctx=ast.Load())
+
         # Intermediate list variables: ESBMC_keys_N: list[base(K)] = d.keys()
         # The list slice uses the BASE type name only (e.g. 'dict' for dict[str,int])
         # so the C++ list subscript handler can call get_typet("dict") correctly.
@@ -1161,6 +1190,37 @@ class Preprocessor(ast.NodeTransformer):
     def _any_ann(self):
         """Return a fresh ast.Name(id='Any') annotation node."""
         return ast.Name(id='Any', ctx=ast.Load())
+
+    def _uses_string_subscript(self, var_name, body):
+        """Return True if var_name is subscripted with a string constant anywhere in body.
+
+        Used to infer that a loop variable annotated as Any is actually a dict,
+        because val["key"] access in Python is only valid on mappings.
+        """
+        module = ast.Module(body=list(body), type_ignores=[])
+        for node in ast.walk(module):
+            if (isinstance(node, ast.Subscript) and
+                    isinstance(node.value, ast.Name) and
+                    node.value.id == var_name and
+                    isinstance(node.slice, ast.Constant) and
+                    isinstance(node.slice.value, str)):
+                return True
+        return False
+
+    def _key_used_as_subscript(self, var_name, body):
+        """Return True if var_name appears as a subscript key anywhere in body.
+
+        Detects patterns like some_dict[var_name] or some_dict[var_name] = value.
+        When iterating a plain dict (key type = Any), this implies the key is str,
+        since it is being used to index another dict in the loop body.
+        """
+        module = ast.Module(body=list(body), type_ignores=[])
+        for node in ast.walk(module):
+            if (isinstance(node, ast.Subscript) and
+                    isinstance(node.slice, ast.Name) and
+                    node.slice.id == var_name):
+                return True
+        return False
 
     def _kv_types_from_annotation(self, annotation):
         """Extract (key_ann, val_ann) AST nodes from a dict[K, V] annotation node.
