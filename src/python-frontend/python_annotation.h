@@ -187,8 +187,7 @@ public:
       // func.value.func._type == "Name" (the class name A)
       if (
         node.contains("_type") && node["_type"] == "Call" &&
-        node.contains("func") &&
-        node["func"]["_type"] == "Attribute" &&
+        node.contains("func") && node["func"]["_type"] == "Attribute" &&
         node["func"].contains("value") &&
         node["func"]["value"]["_type"] == "Call" &&
         node["func"]["value"].contains("func") &&
@@ -213,16 +212,14 @@ public:
             {
               if (
                 member["_type"] == "FunctionDef" &&
-                member["name"] == method_name &&
-                member.contains("args") &&
+                member["name"] == method_name && member.contains("args") &&
                 member["args"].contains("args"))
               {
                 Json &params = member["args"]["args"];
                 // Skip self (index 0); match remaining params to call args
-                for (
-                  size_t i = 1;
-                  i < params.size() && (i - 1) < call_args.size();
-                  ++i)
+                for (size_t i = 1;
+                     i < params.size() && (i - 1) < call_args.size();
+                     ++i)
                 {
                   Json &param = params[i];
                   // Only annotate if the parameter is not yet annotated
@@ -2147,8 +2144,7 @@ private:
     // A() is a Call node with no "id" field; return the class name so that
     // get_type_from_method() can look up the method in the class definition.
     if (
-      call["value"]["_type"] == "Call" &&
-      call["value"].contains("func") &&
+      call["value"]["_type"] == "Call" && call["value"].contains("func") &&
       call["value"]["func"]["_type"] == "Name" &&
       call["value"]["func"].contains("id"))
       return call["value"]["func"]["id"].template get<std::string>();
@@ -2818,8 +2814,7 @@ private:
           return InferResult::UNKNOWN;
         // Method call on temporary instance (e.g., A().f()): let converter infer
         // if get_type_from_method couldn't resolve (class not in AST etc.)
-        else if (
-          func.contains("value") && func["value"]["_type"] == "Call")
+        else if (func.contains("value") && func["value"]["_type"] == "Call")
           return InferResult::UNKNOWN;
       }
     }

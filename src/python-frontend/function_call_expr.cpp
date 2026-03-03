@@ -180,8 +180,7 @@ void function_call_expr::get_function_type()
     // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
     // If the caller is a class or a built-in type, the following condition detects a class method call.
     if (
-      !is_nested_instance_attr &&
-      !obj_is_temp_instance &&
+      !is_nested_instance_attr && !obj_is_temp_instance &&
       (is_class(caller, converter_.ast()) ||
        type_utils::is_builtin_type(caller) ||
        type_utils::is_builtin_type(type_handler_.get_var_type(caller))))
@@ -3278,8 +3277,8 @@ exprt function_call_expr::handle_general_function_call()
             func_value["func"]["id"].get<std::string>();
           typet class_type = type_handler_.get_typet(class_name);
 
-          symbolt &tmp =
-            converter_.create_tmp_symbol(func_value, "$inst$", class_type, exprt());
+          symbolt &tmp = converter_.create_tmp_symbol(
+            func_value, "$inst$", class_type, exprt());
           converter_.symbol_table().add(tmp);
           code_declt tmp_decl(symbol_expr(tmp));
           tmp_decl.location() = location;
