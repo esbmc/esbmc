@@ -430,7 +430,10 @@ exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
     {
       BigInt int_val = binary2integer(
         resolved.value().as_string(), resolved.type().is_signedbv());
-      val = static_cast<double>(int_val.to_int64());
+      if (resolved.type().is_unsignedbv())
+        val = static_cast<double>(int_val.to_uint64());
+      else
+        val = static_cast<double>(int_val.to_int64());
       got_val = true;
     }
 
