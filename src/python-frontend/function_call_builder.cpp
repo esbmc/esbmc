@@ -25,6 +25,35 @@ static size_t utf8_codepoint_count(const std::string &text)
   return count;
 }
 
+static typet normalize_pylist_candidate_type(typet type, const namespacet &ns)
+{
+  if (type.is_pointer())
+    type = type.subtype();
+  if (type.id() == "symbol")
+    type = ns.follow(type);
+  return type;
+}
+
+static std::optional<struct_typet>
+try_get_pylist_struct_type(const typet &type, const namespacet &ns)
+{
+  typet actual_type = normalize_pylist_candidate_type(type, ns);
+  if (!actual_type.is_struct())
+    return std::nullopt;
+
+  const struct_typet &struct_type = to_struct_type(actual_type);
+  const std::string tag = struct_type.tag().as_string();
+  if (tag.find("__ESBMC_PyListObj") == std::string::npos)
+    return std::nullopt;
+
+  return struct_type;
+}
+
+static bool is_pylist_object_type(const typet &type, const namespacet &ns)
+{
+  return try_get_pylist_struct_type(type, ns).has_value();
+}
+
 bool function_call_builder::is_nondet_str_call(const nlohmann::json &node) const
 {
   return node.contains("_type") && node["_type"] == "Call" &&
@@ -143,7 +172,8 @@ symbol_id function_call_builder::build_function_id() const
        */
 
       std::function<typet(const nlohmann::json &)> resolve_attr_type =
-        [&](const nlohmann::json &node) -> typet {
+        [&](const nlohmann::json &node) -> typet
+      {
         if (node["_type"] == "Name")
         {
           // Base case: resolve variable to its type
@@ -314,26 +344,13 @@ symbol_id function_call_builder::build_function_id() const
       var_sid.set_object(var_name);
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
-      auto symbol_points_to_list = [&](const symbolt *sym) -> bool {
-        if (!sym)
-          return false;
-
-        typet actual_type = sym->type;
-        if (actual_type.is_pointer())
-          actual_type = actual_type.subtype();
-        if (actual_type.id() == "symbol")
-          actual_type = converter_.ns.follow(actual_type);
-        if (!actual_type.is_struct())
-          return false;
-
-        const struct_typet &struct_type = to_struct_type(actual_type);
-        const std::string tag = struct_type.tag().as_string();
-        return tag.find("__ESBMC_PyListObj") != std::string::npos;
-      };
+      auto symbol_points_to_list = [&](const symbolt *sym) -> bool
+      { return sym && is_pylist_object_type(sym->type, converter_.ns); };
 
       const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
 
-      auto is_list_slice_assignment = [&]() -> bool {
+      auto is_list_slice_assignment = [&]() -> bool
+      {
         nlohmann::json var_value = json_utils::get_var_value(
           var_name,
           converter_.get_current_func_name(),
@@ -548,7 +565,8 @@ exprt function_call_builder::build() const
   if (is_len_call(function_id) && !call_["args"].empty())
   {
     auto const_string_len_from_symbol =
-      [this](const std::string &name) -> std::optional<BigInt> {
+      [this](const std::string &name) -> std::optional<BigInt>
+    {
       // Be conservative with named symbols; only __name__ is known constant.
       if (name != "__name__")
         return std::nullopt;
@@ -578,7 +596,8 @@ exprt function_call_builder::build() const
 
     auto joinedstr_len =
       [&const_string_len_from_symbol](
-        const nlohmann::json &joined) -> std::optional<BigInt> {
+        const nlohmann::json &joined) -> std::optional<BigInt>
+    {
       if (!joined.contains("values") || !joined["values"].is_array())
         return std::nullopt;
 
@@ -642,35 +661,25 @@ exprt function_call_builder::build() const
         to_symbol_expr(arg_expr).get_identifier().as_string());
       if (arg_symbol)
       {
-        typet actual_type = arg_symbol->type;
-        if (actual_type.is_pointer())
-          actual_type = actual_type.subtype();
-        if (actual_type.id() == "symbol")
-          actual_type = converter_.ns.follow(actual_type);
-
-        if (actual_type.is_struct())
+        auto list_struct =
+          try_get_pylist_struct_type(arg_symbol->type, converter_.ns);
+        if (list_struct)
         {
-          const struct_typet &struct_type = to_struct_type(actual_type);
-          std::string tag = struct_type.tag().as_string();
-          if (tag.find("__ESBMC_PyListObj") != std::string::npos)
-          {
-            code_typet list_size_type;
-            list_size_type.return_type() = size_type();
-            code_typet::argumentt arg_type;
-            arg_type.type() = pointer_typet(struct_type);
-            list_size_type.arguments().push_back(arg_type);
+          code_typet list_size_type;
+          list_size_type.return_type() = size_type();
+          code_typet::argumentt arg_type;
+          arg_type.type() = pointer_typet(*list_struct);
+          list_size_type.arguments().push_back(arg_type);
 
-            symbol_exprt list_size_func(
-              "c:@F@__ESBMC_list_size", list_size_type);
+          symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
 
-            side_effect_expr_function_callt call_expr(size_type());
-            call_expr.function() = list_size_func;
-            if (arg_expr.type().is_pointer())
-              call_expr.arguments().push_back(arg_expr);
-            else
-              call_expr.arguments().push_back(address_of_exprt(arg_expr));
-            return call_expr;
-          }
+          side_effect_expr_function_callt call_expr(size_type());
+          call_expr.function() = list_size_func;
+          if (arg_expr.type().is_pointer())
+            call_expr.arguments().push_back(arg_expr);
+          else
+            call_expr.arguments().push_back(address_of_exprt(arg_expr));
+          return call_expr;
         }
       }
     }
@@ -689,7 +698,8 @@ exprt function_call_builder::build() const
       auto count_assignments = [&](
                                  const nlohmann::json &node,
                                  const std::string &name,
-                                 auto &&self) -> int {
+                                 auto &&self) -> int
+      {
         int count = 0;
         if (!node.is_object() && !node.is_array())
           return 0;
@@ -860,34 +870,25 @@ exprt function_call_builder::build() const
     exprt obj_expr = converter_.get_expr(arg);
 
     // Check actual type: could be dict or list (e.g., from d.keys())
-    typet actual_type = obj_expr.type();
-    if (actual_type.is_pointer())
-      actual_type = actual_type.subtype();
-    if (actual_type.id() == "symbol")
-      actual_type = converter_.ns.follow(actual_type);
-
     // If it's actually a list, call list_size directly
-    if (actual_type.is_struct())
+    auto list_struct =
+      try_get_pylist_struct_type(obj_expr.type(), converter_.ns);
+    if (list_struct)
     {
-      const struct_typet &struct_type = to_struct_type(actual_type);
-      std::string tag = struct_type.tag().as_string();
-      if (tag.find("__ESBMC_PyListObj") != std::string::npos)
-      {
-        // It's a list, not a dict: call list_size on it directly
-        code_typet list_size_type;
-        list_size_type.return_type() = size_type();
-        code_typet::argumentt arg_type;
-        arg_type.type() = pointer_typet(struct_type);
-        list_size_type.arguments().push_back(arg_type);
+      // It's a list, not a dict: call list_size on it directly
+      code_typet list_size_type;
+      list_size_type.return_type() = size_type();
+      code_typet::argumentt arg_type;
+      arg_type.type() = pointer_typet(*list_struct);
+      list_size_type.arguments().push_back(arg_type);
 
-        symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
+      symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
 
-        side_effect_expr_function_callt call_expr(size_type());
-        call_expr.function() = list_size_func;
-        call_expr.arguments().push_back(obj_expr);
+      side_effect_expr_function_callt call_expr(size_type());
+      call_expr.function() = list_size_func;
+      call_expr.arguments().push_back(obj_expr);
 
-        return call_expr;
-      }
+      return call_expr;
     }
 
     // It's genuinely a dict: get the keys member
@@ -1471,7 +1472,8 @@ exprt function_call_builder::build() const
         throw std::runtime_error(
           "split() requires zero, one, or two arguments in minimal support");
 
-      auto is_none_literal = [](const nlohmann::json &node) {
+      auto is_none_literal = [](const nlohmann::json &node)
+      {
         if (
           node.contains("_type") && node["_type"] == "Constant" &&
           node.contains("value") && node["value"].is_null())
@@ -1487,8 +1489,8 @@ exprt function_call_builder::build() const
         return false;
       };
 
-      auto find_keyword =
-        [&](const std::string &name) -> const nlohmann::json * {
+      auto find_keyword = [&](const std::string &name) -> const nlohmann::json *
+      {
         if (!call_.contains("keywords") || !call_["keywords"].is_array())
           return nullptr;
         for (const auto &kw : call_["keywords"])

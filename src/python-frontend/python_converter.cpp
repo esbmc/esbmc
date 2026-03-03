@@ -5276,22 +5276,36 @@ void python_converter::get_var_assign(
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
-    auto is_list_model_type = [this](const typet &in_type)
+    auto try_follow_symbol_type = [this](const typet &type) -> typet
+    {
+      if (type.id() != "symbol")
+        return type;
+
+      const irep_idt &symbol_id = type.identifier();
+      if (symbol_id.empty())
+        return type;
+
+      if (symbol_table_.find_symbol(symbol_id) == nullptr)
+        return type;
+
+      return ns.follow(type);
+    };
+
+    auto is_list_model_type = [this, &try_follow_symbol_type](const typet &in_type)
     {
       typet t = in_type;
-      if (t.id() == "symbol")
-        t = ns.follow(t);
+      t = try_follow_symbol_type(t);
       if (t.is_pointer())
         t = t.subtype();
-      if (t.id() == "symbol")
-        t = ns.follow(t);
+      t = try_follow_symbol_type(t);
       if (!t.is_struct())
         return false;
       return to_struct_type(t).tag().as_string().find("__ESBMC_PyListObj") !=
              std::string::npos;
     };
 
-    auto resolve_runtime_type = [this](const exprt &expr)
+    auto resolve_runtime_type =
+      [this, &try_follow_symbol_type](const exprt &expr)
     {
       typet t = expr.type();
       if (expr.is_symbol())
@@ -5299,9 +5313,7 @@ void python_converter::get_var_assign(
         if (const symbolt *sym = symbol_table_.find_symbol(expr.identifier()))
           t = sym->type;
       }
-      if (t.id() == "symbol")
-        t = ns.follow(t);
-      return t;
+      return try_follow_symbol_type(t);
     };
 
     const typet lhs_runtime_type = lhs_symbol ? lhs_symbol->type : lhs.type();
