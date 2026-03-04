@@ -7746,12 +7746,19 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::EXPR:
     {
-      // Skip yield/yield-from expressions (generator yield points, handled by preprocessor)
-      if (
-        element.contains("value") && element["value"].contains("_type") &&
-        (element["value"]["_type"] == "Yield" ||
-         element["value"]["_type"] == "YieldFrom"))
-        break;
+      // Skip yield expressions: the preprocessor inlines them into assignments.
+      // Reject yield from: the preprocessor does not expand it, so reaching
+      // here means the generator was not fully lowered and verification would
+      // silently produce wrong results.
+      if (element.contains("value") && element["value"].contains("_type"))
+      {
+        const auto &inner_type = element["value"]["_type"];
+        if (inner_type == "Yield")
+          break;
+        if (inner_type == "YieldFrom")
+          throw std::runtime_error(
+            "'yield from' is not supported in ESBMC's Python frontend");
+      }
 
       // Function calls are handled here
       exprt empty;

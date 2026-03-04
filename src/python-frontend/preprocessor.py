@@ -437,7 +437,7 @@ class Preprocessor(ast.NodeTransformer):
                         ast.fix_missing_locations(guard)
                         loop_init = [guard] + loop_init
                     combined = loop_init + loop_yields[0][0]
-                    ip, iv, ipo, ir = loop_yields[0]
+                    iv, ipo, ir = loop_yields[0]
                     loop_yields[0] = (combined, iv, ipo, ir)
                     yields.extend(loop_yields)
                     current_pre = []
@@ -450,7 +450,7 @@ class Preprocessor(ast.NodeTransformer):
                 i += 1
             elif isinstance(stmt, ast.If):
                 if_init, if_yields = self._collect_yields(stmt.body, in_loop=in_loop)
-                else_init, else_yields = (
+                else_yields = (
                     self._collect_yields(stmt.orelse, in_loop=in_loop)
                     if stmt.orelse else ([], [])
                 )
