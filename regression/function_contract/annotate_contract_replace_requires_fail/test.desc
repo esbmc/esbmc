@@ -1,4 +1,4 @@
 CORE
 main.c
---replace-call-with-contract double_positive
+--replace-all-contracts
 ^VERIFICATION FAILED$

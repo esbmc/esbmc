@@ -388,11 +388,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        exprt alignment;
-        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+        if (process_aligned_attribute(aattr, t))
           return true;
-
-        t.set("alignment", alignment);
       }
     }
   }
@@ -476,11 +473,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        exprt alignment;
-        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+        if (process_aligned_attribute(aattr, t))
           return true;
-
-        t.set("alignment", alignment);
       }
       else
         continue;
@@ -1476,6 +1470,11 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "unsigned __intcap";
     break;
 #endif
+
+  case clang::BuiltinType::BoundMember:
+    new_type = ptrmem_typet();
+    c_type = "_ptrmem";
+    break;
 
   // Unsupported extensions (optional don't care)
   case clang::BuiltinType::BFloat16:
@@ -2849,9 +2848,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           {
             if (clang::Expr *val = lha->getValue())
             {
-              clang::Expr::EvalResult result;
-              if (val->EvaluateAsInt(result, *ASTContext))
-                unroll_count = result.Val.getInt().getZExtValue();
+              if (const auto *lit = llvm::dyn_cast<clang::IntegerLiteral>(val))
+                unroll_count = lit->getValue().getZExtValue();
+              else
+              {
+                clang::Expr::EvalResult result;
+                if (val->EvaluateAsInt(result, *ASTContext))
+                  unroll_count = result.Val.getInt().getZExtValue();
+              }
             }
           }
 
@@ -2892,26 +2896,19 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // Unsupported extensions (optional don't care)
   case clang::Stmt::BuiltinBitCastExprClass:
   {
-    const clang::BuiltinBitCastExpr &temp =
+    const clang::BuiltinBitCastExpr &cast =
       static_cast<const clang::BuiltinBitCastExpr &>(stmt);
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-    {
-      typet t;
-      if (get_type(temp.getType(), t))
-        return true;
-      auto nondet = sideeffect2tc(
-        migrate_type(t),
-        expr2tc(),
-        expr2tc(),
-        std::vector<expr2tc>(),
-        type2tc(),
-        sideeffect2t::nondet);
-      exprt expr = migrate_expr_back(nondet);
-      new_expr.swap(expr);
-      break;
-    }
+
+    typet t;
+    if (get_type(cast.getType(), t))
+      return true;
+
+    if (get_expr(*cast.getSubExpr(), new_expr))
+      return true;
+
+    gen_typecast(ns, new_expr, t);
+    break;
   }
-    [[fallthrough]];
 
   default:
   {
@@ -3995,6 +3992,28 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   return nullptr;
 }
 
+bool clang_c_convertert::process_aligned_attribute(
+  const clang::AlignedAttr &aattr,
+  typet &t) const
+{
+  unsigned alignment_bits = aattr.getAlignment(*ASTContext);
+
+  // Clang should report alignment in bits; require a non-zero multiple of `char_width`
+  // to safely convert to bytes. If this is not the case, emit a diagnostic.
+  if (alignment_bits == 0 || alignment_bits % config.ansi_c.char_width != 0)
+  {
+    log_error(
+      "unsupported or invalid aligned attribute: expected non-zero "
+      "multiple of {} bits, got {} bits",
+      config.ansi_c.char_width,
+      alignment_bits);
+    return true;
+  }
+  const unsigned alignment = alignment_bits / config.ansi_c.char_width;
+  t.set("alignment", constant_exprt(BigInt(alignment), size_type()));
+  return false;
+}
+
 bool clang_c_convertert::check_alignment_attributes(
   const clang::FieldDecl *field,
   struct_typet::componentt &comp)
@@ -4009,26 +4028,8 @@ bool clang_c_convertert::check_alignment_attributes(
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        if (aattr.isAlignmentExpr())
-        {
-          // This is usually a constant
-          clang::Expr *alignExpr = aattr.getAlignmentExpr();
-          exprt alignment;
-          if (alignExpr && get_expr(*(aattr.getAlignmentExpr()), alignment))
-            return true;
-          comp.type().set("alignment", alignment);
-        }
-        else
-        {
-          // I was not able to find an example to test this, so abort for now
-          log_error("ESBMC currently does not support type alignments");
-          std::ostringstream oss;
-          llvm::raw_os_ostream ross(oss);
-          aattr.getAlignmentType()->getType()->dump(ross, *ASTContext);
-          ross.flush();
-          log_error("{}", oss.str());
+        if (process_aligned_attribute(aattr, comp.type()))
           return true;
-        }
       }
     }
   }

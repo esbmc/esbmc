@@ -39,21 +39,6 @@ string_handler::string_handler(
 
 namespace
 {
-static bool try_extract_const_string(
-  string_handler &handler,
-  const exprt &expr,
-  std::string &out)
-{
-  exprt tmp = expr;
-  exprt str_expr = handler.ensure_null_terminated_string(tmp);
-  if (str_expr.is_symbol() || str_expr.type().is_array())
-  {
-    out = handler.extract_string_from_array_operands(str_expr);
-    return true;
-  }
-  return false;
-}
-
 static bool get_constant_int(const exprt &expr, long long &out)
 {
   if (expr.is_nil())
@@ -104,6 +89,34 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
   throw std::runtime_error("format() requires constant arguments");
 }
 } // namespace
+
+bool string_handler::try_extract_const_string_expr(
+  const exprt &expr,
+  std::string &out)
+{
+  exprt tmp = expr;
+  exprt str_expr = ensure_null_terminated_string(tmp);
+
+  if (str_expr.is_symbol())
+  {
+    const auto &sym_expr = to_symbol_expr(str_expr);
+    const symbolt *symbol =
+      symbol_table_.find_symbol(sym_expr.get_identifier());
+    if (!symbol || symbol->value.is_nil() || !symbol->value.type().is_array())
+      return false;
+
+    out = extract_string_from_array_operands(symbol->value);
+    return true;
+  }
+
+  if (str_expr.type().is_array())
+  {
+    out = extract_string_from_array_operands(str_expr);
+    return true;
+  }
+
+  return false;
+}
 
 BigInt string_handler::get_string_size(const exprt &expr)
 {
@@ -564,6 +577,8 @@ exprt string_handler::handle_string_operations(
 
 exprt string_handler::get_array_base_address(const exprt &arr)
 {
+  if (arr.type().is_pointer())
+    return arr;
   exprt index = index_exprt(arr, from_integer(0, index_type()));
   return address_of_exprt(index);
 }
@@ -881,41 +896,23 @@ exprt string_handler::handle_string_isspace(
   const exprt &str_expr,
   const locationt &location)
 {
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_isspace",
-    bool_type(),
-    {pointer_typet(char_type())},
-    location);
+  exprt string_copy = str_expr;
+  exprt str_null = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_null);
 
-  // Get the string pointer
-  exprt str_ptr = str_expr;
+  const char *isspace_str_symbol_id = "c:@F@__python_str_isspace";
+  symbolt *isspace_str_symbol =
+    symbol_table_.find_symbol(isspace_str_symbol_id);
+  if (!isspace_str_symbol)
+    throw std::runtime_error(
+      std::string(isspace_str_symbol_id) +
+      " function not found in symbol table");
 
-  if (str_expr.is_constant() && str_expr.type().is_array())
-  {
-    str_ptr = exprt("index", pointer_typet(char_type()));
-    str_ptr.copy_to_operands(str_expr);
-    str_ptr.copy_to_operands(from_integer(0, int_type()));
-  }
-  else if (str_expr.type().is_array())
-  {
-    str_ptr = exprt("address_of", pointer_typet(char_type()));
-    exprt index_expr("index", char_type());
-    index_expr.copy_to_operands(str_expr);
-    index_expr.copy_to_operands(from_integer(0, int_type()));
-    str_ptr.copy_to_operands(index_expr);
-  }
-  else if (!str_expr.type().is_pointer())
-  {
-    str_ptr = exprt("address_of", pointer_typet(char_type()));
-    str_ptr.copy_to_operands(str_expr);
-  }
-
-  // Create function call
   side_effect_expr_function_callt call;
-  call.function() = symbol_exprt(func_symbol_id, code_typet());
-  call.arguments().push_back(str_ptr);
-  call.type() = bool_type();
+  call.function() = symbol_expr(*isspace_str_symbol);
+  call.arguments().push_back(str_addr);
   call.location() = location;
+  call.type() = bool_type();
 
   return call;
 }
@@ -2025,7 +2022,7 @@ exprt string_handler::handle_string_capitalize(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("capitalize() requires constant string");
 
   if (!input.empty())
@@ -2048,7 +2045,7 @@ exprt string_handler::handle_string_title(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("title() requires constant string");
 
   bool new_word = true;
@@ -2078,7 +2075,7 @@ exprt string_handler::handle_string_swapcase(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("swapcase() requires constant string");
 
   for (char &ch : input)
@@ -2103,7 +2100,7 @@ exprt string_handler::handle_string_casefold(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("casefold() requires constant string");
 
   for (char &ch : input)
@@ -2127,8 +2124,8 @@ exprt string_handler::handle_string_count(
   std::string input;
   std::string sub;
   if (
-    !try_extract_const_string(*this, string_obj, input) ||
-    !try_extract_const_string(*this, sub_arg, sub))
+    !try_extract_const_string_expr(string_obj, input) ||
+    !try_extract_const_string_expr(sub_arg, sub))
   {
     throw std::runtime_error("count() requires constant strings");
   }
@@ -2189,8 +2186,8 @@ exprt string_handler::handle_string_removeprefix(
   std::string input;
   std::string prefix;
   if (
-    !try_extract_const_string(*this, string_obj, input) ||
-    !try_extract_const_string(*this, prefix_arg, prefix))
+    !try_extract_const_string_expr(string_obj, input) ||
+    !try_extract_const_string_expr(prefix_arg, prefix))
   {
     throw std::runtime_error("removeprefix() requires constant strings");
   }
@@ -2214,8 +2211,8 @@ exprt string_handler::handle_string_removesuffix(
   std::string input;
   std::string suffix;
   if (
-    !try_extract_const_string(*this, string_obj, input) ||
-    !try_extract_const_string(*this, suffix_arg, suffix))
+    !try_extract_const_string_expr(string_obj, input) ||
+    !try_extract_const_string_expr(suffix_arg, suffix))
   {
     throw std::runtime_error("removesuffix() requires constant strings");
   }
@@ -2241,7 +2238,7 @@ exprt string_handler::handle_string_splitlines(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("splitlines() requires constant string");
 
   std::vector<std::string> parts;
@@ -2285,7 +2282,7 @@ exprt string_handler::handle_string_format(
   const locationt &location)
 {
   std::string format_str;
-  if (!try_extract_const_string(*this, string_obj, format_str))
+  if (!try_extract_const_string_expr(string_obj, format_str))
     throw std::runtime_error("format() requires constant format string");
 
   std::vector<std::string> args;
@@ -2400,8 +2397,8 @@ exprt string_handler::handle_string_partition(
   std::string input;
   std::string sep;
   if (
-    !try_extract_const_string(*this, string_obj, input) ||
-    !try_extract_const_string(*this, sep_arg, sep))
+    !try_extract_const_string_expr(string_obj, input) ||
+    !try_extract_const_string_expr(sep_arg, sep))
   {
     throw std::runtime_error("partition() requires constant strings");
   }
@@ -2451,7 +2448,7 @@ exprt string_handler::handle_string_isalnum(
   [[maybe_unused]] const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("isalnum() requires constant string");
   if (input.empty())
     return from_integer(0, bool_type());
@@ -2469,7 +2466,7 @@ exprt string_handler::handle_string_isupper(
   [[maybe_unused]] const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("isupper() requires constant string");
   bool has_cased = false;
   for (char ch : input)
@@ -2488,7 +2485,7 @@ exprt string_handler::handle_string_isnumeric(
   [[maybe_unused]] const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("isnumeric() requires constant string");
   if (input.empty())
     return from_integer(0, bool_type());
@@ -2506,7 +2503,7 @@ exprt string_handler::handle_string_isidentifier(
   [[maybe_unused]] const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("isidentifier() requires constant string");
   if (input.empty())
     return from_integer(0, bool_type());
@@ -2530,7 +2527,7 @@ exprt string_handler::handle_string_center(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("center() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for center()");
@@ -2544,7 +2541,7 @@ exprt string_handler::handle_string_center(
   {
     std::string fill_str;
     if (
-      !try_extract_const_string(*this, fill_arg, fill_str) ||
+      !try_extract_const_string_expr(fill_arg, fill_str) ||
       fill_str.size() != 1)
     {
       throw std::runtime_error("center() fillchar must be a single character");
@@ -2574,7 +2571,7 @@ exprt string_handler::handle_string_ljust(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("ljust() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for ljust()");
@@ -2588,7 +2585,7 @@ exprt string_handler::handle_string_ljust(
   {
     std::string fill_str;
     if (
-      !try_extract_const_string(*this, fill_arg, fill_str) ||
+      !try_extract_const_string_expr(fill_arg, fill_str) ||
       fill_str.size() != 1)
     {
       throw std::runtime_error("ljust() fillchar must be a single character");
@@ -2613,7 +2610,7 @@ exprt string_handler::handle_string_rjust(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("rjust() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for rjust()");
@@ -2627,7 +2624,7 @@ exprt string_handler::handle_string_rjust(
   {
     std::string fill_str;
     if (
-      !try_extract_const_string(*this, fill_arg, fill_str) ||
+      !try_extract_const_string_expr(fill_arg, fill_str) ||
       fill_str.size() != 1)
     {
       throw std::runtime_error("rjust() fillchar must be a single character");
@@ -2651,7 +2648,7 @@ exprt string_handler::handle_string_zfill(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("zfill() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for zfill()");
@@ -2688,7 +2685,7 @@ exprt string_handler::handle_string_expandtabs(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("expandtabs() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for expandtabs()");
@@ -2734,7 +2731,7 @@ exprt string_handler::handle_string_format_map(
     throw std::runtime_error("format_map() requires one argument");
 
   std::string format_str;
-  if (!try_extract_const_string(*this, string_obj, format_str))
+  if (!try_extract_const_string_expr(string_obj, format_str))
     throw std::runtime_error("format_map() requires constant format string");
 
   const auto &mapping = call["args"][0];
@@ -3026,8 +3023,10 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list argument (the iterable to join)
   const nlohmann::json &list_arg = call_json["args"][0];
 
-  // Currently only support Name references (e.g., variable names)
-  // TODO: Support direct List literals such as " ".join(["a", "b"])
+  // Resolve the list JSON node from either a Name reference or a direct List literal
+  const nlohmann::json *list_node = nullptr;
+  nlohmann::json var_decl;
+
   if (
     list_arg.contains("_type") && list_arg["_type"] == "Name" &&
     list_arg.contains("id"))
@@ -3035,81 +3034,152 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     std::string var_name = list_arg["id"].get<std::string>();
 
     // Look up the variable in the AST to get its initialization value
-    nlohmann::json var_decl = json_utils::find_var_decl(
+    var_decl = json_utils::find_var_decl(
       var_name, converter_.get_current_func_name(), converter_.get_ast_json());
 
     if (var_decl.empty())
       throw std::runtime_error(
         "NameError: name '" + var_name + "' is not defined");
 
-    // Ensure the variable is a list with elements array
     if (!var_decl.contains("value"))
       throw std::runtime_error("join() requires a list");
 
-    const nlohmann::json &list_value = var_decl["value"];
-
-    if (
-      !list_value.contains("_type") || list_value["_type"] != "List" ||
-      !list_value.contains("elts"))
-      throw std::runtime_error("join() requires a list");
-
-    // Get the list elements from the AST
-    const auto &elements = list_value["elts"];
-
-    // Edge case: empty list returns empty string
-    if (elements.empty())
-    {
-      // Create a proper null-terminated empty string
-      typet empty_string_type = type_handler_.build_array(char_type(), 1);
-      exprt empty_str = gen_zero(empty_string_type);
-      // Explicitly set the first (and only) element to null terminator
-      empty_str.operands().at(0) = from_integer(0, char_type());
-      return empty_str;
-    }
-
-    // Convert JSON elements to ESBMC expressions
-    std::vector<exprt> elem_exprs;
-    for (const auto &elem : elements)
-    {
-      exprt elem_expr = converter_.get_expr(elem);
-      ensure_string_array(elem_expr);
-      elem_exprs.push_back(elem_expr);
-    }
-
-    // Edge case: single element returns the element itself (no separator)
-    if (elem_exprs.size() == 1)
-      return elem_exprs[0];
-
-    // Main algorithm: Build the joined string by extracting characters
-    // from all elements and separators, then constructing a single string.
-    // This avoids multiple concatenation operations which could cause
-    // null terminator issues.
-    std::vector<exprt> all_chars;
-
-    // Start with the first element
-    std::vector<exprt> first_chars =
-      string_builder_->extract_string_chars(elem_exprs[0]);
-    all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
-
-    // For each remaining element: add separator, then add element
-    for (size_t i = 1; i < elem_exprs.size(); ++i)
-    {
-      // Insert separator characters
-      std::vector<exprt> sep_chars =
-        string_builder_->extract_string_chars(separator);
-      all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
-
-      // Insert element characters
-      std::vector<exprt> elem_chars =
-        string_builder_->extract_string_chars(elem_exprs[i]);
-      all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
-    }
-
-    // Build final null-terminated string from all collected characters
-    return string_builder_->build_null_terminated_string(all_chars);
+    list_node = &var_decl["value"];
+  }
+  else if (list_arg.contains("_type") && list_arg["_type"] == "List")
+  {
+    list_node = &list_arg;
   }
 
-  throw std::runtime_error("join() argument must be a list of strings");
+  // Handle split() calls: resolve the result to a JSON List at compile time
+  nlohmann::json resolved_split_list;
+  {
+    const nlohmann::json *call_to_resolve = nullptr;
+    if (
+      list_node && list_node->contains("_type") &&
+      (*list_node)["_type"] == "Call")
+      call_to_resolve = list_node;
+    else if (
+      !list_node && list_arg.contains("_type") && list_arg["_type"] == "Call")
+      call_to_resolve = &list_arg;
+
+    if (
+      call_to_resolve && call_to_resolve->contains("func") &&
+      (*call_to_resolve)["func"].contains("_type") &&
+      (*call_to_resolve)["func"]["_type"] == "Attribute" &&
+      (*call_to_resolve)["func"].contains("attr") &&
+      (*call_to_resolve)["func"]["attr"] == "split" &&
+      (*call_to_resolve)["func"].contains("value"))
+    {
+      std::string input;
+      if (extract_constant_string(
+            (*call_to_resolve)["func"]["value"], converter_, input))
+      {
+        std::string sep;
+        if (
+          call_to_resolve->contains("args") &&
+          !(*call_to_resolve)["args"].empty())
+          extract_constant_string(
+            (*call_to_resolve)["args"][0], converter_, sep);
+
+        std::vector<std::string> parts;
+        if (sep.empty())
+        {
+          size_t i = 0;
+          while (i < input.size())
+          {
+            while (i < input.size() &&
+                   std::isspace(static_cast<unsigned char>(input[i])))
+              i++;
+            if (i >= input.size())
+              break;
+            size_t start = i;
+            while (i < input.size() &&
+                   !std::isspace(static_cast<unsigned char>(input[i])))
+              i++;
+            parts.push_back(input.substr(start, i - start));
+          }
+        }
+        else
+        {
+          size_t start = 0;
+          while (true)
+          {
+            size_t pos = input.find(sep, start);
+            if (pos == std::string::npos)
+            {
+              parts.push_back(input.substr(start));
+              break;
+            }
+            parts.push_back(input.substr(start, pos - start));
+            start = pos + sep.size();
+          }
+        }
+
+        resolved_split_list["_type"] = "List";
+        resolved_split_list["elts"] = nlohmann::json::array();
+        for (const auto &part : parts)
+        {
+          nlohmann::json elem;
+          elem["_type"] = "Constant";
+          elem["value"] = part;
+          resolved_split_list["elts"].push_back(elem);
+        }
+        list_node = &resolved_split_list;
+      }
+    }
+  }
+
+  if (
+    !list_node || !list_node->contains("_type") ||
+    (*list_node)["_type"] != "List" || !list_node->contains("elts"))
+    throw std::runtime_error("join() argument must be a list of strings");
+
+  // Get the list elements from the AST
+  const auto &elements = (*list_node)["elts"];
+
+  // Edge case: empty list returns empty string
+  if (elements.empty())
+  {
+    typet empty_string_type = type_handler_.build_array(char_type(), 1);
+    exprt empty_str = gen_zero(empty_string_type);
+    empty_str.operands().at(0) = from_integer(0, char_type());
+    return empty_str;
+  }
+
+  // Convert JSON elements to ESBMC expressions
+  std::vector<exprt> elem_exprs;
+  for (const auto &elem : elements)
+  {
+    exprt elem_expr = converter_.get_expr(elem);
+    ensure_string_array(elem_expr);
+    elem_exprs.push_back(elem_expr);
+  }
+
+  // Edge case: single element returns the element itself (no separator)
+  if (elem_exprs.size() == 1)
+    return elem_exprs[0];
+
+  // Build the joined string by extracting characters from all elements
+  // and separators, then constructing a single string.
+  std::vector<exprt> all_chars;
+
+  std::vector<exprt> first_chars =
+    string_builder_->extract_string_chars(elem_exprs[0]);
+  all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
+
+  for (size_t i = 1; i < elem_exprs.size(); ++i)
+  {
+    std::vector<exprt> sep_chars =
+      string_builder_->extract_string_chars(separator);
+    all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+
+    std::vector<exprt> elem_chars =
+      string_builder_->extract_string_chars(elem_exprs[i]);
+    all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
+  }
+
+  return string_builder_->build_null_terminated_string(all_chars);
 }
 
 exprt string_handler::create_char_comparison_expr(

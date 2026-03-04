@@ -280,14 +280,9 @@ bool clang_cpp_convertert::get_type(
       return true;
 #endif
 
-    if (mpt.isMemberFunctionPointer())
-    {
-      log_error("ESBMC currently does not support Member-Function-Pointer");
-      return true;
-    }
-
     new_type = gen_pointer_type(sub_type);
-    new_type.set("to-member", class_type);
+    if (!mpt.isMemberFunctionPointer())
+      new_type.set("to-member", class_type);
     break;
   }
 

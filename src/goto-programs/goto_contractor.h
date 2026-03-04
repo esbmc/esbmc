@@ -614,7 +614,7 @@ private:
 
   void insert_assume_at(
     goto_functiont goto_function,
-    std::_List_iterator<goto_programt::instructiont> instruction);
+    goto_programt::targett instruction);
 };
 //-----------------------------------------------------------------------------------------------------------------
 class interval_analysis_ibex_contractor

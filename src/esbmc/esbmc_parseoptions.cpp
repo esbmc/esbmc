@@ -59,8 +59,10 @@ extern "C"
 
 #ifndef _WIN32
 #  include <sys/wait.h>
-#  include <execinfo.h>
 #  include <fcntl.h>
+#  ifdef __GLIBC__
+#    include <execinfo.h>
+#  endif
 #endif
 
 #ifdef ENABLE_GOTO_CONTRACTOR
@@ -127,9 +129,11 @@ static void segfault_handler(int sig)
 {
   ::signal(sig, SIG_DFL);
   void *buffer[BT_BUF_SIZE];
+#  ifdef __GLIBC__
   int n = backtrace(buffer, BT_BUF_SIZE);
   dprintf(STDERR_FILENO, "\nSignal %d, backtrace:\n", sig);
   backtrace_symbols_fd(buffer, n, STDERR_FILENO);
+#  endif
   int fd = open("/proc/self/maps", O_RDONLY);
   if (fd != -1)
   {
@@ -2055,8 +2059,15 @@ bool esbmc_parseoptionst::process_goto_program(
     // Process function contracts if enabled
     bool has_enforce = cmdline.isset("enforce-contract");
     bool has_replace = cmdline.isset("replace-call-with-contract");
-    if (has_enforce || has_replace)
-      process_function_contracts(goto_functions, has_replace, has_enforce);
+    bool has_enforce_all = cmdline.isset("enforce-all-contracts");
+    bool has_replace_all = cmdline.isset("replace-all-contracts");
+    if (has_enforce || has_replace || has_enforce_all || has_replace_all)
+      process_function_contracts(
+        goto_functions,
+        has_replace,
+        has_enforce,
+        has_enforce_all,
+        has_replace_all);
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
@@ -2664,7 +2675,9 @@ void esbmc_parseoptionst::print_ileave_points(
 void esbmc_parseoptionst::process_function_contracts(
   goto_functionst &goto_functions,
   bool has_replace,
-  bool has_enforce)
+  bool has_enforce,
+  bool has_enforce_all,
+  bool has_replace_all)
 {
   namespacet ns(context);
   code_contractst contracts(goto_functions, context, ns);
@@ -2759,6 +2772,53 @@ void esbmc_parseoptionst::process_function_contracts(
     {
       log_status(
         "Replacing calls with contracts for {} function(s)", to_replace.size());
+      contracts.replace_calls(to_replace);
+    }
+  }
+
+  // Lambda to collect ONLY functions with __ESBMC_contract annotation
+  auto collect_annotated_contract_functions = [&contracts,
+                                               &goto_functions,
+                                               &ctx]() {
+    std::set<std::string> result;
+    forall_goto_functions (it, goto_functions)
+    {
+      if (!it->second.body_available)
+        continue;
+      std::string func_name = id2string(it->first);
+      if (func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
+        continue;
+      symbolt *func_sym = ctx.find_symbol(it->first);
+      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+        result.insert(func_name);
+    }
+    return result;
+  };
+
+  // Process --enforce-all-contracts
+  if (has_enforce_all)
+  {
+    std::set<std::string> to_enforce = collect_annotated_contract_functions();
+    if (!to_enforce.empty())
+    {
+      log_status(
+        "Enforcing annotated contracts for {} function(s)", to_enforce.size());
+      bool assume_nonnull_valid = cmdline.isset("assume-nonnull-valid");
+      std::string entry_function =
+        cmdline.isset("function") ? cmdline.getval("function") : "";
+      contracts.enforce_contracts(
+        to_enforce, assume_nonnull_valid, entry_function);
+    }
+  }
+
+  // Process --replace-all-contracts
+  if (has_replace_all)
+  {
+    std::set<std::string> to_replace = collect_annotated_contract_functions();
+    if (!to_replace.empty())
+    {
+      log_status(
+        "Replacing annotated calls for {} function(s)", to_replace.size());
       contracts.replace_calls(to_replace);
     }
   }

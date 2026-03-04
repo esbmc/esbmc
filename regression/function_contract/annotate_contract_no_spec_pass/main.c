@@ -12,7 +12,7 @@
 
 int x = 0;
 
-__attribute__((annotate("__ESBMC_contract")))
+__ESBMC_contract
 void do_something(void)
 {
     // No contract specification at all

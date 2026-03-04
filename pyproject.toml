@@ -1,0 +1,15 @@
+[project]
+name = "esbmc"
+version = "8.0.0"
+description = "ESBMC Python frontend development dependencies"
+requires-python = ">=3.10"
+dependencies = [
+    "ast2json>=0.4",
+    "mypy>=1.19.1",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.0",
+    "pytest>=8.0",
+]

@@ -42,6 +42,7 @@ class FieldDecl;
 class MemberExpr;
 class EnumConstantDecl;
 class APValue;
+class AlignedAttr;
 } // namespace clang
 
 std::string
@@ -257,6 +258,15 @@ protected:
   const clang::Decl *get_DeclContext_from_Stmt(const clang::Stmt &stmt);
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
+
+  /*
+   * Helper function to process an AlignedAttr and set the alignment on a type
+   * Arguments:
+   *   aattr: the AlignedAttr to process
+   *   t: the type to set alignment on
+   */
+  bool
+  process_aligned_attribute(const clang::AlignedAttr &aattr, typet &t) const;
 
   /*
    * add additional annotations if a class/struct/union field has alignment attribute

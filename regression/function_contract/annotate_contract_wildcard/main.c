@@ -8,7 +8,7 @@
 int counter = 0;
 int value = 0;
 
-__attribute__((annotate("__ESBMC_contract")))
+__ESBMC_contract
 void increment(void)
 {
     __ESBMC_requires(counter >= 0);
@@ -18,7 +18,7 @@ void increment(void)
     counter++;
 }
 
-__attribute__((annotate("__ESBMC_contract")))
+__ESBMC_contract
 void set_value(int v)
 {
     __ESBMC_requires(v >= 0);

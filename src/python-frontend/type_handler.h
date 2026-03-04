@@ -132,5 +132,8 @@ private:
   /// Get a normalized/canonical type for list element type inference
   typet get_canonical_string_type(const typet &t) const;
 
+  /// Resolves a Call's func node (id or Attribute) to a typet
+  typet get_typet_from_call_func(const nlohmann::json &func) const;
+
   const python_converter &converter_;
 };

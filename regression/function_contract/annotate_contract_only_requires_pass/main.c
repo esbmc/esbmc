@@ -7,7 +7,7 @@
 
 int value = 0;
 
-__attribute__((annotate("__ESBMC_contract")))
+__ESBMC_contract
 void set_positive(int x)
 {
     __ESBMC_requires(x > 0);

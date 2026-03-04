@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^TypeError\: \_\_init\_\_\(\) takes 2 positional arguments but 3 were given$

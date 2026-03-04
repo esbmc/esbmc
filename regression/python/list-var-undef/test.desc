@@ -1,4 +1,4 @@
 CORE
 main.py
-
+--incremental-bmc
 ^ERROR\: Variable \'l\' is not defined in function \'max\' at line 4.$

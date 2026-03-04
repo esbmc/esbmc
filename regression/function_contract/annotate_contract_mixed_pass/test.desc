@@ -1,4 +1,4 @@
 CORE
 main.c
---enforce-contract add --enforce-contract accumulate
+--enforce-all-contracts
 ^VERIFICATION SUCCESSFUL$

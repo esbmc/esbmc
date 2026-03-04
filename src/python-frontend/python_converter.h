@@ -28,6 +28,7 @@ class tuple_handler;
 class python_typechecking;
 class python_class_builder;
 class python_lambda;
+class python_exception_handler;
 
 /**
  * @class python_converter
@@ -96,6 +97,16 @@ public:
     return dict_handler_;
   }
 
+  python_exception_handler &get_exception_handler()
+  {
+    return *exception_handler_;
+  }
+
+  const python_exception_handler &get_exception_handler() const
+  {
+    return *exception_handler_;
+  }
+
   python_math &get_math_handler()
   {
     return math_handler_;
@@ -131,6 +142,11 @@ public:
   const std::string &python_file() const
   {
     return current_python_file;
+  }
+
+  const std::string &main_python_filename() const
+  {
+    return main_python_file;
   }
 
   const std::string &current_function_name() const
@@ -214,6 +230,7 @@ private:
   friend class python_class_builder;
   friend class python_dict_handler;
   friend class python_set;
+  friend class python_exception_handler;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -257,8 +274,6 @@ private:
   exprt get_function_constant_return(const exprt &func_value);
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
-
-  symbolt create_assert_temp_variable(const locationt &location);
 
   exprt get_lambda_expr(const nlohmann::json &element);
 
@@ -432,48 +447,6 @@ private:
   get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
 
   // =========================================================================
-  // Assertion helper methods
-  // =========================================================================
-
-  /**
-   * @brief Handles assertions on list expressions.
-   *
-   * In Python, empty lists are falsy, so `assert []` should fail.
-   * This method converts `assert list_var` to `assert len(list_var) > 0`
-   * by calling __ESBMC_list_size and checking the result.
-   *
-   * @param element The assertion AST node.
-   * @param test The test expression (a list or list-returning function call).
-   * @param block The code block to add generated statements to.
-   * @param attach_assert_message Lambda to attach user assertion messages.
-   */
-  void handle_list_assertion(
-    const nlohmann::json &element,
-    const exprt &test,
-    code_blockt &block,
-    const std::function<void(code_assertt &)> &attach_assert_message);
-
-  /**
-   * @brief Handles assertions on function call expressions.
-   *
-   * Materializes function calls in assertions.
-   * For None-returning functions, executes the call and asserts False.
-   * For other functions, stores result in temp var and asserts on that.
-   *
-   * @param element The assertion AST node.
-   * @param func_call_expr The function call expression to assert on.
-   * @param is_negated Whether the assertion is negated (assert not func()).
-   * @param block The code block to add generated statements to.
-   * @param attach_assert_message Lambda to attach user assertion messages.
-   */
-  void handle_function_call_assertion(
-    const nlohmann::json &element,
-    const exprt &func_call_expr,
-    bool is_negated,
-    code_blockt &block,
-    const std::function<void(code_assertt &)> &attach_assert_message);
-
-  // =========================================================================
   // Helper methods for get_var_assign
   // =========================================================================
 
@@ -645,6 +618,27 @@ private:
   // =========================================================================
 
   /**
+   * @brief Handles type identity checks (value is type_identifier).
+   *
+   * Handles identity checks involving Python type objects.
+   * Type objects are singletons, so identity comparisons between
+   * type objects can be resolved by comparing their identifiers.
+   *
+   * @param op The operator string ("Is" or "IsNot").
+   * @param lhs The left operand expression.
+   * @param rhs The right operand expression.
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @return Boolean result expression, or nil_exprt if not a type identity check.
+   */
+  exprt handle_type_identity_check(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
    * @param rhs Right operand expression (may be modified).
@@ -809,8 +803,37 @@ private:
   /// Wrap values in Optional
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
 
+  // =========================================================================
+  // Enum support helpers
+  // =========================================================================
+
+  /// Build a struct expression for an enum member (e.g. TrafficLight.GREEN)
+  /// so that it carries the enum class type rather than a raw int.
+  exprt make_enum_member_struct_expr(
+    const symbolt &int_sym,
+    const std::string &class_name,
+    const std::string &member_name);
+
   /// Handle Optional value access
   exprt unwrap_optional_if_needed(const exprt &expr);
+
+  // =========================================================================
+  // Dunder method dispatch for user-defined struct types
+  // =========================================================================
+
+  static std::string op_to_dunder(const std::string &op);
+  symbolt *find_dunder_method(
+    const std::string &class_name,
+    const std::string &dunder_name);
+  exprt dispatch_dunder_operator(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const locationt &loc);
+  exprt dispatch_unary_dunder_operator(
+    const std::string &op,
+    exprt &operand,
+    const locationt &loc);
 
   // =========================================================================
   // Member variables
@@ -825,6 +848,7 @@ private:
 
   namespacet ns;
   typet current_element_type;
+  typet current_func_return_type_;
   std::string main_python_file;
   std::string current_python_file;
   nlohmann::json imported_module_json;
@@ -838,6 +862,7 @@ private:
   python_dict_handler *dict_handler_;
   python_typechecking *typechecker_ = nullptr;
   python_lambda *lambda_handler_;
+  python_exception_handler *exception_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;

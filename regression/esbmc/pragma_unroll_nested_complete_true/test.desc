@@ -1,4 +1,6 @@
 CORE
 main.c
 --no-unwinding-assertions
+^Applying #pragma unroll 3 to loop
+^Applying #pragma unroll 5 to loop
 ^VERIFICATION SUCCESSFUL$

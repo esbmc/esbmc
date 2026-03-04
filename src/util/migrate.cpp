@@ -576,9 +576,12 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     // Check that at_pos and exm_pos are valid before using them
     if (at_pos == std::string::npos || exm_pos == std::string::npos)
     {
-      // Invalid symbol identifier - missing required delimiters
-      // Return a level0 symbol as fallback
-      return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
+      log_warning(
+        "migrate_expr: symbol '{}' missing renaming delimiters, "
+        "treating as level0 with base name '{}'",
+        init,
+        thename);
+      return symbol2tc(type, thename, symbol2t::level0, 0, 0, 0, 0);
     }
 
     std::string atstr = thestr.substr(at_pos + 1, exm_pos - at_pos - 1);

@@ -1,0 +1,4 @@
+CORE
+main.py
+--function starred_unpack --incremental-bmc
+^VERIFICATION SUCCESSFUL$

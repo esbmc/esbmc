@@ -136,7 +136,12 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Data Structures**: Supports operations on Python's built-in data structures, including lists, strings, and tuples, with features such as concatenation and bounds checks.
   - **List Operations**:
     - **append()**: Add elements to the end of a list.
+    - **clear()**: Remove all elements from the list (e.g., `my_list.clear()` empties the list).
+    - **pop()**: Remove and return an element at a given index (default is the last element).
+    - **remove()**: Remove the first occurrence of a value from the list (e.g., `l.remove(x)`).
+    - **copy()**: Return a shallow copy of the list (e.g., `new_list = old_list.copy()`).
     - **extend()**: Extends a list by appending all elements from an iterable (e.g., `list1.extend(list2)` or `list1.extend([3, 4, 5])`).
+    - **reverse()**: Reverse the elements of a list in place.
     - **insert()**: Insert elements at a specific index position.
       - When the index equals the list length, the element is appended to the end.
       - When the index exceeds the list length, the element is appended to the end.
@@ -208,6 +213,18 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **Tuple Equality**: Supports equality comparisons between tuples (e.g., `t1 == (1, 2, 3)`).
     - **len() Function**: The built-in `len()` function works with tuples to return the number of elements.
     - **isinstance() Type Checking**: Supports runtime type checking with `isinstance(obj, tuple)`.
+  - **Dictionary Operations**: Supports Python's built-in `dict` type with the following operations:
+    - **Literals**: Creates dictionaries from literal syntax (e.g., `d = {"a": 1, "b": 2}`).
+    - **Subscript access**: Retrieves values by key (e.g., `d["a"]`); raises `KeyError` if the key is absent.
+    - **Subscript assignment**: Inserts or updates a key-value pair (e.g., `d["c"] = 3`).
+    - **Membership testing (`in` / `not in`)**: Checks whether a key exists (e.g., `"a" in d`).
+    - **Key deletion (`del`)**: Removes a key-value pair (e.g., `del d["a"]`); raises `KeyError` if absent.
+    - **Equality comparison**: Compares two dictionaries for equal content regardless of insertion order (e.g., `d1 == d2`).
+    - **Iteration**: Supports `for` loops over `d.keys()`, `d.values()`, and `d.items()`.
+    - **update()**: Merges another dictionary into the current one (e.g., `d.update({"x": 9})`).
+    - **get()**: Returns the value for a key, or a default if the key is absent (e.g., `d.get("a", 0)`).
+    - **setdefault()**: Returns the value for a key if present; otherwise inserts the key with the given default and returns it (e.g., `d.setdefault("d", 4)`). Supports `int`, `float`, `bool`, and `str` value types.
+    - **Nested dictionaries**: Supports dicts whose values are themselves dicts (e.g., `dict[int, dict[int, int]]`).
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
 ### Error Handling and Assertions
@@ -266,6 +283,16 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **math.ceil(x)**: Returns the smallest integer greater than or equal to x.
   - Both functions `math.floor(x)` and `math.ceil(x)` include built-in assertions to reject infinity and NaN inputs.
   - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions.
+- **Constants**: `math.pi`, `math.e`, `math.inf`, `math.tau`, `math.nan`.
+- **Trigonometric**: `math.sin`, `math.cos`, `math.tan`, `math.asin`, `math.acos`, `math.atan`, `math.atan2`.
+- **Exponential/Logarithmic**: `math.exp`, `math.expm1`, `math.log`, `math.log1p`, `math.log2`, `math.log10`, `math.exp2`, `math.pow`.
+- **Hyperbolic**: `math.sinh`, `math.cosh`, `math.tanh`, `math.asinh`, `math.acosh`, `math.atanh`.
+- **Integer/Helpers**: `math.factorial`, `math.gcd`, `math.lcm`, `math.isqrt`, `math.perm`, `math.prod`, `math.isclose`.
+  - `math.prod` currently expects `list[int]` inputs in the frontend model.
+- **Geometry**: `math.hypot`, `math.dist`.
+  - `math.dist` currently expects `list[float]` inputs (not tuples) in the frontend model.
+- **Rounding/Abs**: `math.fabs`, `math.trunc`, `math.modf`.
+- **Other**: `math.fmod`, `math.copysign`, `math.degrees`, `math.radians`, `math.isfinite`.
 
 ### Regular Expression (re) Module Support
 ESBMC-Python provides operational modeling and verification capabilities for Python's re module, enabling pattern-matching verification:
@@ -326,6 +353,7 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
 ### Special Value Detection:
 - **math.isnan(x)**: Returns True if x is NaN (Not a Number).
 - **math.isinf(x)**: Returns True if x is positive or negative infinity.
+- **math.isfinite(x)**: Returns True if x is not NaN and not infinity.
 - Both functions use ESBMC's internal operations for accurate verification according to the IEEE-754 standard.
 
 ### Exception Handling
@@ -334,6 +362,7 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
 - **Multiple Exception Handlers**: Supports multiple except clauses to handle different exception types.
 - **Exception Catching**: Supports catching exceptions with variable binding using except ExceptionType as variable syntax.
   - **Improved Variable Scope Handling**: Exception variables are declared and scoped within their catch blocks, ensuring correct symbol table management during verification.
+- **ImportError Handling**: Imports guarded by try/except ImportError are handled statically.
 - **Exception Hierarchy**: Implements Python's exception hierarchy where all exceptions inherit from BaseException.
 - **Built-in Exception Classes**:
   - **BaseException**: Base class for all exceptions.
@@ -344,6 +373,7 @@ ESBMC-Python provides modeling and verification capabilities for Python's os mod
   - **IndexError**: Raised for sequence index out of range.
   - **KeyError**: Raised for missing dictionary keys.
   - **ZeroDivisionError**: Raised for division by zero operations.
+  - **ImportError**: Raised when a module cannot be found or imported.
   - **OSError**: Base class for I/O related errors.
   - **FileNotFoundError**: Raised when a file or directory is not found (inherits from OSError).
   - **FileExistsError**: Raised when trying to create a file or directory that already exists (inherits from OSError).
@@ -376,9 +406,9 @@ ESBMC-Python provides an optional strict type-checking mode that enforces type c
 The current version of ESBMC-Python has the following limitations:
 
 - Only `for` loops using the `range()` function are supported.
-- List and String support are partial and limited in functionality. Currently supported list methods include `append()` and `insert()`.
+- List and String support are partial and limited in functionality. Currently supported list methods include `append()`, `extend()`, `insert()`, `clear()`, `pop()`, `remove()`, and `copy()`.
 - String slicing does not support step values (e.g., string[::2] for every second character is not supported).
-- Dictionaries are not supported at all.
+- Dictionary support is partial: the supported operations are literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, and `setdefault()`. Other methods (e.g., `pop()`, `copy()`, `popitem()`) are not yet implemented.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
 - `any()` currently supports only list literals as arguments and does not support other iterable types.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).

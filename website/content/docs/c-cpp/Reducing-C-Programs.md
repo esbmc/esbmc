@@ -16,19 +16,19 @@ The usual structure for you to run c-reduce is:
 
 # Generating a preprocessed file
 
-To generate a `.i` from a `.c` file you should use the same compiler used by the language frontend i.e Clang 11
+To generate a `.i` from a `.c` file, you should use the same compiler used by the language frontend, i.e., Clang 11
 
 `clang -E main.c > main.i`
 
 # Creating the script for c-reduce
 
-You have to create a script that makes an exit core 0 if the failure that you want has happened. Examples at the Cookbook section
+You have to create a script that exits with core 0 if the failure you want occurs. Examples in the Cookbook section
 
 # Running
 
-1. Ensure that `test.sh` have execution permission: `chmod +x test.sh`
-1. Check if `esbmc` in on the path: `esbmc --help`
-1. Based on your specs you should define the number of threads for creduce. In general 9 is a good value
+1. Ensure that `test.sh` has execution permission: `chmod +x test.sh`
+1. Check if `esbmc` is in the path: `esbmc --help.`
+1. Based on your spec,s you should define the number of threads for creduce. In general, 9 is a good value
 
 Then run:
 
@@ -40,7 +40,7 @@ The original file will be saved as `main.i.orig` and after finishing the file `m
 
 Here are some scripts for common issues:
 
-## Segmentation Fault, Abort and similar issues
+## Segmentation Fault, Abort, and similar issues
 
 You can get the result value of esbmc (`$?`) and wrap it into an `if` statement
 
@@ -58,7 +58,7 @@ exit 1
 ## When ESBMC throws a message but exits normally
 
 This example would check if the output contains the statement `Unexpected side-effect statement`.
-It is using the `goto-functions-only` parameter which can be replaced.
+It is using the `goto-functions-only` parameter, which can be replaced.
 
 ```bash
 #!/bin/bash
@@ -68,7 +68,7 @@ grep 'Unexpected side-effect statement' esbmc_out.txt >/dev/null 2>&1
 
 ## When ESBMC fails but other tools find the result correctly
 
-In this example ESBMC output contains `VERIFICATION SUCCESFUL` and the other tool `Verification result: FALSE`. You can replace this at will
+In this example, ESBMC output contains `VERIFICATION SUCCESSFUL` and the other tool `Verification result: FALSE`. You can replace this at will
 
 ```bash
 #!/bin/bash

@@ -1,4 +1,4 @@
 CORE
 main.c
---enforce-contract get_positive
+--enforce-all-contracts
 ^VERIFICATION SUCCESSFUL$

@@ -1,4 +1,4 @@
 CORE
 ex.py
-
+--incremental-bmc
 ^VERIFICATION SUCCESSFUL$

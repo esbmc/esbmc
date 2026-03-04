@@ -1,5 +1,6 @@
 # The ESBMC model checker
 
+[![Zulip](https://img.shields.io/badge/social_chat-zulip-blue?logo=zulip)](https://systemsandsoftwaresecurity.zulipchat.com/#narrow/channel/575165-esbmc)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 [![GitHub All Releases](https://img.shields.io/github/downloads/esbmc/esbmc/total.svg)](https://github.com/esbmc/esbmc/releases)
@@ -269,6 +270,10 @@ ESBMC is open-source software mainly distributed under the Apache License 2.0. I
 We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). Please file a pull request against the public GitHub repo if you'd like to submit anything. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
 
 Please review the [developer documentation](https://esbmc.github.io/blob/master/CONTRIBUTIONS.md) if you want to contribute to ESBMC.
+
+## Claude Code Plugin
+
+A [Claude Code](https://docs.anthropic.com/claude-code) plugin for ESBMC is available at [esbmc/agent-marketplace](https://github.com/esbmc/agent-marketplace). It provides `/verify` and `/audit` commands, a verification skill, reference documentation, and examples for using ESBMC within Claude Code.
 
 ## Differences from CBMC
 

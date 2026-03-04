@@ -697,9 +697,9 @@ void goto_convertt::do_function_call_symbol(
         first_arg.is_zero() ||
         (first_arg.id() == "constant" && first_arg.get("value") == "0"))
       {
-        log_debug(
-          "builtin_functions",
-          "__ESBMC_assigns(0) - pure function (no side effects)");
+      log_debug(
+        "builtin_functions",
+        "__ESBMC_assigns(0) - pure function (no side effects)");
 
         // Generate a special marker to indicate explicit empty assigns
         goto_programt::targett t = dest.add_instruction(ASSERT);
@@ -761,12 +761,9 @@ void goto_convertt::do_function_call_symbol(
       assigns_expr.copy_to_operands(actual_arg);
       assigns_expr.location() = function.location();
 
-      // Create a temporary symbol expression as LHS
-      // The name doesn't matter - we only care about the sideeffect on RHS
-      irep_idt tmp_name = "assigns_target$tmp$" + std::to_string(i);
-      symbol_exprt tmp_lhs(tmp_name, actual_arg.type());
+      symbolt &tmp_sym = new_tmp_symbol(actual_arg.type());
+      symbol_exprt tmp_lhs(tmp_sym.name, actual_arg.type());
 
-      // Generate assignment: tmp = assigns_target(expr)
       code_assignt assignment(tmp_lhs, assigns_expr);
       assignment.location() = function.location();
       copy(assignment, ASSIGN, dest);

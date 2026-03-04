@@ -181,6 +181,54 @@ BMC program time: 0.040s
 VERIFICATION SUCCESSFUL
 ```
 
+## Verification of Python Programs
+
+As an illustrative example to show some of the ESBMC features concerning Python programs, consider the following Python code:
+
+```Python
+def divide(a: int, b: int) -> int:
+    assert b != 0
+    return a // b
+
+def main():
+    a: int = nondet_int()
+    b: int = nondet_int()
+
+    __ESBMC_assume(b != 0)
+    result: int = divide(a, b)
+    assert result == a // b
+
+main()
+```
+
+Here, ESBMC is invoked as follows:
+
+```sh
+esbmc file.py
+```
+
+where `file.py` is the Python program to be checked. ESBMC's Python front-end parses the source into an abstract syntax tree, annotates it with type information, and translates it into an intermediate representation that the standard ESBMC back-end can process via SMT solvers. For this particular Python program, ESBMC produces the following verification result:
+
+```
+Converting
+Generating GOTO Program
+GOTO program creation time: 1.216s
+GOTO program processing time: 0.025s
+Starting Bounded Model Checking
+Symex completed in: 0.003s (63 assignments)
+Caching time: 0.000s (removed 1 assertions)
+Slicing time: 0.000s (removed 53 assignments)
+Generated 4 VCC(s), 3 remaining after simplification (9 assignments)
+No solver specified; defaulting to z3
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Z3 v4.15.4
+Runtime decision procedure: 0.001s
+BMC program time: 0.016s
+
+VERIFICATION SUCCESSFUL
+```
+
 ## Using the SMT Boolector Solver
 
 Boolector is a fast solver and is recommended. To install Boolector, use the following one-line command:

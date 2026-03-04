@@ -1296,11 +1296,13 @@ void goto_symext::intrinsic_get_thread_id(
   statet &state = art.get_cur_state().get_active_state();
 
   unsigned int thread_id = art.get_cur_state().get_active_state_number();
-  expr2tc tid = constant_int2tc(call.ret->type, BigInt(thread_id));
 
-  state.value_set.assign(call.ret, tid);
-
-  symex_assign(code_assign2tc(call.ret, tid), true);
+  if (!is_nil_expr(call.ret))
+  {
+    expr2tc tid = constant_int2tc(call.ret->type, BigInt(thread_id));
+    state.value_set.assign(call.ret, tid);
+    symex_assign(code_assign2tc(call.ret, tid), true);
+  }
 }
 
 void goto_symext::intrinsic_set_thread_data(
@@ -1321,7 +1323,8 @@ void goto_symext::intrinsic_set_thread_data(
 
   if (!is_constant_int2t(threadid))
   {
-    log_error("__ESBMC_set_start_data received nonconstant thread id");
+    log_error(
+      "__ESBMC_set_thread_internal_data received nonconstant thread id");
     abort();
   }
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
@@ -1342,17 +1345,21 @@ void goto_symext::intrinsic_get_thread_data(
 
   if (!is_constant_int2t(threadid))
   {
-    log_error("__ESBMC_get_start_data received nonconstant thread id");
+    log_error(
+      "__ESBMC_get_thread_internal_data received nonconstant thread id");
     abort();
   }
 
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
-  assert(base_type_eq(call.ret->type, startdata->type, ns));
+  if (!is_nil_expr(call.ret))
+  {
+    assert(base_type_eq(call.ret->type, startdata->type, ns));
 
-  state.value_set.assign(call.ret, startdata);
-  symex_assign(code_assign2tc(call.ret, startdata), true);
+    state.value_set.assign(call.ret, startdata);
+    symex_assign(code_assign2tc(call.ret, startdata), true);
+  }
 }
 
 void goto_symext::intrinsic_spawn_thread(
@@ -1417,37 +1424,6 @@ void goto_symext::intrinsic_terminate_thread(reachability_treet &art)
   art.get_cur_state().end_thread();
   // No need to force a context switch; an ended thread will cause the run to
   // end and the switcher to be invoked.
-}
-
-void goto_symext::intrinsic_get_thread_state(
-  const code_function_call2t &call,
-  reachability_treet &art)
-{
-  statet &state = art.get_cur_state().get_active_state();
-  expr2tc threadid = call.operands[0];
-  state.level2.rename(threadid);
-
-  while (is_typecast2t(threadid))
-    threadid = to_typecast2t(threadid).from;
-
-  if (!is_constant_int2t(threadid))
-  {
-    log_error("__ESBMC_get_thread_state received nonconstant thread id");
-    abort();
-  }
-
-  unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
-  // Possibly we should handle this error; but meh.
-  assert(art.get_cur_state().threads_state.size() >= tid);
-
-  // Thread state is simply whether the thread is ended or not.
-  unsigned int flags =
-    (art.get_cur_state().threads_state[tid].thread_ended) ? 1 : 0;
-
-  // Reuse threadid
-  expr2tc flag_expr =
-    constant_int2tc(get_uint_type(config.ansi_c.int_width), flags);
-  symex_assign(code_assign2tc(call.ret, flag_expr), true);
 }
 
 void goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
@@ -2234,8 +2210,11 @@ void goto_symext::intrinsic_memcpy(
   }
 
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
+  }
 }
 
 /**
@@ -2466,8 +2445,11 @@ void goto_symext::intrinsic_memset(
   }
 
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
+  }
 }
 
 void goto_symext::intrinsic_builtin_object_size(
@@ -2620,11 +2602,14 @@ void goto_symext::intrinsic_builtin_object_size(
   }
 
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(
-    code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
-    false,
-    cur_state->guard);
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(
+      code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
+      false,
+      cur_state->guard);
+  }
 }
 
 void goto_symext::intrinsic_get_object_size(
@@ -2644,11 +2629,14 @@ void goto_symext::intrinsic_get_object_size(
     to_array_type(internal_deref_items.front().object->type).array_size;
 
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(
-    code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
-    false,
-    cur_state->guard);
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(
+      code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
+      false,
+      cur_state->guard);
+  }
 }
 
 void goto_symext::bump_call(
@@ -2719,15 +2707,16 @@ bool goto_symext::run_builtin(
       abort();
     }
 
+    // Perform overflow check and assign it to the return object
+    if (!is_nil_expr(func_call.ret))
+      symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
+
     // Assign result of the two arguments to the dereferenced third argument
     symex_assign(code_assign2tc(
       dereference2tc(
         to_pointer_type(func_call.operands[2]->type).subtype,
         func_call.operands[2]),
       op));
-
-    // Perform overflow check and assign it to the return object
-    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
 
     return true;
   }
@@ -2736,9 +2725,10 @@ bool goto_symext::run_builtin(
   {
     expr2tc op1 = func_call.operands[0];
     cur_state->rename(op1);
-    symex_assign(code_assign2tc(
-      func_call.ret,
-      is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
+    if (!is_nil_expr(func_call.ret))
+      symex_assign(code_assign2tc(
+        func_call.ret,
+        is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
     return true;
   }
 
@@ -3049,5 +3039,31 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
 
     // Handle non-None comparisons
     expr = gen_true_expr();
+  }
+}
+
+void goto_symext::volatile_check(expr2tc &expr)
+{
+  if (!options.get_bool_option("volatile-check"))
+    return;
+
+  if (is_symbol2t(expr))
+  {
+    const symbol2t &s = to_symbol2t(expr);
+    const symbolt *sym = new_context.find_symbol(s.thename);
+    if (sym && sym->type.cmt_volatile())
+    {
+      log_debug("volatile check", "variable: {}", sym->name.as_string());
+      unsigned int &nondet_count = get_nondet_counter();
+      expr = symbol2tc(
+        expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
+    }
+  }
+  else
+  {
+    expr->Foreach_operand([this](expr2tc &e) {
+      if (!is_nil_expr(e))
+        volatile_check(e);
+    });
   }
 }
