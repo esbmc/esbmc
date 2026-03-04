@@ -697,9 +697,9 @@ void goto_convertt::do_function_call_symbol(
         first_arg.is_zero() ||
         (first_arg.id() == "constant" && first_arg.get("value") == "0"))
       {
-      log_debug(
-        "builtin_functions",
-        "__ESBMC_assigns(0) - pure function (no side effects)");
+        log_debug(
+          "builtin_functions",
+          "__ESBMC_assigns(0) - pure function (no side effects)");
 
         // Generate a special marker to indicate explicit empty assigns
         goto_programt::targett t = dest.add_instruction(ASSERT);

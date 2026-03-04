@@ -104,8 +104,10 @@ public:
   /// that require aliasing disjunctions.
   struct classified_assignst
   {
-    std::vector<expr2tc> direct_targets;  ///< Non-pointer targets matched structurally
-    std::vector<expr2tc> pointer_targets; ///< Pointer-typed targets from *ptr pattern
+    std::vector<expr2tc>
+      direct_targets; ///< Non-pointer targets matched structurally
+    std::vector<expr2tc>
+      pointer_targets; ///< Pointer-typed targets from *ptr pattern
   };
 
   /// \brief Classify assigns targets into direct and pointer categories.

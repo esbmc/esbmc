@@ -49,8 +49,7 @@ void frame_enforcert::materialize_snapshots(
   }
 }
 
-frame_enforcert::classified_assignst
-frame_enforcert::classify_assigns_targets(
+frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
   const std::vector<expr2tc> &explicit_assigns)
 {
   classified_assignst result;
