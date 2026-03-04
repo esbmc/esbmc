@@ -319,6 +319,10 @@ class Preprocessor(ast.NodeTransformer):
                 self.template = template
 
             def visit_Expr(self, stmt):
+                if isinstance(stmt.value, ast.YieldFrom):
+                    raise NotImplementedError(
+                        "yield from inside a generator is not supported by the ESBMC inliner"
+                    )
                 if not isinstance(stmt.value, ast.Yield):
                     return stmt
                 yield_val = stmt.value.value
@@ -337,12 +341,17 @@ class Preprocessor(ast.NodeTransformer):
         inlined = copy.deepcopy(body_stmts)
         replacer = _YieldReplacer(target_name, for_body, node)
         result = []
-        for stmt in inlined:
-            out = replacer.visit(stmt)
-            if isinstance(out, list):
-                result.extend(out)
-            elif out is not None:
-                result.append(out)
+        try:
+            for stmt in inlined:
+                out = replacer.visit(stmt)
+                if isinstance(out, list):
+                    result.extend(out)
+                elif out is not None:
+                    result.append(out)
+        except NotImplementedError as e:
+            import sys
+            print(f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr)
+            return None
 
         for stmt in result:
             self.ensure_all_locations(stmt, node)
@@ -370,15 +379,33 @@ class Preprocessor(ast.NodeTransformer):
 
         Returns (outer_init, yields) where:
           outer_init : top-level statements before the first yield/loop-with-yield
-                       (generator initialisation — emitted once per generator var).
+                       (generator initialisation -- emitted once per generator var).
           yields     : list of (pre_stmts, yield_val, post_stmts, is_repeating)
-            pre_stmts : statements inside the innermost scope before this yield
-                        (e.g. `k = rand1[0]` inside the while body)
-            yield_val : the yielded expression
+            pre_stmts : statements inside the innermost scope before this yield.
+                        For while-loop yields the first item is a guard:
+                        `if not (loop_cond): raise StopIteration`
+            yield_val : the yielded expression (may be an IfExp ternary for if/else)
             post_stmts: statements after this yield until the next yield
                         (e.g. `i += 1` after `yield i`)
             is_repeating: True when the yield is inside a loop
         """
+        import copy
+
+        def _has_yield(node):
+            return any(isinstance(n, (ast.Yield, ast.YieldFrom))
+                       for n in ast.walk(node))
+
+        def _collect_post(stmts, start):
+            """Collect stmts[start:] until a yield-containing statement."""
+            post = []
+            j = start
+            while j < len(stmts):
+                if _has_yield(stmts[j]):
+                    break
+                post.append(stmts[j])
+                j += 1
+            return post, j
+
         outer_init = []
         yields = []
         current_pre = []
@@ -387,14 +414,7 @@ class Preprocessor(ast.NodeTransformer):
         while i < len(stmts):
             stmt = stmts[i]
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Yield):
-                # collect post: stmts after yield until next yield in same scope
-                post = []
-                j = i + 1
-                while j < len(stmts):
-                    if isinstance(stmts[j], ast.Expr) and isinstance(stmts[j].value, ast.Yield):
-                        break
-                    post.append(stmts[j])
-                    j += 1
+                post, j = _collect_post(stmts, i + 1)
                 yields.append((current_pre[:], stmt.value.value, post, in_loop))
                 current_pre = []
                 found_yield = True
@@ -402,9 +422,22 @@ class Preprocessor(ast.NodeTransformer):
             elif isinstance(stmt, (ast.While, ast.For)):
                 loop_init, loop_yields = self._collect_yields(stmt.body, in_loop=True)
                 if loop_yields:
-                    # Merge loop_init (stmts before yield inside loop) into first yield's pre
+                    # For while loops, prepend a guard so _inline_next_call raises
+                    # StopIteration when the loop condition becomes false.
+                    if isinstance(stmt, ast.While):
+                        guard = ast.If(
+                            test=ast.UnaryOp(
+                                op=ast.Not(),
+                                operand=copy.deepcopy(stmt.test)
+                            ),
+                            body=[self._make_stop_iteration_raise(stmt)],
+                            orelse=[]
+                        )
+                        self.ensure_all_locations(guard, stmt)
+                        ast.fix_missing_locations(guard)
+                        loop_init = [guard] + loop_init
                     combined = loop_init + loop_yields[0][0]
-                    iv, ipo, ir = loop_yields[0]
+                    ip, iv, ipo, ir = loop_yields[0]
                     loop_yields[0] = (combined, iv, ipo, ir)
                     yields.extend(loop_yields)
                     current_pre = []
@@ -417,19 +450,43 @@ class Preprocessor(ast.NodeTransformer):
                 i += 1
             elif isinstance(stmt, ast.If):
                 if_init, if_yields = self._collect_yields(stmt.body, in_loop=in_loop)
-                if if_yields:
+                else_init, else_yields = (
+                    self._collect_yields(stmt.orelse, in_loop=in_loop)
+                    if stmt.orelse else ([], [])
+                )
+                if if_yields and else_yields:
+                    # Both branches yield -> combine into a ternary yield value
+                    # and capture post_stmts from the outer scope.
+                    _, if_val, _, _ = if_yields[0]
+                    _, else_val, _, _ = else_yields[0]
+                    ternary_val = ast.IfExp(
+                        test=copy.deepcopy(stmt.test),
+                        body=copy.deepcopy(if_val),
+                        orelse=copy.deepcopy(else_val)
+                    )
+                    self.ensure_all_locations(ternary_val, stmt)
+                    ast.fix_missing_locations(ternary_val)
+                    post, j = _collect_post(stmts, i + 1)
+                    yields.append((current_pre[:], ternary_val, post, in_loop))
+                    current_pre = []
+                    found_yield = True
+                    i = j
+                elif if_yields:
+                    # Only if-branch yields; also grab outer post_stmts.
                     combined = if_init + if_yields[0][0]
                     ip, iv, ipo, ir = if_yields[0]
-                    if_yields[0] = (combined, iv, ipo, ir)
+                    post, j = _collect_post(stmts, i + 1)
+                    if_yields[0] = (combined, iv, ipo + post, ir)
                     yields.extend(if_yields)
                     current_pre = []
                     found_yield = True
+                    i = j
                 else:
                     if not found_yield:
                         outer_init.append(stmt)
                     else:
                         current_pre.append(stmt)
-                i += 1
+                    i += 1
             else:
                 if not found_yield:
                     outer_init.append(stmt)
@@ -1276,9 +1333,14 @@ class Preprocessor(ast.NodeTransformer):
         self.current_start_var = old_start_var
 
         # Assign loop variable = range counter at the start of each iteration.
-        loop_var_init = ast.Assign(
-            targets=[ast.Name(id=node.target.id, ctx=ast.Store())],
-            value=ast.Name(id=start_var, ctx=ast.Load())
+        # Use AnnAssign with 'int' so the annotation system knows the type;
+        # range() always yields integers.  A plain Assign leaves the loop var
+        # unannotated, causing pointer-type mismatches in arithmetic operations.
+        loop_var_init = ast.AnnAssign(
+            target=ast.Name(id=node.target.id, ctx=ast.Store()),
+            annotation=ast.Name(id='int', ctx=ast.Load()),
+            value=ast.Name(id=start_var, ctx=ast.Load()),
+            simple=1
         )
         self.ensure_all_locations(loop_var_init, node)
         ast.fix_missing_locations(loop_var_init)
