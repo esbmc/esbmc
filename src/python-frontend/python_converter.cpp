@@ -4878,7 +4878,8 @@ void python_converter::handle_function_call_rhs(
           if (
             returns.is_object() && returns.contains("_type") &&
             returns["_type"] == "Subscript" && returns.contains("value") &&
-            returns["value"].is_object() && returns["value"].contains("id"))
+            returns["value"].is_object() && returns["value"].contains("id") &&
+            returns["value"]["id"].is_string())
           {
             const std::string val_id =
               returns["value"]["id"].get<std::string>();
