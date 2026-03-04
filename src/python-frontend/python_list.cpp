@@ -2494,6 +2494,30 @@ exprt python_list::build_extend_list_call(
 
   exprt actual_list = other_list;
 
+  if (actual_list.is_code() && actual_list.is_function_call())
+  {
+    const code_function_callt &call_expr =
+      to_code_function_call(to_code(actual_list));
+
+    const typet list_type = converter_.get_type_handler().get_list_type();
+
+    symbolt &tmp_list =
+      converter_.create_tmp_symbol(op, "$extend_list$", list_type, exprt());
+    code_declt tmp_decl(symbol_expr(tmp_list));
+    tmp_decl.location() = location;
+    converter_.add_instruction(tmp_decl);
+
+    code_function_callt func_call;
+    func_call.function() = call_expr.function();
+    func_call.arguments() = call_expr.arguments();
+    func_call.lhs() = symbol_expr(tmp_list);
+    func_call.type() = list_type;
+    func_call.location() = location;
+    converter_.add_instruction(func_call);
+
+    actual_list = symbol_expr(tmp_list);
+  }
+
   // Check if other_list is a string (array or pointer to char)
   if (
     (other_list.type().is_array() &&

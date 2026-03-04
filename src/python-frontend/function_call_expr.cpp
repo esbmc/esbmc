@@ -1999,11 +1999,29 @@ exprt function_call_expr::handle_list_pop() const
   if (args.size() > 1)
     throw std::runtime_error("pop() takes at most 1 argument");
 
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  const symbolt *list_symbol = nullptr;
+
+  // Create temporary symbols from binary expressions (e.g., (x-y).pop()).
+  if (
+    call_["func"].contains("value") &&
+    call_["func"]["value"].contains("_type") &&
+    call_["func"]["value"]["_type"] == "BinOp")
+  {
+    exprt list_expr = converter_.get_expr(call_["func"]["value"]);
+    if (list_expr.is_symbol())
+    {
+      list_symbol = converter_.symbol_table().find_symbol(
+        to_symbol_expr(list_expr).get_identifier());
+    }
+  }
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
+  {
+    std::string list_display_name;
+    list_symbol = get_object_list_symbol(list_display_name);
+    if (!list_symbol)
+      throw std::runtime_error("List variable not found: " + list_display_name);
+  }
 
   // Determine the index (default is -1 for last element)
   exprt index_expr;
@@ -3653,11 +3671,32 @@ exprt function_call_expr::handle_general_function_call()
        function_id_.get_function() == "strlen") &&
       (arg.type() == type_handler_.get_list_type() ||
        (arg.type().is_pointer() &&
-        arg.type().subtype() == type_handler_.get_list_type())) &&
-      arg.is_symbol())
+        arg.type().subtype() == type_handler_.get_list_type() &&
+        arg.type().is_symbol())))
     {
-      symbolt *list_symbol =
-        converter_.find_symbol(arg.identifier().as_string());
+      symbolt *list_symbol = nullptr;
+
+      if (arg.is_symbol())
+      {
+        list_symbol = converter_.find_symbol(arg.identifier().as_string());
+      }
+      else
+      {
+        const typet list_type = type_handler_.get_list_type();
+        symbolt &tmp_list = converter_.create_tmp_symbol(
+          call_, "$obj_size_list_arg$", list_type, exprt());
+
+        code_declt tmp_decl(symbol_expr(tmp_list));
+        tmp_decl.location() = location;
+        converter_.current_block->copy_to_operands(tmp_decl);
+
+        code_assignt tmp_assign(symbol_expr(tmp_list), arg);
+        tmp_assign.location() = location;
+        converter_.current_block->copy_to_operands(tmp_assign);
+
+        list_symbol = &tmp_list;
+      }
+
       assert(list_symbol);
 
       const symbolt *list_size_func_sym =
