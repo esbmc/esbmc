@@ -1184,6 +1184,14 @@ exprt python_dict_handler::handle_dict_get(
         long_int_type(); // Default to int when returning None or unknown
   }
 
+  // When no explicit default is given, dict.get() returns Optional[T]:
+  // either the value (key found) or None (key not found). Use an Optional
+  // struct so that `result is None` correctly checks the is_none field.
+  const bool no_explicit_default = (args.size() < 2);
+  typet effective_result_type = no_explicit_default
+                                  ? type_handler_.build_optional_type(result_type)
+                                  : result_type;
+
   // Get dict members
   member_exprt keys_member(dict_expr, "keys", list_type);
   member_exprt values_member(dict_expr, "values", list_type);
@@ -1235,7 +1243,7 @@ exprt python_dict_handler::handle_dict_get(
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
-    call_node, "$dict_get_result$", result_type, exprt());
+    call_node, "$dict_get_result$", effective_result_type, exprt());
   code_declt result_decl(symbol_expr(result_var));
   result_decl.location() = location;
   converter_.add_instruction(result_decl);
@@ -1298,17 +1306,30 @@ exprt python_dict_handler::handle_dict_get(
     retrieved_value = value_as_typed;
   }
 
-  code_assignt value_assign(symbol_expr(result_var), retrieved_value);
+  exprt then_value = no_explicit_default
+                       ? converter_.wrap_in_optional(retrieved_value, effective_result_type)
+                       : retrieved_value;
+  code_assignt value_assign(symbol_expr(result_var), then_value);
   value_assign.location() = location;
   then_block.copy_to_operands(value_assign);
 
   // Else branch: key not found, use default
   code_blockt else_block;
 
-  // Cast default to result_type if needed
-  if (default_value.type() == none_type() && result_type != none_type())
+  if (no_explicit_default)
   {
-    // Cast None to result_type (represents None as zero/null of that type)
+    // No default given: return Optional(is_none=true) so `result is None` holds.
+    constant_exprt none_expr(none_type());
+    none_expr.set_value("NULL");
+    exprt optional_none =
+      converter_.wrap_in_optional(none_expr, effective_result_type);
+    code_assignt default_assign(symbol_expr(result_var), optional_none);
+    default_assign.location() = location;
+    else_block.copy_to_operands(default_assign);
+  }
+  else if (default_value.type() == none_type() && result_type != none_type())
+  {
+    // Explicit None default: cast to result_type (represents None as zero)
     typecast_exprt casted_default(default_value, result_type);
     code_assignt default_assign(symbol_expr(result_var), casted_default);
     default_assign.location() = location;
