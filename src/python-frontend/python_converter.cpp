@@ -7746,6 +7746,13 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::EXPR:
     {
+      // Skip yield/yield-from expressions (generator yield points, handled by preprocessor)
+      if (
+        element.contains("value") && element["value"].contains("_type") &&
+        (element["value"]["_type"] == "Yield" ||
+         element["value"]["_type"] == "YieldFrom"))
+        break;
+
       // Function calls are handled here
       exprt empty;
       exprt expr = get_expr(element["value"]);

@@ -2720,6 +2720,10 @@ private:
       return InferResult::OK;
     }
 
+    // Guard against bare return (value=null) or missing value key
+    if (!stmt.contains("value") || stmt["value"].is_null())
+      return InferResult::UNKNOWN;
+
     const auto &value_type = stmt["value"]["_type"];
 
     // Get type from RHS constant
