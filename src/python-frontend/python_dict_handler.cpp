@@ -1194,9 +1194,9 @@ exprt python_dict_handler::handle_dict_get(
   // either the value (key found) or None (key not found). Use an Optional
   // struct so that `result is None` correctly checks the is_none field.
   const bool no_explicit_default = (args.size() < 2);
-  typet effective_result_type = no_explicit_default
-                                  ? type_handler_.build_optional_type(result_type)
-                                  : result_type;
+  typet effective_result_type =
+    no_explicit_default ? type_handler_.build_optional_type(result_type)
+                        : result_type;
 
   // Get dict members
   member_exprt keys_member(dict_expr, "keys", list_type);
@@ -1312,9 +1312,10 @@ exprt python_dict_handler::handle_dict_get(
     retrieved_value = value_as_typed;
   }
 
-  exprt then_value = no_explicit_default
-                       ? converter_.wrap_in_optional(retrieved_value, effective_result_type)
-                       : retrieved_value;
+  exprt then_value =
+    no_explicit_default
+      ? converter_.wrap_in_optional(retrieved_value, effective_result_type)
+      : retrieved_value;
   code_assignt value_assign(symbol_expr(result_var), then_value);
   value_assign.location() = location;
   then_block.copy_to_operands(value_assign);
