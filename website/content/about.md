@@ -23,8 +23,8 @@ companies including Intel, Nokia Institute of Technology, Samsung, and
 [Veribee](https://www.veribee.co/). ESBMC is currently funded by Intel, EPSRC
 grants [EP/T026995/1](https://enncore.github.io),
 [EP/V000497/1](https://scorch-project.github.io),
-[https://www.elegant-h2020.eu](EU H2020 ELEGANT 957286) and
-[https://soteriaresearch.org](Soteria project) awarded by the UK Research and
+[EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu) and
+[Soteria project](https://soteriaresearch.org) awarded by the UK Research and
 Innovation for the Digital Security by Design (DSbD) Programme.
 
 <style>
@@ -34,7 +34,9 @@ img {
 }
 </style>
 
-![Zulip SVG](./images/sponsors/zulip-icon-circle.svg)
+![Zulip Logo](./images/sponsors/zulip-icon-circle.svg "The S3 team and by
+extension ESBMC, is sponsored by Zulip. Zulip is an organized team chat app
+designed for efficient communication.")
 
 ## Main Authors and Developers
 

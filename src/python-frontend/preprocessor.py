@@ -24,6 +24,7 @@ class Preprocessor(ast.NodeTransformer):
         self.decimal_class_alias = None
         self.decimal_module_alias = None
         self._subscript_inferred_vars = set()  # vars whose annotations came from subscript inference
+        self.dict_items_vars = {}  # {var_name: dict_expr} for X = d.items() assignments
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -177,15 +178,17 @@ class Preprocessor(ast.NodeTransformer):
         return self.ensure_all_locations(node, source_node)
 
     def _lower_listcomp(self, node):
-        """Lower a simple list comprehension into prefix statements and result expression."""
-        if len(node.generators) != 1:
-            raise NotImplementedError("Nested list comprehensions are not supported yet")
+        """Lower a list comprehension into prefix statements and result expression.
 
-        generator = node.generators[0]
-        if len(getattr(generator, "ifs", [])) > 1:
-            raise NotImplementedError("Only a single if-condition is supported in list comprehensions")
-        if getattr(generator, "is_async", False):
-            raise NotImplementedError("Async list comprehensions are not supported")
+        A comprehension with multiple `for` clauses is not a nested comprehension:
+        it is semantically equivalent to nested for-loops:
+            [f(i,j) for i in A for j in B]  =>  for i in A: for j in B: tmp.append(f(i,j))
+        """
+        for generator in node.generators:
+            if len(getattr(generator, "ifs", [])) > 1:
+                raise NotImplementedError("Only a single if-condition is supported in list comprehensions")
+            if getattr(generator, "is_async", False):
+                raise NotImplementedError("Async list comprehensions are not supported")
 
         # Create a unique temporary list that will collect results.
         tmp_name = f"ESBMC_listcomp_{self.listcomp_counter}"
@@ -213,26 +216,26 @@ class Preprocessor(ast.NodeTransformer):
         )
         self.ensure_all_locations(append_expr, node.elt)
 
+        # Step 3: build nested for-loops from innermost generator outward.
         loop_body = [append_expr]
-        if generator.ifs:
-            # Wrap the append call in a conditional guard if the comprehension uses a filter.
-            cond = self.visit(generator.ifs[0])
-            self.ensure_all_locations(cond, generator.ifs[0])
-            if_stmt = ast.If(test=cond, body=loop_body, orelse=[])
-            self.ensure_all_locations(if_stmt, generator.ifs[0])
-            ast.fix_missing_locations(if_stmt)
-            loop_body = [if_stmt]
+        for generator in reversed(node.generators):
+            if generator.ifs:
+                cond = self.visit(generator.ifs[0])
+                self.ensure_all_locations(cond, generator.ifs[0])
+                if_stmt = ast.If(test=cond, body=loop_body, orelse=[])
+                self.ensure_all_locations(if_stmt, generator.ifs[0])
+                ast.fix_missing_locations(if_stmt)
+                loop_body = [if_stmt]
+            for_stmt = ast.For(
+                target=generator.target,
+                iter=self.visit(generator.iter),
+                body=loop_body,
+                orelse=[]
+            )
+            self.ensure_all_locations(for_stmt, node)
+            loop_body = [for_stmt]
 
-        # Step 3: synthesise a for-loop that looks identical to the comprehension.
-        for_stmt = ast.For(
-            target=generator.target,
-            iter=self.visit(generator.iter),
-            body=loop_body,
-            orelse=[]
-        )
-        self.ensure_all_locations(for_stmt, node)
-        # Reuse the existing for-to-while lowering logic so we keep behaviour consistent.
-        transformed_for = self.visit_For(for_stmt)
+        transformed_for = self.visit_For(loop_body[0])
         if not isinstance(transformed_for, list):
             transformed_for = [transformed_for]
 
@@ -433,9 +436,13 @@ class Preprocessor(ast.NodeTransformer):
                                 if method_name == 'keys':
                                     if isinstance(key_type, ast.Name):
                                         return key_type.id
+                                    elif isinstance(key_type, ast.Subscript) and isinstance(key_type.value, ast.Name):
+                                        return key_type.value.id
                                 elif method_name == 'values':
                                     if isinstance(value_type, ast.Name):
                                         return value_type.id
+                                    elif isinstance(value_type, ast.Subscript) and isinstance(value_type.value, ast.Name):
+                                        return value_type.value.id
 
         # 2. Handle direct dict iteration: for k in d:
         if isinstance(iterable_node, ast.Name):
@@ -521,12 +528,27 @@ class Preprocessor(ast.NodeTransformer):
             key_ann, val_ann = self._get_dict_kv_types(dict_expr.id)
         elif isinstance(dict_expr, ast.Attribute):
             key_ann, val_ann = self._get_kv_types_from_attribute(dict_expr)
+        elif isinstance(dict_expr, ast.Subscript):
+            key_ann, val_ann = self._get_kv_types_from_subscript(dict_expr)
         else:
             key_ann, val_ann = self._get_kv_types_from_call(dict_expr)
 
         target = node.target
         if isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2:
             k_var, v_var = target.elts[0], target.elts[1]
+            # If the key type is still unknown, check the loop body for
+            # some_dict[key_var] usage patterns: using a variable as a dict
+            # subscript key implies it is a str (the common dict key type).
+            if (isinstance(key_ann, ast.Name) and key_ann.id == 'Any' and
+                    isinstance(k_var, ast.Name) and
+                    self._key_used_as_subscript(k_var.id, node.body)):
+                key_ann = ast.Name(id='str', ctx=ast.Load())
+            # If the value type is still unknown, check the loop body for
+            # val["key"] usage patterns: string subscripts imply a dict value.
+            if (isinstance(val_ann, ast.Name) and val_ann.id == 'Any' and
+                    isinstance(v_var, ast.Name) and
+                    self._uses_string_subscript(v_var.id, node.body)):
+                val_ann = ast.Name(id='dict', ctx=ast.Load())
             if isinstance(k_var, ast.Name):
                 self.variable_annotations[k_var.id] = key_ann
             if isinstance(v_var, ast.Name):
@@ -1074,6 +1096,21 @@ class Preprocessor(ast.NodeTransformer):
             )
             self.ensure_all_locations(dict_assign, node)
             setup_stmts.append(dict_assign)
+        elif isinstance(dict_expr, ast.Subscript):
+            # Subscript access (e.g., d["key"].items()): materialize into a temp
+            # variable and infer K/V types from the outer dict's value annotation.
+            dict_temp_var = f'ESBMC_dict_{loop_id}'
+            dict_node = ast.Name(id=dict_temp_var, ctx=ast.Load())
+            self.ensure_all_locations(dict_node, node)
+            key_ann, val_ann = self._get_kv_types_from_subscript(dict_expr)
+            dict_assign = ast.AnnAssign(
+                target=ast.Name(id=dict_temp_var, ctx=ast.Store()),
+                annotation=ast.Name(id='dict', ctx=ast.Load()),
+                value=dict_expr,
+                simple=1
+            )
+            self.ensure_all_locations(dict_assign, node)
+            setup_stmts.append(dict_assign)
         else:
             # Other complex expression (e.g., a function call: make().items()):
             # materialize into a temp symbol so the C++ converter gets a stable
@@ -1090,6 +1127,22 @@ class Preprocessor(ast.NodeTransformer):
             )
             self.ensure_all_locations(dict_assign, node)
             setup_stmts.append(dict_assign)
+
+        # If key or val type is still unknown (Any), scan the loop body for
+        # usage patterns that reveal the type.
+        _tgt = node.target
+        if isinstance(_tgt, (ast.Tuple, ast.List)) and len(_tgt.elts) == 2:
+            _k_elt, _v_elt = _tgt.elts[0], _tgt.elts[1]
+            # some_dict[key_var] in the body => key is str (common dict key type)
+            if (isinstance(key_ann, ast.Name) and key_ann.id == 'Any' and
+                    isinstance(_k_elt, ast.Name) and
+                    self._key_used_as_subscript(_k_elt.id, node.body)):
+                key_ann = ast.Name(id='str', ctx=ast.Load())
+            # val["str_const"] in the body => value is a dict
+            if (isinstance(val_ann, ast.Name) and val_ann.id == 'Any' and
+                    isinstance(_v_elt, ast.Name) and
+                    self._uses_string_subscript(_v_elt.id, node.body)):
+                val_ann = ast.Name(id='dict', ctx=ast.Load())
 
         # Intermediate list variables: ESBMC_keys_N: list[base(K)] = d.keys()
         # The list slice uses the BASE type name only (e.g. 'dict' for dict[str,int])
@@ -1140,6 +1193,37 @@ class Preprocessor(ast.NodeTransformer):
     def _any_ann(self):
         """Return a fresh ast.Name(id='Any') annotation node."""
         return ast.Name(id='Any', ctx=ast.Load())
+
+    def _uses_string_subscript(self, var_name, body):
+        """Return True if var_name is subscripted with a string constant anywhere in body.
+
+        Used to infer that a loop variable annotated as Any is actually a dict,
+        because val["key"] access in Python is only valid on mappings.
+        """
+        module = ast.Module(body=list(body), type_ignores=[])
+        for node in ast.walk(module):
+            if (isinstance(node, ast.Subscript) and
+                    isinstance(node.value, ast.Name) and
+                    node.value.id == var_name and
+                    isinstance(node.slice, ast.Constant) and
+                    isinstance(node.slice.value, str)):
+                return True
+        return False
+
+    def _key_used_as_subscript(self, var_name, body):
+        """Return True if var_name appears as a subscript key anywhere in body.
+
+        Detects patterns like some_dict[var_name] or some_dict[var_name] = value.
+        When iterating a plain dict (key type = Any), this implies the key is str,
+        since it is being used to index another dict in the loop body.
+        """
+        module = ast.Module(body=list(body), type_ignores=[])
+        for node in ast.walk(module):
+            if (isinstance(node, ast.Subscript) and
+                    isinstance(node.slice, ast.Name) and
+                    node.slice.id == var_name):
+                return True
+        return False
 
     def _kv_types_from_annotation(self, annotation):
         """Extract (key_ann, val_ann) AST nodes from a dict[K, V] annotation node.
@@ -1201,6 +1285,18 @@ class Preprocessor(ast.NodeTransformer):
         attr_ann = self.class_attr_annotations.get(class_name, {}).get(attr_name)
         if attr_ann is not None:
             return self._kv_types_from_annotation(attr_ann)
+        return self._any_ann(), self._any_ann()
+
+    def _get_kv_types_from_subscript(self, subscript_node):
+        """Return (key_ann, val_ann) for a subscript dict expression.
+
+        For d["key"].items() where d: dict[str, dict[K, V]], returns (K, V).
+        Uses _create_subscript_annotation to find the value type of d at the
+        subscript key, then extracts the K/V types from that inner dict type.
+        """
+        val_ann = self._create_subscript_annotation(subscript_node)
+        if val_ann is not None:
+            return self._kv_types_from_annotation(val_ann)
         return self._any_ann(), self._any_ann()
 
     def _create_dict_list_assign(self, node, var_name, dict_node, method, elem_ann):
@@ -1696,6 +1792,87 @@ class Preprocessor(ast.NodeTransformer):
 
         return None
 
+    def _get_dict_expr_from_items_call(self, call_node):
+        """If call_node is d.items() on a known dict, return the dict expression. Else None."""
+        if not (isinstance(call_node, ast.Call) and
+                isinstance(call_node.func, ast.Attribute) and
+                call_node.func.attr == 'items' and
+                not call_node.args and
+                not getattr(call_node, 'keywords', [])):
+            return None
+        base = call_node.func.value
+        if isinstance(base, ast.Name):
+            if self.known_variable_types.get(base.id) != 'dict':
+                return None
+        return base
+
+    def _get_items_dict_expr(self, node):
+        """Return dict_expr if node is set(X) where X is a dict_items source, else None."""
+        if not (isinstance(node, ast.Call) and
+                isinstance(node.func, ast.Name) and
+                node.func.id == 'set' and
+                len(node.args) == 1 and
+                not getattr(node, 'keywords', [])):
+            return None
+        arg = node.args[0]
+        if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
+            return self.dict_items_vars[arg.id]
+        return self._get_dict_expr_from_items_call(arg)
+
+    def _try_transform_items_set_eq(self, set_side, literal_side, source_node):
+        """Transform set(d.items()) == {(k,v),...} into dict membership checks.
+
+        Rewrites to: set(d.keys()) == {k,...} and d[k1] == v1 and d[k2] == v2 ...
+        This avoids tuple struct comparison and uses only proven-working primitives.
+        Returns the new AST node, or None if the pattern doesn't match.
+        """
+        dict_expr = self._get_items_dict_expr(set_side)
+        if dict_expr is None:
+            return None
+        if not isinstance(literal_side, ast.Set) or not literal_side.elts:
+            return None
+        pairs = []
+        for elt in literal_side.elts:
+            if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2):
+                return None
+            pairs.append((elt.elts[0], elt.elts[1]))
+
+        # Build: set(dict_expr.keys()) == {k1, k2, ...}
+        keys_set = ast.Set(elts=[k for k, v in pairs])
+        keys_attr = ast.Attribute(value=dict_expr, attr='keys', ctx=ast.Load())
+        keys_call = ast.Call(func=keys_attr, args=[], keywords=[])
+        set_keys = ast.Call(
+            func=ast.Name(id='set', ctx=ast.Load()),
+            args=[keys_call], keywords=[])
+        keys_eq = ast.Compare(
+            left=set_keys, ops=[ast.Eq()], comparators=[keys_set])
+
+        # Build: d[k1] == v1, d[k2] == v2, ...
+        value_checks = []
+        for k, v in pairs:
+            subscript = ast.Subscript(value=dict_expr, slice=k, ctx=ast.Load())
+            val_eq = ast.Compare(
+                left=subscript, ops=[ast.Eq()], comparators=[v])
+            value_checks.append(val_eq)
+
+        result = ast.BoolOp(op=ast.And(), values=[keys_eq] + value_checks)
+        self.ensure_all_locations(result, source_node)
+        ast.fix_missing_locations(result)
+        return result
+
+    def visit_Compare(self, node):
+        """Transform set(d.items()) == {(k,v),...} comparisons to avoid tuple struct issues."""
+        node = self.generic_visit(node)
+        if len(node.ops) != 1 or not isinstance(node.ops[0], ast.Eq):
+            return node
+        result = (self._try_transform_items_set_eq(
+                      node.left, node.comparators[0], node) or
+                  self._try_transform_items_set_eq(
+                      node.comparators[0], node.left, node))
+        if result is None:
+            return node
+        return result
+
     def visit_Assign(self, node):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
@@ -1736,6 +1913,11 @@ class Preprocessor(ast.NodeTransformer):
                     if (isinstance(node.value, ast.Call) and
                             isinstance(node.value.func, ast.Name)):
                         self.instance_class_map[target.id] = node.value.func.id
+                    # Track dict.items() assignments: items = d.items()
+                    if isinstance(node.value, ast.Call):
+                        dict_expr = self._get_dict_expr_from_items_call(node.value)
+                        if dict_expr is not None:
+                            self.dict_items_vars[target.id] = dict_expr
                 return node
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments

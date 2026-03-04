@@ -1,12 +1,14 @@
 ---
-title: Counterexample Guided Abstract Refinement: Integer vs Bit-Vector Encoding
+title:
+  "Counterexample Guided Abstract Refinement: Integer vs. Bit-Vector Encoding"
 ---
 
 ### Example 1: Checking the Pythagorean Theorem
 
-Consider the following C program that resembles the Pythagorean theorem in mathematics:
+Consider the following C program that resembles the Pythagorean theorem in
+mathematics:
 
-````C
+```C
 #include <assert.h>
 
 int main() {
@@ -18,13 +20,17 @@ int main() {
 
   assert((a * a) + (b * b) == (c * c));
 }
-````
+```
 
-This program verifies whether the values of `a`, `b`, and `c` satisfy the equation: `a^2 + b^2 = c^2`.
+This program verifies whether the values of `a`, `b`, and `c` satisfy the
+equation: `a^2 + b^2 = c^2`.
 
-If we use bit-vector encoding, most state-of-the-art SMT solvers struggle to find a counterexample that refutes this assertion due to the large integers (i.e., _BitInt(100000)). However, if we use integer encoding, the solver can quickly find a counterexample, as shown below:
+If we use bit-vector encoding, most state-of-the-art SMT solvers struggle to
+find a counterexample that refutes this assertion due to the large integers
+(i.e., \_BitInt(100000)). However, if we use integer encoding, the solver can
+quickly find a counterexample, as shown below:
 
-````
+```
 [Counterexample]
 
 State 1 file example1.c line 4 column 3 function main thread 0
@@ -48,28 +54,32 @@ Violated property:
 
 
 VERIFICATION FAILED
-````
+```
 
-We can produce an executable test case to confirm this assertion violation as follows:
+We can produce an executable test case to confirm this assertion violation as
+follows:
 
-````
+```
 $ clang example1-test.c -o example1-test
 $ ./example1-test
 example1-test: example1-test.c:9: int main(): Assertion `(a * a) + (b * b) == (c * c)' failed.
 Aborted (core dumped)
-````
+```
 
 ### Key Takeaways:
 
-* Bit-vector encoding makes it harder for SMT solvers to find counterexamples due to the bit-precise arithmetic at large bit-widths.
-* Integer encoding allows solvers to quickly refute the assertion by finding a simple counterexample (e.g., a = 1, b = 1, c = 2).
-* This demonstrates the impact of encoding choices on the efficiency of SMT-based verification tools.
+- Bit-vector encoding makes it harder for SMT solvers to find counterexamples
+  due to the bit-precise arithmetic at large bit-widths.
+- Integer encoding allows solvers to quickly refute the assertion by finding a
+  simple counterexample (e.g., a = 1, b = 1, c = 2).
+- This demonstrates the impact of encoding choices on the efficiency of
+  SMT-based verification tools.
 
 ### Example 2: Handling Overflow in Integer Addition
 
 However, let's now consider that we have this C program:
 
-````C
+```C
 #include <assert.h>
 
 int main() {
@@ -80,11 +90,12 @@ int main() {
 
   assert((a + b) > 0);
 }
-````
+```
 
-The bit-vector encoding produces this counterexample, which indicates an overflow:
+The bit-vector encoding produces this counterexample, which indicates an
+overflow:
 
-````
+```
 [Counterexample]
 
 
@@ -105,11 +116,12 @@ Violated property:
 
 
 VERIFICATION FAILED
-````
+```
 
-While integer encoding proves the program is safe, overflow issues require explicit checks. To prevent overflow, we must add assertion as follows:
+While integer encoding proves the program is safe, overflow issues require
+explicit checks. To prevent overflow, we must add assertion as follows:
 
-````C
+```C
 #include <assert.h>
 #include <limits.h>  // For INT_MAX and INT_MIN
 
@@ -125,12 +137,12 @@ int main() {
 
   return 0;
 }
-````
+```
 
-With the added overflow check, the integer encoding now produces a counterexample indicating an overflow:
+With the added overflow check, the integer encoding now produces a
+counterexample indicating an overflow:
 
-
-````
+```
 [Counterexample]
 
 
@@ -151,11 +163,11 @@ Violated property:
 
 
 VERIFICATION FAILED
-````
+```
 
 We can write an executable test case to confirm this assertion violation:
 
-````
+```
 #include <assert.h>
 #include <limits.h>  // For INT_MAX and INT_MIN
 
@@ -173,43 +185,46 @@ int main() {
 
   return 0;
 }
-````
+```
 
-````
+```
 $ clang example3-test.c -o example3-test
 $ ./example3-test
 example3-test: example3-test.c:11: int main(): Assertion `a <= INT_MAX - b' failed.
 Aborted (core dumped)
-````
+```
 
 ## Key Observations:
 
-* Bit-vector encoding can detect overflow, but may require additional explicit checks to handle cases such as integer overflow.
-* The integer encoding efficiently verifies the correctness of the program once overflow checks are introduced, ensuring safe behavior.
+- Bit-vector encoding can detect overflow, but may require additional explicit
+  checks to handle cases such as integer overflow.
+- The integer encoding efficiently verifies the correctness of the program once
+  overflow checks are introduced, ensuring safe behavior.
 
 ## Pseudocode for Counterexample-Guided Abstraction Refinement
 
-The following pseudocode outlines the steps involved in counterexample-guided abstraction refinement:
+The following pseudocode outlines the steps involved in counterexample-guided
+abstraction refinement:
 
-````
+```
 Function VerifyProgram(c_program):
     # Step 1: Add assertions to check for arithmetic overflow
     program_with_overflow_checks = AddOverflowAssertions(c_program)
-    
+
     # Step 2: Invoke ESBMC with the options --z3, --ir, --fixedbv
     esbmc_output = RunESBMC(program_with_overflow_checks, "--z3 --ir --fixedbv")
-    
+
     # Step 3: Check if verification failed
     if VerificationFailed(esbmc_output):
         # Step 4: Extract counterexample from ESBMC output
         counterexample = ExtractCounterexample(esbmc_output)
-        
+
         # Step 5: Create an executable test case from the counterexample
         test_case = CreateTestCase(counterexample)
-        
+
         # Step 6: Compile and run the test case
         result = RunTestCase(test_case)
-        
+
         # Step 7: Check if the assertion is violated
         if AssertionViolated(result):
             # Verification is complete (counterexample is valid)
@@ -217,19 +232,10 @@ Function VerifyProgram(c_program):
         else:
             # Step 8: Add an assume statement to the original program to remove a spurious counterexample
             updated_program = AddAssumeStatement(c_program, counterexample)
-            
+
             # Go back to Step 2 with the updated program
             VerifyProgram(updated_program)  # Re-run ESBMC with the updated program
     else:
         # Step 9: If verification succeeded, print success message
         Print("Verification succeeded.")
-````
-
-
-
-
-
-
-
-
-
+```

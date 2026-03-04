@@ -123,6 +123,16 @@ private:
   std::string get_object_name() const;
 
   /*
+   * Resolves the list symbol for a list method call.
+   * Handles both a plain name (e.g. mylist.append()) and a subscript of
+   * a nested list (e.g. nested[0].append()) by looking up the inner list
+   * symbol via list_type_map.  Returns nullptr when not found.
+   * On return, `display_name` holds a human-readable identifier suitable
+   * for error messages (e.g. "mylist" or "nested[0]").
+   */
+  const symbolt *get_object_list_symbol(std::string &display_name) const;
+
+  /*
    * Handles int-to-str conversions (e.g., str(65)) by generating
    * the appropriate cast expression.
    */
@@ -216,6 +226,13 @@ private:
    * the __abs__() method. The function returns an expression representing the absolute value.
    */
   exprt handle_abs(nlohmann::json &arg) const;
+
+  /*
+   * Handles round() function calls by rounding a numeric value.
+   * round(x) returns the nearest integer (as int).
+   * round(x, n) returns x rounded to n decimal places (as float).
+   */
+  exprt handle_round(nlohmann::json &arg) const;
 
   /*
    * Checks if the current function call is a min() or max() built-in function.
