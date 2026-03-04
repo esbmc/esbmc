@@ -1167,7 +1167,13 @@ exprt python_dict_handler::handle_dict_get(
   // Determine the default value
   exprt default_value;
   if (args.size() >= 2)
+  {
     default_value = converter_.get_expr(args[1]);
+    // Unwrap Optional if the default comes from a dict.get() without explicit
+    // default (which now returns Optional[T]). We want the raw value type so
+    // that result_var and default_value have compatible types.
+    default_value = converter_.unwrap_optional_if_needed(default_value);
+  }
   else
     default_value = gen_zero(none_type());
 
