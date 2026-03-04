@@ -4845,6 +4845,64 @@ void python_converter::handle_function_call_rhs(
         ret.op0().identifier().as_string(), lhs.identifier().as_string());
     }
 
+    // If list_type_map is still empty for the LHS
+    // e.g. the list was passed through as a parameter inside the function,
+    // fall back to the called function's return-type annotation
+    // to determine the element type.
+    const std::string &lhs_id = lhs.identifier().as_string();
+    if (python_list::get_list_type_map_size(lhs_id) == 0)
+    {
+      std::string func_name;
+      if (
+        ast_node.contains("value") && ast_node["value"].contains("func") &&
+        ast_node["value"]["func"].is_object())
+      {
+        const auto &func_ref = ast_node["value"]["func"];
+        if (func_ref.contains("id") && func_ref["id"].is_string())
+          func_name = func_ref["id"].get<std::string>();
+        else if (func_ref.contains("attr") && func_ref["attr"].is_string())
+          func_name = func_ref["attr"].get<std::string>();
+      }
+
+      if (!func_name.empty())
+      {
+        const auto &func_def =
+          json_utils::find_function((*ast_json)["body"], func_name);
+        if (
+          !func_def.empty() && func_def.contains("returns") &&
+          !func_def["returns"].is_null())
+        {
+          const auto &returns = func_def["returns"];
+          // Handle list[T] annotation (Subscript node with value.id == "list")
+          if (
+            returns.is_object() && returns.contains("_type") &&
+            returns["_type"] == "Subscript" && returns.contains("value") &&
+            returns["value"].is_object() && returns["value"].contains("id"))
+          {
+            const std::string val_id =
+              returns["value"]["id"].get<std::string>();
+            if (val_id == "list" || val_id == "List")
+            {
+              // Extract element type from the slice (e.g. int in list[int])
+              if (
+                returns.contains("slice") && returns["slice"].is_object() &&
+                returns["slice"].contains("id") &&
+                returns["slice"]["id"].is_string())
+              {
+                typet elem_type = type_handler_.get_typet(
+                  returns["slice"]["id"].get<std::string>());
+                if (elem_type != typet())
+                {
+                  python_list::add_type_info_entry(
+                    lhs_id, std::string(), elem_type);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
     typet l_type = type_handler_.get_list_type();
     symbolt &tmp_var_symbol =
       create_tmp_symbol(ast_node, "tmp_var", l_type, gen_zero(l_type));

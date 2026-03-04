@@ -96,6 +96,14 @@ public:
     }
   }
 
+  static void add_type_info_entry(
+    const std::string &list_symbol_id,
+    const std::string &elem_id,
+    const typet &elem_type)
+  {
+    list_type_map[list_symbol_id].push_back(std::make_pair(elem_id, elem_type));
+  }
+
   /**
    * @brief Create an empty set
    * @return Expression representing the empty set
