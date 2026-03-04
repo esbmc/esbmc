@@ -658,13 +658,13 @@ void goto_convertt::do_function_call_symbol(
     // then create an ASSIGN to a sideeffect "assigns_target". This stores the expression
     // tree for later evaluation during replace-call with proper parameter substitution.
     //
-    // Special case: __ESBMC_assigns() means function has no side effects
+    // Special case: __ESBMC_assigns(0) means function has NO side effects
 
     if (arguments.empty())
     {
       log_error(
         "`__ESBMC_assigns' expected to have at least one argument (use "
-        "__ESBMC_assigns() for empty assigns)");
+        "__ESBMC_assigns(0) for empty assigns)");
       abort();
     }
 
@@ -679,28 +679,34 @@ void goto_convertt::do_function_call_symbol(
       "Processing __ESBMC_assigns with {} arguments",
       arguments.size());
 
-    // Check for empty assigns: __ESBMC_assigns() expands to
-    // __ESBMC_assigns_impl((void*)0), so we detect a single (void*)0 argument.
+    // Check for empty assigns: __ESBMC_assigns(0) means no side effects
+    // When user writes __ESBMC_assigns(0), macro expands to __ESBMC_assigns_impl(&(0))
+    // But &(0) is invalid, so we check for address_of(constant 0) pattern
     if (arguments.size() == 1)
     {
       exprt first_arg = arguments[0];
+      // Strip typecast if present
       if (first_arg.id() == "typecast" && first_arg.operands().size() == 1)
       {
         first_arg = first_arg.op0();
       }
 
+      // Check if it's &(0) which would be address_of(constant 0) - but this is invalid C
+      // So also check for direct 0/NULL passed (shouldn't happen with macro, but be safe)
       if (
         first_arg.is_zero() ||
         (first_arg.id() == "constant" && first_arg.get("value") == "0"))
       {
         log_debug(
           "builtin_functions",
-          "__ESBMC_assigns() - function has no side effects");
+          "__ESBMC_assigns(0) - pure function (no side effects)");
 
+        // Generate a special marker to indicate explicit empty assigns
         goto_programt::targett t = dest.add_instruction(ASSERT);
         t->guard = gen_true_expr();
         t->location = function.location();
         t->location.comment("contract::assigns_empty");
+        t->location.property("empty assigns marker");
 
         return;
       }
@@ -724,6 +730,16 @@ void goto_convertt::do_function_call_symbol(
         log_debug(
           "builtin_functions",
           "  Unwrapped address_of for assigns target {}: {}",
+          i,
+          actual_arg.pretty());
+      }
+      else if (actual_arg.type().is_pointer())
+      {
+        // Pointer-typed argument: Clang simplified &(*ptr) to ptr.
+        // This is expected for __ESBMC_assigns(*ptr) patterns.
+        log_debug(
+          "builtin_functions",
+          "  Pointer-typed assigns target {} (from *ptr pattern): {}",
           i,
           actual_arg.pretty());
       }
@@ -751,6 +767,88 @@ void goto_convertt::do_function_call_symbol(
       code_assignt assignment(tmp_lhs, assigns_expr);
       assignment.location() = function.location();
       copy(assignment, ASSIGN, dest);
+    }
+  }
+  else if (base_name == "__ESBMC_loop_assigns_impl")
+  {
+    // __ESBMC_loop_assigns_impl(&expr1, &expr2, ...): loop assigns clause handler
+    // Similar to __ESBMC_assigns_impl but stores targets in LOOP_INVARIANT instruction
+    // for frame rule enforcement during loop invariant checking.
+
+    if (arguments.empty())
+    {
+      log_error(
+        "`__ESBMC_loop_assigns' expected to have at least one argument");
+      abort();
+    }
+
+    if (lhs.is_not_nil())
+    {
+      log_error("__ESBMC_loop_assigns expected not to have LHS");
+      abort();
+    }
+
+    log_debug(
+      "builtin_functions",
+      "Processing __ESBMC_loop_assigns with {} arguments",
+      arguments.size());
+
+    // Find the most recent LOOP_INVARIANT instruction to attach assigns to
+    // If none exists, create one (loop assigns can exist without invariants)
+    goto_programt::instructiont *loop_inv_inst = nullptr;
+    if (!dest.instructions.empty())
+    {
+      auto &last = dest.instructions.back();
+      if (last.is_loop_invariant())
+        loop_inv_inst = &last;
+    }
+
+    // If no LOOP_INVARIANT instruction found, create an empty one
+    if (!loop_inv_inst)
+    {
+      goto_programt::targett t = dest.add_instruction(LOOP_INVARIANT);
+      // Empty loop invariants list - this instruction only carries assigns
+      t->location = function.location();
+      t->location.comment("loop assigns (no invariant)");
+      loop_inv_inst = &(*t);
+    }
+
+    // Process each argument: unwrap address_of and store as assigns target
+    for (size_t i = 0; i < arguments.size(); ++i)
+    {
+      exprt actual_arg = arguments[i];
+
+      // Strip typecast if present
+      if (actual_arg.id() == "typecast" && actual_arg.operands().size() == 1)
+        actual_arg = actual_arg.op0();
+
+      // Unwrap the address_of from macro expansion: &(expr) -> expr
+      if (actual_arg.id() == "address_of" && actual_arg.operands().size() == 1)
+      {
+        actual_arg = actual_arg.op0();
+        log_debug(
+          "builtin_functions",
+          "  Unwrapped address_of for loop assigns target {}: {}",
+          i,
+          actual_arg.pretty());
+      }
+      else
+      {
+        log_warning(
+          "__ESBMC_loop_assigns: unexpected argument form. "
+          "Please use __ESBMC_loop_assigns(expr) where expr is an lvalue.");
+      }
+
+      // Migrate to IRep2 and store as loop assigns target
+      expr2tc target_expr;
+      migrate_expr(actual_arg, target_expr);
+      loop_inv_inst->add_loop_assigns_target(target_expr);
+
+      log_debug(
+        "builtin_functions",
+        "  Loop assigns target {}: {}",
+        i,
+        actual_arg.pretty());
     }
   }
   else if (base_name == "__ESBMC_old")

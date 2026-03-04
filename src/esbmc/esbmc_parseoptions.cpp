@@ -2035,7 +2035,8 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       // Process loop invariants and insert assert/assume/havoc
       remove_no_op(goto_functions);
-      goto_loop_invariant(goto_functions);
+      bool use_frame_rule = cmdline.isset("loop-frame-rule");
+      goto_loop_invariant(goto_functions, context, use_frame_rule);
     }
 
     if (
@@ -2754,8 +2755,9 @@ void esbmc_parseoptionst::process_function_contracts(
       // assumptions for the harness-called function (which receives nil args)
       std::string entry_function =
         cmdline.isset("function") ? cmdline.getval("function") : "";
+      bool check_assigns = cmdline.isset("enforce-assigns-check");
       contracts.enforce_contracts(
-        to_enforce, assume_nonnull_valid, entry_function);
+        to_enforce, assume_nonnull_valid, entry_function, check_assigns);
     }
   }
 
