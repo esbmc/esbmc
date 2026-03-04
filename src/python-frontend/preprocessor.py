@@ -24,6 +24,7 @@ class Preprocessor(ast.NodeTransformer):
         self.decimal_class_alias = None
         self.decimal_module_alias = None
         self._subscript_inferred_vars = set()  # vars whose annotations came from subscript inference
+        self.dict_items_vars = {}  # {var_name: dict_expr} for X = d.items() assignments
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -1791,6 +1792,87 @@ class Preprocessor(ast.NodeTransformer):
 
         return None
 
+    def _get_dict_expr_from_items_call(self, call_node):
+        """If call_node is d.items() on a known dict, return the dict expression. Else None."""
+        if not (isinstance(call_node, ast.Call) and
+                isinstance(call_node.func, ast.Attribute) and
+                call_node.func.attr == 'items' and
+                not call_node.args and
+                not getattr(call_node, 'keywords', [])):
+            return None
+        base = call_node.func.value
+        if isinstance(base, ast.Name):
+            if self.known_variable_types.get(base.id) != 'dict':
+                return None
+        return base
+
+    def _get_items_dict_expr(self, node):
+        """Return dict_expr if node is set(X) where X is a dict_items source, else None."""
+        if not (isinstance(node, ast.Call) and
+                isinstance(node.func, ast.Name) and
+                node.func.id == 'set' and
+                len(node.args) == 1 and
+                not getattr(node, 'keywords', [])):
+            return None
+        arg = node.args[0]
+        if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
+            return self.dict_items_vars[arg.id]
+        return self._get_dict_expr_from_items_call(arg)
+
+    def _try_transform_items_set_eq(self, set_side, literal_side, source_node):
+        """Transform set(d.items()) == {(k,v),...} into dict membership checks.
+
+        Rewrites to: set(d.keys()) == {k,...} and d[k1] == v1 and d[k2] == v2 ...
+        This avoids tuple struct comparison and uses only proven-working primitives.
+        Returns the new AST node, or None if the pattern doesn't match.
+        """
+        dict_expr = self._get_items_dict_expr(set_side)
+        if dict_expr is None:
+            return None
+        if not isinstance(literal_side, ast.Set) or not literal_side.elts:
+            return None
+        pairs = []
+        for elt in literal_side.elts:
+            if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2):
+                return None
+            pairs.append((elt.elts[0], elt.elts[1]))
+
+        # Build: set(dict_expr.keys()) == {k1, k2, ...}
+        keys_set = ast.Set(elts=[k for k, v in pairs])
+        keys_attr = ast.Attribute(value=dict_expr, attr='keys', ctx=ast.Load())
+        keys_call = ast.Call(func=keys_attr, args=[], keywords=[])
+        set_keys = ast.Call(
+            func=ast.Name(id='set', ctx=ast.Load()),
+            args=[keys_call], keywords=[])
+        keys_eq = ast.Compare(
+            left=set_keys, ops=[ast.Eq()], comparators=[keys_set])
+
+        # Build: d[k1] == v1, d[k2] == v2, ...
+        value_checks = []
+        for k, v in pairs:
+            subscript = ast.Subscript(value=dict_expr, slice=k, ctx=ast.Load())
+            val_eq = ast.Compare(
+                left=subscript, ops=[ast.Eq()], comparators=[v])
+            value_checks.append(val_eq)
+
+        result = ast.BoolOp(op=ast.And(), values=[keys_eq] + value_checks)
+        self.ensure_all_locations(result, source_node)
+        ast.fix_missing_locations(result)
+        return result
+
+    def visit_Compare(self, node):
+        """Transform set(d.items()) == {(k,v),...} comparisons to avoid tuple struct issues."""
+        node = self.generic_visit(node)
+        if len(node.ops) != 1 or not isinstance(node.ops[0], ast.Eq):
+            return node
+        result = (self._try_transform_items_set_eq(
+                      node.left, node.comparators[0], node) or
+                  self._try_transform_items_set_eq(
+                      node.comparators[0], node.left, node))
+        if result is None:
+            return node
+        return result
+
     def visit_Assign(self, node):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
@@ -1831,6 +1913,11 @@ class Preprocessor(ast.NodeTransformer):
                     if (isinstance(node.value, ast.Call) and
                             isinstance(node.value.func, ast.Name)):
                         self.instance_class_map[target.id] = node.value.func.id
+                    # Track dict.items() assignments: items = d.items()
+                    if isinstance(node.value, ast.Call):
+                        dict_expr = self._get_dict_expr_from_items_call(node.value)
+                        if dict_expr is not None:
+                            self.dict_items_vars[target.id] = dict_expr
                 return node
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
