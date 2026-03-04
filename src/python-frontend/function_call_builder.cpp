@@ -261,9 +261,29 @@ symbol_id function_call_builder::build_function_id() const
     }
     else if (func_json["value"]["_type"] == "Call")
     {
-      obj_name = func_json["value"]["func"]["id"];
+      const auto &inner_call = func_json["value"];
+      if (
+        inner_call.contains("func") && inner_call["func"].contains("_type") &&
+        inner_call["func"]["_type"] == "Name" &&
+        inner_call["func"].contains("id") &&
+        inner_call["func"]["id"].is_string())
+      {
+        obj_name = inner_call["func"]["id"].get<std::string>();
+      }
+      else
+      {
+        // Nested calls (e.g., u.encode(...).decode(...)) do not always have
+        // func.id. Use inferred call result type instead of indexing JSON
+        // fields that may be null.
+        obj_name = th.get_operand_type(inner_call);
+      }
+
+      if (obj_name.empty())
+        obj_name = "str";
+
       if (obj_name == "nondet_str")
         obj_name = "str";
+
       if (obj_name == "super")
       {
         // For __init__, use is_ctor=true: parent's __init__ is stored under
@@ -955,6 +975,51 @@ exprt function_call_builder::build() const
   if (call_["func"]["_type"] == "Attribute")
   {
     std::string method_name = call_["func"]["attr"].get<std::string>();
+
+    if (method_name == "decode")
+    {
+      const auto &receiver = call_["func"]["value"];
+      const auto is_utf8_literal = [](const nlohmann::json &node) -> bool {
+        if (
+          node.contains("_type") && node["_type"] == "Constant" &&
+          node.contains("value") && node["value"].is_string())
+        {
+          const std::string encoding = node["value"].get<std::string>();
+          return boost::iequals(encoding, "utf-8") ||
+                 boost::iequals(encoding, "utf8");
+        }
+        return false;
+      };
+
+      const bool has_args = call_.contains("args") && call_["args"].is_array();
+      bool decode_utf8 = !has_args || call_["args"].empty();
+      if (has_args && call_["args"].size() == 1)
+        decode_utf8 = is_utf8_literal(call_["args"][0]);
+
+      if (
+        decode_utf8 && receiver.contains("_type") &&
+        receiver["_type"] == "Call" && receiver.contains("func") &&
+        receiver["func"].contains("_type") &&
+        receiver["func"]["_type"] == "Attribute" &&
+        receiver["func"].contains("attr") &&
+        receiver["func"]["attr"] == "encode")
+      {
+        bool encode_utf8 =
+          !receiver.contains("args") || receiver["args"].empty();
+        if (
+          receiver.contains("args") && receiver["args"].is_array() &&
+          receiver["args"].size() == 1)
+          encode_utf8 = is_utf8_literal(receiver["args"][0]);
+
+        if (
+          encode_utf8 && receiver["func"].contains("value") &&
+          !receiver["func"]["value"].is_null())
+        {
+          // For UTF-8 roundtrip decode(encode(x)), preserve original string.
+          return converter_.get_expr(receiver["func"]["value"]);
+        }
+      }
+    }
 
     if (method_name == "startswith")
     {

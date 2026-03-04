@@ -1696,7 +1696,23 @@ std::string function_call_expr::get_object_name() const
     obj_name = function_id_.get_class();
   else if (subelement["_type"] == "Call")
   {
-    obj_name = subelement["func"]["id"];
+    if (
+      subelement.contains("func") && subelement["func"].contains("_type") &&
+      subelement["func"]["_type"] == "Name" &&
+      subelement["func"].contains("id") && subelement["func"]["id"].is_string())
+    {
+      obj_name = subelement["func"]["id"].get<std::string>();
+    }
+    else
+    {
+      // Nested call receivers (e.g. u.encode(...).decode(...)) do not have
+      // a func.id field in the inner Call AST node.
+      obj_name = type_handler_.get_operand_type(subelement);
+    }
+
+    if (obj_name.empty())
+      obj_name = function_id_.get_class();
+
     if (obj_name == "super")
       obj_name = "self";
   }
