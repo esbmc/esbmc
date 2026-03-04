@@ -1526,15 +1526,22 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       predicate = to_exists2t(expr).side_2;
     }
 
-    // We only want expressions of typecast(address_of(symbol)).
-    if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
-      symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
-
-    if (!is_symbol2t(symbol))
+    // We only want expressions of typecast(address_of(symbol)) or address_of(symbol).
     {
-      log_error("Can only use quantifiers with one symbol");
-      expr->dump();
-      abort();
+      if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
+        symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
+
+      else if (is_address_of2t(symbol))
+        symbol = to_address_of2t(symbol).ptr_obj;
+
+      if (!is_symbol2t(symbol))
+      {
+        log_error(
+          "Could not resolve expression into unique symbol. Please open an "
+          "issue.");
+        symbol->dump();
+        abort();
+      }
     }
 
     /* A bit of spaghetti here: the RHS might have different names due to SSA magic.
