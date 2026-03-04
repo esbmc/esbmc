@@ -4873,7 +4873,8 @@ void python_converter::handle_function_call_rhs(
           !func_def["returns"].is_null())
         {
           const auto &returns = func_def["returns"];
-          // Handle list[T] annotation (Subscript node with value.id == "list")
+          // Handle list[T] annotation
+          // Subscript node with value.id == "list"
           if (
             returns.is_object() && returns.contains("_type") &&
             returns["_type"] == "Subscript" && returns.contains("value") &&
@@ -4883,7 +4884,7 @@ void python_converter::handle_function_call_rhs(
               returns["value"]["id"].get<std::string>();
             if (val_id == "list" || val_id == "List")
             {
-              // Extract element type from the slice (e.g. int in list[int])
+              // Extract element type from the slice, e.g. int in list[int]
               if (
                 returns.contains("slice") && returns["slice"].is_object() &&
                 returns["slice"].contains("id") &&
