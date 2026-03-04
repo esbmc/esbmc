@@ -177,15 +177,17 @@ class Preprocessor(ast.NodeTransformer):
         return self.ensure_all_locations(node, source_node)
 
     def _lower_listcomp(self, node):
-        """Lower a simple list comprehension into prefix statements and result expression."""
-        if len(node.generators) != 1:
-            raise NotImplementedError("Nested list comprehensions are not supported yet")
+        """Lower a list comprehension into prefix statements and result expression.
 
-        generator = node.generators[0]
-        if len(getattr(generator, "ifs", [])) > 1:
-            raise NotImplementedError("Only a single if-condition is supported in list comprehensions")
-        if getattr(generator, "is_async", False):
-            raise NotImplementedError("Async list comprehensions are not supported")
+        A comprehension with multiple `for` clauses is not a nested comprehension:
+        it is semantically equivalent to nested for-loops:
+            [f(i,j) for i in A for j in B]  =>  for i in A: for j in B: tmp.append(f(i,j))
+        """
+        for generator in node.generators:
+            if len(getattr(generator, "ifs", [])) > 1:
+                raise NotImplementedError("Only a single if-condition is supported in list comprehensions")
+            if getattr(generator, "is_async", False):
+                raise NotImplementedError("Async list comprehensions are not supported")
 
         # Create a unique temporary list that will collect results.
         tmp_name = f"ESBMC_listcomp_{self.listcomp_counter}"
@@ -213,26 +215,26 @@ class Preprocessor(ast.NodeTransformer):
         )
         self.ensure_all_locations(append_expr, node.elt)
 
+        # Step 3: build nested for-loops from innermost generator outward.
         loop_body = [append_expr]
-        if generator.ifs:
-            # Wrap the append call in a conditional guard if the comprehension uses a filter.
-            cond = self.visit(generator.ifs[0])
-            self.ensure_all_locations(cond, generator.ifs[0])
-            if_stmt = ast.If(test=cond, body=loop_body, orelse=[])
-            self.ensure_all_locations(if_stmt, generator.ifs[0])
-            ast.fix_missing_locations(if_stmt)
-            loop_body = [if_stmt]
+        for generator in reversed(node.generators):
+            if generator.ifs:
+                cond = self.visit(generator.ifs[0])
+                self.ensure_all_locations(cond, generator.ifs[0])
+                if_stmt = ast.If(test=cond, body=loop_body, orelse=[])
+                self.ensure_all_locations(if_stmt, generator.ifs[0])
+                ast.fix_missing_locations(if_stmt)
+                loop_body = [if_stmt]
+            for_stmt = ast.For(
+                target=generator.target,
+                iter=self.visit(generator.iter),
+                body=loop_body,
+                orelse=[]
+            )
+            self.ensure_all_locations(for_stmt, node)
+            loop_body = [for_stmt]
 
-        # Step 3: synthesise a for-loop that looks identical to the comprehension.
-        for_stmt = ast.For(
-            target=generator.target,
-            iter=self.visit(generator.iter),
-            body=loop_body,
-            orelse=[]
-        )
-        self.ensure_all_locations(for_stmt, node)
-        # Reuse the existing for-to-while lowering logic so we keep behaviour consistent.
-        transformed_for = self.visit_For(for_stmt)
+        transformed_for = self.visit_For(loop_body[0])
         if not isinstance(transformed_for, list):
             transformed_for = [transformed_for]
 
