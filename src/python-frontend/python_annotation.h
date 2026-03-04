@@ -2524,6 +2524,18 @@ private:
 
     if (obj_node.empty())
     {
+      // Method call on temporary expression (e.g., ({1,2,3}-{1}).pop()).
+      // Such values have no symbol name, so object lookup fails.
+      if (
+        obj.empty() && call["func"].contains("value") &&
+        call["func"]["value"].contains("_type") &&
+        call["func"]["value"]["_type"] == "BinOp")
+      {
+        std::string inferred_expr_type =
+          get_type_from_binary_expr(call["func"]["value"], ast_);
+        return inferred_expr_type.empty() ? "Any" : inferred_expr_type;
+      }
+
       // Check if obj is a class name
       Json class_node = json_utils::find_class(ast_["body"], obj);
       if (!class_node.empty())

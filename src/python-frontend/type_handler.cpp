@@ -812,6 +812,23 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     else if (value.is_number_float())
       return "float";
   }
+  else if (operand["_type"] == "Set")
+  {
+    return "set";
+  }
+  else if (operand["_type"] == "BinOp")
+  {
+    std::string lhs_type = get_operand_type(operand["left"]);
+    std::string rhs_type = get_operand_type(operand["right"]);
+
+    if (!lhs_type.empty() && lhs_type == rhs_type)
+      return lhs_type;
+
+    if (!lhs_type.empty())
+      return lhs_type;
+    if (!rhs_type.empty())
+      return rhs_type;
+  }
 
   // Handle list subscript (e.g., `mylist[0]`)
   else if (
