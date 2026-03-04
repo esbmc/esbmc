@@ -286,8 +286,11 @@ symbol_id function_call_builder::build_function_id() const
 
       if (obj_name == "super")
       {
+        // For __init__, use is_ctor=true: parent's __init__ is stored under
+        // the class name (e.g. Vehicle::Vehicle), not the literal "__init__".
+        bool is_init_call = (func_name == "__init__");
         symbolt *base_class_func = converter_.find_function_in_base_classes(
-          current_class_name, function_id.to_string(), func_name, false);
+          current_class_name, function_id.to_string(), func_name, is_init_call);
         if (base_class_func)
         {
           return symbol_id::from_string(base_class_func->id.as_string());

@@ -18,6 +18,7 @@
 #include <util/string_constant.h>
 
 #include <regex>
+#include <cmath>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -37,6 +38,57 @@ constexpr unsigned int SURROGATE_END = 0xDFFF;
 // Constants for symbol parsing
 constexpr const char *CLASS_MARKER = "@C@";
 constexpr const char *FUNCTION_MARKER = "@F@";
+
+double round_ties_to_even(const double value)
+{
+  const double lower = std::floor(value);
+  const double diff = value - lower;
+  constexpr double tie_eps = 1e-12;
+
+  if (diff < 0.5 - tie_eps)
+    return lower;
+  if (diff > 0.5 + tie_eps)
+    return lower + 1.0;
+
+  const double parity = std::fmod(std::fabs(lower), 2.0);
+  const bool lower_is_even =
+    parity < tie_eps || std::fabs(parity - 2.0) < tie_eps;
+  return lower_is_even ? lower : lower + 1.0;
+}
+
+double round_to_ndigits_ties_even(const double value, const int ndigits)
+{
+  auto round_ld_ties_even = [](const long double v) -> long double {
+    const long double lower = std::floor(v);
+    const long double diff = v - lower;
+    constexpr long double tie_eps = 1e-15L;
+
+    if (diff < 0.5L - tie_eps)
+      return lower;
+    if (diff > 0.5L + tie_eps)
+      return lower + 1.0L;
+
+    const long double parity = std::fmod(std::fabs(lower), 2.0L);
+    const bool lower_is_even =
+      parity < tie_eps || std::fabs(parity - 2.0L) < tie_eps;
+    return lower_is_even ? lower : lower + 1.0L;
+  };
+
+  // Keep scaling deterministic across libm implementations.
+  long double scale = 1.0L;
+  if (ndigits >= 0)
+  {
+    for (int i = 0; i < ndigits; ++i)
+      scale *= 10.0L;
+    return static_cast<double>(
+      round_ld_ties_even(static_cast<long double>(value) * scale) / scale);
+  }
+
+  for (int i = 0; i < -ndigits; ++i)
+    scale *= 10.0L;
+  return static_cast<double>(
+    round_ld_ties_even(static_cast<long double>(value) / scale) * scale);
+}
 } // namespace
 
 function_call_expr::function_call_expr(
@@ -1227,6 +1279,108 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   // Fallback for unsupported symbolic expressions (e.g., complex)
   // Currently returns a nil expression to signal unsupported cases
   log_warning("Returning nil expression for abs() with type: {}", arg_type);
+  return nil_exprt();
+}
+
+exprt function_call_expr::handle_round(nlohmann::json &arg) const
+{
+  const auto &args = call_["args"];
+  bool has_ndigits = args.size() >= 2;
+
+  // Reject strings early
+  if (is_string_arg(arg))
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "type str doesn't define __round__ method");
+
+  // Handle unary minus (e.g., round(-3.6))
+  // Unlike abs(), round() must preserve the sign.
+  bool is_negated = false;
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+    if (op["_type"] == "USub" && operand.contains("value"))
+    {
+      arg = operand;
+      is_negated = true;
+    }
+  }
+
+  // Compile-time evaluation for numeric literals
+  if (arg.contains("value") && arg["value"].is_number())
+  {
+    if (!has_ndigits)
+    {
+      // round(x) -> nearest integer (returns int)
+      if (arg["value"].is_number_integer())
+      {
+        int val = arg["value"].get<int>();
+        if (is_negated)
+          val = -val;
+        arg["value"] = val;
+        arg["type"] = "int";
+      }
+      else
+      {
+        double val = arg["value"].get<double>();
+        if (is_negated)
+          val = -val;
+        arg["value"] = static_cast<int>(round_ties_to_even(val));
+        arg["type"] = "int";
+      }
+      typet t = type_handler_.get_typet("int", 0);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
+    }
+    else
+    {
+      // round(x, n) -> float rounded to n decimals
+      auto ndigits_arg = args[1];
+      if (
+        ndigits_arg.contains("value") &&
+        ndigits_arg["value"].is_number_integer())
+      {
+        int n = ndigits_arg["value"].get<int>();
+        double val = arg["value"].is_number_integer()
+                       ? static_cast<double>(arg["value"].get<int>())
+                       : arg["value"].get<double>();
+        if (is_negated)
+          val = -val;
+        double rounded = round_to_ndigits_ties_even(val, n);
+        arg["value"] = rounded;
+        arg["type"] = "float";
+        typet t = type_handler_.get_typet("float", 0);
+        exprt expr = converter_.get_expr(arg);
+        expr.type() = t;
+        return expr;
+      }
+    }
+  }
+
+  // Symbolic: try to build an expression for round(x)
+  if (!has_ndigits)
+  {
+    try
+    {
+      exprt operand_expr = converter_.get_expr(arg);
+      typet float_type = type_handler_.get_typet("float", 0);
+      typet int_type = type_handler_.get_typet("int", 0);
+
+      // Use nearbyint (round-to-nearest-even) on the float operand,
+      // then typecast to int — matching Python's round() semantics.
+      exprt nearbyint_expr("nearbyint", float_type);
+      nearbyint_expr.copy_to_operands(operand_expr);
+      return typecast_exprt(nearbyint_expr, int_type);
+    }
+    catch (const std::exception &)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "failed to infer operand type for round()");
+    }
+  }
+
+  log_warning("round() with symbolic arguments not fully supported");
   return nil_exprt();
 }
 
@@ -2895,6 +3049,20 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_divmod(); },
      "divmod"},
 
+    // round() builtin function
+    {[this]() {
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "round" && function_id_.get_prefix() == "py:";
+     },
+     [this]() {
+       if (call_["args"].empty())
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", "round() missing required argument");
+       auto arg = call_["args"][0];
+       return handle_round(arg);
+     },
+     "round() builtin"},
+
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
        const std::string &func_name = function_id_.get_function();
@@ -2939,6 +3107,19 @@ exprt function_call_expr::handle_general_function_call()
   // Handle single-argument min/max by dispatching to typed builtins
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
+
+  const bool has_user_round =
+    !find_function(converter_.ast()["body"], func_name).empty();
+  if (
+    func_name == "round" && call_.contains("func") &&
+    call_["func"].value("_type", "") == "Name" && !has_user_round)
+  {
+    if (call_["args"].empty())
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "round() missing required argument");
+    auto arg = call_["args"][0];
+    return handle_round(arg);
+  }
 
   if (
     (func_name == "min" || func_name == "max" || func_name == "sorted") &&
@@ -3254,8 +3435,22 @@ exprt function_call_expr::handle_general_function_call()
   {
     call.type() = type_handler_.get_typet(func_symbol->name.as_string());
 
+    // Detect super().__init__() pattern: call parent ctor on current self,
+    // not on a newly allocated object.
+    bool is_super_init = call_["func"]["_type"] == "Attribute" &&
+                         call_["func"]["value"]["_type"] == "Call" &&
+                         call_["func"]["value"].contains("func") &&
+                         call_["func"]["value"]["func"].contains("id") &&
+                         call_["func"]["value"]["func"]["id"] == "super";
+
+    if (is_super_init)
+    {
+      if (obj_symbol)
+        call.arguments().push_back(symbol_expr(*obj_symbol));
+      param_offset = 1;
+    }
     // Self is the LHS
-    if (converter_.current_lhs)
+    else if (converter_.current_lhs)
     {
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;
