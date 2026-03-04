@@ -8,6 +8,7 @@
 #include <util/expr_util.h>
 #include <util/message.h>
 
+#include <cmath>
 #include <ostream>
 
 const char *kConstant = "Constant";
@@ -34,6 +35,50 @@ static double to_double(const numeric_value &value)
 {
   return value.is_int ? static_cast<double>(value.int_value)
                       : value.double_value;
+}
+
+static numeric_value extract_value(const nlohmann::json &arg);
+
+static bool
+try_extract_numeric_constant(const nlohmann::json &node, numeric_value &out)
+{
+  if (!node.is_object() || !node.contains("_type"))
+    return false;
+
+  const std::string type = node["_type"];
+  if (type != "Constant" && type != "UnaryOp")
+    return false;
+
+  try
+  {
+    out = extract_value(node);
+    return true;
+  }
+  catch (const std::exception &)
+  {
+    return false;
+  }
+}
+
+static bool try_extract_numeric_1d_list(
+  const nlohmann::json &list_node,
+  std::vector<numeric_value> &values)
+{
+  if (
+    !list_node.is_object() || !list_node.contains("_type") ||
+    list_node["_type"] != "List" || !list_node.contains("elts"))
+    return false;
+
+  values.clear();
+  values.reserve(list_node["elts"].size());
+  for (const auto &elem : list_node["elts"])
+  {
+    numeric_value value;
+    if (!try_extract_numeric_constant(elem, value))
+      return false;
+    values.push_back(value);
+  }
+  return true;
 }
 
 static numeric_value extract_value(const nlohmann::json &arg)
@@ -338,6 +383,82 @@ exprt numpy_call_expr::create_expr_from_call()
       const std::string &operation = function_id_.get_function();
       if (operation == "transpose")
       {
+        // Constant-fold transpose for fully constant 2D numeric lists.
+        // This avoids forcing integer-only backend transpose for float literals.
+        const auto &list_arg = call_["args"][0];
+        if (
+          list_arg.contains("elts") && !list_arg["elts"].empty() &&
+          list_arg["elts"][0].is_object() &&
+          list_arg["elts"][0].contains("_type") &&
+          list_arg["elts"][0]["_type"] == "List")
+        {
+          const auto &rows = list_arg["elts"];
+          const std::size_t row_count = rows.size();
+          const std::size_t col_count =
+            rows[0].contains("elts") ? rows[0]["elts"].size() : 0;
+          bool is_rectangular = col_count > 0;
+
+          for (const auto &row : rows)
+          {
+            if (
+              !row.is_object() || !row.contains("_type") ||
+              row["_type"] != "List" || !row.contains("elts") ||
+              row["elts"].size() != col_count)
+            {
+              is_rectangular = false;
+              break;
+            }
+          }
+
+          if (is_rectangular)
+          {
+            nlohmann::json transposed;
+            transposed["_type"] = "List";
+            transposed["elts"] = nlohmann::json::array();
+
+            bool all_numeric_constants = true;
+            bool has_float_literal = false;
+            for (std::size_t c = 0; c < col_count && all_numeric_constants; ++c)
+            {
+              nlohmann::json out_row;
+              out_row["_type"] = "List";
+              out_row["elts"] = nlohmann::json::array();
+
+              for (std::size_t r = 0; r < row_count; ++r)
+              {
+                numeric_value value;
+                if (!try_extract_numeric_constant(rows[r]["elts"][c], value))
+                {
+                  all_numeric_constants = false;
+                  break;
+                }
+                has_float_literal = has_float_literal || !value.is_int;
+
+                nlohmann::json elem;
+                elem["_type"] = "Constant";
+                elem["value"] = value.is_int
+                                  ? nlohmann::json(value.int_value)
+                                  : nlohmann::json(value.double_value);
+                out_row["elts"].push_back(elem);
+              }
+
+              if (all_numeric_constants)
+                transposed["elts"].push_back(out_row);
+            }
+
+            if (all_numeric_constants && has_float_literal)
+            {
+              exprt folded = converter_.get_expr(transposed);
+              if (converter_.current_lhs)
+              {
+                converter_.current_lhs->type() = folded.type();
+                converter_.update_symbol(*converter_.current_lhs);
+              }
+              return folded;
+            }
+          }
+        }
+
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
         typet t = call.arguments().at(0).type().subtype();
@@ -358,6 +479,33 @@ exprt numpy_call_expr::create_expr_from_call()
       // Handle calls with arrays as parameters; e.g. np.ceil([1, 2, 3])
       if (arg["_type"] == "List")
       {
+        // Constant-fold np.ceil for concrete 1D numeric lists.
+        if (function_id_.get_function() == "ceil")
+        {
+          std::vector<numeric_value> input_values;
+          if (try_extract_numeric_1d_list(arg, input_values))
+          {
+            nlohmann::json out;
+            out["_type"] = "List";
+            out["elts"] = nlohmann::json::array();
+
+            for (const auto &value : input_values)
+            {
+              nlohmann::json elem;
+              elem["_type"] = "Constant";
+              elem["value"] = std::ceil(to_double(value));
+              out["elts"].push_back(elem);
+            }
+            exprt folded = converter_.get_expr(out);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = folded.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return folded;
+          }
+        }
+
         // Append array postfix to call array variants, e.g., ceil_array instead of ceil
         std::string func_name = function_id_.get_function();
         if (func_name == "ceil")
