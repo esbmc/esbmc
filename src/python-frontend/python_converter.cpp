@@ -1903,8 +1903,9 @@ exprt python_converter::handle_list_operations(
   auto is_any_ptr = [](const typet &t) {
     return t.is_pointer() && t.subtype().id() == "empty";
   };
-  if (lhs.type() == list_type && op == "Add" &&
-      (rhs.type() == list_type || is_any_ptr(rhs.type())))
+  if (
+    lhs.type() == list_type && op == "Add" &&
+    (rhs.type() == list_type || is_any_ptr(rhs.type())))
   {
     if (rhs.type() != list_type)
       rhs = typecast_exprt(rhs, list_type);
