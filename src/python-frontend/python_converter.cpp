@@ -4023,10 +4023,21 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!class_attr_symbol)
         {
-          throw std::runtime_error("Attribute \"" + attr_name + "\" not found");
+          // No class-level symbol: attribute was set per-instance (e.g. in
+          // __init__).  This happens when the object comes from a list element
+          // or other expression that bypasses instance_has_attr registration.
+          // Fall back to the struct member if the component exists.
+          if (class_type.has_component(attr_name))
+          {
+            const typet &attr_type = class_type.get_component(attr_name).type();
+            expr = create_member_expression(*symbol, attr_name, attr_type);
+          }
+          else
+            throw std::runtime_error(
+              "Attribute \"" + attr_name + "\" not found");
         }
-
-        expr = symbol_expr(*class_attr_symbol);
+        else
+          expr = symbol_expr(*class_attr_symbol);
       }
     }
 

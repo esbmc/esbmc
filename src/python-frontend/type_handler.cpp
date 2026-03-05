@@ -461,6 +461,9 @@ typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
     func_name = func["id"].get<std::string>();
     if (type_utils::is_builtin_type(func_name))
       return get_typet(func_name);
+    // User-defined class constructor: A() -> struct type tag-A
+    if (json_utils::is_class(func_name, converter_.ast()))
+      return symbol_typet("tag-" + func_name);
   }
   else if (func["_type"] == "Attribute" && func.contains("attr"))
   {

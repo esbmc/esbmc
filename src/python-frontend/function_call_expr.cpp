@@ -3989,7 +3989,6 @@ exprt function_call_expr::handle_general_function_call()
   }
 
   // For constructors without current_lhs, create temp var and add self if needed
-  // Note: get_return_statements() will handle return statements separately
   if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
   {
     size_t num_provided_args = call_["args"].size();
@@ -3997,7 +3996,6 @@ exprt function_call_expr::handle_general_function_call()
     // Only add self if arguments size matches user args (no self added yet)
     if (call.arguments().size() == num_provided_args)
     {
-      // Self parameter not added yet - this is a standalone call (e.g., Positive(2))
       // Create temporary object as self parameter
       typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
       symbolt &temp_self =
@@ -4012,6 +4010,14 @@ exprt function_call_expr::handle_general_function_call()
       // Insert self as first argument
       call.arguments().insert(
         call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
+
+      // Emit the constructor call directly as a FUNCTION_CALL instruction so
+      // ESBMC inlines it (codet("expression") would produce OTHER and be
+      // skipped).  Return the initialised temp_self symbol so callers such as
+      // list literals receive the properly constructed object.
+      call.location() = location;
+      converter_.add_instruction(call);
+      return symbol_expr(temp_self);
     }
   }
 
