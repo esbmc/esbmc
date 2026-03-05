@@ -255,8 +255,79 @@ class Preprocessor(ast.NodeTransformer):
 
         return [init_assign] + transformed_for, result_name
 
+    def _lower_any_genexp(self, genexp_node):
+        """Lower any(elt for target in iter [if cond]) to prefix stmts + boolean result.
+
+        Transforms:
+            any(elt for target in iter if cond)
+        Into:
+            ESBMC_any_N = False
+            for target in iter:
+                if cond:          # only when ifs are present
+                    if elt:
+                        ESBMC_any_N = True
+            <result: ESBMC_any_N>
+        """
+        tmp_name = f"ESBMC_any_{self.listcomp_counter}"
+        self.listcomp_counter += 1
+
+        # ESBMC_any_N = False
+        init_assign = ast.Assign(
+            targets=[self.create_name_node(tmp_name, ast.Store(), genexp_node)],
+            value=self.create_constant_node(False, genexp_node)
+        )
+        self.ensure_all_locations(init_assign, genexp_node)
+        ast.fix_missing_locations(init_assign)
+
+        # if elt: ESBMC_any_N = True
+        set_true = ast.Assign(
+            targets=[self.create_name_node(tmp_name, ast.Store(), genexp_node)],
+            value=self.create_constant_node(True, genexp_node)
+        )
+        self.ensure_all_locations(set_true, genexp_node)
+        ast.fix_missing_locations(set_true)
+
+        if_true = ast.If(
+            test=self.visit(genexp_node.elt),
+            body=[set_true],
+            orelse=[]
+        )
+        self.ensure_all_locations(if_true, genexp_node)
+        ast.fix_missing_locations(if_true)
+
+        loop_body = [if_true]
+
+        for generator in reversed(genexp_node.generators):
+            if generator.ifs:
+                cond = self.visit(generator.ifs[0])
+                self.ensure_all_locations(cond, generator.ifs[0])
+                if_cond = ast.If(test=cond, body=loop_body, orelse=[])
+                self.ensure_all_locations(if_cond, generator.ifs[0])
+                ast.fix_missing_locations(if_cond)
+                loop_body = [if_cond]
+            for_stmt = ast.For(
+                target=generator.target,
+                iter=self.visit(generator.iter),
+                body=loop_body,
+                orelse=[]
+            )
+            self.ensure_all_locations(for_stmt, genexp_node)
+            ast.fix_missing_locations(for_stmt)
+            loop_body = [for_stmt]
+
+        transformed_for = self.visit_For(loop_body[0])
+        if not isinstance(transformed_for, list):
+            transformed_for = [transformed_for]
+
+        for stmt in transformed_for:
+            self.ensure_all_locations(stmt, genexp_node)
+            ast.fix_missing_locations(stmt)
+
+        result_name = self.create_name_node(tmp_name, ast.Load(), genexp_node)
+        return [init_assign] + transformed_for, result_name
+
     class _ListCompExpressionLowerer(ast.NodeTransformer):
-        """Utility transformer that lowers list comprehensions inside an expression."""
+        """Utility transformer that lowers list comprehensions and any(genexpr) inside an expression."""
 
         def __init__(self, preprocessor):
             super().__init__()
@@ -267,6 +338,16 @@ class Preprocessor(ast.NodeTransformer):
             prefix, result_expr = self.preprocessor._lower_listcomp(node)
             self.statements.extend(prefix)
             return result_expr
+
+        def visit_Call(self, node):
+            # Lower any(GeneratorExp(...)) to a loop-based boolean
+            if (isinstance(node.func, ast.Name) and node.func.id == 'any'
+                    and len(node.args) == 1
+                    and isinstance(node.args[0], ast.GeneratorExp)):
+                prefix, result = self.preprocessor._lower_any_genexp(node.args[0])
+                self.statements.extend(prefix)
+                return result
+            return self.generic_visit(node)
 
     def _has_early_return_before_yield(self, body):
         """Return True if body has a Return statement before any Yield (linear top-level scan)."""
