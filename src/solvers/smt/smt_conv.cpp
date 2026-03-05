@@ -1,6 +1,4 @@
 #include "irep2/irep2_expr.h"
-#include <cfloat>
-#include <cstring>
 #include <iomanip>
 #include <solvers/prop/literal.h>
 #include <solvers/smt/smt_conv.h>
@@ -74,7 +72,6 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   array_api = nullptr;
   fp_api = nullptr;
   ra_api = nullptr;
-
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -679,7 +676,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
-
 
   case expr2t::mul_id:
   {
@@ -2798,11 +2794,6 @@ expr2tc smt_convt::get(const expr2tc &expr)
     else
       have_all = false;
   });
-    
-  
-  // If we have null operands, return early to avoid crashes in simplify()
-  if (has_null_operands)
-    return expr;
 
   // If we have null operands, return early to avoid crashes in simplify()
   if (has_null_operands)
@@ -2916,140 +2907,6 @@ double smt_convt::convert_rational_to_double(
   const BigInt &numerator,
   const BigInt &denominator)
 {
-  constexpr size_t BUFFER_SIZE = 1024;
-  constexpr size_t INITIAL_BUFFER_SIZE = 1024;
-  constexpr size_t MAX_BUFFER_SIZE = 100000;
-
-  std::vector<char> num_buffer(BUFFER_SIZE, '\0');
-  std::vector<char> den_buffer(BUFFER_SIZE, '\0');
-
-  numerator.as_string(num_buffer.data(), num_buffer.size(), 10);
-  denominator.as_string(den_buffer.data(), den_buffer.size(), 10);
-
-  num_buffer.back() = '\0';
-  den_buffer.back() = '\0';
-
-  size_t num_len = strnlen(num_buffer.data(), num_buffer.size());
-  size_t den_len = strnlen(den_buffer.data(), den_buffer.size());
-
-  // If the fixed buffer was insufficient, grow and retry safely.
-  if (num_len >= num_buffer.size() - 1 || den_len >= den_buffer.size() - 1)
-  {
-    auto ensure_string = [&](const BigInt &value, std::vector<char> &buffer) {
-      // start from the initial size
-      buffer.assign(INITIAL_BUFFER_SIZE, '\0');
-
-      while (true)
-      {
-        char *result = value.as_string(buffer.data(), buffer.size(), 10);
-        buffer.back() = '\0';
-
-        if (result != nullptr)
-          return;
-
-        size_t next_size = buffer.size() * 2;
-        if (next_size > MAX_BUFFER_SIZE)
-        {
-          log_error("BigInt string too large to convert safely");
-          abort();
-        }
-
-        buffer.assign(next_size, '\0');
-      }
-    };
-
-    ensure_string(numerator, num_buffer);
-    ensure_string(denominator, den_buffer);
-
-    
-    num_len = strnlen(num_buffer.data(), num_buffer.size());
-    den_len = strnlen(den_buffer.data(), den_buffer.size());
-  }
-
-  // Populate the buffer with the decimal representation of `value`, growing the
-  // buffer as needed. We keep the legacy fixed-size path to avoid extra
-  // allocations on the common fast path.
-  auto ensure_string = [&](const BigInt &value, std::vector<char> &buffer) {
-    while (true)
-    {
-      // 1) Try to reuse the current buffer (may already be large).
-      if (!buffer.empty())
-      {
-        char *result = value.as_string(buffer.data(), buffer.size(), 10);
-
-        if (result != nullptr)
-        {
-          // 1a) as_string returns a pointer to the first digit; copy it forward.
-          size_t len = strnlen(result, buffer.size());
-          if (len > 0 && len < buffer.size())
-          {
-            // Include the trailing '\0' so later std::stod sees the number.
-            for (size_t i = 0; i <= len; ++i)
-              buffer[i] = result[i];
-            return true;
-          }
-        }
-      }
-
-      // 2) Need a larger buffer: estimate required digits (+ sign + '\0').
-      size_t required = static_cast<size_t>(value.digits(10)) + 2;
-      size_t next_size = buffer.size() * 2;
-      if (next_size < required)
-        next_size = required;
-      if (next_size == 0)
-        next_size = INITIAL_BUFFER_SIZE;
-      if (next_size > MAX_BUFFER_SIZE)
-        return false;
-
-      // 3) Grow buffer and retry.
-      buffer.assign(next_size, '\0');
-    }
-  };
-
-  // Extract decimal strings for numerator/denominator (with fallback).
-  bool num_ok = ensure_string(numerator, num_buffer);
-  bool den_ok = ensure_string(denominator, den_buffer);
-
-  if (!num_ok || !den_ok)
-  {
-    // If conversion still fails, keep legacy behaviour: approximate sign.
-    bool num_positive = !numerator.is_zero();
-    bool den_positive = !denominator.is_zero();
-
-    if (num_positive && den_positive)
-    {
-      log_warning(
-        "BigInt as_string() failed for very small rational - returning minimal "
-        "positive value");
-      return DBL_MIN;
-    }
-    else
-    {
-      log_warning("BigInt as_string() failed and cannot determine sign");
-      return 0.0;
-    }
-  }
-
-
-
-  if (num_len >= num_buffer.size() - 1 || den_len >= den_buffer.size() - 1)
-  {
-    // Bail out if we still risk truncation.
-    log_warning(
-      "BigInt to string conversion may have been truncated - buffer too small");
-    return 0.0;
-  }
-
-  try
-  {
-    double num_val = std::stod(num_buffer.data());
-    double den_val = std::stod(den_buffer.data());
-    return (den_val != 0.0) ? num_val / den_val : 0.0;
-  }
-  catch (const std::exception &)
-  {
-    return 0.0;
-  }
   bool numerator_negative = numerator.is_negative();
   bool denominator_negative = denominator.is_negative();
 
