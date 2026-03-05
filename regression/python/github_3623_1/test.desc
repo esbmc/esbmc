@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: Unsupported reassignment from dict to list for variable 'd'$

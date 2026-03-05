@@ -2,6 +2,57 @@
 #include <algorithm>
 #include <cmath>
 
+static double round_ties_to_even_consteval(const double value)
+{
+  const double lower = std::floor(value);
+  const double diff = value - lower;
+  constexpr double tie_eps = 1e-12;
+
+  if (diff < 0.5 - tie_eps)
+    return lower;
+  if (diff > 0.5 + tie_eps)
+    return lower + 1.0;
+
+  const double parity = std::fmod(std::fabs(lower), 2.0);
+  const bool lower_is_even =
+    parity < tie_eps || std::fabs(parity - 2.0) < tie_eps;
+  return lower_is_even ? lower : lower + 1.0;
+}
+
+static double
+round_to_ndigits_ties_even_consteval(const double value, const int ndigits)
+{
+  auto round_ld_ties_even = [](const long double v) -> long double {
+    const long double lower = std::floor(v);
+    const long double diff = v - lower;
+    constexpr long double tie_eps = 1e-15L;
+
+    if (diff < 0.5L - tie_eps)
+      return lower;
+    if (diff > 0.5L + tie_eps)
+      return lower + 1.0L;
+
+    const long double parity = std::fmod(std::fabs(lower), 2.0L);
+    const bool lower_is_even =
+      parity < tie_eps || std::fabs(parity - 2.0L) < tie_eps;
+    return lower_is_even ? lower : lower + 1.0L;
+  };
+
+  long double scale = 1.0L;
+  if (ndigits >= 0)
+  {
+    for (int i = 0; i < ndigits; ++i)
+      scale *= 10.0L;
+    return static_cast<double>(
+      round_ld_ties_even(static_cast<long double>(value) * scale) / scale);
+  }
+
+  for (int i = 0; i < -ndigits; ++i)
+    scale *= 10.0L;
+  return static_cast<double>(
+    round_ld_ties_even(static_cast<long double>(value) / scale) * scale);
+}
+
 bool PyConstValue::is_truthy() const
 {
   switch (kind)
@@ -868,6 +919,38 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         return PyConstValue::make_int(
           arg->int_val < 0 ? -arg->int_val : arg->int_val);
       return std::nullopt;
+    }
+
+    // Built-in: round()
+    if (func_name == "round")
+    {
+      if (node["args"].size() < 1 || node["args"].size() > 2)
+        return std::nullopt;
+      auto arg = eval_expr(node["args"][0], env);
+      if (!arg)
+        return std::nullopt;
+
+      if (node["args"].size() == 1)
+      {
+        // round(x) -> int
+        if (arg->kind == PyConstValue::INT)
+          return PyConstValue::make_int(arg->int_val);
+        if (arg->kind == PyConstValue::FLOAT)
+          return PyConstValue::make_int(static_cast<long long>(
+            round_ties_to_even_consteval(arg->float_val)));
+        return std::nullopt;
+      }
+
+      // round(x, n) -> float (or int if n <= 0, but keep float for simplicity)
+      auto ndigits = eval_expr(node["args"][1], env);
+      if (!ndigits || ndigits->kind != PyConstValue::INT)
+        return std::nullopt;
+      int n = static_cast<int>(ndigits->int_val);
+      double val = (arg->kind == PyConstValue::INT)
+                     ? static_cast<double>(arg->int_val)
+                     : arg->float_val;
+      double rounded = round_to_ndigits_ties_even_consteval(val, n);
+      return PyConstValue::make_float(rounded);
     }
 
     // Built-in: min(), max() for two int arguments

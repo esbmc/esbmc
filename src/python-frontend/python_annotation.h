@@ -2524,6 +2524,18 @@ private:
 
     if (obj_node.empty())
     {
+      // Method call on temporary expression (e.g., ({1,2,3}-{1}).pop()).
+      // Such values have no symbol name, so object lookup fails.
+      if (
+        obj.empty() && call["func"].contains("value") &&
+        call["func"]["value"].contains("_type") &&
+        call["func"]["value"]["_type"] == "BinOp")
+      {
+        std::string inferred_expr_type =
+          get_type_from_binary_expr(call["func"]["value"], ast_);
+        return inferred_expr_type.empty() ? "Any" : inferred_expr_type;
+      }
+
       // Check if obj is a class name
       Json class_node = json_utils::find_class(ast_["body"], obj);
       if (!class_node.empty())
@@ -2534,6 +2546,19 @@ private:
         {
           if (member["_type"] == "FunctionDef" && member["name"] == method_name)
           {
+            // Prefer the explicit return-type annotation when present.
+            if (member.contains("returns") && !member["returns"].is_null())
+            {
+              const Json &ret = member["returns"];
+              // Simple type: -> str, -> int, -> MyClass
+              if (ret.contains("id"))
+                return ret["id"].template get<std::string>();
+              // Generic type: -> dict[str, bool], -> list[int], etc.
+              if (
+                ret.contains("_type") && ret["_type"] == "Subscript" &&
+                ret.contains("value") && ret["value"].contains("id"))
+                return ret["value"]["id"].template get<std::string>();
+            }
             std::string inferred_type =
               infer_from_return_statements(member["body"], method_name);
             if (!inferred_type.empty())
@@ -2694,6 +2719,10 @@ private:
 
       return InferResult::OK;
     }
+
+    // Guard against bare return (value=null) or missing value key
+    if (!stmt.contains("value") || stmt["value"].is_null())
+      return InferResult::UNKNOWN;
 
     const auto &value_type = stmt["value"]["_type"];
 
