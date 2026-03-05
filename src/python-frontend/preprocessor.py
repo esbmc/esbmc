@@ -268,6 +268,12 @@ class Preprocessor(ast.NodeTransformer):
                         ESBMC_any_N = True
             <result: ESBMC_any_N>
         """
+        for generator in genexp_node.generators:
+            if len(getattr(generator, "ifs", [])) > 1:
+                raise NotImplementedError("Only a single if-condition is supported in generator expressions")
+            if getattr(generator, "is_async", False):
+                raise NotImplementedError("Async generator expressions are not supported")
+
         tmp_name = f"ESBMC_any_{self.listcomp_counter}"
         self.listcomp_counter += 1
 
