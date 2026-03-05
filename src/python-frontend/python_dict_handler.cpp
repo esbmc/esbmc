@@ -1193,10 +1193,25 @@ exprt python_dict_handler::handle_dict_get(
   // When no explicit default is given, dict.get() returns Optional[T]:
   // either the value (key found) or None (key not found). Use an Optional
   // struct so that `result is None` correctly checks the is_none field.
+  // Exception: for string result types (char array or char*), use a null char*
+  // to represent None instead. Storing a char* inside an Optional struct field
+  // causes the ESBMC SMT encoder's dereference layer to fail (is_struct_type
+  // assertion in dereference.cpp). A null char* is correctly handled by the
+  // isnone evaluator's pointer path: `result is None` => `result == NULL`.
+  // Also normalize the result type to char* (not char[0]) for consistency with
+  // handle_dict_subscript which always returns char* for string values.
   const bool no_explicit_default = (args.size() < 2);
+  const bool is_string_result =
+    (result_type.is_array() && result_type.subtype() == char_type()) ||
+    (result_type.is_pointer() && result_type.subtype() == char_type());
+  const bool use_optional = no_explicit_default && !is_string_result;
+  // Normalize string types to char* so the result variable holds a proper
+  // pointer, not a zero-length char array.
+  typet normalized_result_type =
+    is_string_result ? gen_pointer_type(char_type()) : result_type;
   typet effective_result_type =
-    no_explicit_default ? type_handler_.build_optional_type(result_type)
-                        : result_type;
+    use_optional ? type_handler_.build_optional_type(normalized_result_type)
+                 : normalized_result_type;
 
   // Get dict members
   member_exprt keys_member(dict_expr, "keys", list_type);
@@ -1306,6 +1321,13 @@ exprt python_dict_handler::handle_dict_get(
     typecast_exprt value_as_none(obj_value, result_type);
     retrieved_value = value_as_none;
   }
+  else if (is_string_result)
+  {
+    // For string types: cast void* directly to char* (same as
+    // handle_dict_subscript). Avoid casting to char[0] which is unusable.
+    typecast_exprt value_as_string(obj_value, gen_pointer_type(char_type()));
+    retrieved_value = value_as_string;
+  }
   else
   {
     typecast_exprt value_as_typed(obj_value, result_type);
@@ -1313,7 +1335,7 @@ exprt python_dict_handler::handle_dict_get(
   }
 
   exprt then_value =
-    no_explicit_default
+    use_optional
       ? converter_.wrap_in_optional(retrieved_value, effective_result_type)
       : retrieved_value;
   code_assignt value_assign(symbol_expr(result_var), then_value);
@@ -1323,7 +1345,7 @@ exprt python_dict_handler::handle_dict_get(
   // Else branch: key not found, use default
   code_blockt else_block;
 
-  if (no_explicit_default)
+  if (use_optional)
   {
     // No default given: return Optional(is_none=true) so `result is None` holds.
     constant_exprt none_expr(none_type());
@@ -1331,6 +1353,16 @@ exprt python_dict_handler::handle_dict_get(
     exprt optional_none =
       converter_.wrap_in_optional(none_expr, effective_result_type);
     code_assignt default_assign(symbol_expr(result_var), optional_none);
+    default_assign.location() = location;
+    else_block.copy_to_operands(default_assign);
+  }
+  else if (no_explicit_default)
+  {
+    // String/pointer type with no explicit default: assign NULL char* to
+    // represent None. The isnone evaluator's pointer path handles
+    // `result is None` by checking pointer == NULL.
+    code_assignt default_assign(
+      symbol_expr(result_var), gen_zero(effective_result_type));
     default_assign.location() = location;
     else_block.copy_to_operands(default_assign);
   }
