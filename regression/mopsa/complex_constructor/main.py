@@ -34,7 +34,7 @@ assert z7.imag == 4.0
 
 raised = False
 try:
-    complex("1")
+    complex("1", "2")
 except TypeError:
     raised = True
 assert raised
