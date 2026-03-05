@@ -496,8 +496,9 @@ private:
             if (i >= defaults_start)
             {
               const Json &def_node = defaults[i - defaults_start];
-              if (def_node.contains("_type") && def_node["_type"] == "Name" &&
-                  def_node.contains("id"))
+              if (
+                def_node.contains("_type") && def_node["_type"] == "Name" &&
+                def_node.contains("id"))
               {
                 const std::string &def_name =
                   def_node["id"].template get<std::string>();
