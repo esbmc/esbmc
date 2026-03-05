@@ -159,7 +159,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       while (is_with2t(current))
       {
         const with2t &w = to_with2t(current);
-        if (!is_constant_expr(w.update_value))
+        if (!constant_propagation(w.update_value))
         {
           all_constant_updates = false;
           break;
