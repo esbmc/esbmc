@@ -166,16 +166,50 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
     elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
   }
-  // Handle struct types (such as dictionaries): store by reference
-  else if (elem_symbol.type.is_struct())
+  // Handle struct types (such as dictionaries and user-defined classes).
+  // The element type may be a symbol_typet reference (e.g. "tag-A") rather
+  // than a plain struct_typet, so follow the type before checking is_struct().
+  else if (
+    elem_symbol.type.is_struct() ||
+    (elem_symbol.type.id() == "symbol" &&
+     converter_.name_space().follow(elem_symbol.type).is_struct()))
   {
-    // Calculate actual struct size by counting pointer-sized components
-    const struct_union_typet &struct_type =
-      to_struct_union_type(elem_symbol.type);
+    const typet &resolved =
+      elem_symbol.type.is_struct()
+        ? elem_symbol.type
+        : converter_.name_space().follow(elem_symbol.type);
+    const struct_union_typet &struct_type = to_struct_union_type(resolved);
 
-    // For dictionary structs, each component is a pointer (keys, values)
-    size_t num_components = struct_type.components().size();
-    size_t total_size = num_components * (config.ansi_c.pointer_width() / 8);
+    // Sum the widths of all components to get the true struct size in bytes.
+    size_t total_size = 0;
+    for (const auto &comp : struct_type.components())
+    {
+      const typet &ct = comp.type();
+      if (ct.id() == "symbol")
+      {
+        // Nested struct/class component: recurse via namespace follow
+        const typet &followed = converter_.name_space().follow(ct);
+        if (followed.is_struct())
+        {
+          for (const auto &sc : to_struct_union_type(followed).components())
+          {
+            if (!sc.type().width().empty())
+              total_size +=
+                std::stoull(sc.type().width().as_string(), nullptr, 10) / 8;
+            else
+              total_size += config.ansi_c.pointer_width() / 8;
+          }
+        }
+        else
+          total_size += config.ansi_c.pointer_width() / 8;
+      }
+      else if (!ct.width().empty())
+        total_size += std::stoull(ct.width().as_string(), nullptr, 10) / 8;
+      else
+        total_size += config.ansi_c.pointer_width() / 8;
+    }
+    if (total_size == 0)
+      total_size = config.ansi_c.pointer_width() / 8;
 
     elem_size = from_integer(BigInt(total_size), size_type());
   }
@@ -545,7 +579,14 @@ exprt python_list::get()
 
   for (auto &e : list_value_["elts"])
   {
+    // Clear current_lhs so that constructor calls inside list elements
+    // (e.g. [A(), B()]) create their own self temp variable instead of
+    // inheriting the outer assignment target as self.
+    exprt *saved_lhs = converter_.current_lhs;
+    converter_.current_lhs = nullptr;
     exprt elem = converter_.get_expr(e);
+    converter_.current_lhs = saved_lhs;
+
     exprt list_push_func_call =
       build_push_list_call(list_symbol, list_value_, elem);
     converter_.add_instruction(list_push_func_call);
