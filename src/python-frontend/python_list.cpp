@@ -178,8 +178,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
       elem_symbol.type.is_struct()
         ? elem_symbol.type
         : converter_.name_space().follow(elem_symbol.type);
-    const struct_union_typet &struct_type =
-      to_struct_union_type(resolved);
+    const struct_union_typet &struct_type = to_struct_union_type(resolved);
 
     // Sum the widths of all components to get the true struct size in bytes.
     size_t total_size = 0;
@@ -205,8 +204,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
           total_size += config.ansi_c.pointer_width() / 8;
       }
       else if (!ct.width().empty())
-        total_size +=
-          std::stoull(ct.width().as_string(), nullptr, 10) / 8;
+        total_size += std::stoull(ct.width().as_string(), nullptr, 10) / 8;
       else
         total_size += config.ansi_c.pointer_width() / 8;
     }
