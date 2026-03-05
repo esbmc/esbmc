@@ -79,7 +79,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Global", StatementType::GLOBAL},
   {"Try", StatementType::TRY},
   {"ExceptHandler", StatementType::EXCEPTHANDLER},
-  {"Delete", StatementType::DELETE}};
+  {"Delete", StatementType::DELETE_STATEMENT}};
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -7887,7 +7887,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exception_handler_->get_raise_statement(element, block);
       break;
     }
-    case StatementType::DELETE:
+    case StatementType::DELETE_STATEMENT:
     {
       get_delete_statement(element, block);
       break;
