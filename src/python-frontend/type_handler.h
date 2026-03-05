@@ -11,7 +11,7 @@ class python_converter;
 inline struct_typet get_complex_struct_type()
 {
   struct_typet complex_type;
-  complex_type.tag("tag-complex");
+  complex_type.tag("complex");
   complex_type.components().push_back(
     struct_typet::componentt("real", "real", double_type()));
   complex_type.components().push_back(
@@ -28,7 +28,8 @@ inline bool is_complex_type(const typet &type)
     return false;
 
   const struct_typet &struct_type = to_struct_type(type);
-  return struct_type.tag().as_string() == "tag-complex";
+  const std::string tag = struct_type.tag().as_string();
+  return tag == "complex" || tag == "tag-complex";
 }
 
 inline exprt make_complex(const exprt &real, const exprt &imag)

@@ -4008,7 +4008,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // This allows parameter objects like 'f: Foo' to access instance attributes
       else if (
         !is_converting_lhs && class_type.has_component(attr_name) &&
-        (instance_has_attr || symbol->is_parameter))
+        (instance_has_attr || symbol->is_parameter || is_complex_type(class_type)))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = create_member_expression(*symbol, attr_name, attr_type);
