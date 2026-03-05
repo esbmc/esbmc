@@ -4892,6 +4892,10 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     inferred_type = rhs_expr.type();
     if (inferred_type.is_empty())
       inferred_type = any_type();
+    // Function alias assignment (g = f): store as function pointer,
+    // mirroring how lambda assignments are handled.
+    else if (inferred_type.is_code())
+      inferred_type = gen_pointer_type(inferred_type);
   }
 
   symbolt symbol =
@@ -6992,6 +6996,28 @@ void python_converter::process_function_arguments(
         {
           exprt default_expr = get_expr(defaults[i]);
           type.arguments()[positional_index].default_value() = default_expr;
+
+          // If the default is a function pointer and the parameter was
+          // annotated as Any (void*), upgrade the parameter type to match.
+          // This enables indirect-call resolution for function-alias defaults
+          // like def h(op=g) where g = f (a named function).
+          if (
+            default_expr.type().is_pointer() &&
+            default_expr.type().subtype().is_code())
+          {
+            auto &param_arg = type.arguments()[positional_index];
+            if (param_arg.type() == any_type())
+            {
+              param_arg.type() = default_expr.type();
+              std::string param_id = param_arg.cmt_identifier().as_string();
+              if (!param_id.empty())
+              {
+                symbolt *param_sym = symbol_table_.find_symbol(param_id);
+                if (param_sym)
+                  param_sym->type = default_expr.type();
+              }
+            }
+          }
         }
       }
     }
@@ -7226,6 +7252,34 @@ void python_converter::get_function_definition(
     {
       type.return_type() = inferred_type;
       added_symbol->type = type; // Update the symbol's type
+    }
+  }
+
+  // If return type is still empty, scan the converted GOTO body for RETURN
+  // instructions with typed values. This handles indirect calls through
+  // function-pointer parameters (e.g., "return op(1,1)" where op defaults
+  // to a typed function pointer).
+  if (type.return_type().is_empty())
+  {
+    for (const auto &instr : function_body.operands())
+    {
+      if (!instr.is_code())
+        continue;
+      const codet &code_instr = to_code(instr);
+      if (code_instr.get_statement() == "return")
+      {
+        const code_returnt &ret = to_code_return(code_instr);
+        if (ret.has_return_value())
+        {
+          const typet &ret_type = ret.return_value().type();
+          if (!ret_type.is_empty())
+          {
+            type.return_type() = ret_type;
+            added_symbol->type = type;
+            break;
+          }
+        }
+      }
     }
   }
 
