@@ -533,11 +533,6 @@ private:
                   }
                 }
               }
-              else if (
-                def_node.contains("_type") && def_node["_type"] == "Lambda")
-              {
-                inferred_type = "Any";
-              }
             }
           }
         }
@@ -2124,24 +2119,8 @@ private:
                 if (t.contains("id") && t["id"] == func_id)
                   return "";
             }
-            // Annotated assignment: g: Any = f
-            else if (
-              stype == "AnnAssign" && stmt.contains("target") &&
-              stmt["target"].contains("id") && stmt["target"]["id"] == func_id)
-            {
-              return "";
-            }
-            // Parameter of a top-level function: def h(op=g)
-            else if (
-              stype == "FunctionDef" && stmt.contains("args") &&
-              stmt["args"].contains("args"))
-            {
-              for (const auto &arg : stmt["args"]["args"])
-                if (arg.contains("arg") && arg["arg"] == func_id)
-                  return "";
-            }
           }
-          throw; // func_id is not a known variable — propagate the error
+          throw; // func_id is not a known variable: propagate the error
         }
       }
     }
