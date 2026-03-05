@@ -2815,10 +2815,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !is_class(func_name, *ast_json))
     {
       const auto &func_node = find_function((*ast_json)["body"], func_name);
-      // func_node may be empty for functions handled internally by ESBMC
-      // (e.g. len, print, str) that do not appear as user defs in the AST.
-      if (!func_node.empty())
-        get_function_definition(func_node);
+      assert(!func_node.empty());
+      get_function_definition(func_node);
     }
   }
 
