@@ -1897,9 +1897,18 @@ exprt python_converter::handle_list_operations(
     return list.compare(lhs, rhs, op);
   }
 
-  // List concatenation
-  if (lhs.type() == list_type && rhs.type() == list_type && op == "Add")
+  // List concatenation: also handle Any-typed (void*) right operand, which
+  // occurs when iterating an untyped iterable (e.g. `for r in f()` with no
+  // return annotation) and then concatenating with a typed list literal.
+  auto is_any_ptr = [](const typet &t) {
+    return t.is_pointer() && t.subtype().id() == "empty";
+  };
+  if (
+    lhs.type() == list_type && op == "Add" &&
+    (rhs.type() == list_type || is_any_ptr(rhs.type())))
   {
+    if (rhs.type() != list_type)
+      rhs = typecast_exprt(rhs, list_type);
     python_list list(*this, element);
     return list.build_concat_list_call(lhs, rhs, element);
   }
@@ -7746,6 +7755,20 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::EXPR:
     {
+      // Skip yield expressions: the preprocessor inlines them into assignments.
+      // Reject yield from: the preprocessor does not expand it, so reaching
+      // here means the generator was not fully lowered and verification would
+      // silently produce wrong results.
+      if (element.contains("value") && element["value"].contains("_type"))
+      {
+        const auto &inner_type = element["value"]["_type"];
+        if (inner_type == "Yield")
+          break;
+        if (inner_type == "YieldFrom")
+          throw std::runtime_error(
+            "'yield from' is not supported in ESBMC's Python frontend");
+      }
+
       // Function calls are handled here
       exprt empty;
       exprt expr = get_expr(element["value"]);
