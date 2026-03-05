@@ -2728,8 +2728,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       side_effect_expr_function_callt call;
       call.location() = get_location_from_decl(element);
 
-      // The function pointer itself, not dereferenced
+      // The function pointer itself, not dereferenced.
+      // For Any-typed (void*) parameters, cast to a generic function pointer
+      // so that the adjuster can dereference it to a code type (it calls
+      // to_code_type on the dereferenced subtype, which would fail on void).
       exprt func_ptr_expr = symbol_expr(*var_symbol);
+      if (var_symbol->type == any_type())
+        func_ptr_expr =
+          typecast_exprt(func_ptr_expr, gen_pointer_type(code_typet()));
       call.function() = func_ptr_expr;
 
       // Resolve return type from the concrete target function stored in
@@ -2756,7 +2762,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       {
         const code_typet &func_type = to_code_type(var_symbol->type.subtype());
         call.type() = func_type.return_type();
+        resolved = true;
       }
+
+      // Fallback for Any-typed (void*) function parameters: use any_type so
+      // the indirect call expression has a well-formed type.
+      if (!resolved)
+        call.type() = any_type();
 
       // Process arguments
       if (element.contains("args"))
@@ -2764,6 +2776,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         for (const auto &arg_element : element["args"])
         {
           exprt arg_expr = get_expr(arg_element);
+          // A function name used as an argument decays to a function pointer.
+          if (arg_expr.type().is_code() && arg_expr.is_symbol())
+            arg_expr = address_of_exprt(arg_expr);
           call.arguments().push_back(arg_expr);
         }
       }
@@ -2800,8 +2815,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !is_class(func_name, *ast_json))
     {
       const auto &func_node = find_function((*ast_json)["body"], func_name);
-      assert(!func_node.empty());
-      get_function_definition(func_node);
+      // func_node may be empty for functions handled internally by ESBMC
+      // (e.g. len, print, str) that do not appear as user defs in the AST.
+      if (!func_node.empty())
+        get_function_definition(func_node);
     }
   }
 
@@ -6861,16 +6878,9 @@ size_t python_converter::register_function_argument(
   {
     if (!element.contains("annotation") || element["annotation"].is_null())
     {
-      // Allow unannotated parameters in nested functions by defaulting to Any.
-      // Top-level functions still require explicit annotations.
-      if (current_func_name_.find("@F@") != std::string::npos)
-        arg_type = any_type();
-      else
-      {
-        throw std::runtime_error(
-          "All parameters in function \"" + current_func_name_ +
-          "\" must be type annotated");
-      }
+      // Python does not require type annotations; treat unannotated parameters
+      // as Any (void*) to follow Python semantics.
+      arg_type = any_type();
     }
     else
       arg_type = get_type_from_annotation(element["annotation"], element);
