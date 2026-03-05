@@ -1204,7 +1204,7 @@ expr2tc pointer_offset2t::do_simplify() const
       expand_symbol_types(ptr_op, migrate_namespace_lookup);
 
     assert(!is_symbol_type(to_pointer_type(ptr_op->type).subtype));
-    
+
     // Turn the pointer one into pointer_offset.
     expr2tc new_ptr_op = pointer_offset2tc(type, ptr_op);
     // And multiply the non pointer one by the type size.

@@ -749,8 +749,7 @@ inline void expand_symbol_types(expr2tc &expr, const namespacet *ns)
 
   result->type = expand_type(result->type, ns);
 
-  result->Foreach_operand(
-    [&ns](expr2tc &op) { expand_symbol_types(op, ns); });
+  result->Foreach_operand([&ns](expr2tc &op) { expand_symbol_types(op, ns); });
 
   expr = result;
 }
