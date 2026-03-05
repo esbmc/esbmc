@@ -1793,8 +1793,10 @@ class Preprocessor(ast.NodeTransformer):
                 ctx=ast.Load()
             )
         else:
-            # Fallback to simple 'list' if we can't infer element type
-            iter_annotation = ast.Name(id=annotation_id, ctx=ast.Load())
+            # Use 'Any' instead of bare 'list' to avoid misinterpreting the
+            # container type as the element type in the C++ converter,
+            # which causes invalid ptr+ptr arithmetic (crashes in arith_2ops).
+            iter_annotation = ast.Name(id='Any', ctx=ast.Load())
 
         # Create: ESBMC_iter_N: list[element_type] = <iterable>
         iter_assign = ast.AnnAssign(
