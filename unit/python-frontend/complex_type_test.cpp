@@ -4,15 +4,20 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/type_handler.h>
+#include <util/config.h>
 #include <util/context.h>
 
 TEST_CASE("complex type helpers", "[python-frontend][complex]")
 {
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
   SECTION("detects complex struct type")
   {
     const struct_typet complex_type = get_complex_struct_type();
 
     REQUIRE(is_complex_type(complex_type));
+    REQUIRE(complex_type.tag().as_string() == "complex");
     REQUIRE(complex_type.components().size() == 2);
     REQUIRE(complex_type.components()[0].get_name() == "real");
     REQUIRE(complex_type.components()[1].get_name() == "imag");
@@ -76,6 +81,13 @@ TEST_CASE("complex type helpers", "[python-frontend][complex]")
     const symbolt *complex_type_symbol = context.find_symbol("tag-complex");
     REQUIRE(complex_type_symbol != nullptr);
     REQUIRE(complex_type_symbol->is_type);
+    REQUIRE(complex_type_symbol->id.as_string() == "tag-complex");
     REQUIRE(is_complex_type(complex_type_symbol->type));
+
+    // Generic paths build named type lookups as "tag-" + struct_tag.
+    // Keep struct tag as "complex" so this resolves to "tag-complex".
+    const struct_typet &stored_struct = to_struct_type(complex_type_symbol->type);
+    const std::string derived_lookup = "tag-" + stored_struct.tag().as_string();
+    REQUIRE(derived_lookup == "tag-complex");
   }
 }
