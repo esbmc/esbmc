@@ -277,6 +277,34 @@ class Preprocessor(ast.NodeTransformer):
                 return False
         return False
 
+    class _YieldReplacer(ast.NodeTransformer):
+        """Replace `yield val` expressions with `target = val; for_body`."""
+        def __init__(self, target_name, for_body, template):
+            import copy
+            self.target_name = target_name
+            self.for_body = for_body
+            self.template = template
+            self._copy = copy
+
+        def visit_Expr(self, stmt):
+            if isinstance(stmt.value, ast.YieldFrom):
+                raise NotImplementedError(
+                    "yield from inside a generator is not supported by the ESBMC inliner"
+                )
+            if not isinstance(stmt.value, ast.Yield):
+                return stmt
+            yield_val = stmt.value.value
+            if yield_val is None:
+                yield_val = ast.Constant(value=None)
+            assign = ast.Assign(
+                targets=[ast.Name(id=self.target_name, ctx=ast.Store())],
+                value=yield_val,
+                type_comment=None
+            )
+            ast.copy_location(assign, self.template)
+            ast.fix_missing_locations(assign)
+            return [assign] + [self._copy.deepcopy(s) for s in self.for_body]
+
     def _inline_generator_for(self, node):
         """
         Inline a generator-based for loop.
@@ -303,43 +331,12 @@ class Preprocessor(ast.NodeTransformer):
         if body_stmts is None:
             return None
 
-        # Get the loop target variable name
-        if hasattr(node.target, 'id'):
-            target_name = node.target.id
-        else:
+        if not hasattr(node.target, 'id'):
             return None  # Only handle simple name targets
-
-        for_body = node.body
-
-        class _YieldReplacer(ast.NodeTransformer):
-            """Replace `yield val` expressions with `target = val; for_body`."""
-            def __init__(self, target_name, for_body, template):
-                self.target_name = target_name
-                self.for_body = for_body
-                self.template = template
-
-            def visit_Expr(self, stmt):
-                if isinstance(stmt.value, ast.YieldFrom):
-                    raise NotImplementedError(
-                        "yield from inside a generator is not supported by the ESBMC inliner"
-                    )
-                if not isinstance(stmt.value, ast.Yield):
-                    return stmt
-                yield_val = stmt.value.value
-                if yield_val is None:
-                    yield_val = ast.Constant(value=None)
-                # target = yield_val
-                assign = ast.Assign(
-                    targets=[ast.Name(id=self.target_name, ctx=ast.Store())],
-                    value=yield_val,
-                    type_comment=None
-                )
-                ast.copy_location(assign, self.template)
-                ast.fix_missing_locations(assign)
-                return [assign] + [copy.deepcopy(s) for s in self.for_body]
+        target_name = node.target.id
 
         inlined = copy.deepcopy(body_stmts)
-        replacer = _YieldReplacer(target_name, for_body, node)
+        replacer = self._YieldReplacer(target_name, node.body, node)
         result = []
         try:
             for stmt in inlined:
@@ -358,6 +355,23 @@ class Preprocessor(ast.NodeTransformer):
             ast.fix_missing_locations(stmt)
 
         return result
+
+    @staticmethod
+    def _has_yield(node):
+        """Return True if node contains a Yield or YieldFrom expression."""
+        return any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
+
+    @staticmethod
+    def _collect_post(stmts, start):
+        """Collect stmts[start:] up to (not including) the first yield-containing statement."""
+        post = []
+        j = start
+        while j < len(stmts):
+            if Preprocessor._has_yield(stmts[j]):
+                break
+            post.append(stmts[j])
+            j += 1
+        return post, j
 
     def _find_generator_next_call(self, node):
         """Return (gen_var, func_name) if node contains next(g) for a tracked generator, else None."""
@@ -391,21 +405,6 @@ class Preprocessor(ast.NodeTransformer):
         """
         import copy
 
-        def _has_yield(node):
-            return any(isinstance(n, (ast.Yield, ast.YieldFrom))
-                       for n in ast.walk(node))
-
-        def _collect_post(stmts, start):
-            """Collect stmts[start:] until a yield-containing statement."""
-            post = []
-            j = start
-            while j < len(stmts):
-                if _has_yield(stmts[j]):
-                    break
-                post.append(stmts[j])
-                j += 1
-            return post, j
-
         outer_init = []
         yields = []
         current_pre = []
@@ -414,7 +413,7 @@ class Preprocessor(ast.NodeTransformer):
         while i < len(stmts):
             stmt = stmts[i]
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Yield):
-                post, j = _collect_post(stmts, i + 1)
+                post, j = self._collect_post(stmts, i + 1)
                 yields.append((current_pre[:], stmt.value.value, post, in_loop))
                 current_pre = []
                 found_yield = True
@@ -437,7 +436,7 @@ class Preprocessor(ast.NodeTransformer):
                         ast.fix_missing_locations(guard)
                         loop_init = [guard] + loop_init
                     combined = loop_init + loop_yields[0][0]
-                    ip, iv, ipo, ir = loop_yields[0]
+                    _, iv, ipo, ir = loop_yields[0]
                     loop_yields[0] = (combined, iv, ipo, ir)
                     yields.extend(loop_yields)
                     current_pre = []
@@ -450,7 +449,7 @@ class Preprocessor(ast.NodeTransformer):
                 i += 1
             elif isinstance(stmt, ast.If):
                 if_init, if_yields = self._collect_yields(stmt.body, in_loop=in_loop)
-                else_init, else_yields = (
+                _, else_yields = (
                     self._collect_yields(stmt.orelse, in_loop=in_loop)
                     if stmt.orelse else ([], [])
                 )
@@ -466,7 +465,7 @@ class Preprocessor(ast.NodeTransformer):
                     )
                     self.ensure_all_locations(ternary_val, stmt)
                     ast.fix_missing_locations(ternary_val)
-                    post, j = _collect_post(stmts, i + 1)
+                    post, j = self._collect_post(stmts, i + 1)
                     yields.append((current_pre[:], ternary_val, post, in_loop))
                     current_pre = []
                     found_yield = True
@@ -474,8 +473,8 @@ class Preprocessor(ast.NodeTransformer):
                 elif if_yields:
                     # Only if-branch yields; also grab outer post_stmts.
                     combined = if_init + if_yields[0][0]
-                    ip, iv, ipo, ir = if_yields[0]
-                    post, j = _collect_post(stmts, i + 1)
+                    _, iv, ipo, ir = if_yields[0]
+                    post, j = self._collect_post(stmts, i + 1)
                     if_yields[0] = (combined, iv, ipo + post, ir)
                     yields.extend(if_yields)
                     current_pre = []
