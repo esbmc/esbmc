@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.py
 --incremental-bmc
-^ERROR\: Variable \'counter\' is not defined in function \'pre\' at line 23\.$
+^VERIFICATION SUCCESSFUL$
