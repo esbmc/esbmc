@@ -23,15 +23,23 @@ parser_mod = _load_module("esbmc_parser", "src/python-frontend/parser.py")
 preprocessor_mod = _load_module("esbmc_preprocessor", "src/python-frontend/preprocessor.py")
 
 
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
 def test_parser_add_type_annotation_for_complex_constant():
     assign = ast.parse("x = 2j").body[0]
 
     parser_mod.add_type_annotation(assign)
 
-    assert isinstance(assign.value, ast.Constant)
-    assert getattr(assign.value, "esbmc_type_annotation", None) == "complex"
-    assert getattr(assign.value, "real_value", None) == 0.0
-    assert getattr(assign.value, "imag_value", None) == 2.0
+    require(isinstance(assign.value, ast.Constant), "expected ast.Constant")
+    require(
+        getattr(assign.value, "esbmc_type_annotation", None) == "complex",
+        "expected complex annotation",
+    )
+    require(getattr(assign.value, "real_value", None) == 0.0, "expected real=0.0")
+    require(getattr(assign.value, "imag_value", None) == 2.0, "expected imag=2.0")
 
 
 def test_preprocessor_infers_complex_constant_type():
@@ -40,4 +48,4 @@ def test_preprocessor_infers_complex_constant_type():
 
     inferred = pre._infer_type_from_constant(node)
 
-    assert inferred == "complex"
+    require(inferred == "complex", "expected inferred type complex")

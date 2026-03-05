@@ -1,5 +1,4 @@
 import sys
-import subprocess
 
 # Detect the Python version
 PY3 = sys.version_info[0] == 3
@@ -17,6 +16,19 @@ import os
 import glob
 import base64
 from preprocessor import Preprocessor
+
+def run_mypy_strict(filename):
+    """Run mypy in-process when available; skip otherwise."""
+    try:
+        from mypy import api as mypy_api
+    except ImportError:
+        return 0, ""
+
+    stdout, stderr, exit_status = mypy_api.run(["--strict", filename])
+    output = stdout
+    if stderr:
+        output += stderr
+    return exit_status, output
 
 
 def check_usage():
@@ -528,15 +540,11 @@ def main():
     filename = sys.argv[1]
     output_dir = sys.argv[2]
 
-    # Type checking input program with mypy
-    result = subprocess.run(
-    ["mypy", "--strict", filename],
-    capture_output=True,
-    text=True)
-
-    if result.returncode != 0:
+    # Type checking input program with mypy.
+    returncode, mypy_output = run_mypy_strict(filename)
+    if returncode != 0:
         print("\033[93m\nType checking warning:\033[0m")
-        print(result.stdout)
+        print(mypy_output)
 
     # Add the script directory to the front of the import search path
     script_dir = os.path.dirname(os.path.abspath(filename))
