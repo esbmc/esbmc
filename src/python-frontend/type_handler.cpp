@@ -338,6 +338,25 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "bool")
     return bool_type();
 
+  if (ast_type == "complex")
+  {
+    const char *complex_type_id = "tag-complex";
+    contextt &symbol_table = converter_.symbol_table();
+
+    if (!symbol_table.find_symbol(complex_type_id))
+    {
+      symbolt type_symbol;
+      type_symbol.id = complex_type_id;
+      type_symbol.name = "complex";
+      type_symbol.type = get_complex_struct_type();
+      type_symbol.mode = "Python";
+      type_symbol.is_type = true;
+      symbol_table.move_symbol_to_context(type_symbol);
+    }
+
+    return get_complex_struct_type();
+  }
+
   // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
     return uint256_type();

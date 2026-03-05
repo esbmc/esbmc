@@ -1,9 +1,53 @@
 #pragma once
 
 #include <util/c_types.h>
+#include <util/arith_tools.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
 #include <nlohmann/json.hpp>
 
 class python_converter;
+
+inline struct_typet get_complex_struct_type()
+{
+  struct_typet complex_type;
+  complex_type.tag("tag-complex");
+  complex_type.components().push_back(
+    struct_typet::componentt("real", "real", double_type()));
+  complex_type.components().push_back(
+    struct_typet::componentt("imag", "imag", double_type()));
+  return complex_type;
+}
+
+inline bool is_complex_type(const typet &type)
+{
+  if (type.id() == "symbol")
+    return to_symbol_type(type).get_identifier().as_string() == "tag-complex";
+
+  if (!type.is_struct())
+    return false;
+
+  const struct_typet &struct_type = to_struct_type(type);
+  return struct_type.tag().as_string() == "tag-complex";
+}
+
+inline exprt make_complex(const exprt &real, const exprt &imag)
+{
+  struct_exprt complex_expr(get_complex_struct_type());
+  complex_expr.operands().push_back(
+    real.type() == double_type() ? real : typecast_exprt(real, double_type()));
+  complex_expr.operands().push_back(
+    imag.type() == double_type() ? imag : typecast_exprt(imag, double_type()));
+  return complex_expr;
+}
+
+inline exprt promote_to_complex(const exprt &value)
+{
+  if (is_complex_type(value.type()))
+    return value;
+
+  return make_complex(value, from_double(0.0, double_type()));
+}
 
 class type_handler
 {
