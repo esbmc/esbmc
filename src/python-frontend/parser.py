@@ -93,6 +93,10 @@ def add_type_annotation(node):
         elif isinstance(value_node.value, bytes):
             value_node.esbmc_type_annotation = "bytes"
             value_node.encoded_bytes = encode_bytes(value_node.value)
+        elif isinstance(value_node.value, complex):
+            value_node.esbmc_type_annotation = "complex"
+            value_node.real_value = value_node.value.real
+            value_node.imag_value = value_node.value.imag
 
 
 def is_standard_library_file(filename):

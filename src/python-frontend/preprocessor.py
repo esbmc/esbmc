@@ -2101,7 +2101,8 @@ class Preprocessor(ast.NodeTransformer):
             str: 'str',
             int: 'int',
             float: 'float',
-            bool: 'bool'
+            bool: 'bool',
+            complex: 'complex'
         }
         return constant_type_map.get(type(value), 'Any')
 

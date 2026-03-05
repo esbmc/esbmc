@@ -1162,7 +1162,7 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
     const std::string &func_name = function_id_.get_function();
     if (
       func_name != "int" && func_name != "float" && func_name != "str" &&
-      func_name != "bool" && func_name != "bytes")
+      func_name != "bool" && func_name != "bytes" && func_name != "complex")
     {
       log_warning("Symbol not found: {}", var_name);
     }
@@ -1384,9 +1384,64 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
   return nil_exprt();
 }
 
+exprt function_call_expr::handle_complex() const
+{
+  const nlohmann::json &arguments =
+    call_.contains("args") ? call_["args"] : nlohmann::json::array();
+
+  auto zero = []() -> exprt { return from_double(0.0, double_type()); };
+
+  auto to_double_expr = [this](const nlohmann::json &json_arg) -> exprt {
+    if (is_string_arg(json_arg))
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "complex() with string arguments is not supported yet");
+    }
+
+    exprt value_expr = converter_.get_expr(json_arg);
+    if (is_complex_type(value_expr.type()))
+      return member_exprt(value_expr, "real", double_type());
+
+    if (value_expr.type() != double_type())
+      value_expr = typecast_exprt(value_expr, double_type());
+
+    return value_expr;
+  };
+
+  if (arguments.empty())
+    return make_complex(zero(), zero());
+
+  if (arguments.size() == 1)
+  {
+    exprt real_part = to_double_expr(arguments[0]);
+    if (real_part.is_nil() || real_part.id() == "code")
+      return real_part;
+    return make_complex(real_part, zero());
+  }
+
+  if (arguments.size() == 2)
+  {
+    exprt real_part = to_double_expr(arguments[0]);
+    if (real_part.is_nil() || real_part.id() == "code")
+      return real_part;
+
+    exprt imag_part = to_double_expr(arguments[1]);
+    if (imag_part.is_nil() || imag_part.id() == "code")
+      return imag_part;
+
+    return make_complex(real_part, imag_part);
+  }
+
+  return converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "complex() takes at most 2 arguments");
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
+
+  if (func_name == "complex")
+    return handle_complex();
 
   // Check if there are no arguments
   if (call_["args"].empty())
