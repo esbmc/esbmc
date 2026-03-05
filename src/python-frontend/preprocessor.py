@@ -279,7 +279,10 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(init_assign, genexp_node)
         ast.fix_missing_locations(init_assign)
 
-        # if elt: ESBMC_any_N = True
+        # if not ESBMC_any_N and elt: ESBMC_any_N = True
+        # Guard with `not ESBMC_any_N` so the element expression is not
+        # evaluated on remaining iterations once a truthy value is found,
+        # approximating Python's short-circuit semantics without break.
         set_true = ast.Assign(
             targets=[self.create_name_node(tmp_name, ast.Store(), genexp_node)],
             value=self.create_constant_node(True, genexp_node)
@@ -295,7 +298,18 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(if_true, genexp_node)
         ast.fix_missing_locations(if_true)
 
-        loop_body = [if_true]
+        guard = ast.UnaryOp(
+            op=ast.Not(),
+            operand=self.create_name_node(tmp_name, ast.Load(), genexp_node)
+        )
+        self.ensure_all_locations(guard, genexp_node)
+        ast.fix_missing_locations(guard)
+
+        if_not_found = ast.If(test=guard, body=[if_true], orelse=[])
+        self.ensure_all_locations(if_not_found, genexp_node)
+        ast.fix_missing_locations(if_not_found)
+
+        loop_body = [if_not_found]
 
         for generator in reversed(genexp_node.generators):
             if generator.ifs:
