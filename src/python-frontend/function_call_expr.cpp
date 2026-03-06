@@ -1162,7 +1162,7 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
     const std::string &func_name = function_id_.get_function();
     if (
       func_name != "int" && func_name != "float" && func_name != "str" &&
-      func_name != "bool" && func_name != "bytes")
+      func_name != "bool" && func_name != "bytes" && func_name != "complex")
     {
       log_warning("Symbol not found: {}", var_name);
     }
@@ -1384,9 +1384,83 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
   return nil_exprt();
 }
 
+exprt function_call_expr::handle_complex() const
+{
+  // Ensure complex type symbol exists for downstream attribute resolution.
+  (void)type_handler_.get_typet(std::string("complex"));
+
+  const nlohmann::json &arguments =
+    call_.contains("args") ? call_["args"] : nlohmann::json::array();
+
+  auto zero = []() -> exprt { return from_double(0.0, double_type()); };
+  auto is_cpp_throw = [](const exprt &e) -> bool {
+    return e.statement() == "cpp-throw";
+  };
+
+  if (arguments.empty())
+    return make_complex(zero(), zero());
+
+  if (arguments.size() == 1)
+  {
+    if (is_string_arg(arguments[0]))
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "complex() with string arguments is not supported yet");
+
+    exprt value = converter_.get_expr(arguments[0]);
+    if (value.is_nil() || is_cpp_throw(value))
+      return value;
+
+    if (is_complex_type(value.type()))
+      return value;
+
+    if (value.type() != double_type())
+      value = typecast_exprt(value, double_type());
+
+    return make_complex(value, zero());
+  }
+
+  if (arguments.size() == 2)
+  {
+    if (is_string_arg(arguments[0]) || is_string_arg(arguments[1]))
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "complex() with string arguments is not supported yet");
+
+    exprt real_arg = converter_.get_expr(arguments[0]);
+    if (real_arg.is_nil() || is_cpp_throw(real_arg))
+      return real_arg;
+
+    exprt imag_arg = converter_.get_expr(arguments[1]);
+    if (imag_arg.is_nil() || is_cpp_throw(imag_arg))
+      return imag_arg;
+
+    // Python semantics: complex(x, y) == x + y * 1j, including complex args.
+    real_arg = promote_to_complex(real_arg);
+    imag_arg = promote_to_complex(imag_arg);
+
+    exprt a = member_exprt(real_arg, "real", double_type());
+    exprt b = member_exprt(real_arg, "imag", double_type());
+    exprt c = member_exprt(imag_arg, "real", double_type());
+    exprt d = member_exprt(imag_arg, "imag", double_type());
+
+    exprt real_part("ieee_sub", double_type());
+    real_part.copy_to_operands(a, d);
+
+    exprt imag_part("ieee_add", double_type());
+    imag_part.copy_to_operands(b, c);
+
+    return make_complex(real_part, imag_part);
+  }
+
+  return converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "complex() takes at most 2 arguments");
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
+
+  if (func_name == "complex")
+    return handle_complex();
 
   // Check if there are no arguments
   if (call_["args"].empty())

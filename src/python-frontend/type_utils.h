@@ -31,7 +31,7 @@ enum class StatementType
   GLOBAL,
   TRY,
   EXCEPTHANDLER,
-  DELETE
+  DELETE_STATEMENT
 };
 
 enum class ExpressionType

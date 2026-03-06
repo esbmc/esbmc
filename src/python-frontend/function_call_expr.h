@@ -235,6 +235,15 @@ private:
   exprt handle_round(nlohmann::json &arg) const;
 
   /*
+   * Handles complex() constructor calls.
+   * Supported overloads:
+   * - complex() -> 0.0 + 0.0j
+   * - complex(x) -> float(x) + 0.0j
+   * - complex(x, y) -> float(x) + float(y)j
+   */
+  exprt handle_complex() const;
+
+  /*
    * Checks if the current function call is a min() or max() built-in function.
    * Returns true if the function name matches "min" or "max", false otherwise.
    */

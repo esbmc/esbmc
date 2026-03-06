@@ -79,7 +79,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Global", StatementType::GLOBAL},
   {"Try", StatementType::TRY},
   {"ExceptHandler", StatementType::EXCEPTHANDLER},
-  {"Delete", StatementType::DELETE}};
+  {"Delete", StatementType::DELETE_STATEMENT}};
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -4023,7 +4023,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // This allows parameter objects like 'f: Foo' to access instance attributes
       else if (
         !is_converting_lhs && class_type.has_component(attr_name) &&
-        (instance_has_attr || symbol->is_parameter))
+        (instance_has_attr || symbol->is_parameter ||
+         is_complex_type(class_type)))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = create_member_expression(*symbol, attr_name, attr_type);
@@ -7076,13 +7077,57 @@ void python_converter::validate_return_paths(
 
 typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
 {
+  auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet {
+    if (constant_value.is_number_float())
+      return double_type();
+    if (constant_value.is_number_integer())
+      return long_long_int_type();
+    if (constant_value.is_boolean())
+      return bool_type();
+    if (constant_value.is_string())
+      return gen_pointer_type(char_type());
+    if (constant_value.is_null())
+      return none_type();
+    return empty_typet();
+  };
+
   for (const auto &stmt : body)
   {
     if (stmt["_type"] == "Return" && !stmt["value"].is_null())
     {
+      const auto &ret_val = stmt["value"];
+
       // If returning a tuple, infer its type
-      if (stmt["value"]["_type"] == "Tuple")
-        return tuple_handler_->get_tuple_expr(stmt["value"]).type();
+      if (ret_val["_type"] == "Tuple")
+        return tuple_handler_->get_tuple_expr(ret_val).type();
+
+      // Constant returns (including strings)
+      if (ret_val["_type"] == "Constant" && ret_val.contains("value"))
+      {
+        typet inferred = infer_constant_type(ret_val["value"]);
+        if (!inferred.is_empty())
+          return inferred;
+      }
+
+      // Heuristic: return dict.get(key, default) -> infer from default literal.
+      if (
+        ret_val["_type"] == "Call" && ret_val.contains("func") &&
+        ret_val["func"].contains("_type") &&
+        ret_val["func"]["_type"] == "Attribute" &&
+        ret_val["func"].contains("attr") && ret_val["func"]["attr"] == "get" &&
+        ret_val.contains("args") && ret_val["args"].is_array() &&
+        ret_val["args"].size() >= 2)
+      {
+        const auto &default_arg = ret_val["args"][1];
+        if (
+          default_arg.contains("_type") && default_arg["_type"] == "Constant" &&
+          default_arg.contains("value"))
+        {
+          typet inferred = infer_constant_type(default_arg["value"]);
+          if (!inferred.is_empty())
+            return inferred;
+        }
+      }
     }
   }
 
@@ -7238,6 +7283,19 @@ void python_converter::get_function_definition(
       typet optional_type = type_handler_.build_optional_type(value_type);
       type.return_type() = optional_type;
       current_element_type = optional_type;
+      added_symbol->type = type;
+    }
+  }
+
+  // For unannotated functions, attempt AST-based return inference before body
+  // conversion so return expressions are typed in the right context.
+  if (type.return_type().is_empty())
+  {
+    typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    if (!inferred_type.is_empty())
+    {
+      type.return_type() = inferred_type;
+      current_element_type = inferred_type;
       added_symbol->type = type;
     }
   }
@@ -7895,7 +7953,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exception_handler_->get_raise_statement(element, block);
       break;
     }
-    case StatementType::DELETE:
+    case StatementType::DELETE_STATEMENT:
     {
       get_delete_statement(element, block);
       break;
