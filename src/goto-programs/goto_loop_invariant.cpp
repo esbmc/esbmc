@@ -234,7 +234,8 @@ static bool is_trivial_rhs(const expr2tc &expr)
   }
   if (is_constant_bool2t(expr))
     return true;
-  if (is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
+  if (
+    is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
     return true;
   return false;
 }
@@ -381,8 +382,9 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
         }
       if (!is_fc_ret)
         for (const auto &sym : dep_symbols)
-          if (!inv_symbols.count(sym) &&
-              symbol_name_matches(sym, decl.value, allow_suffix))
+          if (
+            !inv_symbols.count(sym) &&
+            symbol_name_matches(sym, decl.value, allow_suffix))
           {
             is_extra_dep = true;
             break;
