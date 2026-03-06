@@ -5,7 +5,10 @@ def validate_start_with_letter(category: str) -> bool:
     return True
 
 def main() -> None:
-    category: str = input()
+    try:
+        category: str = input()
+    except EOFError:
+        category = "A"
     validate_start_with_letter(category)
 
 main()
