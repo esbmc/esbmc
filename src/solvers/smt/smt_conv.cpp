@@ -815,10 +815,25 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt div_by_zero = mk_eq(side2, zero);
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       const auto single_spec = ieee_float_spect::single_precision();
-      smt_astt max_val = (fbv_type.exponent == single_spec.e &&
-                          fbv_type.fraction == single_spec.f)
-                           ? get_single_max_normal()
-                           : get_double_max_normal();
+      const auto double_spec = ieee_float_spect::double_precision();
+      const bool is_single =
+        fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f;
+      const bool is_double =
+        fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f;
+
+      // Only single- and double-precision are explicitly supported by the
+      // integer-encoding div-by-zero saturation logic. For other formats,
+      // fall back to generic IEEE754 semantics to avoid using an incorrect
+      // bound (which would be unsound).
+      if (!is_single && !is_double)
+      {
+        smt_astt real_result = mk_div(side1, side2);
+        a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+        break;
+      }
+
+      smt_astt max_val =
+        is_single ? get_single_max_normal() : get_double_max_normal();
       smt_astt inf_result =
         mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
       smt_astt real_result = mk_div(side1, side2);
