@@ -369,6 +369,39 @@ class Preprocessor(ast.NodeTransformer):
                 prefix, result = self.preprocessor._lower_any_genexp(node.args[0])
                 self.statements.extend(prefix)
                 return result
+
+            # Lower list(map(f, iterable)) to [f(x) for x in iterable]
+            if (isinstance(node.func, ast.Name) and node.func.id == 'list'
+                    and len(node.args) == 1 and not node.keywords
+                    and isinstance(node.args[0], ast.Call)
+                    and isinstance(node.args[0].func, ast.Name)
+                    and node.args[0].func.id == 'map'
+                    and len(node.args[0].args) == 2):
+                map_call = node.args[0]
+                func_expr = map_call.args[0]
+                iterable_expr = map_call.args[1]
+                if isinstance(func_expr, ast.Lambda) and len(func_expr.args.args) == 1:
+                    param = func_expr.args.args[0]
+                    target = ast.Name(id=param.arg, ctx=ast.Store())
+                    elt = func_expr.body
+                else:
+                    tmp_id = f'ESBMC_map_elt_{self.preprocessor.listcomp_counter}'
+                    target = ast.Name(id=tmp_id, ctx=ast.Store())
+                    elt = ast.Call(
+                        func=func_expr,
+                        args=[ast.Name(id=tmp_id, ctx=ast.Load())],
+                        keywords=[])
+                listcomp = ast.ListComp(
+                    elt=elt,
+                    generators=[ast.comprehension(
+                        target=target,
+                        iter=iterable_expr,
+                        ifs=[],
+                        is_async=0)])
+                ast.copy_location(listcomp, node)
+                ast.fix_missing_locations(listcomp)
+                return self.visit(listcomp)
+
             return self.generic_visit(node)
 
     def _has_early_return_before_yield(self, body):
