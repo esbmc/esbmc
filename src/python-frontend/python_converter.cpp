@@ -4352,6 +4352,18 @@ void python_converter::handle_assignment_type_adjustments(
     return;
   }
 
+  // When a void*/Any-typed variable is assigned a function pointer returned
+  // from a higher-order function call (e.g. g = f(5) where f is a
+  // higher-order lambda returning a function), narrow the variable's type
+  // to the concrete function pointer type so that g(10) resolves correctly.
+  if (
+    lhs_symbol && lhs.type() == any_type() &&
+    rhs.type().is_pointer() && rhs.type().subtype().is_code())
+  {
+    lhs_symbol->type = rhs.type();
+    lhs.type() = rhs.type();
+  }
+
   // Handle lambda assignments
   if (lambda_handler_->is_lambda_assignment(ast_node) && rhs.is_symbol())
   {
