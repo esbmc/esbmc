@@ -47,6 +47,7 @@ protected:
    */
   void extract_and_remove_side_effects(
     goto_programt::targett loop_head,
+    const loopst &loop,
     const std::vector<expr2tc> &invariants,
     goto_programt &side_effects_out);
 
