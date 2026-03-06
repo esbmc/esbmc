@@ -1409,16 +1409,10 @@ ieee_floatt z3_convt::get_fpbv(smt_astt a)
   }
   else
   {
-    z3::model m = solver.get_model();
-    if (m)
-    {
-      // Convert fp numeral to IEEE bitvector and evaluate in the model
-      z3::expr bv(z3_ctx, Z3_mk_fpa_to_ieee_bv(z3_ctx, e));
-      z3::expr v = m.eval(bv, true);
-
-      if (v && Z3_get_ast_kind(z3_ctx, v) == Z3_NUMERAL_AST)
-        number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
-    }
+    Z3_ast v;
+    if (Z3_model_eval(
+          z3_ctx, solver.get_model(), Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
+      number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
   }
 
   return number;
