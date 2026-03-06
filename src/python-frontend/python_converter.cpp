@@ -4352,6 +4352,20 @@ void python_converter::handle_assignment_type_adjustments(
     return;
   }
 
+  // When a variable is assigned a function pointer returned from a
+  // higher-order lambda call (e.g. `inner = outer(5)` or `inner:int = outer(5)`),
+  // override any incorrect annotation (void*, int, …) with the concrete
+  // function pointer type so the subsequent indirect call resolves correctly
+  // instead of crashing in to_code_type.
+  if (
+    lhs_symbol && !is_ctor_call &&
+    rhs.type().is_pointer() && rhs.type().subtype().is_code() &&
+    !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
+  {
+    lhs_symbol->type = rhs.type();
+    lhs.type() = rhs.type();
+  }
+
   // Handle lambda assignments
   if (lambda_handler_->is_lambda_assignment(ast_node) && rhs.is_symbol())
   {
