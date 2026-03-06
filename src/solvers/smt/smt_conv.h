@@ -734,8 +734,7 @@ public:
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
   void set_fp_conv(fp_convt *iface);
-  /** Store a new address-allocation record into the address space accounting.
-   *  idx indicates the object number of this record. */
+  /** Stores handle for the real-arithmetic/enclosure interface. */
   void set_ra_conv(ra_apit *iface);
 
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
