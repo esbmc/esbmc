@@ -260,8 +260,11 @@ static bool symbol_name_matches(
     return true;
   if (!allow_suffix)
     return false;
-  return s.size() > d.size() && s[s.size() - d.size() - 1] == ':' &&
-         s.substr(s.size() - d.size()) == d;
+  if (s.size() < d.size() + 2)
+    return false;
+  const std::size_t suffix_pos = s.size() - d.size();
+  return s[suffix_pos - 2] == ':' && s[suffix_pos - 1] == ':' &&
+         s.compare(suffix_pos, d.size(), d) == 0;
 }
 
 void goto_loop_invariantt::extract_and_remove_side_effects(
