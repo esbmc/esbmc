@@ -3225,6 +3225,23 @@ exprt python_converter::make_char_array_expr(
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
+  const auto &annotated_node = (element["_type"] == "UnaryOp")
+                                 ? element["operand"]
+                                 : element;
+
+  // Handle Python complex constants emitted by parser annotations.
+  // This must run before generic string handling because complex constants
+  // may carry a string-like "value" in the serialized AST.
+  if (
+    annotated_node.contains("esbmc_type_annotation") &&
+    annotated_node["esbmc_type_annotation"] == "complex")
+  {
+    const double real = annotated_node.value("real_value", 0.0);
+    const double imag = annotated_node.value("imag_value", 0.0);
+    return make_complex(
+      from_double(real, double_type()), from_double(imag, double_type()));
+  }
+
   // Determine the source of the literal's value.
   const auto &value = (element["_type"] == "UnaryOp")
                         ? element["operand"]["value"]
