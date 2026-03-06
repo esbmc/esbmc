@@ -153,7 +153,6 @@ public:
 
   std::string dump_smt() override;
 
-
   unsigned int to_bv_counter;
 
   CVC4::ExprManager em;

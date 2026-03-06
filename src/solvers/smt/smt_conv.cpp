@@ -201,8 +201,9 @@ void replace_name_in_body(
 
     return;
   }
-  body->Foreach_operand([lhs, replacement](expr2tc &e)
-                        { replace_name_in_body(lhs, replacement, e); });
+  body->Foreach_operand([lhs, replacement](expr2tc &e) {
+    replace_name_in_body(lhs, replacement, e);
+  });
 }
 
 void smt_convt::pop_ctx()
@@ -542,8 +543,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // Convert all the arguments and store them in 'args'.
     args.reserve(expr->get_num_sub_exprs());
-    expr->foreach_operand([this, &args](const expr2tc &e)
-                          { args.push_back(convert_ast(e)); });
+    expr->foreach_operand(
+      [this, &args](const expr2tc &e) { args.push_back(convert_ast(e)); });
   }
   }
 
@@ -2766,38 +2767,34 @@ expr2tc smt_convt::get(const expr2tc &expr)
     if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       arr_size = get(arr_size);
 
-    res->type->Foreach_subtype(
-      [this](type2tc &t)
-      {
-        if (!is_array_type(t))
-          return;
+    res->type->Foreach_subtype([this](type2tc &t) {
+      if (!is_array_type(t))
+        return;
 
-        expr2tc &arr_size = to_array_type(t).array_size;
-        if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-          arr_size = get(arr_size);
-      });
+      expr2tc &arr_size = to_array_type(t).array_size;
+      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+        arr_size = get(arr_size);
+    });
   }
 
   // Recurse on operands
   bool have_all = true;
   bool has_null_operands = false;
 
-  res->Foreach_operand(
-    [this, &have_all, &has_null_operands](expr2tc &e)
+  res->Foreach_operand([this, &have_all, &has_null_operands](expr2tc &e) {
+    if (!e)
     {
-      if (!e)
-      {
-        has_null_operands = true;
-        have_all = false;
-        return;
-      }
+      has_null_operands = true;
+      have_all = false;
+      return;
+    }
 
-      expr2tc new_e = get(e);
-      if (new_e)
-        e = new_e;
-      else
-        have_all = false;
-    });
+    expr2tc new_e = get(e);
+    if (new_e)
+      e = new_e;
+    else
+      have_all = false;
+  });
 
   // If we have null operands, return early to avoid crashes in simplify()
   if (has_null_operands)

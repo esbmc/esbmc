@@ -74,8 +74,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
     size_t sz = intref.value.to_uint64();
     type2tc idx = index_type2();
 
-    auto extract = [&](size_t i)
-    {
+    auto extract = [&](size_t i) {
       /* The sub-expression should be flattened as well */
       return flatten_to_bitvector(index2tc(
         arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)));
@@ -97,8 +96,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
 
     // Iterate over each member and flatten them
 
-    auto extract = [&](size_t i)
-    {
+    auto extract = [&](size_t i) {
       /* The sub-expression should be flattened as well */
       return flatten_to_bitvector(member2tc(
         structtype.members[sz - i - 1],
