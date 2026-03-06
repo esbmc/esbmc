@@ -127,7 +127,7 @@ public:
       name == "FileExistsError" || name == "PermissionError" ||
       name == "NotImplementedError" || name == "ImportError" ||
       name == "ModuleNotFoundError" || name == "RuntimeError" ||
-      name == "StopIteration");
+      name == "StopIteration" || name == "EOFError");
   }
 
   static bool is_c_model_func(const std::string &func_name)
