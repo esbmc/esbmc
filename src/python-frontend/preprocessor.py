@@ -31,6 +31,8 @@ class Preprocessor(ast.NodeTransformer):
         self.generator_next_index = {}  # gen_var -> next yield index for next() calls
         self.generator_emitted_init = set()  # gen_vars whose outer_init has been emitted
         self.dict_items_vars = {}  # {var_name: dict_expr} for X = d.items() assignments
+        self.het_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous key types
+        self.het_value_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous value types
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -1022,6 +1024,27 @@ class Preprocessor(ast.NodeTransformer):
                 inlined = self._inline_generator_for(node)
                 if inlined is not None:
                     return inlined
+            # Unwrap explicit d.keys() into d so the heterogeneous-key handler
+            # below can pick it up.  `for k in d.keys()` is semantically
+            # identical to `for k in d` and must be treated the same way.
+            if (isinstance(node.iter, ast.Call) and
+                    isinstance(node.iter.func, ast.Attribute) and
+                    node.iter.func.attr == 'keys' and
+                    isinstance(node.iter.func.value, ast.Name) and
+                    node.iter.func.value.id in self.het_dict_literals):
+                node.iter = node.iter.func.value
+            # Unroll iteration over dict literals with heterogeneous key types.
+            if (isinstance(node.iter, ast.Name) and
+                    node.iter.id in self.het_dict_literals):
+                return self._transform_het_dict_for(node)
+            # Unroll d.values() when the dict has heterogeneous value types.
+            if (isinstance(node.iter, ast.Call) and
+                    isinstance(node.iter.func, ast.Attribute) and
+                    node.iter.func.attr == 'values' and
+                    isinstance(node.iter.func.value, ast.Name) and
+                    node.iter.func.value.id in self.het_value_dict_literals):
+                dict_node = self.het_value_dict_literals[node.iter.func.value.id]
+                return self._transform_het_values_for(node, dict_node)
             # Handle general iteration over iterables (strings, lists, etc.)
             self.is_range_loop = False
             return self._transform_iterable_for(node)
@@ -2215,6 +2238,110 @@ class Preprocessor(ast.NodeTransformer):
 
         return ast.Name(id='dict', ctx=ast.Load())
 
+    def _has_heterogeneous_keys(self, dict_node):
+        """Return True if a dict literal has keys of more than one ESBMC-representable type.
+
+        ESBMC stores list elements with a type-specific byte size.  When all
+        keys share the same type the retrieval is consistent; when they differ
+        (e.g. int=8 bytes vs str=strlen+1 bytes) reading with a single fixed
+        size causes an array-bounds violation.
+        """
+        if not dict_node.keys or len(dict_node.keys) < 2:
+            return False
+        key_types = [self._infer_dict_key_type(k) for k in dict_node.keys]
+        return len(set(key_types)) > 1
+
+    def _has_heterogeneous_values(self, dict_node):
+        """Return True if a dict literal has values of more than one ESBMC type.
+
+        Even when both types occupy the same number of bytes (e.g. int and
+        float are both 8 bytes on 64-bit), retrieving a float element through
+        an int-typed pointer gives the raw IEEE 754 bits, not the numeric
+        value, producing a spurious counterexample.
+        """
+        if not dict_node.values or len(dict_node.values) < 2:
+            return False
+        val_types = [self._infer_constant_type(v) for v in dict_node.values]
+        return len(set(val_types)) > 1
+
+    def _infer_constant_type(self, node):
+        """Infer the ESBMC-representable Python type name from a constant node.
+
+        Handles bool (must precede int because bool is a subclass of int),
+        int, float, and str.  Returns 'Any' for anything else.
+        """
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool):
+                return 'bool'
+            if isinstance(node.value, float):
+                return 'float'
+            if isinstance(node.value, int):
+                return 'int'
+            if isinstance(node.value, str):
+                return 'str'
+        return 'Any'
+
+    def _unroll_het_for(self, node, typed_elts):
+        """Emit one typed assignment + one body copy per element.
+
+        typed_elts — list of (type_str, ast_value_node) in iteration order.
+
+        The loop variable (node.target) is renamed to a unique per-iteration
+        symbol so that ESBMC never tries to hold two incompatible types in the
+        same IR symbol.
+        """
+        import copy
+
+        target_name = (node.target.id
+                       if isinstance(node.target, ast.Name)
+                       else 'ESBMC_het_var')
+
+        class _RenameVar(ast.NodeTransformer):
+            """Replace every Load-context Name(old) with Name(new)."""
+            def __init__(self, old, new):
+                self.old = old
+                self.new = new
+            def visit_Name(self, n):
+                if n.id == self.old and isinstance(n.ctx, ast.Load):
+                    return ast.copy_location(
+                        ast.Name(id=self.new, ctx=ast.Load()), n)
+                return n
+
+        result = []
+        for i, (type_str, value_node) in enumerate(typed_elts):
+            iter_var = f'{target_name}_het_{i}_'
+
+            assign = ast.AnnAssign(
+                target=ast.Name(id=iter_var, ctx=ast.Store()),
+                annotation=ast.Name(id=type_str, ctx=ast.Load()),
+                value=copy.deepcopy(value_node),
+                simple=1,
+            )
+            self.ensure_all_locations(assign, node)
+            ast.fix_missing_locations(assign)
+            result.append(assign)
+
+            renamer = _RenameVar(target_name, iter_var)
+            for stmt in node.body:
+                renamed = renamer.visit(copy.deepcopy(stmt))
+                ast.fix_missing_locations(renamed)
+                result.append(renamed)
+
+        return result
+
+    def _transform_het_dict_for(self, node):
+        """Unroll a for-loop over a dict literal with heterogeneous key types."""
+        dict_node = self.het_dict_literals[node.iter.id]
+        typed_elts = [(self._infer_dict_key_type(k), k)
+                      for k in dict_node.keys]
+        return self._unroll_het_for(node, typed_elts)
+
+    def _transform_het_values_for(self, node, dict_node):
+        """Unroll a for-loop over d.values() where values have heterogeneous types."""
+        typed_elts = [(self._infer_constant_type(v), v)
+                      for v in dict_node.values]
+        return self._unroll_het_for(node, typed_elts)
+
     def _infer_dict_key_type(self, key_node):
         """Infer key type from dict literal's first key"""
         if isinstance(key_node, ast.Constant):
@@ -2395,6 +2522,12 @@ class Preprocessor(ast.NodeTransformer):
                         self.variable_annotations[target.id] = annotation_node
                         if isinstance(node.value, ast.Subscript):
                             self._subscript_inferred_vars.add(target.id)
+                    # Track dict literals with heterogeneous key/value types for loop unrolling
+                    if isinstance(node.value, ast.Dict):
+                        if self._has_heterogeneous_keys(node.value):
+                            self.het_dict_literals[target.id] = node.value
+                        if self._has_heterogeneous_values(node.value):
+                            self.het_value_dict_literals[target.id] = node.value
                     # Track class instantiations: c = C()
                     if (isinstance(node.value, ast.Call) and
                             isinstance(node.value.func, ast.Name)):
