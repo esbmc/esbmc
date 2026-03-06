@@ -1093,23 +1093,17 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
   if (!value_opt)
     return from_double(0.0, type_handler_.get_typet("float", 0));
 
-  try
   {
-    double dval = std::stod(*value_opt);
+    char *end = nullptr;
+    double dval = std::strtod(value_opt->c_str(), &end);
+    if (!end || end != value_opt->c_str() + value_opt->size())
+    {
+      log_error(
+        "Failed float conversion from string \"{}\": invalid argument",
+        *value_opt);
+      return from_double(0.0, type_handler_.get_typet("float", 0));
+    }
     return from_double(dval, type_handler_.get_typet("float", 0));
-  }
-  catch (const std::invalid_argument &)
-  {
-    log_error(
-      "Failed float conversion from string \"{}\": invalid argument",
-      *value_opt);
-    return from_double(0.0, type_handler_.get_typet("float", 0));
-  }
-  catch (const std::out_of_range &)
-  {
-    log_error(
-      "Failed float conversion from string \"{}\": out of range", *value_opt);
-    return from_double(0.0, type_handler_.get_typet("float", 0));
   }
 }
 
@@ -1417,16 +1411,11 @@ exprt function_call_expr::handle_complex() const
     return s.substr(b, e - b);
   };
   auto parse_double_strict = [](const std::string &s, double &out) -> bool {
-    try
-    {
-      size_t idx = 0;
-      out = std::stod(s, &idx);
-      return idx == s.size();
-    }
-    catch (const std::exception &)
-    {
+    if (s.empty())
       return false;
-    }
+    char *end = nullptr;
+    out = std::strtod(s.c_str(), &end);
+    return end == s.c_str() + s.size();
   };
   auto extract_constant_string =
     [&](const nlohmann::json &arg, std::string &out) -> bool {
@@ -2025,24 +2014,18 @@ exprt function_call_expr::build_constant_from_arg() const
     else
     {
       // Try to parse as regular float
-      try
       {
-        double dval = std::stod(arg["value"].get<std::string>());
+        const std::string raw_val = arg["value"].get<std::string>();
+        char *end = nullptr;
+        double dval = std::strtod(raw_val.c_str(), &end);
+        if (!end || end != raw_val.c_str() + raw_val.size())
+        {
+          std::string m =
+            "could not convert string to float : '" + raw_val + "'";
+          return converter_.get_exception_handler().gen_exception_raise(
+            "ValueError", m);
+        }
         return from_double(dval, type_handler_.get_typet("float", 0));
-      }
-      catch (const std::invalid_argument &)
-      {
-        std::string m = "could not convert string to float : '" +
-                        arg["value"].get<std::string>() + "'";
-        return converter_.get_exception_handler().gen_exception_raise(
-          "ValueError", m);
-      }
-      catch (const std::out_of_range &)
-      {
-        std::string m = "could not convert string to float : '" +
-                        arg["value"].get<std::string>() + "' (out of range)";
-        return converter_.get_exception_handler().gen_exception_raise(
-          "ValueError", m);
       }
     }
   }
