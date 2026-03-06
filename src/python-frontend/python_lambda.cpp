@@ -125,10 +125,6 @@ typet python_lambda::infer_lambda_return_type(
       }
     }
 
-    // Body is itself a lambda (higher-order function returning a function)
-    if (body_type == "Lambda")
-      return gen_pointer_type(code_typet());
-
     // Handle IfExp (ternary expressions)
     if (body_type == "IfExp")
     {
@@ -232,12 +228,12 @@ void python_lambda::process_lambda_parameters(
 
     // Each lambda parameter is modelled as two symbols:
     //
-    //  1. closure_id  (lam@x)       – a static symbol that is NEVER passed to
+    //  1. closure_id  (lam@x): a static symbol that is never passed to
     //     symex_decl, so it never ends up in frame.local_variables and is
     //     therefore NOT cleared when the function frame is popped.  Inner
     //     lambdas look up free variables by name and find this symbol.
     //
-    //  2. actual_param_id (lam@x$param) – the real parameter symbol that
+    //  2. actual_param_id (lam@x$param): the real parameter symbol that
     //     goto_symex::argument_assignments assigns from the call-site argument.
     //     It lives in the function's local frame (symex_decl adds it to
     //     local_variables) and is cleaned up on return as normal.
@@ -281,6 +277,7 @@ void python_lambda::process_lambda_parameters(
       true, // file_local
       true  // is_parameter
     );
+
     context_.add(param_symbol);
   }
 }
