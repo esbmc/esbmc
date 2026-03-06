@@ -1,4 +1,4 @@
 CORE
 main.py
 --unwind 9
-^ERROR: List out of bounds at\b
+^VERIFICATION FAILED$

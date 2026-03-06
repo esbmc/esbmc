@@ -31,7 +31,7 @@ enum class StatementType
   GLOBAL,
   TRY,
   EXCEPTHANDLER,
-  DELETE
+  DELETE_STATEMENT
 };
 
 enum class ExpressionType
@@ -126,7 +126,8 @@ public:
       name == "NameError" || name == "OSError" || name == "FileNotFoundError" ||
       name == "FileExistsError" || name == "PermissionError" ||
       name == "NotImplementedError" || name == "ImportError" ||
-      name == "ModuleNotFoundError" || name == "RuntimeError");
+      name == "ModuleNotFoundError" || name == "RuntimeError" ||
+      name == "StopIteration");
   }
 
   static bool is_c_model_func(const std::string &func_name)

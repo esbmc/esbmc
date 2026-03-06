@@ -1,5 +1,136 @@
 Release Notes of the ESBMC model checker
 
+*** ESBMC v8.1 Release Notes
+This release of ESBMC v8.1 continues to expand the Python frontend with new data types (enum, Decimal), extended library support (math, string, list, tuple), lambda and higher-order function improvements, and numerous bug fixes for robustness. The release also introduces C/C++ verification improvements including pointer-to-member support, volatile checks, function contract enhancements, and a new time.h operational model. Below is a summary of the new features, enhancements, and bug fixes:
+
+* New Features
+** Python Frontend
+*** Enum Support
+- Added enum support with struct-based modeling (#3645).
+*** Decimal Type
+- Added Decimal construction support (#3577).
+- Implemented Decimal operators: equality, ordering, and arithmetic (#3587).
+*** Dictionary Enhancements
+- Added initial support for dict.items() in for-loops with type-aware lowering (#3648).
+*** List Operations
+- Added list.remove(), list.copy(), list.sort(), and list.reverse() methods (#3535, #3540, #3632).
+- Implemented sorted() built-in function (#3468).
+- Added initial support to convert list(range()) expressions (#3496).
+- Optimized list comparison (#3471).
+- Added list comprehension support in assert statements and function call arguments (#3463, #3618).
+- Fixed negative indexing on mutated lists and out-of-bounds handling (#3612, #3614, #3615, #3616).
+- Fixed crash for list indexing and slicing (#3631).
+- Fixed list_remove mutating type_map across branches (#3544).
+- Fixed 'not list' truthiness check via list_size() instead of pointer cast (#3545).
+- Fixed negative indices and parameter type inference in list slicing (#3547).
+*** String Operations
+- Added str.format() and format_map() support (#3446).
+- Added additional Python string method support with regression coverage (#3445).
+- Supported list literals in str.join() (#3575).
+- Added string slicing with step support, e.g., [::-1] (#3598, #3613).
+- Fixed string repetition handling (#3548).
+- Fixed len() for f-strings to avoid strlen unwinding (#3543).
+- Fixed string slicing with out-of-bounds indices and pointer parameters (#3582).
+- Fixed string-annotation regression by supporting PEP 604 in string annotations (#3550).
+- Fixed join() failing when argument comes from split() call (#3584).
+- Fixed split on BinOp expressions (#3561).
+- Raised IndexError on out-of-bounds string indexing (#3576).
+*** Tuple Enhancements
+- Added tuple membership operator support (#3457).
+- Added min/max support with tuples (#3456).
+- Inferred tuple return type for unannotated functions (#3470).
+- Fixed tuple negative index support (#3451).
+*** Set Operations
+- Added set(iterable) support with bounded strnlen (#3519).
+*** Math Module
+- Added support for imported math functions: sin, cos, sqrt, exp, log (#3498, #3500).
+- Added type checking for math.comb() (#3502).
+- Expanded math library coverage with additional functions and regression tests (#3534, #3537, #3538, #3542).
+- Fixed math.sqrt() domain check causing segfault (#3503).
+- Fixed math constants precision (#3583).
+*** Lambda and Higher-Order Functions
+- Extracted lambda operations to dedicated python_lambda class (#3460).
+- Added initial support for Callable function pointer variables (#3477).
+- Fixed nested lambda closure variable access (#3464).
+- Fixed lambda type inference and ternary expression handling (#3467).
+*** Type Inference
+- Extended type inference for partial generic container annotations (#3473).
+- Inferred type of unannotated assignments from all RHS expressions (#3481).
+- Supported constructor parameter inference for calls in compound expressions (#3505).
+- Supported type inference for nondet_* and Call nodes in list elements (#3564).
+- Allowed untyped parameters in nested functions (#3494).
+- Added proper support for type objects, identity comparisons, and isinstance semantics (#3528).
+- Improved undefined variable error messages (#3472).
+*** Exception Handling
+- Extracted exception handling into dedicated python_exception_handler class (#3573).
+- Improved exception hierarchy to match Python standard library (#3516).
+- Added support for raising arbitrary values in raise statements (#3483).
+- Handled try/except ImportError for missing modules (#3572).
+- Fixed crash when raising exceptions without arguments (#3514).
+*** Class and Object Support
+- Supported class method calls without instance (#3482).
+- Fixed Optional type wrapping for functions with mixed value+None returns (#3585, #3590).
+*** Built-in Functions
+- Implemented optimized min() and max() built-ins with type-aware dispatch (#3443).
+- Supported range() objects by converting to lists and using proper len() (#3511).
+- Fixed enumerate transformation and scope/type inference (#3495).
+*** Non-deterministic Values
+- Added support for nondet_list and nondet_dict in pytest case generation (#3458).
+- Fixed nondet_dict (#3478).
+*** General Bug Fixes
+- Fixed internal failure when assigning different types to the same variable (#3586).
+- Fixed starred unpacking (#3611).
+- Prevented crash on incompatible type reassignment (#3555).
+- Various Python frontend bug fixes (#3558, #3565, #3600, #3601, #3602, #3605, #3606).
+*** Regression and Testing
+- Added HumanEval test cases 10-20 and documented current limitations (#3476).
+- Added ai-generated-code regression suite.
+- Added benchmarks from MOPSA suite.
+
+** C/C++ Verification
+*** Language Support
+- Added support for pointer-to-member and pointer to member function (#3425, #3546).
+- Added support for volatile checks (#3604).
+- Performed linking and extern cleanup (#3484).
+- Updated C++ signature for tuples and arrays (#3491).
+- Fixed BuiltinTemplate triggering errors (#3489).
+- Fixed default alignment crash (#3532, #3569).
+*** Function Contracts
+- Implemented Function Contract Replace Call Mode - Phase 2 (#3429).
+*** Operational Models
+- Added time.h operational model (#3452).
+
+** Verification Features
+*** Loop Handling
+- Added verbose output for pragma unroll (#3490).
+- Re-inserted side effects before each ASSERT/ASSUME in loop invariants (#3643).
+- Fixed crash on LoopHintAttr with unsafe value pointer (#3644).
+*** Verification Process
+- Ask solver for LHS values when ESBMC fails to generate a constant (#2679).
+- Fixed missing checks when using call.ret (#3571).
+- Added --incremental-bmc when test.desc line 3 is empty (#3515).
+*** Simplifier Enhancements
+- Fixed member access simplification through bitcast expressions (#3493).
+*** SMT Backend
+- Handled address_of on constant_struct in SMT encoding (#3591).
+
+** Build System
+- Updated CI to Ubuntu 24.04 (#3506).
+- Refactored build.sh and migrated ARM CI to GitHub's ARM runner (#3574).
+- Disabled backtrace functionality on non-GLIBC platforms (#3531).
+- Fixed x86/x86_64 detection in breakpoint.h instead of excluding ARM (#3530).
+- Prioritized build-dir includes over source-dir for generated headers (#3603).
+- Cleaned up temp dirs on signal-based termination (#3455).
+- Implemented safer config file loading (#3492).
+- Avoided compiler limit: blocks nested too deeply (#3474).
+- Fixed order of operations when assigning result of builtin functions (#3568).
+
+** Documentation
+- Updated function contracts documentation for annotation feature (#3518).
+- Added results and awards for Test-Comp 2025.
+- Documented Python program verification with ESBMC.
+
+
 *** ESBMC v8.0 Release Notes
 This major release of ESBMC v8.0 delivers Python frontend enhancements with comprehensive type system improvements, advanced string handling, and dictionary support. The release includes improvements in verification capabilities, simplifier optimizations, support for witness validation, and enhanced C/C++ verification. Below is a summary of the new features, enhancements, and bug fixes:
 

@@ -1,5 +1,6 @@
 # The ESBMC model checker
 
+[![Zulip](https://img.shields.io/badge/social_chat-zulip-blue?logo=zulip)](https://systemsandsoftwaresecurity.zulipchat.com/#narrow/channel/575165-esbmc)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 [![GitHub All Releases](https://img.shields.io/github/downloads/esbmc/esbmc/total.svg)](https://github.com/esbmc/esbmc/releases)
@@ -208,9 +209,7 @@ https://www.youtube.com/watch?v=uJ5Jn0sxm08&t=2182s
 
 In a workshop between ARM Research and the University of Manchester, this video was delivered as part of a technical talk on exploiting the SAT revolution for automated software verification.
 
-We offer a post-graduate course in software security that explains the internals of ESBMC. 
-
-https://ssvlab.github.io/lucasccordeiro/courses/2020/01/software-security/index.html
+We offer a [post-graduate course](https://ssvlab.github.io/lucasccordeiro/courses/2022/01/software-security/index.html) in software security that explains the internals of ESBMC.
 
 This course unit introduces students to basic and advanced approaches to formally building verified trustworthy software systems, where trustworthiness comprises five attributes: *reliability*, *availability*, *safety*, *resilience*, and *security*.
 

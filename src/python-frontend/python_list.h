@@ -97,6 +97,23 @@ public:
   }
 
   /**
+   * @brief Record a single element-type entry for a list in the static type map.
+   *
+   * @param list_symbol_id  Internal symbol identifier of the list.
+   * @param elem_id         Symbol identifier of the element, or empty when the
+   *                        type is inferred from an annotation rather than from
+   *                        a concrete element expression.
+   * @param elem_type       ESBMC type of the element.
+   */
+  static void add_type_info_entry(
+    const std::string &list_symbol_id,
+    const std::string &elem_id,
+    const typet &elem_type)
+  {
+    list_type_map[list_symbol_id].push_back(std::make_pair(elem_id, elem_type));
+  }
+
+  /**
    * @brief Create an empty set
    * @return Expression representing the empty set
    */
@@ -109,6 +126,13 @@ public:
    */
   static typet
   get_list_element_type(const std::string &list_id, size_t index = 0);
+
+  /**
+   * Get the internal symbol id of the element stored at a given index.
+   * Returns an empty string when the list or index is not found.
+   */
+  static std::string
+  get_list_element_id(const std::string &list_id, size_t index);
 
   /**
    * @brief Convert generator expressions and list comprehensions to lists
@@ -192,6 +216,22 @@ public:
    *          list is unknown or was constructed with no recorded elements.
    */
   static size_t get_list_type_map_size(const std::string &list_id);
+
+  /**
+   * @brief Reverse the compile-time type-info vector for a list.
+   *
+   * Mirrors the runtime element reordering performed by
+   * __ESBMC_list_reverse, so that subsequent index-based type lookups
+   * (e.g. list[0]) continue to resolve to the correct element type
+   * after an in-place reversal.
+   *
+   * Has no effect if the list is unknown, empty, or contains only one
+   * element (those cases are already trivially reversed).
+   *
+   * @param list_id  The internal symbol identifier of the list (e.g.
+   *                 "c:main.py@42@F@main@lst").
+   */
+  static void reverse_type_info(const std::string &list_id);
 
 private:
   friend class python_dict_handler;

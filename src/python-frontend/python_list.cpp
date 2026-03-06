@@ -166,18 +166,63 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
     elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
   }
-  // Handle struct types (such as dictionaries): store by reference
-  else if (elem_symbol.type.is_struct())
+  // Handle struct types (such as dictionaries and user-defined classes).
+  // The element type may be a symbol_typet reference (e.g. "tag-A") rather
+  // than a plain struct_typet, so follow the type before checking is_struct().
+  else if (
+    elem_symbol.type.is_struct() ||
+    (elem_symbol.type.id() == "symbol" &&
+     converter_.name_space().follow(elem_symbol.type).is_struct()))
   {
-    // Calculate actual struct size by counting pointer-sized components
-    const struct_union_typet &struct_type =
-      to_struct_union_type(elem_symbol.type);
+    const typet &resolved =
+      elem_symbol.type.is_struct()
+        ? elem_symbol.type
+        : converter_.name_space().follow(elem_symbol.type);
+    const struct_union_typet &struct_type = to_struct_union_type(resolved);
 
-    // For dictionary structs, each component is a pointer (keys, values)
-    size_t num_components = struct_type.components().size();
-    size_t total_size = num_components * (config.ansi_c.pointer_width() / 8);
+    // Sum the widths of all components to get the true struct size in bytes.
+    size_t total_size = 0;
+    for (const auto &comp : struct_type.components())
+    {
+      const typet &ct = comp.type();
+      if (ct.id() == "symbol")
+      {
+        // Nested struct/class component: recurse via namespace follow
+        const typet &followed = converter_.name_space().follow(ct);
+        if (followed.is_struct())
+        {
+          for (const auto &sc : to_struct_union_type(followed).components())
+          {
+            if (!sc.type().width().empty())
+              total_size +=
+                std::stoull(sc.type().width().as_string(), nullptr, 10) / 8;
+            else
+              total_size += config.ansi_c.pointer_width() / 8;
+          }
+        }
+        else
+          total_size += config.ansi_c.pointer_width() / 8;
+      }
+      else if (!ct.width().empty())
+        total_size += std::stoull(ct.width().as_string(), nullptr, 10) / 8;
+      else
+        total_size += config.ansi_c.pointer_width() / 8;
+    }
+    if (total_size == 0)
+      total_size = config.ansi_c.pointer_width() / 8;
 
     elem_size = from_integer(BigInt(total_size), size_type());
+  }
+  // For non-char, non-bool pointer types (e.g., Optional[T] stored as T*):
+  // pointer_typet has no width() attribute, so we must use pointer_width here
+  // rather than falling to the generic else branch which calls width().
+  else if (
+    elem_symbol.type.is_pointer() &&
+    elem_symbol.type.subtype() != char_type() &&
+    elem_symbol.type.subtype() != bool_type())
+  {
+    const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
+    elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
   }
   // For string pointers (char*), calculate length at runtime using strlen
   else if (
@@ -534,7 +579,14 @@ exprt python_list::get()
 
   for (auto &e : list_value_["elts"])
   {
+    // Clear current_lhs so that constructor calls inside list elements
+    // (e.g. [A(), B()]) create their own self temp variable instead of
+    // inheriting the outer assignment target as self.
+    exprt *saved_lhs = converter_.current_lhs;
+    converter_.current_lhs = nullptr;
     exprt elem = converter_.get_expr(e);
+    converter_.current_lhs = saved_lhs;
+
     exprt list_push_func_call =
       build_push_list_call(list_symbol, list_value_, elem);
     converter_.add_instruction(list_push_func_call);
@@ -557,24 +609,6 @@ exprt python_list::build_list_at_call(
   assert(list_at_func_sym);
 
   locationt location = converter_.get_location_from_decl(element);
-
-  // Check if index is already a constant non-negative value
-  if (index.is_constant() && index.type().is_signedbv())
-  {
-    BigInt idx_value;
-    if (!to_integer(index, idx_value) && idx_value >= 0)
-    {
-      // Index is constant and non-negative, use directly
-      side_effect_expr_function_callt list_at_call;
-      list_at_call.function() = symbol_expr(*list_at_func_sym);
-      list_at_call.arguments().push_back(
-        list.type().is_pointer() ? list : address_of_exprt(list));
-      list_at_call.arguments().push_back(typecast_exprt(index, size_type()));
-      list_at_call.type() = obj_type;
-      list_at_call.location() = location;
-      return list_at_call;
-    }
-  }
 
   // Get list size
   const symbolt *size_func =
@@ -610,6 +644,28 @@ exprt python_list::build_list_at_call(
   // Choose between positive conversion or original
   if_exprt converted_index(is_negative, positive_index, index_as_size);
   converted_index.type() = size_type();
+
+  if (!config.options.get_bool_option("no-bounds-check"))
+  {
+    // Runtime guard only for negative-index normalization. This prevents
+    // underflowed indices (e.g., [] [-1]) from reaching the backend while
+    // preserving legacy behavior for non-negative accesses.
+    exprt oob_cond(">=", bool_type());
+    oob_cond.copy_to_operands(converted_index, symbol_expr(size_var));
+    exprt negative_oob("and", bool_type());
+    negative_oob.copy_to_operands(is_negative, oob_cond);
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "list index out of range");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = negative_oob;
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
 
   // Use the converted expression directly in the call
   side_effect_expr_function_callt list_at_call;
@@ -1244,7 +1300,9 @@ exprt python_list::handle_range_slice(
         // Compute: list_size + bound_expr  (bound_expr is negative)
         const symbolt *size_func =
           converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
-        assert(size_func);
+        if (!size_func)
+          throw std::runtime_error(
+            "__ESBMC_list_size not found in symbol table");
 
         side_effect_expr_function_callt size_call;
         size_call.function() = symbol_expr(*size_func);
@@ -1264,10 +1322,23 @@ exprt python_list::handle_range_slice(
         size_decl.copy_to_operands(size_call);
         converter_.add_instruction(size_decl);
 
-        exprt bound_as_size = typecast_exprt(bound_expr, size_type());
-        exprt resolved("+", size_type());
-        resolved.copy_to_operands(symbol_expr(size_sym), bound_as_size);
-        return resolved;
+        // Compute resolved = list_size + bound_expr (bound_expr is negative)
+        // detect underflow by signed arithmetic.
+        typet signed_t = signed_size_type();
+        exprt size_signed = typecast_exprt(symbol_expr(size_sym), signed_t);
+        exprt bound_signed = typecast_exprt(bound_expr, signed_t);
+        exprt resolved_signed("+", signed_t);
+        resolved_signed.copy_to_operands(size_signed, bound_signed);
+
+        // Clamp to 0 if negative
+        // list(0, list_size + bound)
+        exprt zero_signed = from_integer(0, signed_t);
+        exprt is_neg("<", bool_type());
+        is_neg.copy_to_operands(resolved_signed, zero_signed);
+        exprt clamped = if_exprt(is_neg, zero_signed, resolved_signed);
+        clamped.type() = signed_t;
+
+        return typecast_exprt(clamped, size_type());
       }
 
       return bound_expr;
@@ -1277,7 +1348,8 @@ exprt python_list::handle_range_slice(
     {
       const symbolt *size_func =
         converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
-      assert(size_func);
+      if (!size_func)
+        throw std::runtime_error("__ESBMC_list_size not found in symbol table");
 
       side_effect_expr_function_callt size_call;
       size_call.function() = symbol_expr(*size_func);
@@ -1307,7 +1379,36 @@ exprt python_list::handle_range_slice(
   };
 
   const exprt lower_expr = get_list_bound("lower", false);
-  const exprt upper_expr = get_list_bound("upper", true);
+  exprt upper_expr = get_list_bound("upper", true);
+
+  // Clamp upper bound to the current list size to match Python slicing
+  // semantics (e.g., l[0:100] on a 5-element list).
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error("__ESBMC_list_size not found in symbol table");
+
+    side_effect_expr_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    if (array.type().is_pointer())
+      size_call.arguments().push_back(array);
+    else
+      size_call.arguments().push_back(address_of_exprt(array));
+    size_call.type() = size_type();
+    size_call.location() = location;
+
+    symbolt &size_sym = converter_.create_tmp_symbol(
+      list_value_, "$slice_size$", size_type(), exprt());
+    code_declt size_decl(symbol_expr(size_sym));
+    size_decl.copy_to_operands(size_call);
+    converter_.add_instruction(size_decl);
+
+    exprt upper_ge_size(">=", bool_type());
+    upper_ge_size.copy_to_operands(upper_expr, symbol_expr(size_sym));
+    upper_expr = if_exprt(upper_ge_size, symbol_expr(size_sym), upper_expr);
+    upper_expr.type() = size_type();
+  }
 
   // Initialize counter: int counter = lower
   symbolt &counter = converter_.create_tmp_symbol(
@@ -1365,15 +1466,27 @@ exprt python_list::handle_range_slice(
   while_loop.copy_to_operands(loop_condition, loop_body);
   converter_.add_instruction(while_loop);
 
-  // Update type map for sliced elements (only if bounds are available)
+  // Update type map for sliced elements (only if both bounds are constant literals)
   if (
-    slice_node.contains("lower") && !slice_node["lower"].is_null() &&
-    slice_node.contains("upper") && !slice_node["upper"].is_null())
+    slice_node.contains("lower") && slice_node["lower"].is_object() &&
+    slice_node["lower"].contains("_type") &&
+    slice_node["lower"]["_type"] == "Constant" &&
+    slice_node["lower"].contains("value") && slice_node.contains("upper") &&
+    slice_node["upper"].is_object() && slice_node["upper"].contains("_type") &&
+    slice_node["upper"]["_type"] == "Constant" &&
+    slice_node["upper"].contains("value"))
   {
-    const auto &list_node = json_utils::get_var_value(
-      list_value_["value"]["id"],
-      converter_.current_function_name(),
-      converter_.ast());
+    nlohmann::json list_node;
+    if (
+      list_value_.contains("value") && list_value_["value"].is_object() &&
+      list_value_["value"].contains("id") &&
+      list_value_["value"]["id"].is_string())
+    {
+      list_node = json_utils::get_var_value(
+        list_value_["value"]["id"],
+        converter_.current_function_name(),
+        converter_.ast());
+    }
 
     const size_t lower_bound = slice_node["lower"]["value"].get<size_t>();
     const size_t upper_bound = slice_node["upper"]["value"].get<size_t>();
@@ -1384,7 +1497,11 @@ exprt python_list::handle_range_slice(
       list_node["value"].contains("elts") &&
       list_node["value"]["elts"].is_array())
     {
-      for (size_t i = lower_bound; i < upper_bound; ++i)
+      const size_t elts_size = list_node["value"]["elts"].size();
+      const size_t begin = std::min(lower_bound, elts_size);
+      const size_t end = std::min(upper_bound, elts_size);
+
+      for (size_t i = begin; i < end; ++i)
       {
         const exprt element =
           converter_.get_expr(list_node["value"]["elts"][i]);
@@ -1436,7 +1553,9 @@ exprt python_list::handle_index_access(
 {
   // Find list node for type information
   nlohmann::json list_node;
-  if (list_value_["value"].contains("id"))
+  if (
+    list_value_.contains("value") && list_value_["value"].is_object() &&
+    list_value_["value"].contains("id"))
   {
     list_node = json_utils::find_var_decl(
       list_value_["value"]["id"],
@@ -1520,7 +1639,7 @@ exprt python_list::handle_index_access(
     }
 
     // Determine element type
-    if (list_node["_type"] == "arg")
+    if (list_node.contains("_type") && list_node["_type"] == "arg")
     {
       elem_type =
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
@@ -1535,18 +1654,27 @@ exprt python_list::handle_index_access(
       if (list_type_map[list_name].empty())
       {
         /* Fall back to annotation for function parameters */
-        const nlohmann::json list_value_node = json_utils::get_var_value(
-          list_value_["value"]["id"],
-          converter_.current_function_name(),
-          converter_.ast());
+        if (
+          list_value_.contains("value") && list_value_["value"].is_object() &&
+          list_value_["value"].contains("id") &&
+          list_value_["value"]["id"].is_string())
+        {
+          const nlohmann::json list_value_node = json_utils::get_var_value(
+            list_value_["value"]["id"],
+            converter_.current_function_name(),
+            converter_.ast());
 
-        elem_type = get_elem_type_from_annotation(
-          list_value_node, converter_.get_type_handler());
+          elem_type = get_elem_type_from_annotation(
+            list_value_node, converter_.get_type_handler());
+        }
       }
       else
       {
         size_t type_index =
-          (!list_node.is_null() && list_node["value"]["_type"] == "BinOp")
+          (!list_node.is_null() && list_node.contains("value") &&
+           list_node["value"].is_object() &&
+           list_node["value"].contains("_type") &&
+           list_node["value"]["_type"] == "BinOp")
             ? 0
             : index;
 
@@ -1556,21 +1684,9 @@ exprt python_list::handle_index_access(
         }
         catch (const std::out_of_range &)
         {
-          // Only throw compile-time error if this is a static list with known elements
-          // For constant indices on static lists, this is a definite out-of-bounds error
-          if (
-            (slice_node["_type"] == "Constant" ||
-             (slice_node["_type"] == "UnaryOp" &&
-              slice_node["operand"]["_type"] == "Constant")) &&
-            !list_node.is_null() && list_node.contains("value") &&
-            list_node["value"].contains("elts") &&
-            list_node["value"]["elts"].is_array())
-          {
-            const locationt l = converter_.get_location_from_decl(list_value_);
-            throw std::runtime_error(
-              "List out of bounds at " + l.get_file().as_string() +
-              " line: " + l.get_line().as_string());
-          }
+          // Do not emit a frontend conversion error for constant OOB indices.
+          // The runtime list access model can raise IndexError, which is
+          // observable by Python try/except code.
 
           // Use the known element type for homogeneous dynamic lists.
           if (!list_type_map[list_name].empty())
@@ -1665,10 +1781,16 @@ exprt python_list::handle_index_access(
         else if (!list_node.is_null() && list_node.contains("value"))
         {
           // Check if the value is a Subscript (such as d['a'])
-          if (list_node["value"]["_type"] == "Subscript")
+          if (
+            list_node["value"].contains("_type") &&
+            list_node["value"]["_type"] == "Subscript")
           {
             // For ESBMC_iter_0 = d['a'], get element type from dict's actual value
-            if (list_node["value"]["value"]["_type"] == "Name")
+            if (
+              list_node["value"].contains("value") &&
+              list_node["value"]["value"].is_object() &&
+              list_node["value"]["value"].contains("_type") &&
+              list_node["value"]["value"]["_type"] == "Name")
             {
               std::string dict_var_name =
                 list_node["value"]["value"]["id"].get<std::string>();
@@ -1751,8 +1873,174 @@ exprt python_list::handle_index_access(
 
     if (pos_expr == exprt() || elem_type == typet())
     {
+      const bool has_const_index =
+        (slice_node["_type"] == "Constant" && slice_node.contains("value")) ||
+        (slice_node["_type"] == "UnaryOp" && slice_node.contains("op") &&
+         slice_node["op"]["_type"] == "USub" &&
+         slice_node.contains("operand") &&
+         slice_node["operand"]["_type"] == "Constant");
+      if (has_const_index)
+      {
+        // If we can prove out-of-bounds from a concrete list literal, raise
+        // IndexError in-model so Python try/except(IndexError) can catch it.
+        if (
+          array.is_symbol() && !list_node.is_null() &&
+          list_node.contains("value") && list_node["value"].is_object() &&
+          list_node["value"].contains("elts") &&
+          list_node["value"]["elts"].is_array())
+        {
+          bool negative_index = false;
+          size_t index_abs = 0;
+
+          if (slice_node["_type"] == "Constant" && slice_node.contains("value"))
+          {
+            index_abs = slice_node["value"].get<size_t>();
+          }
+          else
+          {
+            negative_index = true;
+            index_abs = slice_node["operand"]["value"].get<size_t>();
+          }
+
+          const size_t list_size = list_node["value"]["elts"].size();
+          const bool out_of_bounds =
+            (!negative_index && index_abs >= list_size) ||
+            (negative_index && index_abs > list_size);
+
+          if (out_of_bounds)
+          {
+            exprt raise =
+              converter_.get_exception_handler().gen_exception_raise(
+                "IndexError", "list index out of range");
+            codet throw_code("expression");
+            throw_code.operands().push_back(raise);
+            converter_.add_instruction(throw_code);
+            // Unreachable after raise, but return a placeholder expression.
+            return gen_zero(size_type());
+          }
+        }
+
+        const locationt l = converter_.get_location_from_decl(list_value_);
+        throw std::runtime_error(
+          "List out of bounds at " + l.get_file().as_string() +
+          " line: " + l.get_line().as_string());
+      }
+
+      // Keep historical frontend diagnostic for literal lists with
+      // compile-time constant OOB indexing (including nested accesses).
+      if (
+        array.is_symbol() && !list_node.is_null() &&
+        list_node.contains("value") && list_node["value"].is_object() &&
+        list_node["value"].contains("elts") &&
+        list_node["value"]["elts"].is_array())
+      {
+        bool has_const_index = false;
+        bool negative_index = false;
+        size_t index_abs = 0;
+
+        if (slice_node["_type"] == "Constant" && slice_node.contains("value"))
+        {
+          has_const_index = true;
+          index_abs = slice_node["value"].get<size_t>();
+        }
+        else if (
+          slice_node["_type"] == "UnaryOp" && slice_node.contains("op") &&
+          slice_node["op"]["_type"] == "USub" &&
+          slice_node.contains("operand") &&
+          slice_node["operand"]["_type"] == "Constant")
+        {
+          has_const_index = true;
+          negative_index = true;
+          index_abs = slice_node["operand"]["value"].get<size_t>();
+        }
+
+        if (has_const_index)
+        {
+          const size_t list_size = list_node["value"]["elts"].size();
+          const bool out_of_bounds =
+            (!negative_index && index_abs >= list_size) ||
+            (negative_index && index_abs > list_size);
+          if (out_of_bounds)
+          {
+            const locationt l = converter_.get_location_from_decl(list_value_);
+            throw std::runtime_error(
+              "List out of bounds at " + l.get_file().as_string() +
+              " line: " + l.get_line().as_string());
+          }
+        }
+      }
+
       throw std::runtime_error(
         "Invalid list access: could not resolve position or element type");
+    }
+
+    // Preserve historical frontend OOB diagnostics only when we can prove we
+    // are indexing a stable list literal (not a reassigned/mutated/derived
+    // list). Using the type map alone is too broad and causes false positives.
+    // Emit an IndexError raise instead of a C++ exception so Python
+    // try/except(IndexError) can observe the error.
+    if (array.is_symbol())
+    {
+      const std::string &list_name = array.identifier().as_string();
+      auto it = list_type_map.find(list_name);
+      if (it != list_type_map.end() && !it->second.empty())
+      {
+        bool has_const_index = false;
+        bool negative_index = false;
+        size_t index_abs = 0;
+
+        if (slice_node["_type"] == "Constant" && slice_node.contains("value"))
+        {
+          has_const_index = true;
+          index_abs = slice_node["value"].get<size_t>();
+        }
+        else if (
+          slice_node["_type"] == "UnaryOp" && slice_node.contains("op") &&
+          slice_node["op"]["_type"] == "USub" &&
+          slice_node.contains("operand") &&
+          slice_node["operand"]["_type"] == "Constant")
+        {
+          has_const_index = true;
+          negative_index = true;
+          index_abs = slice_node["operand"]["value"].get<size_t>();
+        }
+
+        const bool is_slice_derived_var =
+          !list_node.is_null() && list_node.contains("value") &&
+          list_node["value"].contains("_type") &&
+          list_node["value"]["_type"] == "Subscript";
+
+        bool is_stable_list_literal = false;
+        if (
+          !list_node.is_null() && list_node.contains("value") &&
+          list_node["value"].contains("_type") &&
+          list_node["value"]["_type"] == "List" &&
+          list_node["value"].contains("elts") &&
+          list_node["value"]["elts"].is_array())
+        {
+          // If sizes diverge, the symbol was likely reassigned/mutated.
+          is_stable_list_literal =
+            it->second.size() == list_node["value"]["elts"].size();
+        }
+
+        if (has_const_index && !is_slice_derived_var && is_stable_list_literal)
+        {
+          const size_t known_size = it->second.size();
+          const bool oob = negative_index ? (index_abs > known_size)
+                                          : (index_abs >= known_size);
+          if (oob)
+          {
+            exprt raise =
+              converter_.get_exception_handler().gen_exception_raise(
+                "IndexError", "list index out of range");
+            codet throw_code("expression");
+            throw_code.operands().push_back(raise);
+            converter_.add_instruction(throw_code);
+            // Short-circuit: the raise makes the rest unreachable.
+            return gen_zero(elem_type);
+          }
+        }
+      }
     }
 
     // Build list access and cast result
@@ -1992,6 +2280,8 @@ exprt python_list::list_repetition(
   BigInt list_size;
   exprt list_elem;
   symbolt *list_symbol = nullptr;
+  // True when the list operand is a variable (not a literal).
+  bool is_variable_list = false;
 
   auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
     if (
@@ -2005,7 +2295,16 @@ exprt python_list::list_repetition(
     return true;
   };
 
-  // Get list size from lhs (e.g.: 3 * [1])
+  // Get element expression from list_type_map for a variable list.
+  auto elem_from_type_map = [&](const std::string &src_id) -> exprt {
+    const std::string &elem_id = get_list_element_id(src_id, 0);
+    assert(!elem_id.empty());
+    symbolt *elem_sym = converter_.find_symbol(elem_id);
+    assert(elem_sym);
+    return symbol_expr(*elem_sym);
+  };
+
+  // Get list size from lhs (e.g.: 3 * [1] or 3 * lst)
   if (lhs.type() != list_type)
   {
     if (lhs.is_symbol())
@@ -2023,17 +2322,31 @@ exprt python_list::list_repetition(
     else if (lhs.is_constant())
       list_size = binary2integer(lhs.value().c_str(), true);
 
-    // List element is the rhs
-    list_elem = converter_.get_expr(right_node["elts"][0]);
+    // List element comes from the rhs operand
+    if (right_node.contains("elts"))
+      list_elem = converter_.get_expr(right_node["elts"][0]);
+    else
+    {
+      // rhs is a variable list — get element from list_type_map
+      list_elem = elem_from_type_map(rhs.identifier().as_string());
+      is_variable_list = true;
+    }
   }
 
-  // Get list size from rhs (e.g.: [1] * 3)
+  // Get list size from rhs (e.g.: [1] * 3 or lst * 3)
   if (rhs.type() != list_type)
   {
-    // List element is the rhs
-    list_elem = converter_.get_expr(left_node["elts"][0]);
+    // List element comes from the lhs operand
+    if (left_node.contains("elts"))
+      list_elem = converter_.get_expr(left_node["elts"][0]);
+    else
+    {
+      // lhs is a variable list — get element from list_type_map
+      list_elem = elem_from_type_map(lhs.identifier().as_string());
+      is_variable_list = true;
+    }
 
-    if (rhs.is_symbol()) // (e.g.: [1] * n)
+    if (rhs.is_symbol()) // (e.g.: [1] * n or lst * n)
     {
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(rhs).get_identifier().as_string());
@@ -2049,7 +2362,14 @@ exprt python_list::list_repetition(
       list_size = binary2integer(rhs.value().c_str(), true);
   }
 
-  if (!list_symbol)
+  // For variable lists, allocate a fresh result list so the source is not
+  // mutated.  For literal lists the temp symbol created by get() is reused.
+  if (is_variable_list)
+  {
+    symbolt &result = create_list();
+    list_symbol = &result;
+  }
+  else if (!list_symbol)
   {
     if (lhs.type() == list_type && lhs.is_symbol())
       list_symbol = converter_.find_symbol(lhs.identifier().as_string());
@@ -2064,7 +2384,12 @@ exprt python_list::list_repetition(
   else
     list_id = list_symbol->id.as_string();
 
-  for (int64_t i = 0; i < list_size.to_int64() - 1; ++i)
+  // Literal lists already contain their first element; variable-list results
+  // start empty.  Adjust the loop bounds accordingly.
+  const int64_t push_count =
+    is_variable_list ? list_size.to_int64() : list_size.to_int64() - 1;
+
+  for (int64_t i = 0; i < push_count; ++i)
   {
     converter_.add_instruction(
       build_push_list_call(*list_symbol, list_value_, list_elem));
@@ -2209,6 +2534,30 @@ exprt python_list::build_extend_list_call(
   locationt location = converter_.get_location_from_decl(op);
 
   exprt actual_list = other_list;
+
+  if (actual_list.is_code() && actual_list.is_function_call())
+  {
+    const code_function_callt &call_expr =
+      to_code_function_call(to_code(actual_list));
+
+    const typet list_type = converter_.get_type_handler().get_list_type();
+
+    symbolt &tmp_list =
+      converter_.create_tmp_symbol(op, "$extend_list$", list_type, exprt());
+    code_declt tmp_decl(symbol_expr(tmp_list));
+    tmp_decl.location() = location;
+    converter_.add_instruction(tmp_decl);
+
+    code_function_callt func_call;
+    func_call.function() = call_expr.function();
+    func_call.arguments() = call_expr.arguments();
+    func_call.lhs() = symbol_expr(tmp_list);
+    func_call.type() = list_type;
+    func_call.location() = location;
+    converter_.add_instruction(func_call);
+
+    actual_list = symbol_expr(tmp_list);
+  }
 
   // Check if other_list is a string (array or pointer to char)
   if (
@@ -2371,6 +2720,15 @@ typet python_list::get_list_element_type(
     index = 0;
 
   return type_map_it->second[index].second;
+}
+
+std::string
+python_list::get_list_element_id(const std::string &list_id, size_t index)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || index >= it->second.size())
+    return {};
+  return it->second[index].first;
 }
 
 exprt python_list::handle_comprehension(const nlohmann::json &element)
@@ -3137,4 +3495,12 @@ size_t python_list::get_list_type_map_size(const std::string &list_id)
   if (it == list_type_map.end())
     return 0;
   return it->second.size();
+}
+
+void python_list::reverse_type_info(const std::string &list_id)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || it->second.size() <= 1)
+    return;
+  std::reverse(it->second.begin(), it->second.end());
 }

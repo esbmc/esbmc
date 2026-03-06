@@ -39,21 +39,6 @@ string_handler::string_handler(
 
 namespace
 {
-static bool try_extract_const_string(
-  string_handler &handler,
-  const exprt &expr,
-  std::string &out)
-{
-  exprt tmp = expr;
-  exprt str_expr = handler.ensure_null_terminated_string(tmp);
-  if (str_expr.is_symbol() || str_expr.type().is_array())
-  {
-    out = handler.extract_string_from_array_operands(str_expr);
-    return true;
-  }
-  return false;
-}
-
 static bool get_constant_int(const exprt &expr, long long &out)
 {
   if (expr.is_nil())
@@ -104,6 +89,34 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
   throw std::runtime_error("format() requires constant arguments");
 }
 } // namespace
+
+bool string_handler::try_extract_const_string_expr(
+  const exprt &expr,
+  std::string &out)
+{
+  exprt tmp = expr;
+  exprt str_expr = ensure_null_terminated_string(tmp);
+
+  if (str_expr.is_symbol())
+  {
+    const auto &sym_expr = to_symbol_expr(str_expr);
+    const symbolt *symbol =
+      symbol_table_.find_symbol(sym_expr.get_identifier());
+    if (!symbol || symbol->value.is_nil() || !symbol->value.type().is_array())
+      return false;
+
+    out = extract_string_from_array_operands(symbol->value);
+    return true;
+  }
+
+  if (str_expr.type().is_array())
+  {
+    out = extract_string_from_array_operands(str_expr);
+    return true;
+  }
+
+  return false;
+}
 
 BigInt string_handler::get_string_size(const exprt &expr)
 {
@@ -883,41 +896,23 @@ exprt string_handler::handle_string_isspace(
   const exprt &str_expr,
   const locationt &location)
 {
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_isspace",
-    bool_type(),
-    {pointer_typet(char_type())},
-    location);
+  exprt string_copy = str_expr;
+  exprt str_null = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_null);
 
-  // Get the string pointer
-  exprt str_ptr = str_expr;
+  const char *isspace_str_symbol_id = "c:@F@__python_str_isspace";
+  symbolt *isspace_str_symbol =
+    symbol_table_.find_symbol(isspace_str_symbol_id);
+  if (!isspace_str_symbol)
+    throw std::runtime_error(
+      std::string(isspace_str_symbol_id) +
+      " function not found in symbol table");
 
-  if (str_expr.is_constant() && str_expr.type().is_array())
-  {
-    str_ptr = exprt("index", pointer_typet(char_type()));
-    str_ptr.copy_to_operands(str_expr);
-    str_ptr.copy_to_operands(from_integer(0, int_type()));
-  }
-  else if (str_expr.type().is_array())
-  {
-    str_ptr = exprt("address_of", pointer_typet(char_type()));
-    exprt index_expr("index", char_type());
-    index_expr.copy_to_operands(str_expr);
-    index_expr.copy_to_operands(from_integer(0, int_type()));
-    str_ptr.copy_to_operands(index_expr);
-  }
-  else if (!str_expr.type().is_pointer())
-  {
-    str_ptr = exprt("address_of", pointer_typet(char_type()));
-    str_ptr.copy_to_operands(str_expr);
-  }
-
-  // Create function call
   side_effect_expr_function_callt call;
-  call.function() = symbol_exprt(func_symbol_id, code_typet());
-  call.arguments().push_back(str_ptr);
-  call.type() = bool_type();
+  call.function() = symbol_expr(*isspace_str_symbol);
+  call.arguments().push_back(str_addr);
   call.location() = location;
+  call.type() = bool_type();
 
   return call;
 }
@@ -2027,7 +2022,7 @@ exprt string_handler::handle_string_capitalize(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("capitalize() requires constant string");
 
   if (!input.empty())
@@ -2050,7 +2045,7 @@ exprt string_handler::handle_string_title(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("title() requires constant string");
 
   bool new_word = true;
@@ -2080,7 +2075,7 @@ exprt string_handler::handle_string_swapcase(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("swapcase() requires constant string");
 
   for (char &ch : input)
@@ -2105,7 +2100,7 @@ exprt string_handler::handle_string_casefold(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("casefold() requires constant string");
 
   for (char &ch : input)
@@ -2129,8 +2124,8 @@ exprt string_handler::handle_string_count(
   std::string input;
   std::string sub;
   if (
-    !try_extract_const_string(*this, string_obj, input) ||
-    !try_extract_const_string(*this, sub_arg, sub))
+    !try_extract_const_string_expr(string_obj, input) ||
+    !try_extract_const_string_expr(sub_arg, sub))
   {
     throw std::runtime_error("count() requires constant strings");
   }
@@ -2191,8 +2186,8 @@ exprt string_handler::handle_string_removeprefix(
   std::string input;
   std::string prefix;
   if (
-    !try_extract_const_string(*this, string_obj, input) ||
-    !try_extract_const_string(*this, prefix_arg, prefix))
+    !try_extract_const_string_expr(string_obj, input) ||
+    !try_extract_const_string_expr(prefix_arg, prefix))
   {
     throw std::runtime_error("removeprefix() requires constant strings");
   }
@@ -2216,8 +2211,8 @@ exprt string_handler::handle_string_removesuffix(
   std::string input;
   std::string suffix;
   if (
-    !try_extract_const_string(*this, string_obj, input) ||
-    !try_extract_const_string(*this, suffix_arg, suffix))
+    !try_extract_const_string_expr(string_obj, input) ||
+    !try_extract_const_string_expr(suffix_arg, suffix))
   {
     throw std::runtime_error("removesuffix() requires constant strings");
   }
@@ -2243,7 +2238,7 @@ exprt string_handler::handle_string_splitlines(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("splitlines() requires constant string");
 
   std::vector<std::string> parts;
@@ -2287,7 +2282,7 @@ exprt string_handler::handle_string_format(
   const locationt &location)
 {
   std::string format_str;
-  if (!try_extract_const_string(*this, string_obj, format_str))
+  if (!try_extract_const_string_expr(string_obj, format_str))
     throw std::runtime_error("format() requires constant format string");
 
   std::vector<std::string> args;
@@ -2402,8 +2397,8 @@ exprt string_handler::handle_string_partition(
   std::string input;
   std::string sep;
   if (
-    !try_extract_const_string(*this, string_obj, input) ||
-    !try_extract_const_string(*this, sep_arg, sep))
+    !try_extract_const_string_expr(string_obj, input) ||
+    !try_extract_const_string_expr(sep_arg, sep))
   {
     throw std::runtime_error("partition() requires constant strings");
   }
@@ -2453,7 +2448,7 @@ exprt string_handler::handle_string_isalnum(
   [[maybe_unused]] const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("isalnum() requires constant string");
   if (input.empty())
     return from_integer(0, bool_type());
@@ -2471,7 +2466,7 @@ exprt string_handler::handle_string_isupper(
   [[maybe_unused]] const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("isupper() requires constant string");
   bool has_cased = false;
   for (char ch : input)
@@ -2490,7 +2485,7 @@ exprt string_handler::handle_string_isnumeric(
   [[maybe_unused]] const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("isnumeric() requires constant string");
   if (input.empty())
     return from_integer(0, bool_type());
@@ -2508,7 +2503,7 @@ exprt string_handler::handle_string_isidentifier(
   [[maybe_unused]] const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("isidentifier() requires constant string");
   if (input.empty())
     return from_integer(0, bool_type());
@@ -2532,7 +2527,7 @@ exprt string_handler::handle_string_center(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("center() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for center()");
@@ -2546,7 +2541,7 @@ exprt string_handler::handle_string_center(
   {
     std::string fill_str;
     if (
-      !try_extract_const_string(*this, fill_arg, fill_str) ||
+      !try_extract_const_string_expr(fill_arg, fill_str) ||
       fill_str.size() != 1)
     {
       throw std::runtime_error("center() fillchar must be a single character");
@@ -2576,7 +2571,7 @@ exprt string_handler::handle_string_ljust(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("ljust() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for ljust()");
@@ -2590,7 +2585,7 @@ exprt string_handler::handle_string_ljust(
   {
     std::string fill_str;
     if (
-      !try_extract_const_string(*this, fill_arg, fill_str) ||
+      !try_extract_const_string_expr(fill_arg, fill_str) ||
       fill_str.size() != 1)
     {
       throw std::runtime_error("ljust() fillchar must be a single character");
@@ -2615,7 +2610,7 @@ exprt string_handler::handle_string_rjust(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("rjust() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for rjust()");
@@ -2629,7 +2624,7 @@ exprt string_handler::handle_string_rjust(
   {
     std::string fill_str;
     if (
-      !try_extract_const_string(*this, fill_arg, fill_str) ||
+      !try_extract_const_string_expr(fill_arg, fill_str) ||
       fill_str.size() != 1)
     {
       throw std::runtime_error("rjust() fillchar must be a single character");
@@ -2653,7 +2648,7 @@ exprt string_handler::handle_string_zfill(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("zfill() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for zfill()");
@@ -2690,7 +2685,7 @@ exprt string_handler::handle_string_expandtabs(
   const locationt &location)
 {
   std::string input;
-  if (!try_extract_const_string(*this, string_obj, input))
+  if (!try_extract_const_string_expr(string_obj, input))
     throw std::runtime_error("expandtabs() requires constant string");
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for expandtabs()");
@@ -2736,7 +2731,7 @@ exprt string_handler::handle_string_format_map(
     throw std::runtime_error("format_map() requires one argument");
 
   std::string format_str;
-  if (!try_extract_const_string(*this, string_obj, format_str))
+  if (!try_extract_const_string_expr(string_obj, format_str))
     throw std::runtime_error("format_map() requires constant format string");
 
   const auto &mapping = call["args"][0];
