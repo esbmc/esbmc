@@ -2924,6 +2924,88 @@ double smt_convt::convert_rational_to_double(
   const BigInt &numerator,
   const BigInt &denominator)
 {
+  constexpr size_t INITIAL_BUFFER_SIZE = 1024;
+  constexpr size_t MAX_BUFFER_SIZE = 100000;
+
+  // Start with the legacy fixed-size buffers.
+  std::vector<char> num_buffer(INITIAL_BUFFER_SIZE, '\0');
+  std::vector<char> den_buffer(INITIAL_BUFFER_SIZE, '\0');
+
+  // Populate the buffer with the decimal representation of `value`, growing the
+  // buffer as needed. We keep the legacy fixed-size path to avoid extra
+  // allocations on the common fast path.
+  auto ensure_string = [&](const BigInt &value, std::vector<char> &buffer) {
+    while (true)
+    {
+      // 1) Try to reuse the current buffer (may already be large).
+      if (!buffer.empty())
+      {
+        char *result = value.as_string(buffer.data(), buffer.size(), 10);
+
+        if (result != nullptr)
+        {
+          // 1a) as_string returns a pointer to the first digit; copy it forward.
+          size_t len = strnlen(result, buffer.size());
+          if (len > 0 && len < buffer.size())
+          {
+            // Include the trailing '\0' so later std::stod sees the number.
+            for (size_t i = 0; i <= len; ++i)
+              buffer[i] = result[i];
+            return true;
+          }
+        }
+      }
+
+      // 2) Need a larger buffer: estimate required digits (+ sign + '\0').
+      size_t required = static_cast<size_t>(value.digits(10)) + 2;
+      size_t next_size = buffer.size() * 2;
+      if (next_size < required)
+        next_size = required;
+      if (next_size == 0)
+        next_size = INITIAL_BUFFER_SIZE;
+      if (next_size > MAX_BUFFER_SIZE)
+        return false;
+
+      // 3) Grow buffer and retry.
+      buffer.assign(next_size, '\0');
+    }
+  };
+
+  // Extract decimal strings for numerator/denominator (with fallback).
+  bool num_ok = ensure_string(numerator, num_buffer);
+  bool den_ok = ensure_string(denominator, den_buffer);
+
+  if (!num_ok || !den_ok)
+  {
+    // If conversion still fails, keep legacy behaviour: approximate sign.
+    bool num_positive = !numerator.is_zero();
+    bool den_positive = !denominator.is_zero();
+
+    if (num_positive && den_positive)
+    {
+      log_warning(
+        "BigInt as_string() failed for very small rational - returning minimal "
+        "positive value");
+      return DBL_MIN;
+    }
+    else
+    {
+      log_warning("BigInt as_string() failed and cannot determine sign");
+      return 0.0;
+    }
+  }
+
+  size_t num_len = strnlen(num_buffer.data(), num_buffer.size());
+  size_t den_len = strnlen(den_buffer.data(), den_buffer.size());
+
+  if (num_len >= num_buffer.size() - 1 || den_len >= den_buffer.size() - 1)
+  {
+    // Bail out if we still risk truncation.
+    log_warning(
+      "BigInt to string conversion may have been truncated - buffer too small");
+    return 0.0;
+  }
+
   bool numerator_negative = numerator.is_negative();
   bool denominator_negative = denominator.is_negative();
 
