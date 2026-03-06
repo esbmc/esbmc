@@ -3670,6 +3670,11 @@ exprt function_call_expr::handle_general_function_call()
   {
     exprt arg = converter_.get_expr(arg_node);
 
+    // A function name passed as an argument decays to a function pointer,
+    // mirroring C's implicit function-to-pointer conversion.
+    if (arg.type().is_code() && arg.is_symbol())
+      arg = address_of_exprt(arg);
+
     // Check if the corresponding parameter is Optional
     size_t param_idx = arg_index + param_offset;
 
