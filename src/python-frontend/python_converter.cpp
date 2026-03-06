@@ -1684,8 +1684,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         "can't take floor or mod of complex number");
 
     if (
-      op == "Add" || op == "Sub" || op == "Mult" || op == "Div" ||
-      op == "Eq" || op == "NotEq")
+      op == "Add" || op == "Sub" || op == "Mult" || op == "Div" || op == "Eq" ||
+      op == "NotEq")
     {
       if (op == "Eq" || op == "NotEq")
       {
@@ -3349,9 +3349,8 @@ exprt python_converter::make_char_array_expr(
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
-  const auto &annotated_node = (element["_type"] == "UnaryOp")
-                                 ? element["operand"]
-                                 : element;
+  const auto &annotated_node =
+    (element["_type"] == "UnaryOp") ? element["operand"] : element;
 
   // Handle Python complex constants emitted by parser annotations.
   // This must run before generic string handling because complex constants

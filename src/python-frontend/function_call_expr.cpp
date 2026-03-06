@@ -1466,7 +1466,8 @@ exprt function_call_expr::handle_complex() const
     return "";
   };
   auto is_bytes_annotated_name = [&](const nlohmann::json &arg) -> bool {
-    if (!(arg.contains("_type") && arg["_type"] == "Name" && arg.contains("id")))
+    if (!(arg.contains("_type") && arg["_type"] == "Name" &&
+          arg.contains("id")))
       return false;
 
     const std::string var_name = arg["id"].get<std::string>();
@@ -1522,8 +1523,7 @@ exprt function_call_expr::handle_complex() const
         return index_result;
       const typet &index_t = index_result.type();
       const bool is_python_int =
-        index_t.is_signedbv() || index_t.is_unsignedbv() ||
-        index_t.is_bool();
+        index_t.is_signedbv() || index_t.is_unsignedbv() || index_t.is_bool();
       if (!is_python_int)
         return raise_type_error("__index__ returned non-int");
       if (index_result.type() != double_type())
@@ -1679,7 +1679,8 @@ exprt function_call_expr::handle_complex() const
       double real = 0.0, imag = 0.0;
       if (!parse_complex_string(text, real, imag))
         return raise_value_error("complex() arg is a malformed string");
-      return make_complex(from_double(real, double_type()), from_double(imag, double_type()));
+      return make_complex(
+        from_double(real, double_type()), from_double(imag, double_type()));
     }
 
     // Best-effort support for non-literal string symbols.
@@ -1694,7 +1695,8 @@ exprt function_call_expr::handle_complex() const
           symbol_type.is_array() && symbol_type.subtype().is_unsignedbv() &&
           to_unsignedbv_type(symbol_type.subtype()).get_width() == 8)
           return raise_type_error(
-            "complex() first argument must be a string or a number, not 'bytes'");
+            "complex() first argument must be a string or a number, not "
+            "'bytes'");
 
         // Non-text arrays (e.g., bytes variables represented as integer arrays)
         // are not valid real arguments for complex(x).
@@ -1709,12 +1711,14 @@ exprt function_call_expr::handle_complex() const
              to_unsignedbv_type(elem_type).get_width() == 8);
           if (!is_textual_char_array)
             return raise_type_error(
-              "complex() first argument must be a string or a number, not 'bytes'");
+              "complex() first argument must be a string or a number, not "
+              "'bytes'");
         }
 
         const bool maybe_text_symbol =
           symbol_type.is_array() ||
-          (symbol_type.is_signedbv() && to_signedbv_type(symbol_type).get_width() == 8);
+          (symbol_type.is_signedbv() &&
+           to_signedbv_type(symbol_type).get_width() == 8);
         if (maybe_text_symbol)
         {
           auto value_opt = extract_string_from_symbol(sym);
@@ -1724,7 +1728,8 @@ exprt function_call_expr::handle_complex() const
             if (!parse_complex_string(*value_opt, real, imag))
               return raise_value_error("complex() arg is a malformed string");
             return make_complex(
-              from_double(real, double_type()), from_double(imag, double_type()));
+              from_double(real, double_type()),
+              from_double(imag, double_type()));
           }
         }
       }
@@ -1742,7 +1747,8 @@ exprt function_call_expr::handle_complex() const
       const typet &elem_type = value.type().subtype();
       const bool is_textual_char_array =
         elem_type == char_type() ||
-        (elem_type.is_signedbv() && to_signedbv_type(elem_type).get_width() == 8) ||
+        (elem_type.is_signedbv() &&
+         to_signedbv_type(elem_type).get_width() == 8) ||
         (elem_type.is_unsignedbv() &&
          to_unsignedbv_type(elem_type).get_width() == 8);
       if (!is_textual_char_array)
@@ -1767,7 +1773,8 @@ exprt function_call_expr::handle_complex() const
   // Two-argument form does not accept string / bytes / bytearray values.
   if (
     is_string_arg(*real_json) || is_string_arg(*imag_json) ||
-    !byteslike_name(*real_json).empty() || !byteslike_name(*imag_json).empty() ||
+    !byteslike_name(*real_json).empty() ||
+    !byteslike_name(*imag_json).empty() ||
     is_bytes_annotated_name(*real_json) || is_bytes_annotated_name(*imag_json))
     return raise_type_error("complex() second arg can't be a string");
 
@@ -1779,7 +1786,9 @@ exprt function_call_expr::handle_complex() const
   if (imag_arg.is_nil() || is_cpp_throw(imag_arg))
     return imag_arg;
 
-  if (is_unsigned_byte_array(real_arg.type()) || is_unsigned_byte_array(imag_arg.type()))
+  if (
+    is_unsigned_byte_array(real_arg.type()) ||
+    is_unsigned_byte_array(imag_arg.type()))
     return raise_type_error("complex() second arg can't be a string");
 
   if (!is_complex_type(real_arg.type()))
