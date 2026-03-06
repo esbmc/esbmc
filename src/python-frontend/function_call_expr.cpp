@@ -1465,6 +1465,21 @@ exprt function_call_expr::handle_complex() const
       return "bytearray";
     return "";
   };
+  auto is_bytes_annotated_name = [&](const nlohmann::json &arg) -> bool {
+    if (!(arg.contains("_type") && arg["_type"] == "Name" && arg.contains("id")))
+      return false;
+
+    const std::string var_name = arg["id"].get<std::string>();
+    nlohmann::json var_decl = json_utils::find_var_decl(
+      var_name, converter_.current_function_name(), converter_.ast());
+    if (
+      var_decl.empty() || !var_decl.contains("annotation") ||
+      var_decl["annotation"].is_null())
+      return false;
+
+    const auto &annotation = var_decl["annotation"];
+    return annotation.contains("id") && annotation["id"] == "bytes";
+  };
   auto try_dispatch_numeric_dunder =
     [&](const std::string &op, exprt &operand) -> exprt {
     return converter_.dispatch_unary_dunder_operator(
@@ -1653,6 +1668,9 @@ exprt function_call_expr::handle_complex() const
       return raise_type_error(
         "complex() first argument must be a string or a number, not '" +
         real_byteslike + "'");
+    if (is_bytes_annotated_name(*real_json))
+      return raise_type_error(
+        "complex() first argument must be a string or a number, not 'bytes'");
 
     // One-argument form accepts string literals.
     std::string text;
@@ -1749,7 +1767,8 @@ exprt function_call_expr::handle_complex() const
   // Two-argument form does not accept string / bytes / bytearray values.
   if (
     is_string_arg(*real_json) || is_string_arg(*imag_json) ||
-    !byteslike_name(*real_json).empty() || !byteslike_name(*imag_json).empty())
+    !byteslike_name(*real_json).empty() || !byteslike_name(*imag_json).empty() ||
+    is_bytes_annotated_name(*real_json) || is_bytes_annotated_name(*imag_json))
     return raise_type_error("complex() second arg can't be a string");
 
   exprt real_arg = converter_.get_expr(*real_json);
