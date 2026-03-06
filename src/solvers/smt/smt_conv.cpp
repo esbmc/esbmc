@@ -11,6 +11,7 @@
 #include <util/message/format.h>
 #include <util/type_byte_size.h>
 #include <cmath>
+#include <limits>
 
 // Helpers extracted from z3_convt.
 
