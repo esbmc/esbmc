@@ -691,7 +691,9 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
   // generic bitvector-based path is incorrect when operands are real-encoded.
 
   // fp -> fp: reals are exact, no conversion needed
-  if (int_encoding && is_floatbv_type(cast.from->type) && is_floatbv_type(cast.type))
+  if (
+    int_encoding && is_floatbv_type(cast.from->type) &&
+    is_floatbv_type(cast.type))
     return convert_ast(cast.from);
 
   // fp -> int: round the real to the nearest integer

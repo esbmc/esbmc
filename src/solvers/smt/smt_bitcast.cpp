@@ -74,7 +74,8 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
     size_t sz = intref.value.to_uint64();
     type2tc idx = index_type2();
 
-    auto extract = [&](size_t i) {
+    auto extract = [&](size_t i)
+    {
       /* The sub-expression should be flattened as well */
       return flatten_to_bitvector(index2tc(
         arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)));
@@ -96,7 +97,8 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
 
     // Iterate over each member and flatten them
 
-    auto extract = [&](size_t i) {
+    auto extract = [&](size_t i)
+    {
       /* The sub-expression should be flattened as well */
       return flatten_to_bitvector(member2tc(
         structtype.members[sz - i - 1],
@@ -135,16 +137,13 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
     // the bv to fp method to do the job for us
     if (is_struct_type(new_from) || is_array_type(new_from))
       new_from = flatten_to_bitvector(new_from);
-    // Under --ir-ra, integer values are real-encoded; bit-pattern reinterpretation
-    // as float is semantically unsupported in this mode.
+    // When int_encoding is true, integer types are represented as integers
+    // in the SMT solver, but fp_api expects bitvectors. Fall back to value-based conversion.
     if (
-      options.get_bool_option("ir-ra") &&
+      int_encoding &&
       (is_signedbv_type(new_from) || is_unsignedbv_type(new_from)))
     {
-      log_error(
-        "Unsupported bitcast (int -> float) under --ir-ra: bit-pattern reinterpretation "
-        "requires bitvector encoding (use --floatbv or avoid bitcast).");
-      abort();
+      return convert_ast(typecast2tc(to_type, new_from));
     }
     // from bitvectors should go through the fp api
     if (is_bv_type(new_from) || is_union_type(new_from))
@@ -159,15 +158,7 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
   else if (is_bv_type(to_type))
   {
     // Under --ir-ra, float values are real-encoded; bit-pattern reinterpretation
-    // as a bitvector is semantically unsupported in this mode.
-    if (options.get_bool_option("ir-ra") && is_floatbv_type(from))
-    {
-      log_error(
-        "Unsupported bitcast (float -> bv) under --ir-ra: bit-pattern reinterpretation "
-        "requires bitvector encoding (use --floatbv or avoid bitcast).");
-      abort();
-    }
-    // Under integer encoding (--ir), fixed- and floating-point values are
+    // Under integer encoding (--ir/--ir-ra), fixed- and floating-point values are
     // real-encoded; fall back to value-based typecast.
     if (int_encoding && (is_fixedbv_type(from) || is_floatbv_type(from)))
       return convert_ast(typecast2tc(to_type, from));

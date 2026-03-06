@@ -550,25 +550,6 @@ public:
    *  @param expr A neg2tc to test for overflows in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_neg(const expr2tc &expr);
-  
-  /** Applies IEEE 754 floating-point semantics to a real arithmetic result.
-   *  Handles overflow, underflow, and subnormal number behaviors that are
-   *  missing when using integer/real encoding for floating-point operations.
-   *  Supports both IEEE 754 single precision (32-bit: 8 exponent, 23 fraction)
-   *  and double precision (64-bit: 11 exponent, 52 fraction) formats.
-   *  For double precision: overflow to ±1.798e+308, underflow below 4.941e-324,
-   *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
-   *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
-   *  Other formats return the original result unchanged.
-   *  @param real_result The result of exact real arithmetic operation
-   *  @param fbv_type The floating-point type information (exponent/fraction bits)
-   *  @param operand_zero_check Optional boolean AST for special zero handling
-   *         (e.g., multiplication where either operand is zero should yield zero
-   *         regardless of the other operand, even if it would cause underflow)
-   *  @return SMT AST representing the result with IEEE 754 semantics applied */
-  virtual smt_astt apply_ieee754_semantics(smt_astt real_result, const floatbv_type2t &fbv_type, 
-                                         smt_astt operand_zero_check = nullptr);
-
 
   /** Applies IEEE 754 floating-point semantics to a real arithmetic result.
    *  Handles overflow, underflow, and subnormal number behaviors that are
@@ -585,7 +566,26 @@ public:
    *         (e.g., multiplication where either operand is zero should yield zero
    *         regardless of the other operand, even if it would cause underflow)
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
+  virtual smt_astt apply_ieee754_semantics(
+    smt_astt real_result,
+    const floatbv_type2t &fbv_type,
+    smt_astt operand_zero_check = nullptr);
 
+  /** Applies IEEE 754 floating-point semantics to a real arithmetic result.
+   *  Handles overflow, underflow, and subnormal number behaviors that are
+   *  missing when using integer/real encoding for floating-point operations.
+   *  Supports both IEEE 754 single precision (32-bit: 8 exponent, 23 fraction)
+   *  and double precision (64-bit: 11 exponent, 52 fraction) formats.
+   *  For double precision: overflow to ±1.798e+308, underflow below 4.941e-324,
+   *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
+   *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
+   *  Other formats return the original result unchanged.
+   *  @param real_result The result of exact real arithmetic operation
+   *  @param fbv_type The floating-point type information (exponent/fraction bits)
+   *  @param operand_zero_check Optional boolean AST for special zero handling
+   *         (e.g., multiplication where either operand is zero should yield zero
+   *         regardless of the other operand, even if it would cause underflow)
+   *  @return SMT AST representing the result with IEEE 754 semantics applied */
 
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();
@@ -961,11 +961,11 @@ public:
   fp_convt *fp_api;
   ra_apit *ra_api;
 
-
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.
   smt_astt int_shift_op_array;
-  private:
+
+private:
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);

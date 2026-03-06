@@ -201,9 +201,8 @@ void replace_name_in_body(
 
     return;
   }
-  body->Foreach_operand([lhs, replacement](expr2tc &e) {
-    replace_name_in_body(lhs, replacement, e);
-  });
+  body->Foreach_operand([lhs, replacement](expr2tc &e)
+                        { replace_name_in_body(lhs, replacement, e); });
 }
 
 void smt_convt::pop_ctx()
@@ -334,7 +333,6 @@ smt_astt smt_convt::get_double_min_subnormal()
   return mk_smt_real("4.9406564584124654e-324");
 }
 
-
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
   const floatbv_type2t &fbv_type,
@@ -368,14 +366,16 @@ smt_astt smt_convt::apply_ieee754_semantics(
     {
       min_normal = mk_smt_real("2.2250738585072014e-308");    // 2^(-1022)
       min_subnormal = mk_smt_real("4.9406564584124654e-324"); // 2^(-1074)
-      max_normal = mk_smt_real("1.7976931348623157e+308");    // ~(2-2^(-52)) * 2^1023
+      max_normal =
+        mk_smt_real("1.7976931348623157e+308"); // ~(2-2^(-52)) * 2^1023
     }
     // IEEE 754 single precision (32-bit): 8 exponent bits, 23 fraction bits
     else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
     {
-      min_normal = mk_smt_real("1.1754943508222875e-38");     // 2^(-126)
-      min_subnormal = mk_smt_real("1.4012984643248171e-45");  // 2^(-149)
-      max_normal = mk_smt_real("3.4028234663852886e+38");     // ~(2-2^(-23)) * 2^127
+      min_normal = mk_smt_real("1.1754943508222875e-38");    // 2^(-126)
+      min_subnormal = mk_smt_real("1.4012984643248171e-45"); // 2^(-149)
+      max_normal =
+        mk_smt_real("3.4028234663852886e+38"); // ~(2-2^(-23)) * 2^127
     }
     // Unsupported format - return original result
     else
@@ -390,16 +390,15 @@ smt_astt smt_convt::apply_ieee754_semantics(
     smt_astt zero = mk_smt_real("0.0");
 
     // Get absolute value of result
-    smt_astt abs_result = mk_ite(
-      mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+    smt_astt abs_result =
+      mk_ite(mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
 
     // Check for overflow
     smt_astt overflows = mk_gt(abs_result, max_normal);
 
     // Check for underflow to zero
     smt_astt underflows_to_zero = mk_and(
-      mk_lt(abs_result, min_subnormal),
-      mk_not(mk_eq(real_result, zero)));
+      mk_lt(abs_result, min_subnormal), mk_not(mk_eq(real_result, zero)));
 
     // If we have a special zero check (like for multiplication), use it
     if (operand_zero_check)
@@ -413,8 +412,8 @@ smt_astt smt_convt::apply_ieee754_semantics(
     // Handle subnormal rounding (simplified round-to-nearest)
     smt_astt subnormal_step =
       (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-        ? mk_smt_real("4.9406564584124654e-324")  // Double precision
-        : mk_smt_real("1.4012984643248171e-45");  // Single precision
+        ? mk_smt_real("4.9406564584124654e-324") // Double precision
+        : mk_smt_real("1.4012984643248171e-45"); // Single precision
     smt_astt quotient = mk_div(abs_result, subnormal_step);
     smt_astt rounded_quotient = mk_add(quotient, mk_smt_real("0.5"));
     smt_astt subnormal_magnitude = mk_mul(rounded_quotient, subnormal_step);
@@ -425,8 +424,8 @@ smt_astt smt_convt::apply_ieee754_semantics(
       subnormal_magnitude);
 
     // Overflow result (approximate infinity)
-    smt_astt overflow_result = mk_ite(
-      mk_lt(real_result, zero), mk_sub(zero, max_normal), max_normal);
+    smt_astt overflow_result =
+      mk_ite(mk_lt(real_result, zero), mk_sub(zero, max_normal), max_normal);
 
     // Apply IEEE 754 semantics: overflow > underflow > subnormal > normal
     smt_astt ieee_result = mk_ite(
@@ -444,7 +443,6 @@ smt_astt smt_convt::apply_ieee754_semantics(
     return ieee_result;
   }
 }
-
 
 smt_astt smt_convt::get_double_max_normal()
 {
@@ -544,8 +542,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // Convert all the arguments and store them in 'args'.
     args.reserve(expr->get_num_sub_exprs());
-    expr->foreach_operand(
-      [this, &args](const expr2tc &e) { args.push_back(convert_ast(e)); });
+    expr->foreach_operand([this, &args](const expr2tc &e)
+                          { args.push_back(convert_ast(e)); });
   }
   }
 
@@ -815,13 +813,15 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt div_by_zero = mk_eq(side2, zero);
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       const auto single_spec = ieee_float_spect::single_precision();
-      smt_astt max_val =
-        (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
-          ? get_single_max_normal()
-          : get_double_max_normal();
-      smt_astt inf_result = mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
+      smt_astt max_val = (fbv_type.exponent == single_spec.e &&
+                          fbv_type.fraction == single_spec.f)
+                           ? get_single_max_normal()
+                           : get_double_max_normal();
+      smt_astt inf_result =
+        mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
       smt_astt real_result = mk_div(side1, side2);
-      smt_astt ieee_result = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      smt_astt ieee_result =
+        apply_ieee754_semantics(real_result, fbv_type, nullptr);
       a = mk_ite(div_by_zero, inf_result, ieee_result);
     }
     else
@@ -1899,7 +1899,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
   // Extract the top bit
   auto value = convert_ast(signbit.operand);
 
-   smt_astt is_neg;
+  smt_astt is_neg;
 
   if (int_encoding)
   {
@@ -2766,34 +2766,38 @@ expr2tc smt_convt::get(const expr2tc &expr)
     if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       arr_size = get(arr_size);
 
-    res->type->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
+    res->type->Foreach_subtype(
+      [this](type2tc &t)
+      {
+        if (!is_array_type(t))
+          return;
 
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        arr_size = get(arr_size);
-    });
+        expr2tc &arr_size = to_array_type(t).array_size;
+        if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+          arr_size = get(arr_size);
+      });
   }
 
   // Recurse on operands
   bool have_all = true;
   bool has_null_operands = false;
 
-  res->Foreach_operand([this, &have_all, &has_null_operands](expr2tc &e) {
-    if (!e)
+  res->Foreach_operand(
+    [this, &have_all, &has_null_operands](expr2tc &e)
     {
-      has_null_operands = true;
-      have_all = false;
-      return;
-    }
+      if (!e)
+      {
+        has_null_operands = true;
+        have_all = false;
+        return;
+      }
 
-    expr2tc new_e = get(e);
-    if (new_e)
-      e = new_e;
-    else
-      have_all = false;
-  });
+      expr2tc new_e = get(e);
+      if (new_e)
+        e = new_e;
+      else
+        have_all = false;
+    });
 
   // If we have null operands, return early to avoid crashes in simplify()
   if (has_null_operands)
@@ -2805,7 +2809,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   return res;
 }
- 
+
 expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
 {
   switch (type->type_id)
