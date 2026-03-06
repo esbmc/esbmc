@@ -79,7 +79,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Global", StatementType::GLOBAL},
   {"Try", StatementType::TRY},
   {"ExceptHandler", StatementType::EXCEPTHANDLER},
-  {"Delete", StatementType::DELETE}};
+  {"Delete", StatementType::DELETE_STATEMENT}};
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -1897,9 +1897,18 @@ exprt python_converter::handle_list_operations(
     return list.compare(lhs, rhs, op);
   }
 
-  // List concatenation
-  if (lhs.type() == list_type && rhs.type() == list_type && op == "Add")
+  // List concatenation: also handle Any-typed (void*) right operand, which
+  // occurs when iterating an untyped iterable (e.g. `for r in f()` with no
+  // return annotation) and then concatenating with a typed list literal.
+  auto is_any_ptr = [](const typet &t) {
+    return t.is_pointer() && t.subtype().id() == "empty";
+  };
+  if (
+    lhs.type() == list_type && op == "Add" &&
+    (rhs.type() == list_type || is_any_ptr(rhs.type())))
   {
+    if (rhs.type() != list_type)
+      rhs = typecast_exprt(rhs, list_type);
     python_list list(*this, element);
     return list.build_concat_list_call(lhs, rhs, element);
   }
@@ -2660,6 +2669,49 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     process_forward_reference(element["func"], temp_block);
   }
 
+  // Handle indirect calls through subscript (e.g., {'+': lambda: 1.0}[x]())
+  if (element["func"]["_type"] == "Subscript")
+  {
+    const nlohmann::json &func_node = element["func"];
+    exprt container = get_expr(func_node["value"]);
+
+    exprt func_ptr;
+    if (
+      container.type().is_struct() &&
+      dict_handler_->is_dict_type(container.type()))
+      func_ptr = dict_handler_->handle_dict_subscript(
+        container, func_node["slice"], gen_pointer_type(code_typet()));
+    else
+      func_ptr = get_expr(element["func"]);
+
+    // Determine return type: prefer current function's declared return type,
+    // then try to infer from any lambda body in the dict literal.
+    typet ret_type = current_func_return_type_;
+    if (ret_type.is_empty() && func_node["value"]["_type"] == "Dict")
+    {
+      for (const auto &val : func_node["value"]["values"])
+      {
+        if (val["_type"] == "Lambda" && val.contains("body"))
+        {
+          ret_type = lambda_handler_->infer_lambda_return_type(val["body"]);
+          break;
+        }
+      }
+    }
+    if (ret_type.is_empty())
+      ret_type = double_type();
+
+    side_effect_expr_function_callt call;
+    call.location() = get_location_from_decl(element);
+    call.function() = func_ptr;
+    call.type() = ret_type;
+    if (element.contains("args"))
+      for (const auto &arg : element["args"])
+        call.arguments().push_back(get_expr(arg));
+
+    return call;
+  }
+
   // Handle indirect calls through function pointer variables
   if (element["func"]["_type"] == "Name")
   {
@@ -2676,8 +2728,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       side_effect_expr_function_callt call;
       call.location() = get_location_from_decl(element);
 
-      // The function pointer itself, not dereferenced
+      // The function pointer itself, not dereferenced.
+      // For Any-typed (void*) parameters, cast to a generic function pointer
+      // so that the adjuster can dereference it to a code type (it calls
+      // to_code_type on the dereferenced subtype, which would fail on void).
       exprt func_ptr_expr = symbol_expr(*var_symbol);
+      if (var_symbol->type == any_type())
+        func_ptr_expr =
+          typecast_exprt(func_ptr_expr, gen_pointer_type(code_typet()));
       call.function() = func_ptr_expr;
 
       // Resolve return type from the concrete target function stored in
@@ -2704,7 +2762,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       {
         const code_typet &func_type = to_code_type(var_symbol->type.subtype());
         call.type() = func_type.return_type();
+        resolved = true;
       }
+
+      // Fallback for Any-typed (void*) function parameters: use any_type so
+      // the indirect call expression has a well-formed type.
+      if (!resolved)
+        call.type() = any_type();
 
       // Process arguments
       if (element.contains("args"))
@@ -2712,6 +2776,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         for (const auto &arg_element : element["args"])
         {
           exprt arg_expr = get_expr(arg_element);
+          // A function name used as an argument decays to a function pointer.
+          if (arg_expr.type().is_code() && arg_expr.is_symbol())
+            arg_expr = address_of_exprt(arg_expr);
           call.arguments().push_back(arg_expr);
         }
       }
@@ -3956,7 +4023,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // This allows parameter objects like 'f: Foo' to access instance attributes
       else if (
         !is_converting_lhs && class_type.has_component(attr_name) &&
-        (instance_has_attr || symbol->is_parameter))
+        (instance_has_attr || symbol->is_parameter ||
+         is_complex_type(class_type)))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = create_member_expression(*symbol, attr_name, attr_type);
@@ -3971,10 +4039,21 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!class_attr_symbol)
         {
-          throw std::runtime_error("Attribute \"" + attr_name + "\" not found");
+          // No class-level symbol: attribute was set per-instance (e.g. in
+          // __init__).  This happens when the object comes from a list element
+          // or other expression that bypasses instance_has_attr registration.
+          // Fall back to the struct member if the component exists.
+          if (class_type.has_component(attr_name))
+          {
+            const typet &attr_type = class_type.get_component(attr_name).type();
+            expr = create_member_expression(*symbol, attr_name, attr_type);
+          }
+          else
+            throw std::runtime_error(
+              "Attribute \"" + attr_name + "\" not found");
         }
-
-        expr = symbol_expr(*class_attr_symbol);
+        else
+          expr = symbol_expr(*class_attr_symbol);
       }
     }
 
@@ -4829,6 +4908,10 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     inferred_type = rhs_expr.type();
     if (inferred_type.is_empty())
       inferred_type = any_type();
+    // Function alias assignment (g = f): store as function pointer,
+    // mirroring how lambda assignments are handled.
+    else if (inferred_type.is_code())
+      inferred_type = gen_pointer_type(inferred_type);
   }
 
   symbolt symbol =
@@ -4915,6 +4998,66 @@ void python_converter::handle_function_call_rhs(
     {
       python_list::copy_type_info(
         ret.op0().identifier().as_string(), lhs.identifier().as_string());
+    }
+
+    // If list_type_map is still empty for the LHS
+    // e.g. the list was passed through as a parameter inside the function,
+    // fall back to the called function's return-type annotation
+    // to determine the element type.
+    const std::string &lhs_id = lhs.identifier().as_string();
+    if (python_list::get_list_type_map_size(lhs_id) == 0)
+    {
+      std::string func_name;
+      if (
+        ast_node.contains("value") && ast_node["value"].contains("func") &&
+        ast_node["value"]["func"].is_object())
+      {
+        const auto &func_ref = ast_node["value"]["func"];
+        if (func_ref.contains("id") && func_ref["id"].is_string())
+          func_name = func_ref["id"].get<std::string>();
+        else if (func_ref.contains("attr") && func_ref["attr"].is_string())
+          func_name = func_ref["attr"].get<std::string>();
+      }
+
+      if (!func_name.empty())
+      {
+        const auto &func_def =
+          json_utils::find_function((*ast_json)["body"], func_name);
+        if (
+          !func_def.empty() && func_def.contains("returns") &&
+          !func_def["returns"].is_null())
+        {
+          const auto &returns = func_def["returns"];
+          // Handle list[T] annotation
+          // Subscript node with value.id == "list"
+          if (
+            returns.is_object() && returns.contains("_type") &&
+            returns["_type"] == "Subscript" && returns.contains("value") &&
+            returns["value"].is_object() && returns["value"].contains("id") &&
+            returns["value"]["id"].is_string())
+          {
+            const std::string val_id =
+              returns["value"]["id"].get<std::string>();
+            if (val_id == "list" || val_id == "List")
+            {
+              // Extract element type from the slice, e.g. int in list[int]
+              if (
+                returns.contains("slice") && returns["slice"].is_object() &&
+                returns["slice"].contains("id") &&
+                returns["slice"]["id"].is_string())
+              {
+                typet elem_type = type_handler_.get_typet(
+                  returns["slice"]["id"].get<std::string>());
+                if (elem_type != typet())
+                {
+                  python_list::add_type_info_entry(
+                    lhs_id, std::string(), elem_type);
+                }
+              }
+            }
+          }
+        }
+      }
     }
 
     typet l_type = type_handler_.get_list_type();
@@ -6734,16 +6877,9 @@ size_t python_converter::register_function_argument(
   {
     if (!element.contains("annotation") || element["annotation"].is_null())
     {
-      // Allow unannotated parameters in nested functions by defaulting to Any.
-      // Top-level functions still require explicit annotations.
-      if (current_func_name_.find("@F@") != std::string::npos)
-        arg_type = any_type();
-      else
-      {
-        throw std::runtime_error(
-          "All parameters in function \"" + current_func_name_ +
-          "\" must be type annotated");
-      }
+      // Python does not require type annotations; treat unannotated parameters
+      // as Any (void*) to follow Python semantics.
+      arg_type = any_type();
     }
     else
       arg_type = get_type_from_annotation(element["annotation"], element);
@@ -6869,6 +7005,28 @@ void python_converter::process_function_arguments(
         {
           exprt default_expr = get_expr(defaults[i]);
           type.arguments()[positional_index].default_value() = default_expr;
+
+          // If the default is a function pointer and the parameter was
+          // annotated as Any (void*), upgrade the parameter type to match.
+          // This enables indirect-call resolution for function-alias defaults
+          // like def h(op=g) where g = f (a named function).
+          if (
+            default_expr.type().is_pointer() &&
+            default_expr.type().subtype().is_code())
+          {
+            auto &param_arg = type.arguments()[positional_index];
+            if (param_arg.type() == any_type())
+            {
+              param_arg.type() = default_expr.type();
+              std::string param_id = param_arg.cmt_identifier().as_string();
+              if (!param_id.empty())
+              {
+                symbolt *param_sym = symbol_table_.find_symbol(param_id);
+                if (param_sym)
+                  param_sym->type = default_expr.type();
+              }
+            }
+          }
         }
       }
     }
@@ -6919,13 +7077,57 @@ void python_converter::validate_return_paths(
 
 typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
 {
+  auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet {
+    if (constant_value.is_number_float())
+      return double_type();
+    if (constant_value.is_number_integer())
+      return long_long_int_type();
+    if (constant_value.is_boolean())
+      return bool_type();
+    if (constant_value.is_string())
+      return gen_pointer_type(char_type());
+    if (constant_value.is_null())
+      return none_type();
+    return empty_typet();
+  };
+
   for (const auto &stmt : body)
   {
     if (stmt["_type"] == "Return" && !stmt["value"].is_null())
     {
+      const auto &ret_val = stmt["value"];
+
       // If returning a tuple, infer its type
-      if (stmt["value"]["_type"] == "Tuple")
-        return tuple_handler_->get_tuple_expr(stmt["value"]).type();
+      if (ret_val["_type"] == "Tuple")
+        return tuple_handler_->get_tuple_expr(ret_val).type();
+
+      // Constant returns (including strings)
+      if (ret_val["_type"] == "Constant" && ret_val.contains("value"))
+      {
+        typet inferred = infer_constant_type(ret_val["value"]);
+        if (!inferred.is_empty())
+          return inferred;
+      }
+
+      // Heuristic: return dict.get(key, default) -> infer from default literal.
+      if (
+        ret_val["_type"] == "Call" && ret_val.contains("func") &&
+        ret_val["func"].contains("_type") &&
+        ret_val["func"]["_type"] == "Attribute" &&
+        ret_val["func"].contains("attr") && ret_val["func"]["attr"] == "get" &&
+        ret_val.contains("args") && ret_val["args"].is_array() &&
+        ret_val["args"].size() >= 2)
+      {
+        const auto &default_arg = ret_val["args"][1];
+        if (
+          default_arg.contains("_type") && default_arg["_type"] == "Constant" &&
+          default_arg.contains("value"))
+        {
+          typet inferred = infer_constant_type(default_arg["value"]);
+          if (!inferred.is_empty())
+            return inferred;
+        }
+      }
     }
   }
 
@@ -7085,6 +7287,19 @@ void python_converter::get_function_definition(
     }
   }
 
+  // For unannotated functions, attempt AST-based return inference before body
+  // conversion so return expressions are typed in the right context.
+  if (type.return_type().is_empty())
+  {
+    typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    if (!inferred_type.is_empty())
+    {
+      type.return_type() = inferred_type;
+      current_element_type = inferred_type;
+      added_symbol->type = type;
+    }
+  }
+
   // Save function return type for use in get_return_statements
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
@@ -7103,6 +7318,34 @@ void python_converter::get_function_definition(
     {
       type.return_type() = inferred_type;
       added_symbol->type = type; // Update the symbol's type
+    }
+  }
+
+  // If return type is still empty, scan the converted GOTO body for RETURN
+  // instructions with typed values. This handles indirect calls through
+  // function-pointer parameters (e.g., "return op(1,1)" where op defaults
+  // to a typed function pointer).
+  if (type.return_type().is_empty())
+  {
+    for (const auto &instr : function_body.operands())
+    {
+      if (!instr.is_code())
+        continue;
+      const codet &code_instr = to_code(instr);
+      if (code_instr.get_statement() == "return")
+      {
+        const code_returnt &ret = to_code_return(code_instr);
+        if (ret.has_return_value())
+        {
+          const typet &ret_type = ret.return_value().type();
+          if (!ret_type.is_empty())
+          {
+            type.return_type() = ret_type;
+            added_symbol->type = type;
+            break;
+          }
+        }
+      }
     }
   }
 
@@ -7643,6 +7886,20 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::EXPR:
     {
+      // Skip yield expressions: the preprocessor inlines them into assignments.
+      // Reject yield from: the preprocessor does not expand it, so reaching
+      // here means the generator was not fully lowered and verification would
+      // silently produce wrong results.
+      if (element.contains("value") && element["value"].contains("_type"))
+      {
+        const auto &inner_type = element["value"]["_type"];
+        if (inner_type == "Yield")
+          break;
+        if (inner_type == "YieldFrom")
+          throw std::runtime_error(
+            "'yield from' is not supported in ESBMC's Python frontend");
+      }
+
       // Function calls are handled here
       exprt empty;
       exprt expr = get_expr(element["value"]);
@@ -7696,7 +7953,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exception_handler_->get_raise_statement(element, block);
       break;
     }
-    case StatementType::DELETE:
+    case StatementType::DELETE_STATEMENT:
     {
       get_delete_statement(element, block);
       break;

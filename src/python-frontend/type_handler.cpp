@@ -338,6 +338,25 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "bool")
     return bool_type();
 
+  if (ast_type == "complex")
+  {
+    const char *complex_type_id = "tag-complex";
+    contextt &symbol_table = converter_.symbol_table();
+
+    if (!symbol_table.find_symbol(complex_type_id))
+    {
+      symbolt type_symbol;
+      type_symbol.id = complex_type_id;
+      type_symbol.name = "complex";
+      type_symbol.type = get_complex_struct_type();
+      type_symbol.mode = "Python";
+      type_symbol.is_type = true;
+      symbol_table.move_symbol_to_context(type_symbol);
+    }
+
+    return get_complex_struct_type();
+  }
+
   // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
     return uint256_type();
@@ -461,6 +480,9 @@ typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
     func_name = func["id"].get<std::string>();
     if (type_utils::is_builtin_type(func_name))
       return get_typet(func_name);
+    // User-defined class constructor: A() -> struct type tag-A
+    if (json_utils::is_class(func_name, converter_.ast()))
+      return symbol_typet("tag-" + func_name);
   }
   else if (func["_type"] == "Attribute" && func.contains("attr"))
   {
@@ -811,6 +833,23 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
       return "bool";
     else if (value.is_number_float())
       return "float";
+  }
+  else if (operand["_type"] == "Set")
+  {
+    return "set";
+  }
+  else if (operand["_type"] == "BinOp")
+  {
+    std::string lhs_type = get_operand_type(operand["left"]);
+    std::string rhs_type = get_operand_type(operand["right"]);
+
+    if (!lhs_type.empty() && lhs_type == rhs_type)
+      return lhs_type;
+
+    if (!lhs_type.empty())
+      return lhs_type;
+    if (!rhs_type.empty())
+      return rhs_type;
   }
 
   // Handle list subscript (e.g., `mylist[0]`)

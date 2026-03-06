@@ -1162,7 +1162,7 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
     const std::string &func_name = function_id_.get_function();
     if (
       func_name != "int" && func_name != "float" && func_name != "str" &&
-      func_name != "bool" && func_name != "bytes")
+      func_name != "bool" && func_name != "bytes" && func_name != "complex")
     {
       log_warning("Symbol not found: {}", var_name);
     }
@@ -1384,9 +1384,83 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
   return nil_exprt();
 }
 
+exprt function_call_expr::handle_complex() const
+{
+  // Ensure complex type symbol exists for downstream attribute resolution.
+  (void)type_handler_.get_typet(std::string("complex"));
+
+  const nlohmann::json &arguments =
+    call_.contains("args") ? call_["args"] : nlohmann::json::array();
+
+  auto zero = []() -> exprt { return from_double(0.0, double_type()); };
+  auto is_cpp_throw = [](const exprt &e) -> bool {
+    return e.statement() == "cpp-throw";
+  };
+
+  if (arguments.empty())
+    return make_complex(zero(), zero());
+
+  if (arguments.size() == 1)
+  {
+    if (is_string_arg(arguments[0]))
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "complex() with string arguments is not supported yet");
+
+    exprt value = converter_.get_expr(arguments[0]);
+    if (value.is_nil() || is_cpp_throw(value))
+      return value;
+
+    if (is_complex_type(value.type()))
+      return value;
+
+    if (value.type() != double_type())
+      value = typecast_exprt(value, double_type());
+
+    return make_complex(value, zero());
+  }
+
+  if (arguments.size() == 2)
+  {
+    if (is_string_arg(arguments[0]) || is_string_arg(arguments[1]))
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "complex() with string arguments is not supported yet");
+
+    exprt real_arg = converter_.get_expr(arguments[0]);
+    if (real_arg.is_nil() || is_cpp_throw(real_arg))
+      return real_arg;
+
+    exprt imag_arg = converter_.get_expr(arguments[1]);
+    if (imag_arg.is_nil() || is_cpp_throw(imag_arg))
+      return imag_arg;
+
+    // Python semantics: complex(x, y) == x + y * 1j, including complex args.
+    real_arg = promote_to_complex(real_arg);
+    imag_arg = promote_to_complex(imag_arg);
+
+    exprt a = member_exprt(real_arg, "real", double_type());
+    exprt b = member_exprt(real_arg, "imag", double_type());
+    exprt c = member_exprt(imag_arg, "real", double_type());
+    exprt d = member_exprt(imag_arg, "imag", double_type());
+
+    exprt real_part("ieee_sub", double_type());
+    real_part.copy_to_operands(a, d);
+
+    exprt imag_part("ieee_add", double_type());
+    imag_part.copy_to_operands(b, c);
+
+    return make_complex(real_part, imag_part);
+  }
+
+  return converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "complex() takes at most 2 arguments");
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
+
+  if (func_name == "complex")
+    return handle_complex();
 
   // Check if there are no arguments
   if (call_["args"].empty())
@@ -1696,7 +1770,23 @@ std::string function_call_expr::get_object_name() const
     obj_name = function_id_.get_class();
   else if (subelement["_type"] == "Call")
   {
-    obj_name = subelement["func"]["id"];
+    if (
+      subelement.contains("func") && subelement["func"].contains("_type") &&
+      subelement["func"]["_type"] == "Name" &&
+      subelement["func"].contains("id") && subelement["func"]["id"].is_string())
+    {
+      obj_name = subelement["func"]["id"].get<std::string>();
+    }
+    else
+    {
+      // Nested call receivers (e.g. u.encode(...).decode(...)) do not have
+      // a func.id field in the inner Call AST node.
+      obj_name = type_handler_.get_operand_type(subelement);
+    }
+
+    if (obj_name.empty())
+      obj_name = function_id_.get_class();
+
     if (obj_name == "super")
       obj_name = "self";
   }
@@ -1983,11 +2073,29 @@ exprt function_call_expr::handle_list_pop() const
   if (args.size() > 1)
     throw std::runtime_error("pop() takes at most 1 argument");
 
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  const symbolt *list_symbol = nullptr;
+
+  // Create temporary symbols from binary expressions (e.g., (x-y).pop()).
+  if (
+    call_["func"].contains("value") &&
+    call_["func"]["value"].contains("_type") &&
+    call_["func"]["value"]["_type"] == "BinOp")
+  {
+    exprt list_expr = converter_.get_expr(call_["func"]["value"]);
+    if (list_expr.is_symbol())
+    {
+      list_symbol = converter_.symbol_table().find_symbol(
+        to_symbol_expr(list_expr).get_identifier());
+    }
+  }
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
+  {
+    std::string list_display_name;
+    list_symbol = get_object_list_symbol(list_display_name);
+    if (!list_symbol)
+      throw std::runtime_error("List variable not found: " + list_display_name);
+  }
 
   // Determine the index (default is -1 for last element)
   exprt index_expr;
@@ -3419,8 +3527,22 @@ exprt function_call_expr::handle_general_function_call()
   {
     call.type() = type_handler_.get_typet(func_symbol->name.as_string());
 
+    // Detect super().__init__() pattern: call parent ctor on current self,
+    // not on a newly allocated object.
+    bool is_super_init = call_["func"]["_type"] == "Attribute" &&
+                         call_["func"]["value"]["_type"] == "Call" &&
+                         call_["func"]["value"].contains("func") &&
+                         call_["func"]["value"]["func"].contains("id") &&
+                         call_["func"]["value"]["func"]["id"] == "super";
+
+    if (is_super_init)
+    {
+      if (obj_symbol)
+        call.arguments().push_back(symbol_expr(*obj_symbol));
+      param_offset = 1;
+    }
     // Self is the LHS
-    if (converter_.current_lhs)
+    else if (converter_.current_lhs)
     {
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;
@@ -3548,6 +3670,11 @@ exprt function_call_expr::handle_general_function_call()
   {
     exprt arg = converter_.get_expr(arg_node);
 
+    // A function name passed as an argument decays to a function pointer,
+    // mirroring C's implicit function-to-pointer conversion.
+    if (arg.type().is_code() && arg.is_symbol())
+      arg = address_of_exprt(arg);
+
     // Check if the corresponding parameter is Optional
     size_t param_idx = arg_index + param_offset;
 
@@ -3623,11 +3750,32 @@ exprt function_call_expr::handle_general_function_call()
        function_id_.get_function() == "strlen") &&
       (arg.type() == type_handler_.get_list_type() ||
        (arg.type().is_pointer() &&
-        arg.type().subtype() == type_handler_.get_list_type())) &&
-      arg.is_symbol())
+        arg.type().subtype() == type_handler_.get_list_type() &&
+        arg.type().is_symbol())))
     {
-      symbolt *list_symbol =
-        converter_.find_symbol(arg.identifier().as_string());
+      symbolt *list_symbol = nullptr;
+
+      if (arg.is_symbol())
+      {
+        list_symbol = converter_.find_symbol(arg.identifier().as_string());
+      }
+      else
+      {
+        const typet list_type = type_handler_.get_list_type();
+        symbolt &tmp_list = converter_.create_tmp_symbol(
+          call_, "$obj_size_list_arg$", list_type, exprt());
+
+        code_declt tmp_decl(symbol_expr(tmp_list));
+        tmp_decl.location() = location;
+        converter_.current_block->copy_to_operands(tmp_decl);
+
+        code_assignt tmp_assign(symbol_expr(tmp_list), arg);
+        tmp_assign.location() = location;
+        converter_.current_block->copy_to_operands(tmp_assign);
+
+        list_symbol = &tmp_list;
+      }
+
       assert(list_symbol);
 
       const symbolt *list_size_func_sym =
@@ -3920,7 +4068,6 @@ exprt function_call_expr::handle_general_function_call()
   }
 
   // For constructors without current_lhs, create temp var and add self if needed
-  // Note: get_return_statements() will handle return statements separately
   if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
   {
     size_t num_provided_args = call_["args"].size();
@@ -3928,7 +4075,6 @@ exprt function_call_expr::handle_general_function_call()
     // Only add self if arguments size matches user args (no self added yet)
     if (call.arguments().size() == num_provided_args)
     {
-      // Self parameter not added yet - this is a standalone call (e.g., Positive(2))
       // Create temporary object as self parameter
       typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
       symbolt &temp_self =
@@ -3943,6 +4089,14 @@ exprt function_call_expr::handle_general_function_call()
       // Insert self as first argument
       call.arguments().insert(
         call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
+
+      // Emit the constructor call directly as a FUNCTION_CALL instruction so
+      // ESBMC inlines it (codet("expression") would produce OTHER and be
+      // skipped).  Return the initialised temp_self symbol so callers such as
+      // list literals receive the properly constructed object.
+      call.location() = location;
+      converter_.add_instruction(call);
+      return symbol_expr(temp_self);
     }
   }
 
