@@ -49,8 +49,8 @@ TEST_CASE("complex type helpers", "[python-frontend][complex]")
     REQUIRE(promoted.operands()[0].type() == double_type());
     REQUIRE(promoted.operands()[1].type() == double_type());
 
-    const exprt already_complex =
-      make_complex(from_double(1.0, double_type()), from_double(2.0, double_type()));
+    const exprt already_complex = make_complex(
+      from_double(1.0, double_type()), from_double(2.0, double_type()));
     const exprt unchanged = promote_to_complex(already_complex);
 
     REQUIRE(unchanged == already_complex);
@@ -86,7 +86,8 @@ TEST_CASE("complex type helpers", "[python-frontend][complex]")
 
     // Generic paths build named type lookups as "tag-" + struct_tag.
     // Keep struct tag as "complex" so this resolves to "tag-complex".
-    const struct_typet &stored_struct = to_struct_type(complex_type_symbol->type);
+    const struct_typet &stored_struct =
+      to_struct_type(complex_type_symbol->type);
     const std::string derived_lookup = "tag-" + stored_struct.tag().as_string();
     REQUIRE(derived_lookup == "tag-complex");
   }
