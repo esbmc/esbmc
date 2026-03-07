@@ -11,3 +11,6 @@ assert ((1 + 0j) != "1")
 
 # Edge: mixed float + complex promotion
 assert (2.5 + (1 + 2j)) == complex(3.5, 2.0)
+
+# Edge: UnaryOp over complex constant should preserve sign in literal conversion.
+assert (-1j) == complex(0, -1)
