@@ -841,6 +841,22 @@ exprt function_call_builder::build() const
       }
     }
 
+    // If this is a symbol for an input() string, use the pre-computed
+    // $input_len$ companion instead of falling back to strlen() unrolling.
+    if (arg_expr.is_symbol())
+    {
+      const std::string sym_id =
+        to_symbol_expr(arg_expr).get_identifier().as_string();
+      const auto& len_map = converter_.input_str_to_len_sym_;
+      auto it = len_map.find(sym_id);
+      if (it != len_map.end())
+      {
+        const symbolt* len_sym = converter_.find_symbol(it->second);
+        if (len_sym)
+          return typecast_exprt(symbol_expr(*len_sym), size_type());
+      }
+    }
+
     // If this is a fixed-size char array, compute length at compile time
     // to avoid strlen unwinding.
     typet actual_type = arg_expr.type();
