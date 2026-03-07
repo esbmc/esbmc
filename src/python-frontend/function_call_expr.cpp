@@ -1766,11 +1766,16 @@ exprt function_call_expr::handle_complex() const
   }
 
   // Two-argument form does not accept string / bytes / bytearray values.
+  if (is_string_arg(*real_json))
+    return raise_type_error("complex() can't take second arg if first is a string");
+  const std::string real_byteslike = byteslike_name(*real_json);
+  if (!real_byteslike.empty() || is_bytes_annotated_name(*real_json))
+    return raise_type_error(
+      "complex() first argument must be a string or a number, not '" +
+      (real_byteslike.empty() ? "bytes" : real_byteslike) + "'");
   if (
-    is_string_arg(*real_json) || is_string_arg(*imag_json) ||
-    !byteslike_name(*real_json).empty() ||
-    !byteslike_name(*imag_json).empty() ||
-    is_bytes_annotated_name(*real_json) || is_bytes_annotated_name(*imag_json))
+    is_string_arg(*imag_json) || !byteslike_name(*imag_json).empty() ||
+    is_bytes_annotated_name(*imag_json))
     return raise_type_error("complex() second arg can't be a string");
 
   exprt real_arg = converter_.get_expr(*real_json);
@@ -1791,7 +1796,11 @@ exprt function_call_expr::handle_complex() const
     if (std::optional<exprt> dunder_real =
           try_convert_via_numeric_dunders(real_arg, true);
         dunder_real.has_value())
+    {
+      if (is_cpp_throw(*dunder_real))
+        return *dunder_real;
       real_arg = *dunder_real;
+    }
   }
 
   if (!is_complex_type(imag_arg.type()))
@@ -1799,7 +1808,11 @@ exprt function_call_expr::handle_complex() const
     if (std::optional<exprt> dunder_imag =
           try_convert_via_numeric_dunders(imag_arg, true);
         dunder_imag.has_value())
+    {
+      if (is_cpp_throw(*dunder_imag))
+        return *dunder_imag;
       imag_arg = *dunder_imag;
+    }
   }
 
   // Python semantics: complex(x, y) == x + y * 1j, including complex args.
