@@ -2425,6 +2425,24 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
       return dunder_result;
   }
 
+  // Built-in complex arithmetic: unary + and - operate component-wise.
+  if (is_complex_type(unary_sub.type()) && (op == "USub" || op == "UAdd"))
+  {
+    if (op == "UAdd")
+      return unary_sub;
+
+    exprt real = member_exprt(unary_sub, "real", double_type());
+    exprt imag = member_exprt(unary_sub, "imag", double_type());
+    exprt zero = from_double(0.0, double_type());
+
+    exprt neg_real("ieee_sub", double_type());
+    neg_real.copy_to_operands(zero, real);
+    exprt neg_imag("ieee_sub", double_type());
+    neg_imag.copy_to_operands(zero, imag);
+
+    return make_complex(neg_real, neg_imag);
+  }
+
   exprt unary_expr(map_operator(op, type), type);
   unary_expr.operands().push_back(unary_sub);
 
@@ -2704,6 +2722,30 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (element["func"]["_type"] == "Attribute")
   {
     const std::string &method_name = element["func"]["attr"].get<std::string>();
+
+    if (method_name == "conjugate")
+    {
+      const auto &args = element.contains("args") ? element["args"]
+                                                  : nlohmann::json::array();
+      const auto &keywords = element.contains("keywords")
+                               ? element["keywords"]
+                               : nlohmann::json::array();
+      if (args.empty() && keywords.empty())
+      {
+        exprt obj_expr = get_expr(element["func"]["value"]);
+        if (obj_expr.statement() == "cpp-throw")
+          return obj_expr;
+        if (is_complex_type(obj_expr.type()))
+        {
+          exprt real = member_exprt(obj_expr, "real", double_type());
+          exprt imag = member_exprt(obj_expr, "imag", double_type());
+          exprt zero = from_double(0.0, double_type());
+          exprt neg_imag("ieee_sub", double_type());
+          neg_imag.copy_to_operands(zero, imag);
+          return make_complex(real, neg_imag);
+        }
+      }
+    }
 
     if (
       method_name == "keys" || method_name == "values" ||
