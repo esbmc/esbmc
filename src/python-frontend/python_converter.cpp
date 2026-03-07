@@ -1657,6 +1657,130 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return dunder_result;
   }
 
+  // Intercept complex arithmetic/comparison before generic binary expression
+  // building, which cannot operate directly on struct operands.
+  if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
+  {
+    auto raise_complex_type_error = [&](const std::string &msg) -> exprt {
+      return get_exception_handler().gen_exception_raise("TypeError", msg);
+    };
+    auto is_real_numeric = [](const typet &t) -> bool {
+      return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() ||
+             t.is_bool();
+    };
+    auto is_compatible_numeric = [&](const exprt &e) -> bool {
+      return is_complex_type(e.type()) || is_real_numeric(e.type());
+    };
+    auto member = [](const exprt &z, const irep_idt &name) -> exprt {
+      return member_exprt(z, name, double_type());
+    };
+
+    if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
+      return raise_complex_type_error(
+        "no ordering relation is defined for complex numbers");
+
+    if (op == "FloorDiv" || op == "Mod")
+      return raise_complex_type_error(
+        "can't take floor or mod of complex number");
+
+    if (
+      op == "Add" || op == "Sub" || op == "Mult" || op == "Div" || op == "Eq" ||
+      op == "NotEq")
+    {
+      if (op == "Eq" || op == "NotEq")
+      {
+        if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
+          return gen_boolean(op == "NotEq");
+      }
+      else
+      {
+        if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
+          return raise_complex_type_error(
+            "unsupported operand type(s) for complex arithmetic");
+      }
+
+      exprt lhs_complex = promote_to_complex(lhs);
+      exprt rhs_complex = promote_to_complex(rhs);
+
+      const exprt a = member(lhs_complex, "real");
+      const exprt b = member(lhs_complex, "imag");
+      const exprt c = member(rhs_complex, "real");
+      const exprt d = member(rhs_complex, "imag");
+
+      if (op == "Eq")
+        return and_exprt(equality_exprt(a, c), equality_exprt(b, d));
+      if (op == "NotEq")
+        return or_exprt(
+          not_exprt(equality_exprt(a, c)), not_exprt(equality_exprt(b, d)));
+
+      if (op == "Add")
+      {
+        exprt real("ieee_add", double_type());
+        real.copy_to_operands(a, c);
+        exprt imag("ieee_add", double_type());
+        imag.copy_to_operands(b, d);
+        return make_complex(real, imag);
+      }
+
+      if (op == "Sub")
+      {
+        exprt real("ieee_sub", double_type());
+        real.copy_to_operands(a, c);
+        exprt imag("ieee_sub", double_type());
+        imag.copy_to_operands(b, d);
+        return make_complex(real, imag);
+      }
+
+      if (op == "Mult")
+      {
+        exprt ac("ieee_mul", double_type());
+        ac.copy_to_operands(a, c);
+        exprt bd("ieee_mul", double_type());
+        bd.copy_to_operands(b, d);
+        exprt ad("ieee_mul", double_type());
+        ad.copy_to_operands(a, d);
+        exprt bc("ieee_mul", double_type());
+        bc.copy_to_operands(b, c);
+
+        exprt real("ieee_sub", double_type());
+        real.copy_to_operands(ac, bd);
+        exprt imag("ieee_add", double_type());
+        imag.copy_to_operands(ad, bc);
+        return make_complex(real, imag);
+      }
+
+      // op == "Div"
+      exprt ac("ieee_mul", double_type());
+      ac.copy_to_operands(a, c);
+      exprt bd("ieee_mul", double_type());
+      bd.copy_to_operands(b, d);
+      exprt bc("ieee_mul", double_type());
+      bc.copy_to_operands(b, c);
+      exprt ad("ieee_mul", double_type());
+      ad.copy_to_operands(a, d);
+      exprt c2("ieee_mul", double_type());
+      c2.copy_to_operands(c, c);
+      exprt d2("ieee_mul", double_type());
+      d2.copy_to_operands(d, d);
+
+      exprt numer_real("ieee_add", double_type());
+      numer_real.copy_to_operands(ac, bd);
+      exprt numer_imag("ieee_sub", double_type());
+      numer_imag.copy_to_operands(bc, ad);
+      exprt denom("ieee_add", double_type());
+      denom.copy_to_operands(c2, d2);
+
+      exprt real("ieee_div", double_type());
+      real.copy_to_operands(numer_real, denom);
+      exprt imag("ieee_div", double_type());
+      imag.copy_to_operands(numer_imag, denom);
+      return make_complex(real, imag);
+    }
+
+    return raise_complex_type_error(
+      "unsupported operation for complex operands");
+  }
+
   // Handle array/string operations
   if (lhs.type().is_array() || rhs.type().is_array())
   {
@@ -3225,6 +3349,22 @@ exprt python_converter::make_char_array_expr(
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
+  const auto &annotated_node =
+    (element["_type"] == "UnaryOp") ? element["operand"] : element;
+
+  // Handle Python complex constants emitted by parser annotations.
+  // This must run before generic string handling because complex constants
+  // may carry a string-like "value" in the serialized AST.
+  if (
+    annotated_node.contains("esbmc_type_annotation") &&
+    annotated_node["esbmc_type_annotation"] == "complex")
+  {
+    const double real = annotated_node.value("real_value", 0.0);
+    const double imag = annotated_node.value("imag_value", 0.0);
+    return make_complex(
+      from_double(real, double_type()), from_double(imag, double_type()));
+  }
+
   // Determine the source of the literal's value.
   const auto &value = (element["_type"] == "UnaryOp")
                         ? element["operand"]["value"]
@@ -3469,6 +3609,9 @@ exprt python_converter::dispatch_unary_dunder_operator(
   static const std::map<std::string, std::string> unary_dunder_map = {
     {"USub", "__neg__"},
     {"abs", "__abs__"},
+    {"complex", "__complex__"},
+    {"float", "__float__"},
+    {"index", "__index__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())
@@ -4358,8 +4501,8 @@ void python_converter::handle_assignment_type_adjustments(
   // function pointer type so the subsequent indirect call resolves correctly
   // instead of crashing in to_code_type.
   if (
-    lhs_symbol && !is_ctor_call &&
-    rhs.type().is_pointer() && rhs.type().subtype().is_code() &&
+    lhs_symbol && !is_ctor_call && rhs.type().is_pointer() &&
+    rhs.type().subtype().is_code() &&
     !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
   {
     lhs_symbol->type = rhs.type();
