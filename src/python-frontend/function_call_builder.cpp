@@ -847,11 +847,11 @@ exprt function_call_builder::build() const
     {
       const std::string sym_id =
         to_symbol_expr(arg_expr).get_identifier().as_string();
-      const auto& len_map = converter_.input_str_to_len_sym_;
+      const auto &len_map = converter_.input_str_to_len_sym_;
       auto it = len_map.find(sym_id);
       if (it != len_map.end())
       {
-        const symbolt* len_sym = converter_.find_symbol(it->second);
+        const symbolt *len_sym = converter_.find_symbol(it->second);
         if (len_sym)
           return typecast_exprt(symbol_expr(*len_sym), size_type());
       }
