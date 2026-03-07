@@ -330,6 +330,12 @@ exprt function_call_expr::handle_input() const
   term_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(term_assign);
 
+  // Record the companion $input_len$ symbol so len() on this string (or any
+  // variable aliasing it) can return the symbolic length directly instead of
+  // falling back to strlen() loop-unrolling.
+  converter_.input_str_to_len_sym_[input_sym.id.as_string()] =
+    len_sym.id.as_string();
+
   return symbol_expr(input_sym);
 }
 
@@ -3575,15 +3581,21 @@ exprt function_call_expr::handle_general_function_call()
 {
   auto &symbol_table = converter_.symbol_table();
 
-  // Handle single-argument min/max by dispatching to typed builtins
+  // Handle single-argument min/max/sum/sorted by dispatching to typed builtins
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
+
+  // Skip builtin dispatch if the user imported a function with the same name
+  // e.g. "from other import sum" defines a user sum that shadows the builtin
+  bool is_user_imported =
+    converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
 
   const bool has_user_round =
     !find_function(converter_.ast()["body"], func_name).empty();
   if (
     func_name == "round" && call_.contains("func") &&
-    call_["func"].value("_type", "") == "Name" && !has_user_round)
+    call_["func"].value("_type", "") == "Name" && !has_user_round &&
+    !is_user_imported)
   {
     if (call_["args"].empty())
       return converter_.get_exception_handler().gen_exception_raise(
@@ -3593,7 +3605,9 @@ exprt function_call_expr::handle_general_function_call()
   }
 
   if (
-    (func_name == "min" || func_name == "max" || func_name == "sorted") &&
+    !is_user_imported &&
+    (func_name == "min" || func_name == "max" || func_name == "sorted" ||
+     func_name == "sum") &&
     call_["args"].size() == 1)
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);

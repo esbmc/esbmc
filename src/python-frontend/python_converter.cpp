@@ -2495,12 +2495,49 @@ symbolt *python_converter::find_function_in_base_classes(
 symbolt *
 python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
+  // Extract the name being looked up from the symbol ID.
+  // When the symbol has a class component (py:main@C@Foo@F@bar),
+  // use the class name for matching against import names.
+  auto parsed = ::symbol_id::from_string(symbol_id);
+  const std::string &lookup_name =
+    !parsed.get_class().empty()
+      ? parsed.get_class()
+      : (parsed.get_function().empty() ? parsed.get_object()
+                                       : parsed.get_function());
+
   for (const auto &obj : (*ast_json)["body"])
   {
     if (
       (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
       obj.contains("full_path") && !obj["full_path"].is_null())
     {
+      // For ImportFrom, only match if the specific name was imported.
+      // This prevents "from other import sum" from also hijacking "max".
+      if (
+        obj["_type"] == "ImportFrom" && obj.contains("names") &&
+        !lookup_name.empty())
+      {
+        bool name_imported = false;
+        for (const auto &name : obj["names"])
+        {
+          const std::string &n = name["name"].get<std::string>();
+          if (n == "*" || n == lookup_name)
+          {
+            name_imported = true;
+            break;
+          }
+          if (
+            name.contains("asname") && !name["asname"].is_null() &&
+            name["asname"].get<std::string>() == lookup_name)
+          {
+            name_imported = true;
+            break;
+          }
+        }
+        if (!name_imported)
+          continue;
+      }
+
       std::regex pattern("py:(.*?)@");
       std::string imported_symbol = std::regex_replace(
         symbol_id, pattern, "py:" + obj["full_path"].get<std::string>() + "@");
@@ -2516,6 +2553,22 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
 
 symbolt *python_converter::find_symbol(const std::string &sym_id) const
 {
+  // When not loading models, check imports first so that user imports
+  // (e.g. "from other import sum") shadow builtin model functions that
+  // are registered in the main file's namespace.
+  // Don't let model-module stubs (e.g. esbmc.py's nondet_list
+  // stub) shadow operational models (e.g. nondet.py's nondet_list).
+  if (!is_loading_models)
+  {
+    if (symbolt *imported = find_imported_symbol(sym_id))
+    {
+      const std::string &imp_id = imported->id.as_string();
+      bool is_model_stub = imp_id.find("/models/") != std::string::npos;
+      if (!is_model_stub || !symbol_table_.find_symbol(sym_id))
+        return imported;
+    }
+  }
+
   if (symbolt *symbol = symbol_table_.find_symbol(sym_id))
     return symbol;
 
@@ -5653,6 +5706,17 @@ void python_converter::get_var_assign(
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
+
+    // Propagate $input_str$ → $input_len$ companion mapping so that len()
+    // on any alias of an input() string can use the symbolic length directly.
+    // Must run before type-branching which may take early returns.
+    if (lhs.is_symbol() && rhs.is_symbol())
+    {
+      const std::string rhs_id = rhs.identifier().as_string();
+      auto it = input_str_to_len_sym_.find(rhs_id);
+      if (it != input_str_to_len_sym_.end())
+        input_str_to_len_sym_[lhs.identifier().as_string()] = it->second;
+    }
 
     // Function call handling
     if (rhs.is_function_call())
