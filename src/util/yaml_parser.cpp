@@ -1,6 +1,7 @@
 #include <yaml_parser.h>
+#include <c_string2expr.h>
 
-yaml_parser::yaml_parser(const std::string &path) : file_path(path)
+yaml_parser::yaml_parser(const std::string &path) : file_path_(path)
 {
 }
 
@@ -8,24 +9,23 @@ bool yaml_parser::load_file()
 {
   try
   {
-    root = YAML::LoadFile(file_path);
+    root_ = YAML::LoadFile(file_path_);
   }
   catch (const YAML::Exception &e)
   {
-    log_error("Failed to parse YAML file '{}': {}", file_path, e.what());
+    log_error("Failed to parse YAML file '{}': {}", file_path_, e.what());
     return true;
   }
 
   return false;
 }
 
-std::vector<invariant> yaml_parser::get_invariants() const
+bool yaml_parser::get_invariants()
 {
-  std::vector<invariant> result;
-  if (!root || !root.IsSequence())
-    return result;
+  if (!root_ || !root_.IsSequence())
+    return true;
 
-  for (const auto &entry : root)
+  for (const auto &entry : root_)
   {
     const auto &content = entry["content"];
     if (!content || !content.IsSequence())
@@ -37,10 +37,11 @@ std::vector<invariant> yaml_parser::get_invariants() const
       if (!inv_node)
         continue;
       invariant info = parse_invariant(inv_node);
-      result.push_back(std::move(info));
+      parsed_invariants_.push_back(std::move(info));
     }
   }
-  return result;
+
+  return false;
 }
 
 invariant yaml_parser::parse_invariant(const YAML::Node &node) const
@@ -62,10 +63,10 @@ invariant yaml_parser::parse_invariant(const YAML::Node &node) const
       info.line = BigInt(loc["line"].as<std::string>().c_str(), 10);
     if (loc["column"])
       info.column = BigInt(loc["column"].as<std::string>().c_str(), 10);
-
     if (loc["function"])
       info.function = loc["function"].as<std::string>();
   }
+
   return info;
 }
 
@@ -82,4 +83,13 @@ invariant::Type yaml_parser::type_from_string(const std::string &s) const
 
   log_error("Unknown invariant type: {}", s);
   abort();
+}
+
+bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
+{
+  expression_parser parser;
+  const expression_node *root = parser.parse("s <= i*255 && i > 0");
+  root->print();
+
+  return false;
 }
