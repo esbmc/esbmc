@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--generate-ctest-testcase
+^Generated CTest test case: test_case\.cpp
+^VERIFICATION FAILED$
