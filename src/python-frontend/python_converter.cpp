@@ -7183,6 +7183,61 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
   return flags;
 }
 
+// Return true if 'param_name' has any attribute written (x.attr = ...)
+// anywhere in 'body' (recursive scan over nested blocks).
+static bool param_is_mutated_in_body(
+  const std::string &param_name,
+  const nlohmann::json &body)
+{
+  if (!body.is_array())
+    return false;
+
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string &stype =
+      stmt.contains("_type") ? stmt["_type"].get<std::string>() : "";
+
+    // x.attr = value  (plain assignment)
+    if (stype == "Assign" && stmt.contains("targets"))
+    {
+      for (const auto &tgt : stmt["targets"])
+      {
+        if (
+          tgt.contains("_type") && tgt["_type"] == "Attribute" &&
+          tgt.contains("value") && tgt["value"].contains("_type") &&
+          tgt["value"]["_type"] == "Name" && tgt["value"].contains("id") &&
+          tgt["value"]["id"] == param_name)
+          return true;
+      }
+    }
+    // x.attr: T = value  (annotated assignment)
+    else if (stype == "AnnAssign" && stmt.contains("target"))
+    {
+      const auto &tgt = stmt["target"];
+      if (
+        tgt.contains("_type") && tgt["_type"] == "Attribute" &&
+        tgt.contains("value") && tgt["value"].contains("_type") &&
+        tgt["value"]["_type"] == "Name" && tgt["value"].contains("id") &&
+        tgt["value"]["id"] == param_name)
+        return true;
+    }
+
+    // Recurse into nested blocks (if/while/for bodies, else branches)
+    for (const char *key : {"body", "orelse", "handlers", "finalbody"})
+    {
+      if (stmt.contains(key) && stmt[key].is_array())
+      {
+        if (param_is_mutated_in_body(param_name, stmt[key]))
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -7372,6 +7427,48 @@ void python_converter::process_function_arguments(
         exprt default_expr = get_expr(kw_defaults[i]);
         type.arguments()[kwonly_indices[i]].default_value() = default_expr;
       }
+    }
+  }
+
+  // Python object reference semantics: if a non-enum class parameter is
+  // mutated inside the function (x.attr = ...), model it as a pointer so
+  // that mutations are visible to the caller (same as 'self' for methods).
+  if (!function_node.contains("body"))
+    return;
+  const nlohmann::json &body = function_node["body"];
+
+  for (auto &param_arg : type.arguments())
+  {
+    const std::string param_name = param_arg.get_base_name().as_string();
+    if (param_name == "self" || param_name == "cls" || param_name.empty())
+      continue;
+
+    // Only applies to user-defined (non-enum) class-typed parameters.
+    typet ptype = param_arg.type();
+    if (ptype.id() == "symbol")
+      ptype = ns.follow(ptype);
+    if (!ptype.is_struct())
+      continue;
+    const std::string class_tag = to_struct_type(ptype).tag().as_string();
+    const std::string class_name = extract_class_name_from_tag(class_tag);
+    if (
+      !json_utils::is_class(class_name, *ast_json) ||
+      is_enum_class(class_name, *ast_json))
+      continue;
+
+    // Check whether the function body mutates this parameter.
+    if (!param_is_mutated_in_body(param_name, body))
+      continue;
+
+    // Upgrade the parameter to a pointer and update the parameter symbol.
+    typet ptr_type = gen_pointer_type(param_arg.type());
+    param_arg.type() = ptr_type;
+    const std::string param_id = param_arg.cmt_identifier().as_string();
+    if (!param_id.empty())
+    {
+      symbolt *param_sym = symbol_table_.find_symbol(param_id);
+      if (param_sym)
+        param_sym->type = ptr_type;
     }
   }
 }
@@ -8018,6 +8115,32 @@ void python_converter::get_return_statements(
       {
         // For non-constant arrays (variables), convert to pointer
         return_value = string_handler_.get_array_base_address(return_value);
+      }
+    }
+
+    // When returning a class-typed parameter (internally A*), dereference it
+    // so the return type matches the annotation (A).  This is needed because
+    // user-defined class parameters are modelled as pointers internally for
+    // Python object reference semantics, but callers expect a value return.
+    if (return_value.type().is_pointer())
+    {
+      typet ret_sub = return_value.type().subtype();
+      typet expected = current_func_return_type_;
+      if (ret_sub.id() == "symbol")
+        ret_sub = ns.follow(ret_sub);
+      if (expected.id() == "symbol")
+        expected = ns.follow(expected);
+      if (ret_sub.is_struct() && expected.is_struct())
+      {
+        const struct_typet &rs = to_struct_type(ret_sub);
+        const struct_typet &es = to_struct_type(expected);
+        if (rs.tag() == es.tag())
+        {
+          exprt deref("dereference");
+          deref.type() = return_value.type().subtype();
+          deref.copy_to_operands(return_value);
+          return_value = deref;
+        }
       }
     }
 
