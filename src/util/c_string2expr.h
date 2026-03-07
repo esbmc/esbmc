@@ -96,7 +96,8 @@ private:
     const expression_node *right = nullptr);
 
   // Raise a parse error with source position.
-  [[noreturn]] void throw_error(const char *message, std::size_t position) const;
+  [[noreturn]] void
+  throw_error(const char *message, std::size_t position) const;
 
 private:
   std::string_view input_;
