@@ -2237,6 +2237,32 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     return nullptr;
   }
 
+  // Attribute case: e.g. obj.mutable_attr.append(1)
+  // Resolve the attribute access via get_expr(), which already handles the
+  // class-attribute fallback (instance attr not set → class-level symbol).
+  if (func_value["_type"] == "Attribute")
+  {
+    const exprt attr_expr = converter_.get_expr(func_value);
+    if (attr_expr.is_symbol())
+    {
+      const symbolt *sym =
+        converter_.find_symbol(attr_expr.identifier().as_string());
+      const typet list_type = converter_.get_type_handler().get_list_type();
+      if (sym && sym->type == list_type)
+      {
+        if (
+          func_value.contains("value") && func_value["value"].contains("id") &&
+          func_value.contains("attr"))
+        {
+          display_name = func_value["value"]["id"].get<std::string>() + "." +
+                         func_value["attr"].get<std::string>();
+        }
+        return sym;
+      }
+    }
+    return nullptr;
+  }
+
   // Plain name case: e.g. mylist.append(99)
   display_name = get_object_name();
   symbol_id list_symbol_id = converter_.create_symbol_id();

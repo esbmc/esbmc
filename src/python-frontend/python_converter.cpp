@@ -4182,6 +4182,31 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!class_attr_symbol)
         {
+          // Not found in the direct class — walk base classes (Python MRO).
+          const std::string derived_name =
+            extract_class_name_from_tag(obj_type_name);
+          auto class_node =
+            json_utils::find_class((*ast_json)["body"], derived_name);
+          if (!class_node.empty() && class_node.contains("bases"))
+          {
+            for (const auto &base_node : class_node["bases"])
+            {
+              if (!base_node.contains("id"))
+                continue;
+              symbol_id base_sid = create_symbol_id();
+              base_sid.set_function("");
+              base_sid.set_class(base_node["id"].get<std::string>());
+              base_sid.set_object(attr_name);
+              class_attr_symbol =
+                symbol_table_.find_symbol(base_sid.to_string());
+              if (class_attr_symbol)
+                break;
+            }
+          }
+        }
+
+        if (!class_attr_symbol)
+        {
           // No class-level symbol: attribute was set per-instance (e.g. in
           // __init__).  This happens when the object comes from a list element
           // or other expression that bypasses instance_has_attr registration.
@@ -8867,6 +8892,91 @@ void python_converter::get_delete_statement(
 
       // Delegate to dict_handler which handles both constant and variable keys
       dict_handler_->handle_dict_delete(dict_expr, slice, target_block);
+    }
+    else if (target["_type"] == "Attribute")
+    {
+      // del obj.attr — Python semantics: remove the instance attribute so that
+      // subsequent reads fall back to the class-level attribute.
+      // We model this by resetting the struct member to the class default and
+      // removing the instance-attribute registration.
+      if (target["value"]["_type"] != "Name")
+      {
+        throw std::runtime_error(
+          "del on nested attribute chains is not supported");
+      }
+
+      const std::string var_name = target["value"]["id"].get<std::string>();
+      const std::string attr_name = target["attr"].get<std::string>();
+
+      // Find the instance symbol (with fallback to global scope).
+      symbol_id inst_sid = create_symbol_id();
+      inst_sid.set_object(var_name);
+      symbolt *inst_sym = find_symbol(inst_sid.to_string());
+      if (!inst_sym)
+      {
+        inst_sid.set_function("");
+        inst_sym = find_symbol(inst_sid.to_string());
+      }
+      if (!inst_sym)
+      {
+        throw std::runtime_error(
+          "del attribute: instance variable '" + var_name + "' not found");
+      }
+
+      // Determine the class struct type from the instance symbol type.
+      const typet &sym_type =
+        inst_sym->type.is_pointer() ? inst_sym->type.subtype() : inst_sym->type;
+      typet resolved = sym_type;
+      if (resolved.id() == "symbol")
+        resolved = ns.follow(resolved);
+      if (resolved.id() != "struct")
+      {
+        throw std::runtime_error(
+          "del attribute: '" + var_name + "' is not a struct instance");
+      }
+
+      const struct_typet &struct_type = to_struct_type(resolved);
+      const std::string class_tag = struct_type.tag().as_string();
+      const std::string class_name = extract_class_name_from_tag(class_tag);
+
+      // Look up the authoritative class-type symbol so we see any dynamically
+      // added components (e.g. added during a.x = 2 processing).
+      const std::string class_tag_id = "tag-" + class_tag;
+      const symbolt *class_type_sym = symbol_table_.find_symbol(class_tag_id);
+      const struct_typet &class_struct =
+        class_type_sym ? to_struct_type(class_type_sym->type) : struct_type;
+
+      // Find the class-level attribute symbol (the default value to restore).
+      symbol_id class_sid = create_symbol_id();
+      class_sid.set_function("");
+      class_sid.set_class(class_name);
+      class_sid.set_object(attr_name);
+      symbolt *class_attr_sym =
+        symbol_table_.find_symbol(class_sid.to_string());
+      if (!class_attr_sym)
+      {
+        throw std::runtime_error(
+          "del attribute: class '" + class_name +
+          "' has no class-level attribute '" + attr_name + "'");
+      }
+
+      // Emit: obj.attr = ClassName::attr  (restore class default)
+      if (class_struct.has_component(attr_name))
+      {
+        const typet &attr_type = class_struct.get_component(attr_name).type();
+        exprt lhs = create_member_expression(*inst_sym, attr_name, attr_type);
+        exprt rhs = symbol_expr(*class_attr_sym);
+        if (rhs.type() != lhs.type())
+          rhs = typecast_exprt(rhs, lhs.type());
+        code_assignt assign(lhs, rhs);
+        target_block.copy_to_operands(assign);
+      }
+
+      // Unregister the instance attribute so future reads fall back to the
+      // class-level symbol instead of the (now-reset) struct member.
+      auto map_it = instance_attr_map.find(inst_sym->id.as_string());
+      if (map_it != instance_attr_map.end())
+        map_it->second.erase(attr_name);
     }
     else if (target["_type"] == "Name")
     {
