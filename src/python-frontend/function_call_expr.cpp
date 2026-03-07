@@ -330,6 +330,12 @@ exprt function_call_expr::handle_input() const
   term_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(term_assign);
 
+  // Record the companion $input_len$ symbol so len() on this string (or any
+  // variable aliasing it) can return the symbolic length directly instead of
+  // falling back to strlen() loop-unrolling.
+  converter_.input_str_to_len_sym_[input_sym.id.as_string()] =
+    len_sym.id.as_string();
+
   return symbol_expr(input_sym);
 }
 

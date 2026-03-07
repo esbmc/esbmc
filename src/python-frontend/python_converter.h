@@ -875,6 +875,8 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+  /// Maps $input_str$N symbol ID → $input_len$N symbol ID for input() strings
+  std::unordered_map<std::string, std::string> input_str_to_len_sym_;
 
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;
