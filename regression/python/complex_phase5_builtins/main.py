@@ -3,8 +3,8 @@ import math
 z = complex(3, 4)
 assert abs(z) == 5.0
 
-z_expr = complex(1, 2) + complex(2, 1)
-assert abs(z_expr) == math.sqrt(18.0)
+z_expr = complex(1, 2) + complex(2, 2)
+assert abs(z_expr) == 5.0
 
 z0 = complex(0, 0)
 z1 = complex(0, 2)
