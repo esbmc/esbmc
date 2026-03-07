@@ -166,16 +166,50 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
     elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
   }
-  // Handle struct types (such as dictionaries): store by reference
-  else if (elem_symbol.type.is_struct())
+  // Handle struct types (such as dictionaries and user-defined classes).
+  // The element type may be a symbol_typet reference (e.g. "tag-A") rather
+  // than a plain struct_typet, so follow the type before checking is_struct().
+  else if (
+    elem_symbol.type.is_struct() ||
+    (elem_symbol.type.id() == "symbol" &&
+     converter_.name_space().follow(elem_symbol.type).is_struct()))
   {
-    // Calculate actual struct size by counting pointer-sized components
-    const struct_union_typet &struct_type =
-      to_struct_union_type(elem_symbol.type);
+    const typet &resolved =
+      elem_symbol.type.is_struct()
+        ? elem_symbol.type
+        : converter_.name_space().follow(elem_symbol.type);
+    const struct_union_typet &struct_type = to_struct_union_type(resolved);
 
-    // For dictionary structs, each component is a pointer (keys, values)
-    size_t num_components = struct_type.components().size();
-    size_t total_size = num_components * (config.ansi_c.pointer_width() / 8);
+    // Sum the widths of all components to get the true struct size in bytes.
+    size_t total_size = 0;
+    for (const auto &comp : struct_type.components())
+    {
+      const typet &ct = comp.type();
+      if (ct.id() == "symbol")
+      {
+        // Nested struct/class component: recurse via namespace follow
+        const typet &followed = converter_.name_space().follow(ct);
+        if (followed.is_struct())
+        {
+          for (const auto &sc : to_struct_union_type(followed).components())
+          {
+            if (!sc.type().width().empty())
+              total_size +=
+                std::stoull(sc.type().width().as_string(), nullptr, 10) / 8;
+            else
+              total_size += config.ansi_c.pointer_width() / 8;
+          }
+        }
+        else
+          total_size += config.ansi_c.pointer_width() / 8;
+      }
+      else if (!ct.width().empty())
+        total_size += std::stoull(ct.width().as_string(), nullptr, 10) / 8;
+      else
+        total_size += config.ansi_c.pointer_width() / 8;
+    }
+    if (total_size == 0)
+      total_size = config.ansi_c.pointer_width() / 8;
 
     elem_size = from_integer(BigInt(total_size), size_type());
   }
@@ -545,7 +579,14 @@ exprt python_list::get()
 
   for (auto &e : list_value_["elts"])
   {
+    // Clear current_lhs so that constructor calls inside list elements
+    // (e.g. [A(), B()]) create their own self temp variable instead of
+    // inheriting the outer assignment target as self.
+    exprt *saved_lhs = converter_.current_lhs;
+    converter_.current_lhs = nullptr;
     exprt elem = converter_.get_expr(e);
+    converter_.current_lhs = saved_lhs;
+
     exprt list_push_func_call =
       build_push_list_call(list_symbol, list_value_, elem);
     converter_.add_instruction(list_push_func_call);
@@ -2239,6 +2280,8 @@ exprt python_list::list_repetition(
   BigInt list_size;
   exprt list_elem;
   symbolt *list_symbol = nullptr;
+  // True when the list operand is a variable (not a literal).
+  bool is_variable_list = false;
 
   auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
     if (
@@ -2252,7 +2295,16 @@ exprt python_list::list_repetition(
     return true;
   };
 
-  // Get list size from lhs (e.g.: 3 * [1])
+  // Get element expression from list_type_map for a variable list.
+  auto elem_from_type_map = [&](const std::string &src_id) -> exprt {
+    const std::string &elem_id = get_list_element_id(src_id, 0);
+    assert(!elem_id.empty());
+    symbolt *elem_sym = converter_.find_symbol(elem_id);
+    assert(elem_sym);
+    return symbol_expr(*elem_sym);
+  };
+
+  // Get list size from lhs (e.g.: 3 * [1] or 3 * lst)
   if (lhs.type() != list_type)
   {
     if (lhs.is_symbol())
@@ -2270,17 +2322,31 @@ exprt python_list::list_repetition(
     else if (lhs.is_constant())
       list_size = binary2integer(lhs.value().c_str(), true);
 
-    // List element is the rhs
-    list_elem = converter_.get_expr(right_node["elts"][0]);
+    // List element comes from the rhs operand
+    if (right_node.contains("elts"))
+      list_elem = converter_.get_expr(right_node["elts"][0]);
+    else
+    {
+      // rhs is a variable list — get element from list_type_map
+      list_elem = elem_from_type_map(rhs.identifier().as_string());
+      is_variable_list = true;
+    }
   }
 
-  // Get list size from rhs (e.g.: [1] * 3)
+  // Get list size from rhs (e.g.: [1] * 3 or lst * 3)
   if (rhs.type() != list_type)
   {
-    // List element is the rhs
-    list_elem = converter_.get_expr(left_node["elts"][0]);
+    // List element comes from the lhs operand
+    if (left_node.contains("elts"))
+      list_elem = converter_.get_expr(left_node["elts"][0]);
+    else
+    {
+      // lhs is a variable list — get element from list_type_map
+      list_elem = elem_from_type_map(lhs.identifier().as_string());
+      is_variable_list = true;
+    }
 
-    if (rhs.is_symbol()) // (e.g.: [1] * n)
+    if (rhs.is_symbol()) // (e.g.: [1] * n or lst * n)
     {
       symbolt *size_var = converter_.find_symbol(
         to_symbol_expr(rhs).get_identifier().as_string());
@@ -2296,7 +2362,14 @@ exprt python_list::list_repetition(
       list_size = binary2integer(rhs.value().c_str(), true);
   }
 
-  if (!list_symbol)
+  // For variable lists, allocate a fresh result list so the source is not
+  // mutated.  For literal lists the temp symbol created by get() is reused.
+  if (is_variable_list)
+  {
+    symbolt &result = create_list();
+    list_symbol = &result;
+  }
+  else if (!list_symbol)
   {
     if (lhs.type() == list_type && lhs.is_symbol())
       list_symbol = converter_.find_symbol(lhs.identifier().as_string());
@@ -2311,7 +2384,12 @@ exprt python_list::list_repetition(
   else
     list_id = list_symbol->id.as_string();
 
-  for (int64_t i = 0; i < list_size.to_int64() - 1; ++i)
+  // Literal lists already contain their first element; variable-list results
+  // start empty.  Adjust the loop bounds accordingly.
+  const int64_t push_count =
+    is_variable_list ? list_size.to_int64() : list_size.to_int64() - 1;
+
+  for (int64_t i = 0; i < push_count; ++i)
   {
     converter_.add_instruction(
       build_push_list_call(*list_symbol, list_value_, list_elem));
@@ -2456,6 +2534,30 @@ exprt python_list::build_extend_list_call(
   locationt location = converter_.get_location_from_decl(op);
 
   exprt actual_list = other_list;
+
+  if (actual_list.is_code() && actual_list.is_function_call())
+  {
+    const code_function_callt &call_expr =
+      to_code_function_call(to_code(actual_list));
+
+    const typet list_type = converter_.get_type_handler().get_list_type();
+
+    symbolt &tmp_list =
+      converter_.create_tmp_symbol(op, "$extend_list$", list_type, exprt());
+    code_declt tmp_decl(symbol_expr(tmp_list));
+    tmp_decl.location() = location;
+    converter_.add_instruction(tmp_decl);
+
+    code_function_callt func_call;
+    func_call.function() = call_expr.function();
+    func_call.arguments() = call_expr.arguments();
+    func_call.lhs() = symbol_expr(tmp_list);
+    func_call.type() = list_type;
+    func_call.location() = location;
+    converter_.add_instruction(func_call);
+
+    actual_list = symbol_expr(tmp_list);
+  }
 
   // Check if other_list is a string (array or pointer to char)
   if (

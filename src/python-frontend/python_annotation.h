@@ -484,6 +484,60 @@ private:
           current_func_name_context_ = saved_ctx;
         }
 
+        // If still no type, try to infer from the parameter's default value.
+        // This handles cases like def h(op=g) where g is a function alias.
+        if (inferred_type.empty() && !has_partial_annotation)
+        {
+          const auto &args_node = function_element["args"];
+          if (args_node.contains("defaults"))
+          {
+            const auto &defaults = args_node["defaults"];
+            size_t defaults_start = params.size() - defaults.size();
+            if (i >= defaults_start)
+            {
+              const Json &def_node = defaults[i - defaults_start];
+              if (
+                def_node.contains("_type") && def_node["_type"] == "Name" &&
+                def_node.contains("id"))
+              {
+                const std::string &def_name =
+                  def_node["id"].template get<std::string>();
+                // Use non-throwing (const) overload to avoid crashing when
+                // def_name is a variable (not a FunctionDef).
+                const nlohmann::json &const_body =
+                  static_cast<const nlohmann::json &>(ast_["body"]);
+                // Direct function reference (op=f)?
+                if (!json_utils::find_function(const_body, def_name).empty())
+                  inferred_type = "Any";
+                // Function alias (op=g where g=f)?
+                else
+                {
+                  for (const auto &stmt : ast_["body"])
+                  {
+                    if (
+                      stmt.contains("_type") && stmt["_type"] == "Assign" &&
+                      stmt.contains("targets") && !stmt["targets"].empty() &&
+                      stmt["targets"][0].contains("id") &&
+                      stmt["targets"][0]["id"] == def_name &&
+                      stmt.contains("value") &&
+                      stmt["value"].contains("_type") &&
+                      stmt["value"]["_type"] == "Name" &&
+                      stmt["value"].contains("id") &&
+                      !json_utils::find_function(
+                         const_body,
+                         stmt["value"]["id"].template get<std::string>())
+                         .empty())
+                    {
+                      inferred_type = "Any";
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
         // Apply inference results
         if (has_partial_annotation)
         {
@@ -1482,7 +1536,15 @@ private:
       if (!return_node.empty())
       {
         std::string fallback_type;
-        infer_type(return_node, func_elem, fallback_type);
+        try
+        {
+          infer_type(return_node, func_elem, fallback_type);
+        }
+        catch (std::runtime_error &)
+        {
+          // Return value type could not be inferred (e.g. call through a
+          // function-pointer parameter); leave fallback_type empty.
+        }
         functions_in_analysis_.erase(func_name);
         return fallback_type;
       }
@@ -2034,7 +2096,33 @@ private:
         if (!overload_type.empty())
           return overload_type;
 
-        return get_function_return_type(func_id, ast_);
+        // func_id may be a function-pointer variable (not a defined function).
+        // Catch the "not found" error only when func_id is actually defined in
+        // this module's AST (as a top-level assignment or function parameter).
+        // Otherwise re-throw so the caller can report "Function not found".
+        try
+        {
+          return get_function_return_type(func_id, ast_);
+        }
+        catch (std::runtime_error &)
+        {
+          const nlohmann::json &body =
+            static_cast<const nlohmann::json &>(ast_["body"]);
+          for (const auto &stmt : body)
+          {
+            if (!stmt.contains("_type"))
+              continue;
+            const std::string &stype = stmt["_type"];
+            // Top-level assignment: g = f
+            if (stype == "Assign" && stmt.contains("targets"))
+            {
+              for (const auto &t : stmt["targets"])
+                if (t.contains("id") && t["id"] == func_id)
+                  return "";
+            }
+          }
+          throw; // func_id is not a known variable: propagate the error
+        }
       }
     }
 
@@ -2524,6 +2612,18 @@ private:
 
     if (obj_node.empty())
     {
+      // Method call on temporary expression (e.g., ({1,2,3}-{1}).pop()).
+      // Such values have no symbol name, so object lookup fails.
+      if (
+        obj.empty() && call["func"].contains("value") &&
+        call["func"]["value"].contains("_type") &&
+        call["func"]["value"]["_type"] == "BinOp")
+      {
+        std::string inferred_expr_type =
+          get_type_from_binary_expr(call["func"]["value"], ast_);
+        return inferred_expr_type.empty() ? "Any" : inferred_expr_type;
+      }
+
       // Check if obj is a class name
       Json class_node = json_utils::find_class(ast_["body"], obj);
       if (!class_node.empty())
@@ -2534,6 +2634,19 @@ private:
         {
           if (member["_type"] == "FunctionDef" && member["name"] == method_name)
           {
+            // Prefer the explicit return-type annotation when present.
+            if (member.contains("returns") && !member["returns"].is_null())
+            {
+              const Json &ret = member["returns"];
+              // Simple type: -> str, -> int, -> MyClass
+              if (ret.contains("id"))
+                return ret["id"].template get<std::string>();
+              // Generic type: -> dict[str, bool], -> list[int], etc.
+              if (
+                ret.contains("_type") && ret["_type"] == "Subscript" &&
+                ret.contains("value") && ret["value"].contains("id"))
+                return ret["value"]["id"].template get<std::string>();
+            }
             std::string inferred_type =
               infer_from_return_statements(member["body"], method_name);
             if (!inferred_type.empty())
@@ -2695,6 +2808,10 @@ private:
       return InferResult::OK;
     }
 
+    // Guard against bare return (value=null) or missing value key
+    if (!stmt.contains("value") || stmt["value"].is_null())
+      return InferResult::UNKNOWN;
+
     const auto &value_type = stmt["value"]["_type"];
 
     // Get type from RHS constant
@@ -2754,7 +2871,21 @@ private:
 
     // Get type from RHS variable
     else if (value_type == "Name" || value_type == "Subscript")
+    {
+      // If RHS is a function name (e.g. g = f), skip annotation so the
+      // converter can infer the function-pointer type directly.
+      // Use the non-throwing (const) overload to avoid crashing on names
+      // that are not FunctionDefs.
+      if (
+        value_type == "Name" && stmt["value"].contains("id") &&
+        !json_utils::find_function(
+           static_cast<const nlohmann::json &>(ast_["body"]),
+           stmt["value"]["id"].template get<std::string>())
+           .empty())
+        return InferResult::UNKNOWN;
+
       inferred_type = get_type_from_rhs_variable(stmt, body);
+    }
 
     // Get type from RHS binary expression
     else if (value_type == "BinOp")

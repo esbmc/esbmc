@@ -79,7 +79,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Global", StatementType::GLOBAL},
   {"Try", StatementType::TRY},
   {"ExceptHandler", StatementType::EXCEPTHANDLER},
-  {"Delete", StatementType::DELETE}};
+  {"Delete", StatementType::DELETE_STATEMENT}};
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -1657,6 +1657,130 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return dunder_result;
   }
 
+  // Intercept complex arithmetic/comparison before generic binary expression
+  // building, which cannot operate directly on struct operands.
+  if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
+  {
+    auto raise_complex_type_error = [&](const std::string &msg) -> exprt {
+      return get_exception_handler().gen_exception_raise("TypeError", msg);
+    };
+    auto is_real_numeric = [](const typet &t) -> bool {
+      return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() ||
+             t.is_bool();
+    };
+    auto is_compatible_numeric = [&](const exprt &e) -> bool {
+      return is_complex_type(e.type()) || is_real_numeric(e.type());
+    };
+    auto member = [](const exprt &z, const irep_idt &name) -> exprt {
+      return member_exprt(z, name, double_type());
+    };
+
+    if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
+      return raise_complex_type_error(
+        "no ordering relation is defined for complex numbers");
+
+    if (op == "FloorDiv" || op == "Mod")
+      return raise_complex_type_error(
+        "can't take floor or mod of complex number");
+
+    if (
+      op == "Add" || op == "Sub" || op == "Mult" || op == "Div" || op == "Eq" ||
+      op == "NotEq")
+    {
+      if (op == "Eq" || op == "NotEq")
+      {
+        if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
+          return gen_boolean(op == "NotEq");
+      }
+      else
+      {
+        if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
+          return raise_complex_type_error(
+            "unsupported operand type(s) for complex arithmetic");
+      }
+
+      exprt lhs_complex = promote_to_complex(lhs);
+      exprt rhs_complex = promote_to_complex(rhs);
+
+      const exprt a = member(lhs_complex, "real");
+      const exprt b = member(lhs_complex, "imag");
+      const exprt c = member(rhs_complex, "real");
+      const exprt d = member(rhs_complex, "imag");
+
+      if (op == "Eq")
+        return and_exprt(equality_exprt(a, c), equality_exprt(b, d));
+      if (op == "NotEq")
+        return or_exprt(
+          not_exprt(equality_exprt(a, c)), not_exprt(equality_exprt(b, d)));
+
+      if (op == "Add")
+      {
+        exprt real("ieee_add", double_type());
+        real.copy_to_operands(a, c);
+        exprt imag("ieee_add", double_type());
+        imag.copy_to_operands(b, d);
+        return make_complex(real, imag);
+      }
+
+      if (op == "Sub")
+      {
+        exprt real("ieee_sub", double_type());
+        real.copy_to_operands(a, c);
+        exprt imag("ieee_sub", double_type());
+        imag.copy_to_operands(b, d);
+        return make_complex(real, imag);
+      }
+
+      if (op == "Mult")
+      {
+        exprt ac("ieee_mul", double_type());
+        ac.copy_to_operands(a, c);
+        exprt bd("ieee_mul", double_type());
+        bd.copy_to_operands(b, d);
+        exprt ad("ieee_mul", double_type());
+        ad.copy_to_operands(a, d);
+        exprt bc("ieee_mul", double_type());
+        bc.copy_to_operands(b, c);
+
+        exprt real("ieee_sub", double_type());
+        real.copy_to_operands(ac, bd);
+        exprt imag("ieee_add", double_type());
+        imag.copy_to_operands(ad, bc);
+        return make_complex(real, imag);
+      }
+
+      // op == "Div"
+      exprt ac("ieee_mul", double_type());
+      ac.copy_to_operands(a, c);
+      exprt bd("ieee_mul", double_type());
+      bd.copy_to_operands(b, d);
+      exprt bc("ieee_mul", double_type());
+      bc.copy_to_operands(b, c);
+      exprt ad("ieee_mul", double_type());
+      ad.copy_to_operands(a, d);
+      exprt c2("ieee_mul", double_type());
+      c2.copy_to_operands(c, c);
+      exprt d2("ieee_mul", double_type());
+      d2.copy_to_operands(d, d);
+
+      exprt numer_real("ieee_add", double_type());
+      numer_real.copy_to_operands(ac, bd);
+      exprt numer_imag("ieee_sub", double_type());
+      numer_imag.copy_to_operands(bc, ad);
+      exprt denom("ieee_add", double_type());
+      denom.copy_to_operands(c2, d2);
+
+      exprt real("ieee_div", double_type());
+      real.copy_to_operands(numer_real, denom);
+      exprt imag("ieee_div", double_type());
+      imag.copy_to_operands(numer_imag, denom);
+      return make_complex(real, imag);
+    }
+
+    return raise_complex_type_error(
+      "unsupported operation for complex operands");
+  }
+
   // Handle array/string operations
   if (lhs.type().is_array() || rhs.type().is_array())
   {
@@ -1897,9 +2021,18 @@ exprt python_converter::handle_list_operations(
     return list.compare(lhs, rhs, op);
   }
 
-  // List concatenation
-  if (lhs.type() == list_type && rhs.type() == list_type && op == "Add")
+  // List concatenation: also handle Any-typed (void*) right operand, which
+  // occurs when iterating an untyped iterable (e.g. `for r in f()` with no
+  // return annotation) and then concatenating with a typed list literal.
+  auto is_any_ptr = [](const typet &t) {
+    return t.is_pointer() && t.subtype().id() == "empty";
+  };
+  if (
+    lhs.type() == list_type && op == "Add" &&
+    (rhs.type() == list_type || is_any_ptr(rhs.type())))
   {
+    if (rhs.type() != list_type)
+      rhs = typecast_exprt(rhs, list_type);
     python_list list(*this, element);
     return list.build_concat_list_call(lhs, rhs, element);
   }
@@ -2713,6 +2846,49 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     process_forward_reference(element["func"], temp_block);
   }
 
+  // Handle indirect calls through subscript (e.g., {'+': lambda: 1.0}[x]())
+  if (element["func"]["_type"] == "Subscript")
+  {
+    const nlohmann::json &func_node = element["func"];
+    exprt container = get_expr(func_node["value"]);
+
+    exprt func_ptr;
+    if (
+      container.type().is_struct() &&
+      dict_handler_->is_dict_type(container.type()))
+      func_ptr = dict_handler_->handle_dict_subscript(
+        container, func_node["slice"], gen_pointer_type(code_typet()));
+    else
+      func_ptr = get_expr(element["func"]);
+
+    // Determine return type: prefer current function's declared return type,
+    // then try to infer from any lambda body in the dict literal.
+    typet ret_type = current_func_return_type_;
+    if (ret_type.is_empty() && func_node["value"]["_type"] == "Dict")
+    {
+      for (const auto &val : func_node["value"]["values"])
+      {
+        if (val["_type"] == "Lambda" && val.contains("body"))
+        {
+          ret_type = lambda_handler_->infer_lambda_return_type(val["body"]);
+          break;
+        }
+      }
+    }
+    if (ret_type.is_empty())
+      ret_type = double_type();
+
+    side_effect_expr_function_callt call;
+    call.location() = get_location_from_decl(element);
+    call.function() = func_ptr;
+    call.type() = ret_type;
+    if (element.contains("args"))
+      for (const auto &arg : element["args"])
+        call.arguments().push_back(get_expr(arg));
+
+    return call;
+  }
+
   // Handle indirect calls through function pointer variables
   if (element["func"]["_type"] == "Name")
   {
@@ -2729,8 +2905,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       side_effect_expr_function_callt call;
       call.location() = get_location_from_decl(element);
 
-      // The function pointer itself, not dereferenced
+      // The function pointer itself, not dereferenced.
+      // For Any-typed (void*) parameters, cast to a generic function pointer
+      // so that the adjuster can dereference it to a code type (it calls
+      // to_code_type on the dereferenced subtype, which would fail on void).
       exprt func_ptr_expr = symbol_expr(*var_symbol);
+      if (var_symbol->type == any_type())
+        func_ptr_expr =
+          typecast_exprt(func_ptr_expr, gen_pointer_type(code_typet()));
       call.function() = func_ptr_expr;
 
       // Resolve return type from the concrete target function stored in
@@ -2757,7 +2939,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       {
         const code_typet &func_type = to_code_type(var_symbol->type.subtype());
         call.type() = func_type.return_type();
+        resolved = true;
       }
+
+      // Fallback for Any-typed (void*) function parameters: use any_type so
+      // the indirect call expression has a well-formed type.
+      if (!resolved)
+        call.type() = any_type();
 
       // Process arguments
       if (element.contains("args"))
@@ -2765,6 +2953,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         for (const auto &arg_element : element["args"])
         {
           exprt arg_expr = get_expr(arg_element);
+          // A function name used as an argument decays to a function pointer.
+          if (arg_expr.type().is_code() && arg_expr.is_symbol())
+            arg_expr = address_of_exprt(arg_expr);
           call.arguments().push_back(arg_expr);
         }
       }
@@ -3211,6 +3402,22 @@ exprt python_converter::make_char_array_expr(
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
+  const auto &annotated_node =
+    (element["_type"] == "UnaryOp") ? element["operand"] : element;
+
+  // Handle Python complex constants emitted by parser annotations.
+  // This must run before generic string handling because complex constants
+  // may carry a string-like "value" in the serialized AST.
+  if (
+    annotated_node.contains("esbmc_type_annotation") &&
+    annotated_node["esbmc_type_annotation"] == "complex")
+  {
+    const double real = annotated_node.value("real_value", 0.0);
+    const double imag = annotated_node.value("imag_value", 0.0);
+    return make_complex(
+      from_double(real, double_type()), from_double(imag, double_type()));
+  }
+
   // Determine the source of the literal's value.
   const auto &value = (element["_type"] == "UnaryOp")
                         ? element["operand"]["value"]
@@ -3455,6 +3662,9 @@ exprt python_converter::dispatch_unary_dunder_operator(
   static const std::map<std::string, std::string> unary_dunder_map = {
     {"USub", "__neg__"},
     {"abs", "__abs__"},
+    {"complex", "__complex__"},
+    {"float", "__float__"},
+    {"index", "__index__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())
@@ -4009,7 +4219,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // This allows parameter objects like 'f: Foo' to access instance attributes
       else if (
         !is_converting_lhs && class_type.has_component(attr_name) &&
-        (instance_has_attr || symbol->is_parameter))
+        (instance_has_attr || symbol->is_parameter ||
+         is_complex_type(class_type)))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = create_member_expression(*symbol, attr_name, attr_type);
@@ -4024,10 +4235,46 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!class_attr_symbol)
         {
-          throw std::runtime_error("Attribute \"" + attr_name + "\" not found");
+          // Not found in the direct class — walk base classes (Python MRO).
+          const std::string derived_name =
+            extract_class_name_from_tag(obj_type_name);
+          auto class_node =
+            json_utils::find_class((*ast_json)["body"], derived_name);
+          if (!class_node.empty() && class_node.contains("bases"))
+          {
+            for (const auto &base_node : class_node["bases"])
+            {
+              if (!base_node.contains("id"))
+                continue;
+              symbol_id base_sid = create_symbol_id();
+              base_sid.set_function("");
+              base_sid.set_class(base_node["id"].get<std::string>());
+              base_sid.set_object(attr_name);
+              class_attr_symbol =
+                symbol_table_.find_symbol(base_sid.to_string());
+              if (class_attr_symbol)
+                break;
+            }
+          }
         }
 
-        expr = symbol_expr(*class_attr_symbol);
+        if (!class_attr_symbol)
+        {
+          // No class-level symbol: attribute was set per-instance (e.g. in
+          // __init__).  This happens when the object comes from a list element
+          // or other expression that bypasses instance_has_attr registration.
+          // Fall back to the struct member if the component exists.
+          if (class_type.has_component(attr_name))
+          {
+            const typet &attr_type = class_type.get_component(attr_name).type();
+            expr = create_member_expression(*symbol, attr_name, attr_type);
+          }
+          else
+            throw std::runtime_error(
+              "Attribute \"" + attr_name + "\" not found");
+        }
+        else
+          expr = symbol_expr(*class_attr_symbol);
       }
     }
 
@@ -4324,6 +4571,20 @@ void python_converter::handle_assignment_type_adjustments(
     if (lhs_symbol && !is_ctor_call)
       lhs_symbol->value = rhs;
     return;
+  }
+
+  // When a variable is assigned a function pointer returned from a
+  // higher-order lambda call (e.g. `inner = outer(5)` or `inner:int = outer(5)`),
+  // override any incorrect annotation (void*, int, …) with the concrete
+  // function pointer type so the subsequent indirect call resolves correctly
+  // instead of crashing in to_code_type.
+  if (
+    lhs_symbol && !is_ctor_call && rhs.type().is_pointer() &&
+    rhs.type().subtype().is_code() &&
+    !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
+  {
+    lhs_symbol->type = rhs.type();
+    lhs.type() = rhs.type();
   }
 
   // Handle lambda assignments
@@ -4882,6 +5143,10 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     inferred_type = rhs_expr.type();
     if (inferred_type.is_empty())
       inferred_type = any_type();
+    // Function alias assignment (g = f): store as function pointer,
+    // mirroring how lambda assignments are handled.
+    else if (inferred_type.is_code())
+      inferred_type = gen_pointer_type(inferred_type);
   }
 
   symbolt symbol =
@@ -4968,6 +5233,66 @@ void python_converter::handle_function_call_rhs(
     {
       python_list::copy_type_info(
         ret.op0().identifier().as_string(), lhs.identifier().as_string());
+    }
+
+    // If list_type_map is still empty for the LHS
+    // e.g. the list was passed through as a parameter inside the function,
+    // fall back to the called function's return-type annotation
+    // to determine the element type.
+    const std::string &lhs_id = lhs.identifier().as_string();
+    if (python_list::get_list_type_map_size(lhs_id) == 0)
+    {
+      std::string func_name;
+      if (
+        ast_node.contains("value") && ast_node["value"].contains("func") &&
+        ast_node["value"]["func"].is_object())
+      {
+        const auto &func_ref = ast_node["value"]["func"];
+        if (func_ref.contains("id") && func_ref["id"].is_string())
+          func_name = func_ref["id"].get<std::string>();
+        else if (func_ref.contains("attr") && func_ref["attr"].is_string())
+          func_name = func_ref["attr"].get<std::string>();
+      }
+
+      if (!func_name.empty())
+      {
+        const auto &func_def =
+          json_utils::find_function((*ast_json)["body"], func_name);
+        if (
+          !func_def.empty() && func_def.contains("returns") &&
+          !func_def["returns"].is_null())
+        {
+          const auto &returns = func_def["returns"];
+          // Handle list[T] annotation
+          // Subscript node with value.id == "list"
+          if (
+            returns.is_object() && returns.contains("_type") &&
+            returns["_type"] == "Subscript" && returns.contains("value") &&
+            returns["value"].is_object() && returns["value"].contains("id") &&
+            returns["value"]["id"].is_string())
+          {
+            const std::string val_id =
+              returns["value"]["id"].get<std::string>();
+            if (val_id == "list" || val_id == "List")
+            {
+              // Extract element type from the slice, e.g. int in list[int]
+              if (
+                returns.contains("slice") && returns["slice"].is_object() &&
+                returns["slice"].contains("id") &&
+                returns["slice"]["id"].is_string())
+              {
+                typet elem_type = type_handler_.get_typet(
+                  returns["slice"]["id"].get<std::string>());
+                if (elem_type != typet())
+                {
+                  python_list::add_type_info_entry(
+                    lhs_id, std::string(), elem_type);
+                }
+              }
+            }
+          }
+        }
+      }
     }
 
     typet l_type = type_handler_.get_list_type();
@@ -5314,6 +5639,55 @@ void python_converter::get_var_assign(
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
+    auto try_follow_symbol_type = [this](const typet &type) -> typet {
+      if (type.id() != "symbol")
+        return type;
+
+      const irep_idt &symbol_id = type.identifier();
+      if (symbol_id.empty())
+        return type;
+
+      if (symbol_table_.find_symbol(symbol_id) == nullptr)
+        return type;
+
+      return ns.follow(type);
+    };
+
+    auto is_list_model_type = [this,
+                               &try_follow_symbol_type](const typet &in_type) {
+      typet t = in_type;
+      t = try_follow_symbol_type(t);
+      if (t.is_pointer())
+        t = t.subtype();
+      t = try_follow_symbol_type(t);
+      if (!t.is_struct())
+        return false;
+      return to_struct_type(t).tag().as_string().find("__ESBMC_PyListObj") !=
+             std::string::npos;
+    };
+
+    auto resolve_runtime_type = [this,
+                                 &try_follow_symbol_type](const exprt &expr) {
+      typet t = expr.type();
+      if (expr.is_symbol())
+      {
+        if (const symbolt *sym = symbol_table_.find_symbol(expr.identifier()))
+          t = sym->type;
+      }
+      return try_follow_symbol_type(t);
+    };
+
+    const typet lhs_runtime_type = lhs_symbol ? lhs_symbol->type : lhs.type();
+    const typet rhs_runtime_type = resolve_runtime_type(rhs);
+    if (
+      dict_handler_->is_dict_type(lhs_runtime_type) &&
+      is_list_model_type(rhs_runtime_type))
+    {
+      throw std::runtime_error(
+        "Unsupported reassignment from dict to list for variable '" +
+        sid.get_object() + "'");
+    }
+
     // Handle throw expression
     if (rhs.statement() == "cpp-throw")
     {
@@ -6738,16 +7112,9 @@ size_t python_converter::register_function_argument(
   {
     if (!element.contains("annotation") || element["annotation"].is_null())
     {
-      // Allow unannotated parameters in nested functions by defaulting to Any.
-      // Top-level functions still require explicit annotations.
-      if (current_func_name_.find("@F@") != std::string::npos)
-        arg_type = any_type();
-      else
-      {
-        throw std::runtime_error(
-          "All parameters in function \"" + current_func_name_ +
-          "\" must be type annotated");
-      }
+      // Python does not require type annotations; treat unannotated parameters
+      // as Any (void*) to follow Python semantics.
+      arg_type = any_type();
     }
     else
       arg_type = get_type_from_annotation(element["annotation"], element);
@@ -6873,6 +7240,28 @@ void python_converter::process_function_arguments(
         {
           exprt default_expr = get_expr(defaults[i]);
           type.arguments()[positional_index].default_value() = default_expr;
+
+          // If the default is a function pointer and the parameter was
+          // annotated as Any (void*), upgrade the parameter type to match.
+          // This enables indirect-call resolution for function-alias defaults
+          // like def h(op=g) where g = f (a named function).
+          if (
+            default_expr.type().is_pointer() &&
+            default_expr.type().subtype().is_code())
+          {
+            auto &param_arg = type.arguments()[positional_index];
+            if (param_arg.type() == any_type())
+            {
+              param_arg.type() = default_expr.type();
+              std::string param_id = param_arg.cmt_identifier().as_string();
+              if (!param_id.empty())
+              {
+                symbolt *param_sym = symbol_table_.find_symbol(param_id);
+                if (param_sym)
+                  param_sym->type = default_expr.type();
+              }
+            }
+          }
         }
       }
     }
@@ -6923,13 +7312,57 @@ void python_converter::validate_return_paths(
 
 typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
 {
+  auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet {
+    if (constant_value.is_number_float())
+      return double_type();
+    if (constant_value.is_number_integer())
+      return long_long_int_type();
+    if (constant_value.is_boolean())
+      return bool_type();
+    if (constant_value.is_string())
+      return gen_pointer_type(char_type());
+    if (constant_value.is_null())
+      return none_type();
+    return empty_typet();
+  };
+
   for (const auto &stmt : body)
   {
     if (stmt["_type"] == "Return" && !stmt["value"].is_null())
     {
+      const auto &ret_val = stmt["value"];
+
       // If returning a tuple, infer its type
-      if (stmt["value"]["_type"] == "Tuple")
-        return tuple_handler_->get_tuple_expr(stmt["value"]).type();
+      if (ret_val["_type"] == "Tuple")
+        return tuple_handler_->get_tuple_expr(ret_val).type();
+
+      // Constant returns (including strings)
+      if (ret_val["_type"] == "Constant" && ret_val.contains("value"))
+      {
+        typet inferred = infer_constant_type(ret_val["value"]);
+        if (!inferred.is_empty())
+          return inferred;
+      }
+
+      // Heuristic: return dict.get(key, default) -> infer from default literal.
+      if (
+        ret_val["_type"] == "Call" && ret_val.contains("func") &&
+        ret_val["func"].contains("_type") &&
+        ret_val["func"]["_type"] == "Attribute" &&
+        ret_val["func"].contains("attr") && ret_val["func"]["attr"] == "get" &&
+        ret_val.contains("args") && ret_val["args"].is_array() &&
+        ret_val["args"].size() >= 2)
+      {
+        const auto &default_arg = ret_val["args"][1];
+        if (
+          default_arg.contains("_type") && default_arg["_type"] == "Constant" &&
+          default_arg.contains("value"))
+        {
+          typet inferred = infer_constant_type(default_arg["value"]);
+          if (!inferred.is_empty())
+            return inferred;
+        }
+      }
     }
   }
 
@@ -7089,6 +7522,19 @@ void python_converter::get_function_definition(
     }
   }
 
+  // For unannotated functions, attempt AST-based return inference before body
+  // conversion so return expressions are typed in the right context.
+  if (type.return_type().is_empty())
+  {
+    typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    if (!inferred_type.is_empty())
+    {
+      type.return_type() = inferred_type;
+      current_element_type = inferred_type;
+      added_symbol->type = type;
+    }
+  }
+
   // Save function return type for use in get_return_statements
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
@@ -7107,6 +7553,34 @@ void python_converter::get_function_definition(
     {
       type.return_type() = inferred_type;
       added_symbol->type = type; // Update the symbol's type
+    }
+  }
+
+  // If return type is still empty, scan the converted GOTO body for RETURN
+  // instructions with typed values. This handles indirect calls through
+  // function-pointer parameters (e.g., "return op(1,1)" where op defaults
+  // to a typed function pointer).
+  if (type.return_type().is_empty())
+  {
+    for (const auto &instr : function_body.operands())
+    {
+      if (!instr.is_code())
+        continue;
+      const codet &code_instr = to_code(instr);
+      if (code_instr.get_statement() == "return")
+      {
+        const code_returnt &ret = to_code_return(code_instr);
+        if (ret.has_return_value())
+        {
+          const typet &ret_type = ret.return_value().type();
+          if (!ret_type.is_empty())
+          {
+            type.return_type() = ret_type;
+            added_symbol->type = type;
+            break;
+          }
+        }
+      }
     }
   }
 
@@ -7647,6 +8121,20 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::EXPR:
     {
+      // Skip yield expressions: the preprocessor inlines them into assignments.
+      // Reject yield from: the preprocessor does not expand it, so reaching
+      // here means the generator was not fully lowered and verification would
+      // silently produce wrong results.
+      if (element.contains("value") && element["value"].contains("_type"))
+      {
+        const auto &inner_type = element["value"]["_type"];
+        if (inner_type == "Yield")
+          break;
+        if (inner_type == "YieldFrom")
+          throw std::runtime_error(
+            "'yield from' is not supported in ESBMC's Python frontend");
+      }
+
       // Function calls are handled here
       exprt empty;
       exprt expr = get_expr(element["value"]);
@@ -7700,7 +8188,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exception_handler_->get_raise_statement(element, block);
       break;
     }
-    case StatementType::DELETE:
+    case StatementType::DELETE_STATEMENT:
     {
       get_delete_statement(element, block);
       break;
@@ -8446,6 +8934,91 @@ void python_converter::get_delete_statement(
 
       // Delegate to dict_handler which handles both constant and variable keys
       dict_handler_->handle_dict_delete(dict_expr, slice, target_block);
+    }
+    else if (target["_type"] == "Attribute")
+    {
+      // del obj.attr — Python semantics: remove the instance attribute so that
+      // subsequent reads fall back to the class-level attribute.
+      // We model this by resetting the struct member to the class default and
+      // removing the instance-attribute registration.
+      if (target["value"]["_type"] != "Name")
+      {
+        throw std::runtime_error(
+          "del on nested attribute chains is not supported");
+      }
+
+      const std::string var_name = target["value"]["id"].get<std::string>();
+      const std::string attr_name = target["attr"].get<std::string>();
+
+      // Find the instance symbol (with fallback to global scope).
+      symbol_id inst_sid = create_symbol_id();
+      inst_sid.set_object(var_name);
+      symbolt *inst_sym = find_symbol(inst_sid.to_string());
+      if (!inst_sym)
+      {
+        inst_sid.set_function("");
+        inst_sym = find_symbol(inst_sid.to_string());
+      }
+      if (!inst_sym)
+      {
+        throw std::runtime_error(
+          "del attribute: instance variable '" + var_name + "' not found");
+      }
+
+      // Determine the class struct type from the instance symbol type.
+      const typet &sym_type =
+        inst_sym->type.is_pointer() ? inst_sym->type.subtype() : inst_sym->type;
+      typet resolved = sym_type;
+      if (resolved.id() == "symbol")
+        resolved = ns.follow(resolved);
+      if (resolved.id() != "struct")
+      {
+        throw std::runtime_error(
+          "del attribute: '" + var_name + "' is not a struct instance");
+      }
+
+      const struct_typet &struct_type = to_struct_type(resolved);
+      const std::string class_tag = struct_type.tag().as_string();
+      const std::string class_name = extract_class_name_from_tag(class_tag);
+
+      // Look up the authoritative class-type symbol so we see any dynamically
+      // added components (e.g. added during a.x = 2 processing).
+      const std::string class_tag_id = "tag-" + class_tag;
+      const symbolt *class_type_sym = symbol_table_.find_symbol(class_tag_id);
+      const struct_typet &class_struct =
+        class_type_sym ? to_struct_type(class_type_sym->type) : struct_type;
+
+      // Find the class-level attribute symbol (the default value to restore).
+      symbol_id class_sid = create_symbol_id();
+      class_sid.set_function("");
+      class_sid.set_class(class_name);
+      class_sid.set_object(attr_name);
+      symbolt *class_attr_sym =
+        symbol_table_.find_symbol(class_sid.to_string());
+      if (!class_attr_sym)
+      {
+        throw std::runtime_error(
+          "del attribute: class '" + class_name +
+          "' has no class-level attribute '" + attr_name + "'");
+      }
+
+      // Emit: obj.attr = ClassName::attr  (restore class default)
+      if (class_struct.has_component(attr_name))
+      {
+        const typet &attr_type = class_struct.get_component(attr_name).type();
+        exprt lhs = create_member_expression(*inst_sym, attr_name, attr_type);
+        exprt rhs = symbol_expr(*class_attr_sym);
+        if (rhs.type() != lhs.type())
+          rhs = typecast_exprt(rhs, lhs.type());
+        code_assignt assign(lhs, rhs);
+        target_block.copy_to_operands(assign);
+      }
+
+      // Unregister the instance attribute so future reads fall back to the
+      // class-level symbol instead of the (now-reset) struct member.
+      auto map_it = instance_attr_map.find(inst_sym->id.as_string());
+      if (map_it != instance_attr_map.end())
+        map_it->second.erase(attr_name);
     }
     else if (target["_type"] == "Name")
     {

@@ -25,6 +25,35 @@ static size_t utf8_codepoint_count(const std::string &text)
   return count;
 }
 
+static typet normalize_pylist_candidate_type(typet type, const namespacet &ns)
+{
+  if (type.is_pointer())
+    type = type.subtype();
+  if (type.id() == "symbol")
+    type = ns.follow(type);
+  return type;
+}
+
+static std::optional<struct_typet>
+try_get_pylist_struct_type(const typet &type, const namespacet &ns)
+{
+  typet actual_type = normalize_pylist_candidate_type(type, ns);
+  if (!actual_type.is_struct())
+    return std::nullopt;
+
+  const struct_typet &struct_type = to_struct_type(actual_type);
+  const std::string tag = struct_type.tag().as_string();
+  if (tag.find("__ESBMC_PyListObj") == std::string::npos)
+    return std::nullopt;
+
+  return struct_type;
+}
+
+static bool is_pylist_object_type(const typet &type, const namespacet &ns)
+{
+  return try_get_pylist_struct_type(type, ns).has_value();
+}
+
 bool function_call_builder::is_nondet_str_call(const nlohmann::json &node) const
 {
   return node.contains("_type") && node["_type"] == "Call" &&
@@ -177,9 +206,16 @@ symbol_id function_call_builder::build_function_id() const
           {
             const struct_typet &struct_type = to_struct_type(base_type);
             std::string attr = node["attr"].get<std::string>();
-            return struct_type.has_component(attr)
-                     ? struct_type.get_component(attr).type()
-                     : typet();
+            if (struct_type.has_component(attr))
+              return struct_type.get_component(attr).type();
+            // Not an instance member — check for class-level symbol
+            // (e.g. mutable_attr = [] declared in the class body).
+            symbol_id cls_sid(python_file, struct_type.tag().as_string(), "");
+            cls_sid.set_object(attr);
+            symbolt *cls_sym = converter_.find_symbol(cls_sid.to_string());
+            if (cls_sym)
+              return cls_sym->type;
+            return typet();
           }
           return typet();
         }
@@ -191,21 +227,30 @@ symbol_id function_call_builder::build_function_id() const
 
       if (!obj_type.id().empty())
       {
-        // Normalize the resolved type
-        if (obj_type.is_pointer())
-          obj_type = obj_type.subtype();
-        if (obj_type.id() == "symbol")
-          obj_type = converter_.ns.follow(obj_type);
-
-        // Extract class name from struct type
-        if (obj_type.is_struct())
+        // If the resolved type is a list (e.g. class-level mutable_attr = []),
+        // map directly to the "list" builtin name.
+        if (is_pylist_object_type(obj_type, converter_.ns))
         {
-          std::string tag = to_struct_type(obj_type).tag().as_string();
-          obj_name = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+          obj_name = "list";
         }
         else
         {
-          obj_name = th.type_to_string(obj_type);
+          // Normalize the resolved type
+          if (obj_type.is_pointer())
+            obj_type = obj_type.subtype();
+          if (obj_type.id() == "symbol")
+            obj_type = converter_.ns.follow(obj_type);
+
+          // Extract class name from struct type
+          if (obj_type.is_struct())
+          {
+            std::string tag = to_struct_type(obj_type).tag().as_string();
+            obj_name = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+          }
+          else
+          {
+            obj_name = th.type_to_string(obj_type);
+          }
         }
       }
       else
@@ -232,13 +277,36 @@ symbol_id function_call_builder::build_function_id() const
     }
     else if (func_json["value"]["_type"] == "Call")
     {
-      obj_name = func_json["value"]["func"]["id"];
+      const auto &inner_call = func_json["value"];
+      if (
+        inner_call.contains("func") && inner_call["func"].contains("_type") &&
+        inner_call["func"]["_type"] == "Name" &&
+        inner_call["func"].contains("id") &&
+        inner_call["func"]["id"].is_string())
+      {
+        obj_name = inner_call["func"]["id"].get<std::string>();
+      }
+      else
+      {
+        // Nested calls (e.g., u.encode(...).decode(...)) do not always have
+        // func.id. Use inferred call result type instead of indexing JSON
+        // fields that may be null.
+        obj_name = th.get_operand_type(inner_call);
+      }
+
+      if (obj_name.empty())
+        obj_name = "str";
+
       if (obj_name == "nondet_str")
         obj_name = "str";
+
       if (obj_name == "super")
       {
+        // For __init__, use is_ctor=true: parent's __init__ is stored under
+        // the class name (e.g. Vehicle::Vehicle), not the literal "__init__".
+        bool is_init_call = (func_name == "__init__");
         symbolt *base_class_func = converter_.find_function_in_base_classes(
-          current_class_name, function_id.to_string(), func_name, false);
+          current_class_name, function_id.to_string(), func_name, is_init_call);
         if (base_class_func)
         {
           return symbol_id::from_string(base_class_func->id.as_string());
@@ -315,20 +383,7 @@ symbol_id function_call_builder::build_function_id() const
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
       auto symbol_points_to_list = [&](const symbolt *sym) -> bool {
-        if (!sym)
-          return false;
-
-        typet actual_type = sym->type;
-        if (actual_type.is_pointer())
-          actual_type = actual_type.subtype();
-        if (actual_type.id() == "symbol")
-          actual_type = converter_.ns.follow(actual_type);
-        if (!actual_type.is_struct())
-          return false;
-
-        const struct_typet &struct_type = to_struct_type(actual_type);
-        const std::string tag = struct_type.tag().as_string();
-        return tag.find("__ESBMC_PyListObj") != std::string::npos;
+        return sym && is_pylist_object_type(sym->type, converter_.ns);
       };
 
       const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
@@ -642,35 +697,25 @@ exprt function_call_builder::build() const
         to_symbol_expr(arg_expr).get_identifier().as_string());
       if (arg_symbol)
       {
-        typet actual_type = arg_symbol->type;
-        if (actual_type.is_pointer())
-          actual_type = actual_type.subtype();
-        if (actual_type.id() == "symbol")
-          actual_type = converter_.ns.follow(actual_type);
-
-        if (actual_type.is_struct())
+        auto list_struct =
+          try_get_pylist_struct_type(arg_symbol->type, converter_.ns);
+        if (list_struct)
         {
-          const struct_typet &struct_type = to_struct_type(actual_type);
-          std::string tag = struct_type.tag().as_string();
-          if (tag.find("__ESBMC_PyListObj") != std::string::npos)
-          {
-            code_typet list_size_type;
-            list_size_type.return_type() = size_type();
-            code_typet::argumentt arg_type;
-            arg_type.type() = pointer_typet(struct_type);
-            list_size_type.arguments().push_back(arg_type);
+          code_typet list_size_type;
+          list_size_type.return_type() = size_type();
+          code_typet::argumentt arg_type;
+          arg_type.type() = pointer_typet(*list_struct);
+          list_size_type.arguments().push_back(arg_type);
 
-            symbol_exprt list_size_func(
-              "c:@F@__ESBMC_list_size", list_size_type);
+          symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
 
-            side_effect_expr_function_callt call_expr(size_type());
-            call_expr.function() = list_size_func;
-            if (arg_expr.type().is_pointer())
-              call_expr.arguments().push_back(arg_expr);
-            else
-              call_expr.arguments().push_back(address_of_exprt(arg_expr));
-            return call_expr;
-          }
+          side_effect_expr_function_callt call_expr(size_type());
+          call_expr.function() = list_size_func;
+          if (arg_expr.type().is_pointer())
+            call_expr.arguments().push_back(arg_expr);
+          else
+            call_expr.arguments().push_back(address_of_exprt(arg_expr));
+          return call_expr;
         }
       }
     }
@@ -860,34 +905,25 @@ exprt function_call_builder::build() const
     exprt obj_expr = converter_.get_expr(arg);
 
     // Check actual type: could be dict or list (e.g., from d.keys())
-    typet actual_type = obj_expr.type();
-    if (actual_type.is_pointer())
-      actual_type = actual_type.subtype();
-    if (actual_type.id() == "symbol")
-      actual_type = converter_.ns.follow(actual_type);
-
     // If it's actually a list, call list_size directly
-    if (actual_type.is_struct())
+    auto list_struct =
+      try_get_pylist_struct_type(obj_expr.type(), converter_.ns);
+    if (list_struct)
     {
-      const struct_typet &struct_type = to_struct_type(actual_type);
-      std::string tag = struct_type.tag().as_string();
-      if (tag.find("__ESBMC_PyListObj") != std::string::npos)
-      {
-        // It's a list, not a dict: call list_size on it directly
-        code_typet list_size_type;
-        list_size_type.return_type() = size_type();
-        code_typet::argumentt arg_type;
-        arg_type.type() = pointer_typet(struct_type);
-        list_size_type.arguments().push_back(arg_type);
+      // It's a list, not a dict: call list_size on it directly
+      code_typet list_size_type;
+      list_size_type.return_type() = size_type();
+      code_typet::argumentt arg_type;
+      arg_type.type() = pointer_typet(*list_struct);
+      list_size_type.arguments().push_back(arg_type);
 
-        symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
+      symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
 
-        side_effect_expr_function_callt call_expr(size_type());
-        call_expr.function() = list_size_func;
-        call_expr.arguments().push_back(obj_expr);
+      side_effect_expr_function_callt call_expr(size_type());
+      call_expr.function() = list_size_func;
+      call_expr.arguments().push_back(obj_expr);
 
-        return call_expr;
-      }
+      return call_expr;
     }
 
     // It's genuinely a dict: get the keys member
@@ -955,6 +991,51 @@ exprt function_call_builder::build() const
   if (call_["func"]["_type"] == "Attribute")
   {
     std::string method_name = call_["func"]["attr"].get<std::string>();
+
+    if (method_name == "decode")
+    {
+      const auto &receiver = call_["func"]["value"];
+      const auto is_utf8_literal = [](const nlohmann::json &node) -> bool {
+        if (
+          node.contains("_type") && node["_type"] == "Constant" &&
+          node.contains("value") && node["value"].is_string())
+        {
+          const std::string encoding = node["value"].get<std::string>();
+          return boost::iequals(encoding, "utf-8") ||
+                 boost::iequals(encoding, "utf8");
+        }
+        return false;
+      };
+
+      const bool has_args = call_.contains("args") && call_["args"].is_array();
+      bool decode_utf8 = !has_args || call_["args"].empty();
+      if (has_args && call_["args"].size() == 1)
+        decode_utf8 = is_utf8_literal(call_["args"][0]);
+
+      if (
+        decode_utf8 && receiver.contains("_type") &&
+        receiver["_type"] == "Call" && receiver.contains("func") &&
+        receiver["func"].contains("_type") &&
+        receiver["func"]["_type"] == "Attribute" &&
+        receiver["func"].contains("attr") &&
+        receiver["func"]["attr"] == "encode")
+      {
+        bool encode_utf8 =
+          !receiver.contains("args") || receiver["args"].empty();
+        if (
+          receiver.contains("args") && receiver["args"].is_array() &&
+          receiver["args"].size() == 1)
+          encode_utf8 = is_utf8_literal(receiver["args"][0]);
+
+        if (
+          encode_utf8 && receiver["func"].contains("value") &&
+          !receiver["func"]["value"].is_null())
+        {
+          // For UTF-8 roundtrip decode(encode(x)), preserve original string.
+          return converter_.get_expr(receiver["func"]["value"]);
+        }
+      }
+    }
 
     if (method_name == "startswith")
     {

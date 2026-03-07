@@ -232,6 +232,14 @@ void python_exception_handler::get_except_handler_statement(
     codet::operandst &ops = catch_block.operands();
     ops.insert(ops.begin(), decl_code);
   }
+  else
+  {
+    // Bare 'except:' (no exception type) catches everything.
+    // Mark the catch block type as ellipsis so that adjust_catch
+    // produces the "ellipsis" exception_id, which symex_catch treats
+    // as a catch-all handler.
+    catch_block.type().set("ellipsis", true);
+  }
 
   block.move_to_operands(catch_block);
 }
