@@ -4501,8 +4501,8 @@ void python_converter::handle_assignment_type_adjustments(
   // function pointer type so the subsequent indirect call resolves correctly
   // instead of crashing in to_code_type.
   if (
-    lhs_symbol && !is_ctor_call &&
-    rhs.type().is_pointer() && rhs.type().subtype().is_code() &&
+    lhs_symbol && !is_ctor_call && rhs.type().is_pointer() &&
+    rhs.type().subtype().is_code() &&
     !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
   {
     lhs_symbol->type = rhs.type();

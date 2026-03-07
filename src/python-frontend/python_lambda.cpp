@@ -261,8 +261,8 @@ void python_lambda::process_lambda_parameters(
       param_type,
       location,
       module_name,
-      true,  // file_local
-      false  // not a parameter – keeps it out of symex frame locals
+      true, // file_local
+      false // not a parameter – keeps it out of symex frame locals
     );
     closure_symbol.static_lifetime = true;
     context_.add(closure_symbol);
@@ -406,8 +406,7 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
     // Inner lambdas then read the static variable and see the correct value.
     if (
       element.contains("args") && element["args"].contains("args") &&
-      element["args"]["args"].is_array() &&
-      !element["args"]["args"].empty())
+      element["args"]["args"].is_array() && !element["args"]["args"].empty())
     {
       code_blockt closure_body;
       for (const auto &arg : element["args"]["args"])
