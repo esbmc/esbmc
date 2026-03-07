@@ -56,6 +56,7 @@ extern "C"
 #include <util/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <goto-programs/contracts/contracts.h>
+#include <util/yaml_parser.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
@@ -2008,6 +2009,28 @@ bool esbmc_parseoptionst::process_goto_program(
       // It seems to fix some issues for now
       remove_no_op(goto_functions);
       goto_k_induction(goto_functions);
+    }
+
+    if (cmdline.isset("validate-correctness-witness"))
+    {
+      log_status("Enable correctness witness validation 2.0");
+      options.set_option("loop-invariant", true);
+      std::string path = cmdline.getval("witness");
+      boost::filesystem::path n(path);
+
+      if (n.extension() != ".yaml" && n.extension() != ".yml")
+      {
+        // Unexpected extension
+        log_error("Unsupported witness format, expected yaml or yml");
+        return true;
+      }
+
+      yaml_parser parser(path);
+      if (parser.load_file())
+        return true;
+
+      if (parser.inject_loop_invariants(goto_functions))
+        return true;
     }
 
     if (cmdline.isset("loop-invariant"))
