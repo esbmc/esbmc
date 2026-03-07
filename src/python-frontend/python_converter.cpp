@@ -6358,6 +6358,19 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   cond.location() = get_location_from_decl(ast_node["test"]);
 
+  // Python truthiness for complex in conditional contexts:
+  // bool(z) == (z.real != 0.0 or z.imag != 0.0).
+  if (is_complex_type(cond.type()))
+  {
+    exprt real = member_exprt(cond, "real", double_type());
+    exprt imag = member_exprt(cond, "imag", double_type());
+    exprt zero = from_double(0.0, double_type());
+    cond = or_exprt(
+      not_exprt(equality_exprt(real, zero)),
+      not_exprt(equality_exprt(imag, zero)));
+    cond.location() = get_location_from_decl(ast_node["test"]);
+  }
+
   // Recover type
   current_element_type = t;
 
