@@ -1798,7 +1798,8 @@ exprt function_call_expr::handle_complex() const
 
   // Two-argument form does not accept string / bytes / bytearray values.
   if (is_string_arg(*real_json))
-    return raise_type_error("complex() can't take second arg if first is a string");
+    return raise_type_error(
+      "complex() can't take second arg if first is a string");
   const std::string real_byteslike = byteslike_name(*real_json);
   if (!real_byteslike.empty() || is_bytes_annotated_name(*real_json))
     return raise_type_error(

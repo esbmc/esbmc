@@ -1729,8 +1729,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
           return raise_complex_type_error(
             "unsupported operand type(s) for " + op_symbol(op) + ": '" +
-            expr_python_type_name(lhs) + "' and '" + expr_python_type_name(rhs) +
-            "'");
+            expr_python_type_name(lhs) + "' and '" +
+            expr_python_type_name(rhs) + "'");
       }
 
       exprt lhs_complex = promote_to_complex(lhs);
@@ -2725,8 +2725,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (method_name == "conjugate")
     {
-      const auto &args = element.contains("args") ? element["args"]
-                                                  : nlohmann::json::array();
+      const auto &args =
+        element.contains("args") ? element["args"] : nlohmann::json::array();
       const auto &keywords = element.contains("keywords")
                                ? element["keywords"]
                                : nlohmann::json::array();
