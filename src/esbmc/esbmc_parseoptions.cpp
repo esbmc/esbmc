@@ -2016,6 +2016,28 @@ bool esbmc_parseoptionst::process_goto_program(
                           cmdline.isset("k-induction") ||
                           cmdline.isset("k-induction-parallel");
 
+    if (cmdline.isset("validate-correctness-witness"))
+    {
+      log_status("Enable correctness witness validation 2.0");
+      options.set_option("loop-invariant", true);
+      std::string path = cmdline.getval("witness");
+      boost::filesystem::path n(path);
+
+      if (n.extension() != ".yaml" && n.extension() != ".yml")
+      {
+        // Unexpected extension
+        log_error("Unsupported witness format, expected yaml or yml");
+        return true;
+      }
+
+      yaml_parser parser(path);
+      if (parser.load_file())
+        return true;
+
+      if (parser.inject_loop_invariants(goto_functions))
+        return true;
+    }
+
     if (cmdline.isset("loop-invariant"))
     {
       // Combined mode: Branch 1 (invariant inductivity check) +
@@ -2088,24 +2110,6 @@ bool esbmc_parseoptionst::process_goto_program(
       log_status("Adding Data Race Checks");
       options.set_option("data-races-check", true);
       add_race_assertions(context, goto_functions);
-    }
-
-    if (cmdline.isset("validate-correctness-witness"))
-    {
-      log_status("Enable correctness witness validation");
-      std::string path = cmdline.getval("witness");
-      boost::filesystem::path n(path);
-
-      if (n.extension() != ".yaml" && n.extension() != ".yml")
-      {
-        // Unexpected extension
-        log_error("Unsupported witness format");
-        return true;
-      }
-
-      yaml_parser parser(path);
-      if (parser.load_file())
-        return true;
     }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
