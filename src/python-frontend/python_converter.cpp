@@ -4182,6 +4182,31 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!class_attr_symbol)
         {
+          // Not found in the direct class — walk base classes (Python MRO).
+          const std::string derived_name =
+            extract_class_name_from_tag(obj_type_name);
+          auto class_node =
+            json_utils::find_class((*ast_json)["body"], derived_name);
+          if (!class_node.empty() && class_node.contains("bases"))
+          {
+            for (const auto &base_node : class_node["bases"])
+            {
+              if (!base_node.contains("id"))
+                continue;
+              symbol_id base_sid = create_symbol_id();
+              base_sid.set_function("");
+              base_sid.set_class(base_node["id"].get<std::string>());
+              base_sid.set_object(attr_name);
+              class_attr_symbol =
+                symbol_table_.find_symbol(base_sid.to_string());
+              if (class_attr_symbol)
+                break;
+            }
+          }
+        }
+
+        if (!class_attr_symbol)
+        {
           // No class-level symbol: attribute was set per-instance (e.g. in
           // __init__).  This happens when the object comes from a list element
           // or other expression that bypasses instance_has_attr registration.
