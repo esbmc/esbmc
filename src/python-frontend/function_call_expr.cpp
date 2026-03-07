@@ -2244,9 +2244,9 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
       const typet list_type = converter_.get_type_handler().get_list_type();
       if (sym && sym->type == list_type)
       {
-        if (func_value.contains("value") &&
-            func_value["value"].contains("id") &&
-            func_value.contains("attr"))
+        if (
+          func_value.contains("value") && func_value["value"].contains("id") &&
+          func_value.contains("attr"))
         {
           display_name = func_value["value"]["id"].get<std::string>() + "." +
                          func_value["attr"].get<std::string>();

@@ -8913,9 +8913,8 @@ void python_converter::get_delete_statement(
       }
 
       // Determine the class struct type from the instance symbol type.
-      const typet &sym_type = inst_sym->type.is_pointer()
-                                ? inst_sym->type.subtype()
-                                : inst_sym->type;
+      const typet &sym_type =
+        inst_sym->type.is_pointer() ? inst_sym->type.subtype() : inst_sym->type;
       typet resolved = sym_type;
       if (resolved.id() == "symbol")
         resolved = ns.follow(resolved);
@@ -8932,12 +8931,9 @@ void python_converter::get_delete_statement(
       // Look up the authoritative class-type symbol so we see any dynamically
       // added components (e.g. added during a.x = 2 processing).
       const std::string class_tag_id = "tag-" + class_tag;
-      const symbolt *class_type_sym =
-        symbol_table_.find_symbol(class_tag_id);
+      const symbolt *class_type_sym = symbol_table_.find_symbol(class_tag_id);
       const struct_typet &class_struct =
-        class_type_sym
-          ? to_struct_type(class_type_sym->type)
-          : struct_type;
+        class_type_sym ? to_struct_type(class_type_sym->type) : struct_type;
 
       // Find the class-level attribute symbol (the default value to restore).
       symbol_id class_sid = create_symbol_id();
@@ -8956,8 +8952,7 @@ void python_converter::get_delete_statement(
       // Emit: obj.attr = ClassName::attr  (restore class default)
       if (class_struct.has_component(attr_name))
       {
-        const typet &attr_type =
-          class_struct.get_component(attr_name).type();
+        const typet &attr_type = class_struct.get_component(attr_name).type();
         exprt lhs = create_member_expression(*inst_sym, attr_name, attr_type);
         exprt rhs = symbol_expr(*class_attr_sym);
         if (rhs.type() != lhs.type())
