@@ -1174,6 +1174,25 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
 
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 {
+  auto build_complex_abs = [&](const exprt &complex_expr) -> exprt {
+    exprt real = member_exprt(complex_expr, "real", double_type());
+    exprt imag = member_exprt(complex_expr, "imag", double_type());
+
+    exprt real_sq("ieee_mul", double_type());
+    real_sq.copy_to_operands(real, real);
+    exprt imag_sq("ieee_mul", double_type());
+    imag_sq.copy_to_operands(imag, imag);
+
+    exprt sum("ieee_add", double_type());
+    sum.copy_to_operands(real_sq, imag_sq);
+
+    exprt sqrt_expr("ieee_sqrt", double_type());
+    sqrt_expr.copy_to_operands(sum);
+    sqrt_expr.add("rounding_mode") =
+      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+    return sqrt_expr;
+  };
+
   // Handle the case where the input is a unary minus applied to a literal
   // (e.g., abs(-5) becomes abs(5)).
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
@@ -1225,6 +1244,9 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
       if (!dunder_result.is_nil())
         return dunder_result;
 
+      if (is_complex_type(inferred_type))
+        return build_complex_abs(inferred_expr);
+
       // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", inferred_type);
       abs_expr.copy_to_operands(inferred_expr);
@@ -1252,6 +1274,9 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
       if (!dunder_result.is_nil())
         return dunder_result;
 
+      if (is_complex_type(operand_type))
+        return build_complex_abs(operand_expr);
+
       // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", operand_type);
       abs_expr.copy_to_operands(operand_expr);
@@ -1277,10 +1302,16 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "bad operand type for abs(): '" + arg_type + "'");
 
-  // Fallback for unsupported symbolic expressions (e.g., complex)
-  // Currently returns a nil expression to signal unsupported cases
-  log_warning("Returning nil expression for abs() with type: {}", arg_type);
-  return nil_exprt();
+  exprt fallback_expr = converter_.get_expr(arg);
+  if (fallback_expr.is_nil() || fallback_expr.statement() == "cpp-throw")
+    return fallback_expr;
+
+  if (is_complex_type(fallback_expr.type()))
+    return build_complex_abs(fallback_expr);
+
+  exprt abs_expr("abs", fallback_expr.type());
+  abs_expr.copy_to_operands(fallback_expr);
+  return abs_expr;
 }
 
 exprt function_call_expr::handle_round(nlohmann::json &arg) const
@@ -2101,6 +2132,25 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle abs: Returns the absolute value of an integer or float literal
   else if (func_name == "abs")
     return handle_abs(arg);
+
+  else if (func_name == "bool")
+  {
+    exprt value_expr = converter_.get_expr(arg);
+    if (value_expr.is_nil())
+      return value_expr;
+    if (value_expr.statement() == "cpp-throw")
+      return value_expr;
+
+    if (is_complex_type(value_expr.type()))
+    {
+      exprt real = member_exprt(value_expr, "real", double_type());
+      exprt imag = member_exprt(value_expr, "imag", double_type());
+      exprt zero = from_double(0.0, double_type());
+      return or_exprt(
+        not_exprt(equality_exprt(real, zero)),
+        not_exprt(equality_exprt(imag, zero)));
+    }
+  }
 
   else if (func_name == "str")
     arg_size = handle_str(arg);
