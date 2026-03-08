@@ -35,6 +35,7 @@ add_library(pythonfrontend STATIC
             string_handler.cpp
             exception_utils.cpp
             char_utils.cpp
+            math_guard_utils.cpp
             parse_float.cpp
             tuple_handler.cpp
             convert_float_literal.cpp)
