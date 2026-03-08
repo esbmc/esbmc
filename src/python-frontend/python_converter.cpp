@@ -5530,18 +5530,6 @@ void python_converter::get_var_assign(
   {
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
-    if (container_expr.is_symbol())
-    {
-      const symbolt *sym =
-        symbol_table_.find_symbol(container_expr.identifier());
-      if (sym)
-        container_type = sym->type;
-    }
-    if (container_type.id() == "symbol")
-    {
-      namespacet ns(symbol_table_);
-      container_type = ns.follow(container_type);
-    }
     if (tuple_handler_->is_tuple_type(container_type))
     {
       exprt raise = get_exception_handler().gen_exception_raise(
