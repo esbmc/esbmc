@@ -360,10 +360,13 @@ void goto_convertt::remove_sideeffects(
             args.front() = rebuild_and_chain(conjuncts, 0);
           }
         }
-        // Fall through to remove_function_call without running Forall_operands,
-        // which would otherwise re-transform the already-cleaned argument.
-        remove_function_call(expr, dest, result_is_used);
-        return;
+        if (and_expr)
+        {
+          // Fall through to remove_function_call without running Forall_operands,
+          // which would otherwise re-transform the already-cleaned argument.
+          remove_function_call(expr, dest, result_is_used);
+          return;
+        }
       }
     }
   }
