@@ -71,6 +71,8 @@ ignored_dirs=(
   "input6"
   "github_3712"
   "github_3713"
+  "github_3713_1"
+  "github_3713_2"
   "insertion_fail"
   "insertion3_fail"
   "jpl"
