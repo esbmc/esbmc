@@ -3183,6 +3183,21 @@ function_call_expr::get_dispatch_table()
      },
      "min/max"},
 
+    // __iter__ on builtin iterables (range, list, tuple, str, set, etc.)
+    // Returns the object itself: we model iteration via index-based while
+    // loops, so the iterable is the iterator.
+    {[this]() {
+       if (call_["func"]["_type"] != "Attribute")
+         return false;
+       if (function_id_.get_function() != "__iter__")
+         return false;
+       std::string obj_type =
+         type_handler_.get_var_type(get_object_name());
+       return type_utils::is_builtin_type(obj_type);
+     },
+     [this]() { return converter_.get_expr(call_["func"]["value"]); },
+     "__iter__ on builtin iterables"},
+
     // List methods
     {[this]() { return is_list_method_call(); },
      [this]() { return handle_list_method(); },

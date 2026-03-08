@@ -101,7 +101,13 @@ static typet get_elem_type_from_annotation(
 
   // Case 3: Direct type annotation such as str, int
   if (annotation.contains("id") && annotation["id"].is_string())
-    return type_handler_.get_typet(annotation["id"].get<std::string>());
+  {
+    const std::string &type_id = annotation["id"].get<std::string>();
+    // range is a container of ints; its element type is int, not the container type
+    if (type_id == "range")
+      return long_int_type();
+    return type_handler_.get_typet(type_id);
+  }
 
   // Return empty type if annotation structure is not recognized
   return typet();
