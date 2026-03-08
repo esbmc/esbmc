@@ -3301,6 +3301,135 @@ function_call_expr::get_dispatch_table()
      },
      "isnan/isinf"},
 
+    // cmath.log / cmath.log10: lower directly to complex-safe IR to avoid
+    // backend typing mismatches from model-level dispatch.
+    {[this]() {
+       if (!(call_.contains("func") && call_["func"].contains("_type") &&
+             call_["func"]["_type"] == "Attribute"))
+         return false;
+       const std::string caller = get_object_name();
+       if (caller != "cmath")
+         return false;
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "log" || func_name == "log10";
+     },
+     [this]() -> exprt {
+       const std::string &func_name = function_id_.get_function();
+       const auto &args = call_["args"];
+       const auto &keywords = call_.contains("keywords")
+                                ? call_["keywords"]
+                                : nlohmann::json::array();
+
+       auto raise_type_error = [this](const std::string &msg) -> exprt {
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", msg);
+       };
+
+       auto as_complex_or_throw = [&](const nlohmann::json &node) -> exprt {
+         exprt value = converter_.get_expr(node);
+         if (is_cpp_throw_expr(value))
+           return value;
+         return promote_to_complex(value);
+       };
+
+       auto ieee_bin =
+         [](const irep_idt &id, const exprt &lhs, const exprt &rhs) -> exprt {
+         exprt out(id, double_type());
+         out.copy_to_operands(lhs, rhs);
+         return out;
+       };
+
+       auto complex_div = [&](const exprt &num, const exprt &den) -> exprt {
+         exprt a = member_exprt(num, "real", double_type());
+         exprt b = member_exprt(num, "imag", double_type());
+         exprt c = member_exprt(den, "real", double_type());
+         exprt d = member_exprt(den, "imag", double_type());
+
+         exprt ac = ieee_bin("ieee_mul", a, c);
+         exprt bd = ieee_bin("ieee_mul", b, d);
+         exprt bc = ieee_bin("ieee_mul", b, c);
+         exprt ad = ieee_bin("ieee_mul", a, d);
+         exprt cc = ieee_bin("ieee_mul", c, c);
+         exprt dd = ieee_bin("ieee_mul", d, d);
+
+         exprt denom = ieee_bin("ieee_add", cc, dd);
+         exprt real_num = ieee_bin("ieee_add", ac, bd);
+         exprt imag_num = ieee_bin("ieee_sub", bc, ad);
+         exprt real = ieee_bin("ieee_div", real_num, denom);
+         exprt imag = ieee_bin("ieee_div", imag_num, denom);
+         return make_complex(real, imag);
+       };
+
+       auto complex_log_or_throw = [&](const exprt &z) -> exprt {
+         exprt real = member_exprt(z, "real", double_type());
+         exprt imag = member_exprt(z, "imag", double_type());
+
+         exprt rr = ieee_bin("ieee_mul", real, real);
+         exprt ii = ieee_bin("ieee_mul", imag, imag);
+         exprt sum = ieee_bin("ieee_add", rr, ii);
+         exprt mag = converter_.get_math_handler().handle_sqrt(sum, call_);
+         if (is_cpp_throw_expr(mag))
+           return mag;
+
+         exprt ln_mag = converter_.get_math_handler().handle_log(mag, call_);
+         if (is_cpp_throw_expr(ln_mag))
+           return ln_mag;
+
+         exprt angle =
+           converter_.get_math_handler().handle_atan2(imag, real, call_);
+         if (is_cpp_throw_expr(angle))
+           return angle;
+
+         return make_complex(ln_mag, angle);
+       };
+
+       if (func_name == "log10")
+       {
+         if (!keywords.empty())
+           return raise_type_error("cmath.log10() takes no keyword arguments");
+         if (args.size() != 1)
+           return raise_type_error("log10() takes exactly 1 argument");
+         exprt z = as_complex_or_throw(args[0]);
+         if (is_cpp_throw_expr(z))
+           return z;
+         exprt ln_z = complex_log_or_throw(z);
+         if (is_cpp_throw_expr(ln_z))
+           return ln_z;
+         exprt ln10 = make_complex(
+           from_double(2.302585092994046, double_type()),
+           from_double(0.0, double_type()));
+         return complex_div(ln_z, ln10);
+       }
+
+       if (args.empty() || args.size() > 2)
+         return raise_type_error(
+           "log() takes from 1 to 2 positional arguments");
+       if (!keywords.empty())
+         return raise_type_error("cmath.log() takes no keyword arguments");
+
+       const nlohmann::json *base_json = nullptr;
+       if (args.size() == 2)
+         base_json = &args[1];
+
+       exprt z = as_complex_or_throw(args[0]);
+       if (is_cpp_throw_expr(z))
+         return z;
+       exprt ln_z = complex_log_or_throw(z);
+       if (is_cpp_throw_expr(ln_z))
+         return ln_z;
+       if (base_json == nullptr)
+         return ln_z;
+
+       exprt base = as_complex_or_throw(*base_json);
+       if (is_cpp_throw_expr(base))
+         return base;
+       exprt ln_base = complex_log_or_throw(base);
+       if (is_cpp_throw_expr(ln_base))
+         return ln_base;
+       return complex_div(ln_z, ln_base);
+     },
+     "cmath log/log10"},
+
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
     {[this]() {
        const std::string &func_name = function_id_.get_function();
