@@ -6,7 +6,7 @@
 
 namespace
 {
-constexpr std::size_t MAX_COMPLEX_SCAN_DEPTH = 256;
+constexpr std::size_t MAX_COMPLEX_SCAN_DEPTH = 16;
 
 bool is_complex_annotation(const nlohmann::json &node)
 {
@@ -22,7 +22,7 @@ bool json_arg_contains_or_is_complex_impl(
   std::size_t depth)
 {
   if (depth > MAX_COMPLEX_SCAN_DEPTH)
-    return false;
+    return true;
 
   if (is_complex_annotation(arg_json))
     return true;
@@ -102,7 +102,7 @@ bool json_arg_contains_or_is_complex_impl(
               stmt["value"],
               converter,
               type_handler,
-              current_function,
+              called_name,
               depth + 1))
           {
             return true;
