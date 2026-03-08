@@ -3636,6 +3636,18 @@ symbolt *python_converter::find_dunder_method(
   return find_symbol(sid.to_string());
 }
 
+bool python_converter::has_dunder_method(
+  const nlohmann::json &value_node,
+  const std::string &dunder_name)
+{
+  const std::string class_name =
+    type_handler_.get_var_classname(value_node);
+  if (class_name.empty())
+    return false;
+
+  return find_dunder_method(class_name, dunder_name) != nullptr;
+}
+
 exprt python_converter::dispatch_dunder_operator(
   const std::string &op,
   exprt &lhs,
@@ -4412,16 +4424,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     exprt array = get_expr(element["value"]);
     const nlohmann::json &slice = element["slice"];
+    typet array_type = ns.follow(array.type());
 
     // Handle tuple subscripting - tuples are structs, not arrays
-    if (tuple_handler_->is_tuple_type(array.type()))
+    if (tuple_handler_->is_tuple_type(array_type))
     {
       expr = tuple_handler_->handle_tuple_subscript(array, slice, element);
       break;
     }
 
     // Handle dictionary subscript with type inference from annotations
-    if (array.type().is_struct() && dict_handler_->is_dict_type(array.type()))
+    if (array_type.is_struct() && dict_handler_->is_dict_type(array_type))
     {
       // Try to resolve the expected return type from the dict's type annotation
       typet expected_type =
@@ -4430,6 +4443,32 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Pass the expected type to the dict handler
       // If empty, the handler will use its default heuristics
       expr = dict_handler_->handle_dict_subscript(array, slice, expected_type);
+      break;
+    }
+
+    // Handle object subscripting through __getitem__:
+    //   obj[key] -> obj.__getitem__(key)
+    if (has_dunder_method(element["value"], "__getitem__"))
+    {
+      nlohmann::json call_node;
+      call_node["_type"] = "Call";
+      call_node["func"] = {
+        {"_type", "Attribute"},
+        {"value", element["value"]},
+        {"attr", "__getitem__"}};
+      call_node["args"] = nlohmann::json::array();
+      call_node["args"].push_back(slice);
+      call_node["keywords"] = nlohmann::json::array();
+      if (element.contains("lineno"))
+        call_node["lineno"] = element["lineno"];
+      if (element.contains("col_offset"))
+        call_node["col_offset"] = element["col_offset"];
+      if (element.contains("end_lineno"))
+        call_node["end_lineno"] = element["end_lineno"];
+      if (element.contains("end_col_offset"))
+        call_node["end_col_offset"] = element["end_col_offset"];
+
+      expr = get_function_call(call_node);
       break;
     }
 
@@ -5541,6 +5580,40 @@ void python_converter::get_var_assign(
     }
   }
 
+  // Handle object subscript assignment via __setitem__:
+  //   obj[key] = value  ->  obj.__setitem__(key, value)
+  if (
+    target.contains("_type") && target["_type"] == "Subscript" &&
+    target.contains("value") && target.contains("slice") &&
+    ast_node.contains("value") && !ast_node["value"].is_null())
+  {
+    if (has_dunder_method(target["value"], "__setitem__"))
+    {
+      nlohmann::json call_node;
+      call_node["_type"] = "Call";
+      call_node["func"] = {
+        {"_type", "Attribute"},
+        {"value", target["value"]},
+        {"attr", "__setitem__"}};
+      call_node["args"] = nlohmann::json::array();
+      call_node["args"].push_back(target["slice"]);
+      call_node["args"].push_back(ast_node["value"]);
+      call_node["keywords"] = nlohmann::json::array();
+      if (ast_node.contains("lineno"))
+        call_node["lineno"] = ast_node["lineno"];
+      if (ast_node.contains("col_offset"))
+        call_node["col_offset"] = ast_node["col_offset"];
+      if (ast_node.contains("end_lineno"))
+        call_node["end_lineno"] = ast_node["end_lineno"];
+      if (ast_node.contains("end_col_offset"))
+        call_node["end_col_offset"] = ast_node["end_col_offset"];
+
+      exprt setitem_call = get_function_call(call_node);
+      target_block.copy_to_operands(convert_expression_to_code(setitem_call));
+      return;
+    }
+  }
+
   if (ast_node["_type"] == "AnnAssign")
   {
     // Extract name and set in symbol ID
@@ -6451,7 +6524,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // bool(z) == (z.real != 0.0 or z.imag != 0.0).
   if (is_complex_type(cond.type()))
   {
-    cond = complex_to_bool_expr(cond);
+    exprt real = member_exprt(cond, "real", double_type());
+    exprt imag = member_exprt(cond, "imag", double_type());
+    exprt zero = from_double(0.0, double_type());
+    cond = or_exprt(
+      not_exprt(equality_exprt(real, zero)),
+      not_exprt(equality_exprt(imag, zero)));
     cond.location() = get_location_from_decl(ast_node["test"]);
   }
 

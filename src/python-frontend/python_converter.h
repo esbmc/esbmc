@@ -825,6 +825,9 @@ private:
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
+  bool has_dunder_method(
+    const nlohmann::json &value_node,
+    const std::string &dunder_name);
   exprt dispatch_dunder_operator(
     const std::string &op,
     exprt &lhs,
