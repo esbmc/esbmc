@@ -5525,6 +5525,34 @@ void python_converter::get_var_assign(
         *this, ast_node, target, target_block))
     return;
 
+  // Tuple subscript assignment: tuples are immutable, raise TypeError
+  if (target["_type"] == "Subscript")
+  {
+    exprt container_expr = get_expr(target["value"]);
+    typet container_type = container_expr.type();
+    if (container_expr.is_symbol())
+    {
+      const symbolt *sym =
+        symbol_table_.find_symbol(container_expr.identifier());
+      if (sym)
+        container_type = sym->type;
+    }
+    if (container_type.id() == "symbol")
+    {
+      namespacet ns(symbol_table_);
+      container_type = ns.follow(container_type);
+    }
+    if (tuple_handler_->is_tuple_type(container_type))
+    {
+      exprt raise = get_exception_handler().gen_exception_raise(
+        "TypeError", "'tuple' object does not support item assignment");
+      codet throw_code("expression");
+      throw_code.operands().push_back(raise);
+      target_block.copy_to_operands(throw_code);
+      return;
+    }
+  }
+
   if (ast_node["_type"] == "AnnAssign")
   {
     // Extract name and set in symbol ID
