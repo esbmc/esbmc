@@ -154,6 +154,20 @@ assert raised_value
 # second arg string -> TypeError
 raised_type = False
 try:
+    complex("1", 2)
+except TypeError:
+    raised_type = True
+assert raised_type
+
+raised_type = False
+try:
+    complex(b"1", 2)
+except TypeError:
+    raised_type = True
+assert raised_type
+
+raised_type = False
+try:
     complex(1, "2")
 except TypeError:
     raised_type = True
@@ -261,6 +275,19 @@ class BadIndex:
 raised_type = False
 try:
     complex(BadIndex())
+except TypeError:
+    raised_type = True
+assert raised_type
+
+
+class RaiseFloat:
+    def __float__(self) -> float:
+        raise TypeError("boom")
+
+
+raised_type = False
+try:
+    complex(RaiseFloat(), 1)
 except TypeError:
     raised_type = True
 assert raised_type
