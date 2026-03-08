@@ -1,6 +1,7 @@
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/math_guard_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
@@ -3200,6 +3201,10 @@ function_call_expr::get_dispatch_table()
      [this]() {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
+       auto raise_math_real_type_error = [this]() -> exprt {
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", "must be real number, not complex");
+       };
 
        if (func_name == "__ESBMC_isnan")
        {
@@ -3207,6 +3212,10 @@ function_call_expr::get_dispatch_table()
            throw std::runtime_error("isnan() expects exactly 1 argument");
 
          exprt arg_expr = converter_.get_expr(args[0]);
+         if (arg_expr.statement() == "cpp-throw")
+           return arg_expr;
+         if (is_complex_type(arg_expr.type()))
+           return raise_math_real_type_error();
          exprt isnan_expr("isnan", bool_typet());
          isnan_expr.copy_to_operands(arg_expr);
          return isnan_expr;
@@ -3217,6 +3226,10 @@ function_call_expr::get_dispatch_table()
            throw std::runtime_error("isinf() expects exactly 1 argument");
 
          exprt arg_expr = converter_.get_expr(args[0]);
+         if (arg_expr.statement() == "cpp-throw")
+           return arg_expr;
+         if (is_complex_type(arg_expr.type()))
+           return raise_math_real_type_error();
          exprt isinf_expr("isinf", bool_typet());
          isinf_expr.copy_to_operands(arg_expr);
          return isinf_expr;
@@ -3234,49 +3247,35 @@ function_call_expr::get_dispatch_table()
          is_math_module = (caller == "math");
        }
 
-       bool is_math_wrapper =
-         (func_name == "__ESBMC_sin" || func_name == "__ESBMC_cos" ||
-          func_name == "__ESBMC_sqrt" || func_name == "__ESBMC_exp" ||
-          func_name == "__ESBMC_log" || func_name == "__ESBMC_acos" ||
-          func_name == "__ESBMC_atan" || func_name == "__ESBMC_atan2" ||
-          func_name == "__ESBMC_log2" || func_name == "__ESBMC_pow" ||
-          func_name == "__ESBMC_fabs" || func_name == "__ESBMC_trunc" ||
-          func_name == "__ESBMC_fmod" || func_name == "__ESBMC_copysign" ||
-          func_name == "__ESBMC_tan" || func_name == "__ESBMC_asin" ||
-          func_name == "__ESBMC_sinh" || func_name == "__ESBMC_cosh" ||
-          func_name == "__ESBMC_tanh" || func_name == "__ESBMC_log10" ||
-          func_name == "__ESBMC_expm1" || func_name == "__ESBMC_log1p" ||
-          func_name == "__ESBMC_exp2" || func_name == "__ESBMC_asinh" ||
-          func_name == "__ESBMC_acosh" || func_name == "__ESBMC_atanh" ||
-          func_name == "__ESBMC_hypot");
+       const bool is_math_wrapper =
+         math_guard_utils::math_wrapper_function_names().count(func_name) != 0;
 
-       return (is_math_module &&
-               (func_name == "sin" || func_name == "cos" ||
-                func_name == "sqrt" || func_name == "exp" ||
-                func_name == "log" || func_name == "acos" ||
-                func_name == "atan" || func_name == "atan2" ||
-                func_name == "log2" || func_name == "pow" ||
-                func_name == "fabs" || func_name == "trunc" ||
-                func_name == "fmod" || func_name == "copysign" ||
-                func_name == "tan" || func_name == "asin" ||
-                func_name == "sinh" || func_name == "cosh" ||
-                func_name == "tanh" || func_name == "log10" ||
-                func_name == "expm1" || func_name == "log1p" ||
-                func_name == "exp2" || func_name == "asinh" ||
-                func_name == "acosh" || func_name == "atanh" ||
-                func_name == "hypot" || func_name == "cbrt" ||
-                func_name == "erf" || func_name == "erfc" ||
-                func_name == "frexp" || func_name == "fsum" ||
-                func_name == "gamma" || func_name == "ldexp" ||
-                func_name == "lgamma" || func_name == "nextafter" ||
-                func_name == "remainder" || func_name == "sumprod" ||
-                func_name == "ulp" || func_name == "dist")) ||
-              is_math_wrapper;
+       return
+         (is_math_module &&
+          math_guard_utils::math_module_function_names().count(func_name) != 0) ||
+         is_math_wrapper;
      },
      [this]() -> exprt {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
-
+       auto raise_math_real_type_error = [this]() -> exprt {
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", "must be real number, not complex");
+       };
+       auto raise_math_int_type_error = [this]() -> exprt {
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", "'complex' object cannot be interpreted as an integer");
+       };
+       auto has_complex_arg = [](const exprt &arg_expr) -> bool {
+         return is_complex_type(arg_expr.type());
+       };
+       const auto call_has_complex = [&]() -> bool {
+         return math_guard_utils::call_has_complex_in_args_or_keywords(
+           call_,
+           converter_,
+           type_handler_,
+           converter_.current_function_name());
+       };
        auto require_one_arg = [&]() -> exprt {
          if (args.size() != 1)
            throw std::runtime_error(
@@ -3294,21 +3293,29 @@ function_call_expr::get_dispatch_table()
        if (func_name == "sin" || func_name == "__ESBMC_sin")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_sin(arg_expr, call_);
        }
        else if (func_name == "cos" || func_name == "__ESBMC_cos")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_cos(arg_expr, call_);
        }
        else if (func_name == "exp" || func_name == "__ESBMC_exp")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_exp(arg_expr, call_);
        }
        else if (func_name == "sqrt" || func_name == "__ESBMC_sqrt")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          // Domain check for sqrt: operand must be >= 0
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3352,6 +3359,8 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "log" || func_name == "__ESBMC_log")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          // Domain check for log: operand must be > 0
          exprt fp_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3380,6 +3389,8 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "acos" || func_name == "__ESBMC_acos")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          // Domain check for acos: operand must be in [-1.0, 1.0]
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3425,116 +3436,196 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "atan" || func_name == "__ESBMC_atan")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_atan(arg_expr, call_);
        }
        else if (func_name == "log2" || func_name == "__ESBMC_log2")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_log2(arg_expr, call_);
        }
        else if (func_name == "tan" || func_name == "__ESBMC_tan")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_tan(arg_expr, call_);
        }
        else if (func_name == "asin" || func_name == "__ESBMC_asin")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_asin(arg_expr, call_);
        }
        else if (func_name == "sinh" || func_name == "__ESBMC_sinh")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_sinh(arg_expr, call_);
        }
        else if (func_name == "cosh" || func_name == "__ESBMC_cosh")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_cosh(arg_expr, call_);
        }
        else if (func_name == "tanh" || func_name == "__ESBMC_tanh")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_tanh(arg_expr, call_);
        }
        else if (func_name == "log10" || func_name == "__ESBMC_log10")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_log10(arg_expr, call_);
        }
        else if (func_name == "expm1" || func_name == "__ESBMC_expm1")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_expm1(arg_expr, call_);
        }
        else if (func_name == "log1p" || func_name == "__ESBMC_log1p")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_log1p(arg_expr, call_);
        }
        else if (func_name == "exp2" || func_name == "__ESBMC_exp2")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_exp2(arg_expr, call_);
        }
        else if (func_name == "asinh" || func_name == "__ESBMC_asinh")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_asinh(arg_expr, call_);
        }
        else if (func_name == "acosh" || func_name == "__ESBMC_acosh")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_acosh(arg_expr, call_);
        }
        else if (func_name == "atanh" || func_name == "__ESBMC_atanh")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_atanh(arg_expr, call_);
        }
        else if (func_name == "fabs" || func_name == "__ESBMC_fabs")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_fabs(arg_expr, call_);
        }
        else if (func_name == "trunc" || func_name == "__ESBMC_trunc")
        {
          exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_trunc(arg_expr, call_);
        }
        else if (func_name == "atan2" || func_name == "__ESBMC_atan2")
        {
          auto [y_expr, x_expr] = require_two_args();
+         if (has_complex_arg(y_expr) || has_complex_arg(x_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_atan2(
            y_expr, x_expr, call_);
        }
        else if (func_name == "pow" || func_name == "__ESBMC_pow")
        {
          auto [base_expr, exp_expr] = require_two_args();
+         if (has_complex_arg(base_expr) || has_complex_arg(exp_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_pow(
            base_expr, exp_expr, call_);
        }
        else if (func_name == "fmod" || func_name == "__ESBMC_fmod")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
+         if (has_complex_arg(lhs_expr) || has_complex_arg(rhs_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_fmod(
            lhs_expr, rhs_expr, call_);
        }
        else if (func_name == "copysign" || func_name == "__ESBMC_copysign")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
+         if (has_complex_arg(lhs_expr) || has_complex_arg(rhs_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_copysign(
            lhs_expr, rhs_expr, call_);
        }
        else if (func_name == "hypot" || func_name == "__ESBMC_hypot")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
+         if (has_complex_arg(lhs_expr) || has_complex_arg(rhs_expr))
+           return raise_math_real_type_error();
          return converter_.get_math_handler().handle_hypot(
            lhs_expr, rhs_expr, call_);
        }
+       else if (
+         math_guard_utils::math_guard_real_general_functions().count(func_name) != 0)
+       {
+         exprt arg_expr = require_one_arg();
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
+         return handle_general_function_call();
+       }
+       else if (
+         math_guard_utils::math_guard_int_general_functions().count(func_name) != 0)
+       {
+         exprt throw_expr;
+         if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+               call_, converter_, throw_expr))
+           return throw_expr;
+         if (call_has_complex())
+           return raise_math_int_type_error();
+         return handle_general_function_call();
+       }
+       else if (
+         math_guard_utils::math_guard_real_general_twoarg_functions().count(func_name) != 0)
+       {
+         exprt throw_expr;
+         if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+               call_, converter_, throw_expr))
+           return throw_expr;
+         if (call_has_complex())
+           return raise_math_real_type_error();
+         return handle_general_function_call();
+       }
        else if (func_name == "dist")
        {
+         exprt throw_expr;
+         if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+               call_, converter_, throw_expr))
+           return throw_expr;
+         if (call_has_complex())
+           return raise_math_real_type_error();
          auto [lhs_expr, rhs_expr] = require_two_args();
+         if (has_complex_arg(lhs_expr) || has_complex_arg(rhs_expr))
+           return raise_math_real_type_error();
          // Native handler for tuple arguments; lists use the model
          if (lhs_expr.type().is_struct() && rhs_expr.type().is_struct())
          {
@@ -3559,12 +3650,17 @@ function_call_expr::get_dispatch_table()
          }
          return handle_general_function_call();
        }
-       else if (
-         func_name == "cbrt" || func_name == "erf" || func_name == "erfc" ||
-         func_name == "frexp" || func_name == "fsum" || func_name == "gamma" ||
-         func_name == "ldexp" || func_name == "lgamma" ||
-         func_name == "nextafter" || func_name == "remainder" ||
-         func_name == "sumprod" || func_name == "ulp")
+       else if (func_name == "fsum")
+       {
+         exprt throw_expr;
+         if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+               call_, converter_, throw_expr))
+           return throw_expr;
+         if (call_has_complex())
+           return raise_math_real_type_error();
+         return handle_general_function_call();
+       }
+       else if (func_name == "sumprod" || func_name == "prod")
        {
          return handle_general_function_call();
        }
