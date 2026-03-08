@@ -2369,24 +2369,6 @@ private:
                               ? call["func"]["attr"].template get<std::string>()
                               : "";
 
-    // __iter__ on a builtin iterable returns the same type as the object.
-    // This ensures `it = r.__iter__()` gets the same type as `r` so that
-    // subsequent for-loop variable type inference works correctly.
-    if (attr_name == "__iter__")
-    {
-      Json obj_node =
-        json_utils::find_var_decl(obj, get_current_func_name(), ast_);
-      if (
-        !obj_node.empty() && obj_node.contains("annotation") &&
-        !obj_node["annotation"].is_null() &&
-        obj_node["annotation"].contains("id"))
-      {
-        std::string obj_type =
-          obj_node["annotation"]["id"].template get<std::string>();
-        if (type_utils::is_builtin_type(obj_type))
-          return obj_type;
-      }
-    }
 
     // Handle dict.keys() and dict.values()
     if (attr_name == "keys" || attr_name == "values")
@@ -3047,18 +3029,11 @@ private:
         }
         else if (iter_annotation["_type"] == "Name")
         {
+          // For str iteration, element type is also str
           std::string type_name =
             iter_annotation["id"].template get<std::string>();
           if (type_name == "str")
             stmt["annotation"] = iter_annotation;
-          else if (type_name == "range")
-            // range always yields int elements
-            stmt["annotation"] = create_name_annotation(
-              "int",
-              iter_annotation["lineno"],
-              iter_annotation["col_offset"],
-              iter_annotation["end_lineno"],
-              iter_annotation["end_col_offset"]);
         }
       }
     }

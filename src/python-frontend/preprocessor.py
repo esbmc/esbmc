@@ -905,8 +905,6 @@ class Preprocessor(ast.NodeTransformer):
 
         if container_type == 'str':
             return 'str'
-        elif container_type == 'range':
-            return 'int'
         elif isinstance(iterable_node, ast.List) and iterable_node.elts:
             # Infer from first element if available
             first_elem = iterable_node.elts[0]
@@ -2581,16 +2579,6 @@ class Preprocessor(ast.NodeTransformer):
                         dict_expr = self._get_dict_expr_from_items_call(node.value)
                         if dict_expr is not None:
                             self.dict_items_vars[target.id] = dict_expr
-                    # Propagate type for X = Y.__iter__(): X gets same type as Y
-                    if (isinstance(node.value, ast.Call) and
-                            isinstance(node.value.func, ast.Attribute) and
-                            node.value.func.attr == '__iter__' and
-                            isinstance(node.value.func.value, ast.Name)):
-                        src = node.value.func.value.id
-                        if src in self.known_variable_types:
-                            self.known_variable_types[target.id] = self.known_variable_types[src]
-                        if src in self.variable_annotations:
-                            self.variable_annotations[target.id] = self.variable_annotations[src]
                 return node
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
