@@ -418,10 +418,8 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "tuple")
     return empty_typet();
 
-  // list — handle list type annotations
-  // For generic "list" without element types, return the list type
-  // so the actual element type is inferred from context
-  if (ast_type == "list")
+  // list/range — range objects are stored as lists in ESBMC's model
+  if (ast_type == "list" || ast_type == "range")
     return get_list_type();
 
   // dict — handle dict type annotations
