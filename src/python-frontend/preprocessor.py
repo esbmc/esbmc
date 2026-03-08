@@ -33,6 +33,7 @@ class Preprocessor(ast.NodeTransformer):
         self.dict_items_vars = {}  # {var_name: dict_expr} for X = d.items() assignments
         self.het_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous key types
         self.het_value_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous value types
+        self.bound_method_vars = {}  # {var_name: ast.Attribute} for g = obj.method assignments
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -2548,6 +2549,15 @@ class Preprocessor(ast.NodeTransformer):
                 return self._handle_tuple_unpacking(target, node.value, node)
             else:
                 # Simple assignment - track the type
+                # Detect bound method assignment: g = obj.method
+                if (isinstance(target, ast.Name) and
+                        isinstance(node.value, ast.Attribute) and
+                        isinstance(node.value.value, ast.Name)):
+                    self.bound_method_vars[target.id] = node.value
+                    return None  # Remove; call sites are rewritten in visit_Call
+                # Clear stale bound method tracking on variable reassignment
+                if isinstance(target, ast.Name) and target.id in self.bound_method_vars:
+                    del self.bound_method_vars[target.id]
                 self._update_variable_types_simple(target, node.value)
                 # Also store annotation node if we can infer it
                 if isinstance(target, ast.Name):
@@ -2667,6 +2677,12 @@ class Preprocessor(ast.NodeTransformer):
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
+        # Rewrite g(args) → obj.method(args) for bound method variables
+        if isinstance(node.func, ast.Name) and node.func.id in self.bound_method_vars:
+            node.func = self.bound_method_vars[node.func.id]
+            self.generic_visit(node)
+            return node
+
         # Rewrite Decimal(...) constructor calls to internal 4-arg form
         is_decimal_call = False
         decimal_names = {"Decimal"}
