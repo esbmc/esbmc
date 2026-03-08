@@ -5710,12 +5710,22 @@ void python_converter::get_var_assign(
     // Propagate $input_str$ → $input_len$ companion mapping so that len()
     // on any alias of an input() string can use the symbolic length directly.
     // Must run before type-branching which may take early returns.
-    if (lhs.is_symbol() && rhs.is_symbol())
+    if (lhs.is_symbol())
     {
-      const std::string rhs_id = rhs.identifier().as_string();
-      auto it = input_str_to_len_sym_.find(rhs_id);
-      if (it != input_str_to_len_sym_.end())
-        input_str_to_len_sym_[lhs.identifier().as_string()] = it->second;
+      if (rhs.is_symbol())
+      {
+        const std::string rhs_id = rhs.identifier().as_string();
+        auto it = input_str_to_len_sym_.find(rhs_id);
+        if (it != input_str_to_len_sym_.end())
+          input_str_to_len_sym_[lhs.identifier().as_string()] = it->second;
+        else
+          input_str_to_len_sym_.erase(lhs.identifier().as_string());
+      }
+      else
+      {
+        // RHS is not a symbol with a mapped input length: clear any stale mapping
+        input_str_to_len_sym_.erase(lhs.identifier().as_string());
+      }
     }
 
     // Function call handling
