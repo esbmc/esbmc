@@ -399,7 +399,7 @@ private:
     const exprt &rhs);
 
   void get_attributes_from_self(
-    const nlohmann::json &method_body,
+    const nlohmann::json &func_node,
     struct_typet &clazz);
 
   exprt get_return_from_func(const char *func_symbol_id);

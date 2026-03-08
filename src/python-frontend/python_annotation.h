@@ -152,6 +152,13 @@ public:
                        ++i)
                   {
                     Json &param = params[i];
+                    // Only annotate if the parameter is not yet annotated;
+                    // do not overwrite explicit annotations (e.g., Optional["List"])
+                    // with a less-specific type inferred from a call site (e.g., NoneType).
+                    if (
+                      param.contains("annotation") &&
+                      !param["annotation"].is_null())
+                      continue;
                     const Json &arg = call_args[i - 1];
                     std::string arg_type = get_argument_type(arg);
                     if (!arg_type.empty())
