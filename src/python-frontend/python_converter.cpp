@@ -3943,6 +3943,40 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
         }
 
+        // Unwrap Optional[T] before attribute access.
+        // e.g., y.tail.head where tail: Optional[List] → unwrap .value to get List
+        if (base_type.is_struct())
+        {
+          const struct_typet &opt_st = to_struct_type(base_type);
+          const std::string &tag = opt_st.tag().as_string();
+          if (
+            tag.rfind("tag-Optional_", 0) == 0 &&
+            opt_st.has_component("value") &&
+            !opt_st.has_component(attr_name))
+          {
+            const typet &inner_raw = opt_st.get_component("value").type();
+            base_expr = member_exprt(base_expr, "value", inner_raw);
+            base_type = inner_raw;
+            if (base_type.is_pointer())
+              base_type = base_type.subtype();
+            if (base_type.id() == "symbol")
+              base_type = ns.follow(base_type);
+          }
+        }
+
+        // Unwrap pointer-to-struct for attribute access.
+        // e.g., tail: Optional["List"] is stored as a pointer to tag-List;
+        // update base_type so the struct component lookup below succeeds.
+        // The actual dereference node is inserted by the handler below.
+        if (base_type.is_pointer())
+        {
+          typet pointed_to = base_type.subtype();
+          if (pointed_to.id() == "symbol")
+            pointed_to = ns.follow(pointed_to);
+          if (pointed_to.is_struct())
+            base_type = pointed_to;
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -4270,8 +4304,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             expr = create_member_expression(*symbol, attr_name, attr_type);
           }
           else
+          {
             throw std::runtime_error(
               "Attribute \"" + attr_name + "\" not found");
+          }
         }
         else
           expr = symbol_expr(*class_attr_symbol);
@@ -4519,9 +4555,15 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
     if (var_type_str.empty())
       return {var_type_str, var_typet};
 
-    if (var_type_str == "dict" || var_type_str == "Dict")
+    // User-defined classes named "list"/"List" or "dict"/"Dict" take priority
+    // over the built-in types when used as a plain Name annotation.
+    if (
+      (var_type_str == "dict" || var_type_str == "Dict") &&
+      !json_utils::is_class(var_type_str, *ast_json))
       var_typet = dict_handler_->get_dict_struct_type();
-    else if (var_type_str == "list" || var_type_str == "List")
+    else if (
+      (var_type_str == "list" || var_type_str == "List") &&
+      !json_utils::is_class(var_type_str, *ast_json))
       var_typet = type_handler_.get_list_type();
     else
       var_typet = type_handler_.get_typet(var_type_str, type_size);
@@ -5575,11 +5617,30 @@ void python_converter::get_var_assign(
                        *this, ast_node, target, sid))
       return;
 
-    // Create symbol for unannotated assignments with inferrable types
+    // Create symbol for unannotated assignments with inferrable types.
+    // If the annotator injected an "annotation" field and we already have a
+    // valid type in current_element_type, use it directly so that user-defined
+    // classes named "List"/"Dict" are not mis-resolved to built-in types.
     if (!lhs_symbol && !is_global)
     {
-      lhs_symbol =
-        create_symbol_for_unannotated_assign(ast_node, target, sid, is_global);
+      if (
+        ast_node.contains("annotation") && !ast_node["annotation"].is_null() &&
+        !current_element_type.is_empty())
+      {
+        std::string module_name = location_begin.get_file().as_string();
+        symbolt symbol = create_symbol(
+          module_name, name, sid.to_string(), location_begin,
+          current_element_type);
+        symbol.lvalue = true;
+        symbol.file_local = true;
+        symbol.is_extern = false;
+        lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+      }
+      else
+      {
+        lhs_symbol =
+          create_symbol_for_unannotated_assign(ast_node, target, sid, is_global);
+      }
     }
 
     if (!lhs_symbol && !is_global)
@@ -6481,9 +6542,17 @@ typet python_converter::get_type_from_annotation(
       std::string type_id = annotation_node["id"].get<std::string>();
 
       if (type_id == "dict" || type_id == "Dict")
-        return dict_handler_->get_dict_struct_type();
+      {
+        // User-defined class named "dict"/"Dict" takes precedence over built-in
+        if (!json_utils::is_class(type_id, *ast_json))
+          return dict_handler_->get_dict_struct_type();
+      }
       if (type_id == "list" || type_id == "List")
-        return type_handler_.get_list_type();
+      {
+        // User-defined class named "list"/"List" takes precedence over built-in
+        if (!json_utils::is_class(type_id, *ast_json))
+          return type_handler_.get_list_type();
+      }
 
       return type_handler_.get_typet(type_id);
     }
@@ -6716,14 +6785,32 @@ typet python_converter::get_type_from_annotation(
     {
       if (
         annotation_node.contains("slice") &&
-        annotation_node["slice"].is_object() &&
-        annotation_node["slice"].contains("id"))
+        annotation_node["slice"].is_object())
       {
-        std::string inner_type =
-          annotation_node["slice"]["id"].get<std::string>();
-        typet base_type = type_handler_.get_typet(inner_type);
-        // Always use pointer type for Optional to properly represent None
-        return gen_pointer_type(base_type);
+        const auto &slice = annotation_node["slice"];
+        std::string inner_type;
+
+        // Optional[List]: slice is a Name node
+        if (slice.contains("id"))
+          inner_type = slice["id"].get<std::string>();
+        // Optional["List"]: forward reference string; slice is a Constant node
+        else if (
+          slice.contains("_type") && slice["_type"] == "Constant" &&
+          slice.contains("value") && slice["value"].is_string())
+          inner_type = slice["value"].get<std::string>();
+
+        if (!inner_type.empty())
+        {
+          typet base_type;
+          // If inner_type is a user-defined class, return its struct symbol type
+          // rather than a built-in type (e.g., avoid mapping "List" to PyListObj).
+          if (json_utils::is_class(inner_type, *ast_json))
+            base_type = symbol_typet("tag-" + inner_type);
+          else
+            base_type = type_handler_.get_typet(inner_type);
+          // Always use pointer type for Optional to properly represent None
+          return gen_pointer_type(base_type);
+        }
       }
     }
 
@@ -6943,12 +7030,16 @@ typet python_converter::get_type_from_annotation(
   {
     std::string type_id = annotation_node["id"].get<std::string>();
 
-    // Special handling for dict type
-    if (type_id == "dict" || type_id == "Dict")
+    // Special handling for dict type — but only if not shadowed by a user class
+    if (
+      (type_id == "dict" || type_id == "Dict") &&
+      !json_utils::is_class(type_id, *ast_json))
       return dict_handler_->get_dict_struct_type();
 
-    // Special handling for list type
-    if (type_id == "list" || type_id == "List")
+    // Special handling for list type — but only if not shadowed by a user class
+    if (
+      (type_id == "list" || type_id == "List") &&
+      !json_utils::is_class(type_id, *ast_json))
       return type_handler_.get_list_type();
 
     return type_handler_.get_typet(type_id);
@@ -7622,9 +7713,30 @@ void python_converter::get_function_definition(
 }
 
 void python_converter::get_attributes_from_self(
-  const nlohmann::json &method_body,
+  const nlohmann::json &func_node,
   struct_typet &clazz)
 {
+  const nlohmann::json &method_body = func_node.contains("body")
+                                        ? func_node.at("body")
+                                        : func_node;
+
+  // Build a map of parameter name -> annotation from the function signature.
+  // Used to recover the declared type when the body annotation is uninformative
+  // (e.g., "NoneType" inferred from a None literal at a call site).
+  std::unordered_map<std::string, nlohmann::json> param_annotations;
+  if (
+    func_node.contains("args") && func_node["args"].is_object() &&
+    func_node["args"].contains("args"))
+  {
+    for (const auto &arg : func_node["args"]["args"])
+    {
+      if (
+        arg.contains("arg") && arg.contains("annotation") &&
+        !arg["annotation"].is_null())
+        param_annotations[arg["arg"].get<std::string>()] = arg["annotation"];
+    }
+  }
+
   for (const auto &stmt : method_body)
   {
     if (
@@ -7684,8 +7796,45 @@ void python_converter::get_attributes_from_self(
         type = gen_pointer_type(char_type());
       else if (annotated_type == "Optional")
       {
-        typet base_type = get_type_from_annotation(stmt["annotation"], stmt);
-        type = gen_pointer_type(base_type);
+        // The body annotation may be bare "Optional" without the inner type.
+        // Try to recover the full annotation (e.g., Optional["List"]) from
+        // the function parameter declaration.
+        typet resolved;
+        if (
+          stmt.contains("value") && stmt["value"].is_object() &&
+          stmt["value"].contains("id"))
+        {
+          const std::string param_name =
+            stmt["value"]["id"].get<std::string>();
+          auto it = param_annotations.find(param_name);
+          if (it != param_annotations.end())
+            resolved = get_type_from_annotation(it->second, stmt);
+        }
+        if (!resolved.is_nil() && !resolved.is_empty())
+          type = resolved;
+        else
+        {
+          typet base_type = get_type_from_annotation(stmt["annotation"], stmt);
+          type = gen_pointer_type(base_type);
+        }
+      }
+      else if (annotated_type == "NoneType")
+      {
+        // The annotator inferred NoneType from a None literal at a call site.
+        // Look up the declared parameter annotation from the function signature
+        // to recover the real type (e.g., Optional["List"]).
+        typet resolved;
+        if (
+          stmt.contains("value") && stmt["value"].is_object() &&
+          stmt["value"].contains("id"))
+        {
+          const std::string param_name = stmt["value"]["id"].get<std::string>();
+          auto it = param_annotations.find(param_name);
+          if (it != param_annotations.end())
+            resolved = get_type_from_annotation(it->second, stmt);
+        }
+        type = (!resolved.is_nil() && !resolved.is_empty()) ? resolved
+                                                             : pointer_type();
       }
       else
         type = type_handler_.get_typet(annotated_type);
