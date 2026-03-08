@@ -4020,8 +4020,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           const std::string &tag = opt_st.tag().as_string();
           if (
             tag.rfind("tag-Optional_", 0) == 0 &&
-            opt_st.has_component("value") &&
-            !opt_st.has_component(attr_name))
+            opt_st.has_component("value") && !opt_st.has_component(attr_name))
           {
             const typet &inner_raw = opt_st.get_component("value").type();
             base_expr = member_exprt(base_expr, "value", inner_raw);
@@ -5698,7 +5697,10 @@ void python_converter::get_var_assign(
       {
         std::string module_name = location_begin.get_file().as_string();
         symbolt symbol = create_symbol(
-          module_name, name, sid.to_string(), location_begin,
+          module_name,
+          name,
+          sid.to_string(),
+          location_begin,
           current_element_type);
         symbol.lvalue = true;
         symbol.file_local = true;
@@ -5707,8 +5709,8 @@ void python_converter::get_var_assign(
       }
       else
       {
-        lhs_symbol =
-          create_symbol_for_unannotated_assign(ast_node, target, sid, is_global);
+        lhs_symbol = create_symbol_for_unannotated_assign(
+          ast_node, target, sid, is_global);
       }
     }
 
@@ -7895,9 +7897,8 @@ void python_converter::get_attributes_from_self(
   const nlohmann::json &func_node,
   struct_typet &clazz)
 {
-  const nlohmann::json &method_body = func_node.contains("body")
-                                        ? func_node.at("body")
-                                        : func_node;
+  const nlohmann::json &method_body =
+    func_node.contains("body") ? func_node.at("body") : func_node;
 
   // Build a map of parameter name -> annotation from the function signature.
   // Used to recover the declared type when the body annotation is uninformative
@@ -7983,8 +7984,7 @@ void python_converter::get_attributes_from_self(
           stmt.contains("value") && stmt["value"].is_object() &&
           stmt["value"].contains("id"))
         {
-          const std::string param_name =
-            stmt["value"]["id"].get<std::string>();
+          const std::string param_name = stmt["value"]["id"].get<std::string>();
           auto it = param_annotations.find(param_name);
           if (it != param_annotations.end())
             resolved = get_type_from_annotation(it->second, stmt);
@@ -8013,7 +8013,7 @@ void python_converter::get_attributes_from_self(
             resolved = get_type_from_annotation(it->second, stmt);
         }
         type = (!resolved.is_nil() && !resolved.is_empty()) ? resolved
-                                                             : pointer_type();
+                                                            : pointer_type();
       }
       else
         type = type_handler_.get_typet(annotated_type);
