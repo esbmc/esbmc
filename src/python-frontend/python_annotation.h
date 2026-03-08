@@ -2368,6 +2368,7 @@ private:
     std::string attr_name = call["func"].contains("attr")
                               ? call["func"]["attr"].template get<std::string>()
                               : "";
+
     // Handle dict.keys() and dict.values()
     if (attr_name == "keys" || attr_name == "values")
     {

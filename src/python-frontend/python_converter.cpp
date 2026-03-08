@@ -1905,6 +1905,29 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
+  // For arithmetic operations, cast any-typed (void*) operands to a concrete
+  // type. Pointer*pointer is invalid (except subtraction), so we must resolve
+  // the type. When one side has a concrete type, mirror it; otherwise default
+  // to int64 (Python's integer semantics for unannotated parameters).
+  if (!type_utils::is_relational_op(op))
+  {
+    auto is_any = [](const exprt &e) { return e.type() == any_type(); };
+    auto concrete_numeric_type = [](const typet &t) -> typet {
+      if (t.is_floatbv())
+        return t;
+      return long_long_int_type();
+    };
+    if (is_any(lhs) && !is_any(rhs))
+      lhs = typecast_exprt(lhs, concrete_numeric_type(rhs.type()));
+    else if (is_any(rhs) && !is_any(lhs))
+      rhs = typecast_exprt(rhs, concrete_numeric_type(lhs.type()));
+    else if (is_any(lhs) && is_any(rhs))
+    {
+      lhs = typecast_exprt(lhs, long_long_int_type());
+      rhs = typecast_exprt(rhs, long_long_int_type());
+    }
+  }
+
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
@@ -6451,12 +6474,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // bool(z) == (z.real != 0.0 or z.imag != 0.0).
   if (is_complex_type(cond.type()))
   {
-    exprt real = member_exprt(cond, "real", double_type());
-    exprt imag = member_exprt(cond, "imag", double_type());
-    exprt zero = from_double(0.0, double_type());
-    cond = or_exprt(
-      not_exprt(equality_exprt(real, zero)),
-      not_exprt(equality_exprt(imag, zero)));
+    cond = complex_to_bool_expr(cond);
     cond.location() = get_location_from_decl(ast_node["test"]);
   }
 
