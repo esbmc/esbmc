@@ -3250,10 +3250,10 @@ function_call_expr::get_dispatch_table()
        const bool is_math_wrapper =
          math_guard_utils::math_wrapper_function_names().count(func_name) != 0;
 
-       return
-         (is_math_module &&
-          math_guard_utils::math_module_function_names().count(func_name) != 0) ||
-         is_math_wrapper;
+       return (is_math_module &&
+               math_guard_utils::math_module_function_names().count(
+                 func_name) != 0) ||
+              is_math_wrapper;
      },
      [this]() -> exprt {
        const std::string &func_name = function_id_.get_function();
@@ -3586,7 +3586,8 @@ function_call_expr::get_dispatch_table()
            lhs_expr, rhs_expr, call_);
        }
        else if (
-         math_guard_utils::math_guard_real_general_functions().count(func_name) != 0)
+         math_guard_utils::math_guard_real_general_functions().count(
+           func_name) != 0)
        {
          exprt arg_expr = require_one_arg();
          if (has_complex_arg(arg_expr))
@@ -3594,7 +3595,8 @@ function_call_expr::get_dispatch_table()
          return handle_general_function_call();
        }
        else if (
-         math_guard_utils::math_guard_int_general_functions().count(func_name) != 0)
+         math_guard_utils::math_guard_int_general_functions().count(
+           func_name) != 0)
        {
          exprt throw_expr;
          if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
@@ -3605,7 +3607,8 @@ function_call_expr::get_dispatch_table()
          return handle_general_function_call();
        }
        else if (
-         math_guard_utils::math_guard_real_general_twoarg_functions().count(func_name) != 0)
+         math_guard_utils::math_guard_real_general_twoarg_functions().count(
+           func_name) != 0)
        {
          exprt throw_expr;
          if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(

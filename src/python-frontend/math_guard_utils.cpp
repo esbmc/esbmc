@@ -10,9 +10,8 @@ constexpr std::size_t MAX_COMPLEX_SCAN_DEPTH = 256;
 
 bool is_complex_annotation(const nlohmann::json &node)
 {
-  return
-    node.contains("esbmc_type_annotation") &&
-    node["esbmc_type_annotation"] == "complex";
+  return node.contains("esbmc_type_annotation") &&
+         node["esbmc_type_annotation"] == "complex";
 }
 
 bool json_arg_contains_or_is_complex_impl(
@@ -45,7 +44,8 @@ bool json_arg_contains_or_is_complex_impl(
     if (!var_decl_or_arg.empty())
     {
       if (
-        var_decl_or_arg.contains("_type") && var_decl_or_arg["_type"] == "arg" &&
+        var_decl_or_arg.contains("_type") &&
+        var_decl_or_arg["_type"] == "arg" &&
         var_decl_or_arg.contains("annotation") &&
         var_decl_or_arg["annotation"].is_object() &&
         var_decl_or_arg["annotation"].contains("id") &&
@@ -120,9 +120,8 @@ bool json_arg_contains_or_is_complex_impl(
 
     if (value.is_object())
     {
-      if (
-        json_arg_contains_or_is_complex_impl(
-          value, converter, type_handler, current_function, depth + 1))
+      if (json_arg_contains_or_is_complex_impl(
+            value, converter, type_handler, current_function, depth + 1))
       {
         return true;
       }
@@ -151,48 +150,28 @@ namespace math_guard_utils
 const std::unordered_set<std::string> &math_wrapper_function_names()
 {
   static const std::unordered_set<std::string> names = {
-    "__ESBMC_sin",
-    "__ESBMC_cos",
-    "__ESBMC_sqrt",
-    "__ESBMC_exp",
-    "__ESBMC_log",
-    "__ESBMC_acos",
-    "__ESBMC_atan",
-    "__ESBMC_atan2",
-    "__ESBMC_log2",
-    "__ESBMC_pow",
-    "__ESBMC_fabs",
-    "__ESBMC_trunc",
-    "__ESBMC_fmod",
-    "__ESBMC_copysign",
-    "__ESBMC_tan",
-    "__ESBMC_asin",
-    "__ESBMC_sinh",
-    "__ESBMC_cosh",
-    "__ESBMC_tanh",
-    "__ESBMC_log10",
-    "__ESBMC_expm1",
-    "__ESBMC_log1p",
-    "__ESBMC_exp2",
-    "__ESBMC_asinh",
-    "__ESBMC_acosh",
-    "__ESBMC_atanh",
-    "__ESBMC_hypot"};
+    "__ESBMC_sin",   "__ESBMC_cos",      "__ESBMC_sqrt", "__ESBMC_exp",
+    "__ESBMC_log",   "__ESBMC_acos",     "__ESBMC_atan", "__ESBMC_atan2",
+    "__ESBMC_log2",  "__ESBMC_pow",      "__ESBMC_fabs", "__ESBMC_trunc",
+    "__ESBMC_fmod",  "__ESBMC_copysign", "__ESBMC_tan",  "__ESBMC_asin",
+    "__ESBMC_sinh",  "__ESBMC_cosh",     "__ESBMC_tanh", "__ESBMC_log10",
+    "__ESBMC_expm1", "__ESBMC_log1p",    "__ESBMC_exp2", "__ESBMC_asinh",
+    "__ESBMC_acosh", "__ESBMC_atanh",    "__ESBMC_hypot"};
   return names;
 }
 
 const std::unordered_set<std::string> &math_module_function_names()
 {
   static const std::unordered_set<std::string> names = {
-    "sin",      "cos",      "sqrt",    "exp",      "log",      "acos",
-    "atan",     "atan2",    "log2",    "pow",      "fabs",     "trunc",
-    "fmod",     "copysign", "tan",     "asin",     "sinh",     "cosh",
-    "tanh",     "log10",    "expm1",   "log1p",    "exp2",     "asinh",
-    "acosh",    "atanh",    "hypot",   "floor",    "ceil",     "factorial",
-    "gcd",      "lcm",      "isqrt",   "perm",     "prod",     "isclose",
-    "isinf",    "isnan",    "isfinite","degrees",  "radians",  "modf",
-    "cbrt",     "erf",      "erfc",    "frexp",    "fsum",     "gamma",
-    "ldexp",    "lgamma",   "nextafter","remainder","sumprod", "ulp",
+    "sin",   "cos",      "sqrt",      "exp",       "log",     "acos",
+    "atan",  "atan2",    "log2",      "pow",       "fabs",    "trunc",
+    "fmod",  "copysign", "tan",       "asin",      "sinh",    "cosh",
+    "tanh",  "log10",    "expm1",     "log1p",     "exp2",    "asinh",
+    "acosh", "atanh",    "hypot",     "floor",     "ceil",    "factorial",
+    "gcd",   "lcm",      "isqrt",     "perm",      "prod",    "isclose",
+    "isinf", "isnan",    "isfinite",  "degrees",   "radians", "modf",
+    "cbrt",  "erf",      "erfc",      "frexp",     "fsum",    "gamma",
+    "ldexp", "lgamma",   "nextafter", "remainder", "sumprod", "ulp",
     "dist"};
   return names;
 }
@@ -200,8 +179,20 @@ const std::unordered_set<std::string> &math_module_function_names()
 const std::unordered_set<std::string> &math_guard_real_general_functions()
 {
   static const std::unordered_set<std::string> names = {
-    "floor", "ceil", "degrees", "radians", "modf", "cbrt", "erf",
-    "erfc",  "frexp","gamma",   "lgamma",  "ulp",  "isinf","isnan",
+    "floor",
+    "ceil",
+    "degrees",
+    "radians",
+    "modf",
+    "cbrt",
+    "erf",
+    "erfc",
+    "frexp",
+    "gamma",
+    "lgamma",
+    "ulp",
+    "isinf",
+    "isnan",
     "isfinite"};
   return names;
 }
@@ -241,9 +232,8 @@ bool call_has_complex_in_args_or_keywords(
   {
     for (const auto &arg : call["args"])
     {
-      if (
-        json_arg_contains_or_is_complex(
-          arg, converter, type_handler, current_function))
+      if (json_arg_contains_or_is_complex(
+            arg, converter, type_handler, current_function))
       {
         return true;
       }
