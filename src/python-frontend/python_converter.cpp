@@ -1661,6 +1661,33 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // building, which cannot operate directly on struct operands.
   if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
   {
+    auto op_symbol = [](const std::string &op_name) -> std::string {
+      if (op_name == "Add")
+        return "+";
+      if (op_name == "Sub")
+        return "-";
+      if (op_name == "Mult")
+        return "*";
+      if (op_name == "Div")
+        return "/";
+      return op_name;
+    };
+    auto expr_python_type_name = [&](const exprt &e) -> std::string {
+      const typet &t = e.type();
+      if (is_complex_type(t))
+        return "complex";
+      if (t.is_bool())
+        return "bool";
+      if (t.is_floatbv())
+        return "float";
+      if (t.is_signedbv() || t.is_unsignedbv())
+        return "int";
+      if (t.is_array() && t.subtype() == char_type())
+        return "str";
+      if (t.is_array())
+        return "bytes";
+      return type_handler_.type_to_string(t);
+    };
     auto raise_complex_type_error = [&](const std::string &msg) -> exprt {
       return get_exception_handler().gen_exception_raise("TypeError", msg);
     };
@@ -1673,6 +1700,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     };
     auto member = [](const exprt &z, const irep_idt &name) -> exprt {
       return member_exprt(z, name, double_type());
+    };
+    auto ieee_binop = [](const irep_idt &id, const exprt &x, const exprt &y) {
+      exprt out(id, double_type());
+      out.copy_to_operands(x, y);
+      return out;
     };
 
     if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
@@ -1696,7 +1728,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       {
         if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
           return raise_complex_type_error(
-            "unsupported operand type(s) for complex arithmetic");
+            "unsupported operand type(s) for " + op_symbol(op) + ": '" +
+            expr_python_type_name(lhs) + "' and '" +
+            expr_python_type_name(rhs) + "'");
       }
 
       exprt lhs_complex = promote_to_complex(lhs);
@@ -1715,65 +1749,44 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
       if (op == "Add")
       {
-        exprt real("ieee_add", double_type());
-        real.copy_to_operands(a, c);
-        exprt imag("ieee_add", double_type());
-        imag.copy_to_operands(b, d);
+        exprt real = ieee_binop("ieee_add", a, c);
+        exprt imag = ieee_binop("ieee_add", b, d);
         return make_complex(real, imag);
       }
 
       if (op == "Sub")
       {
-        exprt real("ieee_sub", double_type());
-        real.copy_to_operands(a, c);
-        exprt imag("ieee_sub", double_type());
-        imag.copy_to_operands(b, d);
+        exprt real = ieee_binop("ieee_sub", a, c);
+        exprt imag = ieee_binop("ieee_sub", b, d);
         return make_complex(real, imag);
       }
 
       if (op == "Mult")
       {
-        exprt ac("ieee_mul", double_type());
-        ac.copy_to_operands(a, c);
-        exprt bd("ieee_mul", double_type());
-        bd.copy_to_operands(b, d);
-        exprt ad("ieee_mul", double_type());
-        ad.copy_to_operands(a, d);
-        exprt bc("ieee_mul", double_type());
-        bc.copy_to_operands(b, c);
+        exprt ac = ieee_binop("ieee_mul", a, c);
+        exprt bd = ieee_binop("ieee_mul", b, d);
+        exprt ad = ieee_binop("ieee_mul", a, d);
+        exprt bc = ieee_binop("ieee_mul", b, c);
 
-        exprt real("ieee_sub", double_type());
-        real.copy_to_operands(ac, bd);
-        exprt imag("ieee_add", double_type());
-        imag.copy_to_operands(ad, bc);
+        exprt real = ieee_binop("ieee_sub", ac, bd);
+        exprt imag = ieee_binop("ieee_add", ad, bc);
         return make_complex(real, imag);
       }
 
       // op == "Div"
-      exprt ac("ieee_mul", double_type());
-      ac.copy_to_operands(a, c);
-      exprt bd("ieee_mul", double_type());
-      bd.copy_to_operands(b, d);
-      exprt bc("ieee_mul", double_type());
-      bc.copy_to_operands(b, c);
-      exprt ad("ieee_mul", double_type());
-      ad.copy_to_operands(a, d);
-      exprt c2("ieee_mul", double_type());
-      c2.copy_to_operands(c, c);
-      exprt d2("ieee_mul", double_type());
-      d2.copy_to_operands(d, d);
+      exprt ac = ieee_binop("ieee_mul", a, c);
+      exprt bd = ieee_binop("ieee_mul", b, d);
+      exprt bc = ieee_binop("ieee_mul", b, c);
+      exprt ad = ieee_binop("ieee_mul", a, d);
+      exprt c2 = ieee_binop("ieee_mul", c, c);
+      exprt d2 = ieee_binop("ieee_mul", d, d);
 
-      exprt numer_real("ieee_add", double_type());
-      numer_real.copy_to_operands(ac, bd);
-      exprt numer_imag("ieee_sub", double_type());
-      numer_imag.copy_to_operands(bc, ad);
-      exprt denom("ieee_add", double_type());
-      denom.copy_to_operands(c2, d2);
+      exprt numer_real = ieee_binop("ieee_add", ac, bd);
+      exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
+      exprt denom = ieee_binop("ieee_add", c2, d2);
 
-      exprt real("ieee_div", double_type());
-      real.copy_to_operands(numer_real, denom);
-      exprt imag("ieee_div", double_type());
-      imag.copy_to_operands(numer_imag, denom);
+      exprt real = ieee_binop("ieee_div", numer_real, denom);
+      exprt imag = ieee_binop("ieee_div", numer_imag, denom);
       return make_complex(real, imag);
     }
 
@@ -2412,6 +2425,24 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
       return dunder_result;
   }
 
+  // Built-in complex arithmetic: unary + and - operate component-wise.
+  if (is_complex_type(unary_sub.type()) && (op == "USub" || op == "UAdd"))
+  {
+    if (op == "UAdd")
+      return unary_sub;
+
+    exprt real = member_exprt(unary_sub, "real", double_type());
+    exprt imag = member_exprt(unary_sub, "imag", double_type());
+    exprt zero = from_double(0.0, double_type());
+
+    exprt neg_real("ieee_sub", double_type());
+    neg_real.copy_to_operands(zero, real);
+    exprt neg_imag("ieee_sub", double_type());
+    neg_imag.copy_to_operands(zero, imag);
+
+    return make_complex(neg_real, neg_imag);
+  }
+
   exprt unary_expr(map_operator(op, type), type);
   unary_expr.operands().push_back(unary_sub);
 
@@ -2691,6 +2722,30 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (element["func"]["_type"] == "Attribute")
   {
     const std::string &method_name = element["func"]["attr"].get<std::string>();
+
+    if (method_name == "conjugate")
+    {
+      const auto &args =
+        element.contains("args") ? element["args"] : nlohmann::json::array();
+      const auto &keywords = element.contains("keywords")
+                               ? element["keywords"]
+                               : nlohmann::json::array();
+      if (args.empty() && keywords.empty())
+      {
+        exprt obj_expr = get_expr(element["func"]["value"]);
+        if (obj_expr.statement() == "cpp-throw")
+          return obj_expr;
+        if (is_complex_type(obj_expr.type()))
+        {
+          exprt real = member_exprt(obj_expr, "real", double_type());
+          exprt imag = member_exprt(obj_expr, "imag", double_type());
+          exprt zero = from_double(0.0, double_type());
+          exprt neg_imag("ieee_sub", double_type());
+          neg_imag.copy_to_operands(zero, imag);
+          return make_complex(real, neg_imag);
+        }
+      }
+    }
 
     if (
       method_name == "keys" || method_name == "values" ||
@@ -3412,8 +3467,22 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     annotated_node.contains("esbmc_type_annotation") &&
     annotated_node["esbmc_type_annotation"] == "complex")
   {
-    const double real = annotated_node.value("real_value", 0.0);
-    const double imag = annotated_node.value("imag_value", 0.0);
+    double real = annotated_node.value("real_value", 0.0);
+    double imag = annotated_node.value("imag_value", 0.0);
+
+    // UnaryOp(USub, Constant(complex)) must preserve the sign.
+    if (
+      element.contains("_type") && element["_type"] == "UnaryOp" &&
+      element.contains("op") && element["op"].contains("_type"))
+    {
+      const std::string op_type = element["op"]["_type"].get<std::string>();
+      if (op_type == "USub")
+      {
+        real = -real;
+        imag = -imag;
+      }
+    }
+
     return make_complex(
       from_double(real, double_type()), from_double(imag, double_type()));
   }
@@ -6350,6 +6419,19 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   cond.location() = get_location_from_decl(ast_node["test"]);
 
+  // Python truthiness for complex in conditional contexts:
+  // bool(z) == (z.real != 0.0 or z.imag != 0.0).
+  if (is_complex_type(cond.type()))
+  {
+    exprt real = member_exprt(cond, "real", double_type());
+    exprt imag = member_exprt(cond, "imag", double_type());
+    exprt zero = from_double(0.0, double_type());
+    cond = or_exprt(
+      not_exprt(equality_exprt(real, zero)),
+      not_exprt(equality_exprt(imag, zero)));
+    cond.location() = get_location_from_decl(ast_node["test"]);
+  }
+
   // Recover type
   current_element_type = t;
 
@@ -7192,6 +7274,61 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
   return flags;
 }
 
+// Return true if 'param_name' has any attribute written (x.attr = ...)
+// anywhere in 'body' (recursive scan over nested blocks).
+static bool param_is_mutated_in_body(
+  const std::string &param_name,
+  const nlohmann::json &body)
+{
+  if (!body.is_array())
+    return false;
+
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string &stype =
+      stmt.contains("_type") ? stmt["_type"].get<std::string>() : "";
+
+    // x.attr = value  (plain assignment)
+    if (stype == "Assign" && stmt.contains("targets"))
+    {
+      for (const auto &tgt : stmt["targets"])
+      {
+        if (
+          tgt.contains("_type") && tgt["_type"] == "Attribute" &&
+          tgt.contains("value") && tgt["value"].contains("_type") &&
+          tgt["value"]["_type"] == "Name" && tgt["value"].contains("id") &&
+          tgt["value"]["id"] == param_name)
+          return true;
+      }
+    }
+    // x.attr: T = value  (annotated assignment)
+    else if (stype == "AnnAssign" && stmt.contains("target"))
+    {
+      const auto &tgt = stmt["target"];
+      if (
+        tgt.contains("_type") && tgt["_type"] == "Attribute" &&
+        tgt.contains("value") && tgt["value"].contains("_type") &&
+        tgt["value"]["_type"] == "Name" && tgt["value"].contains("id") &&
+        tgt["value"]["id"] == param_name)
+        return true;
+    }
+
+    // Recurse into nested blocks (if/while/for bodies, else branches)
+    for (const char *key : {"body", "orelse", "handlers", "finalbody"})
+    {
+      if (stmt.contains(key) && stmt[key].is_array())
+      {
+        if (param_is_mutated_in_body(param_name, stmt[key]))
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -7381,6 +7518,48 @@ void python_converter::process_function_arguments(
         exprt default_expr = get_expr(kw_defaults[i]);
         type.arguments()[kwonly_indices[i]].default_value() = default_expr;
       }
+    }
+  }
+
+  // Python object reference semantics: if a non-enum class parameter is
+  // mutated inside the function (x.attr = ...), model it as a pointer so
+  // that mutations are visible to the caller (same as 'self' for methods).
+  if (!function_node.contains("body"))
+    return;
+  const nlohmann::json &body = function_node["body"];
+
+  for (auto &param_arg : type.arguments())
+  {
+    const std::string param_name = param_arg.get_base_name().as_string();
+    if (param_name == "self" || param_name == "cls" || param_name.empty())
+      continue;
+
+    // Only applies to user-defined (non-enum) class-typed parameters.
+    typet ptype = param_arg.type();
+    if (ptype.id() == "symbol")
+      ptype = ns.follow(ptype);
+    if (!ptype.is_struct())
+      continue;
+    const std::string class_tag = to_struct_type(ptype).tag().as_string();
+    const std::string class_name = extract_class_name_from_tag(class_tag);
+    if (
+      !json_utils::is_class(class_name, *ast_json) ||
+      is_enum_class(class_name, *ast_json))
+      continue;
+
+    // Check whether the function body mutates this parameter.
+    if (!param_is_mutated_in_body(param_name, body))
+      continue;
+
+    // Upgrade the parameter to a pointer and update the parameter symbol.
+    typet ptr_type = gen_pointer_type(param_arg.type());
+    param_arg.type() = ptr_type;
+    const std::string param_id = param_arg.cmt_identifier().as_string();
+    if (!param_id.empty())
+    {
+      symbolt *param_sym = symbol_table_.find_symbol(param_id);
+      if (param_sym)
+        param_sym->type = ptr_type;
     }
   }
 }
@@ -8085,6 +8264,32 @@ void python_converter::get_return_statements(
       {
         // For non-constant arrays (variables), convert to pointer
         return_value = string_handler_.get_array_base_address(return_value);
+      }
+    }
+
+    // When returning a class-typed parameter (internally A*), dereference it
+    // so the return type matches the annotation (A).  This is needed because
+    // user-defined class parameters are modelled as pointers internally for
+    // Python object reference semantics, but callers expect a value return.
+    if (return_value.type().is_pointer())
+    {
+      typet ret_sub = return_value.type().subtype();
+      typet expected = current_func_return_type_;
+      if (ret_sub.id() == "symbol")
+        ret_sub = ns.follow(ret_sub);
+      if (expected.id() == "symbol")
+        expected = ns.follow(expected);
+      if (ret_sub.is_struct() && expected.is_struct())
+      {
+        const struct_typet &rs = to_struct_type(ret_sub);
+        const struct_typet &es = to_struct_type(expected);
+        if (rs.tag() == es.tag())
+        {
+          exprt deref("dereference");
+          deref.type() = return_value.type().subtype();
+          deref.copy_to_operands(return_value);
+          return_value = deref;
+        }
       }
     }
 
