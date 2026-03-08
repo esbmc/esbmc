@@ -2143,14 +2143,10 @@ exprt function_call_expr::build_constant_from_arg() const
       return value_expr;
 
     if (is_complex_type(value_expr.type()))
-    {
-      exprt real = member_exprt(value_expr, "real", double_type());
-      exprt imag = member_exprt(value_expr, "imag", double_type());
-      exprt zero = from_double(0.0, double_type());
-      return or_exprt(
-        not_exprt(equality_exprt(real, zero)),
-        not_exprt(equality_exprt(imag, zero)));
-    }
+      return complex_to_bool_expr(value_expr);
+
+    value_expr.type() = type_handler_.get_typet(func_name, arg_size);
+    return value_expr;
   }
 
   else if (func_name == "str")

@@ -50,6 +50,16 @@ inline exprt promote_to_complex(const exprt &value)
   return make_complex(value, from_double(0.0, double_type()));
 }
 
+inline exprt complex_to_bool_expr(const exprt &complex_expr)
+{
+  exprt real = member_exprt(complex_expr, "real", double_type());
+  exprt imag = member_exprt(complex_expr, "imag", double_type());
+  exprt zero = from_double(0.0, double_type());
+  return or_exprt(
+    not_exprt(equality_exprt(real, zero)),
+    not_exprt(equality_exprt(imag, zero)));
+}
+
 class type_handler
 {
 public:
