@@ -10,8 +10,7 @@
 
 /// Recursively flatten a (possibly nested) binary && expression into a flat
 /// list of conjuncts.  Clang represents A && B && C as and(and(A,B),C).
-static void
-collect_and_conjuncts(const exprt &expr, exprt::operandst &out)
+static void collect_and_conjuncts(const exprt &expr, exprt::operandst &out)
 {
   if (expr.is_and())
     for (const auto &op : expr.operands())
@@ -23,8 +22,7 @@ collect_and_conjuncts(const exprt &expr, exprt::operandst &out)
 /// Rebuild a right-to-left nested binary && from a flat list of conjuncts
 /// starting at index @p i.  Mirrors the binary shape Clang produces so that
 /// downstream code (is_boolean checks, migrate_expr) behaves identically.
-static exprt
-rebuild_and_chain(const exprt::operandst &conjuncts, std::size_t i)
+static exprt rebuild_and_chain(const exprt::operandst &conjuncts, std::size_t i)
 {
   assert(i < conjuncts.size());
   if (i + 1 == conjuncts.size())
@@ -345,8 +343,7 @@ void goto_convertt::remove_sideeffects(
             and_expr = &args.front();
           else if (
             args.front().id() == "typecast" &&
-            args.front().operands().size() == 1 &&
-            args.front().op0().is_and())
+            args.front().operands().size() == 1 && args.front().op0().is_and())
             and_expr = &args.front().op0();
 
           if (and_expr)
