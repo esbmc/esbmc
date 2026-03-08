@@ -1,85 +1,28 @@
 
 /*
- * This function is used to check loop invariants.
- * It takes phases:
- * 1. Check if the invariants are satisfiable before entering the loop (Step 1)
- * 2. Capture all related variables in the loop (not done yet), then set all the variables to nondet
- * 3. Set the loop invariant as the assumption (Step k)
- * 4. Enter the loop (only run a single step of the loop)
- * 5. Check if the invariant is satisfiable after the loop (Step k+1)
- * 6. If the invariant is not satisfied, the function will return a warning (loop invariants are not preserved).
- * 7. If the invariant is satisfied, the function will return true.
- * 8. Use the loop invariants as assumptions in the following steps.
- * 
- * For example:
- * int binary_search(int *arr, int size, int target) {
- *   int lb = 0;
- *   int ub = size - 1;
- *   while (lb <= ub) {
- *     int mid = (lb + ub) / 2;
- *     if (arr[mid] == target) {
- *       return mid;
- *     }
- *     if (arr[mid] < target) {
- *       left = mid + 1;
- *     } else {
- *       right = mid - 1;
- *     }
- *   }
- *   return -1;
- * }
- * 
- * We can find the loop invariant as: lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1
- * 
- * We can use the following steps to check the loop invariant:
- * 
- * int binary_search(int *arr, int size, int target) {
- *   int lb = 0;
- *   int ub = size - 1;
- *   // 1. Assert invariants before entering the loop
- *   assert(lb -1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1);
- * 
- *   // 2. Capture all related variables in the loop
- *   int mid = nondet_int();
- *   int lb = nondet_int();
- *   int ub = nondet_int();
- * 
- *   // 3. Set the loop invariant as the assumption
- *   assume(lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); // Step k
- * 
- *   // 4. Enter the loop (only run a single step of the loop)
- *   // Branch 1: 
- *   if (lb <= ub) {
- *     int mid = (lb + ub) / 2;
- *     if (arr[mid] == target) {
- *       return mid;
- *     }
- *     if (arr[mid] < target) {
- *       lb = mid + 1;
- *     } else {
- *       ub = mid - 1;
- *     }
- * 
- *     // 5. Check if the invariant is satisfiable after the loop // Step k
- *     assert(lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); //should use Multi-property for these assertion analysis
- * 
- *     // 6. Terminate the loop
- *     assume (false);
- *   }
- *   return -1;
- *   
- * // Branch 2: 
- *   else {
- *     // invariant + !condition (need to add theloop exit condition)
- *     // we did not extra explicitly add the loop exit condition, it is from the previous step
- *     //assume (!(lb <= ub)); from if-else branch
- *     //assume (lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); from the previous assumption
- *     // we assume the invariant is preserved after the loop, then we can continue on this branch to check the following assertions.
- *   }
- * }
- * 
- * 
- * 
+ * Loop invariant instrumentation pass.
+ *
+ * Converts __ESBMC_loop_invariant(I) annotations into a three-part inductive
+ * invariant check following the standard k-induction schema:
+ *
+ *   1. Base case    -- ASSERT I before the loop; verifies I holds on entry.
+ *
+ *   2. Havoc + Assume -- Loop-modified variables are set to nondet values,
+ *                        then I is ASSUMEd, modelling an arbitrary iteration.
+ *
+ *   3. Inductive step -- After one loop body iteration, ASSERT I to verify
+ *                        the body preserves the invariant.  ASSUME(false) then
+ *                        terminates this symbolic execution path.
+ *
+ * Function calls inside the invariant (e.g., in_range(x)) require the
+ * DECL/FUNCTION_CALL pair to be re-evaluated after the havoc step so that the
+ * return value reflects the new nondet values.  extract_and_remove_side_effects
+ * moves these instructions into a side_effects block that is re-inserted before
+ * each ASSERT/ASSUME.  The Clang frontend avoids losing guard conditions in
+ * A && f(x) && B by special-casing __ESBMC_loop_invariant in goto_sideeffects
+ * (flatten and, remove_sideeffects per conjunct, rebuild and), so the stored
+ * invariant is always the full expression and no short-circuit recovery is
+ * needed here.
  */
 
 #include <goto-programs/goto_loop_invariant.h>
@@ -101,13 +44,12 @@ void goto_loop_invariant(goto_functionst &goto_functions)
 
 void goto_loop_invariantt::goto_loop_invariant()
 {
-  // Process each loop in the function
   for (auto &function_loop : function_loops)
   {
-    if (function_loop.get_modified_loop_vars().empty())
-      continue;
-
-    // Start the loop conversion with invariant instrumentation
+    // If the loop modifies no variables the havoc step is empty and the
+    // inductive check is trivially true.  We still process the loop so that
+    // the base-case ASSERT is emitted (it can still catch a wrong invariant).
+    // TODO: consider whether an empty modified-vars set warrants a warning.
     convert_loop_with_invariant(function_loop);
   }
 }
@@ -146,12 +88,13 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 
   goto_programt::targett loop_head = loop.get_original_loop_head();
 
-  // Safety check: ensure the dest is not empty
+  // Cannot search backwards past the very first instruction.
   if (loop_head == goto_function.body.instructions.begin())
     return invariants;
 
-  // because we have already combined the loop invariant into one, we should be easy to say it is safe to break.
-  // Search backwards from loop head to find LOOP_INVARIANT
+  // Search backwards from loop head to find the LOOP_INVARIANT instruction.
+  // We stop at the first one found (the invariant for THIS loop), since the
+  // user must place __ESBMC_loop_invariant immediately before its loop.
   goto_programt::targett search_it = loop_head;
 
   size_t search_distance = 0;
@@ -166,31 +109,22 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
     {
       auto const &current_invariants = search_it->get_loop_invariants();
 
-      // Simple approach: take the first LOOP_INVARIANT found before this loop
-      // This works because LOOP_INVARIANT should be placed immediately before its loop
       if (current_invariants.size() == 1)
       {
-        // add single invariant
         invariants.push_back(current_invariants.front());
-        break; // Found the invariant for this loop, stop searching
+        break;
       }
       else if (current_invariants.size() > 1)
       {
-        // Combine to one && format invariant
+        // Multiple sub-expressions: fold them into a single && conjunction.
         auto it = current_invariants.begin();
-        auto combined_invariant = *it; // first element
-        ++it;                          // move to second element
-
-        for (; it != current_invariants.end(); ++it)
-        {
-          combined_invariant = and2tc(combined_invariant, *it);
-        }
-
-        // return one combined invariant
-        invariants.push_back(combined_invariant);
-        break; // Found the invariant for this loop, stop searching
+        auto combined = *it;
+        for (++it; it != current_invariants.end(); ++it)
+          combined = and2tc(combined, *it);
+        invariants.push_back(combined);
+        break;
       }
-      // if current_invariants.empty(), continue searching
+      // current_invariants.empty(): skip and keep searching backwards.
     }
   }
 
@@ -247,19 +181,9 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
   if (!loop_inv_it->is_loop_invariant())
     return; // no LOOP_INVARIANT found
 
-  // Walk backwards from LOOP_INVARIANT collecting consecutive DECL /
-  // FUNCTION_CALL pairs that define compiler-generated temporaries used in
-  // the invariant.  Stop at the first instruction of any other kind.
-  //
-  // We track fc_return_syms separately so that DECL instructions are only
-  // collected when they correspond to a FUNCTION_CALL return value we have
-  // already identified.  This prevents accidentally extracting DECLs of
-  // ordinary user variables that happen to appear in the invariant expression
-  // but are not compiler-generated temporaries.
-  //
-  // Note: the C frontend does not emit DEAD instructions for these
-  // temporaries (confirmed by GOTO dump inspection), so no DEAD/undead
-  // mismatch arises from moving the DECLs.
+  // Walk backwards from the LOOP_INVARIANT: collect DECL/FUNCTION_CALL
+  // instructions that define temporaries used in the invariant; stop at the
+  // first unrecognised instruction.
   std::vector<goto_programt::targett> to_remove;
   std::set<irep_idt> fc_return_syms;
 
@@ -285,14 +209,12 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
       }
       break;
     }
-    else if (search->is_decl())
+
+    if (search->is_decl())
     {
       if (!is_code_decl2t(search->code))
         break;
       const code_decl2t &decl = to_code_decl2t(search->code);
-      // Only collect the DECL if its variable is a known FC return value.
-      // Ordinary variables (e.g. loop counters) that appear in the invariant
-      // expression must not be extracted from their original declaration site.
       if (fc_return_syms.count(decl.value))
       {
         to_remove.push_back(search);
@@ -300,8 +222,10 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
       }
       break;
     }
-    else
-      break;
+
+    // Any other instruction (ASSIGN, GOTO, SKIP, ASSUME, etc.) ends the
+    // backward search so we only collect the contiguous DECL/FC block.
+    break;
   }
 
   if (to_remove.empty())
