@@ -1,4 +1,4 @@
 CORE
-main.c
+all_cases.c
 --loop-invariant
 ^VERIFICATION SUCCESSFUL$
