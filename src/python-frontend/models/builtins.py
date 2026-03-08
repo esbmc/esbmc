@@ -142,6 +142,7 @@ def min_str(iterable: list[str]) -> str:
 #         i = i + 1
 #     return False
 
+
 def sum(iterable: list[int]) -> int:
     """Return the sum of all elements in an iterable of integers."""
     result: int = 0
