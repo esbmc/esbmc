@@ -40,7 +40,10 @@ bool __ESBMC_list_push(
   size_t type_size);
 
 bool __ESBMC_list_push_object(PyListObject *l, PyObject *o);
-bool __ESBMC_list_push_dict_ptr(PyListObject *l, void *dict_ptr, size_t type_id);
+bool __ESBMC_list_push_dict_ptr(
+  PyListObject *l,
+  void *dict_ptr,
+  size_t type_id);
 
 bool __ESBMC_list_eq(
   const PyListObject *l1,
