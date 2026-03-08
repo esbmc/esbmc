@@ -206,9 +206,16 @@ symbol_id function_call_builder::build_function_id() const
           {
             const struct_typet &struct_type = to_struct_type(base_type);
             std::string attr = node["attr"].get<std::string>();
-            return struct_type.has_component(attr)
-                     ? struct_type.get_component(attr).type()
-                     : typet();
+            if (struct_type.has_component(attr))
+              return struct_type.get_component(attr).type();
+            // Not an instance member — check for class-level symbol
+            // (e.g. mutable_attr = [] declared in the class body).
+            symbol_id cls_sid(python_file, struct_type.tag().as_string(), "");
+            cls_sid.set_object(attr);
+            symbolt *cls_sym = converter_.find_symbol(cls_sid.to_string());
+            if (cls_sym)
+              return cls_sym->type;
+            return typet();
           }
           return typet();
         }
@@ -220,21 +227,30 @@ symbol_id function_call_builder::build_function_id() const
 
       if (!obj_type.id().empty())
       {
-        // Normalize the resolved type
-        if (obj_type.is_pointer())
-          obj_type = obj_type.subtype();
-        if (obj_type.id() == "symbol")
-          obj_type = converter_.ns.follow(obj_type);
-
-        // Extract class name from struct type
-        if (obj_type.is_struct())
+        // If the resolved type is a list (e.g. class-level mutable_attr = []),
+        // map directly to the "list" builtin name.
+        if (is_pylist_object_type(obj_type, converter_.ns))
         {
-          std::string tag = to_struct_type(obj_type).tag().as_string();
-          obj_name = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+          obj_name = "list";
         }
         else
         {
-          obj_name = th.type_to_string(obj_type);
+          // Normalize the resolved type
+          if (obj_type.is_pointer())
+            obj_type = obj_type.subtype();
+          if (obj_type.id() == "symbol")
+            obj_type = converter_.ns.follow(obj_type);
+
+          // Extract class name from struct type
+          if (obj_type.is_struct())
+          {
+            std::string tag = to_struct_type(obj_type).tag().as_string();
+            obj_name = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+          }
+          else
+          {
+            obj_name = th.type_to_string(obj_type);
+          }
         }
       }
       else
@@ -261,13 +277,36 @@ symbol_id function_call_builder::build_function_id() const
     }
     else if (func_json["value"]["_type"] == "Call")
     {
-      obj_name = func_json["value"]["func"]["id"];
+      const auto &inner_call = func_json["value"];
+      if (
+        inner_call.contains("func") && inner_call["func"].contains("_type") &&
+        inner_call["func"]["_type"] == "Name" &&
+        inner_call["func"].contains("id") &&
+        inner_call["func"]["id"].is_string())
+      {
+        obj_name = inner_call["func"]["id"].get<std::string>();
+      }
+      else
+      {
+        // Nested calls (e.g., u.encode(...).decode(...)) do not always have
+        // func.id. Use inferred call result type instead of indexing JSON
+        // fields that may be null.
+        obj_name = th.get_operand_type(inner_call);
+      }
+
+      if (obj_name.empty())
+        obj_name = "str";
+
       if (obj_name == "nondet_str")
         obj_name = "str";
+
       if (obj_name == "super")
       {
+        // For __init__, use is_ctor=true: parent's __init__ is stored under
+        // the class name (e.g. Vehicle::Vehicle), not the literal "__init__".
+        bool is_init_call = (func_name == "__init__");
         symbolt *base_class_func = converter_.find_function_in_base_classes(
-          current_class_name, function_id.to_string(), func_name, false);
+          current_class_name, function_id.to_string(), func_name, is_init_call);
         if (base_class_func)
         {
           return symbol_id::from_string(base_class_func->id.as_string());
@@ -818,6 +857,22 @@ exprt function_call_builder::build() const
       }
     }
 
+    // If this is a symbol for an input() string, use the pre-computed
+    // $input_len$ companion instead of falling back to strlen() unrolling.
+    if (arg_expr.is_symbol())
+    {
+      const std::string sym_id =
+        to_symbol_expr(arg_expr).get_identifier().as_string();
+      const auto &len_map = converter_.input_str_to_len_sym_;
+      auto it = len_map.find(sym_id);
+      if (it != len_map.end())
+      {
+        const symbolt *len_sym = converter_.find_symbol(it->second);
+        if (len_sym)
+          return typecast_exprt(symbol_expr(*len_sym), size_type());
+      }
+    }
+
     // If this is a fixed-size char array, compute length at compile time
     // to avoid strlen unwinding.
     typet actual_type = arg_expr.type();
@@ -952,6 +1007,51 @@ exprt function_call_builder::build() const
   if (call_["func"]["_type"] == "Attribute")
   {
     std::string method_name = call_["func"]["attr"].get<std::string>();
+
+    if (method_name == "decode")
+    {
+      const auto &receiver = call_["func"]["value"];
+      const auto is_utf8_literal = [](const nlohmann::json &node) -> bool {
+        if (
+          node.contains("_type") && node["_type"] == "Constant" &&
+          node.contains("value") && node["value"].is_string())
+        {
+          const std::string encoding = node["value"].get<std::string>();
+          return boost::iequals(encoding, "utf-8") ||
+                 boost::iequals(encoding, "utf8");
+        }
+        return false;
+      };
+
+      const bool has_args = call_.contains("args") && call_["args"].is_array();
+      bool decode_utf8 = !has_args || call_["args"].empty();
+      if (has_args && call_["args"].size() == 1)
+        decode_utf8 = is_utf8_literal(call_["args"][0]);
+
+      if (
+        decode_utf8 && receiver.contains("_type") &&
+        receiver["_type"] == "Call" && receiver.contains("func") &&
+        receiver["func"].contains("_type") &&
+        receiver["func"]["_type"] == "Attribute" &&
+        receiver["func"].contains("attr") &&
+        receiver["func"]["attr"] == "encode")
+      {
+        bool encode_utf8 =
+          !receiver.contains("args") || receiver["args"].empty();
+        if (
+          receiver.contains("args") && receiver["args"].is_array() &&
+          receiver["args"].size() == 1)
+          encode_utf8 = is_utf8_literal(receiver["args"][0]);
+
+        if (
+          encode_utf8 && receiver["func"].contains("value") &&
+          !receiver["func"]["value"].is_null())
+        {
+          // For UTF-8 roundtrip decode(encode(x)), preserve original string.
+          return converter_.get_expr(receiver["func"]["value"]);
+        }
+      }
+    }
 
     if (method_name == "startswith")
     {

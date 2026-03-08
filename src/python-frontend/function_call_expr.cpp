@@ -19,6 +19,7 @@
 
 #include <regex>
 #include <cmath>
+#include <cctype>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -328,6 +329,12 @@ exprt function_call_expr::handle_input() const
   code_assignt term_assign(term_pos, from_integer(0, char_type()));
   term_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(term_assign);
+
+  // Record the companion $input_len$ symbol so len() on this string (or any
+  // variable aliasing it) can return the symbolic length directly instead of
+  // falling back to strlen() loop-unrolling.
+  converter_.input_str_to_len_sym_[input_sym.id.as_string()] =
+    len_sym.id.as_string();
 
   return symbol_expr(input_sym);
 }
@@ -1092,23 +1099,17 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
   if (!value_opt)
     return from_double(0.0, type_handler_.get_typet("float", 0));
 
-  try
   {
-    double dval = std::stod(*value_opt);
+    char *end = nullptr;
+    double dval = std::strtod(value_opt->c_str(), &end);
+    if (!end || end != value_opt->c_str() + value_opt->size())
+    {
+      log_error(
+        "Failed float conversion from string \"{}\": invalid argument",
+        *value_opt);
+      return from_double(0.0, type_handler_.get_typet("float", 0));
+    }
     return from_double(dval, type_handler_.get_typet("float", 0));
-  }
-  catch (const std::invalid_argument &)
-  {
-    log_error(
-      "Failed float conversion from string \"{}\": invalid argument",
-      *value_opt);
-    return from_double(0.0, type_handler_.get_typet("float", 0));
-  }
-  catch (const std::out_of_range &)
-  {
-    log_error(
-      "Failed float conversion from string \"{}\": out of range", *value_opt);
-    return from_double(0.0, type_handler_.get_typet("float", 0));
   }
 }
 
@@ -1162,7 +1163,7 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
     const std::string &func_name = function_id_.get_function();
     if (
       func_name != "int" && func_name != "float" && func_name != "str" &&
-      func_name != "bool" && func_name != "bytes")
+      func_name != "bool" && func_name != "bytes" && func_name != "complex")
     {
       log_warning("Symbol not found: {}", var_name);
     }
@@ -1173,6 +1174,25 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
 
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 {
+  auto build_complex_abs = [&](const exprt &complex_expr) -> exprt {
+    exprt real = member_exprt(complex_expr, "real", double_type());
+    exprt imag = member_exprt(complex_expr, "imag", double_type());
+
+    exprt real_sq("ieee_mul", double_type());
+    real_sq.copy_to_operands(real, real);
+    exprt imag_sq("ieee_mul", double_type());
+    imag_sq.copy_to_operands(imag, imag);
+
+    exprt sum("ieee_add", double_type());
+    sum.copy_to_operands(real_sq, imag_sq);
+
+    exprt sqrt_expr("ieee_sqrt", double_type());
+    sqrt_expr.copy_to_operands(sum);
+    sqrt_expr.add("rounding_mode") =
+      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+    return sqrt_expr;
+  };
+
   // Handle the case where the input is a unary minus applied to a literal
   // (e.g., abs(-5) becomes abs(5)).
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
@@ -1224,6 +1244,9 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
       if (!dunder_result.is_nil())
         return dunder_result;
 
+      if (is_complex_type(inferred_type))
+        return build_complex_abs(inferred_expr);
+
       // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", inferred_type);
       abs_expr.copy_to_operands(inferred_expr);
@@ -1251,6 +1274,9 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
       if (!dunder_result.is_nil())
         return dunder_result;
 
+      if (is_complex_type(operand_type))
+        return build_complex_abs(operand_expr);
+
       // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", operand_type);
       abs_expr.copy_to_operands(operand_expr);
@@ -1276,10 +1302,16 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "bad operand type for abs(): '" + arg_type + "'");
 
-  // Fallback for unsupported symbolic expressions (e.g., complex)
-  // Currently returns a nil expression to signal unsupported cases
-  log_warning("Returning nil expression for abs() with type: {}", arg_type);
-  return nil_exprt();
+  exprt fallback_expr = converter_.get_expr(arg);
+  if (fallback_expr.is_nil() || fallback_expr.statement() == "cpp-throw")
+    return fallback_expr;
+
+  if (is_complex_type(fallback_expr.type()))
+    return build_complex_abs(fallback_expr);
+
+  exprt abs_expr("abs", fallback_expr.type());
+  abs_expr.copy_to_operands(fallback_expr);
+  return abs_expr;
 }
 
 exprt function_call_expr::handle_round(nlohmann::json &arg) const
@@ -1384,9 +1416,461 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
   return nil_exprt();
 }
 
+exprt function_call_expr::handle_complex() const
+{
+  // Ensure complex type symbol exists for downstream attribute resolution.
+  (void)type_handler_.get_typet(std::string("complex"));
+
+  const nlohmann::json &arguments =
+    call_.contains("args") ? call_["args"] : nlohmann::json::array();
+  const nlohmann::json &keywords =
+    call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
+
+  auto raise_type_error = [this](const std::string &msg) -> exprt {
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", msg);
+  };
+  auto raise_value_error = [this](const std::string &msg) -> exprt {
+    return converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", msg);
+  };
+  auto zero = []() -> exprt { return from_double(0.0, double_type()); };
+  auto is_cpp_throw = [](const exprt &e) -> bool {
+    return e.statement() == "cpp-throw";
+  };
+  auto trim = [](std::string s) -> std::string {
+    size_t b = 0;
+    while (b < s.size() && std::isspace(static_cast<unsigned char>(s[b])))
+      ++b;
+    size_t e = s.size();
+    while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1])))
+      --e;
+    return s.substr(b, e - b);
+  };
+  auto parse_double_strict = [](const std::string &s, double &out) -> bool {
+    if (s.empty())
+      return false;
+    char *end = nullptr;
+    out = std::strtod(s.c_str(), &end);
+    return end == s.c_str() + s.size();
+  };
+  auto extract_constant_string =
+    [&](const nlohmann::json &arg, std::string &out) -> bool {
+    if (!arg.contains("value"))
+      return false;
+    if (!arg["value"].is_string())
+      return false;
+    out = arg["value"].get<std::string>();
+    return true;
+  };
+  auto is_bytes_literal = [](const nlohmann::json &arg) -> bool {
+    if (arg.contains("encoded_bytes"))
+      return true;
+    if (
+      arg.contains("annotation") && arg["annotation"].contains("id") &&
+      arg["annotation"]["id"] == "bytes")
+      return true;
+    if (
+      arg.contains("esbmc_type_annotation") &&
+      arg["esbmc_type_annotation"] == "bytes")
+      return true;
+    if (arg.contains("kind") && arg["kind"] == "bytes")
+      return true;
+    return false;
+  };
+  auto is_bytearray_call = [](const nlohmann::json &arg) -> bool {
+    return (
+      arg.contains("_type") && arg["_type"] == "Call" && arg.contains("func") &&
+      arg["func"].contains("_type") && arg["func"]["_type"] == "Name" &&
+      arg["func"].contains("id") && arg["func"]["id"] == "bytearray");
+  };
+  auto byteslike_name = [&](const nlohmann::json &arg) -> std::string {
+    if (is_bytes_literal(arg))
+      return "bytes";
+    if (is_bytearray_call(arg))
+      return "bytearray";
+    return "";
+  };
+  auto is_bytes_annotated_name = [&](const nlohmann::json &arg) -> bool {
+    if (!(arg.contains("_type") && arg["_type"] == "Name" &&
+          arg.contains("id")))
+      return false;
+
+    const std::string var_name = arg["id"].get<std::string>();
+    nlohmann::json var_decl = json_utils::find_var_decl(
+      var_name, converter_.current_function_name(), converter_.ast());
+    if (
+      var_decl.empty() || !var_decl.contains("annotation") ||
+      var_decl["annotation"].is_null())
+      return false;
+
+    const auto &annotation = var_decl["annotation"];
+    return annotation.contains("id") && annotation["id"] == "bytes";
+  };
+  auto try_dispatch_numeric_dunder =
+    [&](const std::string &op, exprt &operand) -> exprt {
+    return converter_.dispatch_unary_dunder_operator(
+      op, operand, converter_.get_location_from_decl(call_));
+  };
+  auto try_convert_via_numeric_dunders =
+    [&](exprt &value, bool require_complex_result) -> std::optional<exprt> {
+    exprt complex_result = try_dispatch_numeric_dunder("complex", value);
+    if (!complex_result.is_nil())
+    {
+      if (is_cpp_throw(complex_result))
+        return complex_result;
+      if (!is_complex_type(complex_result.type()))
+      {
+        if (require_complex_result)
+          return raise_type_error("__complex__ returned non-complex");
+        complex_result = promote_to_complex(complex_result);
+      }
+      return complex_result;
+    }
+
+    exprt float_result = try_dispatch_numeric_dunder("float", value);
+    if (!float_result.is_nil())
+    {
+      if (is_cpp_throw(float_result))
+        return float_result;
+      const typet &float_t = float_result.type();
+      const bool is_python_float =
+        float_t == double_type() ||
+        (float_t.is_floatbv() && to_floatbv_type(float_t).get_width() == 64);
+      if (!is_python_float)
+        return raise_type_error("__float__ returned non-float");
+      return make_complex(float_result, zero());
+    }
+
+    exprt index_result = try_dispatch_numeric_dunder("index", value);
+    if (!index_result.is_nil())
+    {
+      if (is_cpp_throw(index_result))
+        return index_result;
+      const typet &index_t = index_result.type();
+      const bool is_python_int =
+        index_t.is_signedbv() || index_t.is_unsignedbv() || index_t.is_bool();
+      if (!is_python_int)
+        return raise_type_error("__index__ returned non-int");
+      if (index_result.type() != double_type())
+        index_result = typecast_exprt(index_result, double_type());
+      return make_complex(index_result, zero());
+    }
+
+    return std::nullopt;
+  };
+  auto is_unsigned_byte_array = [](const typet &type) -> bool {
+    if (!type.is_array())
+      return false;
+    const typet &subtype = type.subtype();
+    return subtype.is_unsignedbv() &&
+           to_unsignedbv_type(subtype).get_width() == 8;
+  };
+  auto parse_complex_string =
+    [&](const std::string &raw, double &real_out, double &imag_out) -> bool {
+    std::string s = trim(raw);
+    if (s.empty())
+      return false;
+
+    // Accept optional wrapping parentheses (possibly repeated).
+    while (s.size() > 2 && s.front() == '(' && s.back() == ')')
+      s = trim(s.substr(1, s.size() - 2));
+
+    auto lower_last = [](char c) {
+      return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    };
+
+    // No imaginary suffix: parse as real number.
+    if (lower_last(s.back()) != 'j')
+    {
+      double r = 0.0;
+      if (!parse_double_strict(s, r))
+        return false;
+      real_out = r;
+      imag_out = 0.0;
+      return true;
+    }
+
+    std::string body = trim(s.substr(0, s.size() - 1));
+    if (body.empty() || body == "+" || body == "-")
+    {
+      real_out = 0.0;
+      imag_out = (body == "-") ? -1.0 : 1.0;
+      return true;
+    }
+
+    size_t split = std::string::npos;
+    for (size_t i = 1; i < body.size(); ++i)
+    {
+      const char c = body[i];
+      if (c == '+' || c == '-')
+      {
+        const char prev = body[i - 1];
+        if (prev != 'e' && prev != 'E')
+          split = i;
+      }
+    }
+
+    if (split == std::string::npos)
+    {
+      double imag = 0.0;
+      if (!parse_double_strict(body, imag))
+        return false;
+      real_out = 0.0;
+      imag_out = imag;
+      return true;
+    }
+
+    const std::string real_part = trim(body.substr(0, split));
+    const std::string imag_part = trim(body.substr(split));
+    double real = 0.0;
+    if (!parse_double_strict(real_part, real))
+      return false;
+
+    double imag = 0.0;
+    if (imag_part == "+" || imag_part == "-")
+      imag = (imag_part == "-") ? -1.0 : 1.0;
+    else if (!parse_double_strict(imag_part, imag))
+      return false;
+
+    real_out = real;
+    imag_out = imag;
+    return true;
+  };
+
+  if (arguments.size() > 2)
+    return raise_type_error("complex() takes at most 2 arguments");
+
+  const nlohmann::json *real_json = nullptr;
+  const nlohmann::json *imag_json = nullptr;
+
+  if (!arguments.empty())
+    real_json = &arguments[0];
+  if (arguments.size() >= 2)
+    imag_json = &arguments[1];
+
+  if (keywords.is_array())
+  {
+    for (const auto &kw : keywords)
+    {
+      if (!kw.contains("arg") || kw["arg"].is_null() || !kw.contains("value"))
+        return raise_type_error("complex() does not support **kwargs");
+
+      const std::string name = kw["arg"].get<std::string>();
+      if (name == "real")
+      {
+        if (real_json != nullptr)
+          return raise_type_error(
+            "complex() got multiple values for argument 'real'");
+        real_json = &kw["value"];
+      }
+      else if (name == "imag")
+      {
+        if (imag_json != nullptr)
+          return raise_type_error(
+            "complex() got multiple values for argument 'imag'");
+        imag_json = &kw["value"];
+      }
+      else
+      {
+        return raise_type_error(
+          "complex() got an unexpected keyword argument '" + name + "'");
+      }
+    }
+  }
+
+  nlohmann::json default_real_json;
+  if (real_json == nullptr)
+  {
+    default_real_json = {{"_type", "Constant"}, {"value", 0}};
+    real_json = &default_real_json;
+  }
+
+  if (imag_json == nullptr)
+  {
+    // bytes/bytearray are rejected by CPython in complex(x) one-arg form.
+    const std::string real_byteslike = byteslike_name(*real_json);
+    if (!real_byteslike.empty())
+      return raise_type_error(
+        "complex() first argument must be a string or a number, not '" +
+        real_byteslike + "'");
+    if (is_bytes_annotated_name(*real_json))
+      return raise_type_error(
+        "complex() first argument must be a string or a number, not 'bytes'");
+
+    // One-argument form accepts string literals.
+    std::string text;
+    if (extract_constant_string(*real_json, text))
+    {
+      double real = 0.0, imag = 0.0;
+      if (!parse_complex_string(text, real, imag))
+        return raise_value_error("complex() arg is a malformed string");
+      return make_complex(
+        from_double(real, double_type()), from_double(imag, double_type()));
+    }
+
+    // Best-effort support for non-literal string symbols.
+    if ((*real_json).contains("_type") && (*real_json)["_type"] == "Name")
+    {
+      const symbolt *sym = lookup_python_symbol((*real_json)["id"]);
+      if (sym)
+      {
+        const typet &symbol_type =
+          sym->value.type().is_not_nil() ? sym->value.type() : sym->type;
+        if (
+          symbol_type.is_array() && symbol_type.subtype().is_unsignedbv() &&
+          to_unsignedbv_type(symbol_type.subtype()).get_width() == 8)
+          return raise_type_error(
+            "complex() first argument must be a string or a number, not "
+            "'bytes'");
+
+        // Non-text arrays (e.g., bytes variables represented as integer arrays)
+        // are not valid real arguments for complex(x).
+        if (symbol_type.is_array())
+        {
+          const typet &elem_type = symbol_type.subtype();
+          const bool is_textual_char_array =
+            elem_type == char_type() ||
+            (elem_type.is_signedbv() &&
+             to_signedbv_type(elem_type).get_width() == 8) ||
+            (elem_type.is_unsignedbv() &&
+             to_unsignedbv_type(elem_type).get_width() == 8);
+          if (!is_textual_char_array)
+            return raise_type_error(
+              "complex() first argument must be a string or a number, not "
+              "'bytes'");
+        }
+
+        const bool maybe_text_symbol =
+          symbol_type.is_array() ||
+          (symbol_type.is_signedbv() &&
+           to_signedbv_type(symbol_type).get_width() == 8);
+        if (maybe_text_symbol)
+        {
+          auto value_opt = extract_string_from_symbol(sym);
+          if (value_opt)
+          {
+            double real = 0.0, imag = 0.0;
+            if (!parse_complex_string(*value_opt, real, imag))
+              return raise_value_error("complex() arg is a malformed string");
+            return make_complex(
+              from_double(real, double_type()),
+              from_double(imag, double_type()));
+          }
+        }
+      }
+    }
+
+    exprt value = converter_.get_expr(*real_json);
+    if (value.is_nil() || is_cpp_throw(value))
+      return value;
+
+    if (is_unsigned_byte_array(value.type()))
+      return raise_type_error(
+        "complex() first argument must be a string or a number, not 'bytes'");
+    if (value.type().is_array())
+    {
+      const typet &elem_type = value.type().subtype();
+      const bool is_textual_char_array =
+        elem_type == char_type() ||
+        (elem_type.is_signedbv() &&
+         to_signedbv_type(elem_type).get_width() == 8) ||
+        (elem_type.is_unsignedbv() &&
+         to_unsignedbv_type(elem_type).get_width() == 8);
+      if (!is_textual_char_array)
+        return raise_type_error(
+          "complex() first argument must be a string or a number, not 'bytes'");
+    }
+
+    if (is_complex_type(value.type()))
+      return value;
+
+    if (std::optional<exprt> dunder_value =
+          try_convert_via_numeric_dunders(value, true);
+        dunder_value.has_value())
+      return *dunder_value;
+
+    if (value.type() != double_type())
+      value = typecast_exprt(value, double_type());
+
+    return make_complex(value, zero());
+  }
+
+  // Two-argument form does not accept string / bytes / bytearray values.
+  if (is_string_arg(*real_json))
+    return raise_type_error(
+      "complex() can't take second arg if first is a string");
+  const std::string real_byteslike = byteslike_name(*real_json);
+  if (!real_byteslike.empty() || is_bytes_annotated_name(*real_json))
+    return raise_type_error(
+      "complex() first argument must be a string or a number, not '" +
+      (real_byteslike.empty() ? "bytes" : real_byteslike) + "'");
+  if (
+    is_string_arg(*imag_json) || !byteslike_name(*imag_json).empty() ||
+    is_bytes_annotated_name(*imag_json))
+    return raise_type_error("complex() second arg can't be a string");
+
+  exprt real_arg = converter_.get_expr(*real_json);
+  if (real_arg.is_nil() || is_cpp_throw(real_arg))
+    return real_arg;
+
+  exprt imag_arg = converter_.get_expr(*imag_json);
+  if (imag_arg.is_nil() || is_cpp_throw(imag_arg))
+    return imag_arg;
+
+  if (
+    is_unsigned_byte_array(real_arg.type()) ||
+    is_unsigned_byte_array(imag_arg.type()))
+    return raise_type_error("complex() second arg can't be a string");
+
+  if (!is_complex_type(real_arg.type()))
+  {
+    if (std::optional<exprt> dunder_real =
+          try_convert_via_numeric_dunders(real_arg, true);
+        dunder_real.has_value())
+    {
+      if (is_cpp_throw(*dunder_real))
+        return *dunder_real;
+      real_arg = *dunder_real;
+    }
+  }
+
+  if (!is_complex_type(imag_arg.type()))
+  {
+    if (std::optional<exprt> dunder_imag =
+          try_convert_via_numeric_dunders(imag_arg, true);
+        dunder_imag.has_value())
+    {
+      if (is_cpp_throw(*dunder_imag))
+        return *dunder_imag;
+      imag_arg = *dunder_imag;
+    }
+  }
+
+  // Python semantics: complex(x, y) == x + y * 1j, including complex args.
+  real_arg = promote_to_complex(real_arg);
+  imag_arg = promote_to_complex(imag_arg);
+
+  exprt a = member_exprt(real_arg, "real", double_type());
+  exprt b = member_exprt(real_arg, "imag", double_type());
+  exprt c = member_exprt(imag_arg, "real", double_type());
+  exprt d = member_exprt(imag_arg, "imag", double_type());
+
+  exprt real_part("ieee_sub", double_type());
+  real_part.copy_to_operands(a, d);
+
+  exprt imag_part("ieee_add", double_type());
+  imag_part.copy_to_operands(b, c);
+
+  return make_complex(real_part, imag_part);
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
+
+  if (func_name == "complex")
+    return handle_complex();
 
   // Check if there are no arguments
   if (call_["args"].empty())
@@ -1581,24 +2065,18 @@ exprt function_call_expr::build_constant_from_arg() const
     else
     {
       // Try to parse as regular float
-      try
       {
-        double dval = std::stod(arg["value"].get<std::string>());
+        const std::string raw_val = arg["value"].get<std::string>();
+        char *end = nullptr;
+        double dval = std::strtod(raw_val.c_str(), &end);
+        if (!end || end != raw_val.c_str() + raw_val.size())
+        {
+          std::string m =
+            "could not convert string to float : '" + raw_val + "'";
+          return converter_.get_exception_handler().gen_exception_raise(
+            "ValueError", m);
+        }
         return from_double(dval, type_handler_.get_typet("float", 0));
-      }
-      catch (const std::invalid_argument &)
-      {
-        std::string m = "could not convert string to float : '" +
-                        arg["value"].get<std::string>() + "'";
-        return converter_.get_exception_handler().gen_exception_raise(
-          "ValueError", m);
-      }
-      catch (const std::out_of_range &)
-      {
-        std::string m = "could not convert string to float : '" +
-                        arg["value"].get<std::string>() + "' (out of range)";
-        return converter_.get_exception_handler().gen_exception_raise(
-          "ValueError", m);
       }
     }
   }
@@ -1656,6 +2134,25 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "abs")
     return handle_abs(arg);
 
+  else if (func_name == "bool")
+  {
+    exprt value_expr = converter_.get_expr(arg);
+    if (value_expr.is_nil())
+      return value_expr;
+    if (value_expr.statement() == "cpp-throw")
+      return value_expr;
+
+    if (is_complex_type(value_expr.type()))
+    {
+      exprt real = member_exprt(value_expr, "real", double_type());
+      exprt imag = member_exprt(value_expr, "imag", double_type());
+      exprt zero = from_double(0.0, double_type());
+      return or_exprt(
+        not_exprt(equality_exprt(real, zero)),
+        not_exprt(equality_exprt(imag, zero)));
+    }
+  }
+
   else if (func_name == "str")
     arg_size = handle_str(arg);
 
@@ -1696,7 +2193,23 @@ std::string function_call_expr::get_object_name() const
     obj_name = function_id_.get_class();
   else if (subelement["_type"] == "Call")
   {
-    obj_name = subelement["func"]["id"];
+    if (
+      subelement.contains("func") && subelement["func"].contains("_type") &&
+      subelement["func"]["_type"] == "Name" &&
+      subelement["func"].contains("id") && subelement["func"]["id"].is_string())
+    {
+      obj_name = subelement["func"]["id"].get<std::string>();
+    }
+    else
+    {
+      // Nested call receivers (e.g. u.encode(...).decode(...)) do not have
+      // a func.id field in the inner Call AST node.
+      obj_name = type_handler_.get_operand_type(subelement);
+    }
+
+    if (obj_name.empty())
+      obj_name = function_id_.get_class();
+
     if (obj_name == "super")
       obj_name = "self";
   }
@@ -1782,6 +2295,32 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
                                       ? slice_node["id"].get<std::string>()
                                       : "(expr)";
         display_name = base_name + "[" + idx_str + "]";
+        return sym;
+      }
+    }
+    return nullptr;
+  }
+
+  // Attribute case: e.g. obj.mutable_attr.append(1)
+  // Resolve the attribute access via get_expr(), which already handles the
+  // class-attribute fallback (instance attr not set → class-level symbol).
+  if (func_value["_type"] == "Attribute")
+  {
+    const exprt attr_expr = converter_.get_expr(func_value);
+    if (attr_expr.is_symbol())
+    {
+      const symbolt *sym =
+        converter_.find_symbol(attr_expr.identifier().as_string());
+      const typet list_type = converter_.get_type_handler().get_list_type();
+      if (sym && sym->type == list_type)
+      {
+        if (
+          func_value.contains("value") && func_value["value"].contains("id") &&
+          func_value.contains("attr"))
+        {
+          display_name = func_value["value"]["id"].get<std::string>() + "." +
+                         func_value["attr"].get<std::string>();
+        }
         return sym;
       }
     }
@@ -1983,11 +2522,29 @@ exprt function_call_expr::handle_list_pop() const
   if (args.size() > 1)
     throw std::runtime_error("pop() takes at most 1 argument");
 
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  const symbolt *list_symbol = nullptr;
+
+  // Create temporary symbols from binary expressions (e.g., (x-y).pop()).
+  if (
+    call_["func"].contains("value") &&
+    call_["func"]["value"].contains("_type") &&
+    call_["func"]["value"]["_type"] == "BinOp")
+  {
+    exprt list_expr = converter_.get_expr(call_["func"]["value"]);
+    if (list_expr.is_symbol())
+    {
+      list_symbol = converter_.symbol_table().find_symbol(
+        to_symbol_expr(list_expr).get_identifier());
+    }
+  }
 
   if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
+  {
+    std::string list_display_name;
+    list_symbol = get_object_list_symbol(list_display_name);
+    if (!list_symbol)
+      throw std::runtime_error("List variable not found: " + list_display_name);
+  }
 
   // Determine the index (default is -1 for last element)
   exprt index_expr;
@@ -3088,15 +3645,21 @@ exprt function_call_expr::handle_general_function_call()
 {
   auto &symbol_table = converter_.symbol_table();
 
-  // Handle single-argument min/max by dispatching to typed builtins
+  // Handle single-argument min/max/sum/sorted by dispatching to typed builtins
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
+
+  // Skip builtin dispatch if the user imported a function with the same name
+  // e.g. "from other import sum" defines a user sum that shadows the builtin
+  bool is_user_imported =
+    converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
 
   const bool has_user_round =
     !find_function(converter_.ast()["body"], func_name).empty();
   if (
     func_name == "round" && call_.contains("func") &&
-    call_["func"].value("_type", "") == "Name" && !has_user_round)
+    call_["func"].value("_type", "") == "Name" && !has_user_round &&
+    !is_user_imported)
   {
     if (call_["args"].empty())
       return converter_.get_exception_handler().gen_exception_raise(
@@ -3106,7 +3669,9 @@ exprt function_call_expr::handle_general_function_call()
   }
 
   if (
-    (func_name == "min" || func_name == "max" || func_name == "sorted") &&
+    !is_user_imported &&
+    (func_name == "min" || func_name == "max" || func_name == "sorted" ||
+     func_name == "sum") &&
     call_["args"].size() == 1)
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
@@ -3419,8 +3984,22 @@ exprt function_call_expr::handle_general_function_call()
   {
     call.type() = type_handler_.get_typet(func_symbol->name.as_string());
 
+    // Detect super().__init__() pattern: call parent ctor on current self,
+    // not on a newly allocated object.
+    bool is_super_init = call_["func"]["_type"] == "Attribute" &&
+                         call_["func"]["value"]["_type"] == "Call" &&
+                         call_["func"]["value"].contains("func") &&
+                         call_["func"]["value"]["func"].contains("id") &&
+                         call_["func"]["value"]["func"]["id"] == "super";
+
+    if (is_super_init)
+    {
+      if (obj_symbol)
+        call.arguments().push_back(symbol_expr(*obj_symbol));
+      param_offset = 1;
+    }
     // Self is the LHS
-    if (converter_.current_lhs)
+    else if (converter_.current_lhs)
     {
       call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;
@@ -3548,6 +4127,11 @@ exprt function_call_expr::handle_general_function_call()
   {
     exprt arg = converter_.get_expr(arg_node);
 
+    // A function name passed as an argument decays to a function pointer,
+    // mirroring C's implicit function-to-pointer conversion.
+    if (arg.type().is_code() && arg.is_symbol())
+      arg = address_of_exprt(arg);
+
     // Check if the corresponding parameter is Optional
     size_t param_idx = arg_index + param_offset;
 
@@ -3623,11 +4207,32 @@ exprt function_call_expr::handle_general_function_call()
        function_id_.get_function() == "strlen") &&
       (arg.type() == type_handler_.get_list_type() ||
        (arg.type().is_pointer() &&
-        arg.type().subtype() == type_handler_.get_list_type())) &&
-      arg.is_symbol())
+        arg.type().subtype() == type_handler_.get_list_type() &&
+        arg.type().is_symbol())))
     {
-      symbolt *list_symbol =
-        converter_.find_symbol(arg.identifier().as_string());
+      symbolt *list_symbol = nullptr;
+
+      if (arg.is_symbol())
+      {
+        list_symbol = converter_.find_symbol(arg.identifier().as_string());
+      }
+      else
+      {
+        const typet list_type = type_handler_.get_list_type();
+        symbolt &tmp_list = converter_.create_tmp_symbol(
+          call_, "$obj_size_list_arg$", list_type, exprt());
+
+        code_declt tmp_decl(symbol_expr(tmp_list));
+        tmp_decl.location() = location;
+        converter_.current_block->copy_to_operands(tmp_decl);
+
+        code_assignt tmp_assign(symbol_expr(tmp_list), arg);
+        tmp_assign.location() = location;
+        converter_.current_block->copy_to_operands(tmp_assign);
+
+        list_symbol = &tmp_list;
+      }
+
       assert(list_symbol);
 
       const symbolt *list_size_func_sym =
@@ -3920,7 +4525,6 @@ exprt function_call_expr::handle_general_function_call()
   }
 
   // For constructors without current_lhs, create temp var and add self if needed
-  // Note: get_return_statements() will handle return statements separately
   if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
   {
     size_t num_provided_args = call_["args"].size();
@@ -3928,7 +4532,6 @@ exprt function_call_expr::handle_general_function_call()
     // Only add self if arguments size matches user args (no self added yet)
     if (call.arguments().size() == num_provided_args)
     {
-      // Self parameter not added yet - this is a standalone call (e.g., Positive(2))
       // Create temporary object as self parameter
       typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
       symbolt &temp_self =
@@ -3943,6 +4546,14 @@ exprt function_call_expr::handle_general_function_call()
       // Insert self as first argument
       call.arguments().insert(
         call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
+
+      // Emit the constructor call directly as a FUNCTION_CALL instruction so
+      // ESBMC inlines it (codet("expression") would produce OTHER and be
+      // skipped).  Return the initialised temp_self symbol so callers such as
+      // list literals receive the properly constructed object.
+      call.location() = location;
+      converter_.add_instruction(call);
+      return symbol_expr(temp_self);
     }
   }
 

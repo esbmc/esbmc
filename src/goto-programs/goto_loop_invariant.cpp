@@ -32,6 +32,7 @@
 #include <util/i2string.h>
 #include <util/std_expr.h>
 #include <util/options.h>
+#include <irep2/irep2_utils.h>
 
 void goto_loop_invariant(goto_functionst &goto_functions)
 {
@@ -68,7 +69,7 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // Extract invariant-related DECL/FUNCTION_CALLs and re-insert before each
   // ASSERT/ASSUME.
   goto_programt side_effects;
-  extract_and_remove_side_effects(loop_head, invariants, side_effects);
+  extract_and_remove_side_effects(loop_head, loop, invariants, side_effects);
 
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, side_effects);
@@ -152,8 +153,58 @@ void goto_loop_invariantt::collect_symbols(
   }
 }
 
+/// Return true if \p expr is a trivial RHS (constant 0/1, constant bool, or
+/// NONDET). We skip collecting such assignments when tracing back from the
+/// invariant so that we only pull in the "real" definition (e.g. from a
+/// function call) and not the fallback or initialiser.
+static bool is_trivial_rhs(const expr2tc &expr)
+{
+  if (!expr)
+    return true;
+  if (is_constant_int2t(expr))
+  {
+    const auto &v = to_constant_int2t(expr).value;
+    return v == 0 || v == 1;
+  }
+  if (is_constant_bool2t(expr))
+    return true;
+  if (
+    is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
+    return true;
+  return false;
+}
+
+/// Heuristic: compiler-generated temporaries (e.g. for short-circuit evaluation)
+/// typically have '$' in their name; user variables do not. Used to avoid
+/// moving user variable DECLs/ASSIGNs while still collecting compiler temps.
+static bool is_likely_compiler_temp(const irep_idt &id)
+{
+  return id2string(id).find('$') != std::string::npos;
+}
+
+/// True if \p full_or_short matches \p decl_id: either exact match, or
+/// (when \p allow_suffix) \p full_or_short ends with "::" + decl_id.
+static bool symbol_name_matches(
+  const irep_idt &full_or_short,
+  const irep_idt &decl_id,
+  bool allow_suffix)
+{
+  const std::string s = id2string(full_or_short);
+  const std::string d = id2string(decl_id);
+  if (s == d)
+    return true;
+  if (!allow_suffix)
+    return false;
+  if (s.size() < d.size() + 2)
+    return false;
+  const std::size_t suffix_pos = s.size() - d.size();
+  return s[suffix_pos - 2] == ':' && s[suffix_pos - 1] == ':' &&
+         s.compare(suffix_pos, d.size(), d) == 0;
+}
+
 void goto_loop_invariantt::extract_and_remove_side_effects(
   goto_programt::targett loop_head,
+  const loopst &loop,
   const std::vector<expr2tc> &invariants,
   goto_programt &side_effects_out)
 {
@@ -165,9 +216,21 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
   if (inv_symbols.empty())
     return;
 
+  // Names of variables modified in the loop: do not move their DECLs (they
+  // are user variables like i, sum, y; moving them would break base case).
+  std::set<irep_idt> modified_in_loop;
+  for (const auto &e : loop.get_modified_loop_vars())
+    if (is_symbol2t(e))
+      modified_in_loop.insert(to_symbol2t(e).get_symbol_name());
+
+  auto decl_modified_in_loop = [&modified_in_loop](const irep_idt &decl_val) {
+    for (const auto &sym : modified_in_loop)
+      if (symbol_name_matches(sym, decl_val, true))
+        return true;
+    return false;
+  };
+
   // Find the LOOP_INVARIANT instruction preceding loop_head.
-  // Uses the same search limit as extract_loop_invariants so the two
-  // backward passes are consistent.
   goto_programt::targett loop_inv_it = loop_head;
   size_t back_dist = 0;
   while (loop_inv_it != goto_function.body.instructions.begin() &&
@@ -179,18 +242,41 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
       break;
   }
   if (!loop_inv_it->is_loop_invariant())
-    return; // no LOOP_INVARIANT found
+    return;
 
-  // Walk backwards from the LOOP_INVARIANT: collect DECL/FUNCTION_CALL
-  // instructions that define temporaries used in the invariant; stop at the
-  // first unrecognised instruction.
+  // Walk backwards from LOOP_INVARIANT: collect instructions that define
+  // temporaries used in the invariant. dep_symbols = symbols the invariant
+  // (or already-collected definitions) depend on. Also trace through ASSIGNs
+  // so when the invariant uses a compiler temporary (e.g. tmp$2) assigned from
+  // a function-call result, we collect that ASSIGN and the FUNCTION_CALL/DECL
+  // (fixes issue #3711: function call in the middle of invariant body).
+  // Collect DECL only when the symbol is in dep_symbols and not modified in
+  // the loop (so we do not move DECLs for user variables like i, sum).
   std::vector<goto_programt::targett> to_remove;
+  std::set<irep_idt> dep_symbols = inv_symbols;
   std::set<irep_idt> fc_return_syms;
 
   goto_programt::targett search = loop_inv_it;
   while (search != goto_function.body.instructions.begin())
   {
     --search;
+
+    if (search->is_assign() && is_code_assign2t(search->code))
+    {
+      const code_assign2t &assign = to_code_assign2t(search->code);
+      if (!is_symbol2t(assign.target))
+        break;
+      irep_idt lhs_sym = to_symbol2t(assign.target).get_symbol_name();
+      if (dep_symbols.count(lhs_sym) == 0)
+        break;
+      if (inv_symbols.count(lhs_sym) && !is_likely_compiler_temp(lhs_sym))
+        break;
+      if (is_trivial_rhs(assign.source))
+        continue;
+      to_remove.push_back(search);
+      collect_symbols(assign.source, dep_symbols);
+      continue;
+    }
 
     if (search->is_function_call())
     {
@@ -200,7 +286,7 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
       if (!is_nil_expr(fc.ret) && is_symbol2t(fc.ret))
       {
         irep_idt sym = to_symbol2t(fc.ret).get_symbol_name();
-        if (inv_symbols.count(sym))
+        if (dep_symbols.count(sym))
         {
           fc_return_syms.insert(sym);
           to_remove.push_back(search);
@@ -215,24 +301,49 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
       if (!is_code_decl2t(search->code))
         break;
       const code_decl2t &decl = to_code_decl2t(search->code);
-      if (fc_return_syms.count(decl.value))
+      if (decl_modified_in_loop(decl.value))
+      {
+        continue;
+      }
+      const bool allow_suffix = is_likely_compiler_temp(decl.value);
+      bool is_fc_ret = false;
+      bool is_extra_dep = false;
+      for (const auto &sym : fc_return_syms)
+        if (symbol_name_matches(sym, decl.value, allow_suffix))
+        {
+          is_fc_ret = true;
+          break;
+        }
+      if (!is_fc_ret)
+        for (const auto &sym : dep_symbols)
+          if (
+            !inv_symbols.count(sym) &&
+            symbol_name_matches(sym, decl.value, allow_suffix))
+          {
+            is_extra_dep = true;
+            break;
+          }
+      if (is_fc_ret || is_extra_dep)
       {
         to_remove.push_back(search);
         continue;
       }
-      break;
+      if (inv_symbols.count(decl.value) && !allow_suffix)
+        break;
+      continue;
     }
 
-    // Any other instruction (ASSIGN, GOTO, SKIP, ASSUME, etc.) ends the
-    // backward search so we only collect the contiguous DECL/FC block.
+    if (search->is_goto())
+    {
+      continue;
+    }
+
     break;
   }
 
   if (to_remove.empty())
     return;
 
-  // Move collected instructions into side_effects_out (original order) and
-  // erase from the GOTO program.
   for (auto rit = to_remove.rbegin(); rit != to_remove.rend(); ++rit)
   {
     side_effects_out.instructions.push_back(**rit);
