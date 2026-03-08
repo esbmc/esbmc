@@ -336,11 +336,11 @@ void goto_convertt::remove_sideeffects(
       if (fsym && fsym->name == "__ESBMC_loop_invariant")
       {
         exprt::operandst &args = expr.op1().operands();
+        exprt *and_expr = nullptr;
         if (args.size() == 1 && has_sideeffect(args.front()))
         {
           // Locate the && expression, looking through any implicit typecast
           // that Clang inserts when converting the && result to _Bool.
-          exprt *and_expr = nullptr;
           if (args.front().is_and())
             and_expr = &args.front();
           else if (
@@ -360,10 +360,10 @@ void goto_convertt::remove_sideeffects(
             args.front() = rebuild_and_chain(conjuncts, 0);
           }
         }
+        // Only bypass Forall_operands when we actually rewrote the && chain;
+        // otherwise (e.g. single foo(x) or foo(x)==0) fall through to normal path.
         if (and_expr)
         {
-          // Fall through to remove_function_call without running Forall_operands,
-          // which would otherwise re-transform the already-cleaned argument.
           remove_function_call(expr, dest, result_is_used);
           return;
         }
