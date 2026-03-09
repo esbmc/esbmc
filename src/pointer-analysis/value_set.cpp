@@ -598,10 +598,12 @@ void value_sett::get_value_set_rec(
 
     if (sym.rlevel == symbol2t::renaming_level::level1_global)
       assert(sym.level1_num == 0);
-    /* These assertions do not hold during value_sett::assign():
-     * - level2 (non-global): the RHS can be an L2 symbol (e.g. pthread_create)
-     * - level2_global: global variables renamed during symbolic execution appear
-     *   as L2_global symbols; their value set is looked up via the base name.
+
+    /* This assertion does not hold: during value_sett::assign() the RHS is the
+     * L2 symbol c:pthread_lib.c@5466@F@pthread_create@startdata in e.g.
+     * - regression/esbmc-unix/02_account_symbolic_06
+     * - regression/esbmc/10_bicycle_01
+     * - regression/nonz3/10_bicycle_02
     // assert(sym.rlevel != symbol2t::renaming_level::level2);
     // assert(sym.rlevel != symbol2t::renaming_level::level2_global);
      */
