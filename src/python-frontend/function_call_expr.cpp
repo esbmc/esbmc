@@ -1453,6 +1453,65 @@ exprt function_call_expr::handle_complex() const
       "ValueError", msg);
   };
   auto zero = []() -> exprt { return from_double(0.0, double_type()); };
+  auto promote_int_arith_to_double =
+    [&](const exprt &input_expr, auto &self, std::size_t depth) -> exprt {
+    if (depth > 64)
+      return typecast_exprt(input_expr, double_type());
+
+    if (is_cpp_throw_expr(input_expr))
+      return input_expr;
+
+    const irep_idt id = input_expr.id();
+    if (
+      (id == "+" || id == "-" || id == "*" || id == "/") &&
+      input_expr.operands().size() == 2)
+    {
+      exprt lhs = self(input_expr.op0(), self, depth + 1);
+      if (is_cpp_throw_expr(lhs))
+        return lhs;
+      exprt rhs = self(input_expr.op1(), self, depth + 1);
+      if (is_cpp_throw_expr(rhs))
+        return rhs;
+
+      exprt op_expr;
+      if (id == "+")
+        op_expr = exprt("ieee_add", double_type());
+      else if (id == "-")
+        op_expr = exprt("ieee_sub", double_type());
+      else if (id == "*")
+        op_expr = exprt("ieee_mul", double_type());
+      else
+        op_expr = exprt("ieee_div", double_type());
+
+      op_expr.copy_to_operands(lhs, rhs);
+      return op_expr;
+    }
+
+    if (input_expr.type() == double_type())
+      return input_expr;
+
+    const typet &expr_type = input_expr.type();
+    const bool numeric_like =
+      expr_type.is_floatbv() || expr_type.is_signedbv() ||
+      expr_type.is_unsignedbv() || expr_type.is_bool();
+    if (!numeric_like)
+      return input_expr;
+
+    return typecast_exprt(input_expr, double_type());
+  };
+  auto normalize_numeric_expr_for_complex = [&](exprt value) -> exprt {
+    if (is_cpp_throw_expr(value))
+      return value;
+    if (is_complex_type(value.type()))
+      return value;
+
+    if (
+      value.type().is_signedbv() || value.type().is_unsignedbv() ||
+      value.type().is_bool())
+      return promote_int_arith_to_double(value, promote_int_arith_to_double, 0);
+
+    return value;
+  };
   auto is_cpp_throw = [](const exprt &e) -> bool {
     return e.statement() == "cpp-throw";
   };
@@ -1808,8 +1867,14 @@ exprt function_call_expr::handle_complex() const
         dunder_value.has_value())
       return *dunder_value;
 
+    value = normalize_numeric_expr_for_complex(value);
+    if (is_cpp_throw_expr(value))
+      return value;
+
     if (value.type() != double_type())
+    {
       value = typecast_exprt(value, double_type());
+    }
 
     return make_complex(value, zero());
   }
@@ -1852,6 +1917,9 @@ exprt function_call_expr::handle_complex() const
       real_arg = *dunder_real;
     }
   }
+  real_arg = normalize_numeric_expr_for_complex(real_arg);
+  if (is_cpp_throw_expr(real_arg))
+    return real_arg;
 
   if (!is_complex_type(imag_arg.type()))
   {
@@ -1864,6 +1932,9 @@ exprt function_call_expr::handle_complex() const
       imag_arg = *dunder_imag;
     }
   }
+  imag_arg = normalize_numeric_expr_for_complex(imag_arg);
+  if (is_cpp_throw_expr(imag_arg))
+    return imag_arg;
 
   // Python semantics: complex(x, y) == x + y * 1j, including complex args.
   real_arg = promote_to_complex(real_arg);
