@@ -404,12 +404,14 @@ exprt python_dict_handler::handle_dict_subscript(
   member_exprt keys_member(dict_expr, "keys", list_type);
   member_exprt values_member(dict_expr, "values", list_type);
 
-  // Find __ESBMC_list_find_index function
+  // Use try_find_index so a missing key returns SIZE_MAX instead of asserting.
+  // We then emit a cpp-throw KeyError for the not-found case, which allows
+  // try/except KeyError blocks to catch it (Python semantics).
   const symbolt *find_func =
-    symbol_table_.find_symbol("c:@F@__ESBMC_list_find_index");
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
   if (!find_func)
     throw std::runtime_error(
-      "__ESBMC_list_find_index not found - add it to list.c model");
+      "__ESBMC_list_try_find_index not found - add it to list.c model");
 
   // Create temp for index result
   symbolt &index_var = converter_.create_tmp_symbol(
@@ -424,7 +426,7 @@ exprt python_dict_handler::handle_dict_subscript(
   list_elem_info key_info =
     list_handler.get_list_element_info(slice_node, key_expr);
 
-  // Call find_index(keys, key, type_hash, size)
+  // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if absent
   code_function_callt find_call;
   find_call.function() = symbol_expr(*find_func);
   find_call.lhs() = symbol_expr(index_var);
@@ -444,6 +446,56 @@ exprt python_dict_handler::handle_dict_subscript(
   find_call.type() = size_type();
   find_call.location() = location;
   converter_.add_instruction(find_call);
+
+  // If index == SIZE_MAX the key was not found: throw KeyError so that
+  // try/except KeyError handlers can catch it (instead of failing the property).
+  {
+    constant_exprt size_max(
+      integer2binary(SIZE_MAX, bv_width(size_type())),
+      integer2string(SIZE_MAX),
+      size_type());
+    exprt key_not_found = equality_exprt(symbol_expr(index_var), size_max);
+
+    std::string keyerror_msg = "KeyError: key not found in dictionary";
+    std::string keyerror_type_str = "KeyError";
+    typet keyerror_type = type_handler_.get_typet(keyerror_type_str);
+
+    exprt msg_size_expr = constant_exprt(
+      integer2binary(keyerror_msg.size(), bv_width(size_type())),
+      integer2string(keyerror_msg.size()),
+      size_type());
+    typet str_arr_type = array_typet(char_type(), msg_size_expr);
+
+    symbolt &err_msg_var = converter_.create_tmp_symbol(
+      slice_node, "$keyerror_msg$", str_arr_type, exprt());
+    code_declt err_msg_decl(symbol_expr(err_msg_var));
+    err_msg_decl.location() = location;
+
+    exprt err_str =
+      converter_.get_string_builder().build_string_literal(keyerror_msg);
+    code_assignt err_msg_assign(symbol_expr(err_msg_var), err_str);
+    err_msg_assign.location() = location;
+
+    exprt exc_struct("struct", keyerror_type);
+    exc_struct.copy_to_operands(address_of_exprt(symbol_expr(err_msg_var)));
+
+    exprt raise_keyerror = side_effect_exprt("cpp-throw", keyerror_type);
+    raise_keyerror.move_to_operands(exc_struct);
+    raise_keyerror.location() = location;
+
+    code_blockt throw_block;
+    throw_block.copy_to_operands(err_msg_decl);
+    throw_block.copy_to_operands(err_msg_assign);
+    code_expressiont raise_code(raise_keyerror);
+    raise_code.location() = location;
+    throw_block.copy_to_operands(raise_code);
+
+    code_ifthenelset key_check;
+    key_check.cond() = key_not_found;
+    key_check.then_case() = throw_block;
+    key_check.location() = location;
+    converter_.add_instruction(key_check);
+  }
 
   // Get values[index] using list_at
   const symbolt *at_func = symbol_table_.find_symbol("c:@F@__ESBMC_list_at");

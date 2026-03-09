@@ -32,7 +32,7 @@ static const std::map<std::string, std::string> builtin_functions = {
   {"round", "int"}, // Can return int or float
   {"min", "Any"},   // Type depends on input
   {"max", "Any"},   // Type depends on input
-  {"sum", "int"},   // Can return int or float, but int is common case
+  {"sum", "Any"},   // Type depends on input
   {"pow", "int"},   // Can return int or float
 
   // Sequence functions
@@ -152,6 +152,13 @@ public:
                        ++i)
                   {
                     Json &param = params[i];
+                    // Only annotate if the parameter is not yet annotated;
+                    // do not overwrite explicit annotations (e.g., Optional["List"])
+                    // with a less-specific type inferred from a call site (e.g., NoneType).
+                    if (
+                      param.contains("annotation") &&
+                      !param["annotation"].is_null())
+                      continue;
                     const Json &arg = call_args[i - 1];
                     std::string arg_type = get_argument_type(arg);
                     if (!arg_type.empty())
@@ -2361,6 +2368,7 @@ private:
     std::string attr_name = call["func"].contains("attr")
                               ? call["func"]["attr"].template get<std::string>()
                               : "";
+
     // Handle dict.keys() and dict.values()
     if (attr_name == "keys" || attr_name == "values")
     {

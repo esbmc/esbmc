@@ -206,9 +206,16 @@ symbol_id function_call_builder::build_function_id() const
           {
             const struct_typet &struct_type = to_struct_type(base_type);
             std::string attr = node["attr"].get<std::string>();
-            return struct_type.has_component(attr)
-                     ? struct_type.get_component(attr).type()
-                     : typet();
+            if (struct_type.has_component(attr))
+              return struct_type.get_component(attr).type();
+            // Not an instance member — check for class-level symbol
+            // (e.g. mutable_attr = [] declared in the class body).
+            symbol_id cls_sid(python_file, struct_type.tag().as_string(), "");
+            cls_sid.set_object(attr);
+            symbolt *cls_sym = converter_.find_symbol(cls_sid.to_string());
+            if (cls_sym)
+              return cls_sym->type;
+            return typet();
           }
           return typet();
         }
@@ -220,21 +227,30 @@ symbol_id function_call_builder::build_function_id() const
 
       if (!obj_type.id().empty())
       {
-        // Normalize the resolved type
-        if (obj_type.is_pointer())
-          obj_type = obj_type.subtype();
-        if (obj_type.id() == "symbol")
-          obj_type = converter_.ns.follow(obj_type);
-
-        // Extract class name from struct type
-        if (obj_type.is_struct())
+        // If the resolved type is a list (e.g. class-level mutable_attr = []),
+        // map directly to the "list" builtin name.
+        if (is_pylist_object_type(obj_type, converter_.ns))
         {
-          std::string tag = to_struct_type(obj_type).tag().as_string();
-          obj_name = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+          obj_name = "list";
         }
         else
         {
-          obj_name = th.type_to_string(obj_type);
+          // Normalize the resolved type
+          if (obj_type.is_pointer())
+            obj_type = obj_type.subtype();
+          if (obj_type.id() == "symbol")
+            obj_type = converter_.ns.follow(obj_type);
+
+          // Extract class name from struct type
+          if (obj_type.is_struct())
+          {
+            std::string tag = to_struct_type(obj_type).tag().as_string();
+            obj_name = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+          }
+          else
+          {
+            obj_name = th.type_to_string(obj_type);
+          }
         }
       }
       else
@@ -838,6 +854,22 @@ exprt function_call_builder::build() const
           if (!to_integer(arr_type.size(), sz) && sz > 0)
             return from_integer(sz - 1, size_type());
         }
+      }
+    }
+
+    // If this is a symbol for an input() string, use the pre-computed
+    // $input_len$ companion instead of falling back to strlen() unrolling.
+    if (arg_expr.is_symbol())
+    {
+      const std::string sym_id =
+        to_symbol_expr(arg_expr).get_identifier().as_string();
+      const auto &len_map = converter_.input_str_to_len_sym_;
+      auto it = len_map.find(sym_id);
+      if (it != len_map.end())
+      {
+        const symbolt *len_sym = converter_.find_symbol(it->second);
+        if (len_sym)
+          return typecast_exprt(symbol_expr(*len_sym), size_type());
       }
     }
 

@@ -1,5 +1,4 @@
 import sys
-import subprocess
 
 # Detect the Python version
 PY3 = sys.version_info[0] == 3
@@ -17,6 +16,19 @@ import os
 import glob
 import base64
 from preprocessor import Preprocessor
+
+def run_mypy_strict(filename):
+    """Run mypy in-process when available; skip otherwise."""
+    try:
+        from mypy import api as mypy_api
+    except ImportError:
+        return 0, ""
+
+    stdout, stderr, exit_status = mypy_api.run(["--strict", filename])
+    output = stdout
+    if stderr:
+        output += stderr
+    return exit_status, output
 
 
 def check_usage():
@@ -84,15 +96,24 @@ def import_module_by_name(module_name, output_dir):
 def encode_bytes(value):
     return base64.b64encode(value).decode('ascii')
 
-def add_type_annotation(node):
-    value_node = node.value
+def annotate_constant_node(value_node):
     # Python 3.8+ uses ast.Constant instead of ast.Str, ast.Num, ast.Bytes, etc.
-    if isinstance(value_node, ast.Constant):
-        if isinstance(value_node.value, str):
-            value_node.esbmc_type_annotation = "str"
-        elif isinstance(value_node.value, bytes):
-            value_node.esbmc_type_annotation = "bytes"
-            value_node.encoded_bytes = encode_bytes(value_node.value)
+    if not isinstance(value_node, ast.Constant):
+        return
+
+    if isinstance(value_node.value, str):
+        value_node.esbmc_type_annotation = "str"
+    elif isinstance(value_node.value, bytes):
+        value_node.esbmc_type_annotation = "bytes"
+        value_node.encoded_bytes = encode_bytes(value_node.value)
+    elif isinstance(value_node.value, complex):
+        value_node.esbmc_type_annotation = "complex"
+        value_node.real_value = value_node.value.real
+        value_node.imag_value = value_node.value.imag
+
+
+def add_type_annotation(node):
+    annotate_constant_node(node.value)
 
 
 def is_standard_library_file(filename):
@@ -524,15 +545,11 @@ def main():
     filename = sys.argv[1]
     output_dir = sys.argv[2]
 
-    # Type checking input program with mypy
-    result = subprocess.run(
-    ["mypy", "--strict", filename],
-    capture_output=True,
-    text=True)
-
-    if result.returncode != 0:
+    # Type checking input program with mypy.
+    returncode, mypy_output = run_mypy_strict(filename)
+    if returncode != 0:
         print("\033[93m\nType checking warning:\033[0m")
-        print(result.stdout)
+        print(mypy_output)
 
     # Add the script directory to the front of the import search path
     script_dir = os.path.dirname(os.path.abspath(filename))
@@ -558,8 +575,11 @@ def main():
             # Collect import information
             process_imports(node, output_dir)
         elif isinstance(node, ast.Assign):
-            # Add type annotation on assignments
+            # Keep assignment-specific annotation behavior.
             add_type_annotation(node)
+        elif isinstance(node, ast.Constant):
+            # Ensure constants are annotated in all contexts (e.g., call args).
+            annotate_constant_node(node)
         elif isinstance(node, ast.Attribute):
             # Detect and process submodule usage
             detect_and_process_submodules(node, processed_submodules, output_dir)

@@ -164,6 +164,18 @@ class NotImplementedError(RuntimeError):
         return self.message
 
 
+class EOFError(Exception):  # noqa: A001
+    """Raised when input() hits end-of-file without reading any data"""
+
+    message: str = ""
+
+    def __init__(self, message: str = "EOF when reading a line"):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
 class ImportError(Exception):
     """Raised when an import statement fails to find the module"""
     message: str = ""
