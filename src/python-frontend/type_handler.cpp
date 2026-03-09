@@ -181,7 +181,8 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   return std::string();
 }
 
-std::string type_handler::get_var_classname(const nlohmann::json &value_node) const
+std::string
+type_handler::get_var_classname(const nlohmann::json &value_node) const
 {
   if (!value_node.contains("_type") || value_node["_type"] != "Name")
     return "";
@@ -210,7 +211,8 @@ std::string type_handler::get_var_classname(const nlohmann::json &value_node) co
   if (var_symbol)
   {
     const auto annotation_types =
-      converter_.get_typechecker().get_annotation_types(var_symbol->id.as_string());
+      converter_.get_typechecker().get_annotation_types(
+        var_symbol->id.as_string());
     if (!annotation_types.empty())
     {
       typet ann_type = annotation_types.front();
