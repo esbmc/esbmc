@@ -2428,7 +2428,7 @@ exprt function_call_expr::handle_min_max(
   exprt arg1 = converter_.get_expr(args[0]);
   exprt arg2 = converter_.get_expr(args[1]);
 
-  // Determine result type (with basic type promotion)
+  // Determine result type (with type promotion)
   typet result_type = arg1.type();
   if (!base_type_eq(result_type, arg2.type(), converter_.ns))
   {
@@ -2436,6 +2436,22 @@ exprt function_call_expr::handle_min_max(
       result_type = arg2.type(); // Promote to float
     else if (result_type.is_floatbv() && arg2.type().is_signedbv())
       ; // Keep float type
+    else if (
+      (result_type.is_signedbv() && arg2.type().is_unsignedbv()) ||
+      (result_type.is_unsignedbv() && arg2.type().is_signedbv()))
+    {
+      // Python integers are signed; normalize both operands to signedbv
+      const unsigned width = std::max(
+        result_type.is_signedbv()
+          ? to_signedbv_type(result_type).get_width()
+          : to_unsignedbv_type(result_type).get_width(),
+        arg2.type().is_signedbv()
+          ? to_signedbv_type(arg2.type()).get_width()
+          : to_unsignedbv_type(arg2.type()).get_width());
+      result_type = signedbv_typet(width);
+      arg1 = typecast_exprt(arg1, result_type);
+      arg2 = typecast_exprt(arg2, result_type);
+    }
     else
       throw std::runtime_error(
         func_name + "() arguments must be of comparable types: got " +
