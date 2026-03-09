@@ -401,8 +401,9 @@ void goto_convertt::remove_sideeffects(
       // Fix: flatten the top-level && / || chain, call remove_sideeffects()
       // on each operand independently, and rebuild a plain and/or expression.
       // This keeps the full formula intact in the stored contract instruction.
-      if (fsym && (fsym->name == "__ESBMC_ensures" ||
-                   fsym->name == "__ESBMC_requires"))
+      if (
+        fsym &&
+        (fsym->name == "__ESBMC_ensures" || fsym->name == "__ESBMC_requires"))
       {
         exprt::operandst &args = expr.op1().operands();
         bool rewrote = false;
