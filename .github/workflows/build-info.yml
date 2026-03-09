@@ -25,6 +25,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: esbmc-info-manual
-          path: |
-            info-out/esbmc.info
-            info-out/esbmc.texi
+          path: info-out/esbmc.info

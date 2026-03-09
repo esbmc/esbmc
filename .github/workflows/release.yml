@@ -43,9 +43,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: esbmc-info-manual
-          path: ./info-manual
-      - name: Create Info Manual archive
-        run: zip -r esbmc-info-manual.zip ./info-manual
+          path: .
       - name: Get files
         run: ls
       - name: Do the release
@@ -59,4 +57,4 @@ jobs:
           files: |
             esbmc-linux.zip
             esbmc-windows.zip
-            esbmc-info-manual.zip
+            esbmc.info
