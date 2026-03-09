@@ -627,12 +627,12 @@ private:
           {
             // If one type is a specialisation of the other (e.g. "list" vs
             // "list[int]"), prefer the more specific one.
-            auto is_prefix = [](const std::string &base,
-                                const std::string &specific) {
-              return specific.size() > base.size() &&
-                     specific.substr(0, base.size()) == base &&
-                     specific[base.size()] == '[';
-            };
+            auto is_prefix =
+              [](const std::string &base, const std::string &specific) {
+                return specific.size() > base.size() &&
+                       specific.substr(0, base.size()) == base &&
+                       specific[base.size()] == '[';
+              };
             if (is_prefix(inferred_type, arg_type))
             {
               inferred_type = arg_type;
@@ -1848,8 +1848,7 @@ private:
     {
       // Extract variable name from the declaration node
       std::string var_name;
-      if (
-        var_node.contains("target") && var_node["target"].contains("id"))
+      if (var_node.contains("target") && var_node["target"].contains("id"))
         var_name = var_node["target"]["id"].template get<std::string>();
       else if (
         var_node.contains("targets") && !var_node["targets"].empty() &&
@@ -1861,9 +1860,9 @@ private:
         std::string func_name = get_current_func_name();
         // Strip nested-function suffix to reach the enclosing function
         std::size_t at_pos = func_name.rfind("@F@");
-        std::string top_func =
-          (at_pos != std::string::npos) ? func_name.substr(at_pos + 3)
-                                        : func_name;
+        std::string top_func = (at_pos != std::string::npos)
+                                 ? func_name.substr(at_pos + 3)
+                                 : func_name;
         Json func_def = find_function_recursive(top_func, ast_["body"]);
         if (!func_def.empty() && func_def.contains("body"))
         {

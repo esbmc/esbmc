@@ -346,7 +346,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
         // Create a temp bool to hold the RHS result.
         // Default to false for `or` (LHS true → result true without RHS).
         // Default to true  for `and` (LHS false → result false without RHS).
-        exprt default_val = is_or ? gen_zero(bool_type()) : gen_one(bool_type());
+        exprt default_val =
+          is_or ? gen_zero(bool_type()) : gen_one(bool_type());
         symbolt &sc_sym =
           create_tmp_symbol(element, "$sc$", bool_type(), default_val);
         code_declt sc_decl(symbol_expr(sc_sym));
@@ -378,8 +379,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 
         // For `or`:  guard = !lhs  (run RHS only when LHS is false)
         // For `and`: guard =  lhs  (run RHS only when LHS is true)
-        exprt guard =
-          is_or ? exprt("not", bool_type()) : lhs_cond;
+        exprt guard = is_or ? exprt("not", bool_type()) : lhs_cond;
         if (is_or)
           guard.copy_to_operands(lhs_cond);
 
@@ -6550,7 +6550,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
     auto make_size_check = [&](exprt container) -> exprt {
       symbolt &size_sym = create_tmp_symbol(
-        ast_node, "$cond_size$", signedbv_typet(64), gen_zero(signedbv_typet(64)));
+        ast_node,
+        "$cond_size$",
+        signedbv_typet(64),
+        gen_zero(signedbv_typet(64)));
       code_declt size_decl(symbol_expr(size_sym));
       size_decl.location() = cond_loc;
       current_block->copy_to_operands(size_decl);

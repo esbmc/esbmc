@@ -1095,8 +1095,8 @@ static std::string infer_node_type_str(
     const std::string &name = node["id"].get<std::string>();
     nlohmann::json vd = json_utils::find_var_decl(name, func_name, ast);
     if (
-      !vd.empty() && vd.contains("annotation") &&
-      !vd["annotation"].is_null() && vd["annotation"].contains("id"))
+      !vd.empty() && vd.contains("annotation") && !vd["annotation"].is_null() &&
+      vd["annotation"].contains("id"))
       return vd["annotation"]["id"].get<std::string>();
     return "";
   }
@@ -1132,8 +1132,7 @@ static std::string search_dict_value_type_in_stmts(
           tgt["value"]["id"].get<std::string>() == var_name &&
           stmt.contains("value"))
         {
-          std::string vt =
-            infer_node_type_str(stmt["value"], func_name, ast);
+          std::string vt = infer_node_type_str(stmt["value"], func_name, ast);
           if (!vt.empty() && vt != "Any")
             return vt;
         }
@@ -1145,8 +1144,8 @@ static std::string search_dict_value_type_in_stmts(
     {
       if (stmt.contains(key) && stmt[key].is_array())
       {
-        std::string found = search_dict_value_type_in_stmts(
-          var_name, func_name, stmt[key], ast);
+        std::string found =
+          search_dict_value_type_in_stmts(var_name, func_name, stmt[key], ast);
         if (!found.empty())
           return found;
       }
@@ -1188,8 +1187,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
       std::string fn = call_node["func"]["id"].get<std::string>();
 
       // Find the function definition to get its return type annotation
-      nlohmann::json func_def =
-        json_utils::find_function(ast["body"], fn);
+      nlohmann::json func_def = json_utils::find_function(ast["body"], fn);
 
       if (
         !func_def.empty() && func_def.contains("returns") &&
@@ -1204,7 +1202,8 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   }
 
   // Extract the value type from the dict annotation
-  typet from_annotation = get_dict_value_type_from_annotation(var_decl["annotation"]);
+  typet from_annotation =
+    get_dict_value_type_from_annotation(var_decl["annotation"]);
   if (!from_annotation.is_nil() && !from_annotation.is_empty())
     return from_annotation;
 
@@ -1221,13 +1220,12 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
     std::size_t at = top_func.rfind("@F@");
     if (at != std::string::npos)
       top_func = top_func.substr(at + 3);
-    nlohmann::json func_def =
-      json_utils::find_function(ast["body"], top_func);
+    nlohmann::json func_def = json_utils::find_function(ast["body"], top_func);
 
     if (!func_def.empty() && func_def.contains("body"))
     {
-      std::string vt_str =
-        search_dict_value_type_in_stmts(var_name, func_name, func_def["body"], ast);
+      std::string vt_str = search_dict_value_type_in_stmts(
+        var_name, func_name, func_def["body"], ast);
       if (!vt_str.empty())
         return type_handler_.get_typet(vt_str);
     }
