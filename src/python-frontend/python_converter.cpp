@@ -6566,6 +6566,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // ternary operator
   if (type == "IfExp")
   {
+    // Normalize branches: code_function_callt must become side_effect_expr so
+    // that migration to irep2 preserves the correct return type in if2t.
+    then = to_value_expr(then, ns);
+    else_expr = to_value_expr(else_expr, ns);
+
     // Resolve result type based on branch types
     typet result_type =
       resolve_ternary_type(then.type(), else_expr.type(), current_element_type);
