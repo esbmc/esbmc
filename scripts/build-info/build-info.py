@@ -7,8 +7,7 @@ Dependencies: pandoc, texinfo (makeinfo), pyyaml
 import argparse
 import re
 import subprocess
-import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -174,11 +173,25 @@ HEADER = """\
 title: ESBMC User Manual
 ---
 
-# ESBMC User Manual
-
 ESBMC (Efficient SMT-based Context-Bounded Model Checker) automatically
 detects or proves the absence of runtime errors in C, C++, CUDA, CHERI,
 Kotlin, Python, and Solidity programs using SMT solvers.
+
+Thank you for using ESBMC. ESBMC is made possible by the following
+organizations:
+
+The ESBMC development was supported by various research funding agencies,
+including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal
+Society (UK), British Council (UK), European Commission (Horizon 2020), and
+companies including Intel, Nokia Institute of Technology, Samsung, and Veribee.
+ESBMC is currently funded by Intel, EPSRC grants EP/T026995/1, EP/V000497/1,
+EU H2020 ELEGANT 957286 and Soteria project awarded by the UK Research and
+Innovation for the Digital Security by Design (DSbD) Programme.
+
+The S3 team and by extension ESBMC, is sponsored by Zulip. Zulip is an
+organized team chat app designed for efficient communication.
+
+# ESBMC User Manual
 
 """
 
