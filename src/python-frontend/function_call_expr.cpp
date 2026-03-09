@@ -2364,6 +2364,30 @@ bool function_call_expr::is_min_max_call() const
   return false;
 }
 
+// Convert a code_function_callt to a side_effect_expr_function_callt so it can
+// be used as a value expression (e.g., as an operand of if_exprt).
+static exprt to_value_expr(const exprt &arg, const namespacet &ns)
+{
+  if (!arg.is_code() || !arg.is_function_call())
+    return arg;
+
+  side_effect_expr_function_callt func_call;
+  func_call.function() = arg.op1();
+  for (const auto &operand : to_code(arg).op2().operands())
+    func_call.arguments().push_back(operand);
+
+  const exprt &func_expr = arg.op1();
+  if (func_expr.is_symbol())
+  {
+    const symbolt *sym = ns.lookup(to_symbol_expr(func_expr));
+    if (sym)
+      func_call.type() = to_code_type(sym->type).return_type();
+  }
+  if (func_call.type().is_nil() || func_call.type().id() == "empty")
+    func_call.type() = arg.type();
+  return func_call;
+}
+
 exprt function_call_expr::handle_min_max(
   const std::string &func_name,
   irep_idt comparison_op) const
@@ -2425,8 +2449,8 @@ exprt function_call_expr::handle_min_max(
       func_name + "() with more than 2 arguments not yet supported");
 
   // Two arguments case: min/max(a, b)
-  exprt arg1 = converter_.get_expr(args[0]);
-  exprt arg2 = converter_.get_expr(args[1]);
+  exprt arg1 = to_value_expr(converter_.get_expr(args[0]), converter_.ns);
+  exprt arg2 = to_value_expr(converter_.get_expr(args[1]), converter_.ns);
 
   // Determine result type (with type promotion)
   typet result_type = arg1.type();
