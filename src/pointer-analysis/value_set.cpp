@@ -591,7 +591,7 @@ void value_sett::get_value_set_rec(
 
     if (sym.rlevel == symbol2t::renaming_level::level1_global)
       assert(sym.level1_num == 0);
-    assert(sym.rlevel != symbol2t::renaming_level::level2_global);
+    //assert(sym.rlevel != symbol2t::renaming_level::level2_global);
     /* This assertion does not hold: during value_sett::assign() the RHS is the
      * L2 symbol c:pthread_lib.c@5466@F@pthread_create@startdata in e.g.
      * - regression/esbmc-unix/02_account_symbolic_06
