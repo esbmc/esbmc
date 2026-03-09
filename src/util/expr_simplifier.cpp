@@ -983,9 +983,12 @@ expr2tc member2t::do_simplify() const
     if (is_constant_struct2t(source_value))
     {
       s = to_constant_struct2t(source_value).datatype_members[no];
-      assert(
-        is_pointer_type(type) ||
-        base_type_eq(type, s->type, *migrate_namespace_lookup));
+      // Be defensive: if member extraction type doesn't match, skip
+      // simplification instead of aborting in the simplifier.
+      if (
+        !is_pointer_type(type) &&
+        !base_type_eq(type, s->type, *migrate_namespace_lookup))
+        return expr2tc();
     }
     else
     {
