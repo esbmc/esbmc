@@ -34,6 +34,7 @@ class Preprocessor(ast.NodeTransformer):
         self.het_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous key types
         self.het_value_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous value types
         self.bound_method_vars = {}  # {var_name: ast.Attribute} for g = obj.method assignments
+        self.called_names = set()  # names used as callees: g() → 'g' ∈ called_names
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -132,6 +133,13 @@ class Preprocessor(ast.NodeTransformer):
 
     def visit_Module(self, node):
         """Visit the module and inject helper functions if needed"""
+        # Pre-pass: collect all names used as callees so we can distinguish
+        # bound method assignments (g = obj.method; g()) from plain attribute
+        # reads (res = a.x) which must not be removed.
+        for n in ast.walk(node):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                self.called_names.add(n.func.id)
+
         # Pre-pass: collect global-scope variable annotations so that
         # unannotated function parameters can be inferred from call-site types
         # (e.g. `def f(d): for k,v in d.items()` called with a dict literal).
@@ -2550,9 +2558,11 @@ class Preprocessor(ast.NodeTransformer):
             else:
                 # Simple assignment - track the type
                 # Detect bound method assignment: g = obj.method
+                # Only remove when g is actually called somewhere (g())
                 if (isinstance(target, ast.Name) and
                         isinstance(node.value, ast.Attribute) and
-                        isinstance(node.value.value, ast.Name)):
+                        isinstance(node.value.value, ast.Name) and
+                        target.id in self.called_names):
                     self.bound_method_vars[target.id] = node.value
                     return None  # Remove; call sites are rewritten in visit_Call
                 # Clear stale bound method tracking on variable reassignment
