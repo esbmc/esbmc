@@ -3257,7 +3257,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
       auto it = param_positions.find(arg_name);
       if (it == param_positions.end())
-        continue; // Ignore keyword args not in the function signature (e.g., key= in sorted())
+      {
+        // For user-defined functions, unknown kwargs are a TypeError.
+        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently skip.
+        if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
+          throw std::runtime_error(
+            "Unknown keyword argument: " + arg_name + " in function " +
+            func_symbol->name.as_string());
+        continue;
+      }
 
       exprt arg_expr = get_expr(kw["value"]);
 
