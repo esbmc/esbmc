@@ -2464,9 +2464,8 @@ exprt function_call_expr::handle_min_max(
     {
       // Python integers are signed; normalize both operands to signedbv
       const unsigned width = std::max(
-        result_type.is_signedbv()
-          ? to_signedbv_type(result_type).get_width()
-          : to_unsignedbv_type(result_type).get_width(),
+        result_type.is_signedbv() ? to_signedbv_type(result_type).get_width()
+                                  : to_unsignedbv_type(result_type).get_width(),
         arg2.type().is_signedbv()
           ? to_signedbv_type(arg2.type()).get_width()
           : to_unsignedbv_type(arg2.type()).get_width());
