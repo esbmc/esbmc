@@ -742,7 +742,7 @@ inline type2tc expand_type(const type2tc &t, const namespacet *ns)
 // concrete type, both in each node's own type and in all sub-expressions.
 inline void expand_symbol_types(expr2tc &expr, const namespacet *ns)
 {
-  if (is_nil_expr(expr))
+  if (is_nil_expr(expr) || ns == nullptr)
     return;
 
   expr2tc result = expr->clone();
