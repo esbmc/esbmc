@@ -272,7 +272,10 @@ bool clang_cpp_convertert::get_type(
       return true;
 
     typet class_type;
-#if CLANG_VERSION_MAJOR >= 21
+#if CLANG_VERSION_MAJOR >= 22
+    if (get_type(*mpt.getQualifier().getAsType(), class_type))
+      return true;
+#elif CLANG_VERSION_MAJOR >= 21
     if (get_type(*mpt.getQualifier()->getAsType(), class_type))
       return true;
 #else
@@ -311,7 +314,7 @@ bool clang_cpp_convertert::get_type(
     break;
   }
 
-#if CLANG_VERSION_MAJOR >= 14
+#if CLANG_VERSION_MAJOR >= 14 && CLANG_VERSION_MAJOR < 22
   case clang::Type::Using:
   {
     const clang::UsingType &ut =
@@ -1023,7 +1026,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     break;
   }
-
+#if 0
   case clang::Stmt::LambdaExprClass:
   {
     const clang::LambdaExpr &lambda_expr =
@@ -1060,7 +1063,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     break;
   }
-
+#endif
   case clang::Stmt::CXXStdInitializerListExprClass:
   {
     const clang::CXXStdInitializerListExpr &cxxstdinit =
@@ -1934,7 +1937,7 @@ bool clang_cpp_convertert::annotate_class_method(
   exprt &new_expr)
 {
   code_typet &component_type = to_code_type(new_expr.type());
-
+#if 0
   /*
    * The order of annotations matters.
    */
@@ -2002,7 +2005,7 @@ bool clang_cpp_convertert::annotate_class_method(
   if (!cxxmdd.isStatic())
     if (to_code(new_expr).statement() == "skip")
       to_code(new_expr).remove("statement");
-
+#endif
   return false;
 }
 
@@ -2238,12 +2241,14 @@ bool clang_cpp_convertert::is_aggregate_type(const clang::QualType &q_type)
 
     return aryType.isAggregateType();
   }
+#if 0
   case clang::Type::Elaborated:
   {
     const clang::ElaboratedType &et =
       static_cast<const clang::ElaboratedType &>(the_type);
     return (is_aggregate_type(et.getNamedType()));
   }
+#endif
   case clang::Type::Record:
   {
     const clang::RecordDecl &rd =

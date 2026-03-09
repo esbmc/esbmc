@@ -6,7 +6,11 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Basic/Version.inc>
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
+#if CLANG_VERSION_MAJOR >= 22
+#include <clang/Options/Options.h>
+#else
 #include <clang/Driver/Options.h>
+#endif
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/CompilerInvocation.h>
@@ -90,12 +94,22 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   const char *const BinaryName = Argv[0];
 
   unsigned MissingArgIndex, MissingArgCount;
-  llvm::opt::InputArgList ParsedArgs =
+#if CLANG_VERSION_MAJOR >= 22
+llvm::opt::InputArgList ParsedArgs =
+    clang::getDriverOptTable().ParseArgs(
+      llvm::ArrayRef<const char *>(Argv).slice(1),
+      MissingArgIndex,
+      MissingArgCount);
+
+#else
+llvm::opt::InputArgList ParsedArgs =
     clang::driver::getDriverOptTable().ParseArgs(
       llvm::ArrayRef<const char *>(Argv).slice(1),
       MissingArgIndex,
       MissingArgCount);
 
+#endif
+  
   clang::ParseDiagnosticArgs(*DiagOpts, ParsedArgs);
 
   clang::TextDiagnosticPrinter DiagnosticPrinter(
