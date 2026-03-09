@@ -1648,6 +1648,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Convert function calls to side effects
   convert_function_calls_to_side_effects(lhs, rhs);
+  if (lhs.statement() == "cpp-throw")
+    return lhs;
+  if (rhs.statement() == "cpp-throw")
+    return rhs;
 
   // Dispatch dunder methods for user-defined struct types
   {
@@ -1735,6 +1739,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
       exprt lhs_complex = promote_to_complex(lhs);
       exprt rhs_complex = promote_to_complex(rhs);
+      if (lhs_complex.statement() == "cpp-throw")
+        return lhs_complex;
+      if (rhs_complex.statement() == "cpp-throw")
+        return rhs_complex;
 
       const exprt a = member(lhs_complex, "real");
       const exprt b = member(lhs_complex, "imag");
