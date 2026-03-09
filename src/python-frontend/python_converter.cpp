@@ -5564,11 +5564,12 @@ void python_converter::get_var_assign(
         *this, ast_node, target, target_block))
     return;
 
-  // Tuple subscript assignment: tuples are immutable, raise TypeError
-  if (target["_type"] == "Subscript")
+  if (target.contains("_type") && target["_type"] == "Subscript")
   {
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
+
+    // Tuple subscript assignment: tuples are immutable, raise TypeError
     if (tuple_handler_->is_tuple_type(container_type))
     {
       exprt raise = get_exception_handler().gen_exception_raise(
@@ -5578,16 +5579,12 @@ void python_converter::get_var_assign(
       target_block.copy_to_operands(throw_code);
       return;
     }
-  }
 
-  // Handle object subscript assignment via __setitem__:
-  //   obj[key] = value  ->  obj.__setitem__(key, value)
-  if (
-    target.contains("_type") && target["_type"] == "Subscript" &&
-    target.contains("value") && target.contains("slice") &&
-    ast_node.contains("value") && !ast_node["value"].is_null())
-  {
-    if (has_dunder_method(target["value"], "__setitem__"))
+    // Handle object subscript assignment via __setitem__:
+    //   obj[key] = value  ->  obj.__setitem__(key, value)
+    if (target.contains("value") && target.contains("slice") &&
+        ast_node.contains("value") && !ast_node["value"].is_null() &&
+        has_dunder_method(target["value"], "__setitem__"))
     {
       nlohmann::json call_node;
       call_node["_type"] = "Call";
