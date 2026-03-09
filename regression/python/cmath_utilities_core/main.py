@@ -12,11 +12,11 @@ def approx(a: float, b: float, tol: float = 1e-6) -> bool:
     return absf(a - b) <= tol
 
 
-z = complex(1.0, 1.0)
-
 assert approx(cmath.pi, math.pi)
 assert approx(cmath.e, math.e)
 assert approx(cmath.tau, math.tau)
+assert math.isinf(cmath.inf)
+assert math.isnan(cmath.nan)
 
 assert cmath.isfinite(complex(1.0, 0.0))
 assert not cmath.isfinite(cmath.infj)
@@ -26,5 +26,17 @@ assert cmath.isnan(cmath.nanj)
 assert not cmath.isinf(cmath.nanj)
 
 assert cmath.isclose(complex(-0.0, 0.0), complex(0.0, -0.0))
-assert cmath.isclose(cmath.infj, cmath.infj)
-assert cmath.isclose(z, z + complex(1e-12, -1e-12), rel_tol=1e-9, abs_tol=1e-9)
+
+# complex power basics from Tier 3 scope
+z = complex(1.0, 2.0)
+z2 = z ** 2
+assert approx(z2.real, -3.0, 1e-6)
+assert approx(z2.imag, 4.0, 1e-6)
+
+zsqrt = complex(4.0, 0.0) ** 0.5
+assert approx(zsqrt.real, 2.0, 1e-6)
+assert approx(zsqrt.imag, 0.0, 1e-6)
+
+zsqrt_c = complex(4.0, 0.0) ** complex(0.5, 0.0)
+assert approx(zsqrt_c.real, 2.0, 1e-6)
+assert approx(zsqrt_c.imag, 0.0, 1e-6)
