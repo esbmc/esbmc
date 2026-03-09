@@ -2364,9 +2364,7 @@ bool function_call_expr::is_min_max_call() const
   return false;
 }
 
-// Convert a code_function_callt to a side_effect_expr_function_callt so it can
-// be used as a value expression (e.g., as an operand of if_exprt).
-static exprt to_value_expr(const exprt &arg, const namespacet &ns)
+exprt to_value_expr(const exprt &arg, const namespacet &ns)
 {
   if (!arg.is_code() || !arg.is_function_call())
     return arg;
