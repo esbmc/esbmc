@@ -127,7 +127,11 @@ void goto_coveraget::branch_function_coverage()
         {
           // add a false assert in the beginning
           // to check if the function is entered.
-          insert_assert(goto_program, it, gen_false_expr());
+          insert_assert(
+            goto_program,
+            it,
+            gen_false_expr(),
+            "function entry: " + id2string(f_it->first));
           flg = false;
         }
 

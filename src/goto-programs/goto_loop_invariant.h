@@ -37,9 +37,11 @@ protected:
   contextt &context;
   bool use_frame_rule;
   /// Maximum number of instructions to search backwards from the loop head
-  /// when locating the LOOP_INVARIANT instruction or its extracted side
-  /// effects.  Both extract_loop_invariants and extract_and_remove_side_effects
-  /// use this same limit so their searches are consistent.
+  /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
+  /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
+  /// for up to ~4 extra declarations before the invariant.  Both
+  /// extract_loop_invariants and extract_and_remove_side_effects use this
+  /// same limit so their searches are consistent.
   static constexpr size_t kMaxInvariantSearchBack = 10;
 
   void goto_loop_invariant();
@@ -57,12 +59,13 @@ protected:
 
   /**
    * Collect DECL/FUNCTION_CALL instructions immediately before LOOP_INVARIANT
-   * that define temporaries used in the invariant. Remove them from the GOTO
-   * program and return in original order for re-insertion before each
-   * ASSERT/ASSUME.
+   * that define temporaries used in the invariant.  Remove them from the GOTO
+   * program and place them in @p side_effects_out for re-insertion before each
+   * ASSERT/ASSUME so they are re-evaluated with the havoc'd variables.
    */
   void extract_and_remove_side_effects(
     goto_programt::targett loop_head,
+    const loopst &loop,
     const std::vector<expr2tc> &invariants,
     goto_programt &side_effects_out);
 

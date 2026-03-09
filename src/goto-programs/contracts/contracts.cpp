@@ -1906,39 +1906,38 @@ expr2tc code_contractst::remove_incorrect_casts(
   if (is_nil_expr(expr) || is_nil_expr(ret_val))
     return expr;
 
-  // NON-RECURSIVE: Only process direct typecast on return_value symbol
-  // This avoids infinite recursion and circular references
+  // Strip a chain of typecasts wrapping a return_value symbol.
+  //
+  // When __ESBMC_return_value is undeclared in C source, Clang assigns it the
+  // implicit-int type.  An expression like (size_t)__ESBMC_return_value then
+  // compiles to (size_t)(int)rv — two nested casts.  After the symbol is
+  // replaced by the actual ret_val (e.g. void*), we need to remove ALL
+  // intermediate casts whose type disagrees with ret_val's type, not just the
+  // outermost one.
   if (is_typecast2t(expr))
   {
-    const typecast2t &cast = to_typecast2t(expr);
+    // Peel off typecasts until we reach a non-cast expression.
+    expr2tc inner = expr;
+    while (is_typecast2t(inner))
+      inner = to_typecast2t(inner).from;
 
-    // Check if we're casting a return_value symbol (directly, not nested)
-    if (is_symbol2t(cast.from))
+    // If the innermost expression is a return_value symbol, discard all casts.
+    if (is_symbol2t(inner) && is_return_value_symbol(to_symbol2t(inner)))
     {
-      const symbol2t &sym = to_symbol2t(cast.from);
-
-      if (is_return_value_symbol(sym))
+      const typecast2t &outermost = to_typecast2t(expr);
+      if (!base_type_eq(outermost.type, ret_val->type, ns))
       {
-        // Compare the cast target type with ret_val's type
-        // If they don't match, the cast is incorrect and should be removed
-        if (!base_type_eq(cast.type, ret_val->type, ns))
-        {
-          log_debug(
-            "contracts",
-            "Removing incorrect cast from {} to {} (ret_val type is {})",
-            get_type_id(*cast.from->type),
-            get_type_id(*cast.type),
-            get_type_id(*ret_val->type));
-
-          // Return the original symbol without the cast
-          return cast.from;
-        }
+        log_debug(
+          "contracts",
+          "Removing cast chain down to return_value symbol "
+          "(outer cast type={}, ret_val type={})",
+          get_type_id(*outermost.type),
+          get_type_id(*ret_val->type));
+        return inner;
       }
     }
   }
 
-  // No recursion: return original expression unchanged
-  // The caller (fix_comparison_types) will handle nested structures explicitly
   return expr;
 }
 
@@ -2141,23 +2140,20 @@ expr2tc code_contractst::fix_comparison_types(
     return new_expr;
   }
 
-  // Step 2: Handle logical operators (AND, OR) that may contain comparisons
-  // Only process one level: if this is AND/OR, process its direct operands
+  // Step 2: Handle logical operators (AND, OR) that may contain comparisons.
+  // Recurse into every operand so that nested logical sub-expressions (e.g.
+  // and(or(equality(rv, 0), ...), equality(...))) are fully processed.
   if (is_and2t(expr) || is_or2t(expr))
   {
     expr2tc new_expr = expr->clone();
     bool changed = false;
 
-    // Process each operand (but only one level deep)
     new_expr->Foreach_operand([this, &ret_val, &changed](expr2tc &op) {
-      if (is_comp_expr(op))
+      expr2tc fixed = fix_comparison_types(op, ret_val);
+      if (fixed != op)
       {
-        expr2tc fixed = fix_comparison_types(op, ret_val);
-        if (fixed != op)
-        {
-          op = fixed;
-          changed = true;
-        }
+        op = fixed;
+        changed = true;
       }
     });
 
