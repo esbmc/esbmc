@@ -3,3 +3,4 @@ new_unit_test(python_annotation_test "python_annotation_test.cpp" "pythonfronten
 endif()
 new_unit_test(symbol_id_test "symbol_id_test.cpp" "pythonfrontend")
 new_unit_test(python_class_test "python_class_test.cpp" "pythonfrontend")
+new_unit_test(complex_type_test "complex_type_test.cpp" "pythonfrontend;util_esbmc;bigint")

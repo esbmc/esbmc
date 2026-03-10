@@ -399,7 +399,7 @@ private:
     const exprt &rhs);
 
   void get_attributes_from_self(
-    const nlohmann::json &method_body,
+    const nlohmann::json &func_node,
     struct_typet &clazz);
 
   exprt get_return_from_func(const char *func_symbol_id);
@@ -825,6 +825,9 @@ private:
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
+  bool has_dunder_method(
+    const nlohmann::json &value_node,
+    const std::string &dunder_name);
   exprt dispatch_dunder_operator(
     const std::string &op,
     exprt &lhs,
@@ -875,6 +878,9 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+  /// Maps any symbol currently known to refer to an input() string
+  /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
+  std::unordered_map<std::string, std::string> input_str_to_len_sym_;
 
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;

@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant
+^VERIFICATION FAILED$
+
