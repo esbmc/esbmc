@@ -2,6 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
 #include <util/context.h>
@@ -178,6 +179,49 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   }
 
   return std::string();
+}
+
+std::string type_handler::get_var_classname(const nlohmann::json &value_node) const
+{
+  if (!value_node.contains("_type") || value_node["_type"] != "Name")
+    return "";
+
+  const std::string var_name = value_node["id"].get<std::string>();
+  auto get_class_name = [this](const std::string &name) -> std::string {
+    if (name.empty())
+      return "";
+
+    const std::string class_name =
+      (name.rfind("tag-", 0) == 0) ? name.substr(4) : name;
+    const std::string class_tag = "tag-" + class_name;
+    return converter_.symbol_table().find_symbol(class_tag) ? class_name : "";
+  };
+
+  symbol_id var_sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  var_sid.set_object(var_name);
+
+  symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+  if (!var_symbol)
+    var_symbol = converter_.find_symbol(var_sid.global_to_string());
+
+  if (var_symbol)
+  {
+    const auto annotation_types =
+      converter_.get_typechecker().get_annotation_types(var_symbol->id.as_string());
+    if (!annotation_types.empty())
+    {
+      typet ann_type = annotation_types.front();
+      if (ann_type.is_pointer())
+        ann_type = ann_type.subtype();
+      if (ann_type.is_struct())
+        return get_class_name(to_struct_type(ann_type).tag().as_string());
+    }
+  }
+
+  return get_class_name(get_var_type(var_name));
 }
 
 /// Check if two types are compatible for list homogeneity

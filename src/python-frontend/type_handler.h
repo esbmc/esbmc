@@ -85,6 +85,7 @@ public:
    * @return A string representing the variable's type.
    */
   std::string get_var_type(const std::string &var_name) const;
+  std::string get_var_classname(const nlohmann::json &value_node) const;
 
   /*
    * Creates an array_typet.
