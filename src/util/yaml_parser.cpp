@@ -88,7 +88,7 @@ invariant::Type yaml_parser::type_from_string(const std::string &s) const
 bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
 {
   expression_parser parser;
-  const expression_node *root = parser.parse("s.x <= i*255 && i > 0");
+  const expression_node *root = parser.parse("s.x <= i*255 && i->y > 0");
   root->dump();
   return true;
 
