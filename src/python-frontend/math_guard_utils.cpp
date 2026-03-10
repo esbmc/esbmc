@@ -99,11 +99,7 @@ bool json_arg_contains_or_is_complex_impl(
             stmt.contains("_type") && stmt["_type"] == "Return" &&
             stmt.contains("value") && !stmt["value"].is_null() &&
             json_arg_contains_or_is_complex_impl(
-              stmt["value"],
-              converter,
-              type_handler,
-              called_name,
-              depth + 1))
+              stmt["value"], converter, type_handler, called_name, depth + 1))
           {
             return true;
           }

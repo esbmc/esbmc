@@ -1491,9 +1491,9 @@ exprt function_call_expr::handle_complex() const
       return input_expr;
 
     const typet &expr_type = input_expr.type();
-    const bool numeric_like =
-      expr_type.is_floatbv() || expr_type.is_signedbv() ||
-      expr_type.is_unsignedbv() || expr_type.is_bool();
+    const bool numeric_like = expr_type.is_floatbv() ||
+                              expr_type.is_signedbv() ||
+                              expr_type.is_unsignedbv() || expr_type.is_bool();
     if (!numeric_like)
       return input_expr;
 
@@ -3551,16 +3551,18 @@ function_call_expr::get_dispatch_table()
              func_name + "() expects exactly 2 arguments");
          return {converter_.get_expr(args[0]), converter_.get_expr(args[1])};
        };
-       auto guard_one_real_arg = [&](const exprt &arg_expr)
-         -> std::optional<exprt> {
+       auto guard_one_real_arg =
+         [&](const exprt &arg_expr) -> std::optional<exprt> {
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (has_complex_arg(arg_expr))
            return raise_math_real_type_error();
          return std::nullopt;
        };
-       auto guard_two_real_args = [&](const exprt &lhs_expr, const exprt &rhs_expr)
-         -> std::optional<exprt> {
+       auto guard_two_real_args =
+         [&](
+           const exprt &lhs_expr,
+           const exprt &rhs_expr) -> std::optional<exprt> {
          if (is_cpp_throw_expr(lhs_expr))
            return lhs_expr;
          if (is_cpp_throw_expr(rhs_expr))
@@ -3859,7 +3861,8 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "pow" || func_name == "__ESBMC_pow")
        {
          auto [base_expr, exp_expr] = require_two_args();
-         if (std::optional<exprt> guarded = guard_two_real_args(base_expr, exp_expr);
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(base_expr, exp_expr);
              guarded.has_value())
            return *guarded;
          return converter_.get_math_handler().handle_pow(
@@ -3868,7 +3871,8 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "fmod" || func_name == "__ESBMC_fmod")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded = guard_two_real_args(lhs_expr, rhs_expr);
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
              guarded.has_value())
            return *guarded;
          return converter_.get_math_handler().handle_fmod(
@@ -3877,7 +3881,8 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "copysign" || func_name == "__ESBMC_copysign")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded = guard_two_real_args(lhs_expr, rhs_expr);
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
              guarded.has_value())
            return *guarded;
          return converter_.get_math_handler().handle_copysign(
@@ -3886,7 +3891,8 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "hypot" || func_name == "__ESBMC_hypot")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded = guard_two_real_args(lhs_expr, rhs_expr);
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
              guarded.has_value())
            return *guarded;
          return converter_.get_math_handler().handle_hypot(
@@ -3935,7 +3941,8 @@ function_call_expr::get_dispatch_table()
          if (call_has_complex())
            return raise_math_real_type_error();
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded = guard_two_real_args(lhs_expr, rhs_expr);
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
              guarded.has_value())
            return *guarded;
          // Native handler for tuple arguments; lists use the model

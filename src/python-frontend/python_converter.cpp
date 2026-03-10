@@ -1811,7 +1811,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           resolved_rhs = s->value;
       }
       else if (
-        rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/")
+        rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" ||
+        rhs.id() == "/")
       {
         resolved_rhs = get_math_handler().compute_expr(rhs);
       }
@@ -1879,8 +1880,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       }
 
       auto pow_nonnegative = [&](unsigned long long exponent_abs) -> exprt {
-        exprt acc =
-          make_complex(from_double(1.0, double_type()), from_double(0.0, double_type()));
+        exprt acc = make_complex(
+          from_double(1.0, double_type()), from_double(0.0, double_type()));
         exprt base = lhs_complex;
 
         while (exponent_abs > 0)
@@ -1911,8 +1912,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       const unsigned long long exponent_abs =
         static_cast<unsigned long long>(-exponent);
       exprt positive_power = pow_nonnegative(exponent_abs);
-      exprt one =
-        make_complex(from_double(1.0, double_type()), from_double(0.0, double_type()));
+      exprt one = make_complex(
+        from_double(1.0, double_type()), from_double(0.0, double_type()));
       return complex_div(one, positive_power);
     }
 
