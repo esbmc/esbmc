@@ -1,28 +1,10 @@
-#include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h> // SIZE_MAX
-#include <string.h>
-#include "python_types.h"
+#include "list.h"
 
 // TODO: There is no such a thing as a generic type in python.
 static PyType __ESBMC_generic_type;
 static PyType __ESBMC_list_type;
-
-// Optimized value comparison - avoids memcmp loop unrolling for common sizes
-static inline bool
-__ESBMC_values_equal(const void *a, const void *b, size_t size)
-{
-  if (a == b)
-    return true;
-  // Direct comparison for common sizes - no loop needed
-  // Python frontend maps: int/float -> 8 bytes, bool -> 1 byte
-  if (size == 8)
-    return *(const uint64_t *)a == *(const uint64_t *)b;
-  if (size == 1)
-    return *(const uint8_t *)a == *(const uint8_t *)b;
-  // Fallback for larger/unusual sizes
-  return memcmp(a, b, size) == 0;
-}
 
 // Default maximum nesting depth to prevent state explosion during symbolic execution.
 // This can be overridden via --python-list-compare-depth option.
@@ -515,57 +497,6 @@ PyObject *__ESBMC_list_pop(PyListObject *l, int64_t index)
   l->size = l->size - 1;
 
   return popped;
-}
-
-bool __ESBMC_dict_eq(
-  const PyListObject *lhs_keys,
-  const PyListObject *lhs_values,
-  const PyListObject *rhs_keys,
-  const PyListObject *rhs_values)
-{
-  if (!lhs_keys || !lhs_values || !rhs_keys || !rhs_values)
-    return false;
-
-  // Sizes must match
-  if (lhs_keys->size != rhs_keys->size)
-    return false;
-
-  // For each key-value pair in lhs, check if it exists in rhs
-  size_t i = 0;
-  while (i < lhs_keys->size)
-  {
-    const PyObject *lhs_key = &lhs_keys->items[i];
-    const PyObject *lhs_value = &lhs_values->items[i];
-
-    // Find this key in rhs_keys
-    size_t rhs_idx = __ESBMC_list_try_find_index(
-      (PyListObject *)rhs_keys,
-      lhs_key->value,
-      lhs_key->type_id,
-      lhs_key->size);
-
-    // Key not found in rhs
-    if (rhs_idx == SIZE_MAX)
-      return false;
-
-    // Key found: compare the corresponding values
-    const PyObject *rhs_value = &rhs_values->items[rhs_idx];
-
-    // Values must have same type and size
-    if (
-      lhs_value->type_id != rhs_value->type_id ||
-      lhs_value->size != rhs_value->size)
-      return false;
-
-    // Compare actual value contents
-    if (!__ESBMC_values_equal(
-          lhs_value->value, rhs_value->value, lhs_value->size))
-      return false;
-
-    i++;
-  }
-
-  return true;
 }
 
 PyListObject *__ESBMC_list_copy(const PyListObject *l)
