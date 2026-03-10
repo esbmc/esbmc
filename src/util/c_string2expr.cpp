@@ -115,7 +115,66 @@ const expression_node *expression_parser::parse_prefix()
     return make_node(token_text(operator_token), operand_node, nullptr);
   }
 
-  return parse_primary();
+  return parse_postfix();
+}
+
+const expression_node *expression_parser::parse_postfix()
+{
+  const expression_node *node = parse_primary();
+
+  while (true)
+  {
+    if (current_.type == token_type::dot)
+    {
+      // parse member: x.y
+      next_token();
+
+      if (current_.type != token_type::identifier)
+        log_error("expected identifier after '.' : {}", current_.begin);
+
+      const token member_token = current_;
+      next_token();
+
+      const expression_node *member_node = make_node(token_text(member_token));
+      node = make_node(".", node, member_node);
+      continue;
+    }
+
+    if (current_.type == token_type::arrow)
+    {
+      // member: x->y
+      next_token();
+
+      if (current_.type != token_type::identifier)
+        log_error("expected identifier after '->': {}", current_.begin);
+
+      const token member_token = current_;
+      next_token();
+
+      const expression_node *member_node = make_node(token_text(member_token));
+      node = make_node("->", node, member_node);
+      continue;
+    }
+
+    if (current_.type == token_type::left_bracket)
+    {
+      // parse index: x[0]
+      next_token();
+
+      const expression_node *index_node = parse_expression(0);
+
+      if (current_.type != token_type::right_bracket)
+        log_error("expected ']' : {}", current_.begin);
+
+      next_token();
+
+      node = make_node("[]", node, index_node);
+      continue;
+    }
+    break;
+  }
+
+  return node;
 }
 
 // Parse an identifier, integer literal, or parenthesized expression.
@@ -275,6 +334,17 @@ void expression_parser::next_token()
         return;
       }
       break;
+
+    case '-':
+      if (next_char == '>')
+      {
+        current_.type = token_type::arrow;
+        current_.begin = position_;
+        current_.length = 2;
+        position_ += 2;
+        return;
+      }
+      break;
     }
   }
 
@@ -290,6 +360,21 @@ void expression_parser::next_token()
 
   case ')':
     current_.type = token_type::right_paren;
+    current_.length = 1;
+    return;
+
+  case '[':
+    current_.type = token_type::left_bracket;
+    current_.length = 1;
+    return;
+
+  case ']':
+    current_.type = token_type::right_bracket;
+    current_.length = 1;
+    return;
+
+  case '.':
+    current_.type = token_type::dot;
     current_.length = 1;
     return;
 
