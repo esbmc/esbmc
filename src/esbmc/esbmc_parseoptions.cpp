@@ -1811,6 +1811,10 @@ bool esbmc_parseoptionst::parse_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
 {
+  if(options.get_bool_option("conservative-linking")) {
+    config.conservative = true;
+  }
+  
   try
   {
     if (parse(cmdline))

@@ -111,28 +111,32 @@ const struct group_opt_templ all_cmd_options[] = {
      "convert the assert(cond) to assert(!cond)"}}},
 #endif
   {"Frontend",
-   {{"include,I",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "path"),
-     "set include path"},
-    {"include-file",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "file"),
-     "include files via frontend's -include option before anything else"},
-    {"nostdinc", NULL, "do not include from standard system paths"},
-    {"idirafter",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "path"),
-     "append system include path to search after system headers"},
-    {"define,D",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "macro"),
-     "define preprocessor macro"},
-    {"warning,W",
-     boost::program_options::value<std::vector<std::string>>(),
-     "enable specific frontend warnings, disable with \"no-\" prefix, or pass "
-     "options directly to the C/C++ frontends with the form "
-     "-Wc,OPT1,OPT2,..."},
+   {
+     {"include,I",
+      boost::program_options::value<std::vector<std::string>>()->value_name(
+        "path"),
+      "set include path"},
+     {"include-file",
+      boost::program_options::value<std::vector<std::string>>()->value_name(
+        "file"),
+      "include files via frontend's -include option before anything else"},
+     {"nostdinc", NULL, "do not include from standard system paths"},
+     {"idirafter",
+      boost::program_options::value<std::vector<std::string>>()->value_name(
+        "path"),
+      "append system include path to search after system headers"},
+     {"define,D",
+      boost::program_options::value<std::vector<std::string>>()->value_name(
+        "macro"),
+      "define preprocessor macro"},
+     {"warning,W",
+      boost::program_options::value<std::vector<std::string>>(),
+      "enable specific frontend warnings, disable with \"no-\" prefix, or pass "
+      "options directly to the C/C++ frontends with the form "
+      "-Wc,OPT1,OPT2,..."},
+     {"conservative-linking",
+     NULL,
+     "sets ASTImporter to Conservative mode (instead of Liberal)."},
     {"std",
      boost::program_options::value<std::string>()->value_name("version"),
      "set C/C++ standard version"},

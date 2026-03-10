@@ -163,6 +163,8 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   return unit;
 }
 
+#include <util/config.h>
+
 void mergeASTs(
   const std::unique_ptr<clang::ASTUnit> &FromUnit,
   std::unique_ptr<clang::ASTUnit> &ToUnit)
@@ -179,7 +181,7 @@ void mergeASTs(
     FromUnit->getFileManager(),
     false);
 
-  Importer.setODRHandling(clang::ASTImporter::ODRHandlingType::Liberal);
+  Importer.setODRHandling(config.conservative ? clang::ASTImporter::ODRHandlingType::Conservative : clang::ASTImporter::ODRHandlingType::Liberal);
 
   for (auto decl : FromUnit->getASTContext().getTranslationUnitDecl()->decls())
   {

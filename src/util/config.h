@@ -158,6 +158,8 @@ public:
   assert_db ssa_caching_db;
 
   std::vector<std::string> args;
+
+  bool conservative = false;
 };
 
 extern configt config;
