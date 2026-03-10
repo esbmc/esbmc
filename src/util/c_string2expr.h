@@ -50,6 +50,10 @@ private:
     integer,
     left_paren,
     right_paren,
+    left_bracket,
+    right_bracket,
+    dot,
+    arrow,
     plus,
     minus,
     star,
@@ -78,6 +82,7 @@ private:
 
   // Parse unary prefix operators.
   const expression_node *parse_prefix();
+  const expression_node *parse_postfix();
 
   // Parse identifiers, integers, and parenthesized expressions.
   const expression_node *parse_primary();
