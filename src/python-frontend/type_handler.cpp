@@ -53,13 +53,15 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
 
   const contextt &symbol_table = converter_.symbol_table();
 
-  symbol_table.foreach_operand([&](const symbolt &s) {
-    if (s.type.id() == "struct" && s.name == func_name)
+  symbol_table.foreach_operand(
+    [&](const symbolt &s)
     {
-      is_ctor_call = true;
-      return;
-    }
-  });
+      if (s.type.id() == "struct" && s.name == func_name)
+      {
+        is_ctor_call = true;
+        return;
+      }
+    });
 
   return is_ctor_call;
 }
@@ -603,7 +605,8 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
     return false;
 
   // Helper lambda that leverages existing get_typet method
-  auto get_element_type = [this](const nlohmann::json &element) -> typet {
+  auto get_element_type = [this](const nlohmann::json &element) -> typet
+  {
     try
     {
       typet elem_type = get_typet(element);
