@@ -6,6 +6,7 @@
 #include <irep2/irep2_expr.h>
 #include <util/migrate.h>
 #include <util/message.h>
+#include <util/namespace.h>
 
 std::string indent_str_irep2(unsigned int indent);
 
@@ -710,6 +711,47 @@ inline void get_symbols(
 
   expr->foreach_operand(
     [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
+}
+
+// Expand all symbol_type2t occurrences in a type to their concrete definitions.
+// Stops at struct/union boundaries to avoid infinite recursion on recursive
+// types (e.g. struct S { S *next; }) ==>  pointer(symbol("S")) in a member would
+// loop back to struct S indefinitely.
+inline type2tc expand_type(const type2tc &t, const namespacet *ns)
+{
+  if (is_nil_type(t))
+    return t;
+
+  // ns.follow handles chains of typedefs: symbol("A") -> symbol("B") -> struct
+  if (is_symbol_type(t))
+    return expand_type(ns->follow(t), ns);
+
+  // Struct/union are terminal: they ARE the concrete definition.
+  if (is_struct_type(t) || is_union_type(t))
+    return t;
+
+  // For pointer, array, vector, etc.: clone and expand each sub-type.
+  // Foreach_subtype visits all type2tc fields registered in the type's traits
+  // (e.g. pointer_data::subtype, array_data::subtype).
+  type2tc result = t->clone();
+  result->Foreach_subtype([&ns](type2tc &sub) { sub = expand_type(sub, ns); });
+  return result;
+}
+
+// Recursively replace every symbol_type2t in an expression tree with its
+// concrete type, both in each node's own type and in all sub-expressions.
+inline void expand_symbol_types(expr2tc &expr, const namespacet *ns)
+{
+  if (is_nil_expr(expr) || ns == nullptr)
+    return;
+
+  expr2tc result = expr->clone();
+
+  result->type = expand_type(result->type, ns);
+
+  result->Foreach_operand([&ns](expr2tc &op) { expand_symbol_types(op, ns); });
+
+  expr = result;
 }
 
 #endif /* UTIL_IREP2_UTILS_H_ */
