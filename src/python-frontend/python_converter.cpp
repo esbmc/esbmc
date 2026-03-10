@@ -3460,15 +3460,20 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     for (const auto &kw : element["keywords"])
     {
       std::string arg_name = kw["arg"].get<std::string>();
-      exprt arg_expr = get_expr(kw["value"]);
 
       auto it = param_positions.find(arg_name);
       if (it == param_positions.end())
       {
-        throw std::runtime_error(
-          "Unknown keyword argument: " + arg_name + " in function " +
-          func_symbol->name.as_string());
+        // For user-defined functions, unknown kwargs are a TypeError.
+        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently skip.
+        if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
+          throw std::runtime_error(
+            "Unknown keyword argument: " + arg_name + " in function " +
+            func_symbol->name.as_string());
+        continue;
       }
+
+      exprt arg_expr = get_expr(kw["value"]);
 
       // Convert array to pointer to match parameter type
       const typet &param_type = params[it->second].type();
