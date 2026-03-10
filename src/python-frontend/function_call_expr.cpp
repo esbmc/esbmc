@@ -224,17 +224,18 @@ void function_call_expr::get_function_type()
 
     // Check for nested instance attribute (e.g., self.b.a.method())
     // Exclude module.Class.method() pattern
+    // Walk the full attribute chain to find the root Name node, regardless of depth.
     bool is_nested_instance_attr = false;
     if (call_["func"]["value"]["_type"] == "Attribute")
     {
-      if (call_["func"]["value"]["value"]["_type"] == "Name")
+      const nlohmann::json *cur = &call_["func"]["value"];
+      while ((*cur)["_type"] == "Attribute")
+        cur = &(*cur)["value"];
+      if ((*cur)["_type"] == "Name")
       {
-        std::string root_name =
-          call_["func"]["value"]["value"]["id"].get<std::string>();
+        std::string root_name = (*cur)["id"].get<std::string>();
         if (!converter_.is_imported_module(root_name))
-        {
           is_nested_instance_attr = true;
-        }
       }
     }
 
