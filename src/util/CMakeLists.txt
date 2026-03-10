@@ -26,7 +26,7 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp
         threeval.cpp typecheck.cpp bitvector.cpp parser.cpp replace_symbol.cpp
         string_container.cpp options.cpp c_misc.cpp
-        simplify_expr.cpp dstring.cpp simplify_expr2.cpp
+        simplify_expr.cpp dstring.cpp expr_simplifier.cpp
         simplify_utils.cpp string2array.cpp array2string.cpp time_stopping.cpp symbol.cpp
         symbol_generator.cpp symbolic_types.cpp
         type_eq.cpp guard.cpp array_name.cpp union_find.cpp

@@ -36,6 +36,7 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <regex>
 #include <stdexcept>
 #include <sstream>
@@ -1648,6 +1649,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Convert function calls to side effects
   convert_function_calls_to_side_effects(lhs, rhs);
+  if (lhs.statement() == "cpp-throw")
+    return lhs;
+  if (rhs.statement() == "cpp-throw")
+    return rhs;
 
   // Dispatch dunder methods for user-defined struct types
   {
@@ -1706,6 +1711,77 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       out.copy_to_operands(x, y);
       return out;
     };
+    auto complex_mul = [&](const exprt &x, const exprt &y) -> exprt {
+      const exprt xr = member(x, "real");
+      const exprt xi = member(x, "imag");
+      const exprt yr = member(y, "real");
+      const exprt yi = member(y, "imag");
+      exprt ac = ieee_binop("ieee_mul", xr, yr);
+      exprt bd = ieee_binop("ieee_mul", xi, yi);
+      exprt ad = ieee_binop("ieee_mul", xr, yi);
+      exprt bc = ieee_binop("ieee_mul", xi, yr);
+      return make_complex(
+        ieee_binop("ieee_sub", ac, bd), ieee_binop("ieee_add", ad, bc));
+    };
+    auto complex_div = [&](const exprt &x, const exprt &y) -> exprt {
+      const exprt xr = member(x, "real");
+      const exprt xi = member(x, "imag");
+      const exprt yr = member(y, "real");
+      const exprt yi = member(y, "imag");
+      exprt ac = ieee_binop("ieee_mul", xr, yr);
+      exprt bd = ieee_binop("ieee_mul", xi, yi);
+      exprt bc = ieee_binop("ieee_mul", xi, yr);
+      exprt ad = ieee_binop("ieee_mul", xr, yi);
+      exprt c2 = ieee_binop("ieee_mul", yr, yr);
+      exprt d2 = ieee_binop("ieee_mul", yi, yi);
+      exprt numer_real = ieee_binop("ieee_add", ac, bd);
+      exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
+      exprt denom = ieee_binop("ieee_add", c2, d2);
+      return make_complex(
+        ieee_binop("ieee_div", numer_real, denom),
+        ieee_binop("ieee_div", numer_imag, denom));
+    };
+    auto complex_log = [&](const exprt &z) -> exprt {
+      const exprt zr = member(z, "real");
+      const exprt zi = member(z, "imag");
+      const exprt zr2 = ieee_binop("ieee_mul", zr, zr);
+      const exprt zi2 = ieee_binop("ieee_mul", zi, zi);
+      const exprt abs2 = ieee_binop("ieee_add", zr2, zi2);
+
+      exprt abs_z = get_math_handler().handle_sqrt(abs2, element);
+      if (abs_z.statement() == "cpp-throw")
+        return abs_z;
+
+      exprt ln_abs = get_math_handler().handle_log(abs_z, element);
+      if (ln_abs.statement() == "cpp-throw")
+        return ln_abs;
+
+      exprt arg_z = get_math_handler().handle_atan2(zi, zr, element);
+      if (arg_z.statement() == "cpp-throw")
+        return arg_z;
+
+      return make_complex(ln_abs, arg_z);
+    };
+    auto complex_exp = [&](const exprt &z) -> exprt {
+      const exprt zr = member(z, "real");
+      const exprt zi = member(z, "imag");
+
+      exprt exp_real = get_math_handler().handle_exp(zr, element);
+      if (exp_real.statement() == "cpp-throw")
+        return exp_real;
+
+      exprt cos_imag = get_math_handler().handle_cos(zi, element);
+      if (cos_imag.statement() == "cpp-throw")
+        return cos_imag;
+
+      exprt sin_imag = get_math_handler().handle_sin(zi, element);
+      if (sin_imag.statement() == "cpp-throw")
+        return sin_imag;
+
+      exprt real = ieee_binop("ieee_mul", exp_real, cos_imag);
+      exprt imag = ieee_binop("ieee_mul", exp_real, sin_imag);
+      return make_complex(real, imag);
+    };
 
     if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
       return raise_complex_type_error(
@@ -1714,6 +1790,132 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (op == "FloorDiv" || op == "Mod")
       return raise_complex_type_error(
         "can't take floor or mod of complex number");
+
+    if (op == "Pow")
+    {
+      if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
+        return raise_complex_type_error(
+          "unsupported operand type(s) for " + op_symbol(op) + ": '" +
+          expr_python_type_name(lhs) + "' and '" + expr_python_type_name(rhs) +
+          "'");
+
+      exprt lhs_complex = promote_to_complex(lhs);
+      if (lhs_complex.statement() == "cpp-throw")
+        return lhs_complex;
+
+      exprt resolved_rhs = rhs;
+      if (rhs.is_symbol())
+      {
+        const symbolt *s = symbol_table_.find_symbol(rhs.identifier());
+        if (s && !s->value.is_nil())
+          resolved_rhs = s->value;
+      }
+      else if (
+        rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" ||
+        rhs.id() == "/")
+      {
+        resolved_rhs = get_math_handler().compute_expr(rhs);
+      }
+      if (resolved_rhs.statement() == "cpp-throw")
+        return resolved_rhs;
+
+      BigInt exponent_big;
+      bool has_integer_exponent = false;
+
+      if (resolved_rhs.is_true())
+      {
+        exponent_big = BigInt(1);
+        has_integer_exponent = true;
+      }
+      else if (resolved_rhs.is_false())
+      {
+        exponent_big = BigInt(0);
+        has_integer_exponent = true;
+      }
+      else if (
+        resolved_rhs.id() == "unary-" && resolved_rhs.operands().size() == 1)
+      {
+        BigInt inner;
+        if (!to_integer(resolved_rhs.op0(), inner))
+        {
+          exponent_big = -inner;
+          has_integer_exponent = true;
+        }
+      }
+      else if (
+        resolved_rhs.id() == "unary+" && resolved_rhs.operands().size() == 1)
+      {
+        BigInt inner;
+        if (!to_integer(resolved_rhs.op0(), inner))
+        {
+          exponent_big = inner;
+          has_integer_exponent = true;
+        }
+      }
+      else if (!to_integer(resolved_rhs, exponent_big))
+      {
+        has_integer_exponent = true;
+      }
+
+      if (!has_integer_exponent)
+      {
+        exprt rhs_complex = promote_to_complex(resolved_rhs);
+        if (rhs_complex.statement() == "cpp-throw")
+          return rhs_complex;
+
+        exprt lhs_log = complex_log(lhs_complex);
+        if (lhs_log.statement() == "cpp-throw")
+          return lhs_log;
+
+        exprt product = complex_mul(rhs_complex, lhs_log);
+        return complex_exp(product);
+      }
+
+      static const BigInt min_long = BigInt(std::numeric_limits<long>::min());
+      static const BigInt max_long = BigInt(std::numeric_limits<long>::max());
+      if (exponent_big < min_long || exponent_big > max_long)
+      {
+        return raise_complex_type_error(
+          "complex exponent out of supported integer range");
+      }
+
+      auto pow_nonnegative = [&](unsigned long long exponent_abs) -> exprt {
+        exprt acc = make_complex(
+          from_double(1.0, double_type()), from_double(0.0, double_type()));
+        exprt base = lhs_complex;
+
+        while (exponent_abs > 0)
+        {
+          if ((exponent_abs & 1ULL) != 0ULL)
+            acc = complex_mul(acc, base);
+
+          exponent_abs >>= 1U;
+          if (exponent_abs > 0)
+            base = complex_mul(base, base);
+        }
+
+        return acc;
+      };
+
+      const long exponent = exponent_big.to_int64();
+      if (exponent >= 0)
+      {
+        return pow_nonnegative(static_cast<unsigned long long>(exponent));
+      }
+
+      if (exponent == std::numeric_limits<long>::min())
+      {
+        return raise_complex_type_error(
+          "complex exponent out of supported integer range");
+      }
+
+      const unsigned long long exponent_abs =
+        static_cast<unsigned long long>(-exponent);
+      exprt positive_power = pow_nonnegative(exponent_abs);
+      exprt one = make_complex(
+        from_double(1.0, double_type()), from_double(0.0, double_type()));
+      return complex_div(one, positive_power);
+    }
 
     if (
       op == "Add" || op == "Sub" || op == "Mult" || op == "Div" || op == "Eq" ||
@@ -1735,6 +1937,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
       exprt lhs_complex = promote_to_complex(lhs);
       exprt rhs_complex = promote_to_complex(rhs);
+      if (lhs_complex.statement() == "cpp-throw")
+        return lhs_complex;
+      if (rhs_complex.statement() == "cpp-throw")
+        return rhs_complex;
 
       const exprt a = member(lhs_complex, "real");
       const exprt b = member(lhs_complex, "imag");
