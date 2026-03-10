@@ -1502,6 +1502,14 @@ private:
               // Try to extract id if it exists
               if (returns.contains("id"))
               {
+                // If the body also has `return None` paths, the function
+                // actually returns Optional[T] regardless of the annotation.
+                // Return "" so the converter handles this as Optional.
+                if (has_return_none(func_elem["body"]))
+                {
+                  functions_in_analysis_.erase(func_name);
+                  return "";
+                }
                 functions_in_analysis_.erase(func_name);
                 return returns["id"];
               }

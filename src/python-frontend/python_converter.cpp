@@ -7893,18 +7893,65 @@ void python_converter::get_function_definition(
 
   symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
-  // Pre-scan: for unannotated functions, detect mixed value+None returns
-  // and set return type to Optional so None checks work correctly at runtime
-  if (type.return_type().is_empty())
+  // Pre-scan: detect mixed value+None returns and upgrade return type to
+  // Optional so None checks work correctly at runtime.
+  // This applies even when the function has an explicit return annotation:
+  // Python does not enforce annotations, so `-> int` with `return None` in
+  // the body must be modelled as Optional[int].
+  auto body_has_none_return = [](const nlohmann::json &body) -> bool {
+    std::function<bool(const nlohmann::json &)> scan =
+      [&](const nlohmann::json &stmts) -> bool {
+      for (const auto &s : stmts)
+      {
+        if (s["_type"] == "Return")
+        {
+          if (s["value"].is_null())
+            return true;
+          if (
+            s["value"]["_type"] == "Constant" && s["value"]["value"].is_null())
+            return true;
+        }
+        if (s.contains("body") && s["body"].is_array() && scan(s["body"]))
+          return true;
+        if (
+          s.contains("orelse") && s["orelse"].is_array() &&
+          scan(s["orelse"]))
+          return true;
+      }
+      return false;
+    };
+    return scan(body);
+  };
+
+  bool already_optional = type.return_type().is_struct() &&
+                          to_struct_type(type.return_type())
+                            .tag()
+                            .as_string()
+                            .starts_with("tag-Optional_");
+  if (!already_optional && body_has_none_return(function_node["body"]))
   {
-    TypeFlags return_flags = infer_types_from_returns(function_node["body"]);
-    bool has_value_return =
-      return_flags.has_int || return_flags.has_float || return_flags.has_bool;
-    if (has_value_return && return_flags.has_none)
+    if (type.return_type().is_empty())
     {
-      typet value_type =
-        type_utils::select_widest_type(return_flags, long_long_int_type());
-      typet optional_type = type_handler_.build_optional_type(value_type);
+      // Unannotated function: need full type inference to pick value_type
+      TypeFlags return_flags = infer_types_from_returns(function_node["body"]);
+      bool has_value_return =
+        return_flags.has_int || return_flags.has_float || return_flags.has_bool;
+      if (has_value_return)
+      {
+        typet value_type =
+          type_utils::select_widest_type(return_flags, long_long_int_type());
+        typet optional_type = type_handler_.build_optional_type(value_type);
+        type.return_type() = optional_type;
+        current_element_type = optional_type;
+        added_symbol->type = type;
+      }
+    }
+    else
+    {
+      // Explicitly-annotated function (e.g., -> int) with return None paths:
+      // upgrade the annotated type to Optional[annotated_type].
+      typet optional_type =
+        type_handler_.build_optional_type(type.return_type());
       type.return_type() = optional_type;
       current_element_type = optional_type;
       added_symbol->type = type;
