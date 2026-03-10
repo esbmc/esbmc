@@ -89,7 +89,7 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
 {
   expression_parser parser;
   const expression_node *root = parser.parse("s <= i*255 && i > 0");
-  root->print();
+  root->dump();
 
   return false;
 }
