@@ -817,10 +817,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       const auto single_spec = ieee_float_spect::single_precision();
       const auto double_spec = ieee_float_spect::double_precision();
-      const bool is_single =
-        fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f;
-      const bool is_double =
-        fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f;
+      const bool is_single = fbv_type.exponent == single_spec.e &&
+                             fbv_type.fraction == single_spec.f;
+      const bool is_double = fbv_type.exponent == double_spec.e &&
+                             fbv_type.fraction == double_spec.f;
 
       // Only single- and double-precision are explicitly supported by the
       // integer-encoding div-by-zero saturation logic. For other formats,
