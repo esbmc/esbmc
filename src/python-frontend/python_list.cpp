@@ -1920,6 +1920,19 @@ exprt python_list::handle_index_access(
           }
         }
 
+        // If array is a constant placeholder (e.g., from a chained OOB access),
+        // we're in dead code after a prior IndexError. Emit IndexError and return
+        // a placeholder rather than crashing the frontend.
+        if (!array.is_symbol() && array.is_constant())
+        {
+          exprt raise = converter_.get_exception_handler().gen_exception_raise(
+            "IndexError", "list index out of range");
+          codet throw_code("expression");
+          throw_code.operands().push_back(raise);
+          converter_.add_instruction(throw_code);
+          return gen_zero(size_type());
+        }
+
         const locationt l = converter_.get_location_from_decl(list_value_);
         throw std::runtime_error(
           "List out of bounds at " + l.get_file().as_string() +
