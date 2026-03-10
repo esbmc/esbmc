@@ -1826,10 +1826,9 @@ code_contractst::materialize_ptr_field_snapshots(
         const type2tc &ftype = stype.members[i];
 
         // Create a uniquely-named snapshot symbol
-        std::string snap_name =
-          "__ESBMC_frame_snap_ptrf_" + func_name + "_" +
-          id2string(ptr_name) + "_" + id2string(field) + "_" +
-          std::to_string(ptr_field_snap_counter++);
+        std::string snap_name = "__ESBMC_frame_snap_ptrf_" + func_name + "_" +
+                                id2string(ptr_name) + "_" + id2string(field) +
+                                "_" + std::to_string(ptr_field_snap_counter++);
 
         symbolt snap_sym_obj;
         snap_sym_obj.name = snap_name;
@@ -1883,8 +1882,8 @@ void code_contractst::emit_ptr_field_assertions(
     goto_programt::targett t = wrapper.add_instruction(ASSERT);
     t->guard = guard;
     t->location = location;
-    std::string label = id2string(to_symbol2t(entry.ptr_sym).thename) +
-                        "->" + id2string(entry.field_name);
+    std::string label = id2string(to_symbol2t(entry.ptr_sym).thename) + "->" +
+                        id2string(entry.field_name);
     t->location.comment(
       "assigns compliance: " + label + " not in assigns clause");
     t->location.property("assigns compliance");

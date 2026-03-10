@@ -117,11 +117,11 @@ public:
   /// the post-call assertion can verify it is unchanged.
   struct ptr_field_snapshot_t
   {
-    expr2tc ptr_sym;       ///< Pointer symbol (e.g. symbol2tc for "ctx")
-    type2tc pointee_type;  ///< Resolved struct type pointed to by ptr_sym
-    irep_idt field_name;   ///< Field name not in assigns (e.g. "capacity")
-    type2tc field_type;    ///< Type of that field
-    expr2tc snapshot_sym;  ///< Snapshot symbol holding pre-call field value
+    expr2tc ptr_sym;      ///< Pointer symbol (e.g. symbol2tc for "ctx")
+    type2tc pointee_type; ///< Resolved struct type pointed to by ptr_sym
+    irep_idt field_name;  ///< Field name not in assigns (e.g. "capacity")
+    type2tc field_type;   ///< Type of that field
+    expr2tc snapshot_sym; ///< Snapshot symbol holding pre-call field value
   };
 
 private:
