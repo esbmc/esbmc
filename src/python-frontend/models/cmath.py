@@ -1,6 +1,5 @@
 import math
 
-
 pi: float = math.pi
 e: float = math.e
 tau: float = math.tau
