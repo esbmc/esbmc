@@ -13,7 +13,7 @@ expression_node::expression_node(std::string_view node_value)
 
 void expression_node::output(std::ostream &out) const
 {
-  // Print the AST as a tree.
+  // print the AST as a tree
   out << value << '\n';
 
   if (left)
@@ -25,7 +25,7 @@ void expression_node::output(std::ostream &out) const
 
 void expression_node::dump() const
 {
-  // Print the AST to standard output.
+  // print the AST
   std::ostringstream oss;
   output(oss);
   log_status("{}", oss.str());
@@ -37,7 +37,6 @@ void expression_node::node_output(
   const std::string &prefix,
   bool has_next_sibling)
 {
-  // Recursive helper used by print()
   out << prefix << (has_next_sibling ? "├── " : "└── ") << node->value << '\n';
 
   if (!node->left && !node->right)
@@ -53,17 +52,17 @@ void expression_node::node_output(
     node_output(node->right, out, child_prefix, false);
 }
 
-// Create a reusable parser instance.
 expression_parser::expression_parser() : input_(), position_(0)
 {
+  // create a reusable parser instance
   current_.type = token_type::end;
   current_.begin = 0;
   current_.length = 0;
 }
 
-// Parse the input expression and return the AST root.
 const expression_node *expression_parser::parse(std::string_view expression)
 {
+  // parse the input expression and return the AST root
   input_ = expression;
   position_ = 0;
   nodes_.clear();
@@ -78,10 +77,10 @@ const expression_node *expression_parser::parse(std::string_view expression)
   return root;
 }
 
-// Parse a binary expression with precedence climbing.
 const expression_node *
 expression_parser::parse_expression(int minimum_precedence)
 {
+  // parse a binary expression with precedence climbing
   const expression_node *left_node = parse_prefix();
 
   while (true)
@@ -100,9 +99,9 @@ expression_parser::parse_expression(int minimum_precedence)
   return left_node;
 }
 
-// Parse unary prefix operators such as !, - and +.
 const expression_node *expression_parser::parse_prefix()
 {
+  // parse unary prefix operators such as !, - and +
   if (
     current_.type == token_type::logical_not ||
     current_.type == token_type::minus || current_.type == token_type::plus)
@@ -110,7 +109,7 @@ const expression_node *expression_parser::parse_prefix()
     const token operator_token = current_;
     next_token();
 
-    // Prefix operators bind tighter than all supported binary operators.
+    // prefix operators bind tighter than all supported binary operators
     const expression_node *operand_node = parse_expression(100);
     return make_node(token_text(operator_token), operand_node, nullptr);
   }
@@ -120,6 +119,7 @@ const expression_node *expression_parser::parse_prefix()
 
 const expression_node *expression_parser::parse_postfix()
 {
+  // parse ppstfix operators such as ., -> and []
   const expression_node *node = parse_primary();
 
   while (true)
@@ -177,9 +177,9 @@ const expression_node *expression_parser::parse_postfix()
   return node;
 }
 
-// Parse an identifier, integer literal, or parenthesized expression.
 const expression_node *expression_parser::parse_primary()
 {
+  // parse an identifier, integer literal, or parenthesized expression.
   if (
     current_.type == token_type::identifier ||
     current_.type == token_type::integer)
@@ -206,9 +206,9 @@ const expression_node *expression_parser::parse_primary()
   abort();
 }
 
-// Read the next token from the input string.
 void expression_parser::next_token()
 {
+  // read the next token from the input string
   while (position_ < input_.size() &&
          std::isspace(static_cast<unsigned char>(input_[position_])) != 0)
   {
@@ -226,7 +226,7 @@ void expression_parser::next_token()
 
   const char current_char = input_[position_];
 
-  // Identifier: [a-zA-Z_][a-zA-Z0-9_]*
+  // identifier: [a-zA-Z_][a-zA-Z0-9_]*
   if (
     std::isalpha(static_cast<unsigned char>(current_char)) != 0 ||
     current_char == '_')
@@ -246,7 +246,7 @@ void expression_parser::next_token()
     return;
   }
 
-  // Integer: [0-9]+
+  // integer: [0-9]+
   if (std::isdigit(static_cast<unsigned char>(current_char)) != 0)
   {
     const std::size_t start = position_++;
@@ -262,7 +262,7 @@ void expression_parser::next_token()
     return;
   }
 
-  // Two-character operators.
+  // two-character operators
   if (position_ + 1 < input_.size())
   {
     const char next_char = input_[position_ + 1];
@@ -348,7 +348,7 @@ void expression_parser::next_token()
     }
   }
 
-  // One-character tokens.
+  // one-character tokens
   ++position_;
 
   switch (current_char)
@@ -419,9 +419,9 @@ void expression_parser::next_token()
   }
 }
 
-// Return precedence for a supported binary operator.
 int expression_parser::binary_precedence(token_type type) const
 {
+  // return precedence for a supported binary operator
   switch (type)
   {
   case token_type::logical_or:
@@ -447,18 +447,18 @@ int expression_parser::binary_precedence(token_type type) const
   }
 }
 
-// Return the original text slice for a token.
 std::string_view expression_parser::token_text(const token &tok) const
 {
+  // return the original text slice for a token.
   return input_.substr(tok.begin, tok.length);
 }
 
-// Allocate one AST node from the internal node pool.
 const expression_node *expression_parser::make_node(
   std::string_view value,
   const expression_node *left,
   const expression_node *right)
 {
+  // allocate one AST node from the internal node pool
   nodes_.emplace_back(value);
   expression_node &node = nodes_.back();
   node.left = left;
