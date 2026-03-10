@@ -3254,15 +3254,20 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     for (const auto &kw : element["keywords"])
     {
       std::string arg_name = kw["arg"].get<std::string>();
-      exprt arg_expr = get_expr(kw["value"]);
 
       auto it = param_positions.find(arg_name);
       if (it == param_positions.end())
       {
-        throw std::runtime_error(
-          "Unknown keyword argument: " + arg_name + " in function " +
-          func_symbol->name.as_string());
+        // For user-defined functions, unknown kwargs are a TypeError.
+        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently skip.
+        if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
+          throw std::runtime_error(
+            "Unknown keyword argument: " + arg_name + " in function " +
+            func_symbol->name.as_string());
+        continue;
       }
+
+      exprt arg_expr = get_expr(kw["value"]);
 
       // Convert array to pointer to match parameter type
       const typet &param_type = params[it->second].type();
@@ -3640,8 +3645,7 @@ bool python_converter::has_dunder_method(
   const nlohmann::json &value_node,
   const std::string &dunder_name)
 {
-  const std::string class_name =
-    type_handler_.get_var_classname(value_node);
+  const std::string class_name = type_handler_.get_var_classname(value_node);
   if (class_name.empty())
     return false;
 
@@ -5582,9 +5586,10 @@ void python_converter::get_var_assign(
 
     // Handle object subscript assignment via __setitem__:
     //   obj[key] = value  ->  obj.__setitem__(key, value)
-    if (target.contains("value") && target.contains("slice") &&
-        ast_node.contains("value") && !ast_node["value"].is_null() &&
-        has_dunder_method(target["value"], "__setitem__"))
+    if (
+      target.contains("value") && target.contains("slice") &&
+      ast_node.contains("value") && !ast_node["value"].is_null() &&
+      has_dunder_method(target["value"], "__setitem__"))
     {
       nlohmann::json call_node;
       call_node["_type"] = "Call";
