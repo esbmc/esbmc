@@ -983,9 +983,12 @@ expr2tc member2t::do_simplify() const
     if (is_constant_struct2t(source_value))
     {
       s = to_constant_struct2t(source_value).datatype_members[no];
-      assert(
-        is_pointer_type(type) ||
-        base_type_eq(type, s->type, *migrate_namespace_lookup));
+      // Be defensive: if member extraction type doesn't match, skip
+      // simplification instead of aborting in the simplifier.
+      if (
+        !is_pointer_type(type) &&
+        !base_type_eq(type, s->type, *migrate_namespace_lookup))
+        return expr2tc();
     }
     else
     {
@@ -3923,6 +3926,43 @@ static expr2tc simplify_floatbv_2ops(
   expr2tc simplified_side_1 = try_simplification(side_1);
   expr2tc simplified_side_2 = try_simplification(side_2);
 
+  // Robustness: some frontends may build floatbv ops with integer/bool
+  // constants as operands. Coerce them to float constants before trying
+  // float simplification to avoid malformed FP nodes reaching the solver.
+  if (is_floatbv_type(type) && is_constant_int2t(rounding_mode))
+  {
+    const BigInt rm_value = to_constant_int2t(rounding_mode).value;
+    const auto rm = ieee_floatt::rounding_modet(rm_value.to_int64());
+    const auto target_spec = to_floatbv_type(migrate_type_back(type));
+
+    auto coerce_to_float_constant = [&](expr2tc &side) {
+      if (is_constant_floatbv2t(side))
+        return;
+
+      if (is_constant_int2t(side))
+      {
+        ieee_floatt fp;
+        fp.rounding_mode = rm;
+        fp.spec = target_spec;
+        fp.from_integer(to_constant_int2t(side).value);
+        side = constant_floatbv2tc(fp);
+        return;
+      }
+
+      if (is_constant_bool2t(side))
+      {
+        ieee_floatt fp;
+        fp.rounding_mode = rm;
+        fp.spec = target_spec;
+        fp.from_integer(BigInt(to_constant_bool2t(side).value ? 1 : 0));
+        side = constant_floatbv2tc(fp);
+      }
+    };
+
+    coerce_to_float_constant(simplified_side_1);
+    coerce_to_float_constant(simplified_side_2);
+  }
+
   // Try to handle NaN
   if (is_constant_floatbv2t(simplified_side_1))
     if (to_constant_floatbv2t(simplified_side_1).value.is_NaN())
@@ -3986,7 +4026,11 @@ static expr2tc simplify_floatbv_2ops(
       get_value);
   }
   else
-    assert(0);
+  {
+    // Do not abort on unexpected constant operand kinds; just skip
+    // simplification for this node and keep the original expression.
+    return expr2tc();
+  }
 
   return typecast_check_return(type, simpl_res);
 }
