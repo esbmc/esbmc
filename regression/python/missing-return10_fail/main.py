@@ -10,4 +10,6 @@ def foo(x:int, y:int) -> int:
 
 x = random.randint(0,1)
 y = random.randint(0,1)
-foo(x, y)
+
+z = foo(x,y)
+assert z is not None

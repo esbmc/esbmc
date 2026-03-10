@@ -44,6 +44,9 @@ inline exprt make_complex(const exprt &real, const exprt &imag)
 
 inline exprt promote_to_complex(const exprt &value)
 {
+  if (value.statement() == "cpp-throw")
+    return value;
+
   if (is_complex_type(value.type()))
     return value;
 
