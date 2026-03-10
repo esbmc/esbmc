@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract set_x --function set_x --enforce-assigns-check
+^VERIFICATION SUCCESSFUL$

@@ -24,6 +24,7 @@
 #include <util/context.h>
 #include <irep2/irep2_expr.h>
 #include <map>
+#include <set>
 #include <vector>
 
 /// Enforcement mode: ASSUME constrains search space (loops), ASSERT checks compliance (contracts)
@@ -99,15 +100,25 @@ public:
   /// \return Vector of symbol2tc expressions for global variables
   static std::vector<expr2tc> collect_global_variables(const contextt &context);
 
-  /// \brief Classification of assigns targets into direct and pointer categories.
+  /// \brief Classification of assigns targets into direct, pointer, and struct-field categories.
   /// Used to separate structurally-matchable targets from pointer-typed targets
-  /// that require aliasing disjunctions.
+  /// that require aliasing disjunctions, and from direct struct field targets
+  /// that require per-field compliance checking.
   struct classified_assignst
   {
     std::vector<expr2tc>
       direct_targets; ///< Non-pointer targets matched structurally
     std::vector<expr2tc>
       pointer_targets; ///< Pointer-typed targets from *ptr pattern
+    /// Direct struct field targets: maps global struct symbol name to the set
+    /// of field names explicitly assigned.  Used to generate per-field
+    /// compliance assertions instead of a coarse whole-struct assertion.
+    /// Example: __ESBMC_assigns(global_pt.x) → struct_field_targets["global_pt"] = {"x"}
+    std::map<irep_idt, std::set<irep_idt>> struct_field_targets;
+    /// Pointer-struct-field targets: maps pointer symbol name to the set of
+    /// field names explicitly assigned through that pointer.
+    /// Example: __ESBMC_assigns(ctx->count) → ptr_field_targets["ctx"] = {"count"}
+    std::map<irep_idt, std::set<irep_idt>> ptr_field_targets;
   };
 
   /// \brief Classify assigns targets into direct and pointer categories.

@@ -112,11 +112,24 @@ public:
   /// \return True if function has the contract annotation
   bool is_annotated_contract_function(const symbolt &func_sym) const;
 
+  /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
+  /// Captures the pre-call value of a field NOT in the assigns clause so that
+  /// the post-call assertion can verify it is unchanged.
+  struct ptr_field_snapshot_t
+  {
+    expr2tc ptr_sym;       ///< Pointer symbol (e.g. symbol2tc for "ctx")
+    type2tc pointee_type;  ///< Resolved struct type pointed to by ptr_sym
+    irep_idt field_name;   ///< Field name not in assigns (e.g. "capacity")
+    type2tc field_type;    ///< Type of that field
+    expr2tc snapshot_sym;  ///< Snapshot symbol holding pre-call field value
+  };
+
 private:
   goto_functionst &goto_functions;
   contextt &context;
   const namespacet &ns;
   frame_enforcert frame_enforcer;
+  size_t ptr_field_snap_counter = 0; ///< Counter for unique snapshot names
 
   /// \brief Check if a function is compiler-generated and should be skipped
   /// \param function_name Function name or ID
@@ -265,6 +278,33 @@ private:
   /// \return Vector of old_snapshot_t structures (original_expr, temp_var)
   std::vector<old_snapshot_t>
   collect_old_snapshots_from_body(const goto_programt &function_body) const;
+
+  /// \brief Snapshot fields of pointed-to structs that are NOT in the assigns clause.
+  /// For each pointer symbol in classified.ptr_field_targets, enumerates the
+  /// pointed-to struct's fields, and for each field NOT in the assigned set
+  /// emits DECL+ASSIGN instructions capturing the pre-call value.
+  /// \param classified Classified assigns targets (provides ptr_field_targets)
+  /// \param original_func Original function symbol (provides parameter types)
+  /// \param wrapper GOTO program to append snapshot instructions to
+  /// \param location Source location for generated instructions
+  /// \param func_name Function name for unique snapshot naming
+  /// \return Vector of snapshot records for use in emit_ptr_field_assertions
+  std::vector<ptr_field_snapshot_t> materialize_ptr_field_snapshots(
+    const frame_enforcert::classified_assignst &classified,
+    const symbolt &original_func,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name);
+
+  /// \brief Emit ASSERT instructions checking that ptr->field is unchanged.
+  /// For each snapshot in the vector, asserts ptr->field == snapshot_sym.
+  /// \param snapshots Snapshots produced by materialize_ptr_field_snapshots
+  /// \param wrapper GOTO program to append assertions to
+  /// \param location Source location for generated instructions
+  void emit_ptr_field_assertions(
+    const std::vector<ptr_field_snapshot_t> &snapshots,
+    goto_programt &wrapper,
+    const locationt &location);
 
   /// \brief Materialize old snapshots in wrapper function (enforce-contract mode)
   /// Creates DECL and ASSIGN instructions for snapshot variables before function call

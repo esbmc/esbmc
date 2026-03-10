@@ -66,6 +66,36 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
       // Explicit dereference: extract the pointer operand
       result.pointer_targets.push_back(to_dereference2t(target).value);
     }
+    else if (is_member2t(target))
+    {
+      const member2t &mem = to_member2t(target);
+      if (is_symbol2t(mem.source_value))
+      {
+        // global_struct.field: record for per-field global compliance checking
+        irep_idt struct_name = to_symbol2t(mem.source_value).thename;
+        result.struct_field_targets[struct_name].insert(mem.member);
+      }
+      else if (is_dereference2t(mem.source_value))
+      {
+        // ptr->field: member2t(dereference2t(ptr_sym), field)
+        // Record for per-field pointer compliance checking.
+        const dereference2t &deref = to_dereference2t(mem.source_value);
+        if (is_symbol2t(deref.value))
+        {
+          irep_idt ptr_name = to_symbol2t(deref.value).thename;
+          result.ptr_field_targets[ptr_name].insert(mem.member);
+        }
+        else
+        {
+          // Complex pointer expression — fall back to direct_targets
+          result.direct_targets.push_back(target);
+        }
+      }
+      else
+      {
+        result.direct_targets.push_back(target);
+      }
+    }
     else
     {
       result.direct_targets.push_back(target);
@@ -73,6 +103,31 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
   }
 
   return result;
+}
+
+/// Helper: emit a single ASSUME or ASSERT instruction with the given guard.
+static void emit_frame_instruction(
+  goto_programt &dest,
+  const locationt &loc,
+  const expr2tc &guard,
+  frame_modet mode,
+  const std::string &var_name)
+{
+  goto_program_instruction_typet inst_type =
+    (mode == frame_modet::ASSERT) ? ASSERT : ASSUME;
+  goto_programt::targett t = dest.add_instruction(inst_type);
+  t->guard = guard;
+  t->location = loc;
+  if (mode == frame_modet::ASSERT)
+  {
+    t->location.comment(
+      "assigns compliance: " + var_name + " not in assigns clause");
+    t->location.property("assigns compliance");
+  }
+  else
+  {
+    t->location.comment("frame: preserve unassigned variable");
+  }
 }
 
 void frame_enforcert::enforce_frame_rule(
@@ -104,7 +159,40 @@ void frame_enforcert::enforce_frame_rule(
     if (is_assigned)
       continue;
 
-    // Base guard: var == snapshot (unchanged condition)
+    // Check for struct field targets: if this global is a struct and some of
+    // its fields are in the assigns clause, generate per-field assertions
+    // instead of a coarse whole-struct assertion.
+    // Example: __ESBMC_assigns(global_pt.x) allows global_pt.x to change but
+    // asserts that global_pt.y, global_pt.z, ... remain unchanged.
+    if (is_symbol2t(var) && is_struct_type(var))
+    {
+      const irep_idt &sym_name = to_symbol2t(var).thename;
+      auto sit = classified.struct_field_targets.find(sym_name);
+      if (sit != classified.struct_field_targets.end())
+      {
+        // Some fields of this struct are in the assigns clause.
+        // Assert only that the fields NOT in assigns are unchanged.
+        const struct_type2t &stype = to_struct_type(var->type);
+        for (size_t i = 0; i < stype.member_names.size(); ++i)
+        {
+          const irep_idt &field = stype.member_names[i];
+          if (sit->second.count(field))
+            continue; // This field is explicitly assigned — skip
+
+          const type2tc &ftype = stype.members[i];
+          expr2tc field_var = member2tc(ftype, var, field);
+          expr2tc field_snap = member2tc(ftype, snap, field);
+          expr2tc field_guard = equality2tc(field_var, field_snap);
+
+          std::string field_name_str =
+            id2string(sym_name) + "." + id2string(field);
+          emit_frame_instruction(dest, loc, field_guard, mode, field_name_str);
+        }
+        continue; // Skip the whole-struct assertion
+      }
+    }
+
+    // Build the base guard: var == snapshot (unchanged condition)
     expr2tc guard = equality2tc(var, snap);
 
     // In ASSERT mode, add aliasing disjunctions for pointer targets.
@@ -128,25 +216,11 @@ void frame_enforcert::enforce_frame_rule(
       }
     }
 
-    // Emit ASSUME or ASSERT with the (possibly disjunctive) guard
-    goto_program_instruction_typet inst_type =
-      (mode == frame_modet::ASSERT) ? ASSERT : ASSUME;
-    goto_programt::targett t = dest.add_instruction(inst_type);
-    t->guard = guard;
-    t->location = loc;
-    if (mode == frame_modet::ASSERT)
-    {
-      std::string var_name = "unknown";
-      if (is_symbol2t(var))
-        var_name = id2string(to_symbol2t(var).thename);
-      t->location.comment(
-        "assigns compliance: " + var_name + " not in assigns clause");
-      t->location.property("assigns compliance");
-    }
-    else
-    {
-      t->location.comment("frame: preserve unassigned variable");
-    }
+    // Emit the (possibly disjunctive) whole-variable guard
+    std::string var_name = "unknown";
+    if (is_symbol2t(var))
+      var_name = id2string(to_symbol2t(var).thename);
+    emit_frame_instruction(dest, loc, guard, mode, var_name);
   }
 }
 
