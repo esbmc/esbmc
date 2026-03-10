@@ -5421,10 +5421,9 @@ std::string python_converter::infer_type_from_any_annotation(
     // use the actual return type so comparisons like y == "x" work correctly.
     bool ret_is_charptr =
       ret_type.is_pointer() && ret_type.subtype() == char_type();
-    bool lhs_is_scalar = !current_element_type.is_pointer() &&
-                         !current_element_type.is_array() &&
-                         !current_element_type.is_struct() &&
-                         !current_element_type.id().empty();
+    bool lhs_is_scalar =
+      !current_element_type.is_pointer() && !current_element_type.is_array() &&
+      !current_element_type.is_struct() && !current_element_type.id().empty();
     if (ret_is_charptr && lhs_is_scalar)
     {
       current_element_type = ret_type;
