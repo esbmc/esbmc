@@ -2817,57 +2817,58 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
 
   case clang::Stmt::AttributedStmtClass:
+{
+  const clang::AttributedStmt &astmt =
+    static_cast<const clang::AttributedStmt &>(stmt);
+
+  if (get_expr(*astmt.getSubStmt(), new_expr))
+    return true;
+
+  for (const auto *attr : astmt.getAttrs())
   {
-    const clang::AttributedStmt &astmt =
-      static_cast<const clang::AttributedStmt &>(stmt);
-
-    // First, convert the sub-statement
-    if (get_expr(*astmt.getSubStmt(), new_expr))
-      return true;
-
-    // Check for loop unroll attributes
-    for (const auto *attr : astmt.getAttrs())
+    if (const auto *lha = llvm::dyn_cast<clang::LoopHintAttr>(attr))
     {
-      if (const auto *lha = llvm::dyn_cast<clang::LoopHintAttr>(attr))
+      if (
+        lha->getOption() == clang::LoopHintAttr::Unroll ||
+        lha->getOption() == clang::LoopHintAttr::UnrollCount)
       {
-        if (
-          lha->getOption() == clang::LoopHintAttr::Unroll ||
-          lha->getOption() == clang::LoopHintAttr::UnrollCount)
+        unsigned unroll_count = 0;
+        auto state = lha->getState();
+
+        if (state == clang::LoopHintAttr::Numeric)
         {
-          unsigned unroll_count = 0;
-
-          auto state = lha->getState();
-          if (
-            state == clang::LoopHintAttr::Full ||
-            state == clang::LoopHintAttr::Enable)
+          clang::Expr *val = lha->getValue();
+          if (val && llvm::isa<clang::Expr>(val))
           {
-            // Full unroll - use sentinel to indicate "no limit"
-            unroll_count = UINT_MAX;
-          }
-          else if (state == clang::LoopHintAttr::Numeric)
-          {
-            if (clang::Expr *val = lha->getValue())
-            {
-              if (const auto *lit = llvm::dyn_cast<clang::IntegerLiteral>(val))
-                unroll_count = lit->getValue().getZExtValue();
-              else
-              {
-                clang::Expr::EvalResult result;
-                if (val->EvaluateAsInt(result, *ASTContext))
-                  unroll_count = result.Val.getInt().getZExtValue();
-              }
-            }
-          }
+            if (const auto *lit =
+                  llvm::dyn_cast<clang::IntegerLiteral>(val))
+              unroll_count = lit->getValue().getZExtValue();
+            else if (
+              const auto *lit = llvm::dyn_cast<clang::IntegerLiteral>(
+                val->IgnoreParenImpCasts()))
+              unroll_count = lit->getValue().getZExtValue();
 
-          if (unroll_count > 0)
-            new_expr.set(
-              "#pragma_unroll", irep_idt(std::to_string(unroll_count)));
+            // TODO: Possible Clang bug, merging static inline with
+            // pragma unroll cause borked AST. It should be safe to
+            // skip though.	    
+          }
         }
+
+        if (unroll_count > 0)
+        {
+	  // Users expect behavior of pragma unroll to
+	  // fully unroll the loop. ESBMC unwind works differently          
+	  unroll_count++; 
+	   new_expr.set(
+            "#pragma_unroll", irep_idt(std::to_string(unroll_count)));
+	}          
+         
       }
     }
-    break;
   }
-
+  break;
+}
+ 
   case clang::Stmt::ExprWithCleanupsClass:
   {
     const clang::ExprWithCleanups &ewc =
