@@ -8119,9 +8119,7 @@ void python_converter::get_function_definition(
         }
         if (s.contains("body") && s["body"].is_array() && scan(s["body"]))
           return true;
-        if (
-          s.contains("orelse") && s["orelse"].is_array() &&
-          scan(s["orelse"]))
+        if (s.contains("orelse") && s["orelse"].is_array() && scan(s["orelse"]))
           return true;
       }
       return false;
@@ -8129,11 +8127,11 @@ void python_converter::get_function_definition(
     return scan(body);
   };
 
-  bool already_optional = type.return_type().is_struct() &&
-                          to_struct_type(type.return_type())
-                            .tag()
-                            .as_string()
-                            .starts_with("tag-Optional_");
+  bool already_optional =
+    type.return_type().is_struct() && to_struct_type(type.return_type())
+                                        .tag()
+                                        .as_string()
+                                        .starts_with("tag-Optional_");
   if (!already_optional && body_has_none_return(function_node["body"]))
   {
     if (type.return_type().is_empty())
