@@ -3846,8 +3846,7 @@ bool python_converter::has_dunder_method(
   const nlohmann::json &value_node,
   const std::string &dunder_name)
 {
-  const std::string class_name =
-    type_handler_.get_var_classname(value_node);
+  const std::string class_name = type_handler_.get_var_classname(value_node);
   if (class_name.empty())
     return false;
 
@@ -5788,9 +5787,10 @@ void python_converter::get_var_assign(
 
     // Handle object subscript assignment via __setitem__:
     //   obj[key] = value  ->  obj.__setitem__(key, value)
-    if (target.contains("value") && target.contains("slice") &&
-        ast_node.contains("value") && !ast_node["value"].is_null() &&
-        has_dunder_method(target["value"], "__setitem__"))
+    if (
+      target.contains("value") && target.contains("slice") &&
+      ast_node.contains("value") && !ast_node["value"].is_null() &&
+      has_dunder_method(target["value"], "__setitem__"))
     {
       nlohmann::json call_node;
       call_node["_type"] = "Call";
