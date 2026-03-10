@@ -18,15 +18,17 @@ public:
   const expression_node *left;
   const expression_node *right;
 
-  // Print the AST as a tree.
-  void print(std::ostream &output_stream) const;
-  void print() const;
+  // Write the AST to standard output.
+  void dump() const;
+
+  // Write the AST to the given output stream.
+  void output(std::ostream &out) const;
 
 private:
   // Recursive helper for tree printing.
-  static void print_impl(
+  static void node_output(
     const expression_node *node,
-    std::ostream &output_stream,
+    std::ostream &out,
     const std::string &prefix,
     bool has_next_sibling);
 };
@@ -94,9 +96,6 @@ private:
     std::string_view value,
     const expression_node *left = nullptr,
     const expression_node *right = nullptr);
-
-  // Raise a parse error with source position.
-  [[noreturn]] void throw_error(const char *message, std::size_t position) const;
 
 private:
   std::string_view input_;

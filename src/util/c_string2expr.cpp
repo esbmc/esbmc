@@ -4,55 +4,53 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <util/message.h>
 
-// Create a node with the given text.
 expression_node::expression_node(std::string_view node_value)
   : value(node_value), left(nullptr), right(nullptr)
 {
 }
 
-// Print the AST as a tree.
-void expression_node::print(std::ostream &output_stream) const
+void expression_node::output(std::ostream &out) const
 {
-  output_stream << value << '\n';
+  // Print the AST as a tree.
+  out << value << '\n';
 
-  if (left != nullptr)
-    print_impl(left, output_stream, "", right != nullptr);
+  if (left)
+    node_output(left, out, "", right);
 
-  if (right != nullptr)
-    print_impl(right, output_stream, "", false);
+  if (right)
+    node_output(right, out, "", false);
 }
 
-// Print the AST to standard output.
-void expression_node::print() const
+void expression_node::dump() const
 {
-  print(std::cout);
+  // Print the AST to standard output.
+  std::ostringstream oss;
+  output(oss);
+  log_status("{}", oss.str());
 }
 
-// Recursive helper used by print().
-void expression_node::print_impl(
+void expression_node::node_output(
   const expression_node *node,
-  std::ostream &output_stream,
+  std::ostream &out,
   const std::string &prefix,
   bool has_next_sibling)
 {
-  output_stream << prefix << (has_next_sibling ? "├── " : "└── ") << node->value
-                << '\n';
+  // Recursive helper used by print()
+  out << prefix << (has_next_sibling ? "├── " : "└── ") << node->value << '\n';
 
-  const bool has_left = (node->left != nullptr);
-  const bool has_right = (node->right != nullptr);
-
-  if (!has_left && !has_right)
+  if (!node->left && !node->right)
     return;
 
   const std::string child_prefix =
     prefix + (has_next_sibling ? "│   " : "    ");
 
-  if (has_left)
-    print_impl(node->left, output_stream, child_prefix, has_right);
+  if (node->left)
+    node_output(node->left, out, child_prefix, node->right);
 
-  if (has_right)
-    print_impl(node->right, output_stream, child_prefix, false);
+  if (node->right)
+    node_output(node->right, out, child_prefix, false);
 }
 
 // Create a reusable parser instance.
@@ -75,7 +73,7 @@ const expression_node *expression_parser::parse(std::string_view expression)
   const expression_node *root = parse_expression(0);
 
   if (current_.type != token_type::end)
-    throw_error("unexpected trailing token", current_.begin);
+    log_error("unexpected trailing token {}", current_.begin);
 
   return root;
 }
@@ -139,13 +137,14 @@ const expression_node *expression_parser::parse_primary()
     const expression_node *node = parse_expression(0);
 
     if (current_.type != token_type::right_paren)
-      throw_error("expected ')'", current_.begin);
+      log_error("expected ')'");
 
     next_token();
     return node;
   }
 
-  throw_error("expected primary expression", current_.begin);
+  log_error("expected primary expression: {}", current_.begin);
+  abort();
 }
 
 // Read the next token from the input string.
@@ -330,7 +329,8 @@ void expression_parser::next_token()
     return;
 
   default:
-    throw_error("unexpected character", current_.begin);
+    log_error("unexpected character: {}", current_.begin);
+    abort();
   }
 }
 
@@ -379,12 +379,4 @@ const expression_node *expression_parser::make_node(
   node.left = left;
   node.right = right;
   return &node;
-}
-
-// Throw a parse error with source position.
-[[noreturn]] void
-expression_parser::throw_error(const char *message, std::size_t position) const
-{
-  throw std::runtime_error(
-    std::string(message) + " at position " + std::to_string(position));
 }
