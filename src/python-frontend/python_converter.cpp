@@ -5406,8 +5406,9 @@ std::string python_converter::infer_type_from_any_annotation(
   // For method calls (e.g., b.f()), the method symbol is stored under the
   // class scope (py:file@C@ClassName@F@method), not the top-level scope.
   // Look up the object's class and retry the symbol lookup.
-  if (!func_symbol && func_node["_type"] == "Attribute" &&
-      func_node["value"].contains("id"))
+  if (
+    !func_symbol && func_node["_type"] == "Attribute" &&
+    func_node["value"].contains("id"))
   {
     const std::string obj_name = func_node["value"]["id"].get<std::string>();
     symbol_id obj_sid = create_symbol_id();
