@@ -13,6 +13,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <climits>
 #include <optional>
+#include <vector>
 
 static size_t utf8_codepoint_count(const std::string &text)
 {
@@ -141,6 +142,7 @@ symbol_id function_call_builder::build_function_id() const
   const std::string &func_type = func_json["_type"];
 
   std::string func_name, obj_name, class_name;
+  std::string resolved_module_path;
 
   symbol_id function_id(python_file, current_class_name, current_function_name);
 
@@ -160,104 +162,118 @@ symbol_id function_call_builder::build_function_id() const
     // Get object name
     if (func_json["value"]["_type"] == "Attribute")
     {
-      /* Handle nested attribute chains (e.g., self.f.foo(), a.b.c.method())
-       *
-       * When calling a method through an attribute chain, we need to determine
-       * the class type of the intermediate object. For example, in self.f.foo(),
-       * we need to know that 'f' has type Foo to correctly resolve Foo.foo().
-       *
-       * Strategy: Recursively walk the attribute chain from left to right,
-       * resolving each component's type by looking up struct members in the
-       * symbol table, until we reach the final object whose class we need.
-       */
+      std::string module_root;
+      std::vector<std::string> module_segments;
+      if (
+        json_utils::extract_attribute_chain(
+          func_json["value"], module_root, module_segments) &&
+        !module_segments.empty() && converter_.is_imported_module(module_root))
+      {
+        resolved_module_path =
+          converter_.resolve_module_chain_path(module_root, module_segments);
+      }
 
-      std::function<typet(const nlohmann::json &)> resolve_attr_type =
-        [&](const nlohmann::json &node) -> typet {
-        if (node["_type"] == "Name")
-        {
-          // Base case: resolve variable to its type
-          std::string name = node["id"].get<std::string>();
+      if (resolved_module_path.empty())
+      {
+        /* Handle nested attribute chains (e.g., self.f.foo(), a.b.c.method())
+         *
+         * When calling a method through an attribute chain, we need to determine
+         * the class type of the intermediate object. For example, in self.f.foo(),
+         * we need to know that 'f' has type Foo to correctly resolve Foo.foo().
+         *
+         * Strategy: Recursively walk the attribute chain from left to right,
+         * resolving each component's type by looking up struct members in the
+         * symbol table, until we reach the final object whose class we need.
+         */
 
-          // Skip module names - let the module handling logic deal with them
-          if (converter_.is_imported_module(name))
-            return typet();
-
-          symbol_id var_sid(
-            python_file, current_class_name, current_function_name);
-          var_sid.set_object(name);
-          symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-          return var_symbol ? var_symbol->type : typet();
-        }
-        else if (node["_type"] == "Attribute")
-        {
-          // Recursive case: resolve base, then look up member
-          typet base_type = resolve_attr_type(node["value"]);
-          if (base_type.id().empty())
-            return typet();
-
-          // Normalize type (dereference pointers, follow symbol types)
-          if (base_type.is_pointer())
-            base_type = base_type.subtype();
-          if (base_type.id() == "symbol")
-            base_type = converter_.ns.follow(base_type);
-
-          // Look up the member in the struct
-          if (base_type.is_struct())
+        std::function<typet(const nlohmann::json &)> resolve_attr_type =
+          [&](const nlohmann::json &node) -> typet {
+          if (node["_type"] == "Name")
           {
-            const struct_typet &struct_type = to_struct_type(base_type);
-            std::string attr = node["attr"].get<std::string>();
-            if (struct_type.has_component(attr))
-              return struct_type.get_component(attr).type();
-            // Not an instance member — check for class-level symbol
-            // (e.g. mutable_attr = [] declared in the class body).
-            symbol_id cls_sid(python_file, struct_type.tag().as_string(), "");
-            cls_sid.set_object(attr);
-            symbolt *cls_sym = converter_.find_symbol(cls_sid.to_string());
-            if (cls_sym)
-              return cls_sym->type;
+            // Base case: resolve variable to its type
+            std::string name = node["id"].get<std::string>();
+
+            // Skip module names - let the module handling logic deal with them
+            if (converter_.is_imported_module(name))
+              return typet();
+
+            symbol_id var_sid(
+              python_file, current_class_name, current_function_name);
+            var_sid.set_object(name);
+            symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+            return var_symbol ? var_symbol->type : typet();
+          }
+          else if (node["_type"] == "Attribute")
+          {
+            // Recursive case: resolve base, then look up member
+            typet base_type = resolve_attr_type(node["value"]);
+            if (base_type.id().empty())
+              return typet();
+
+            // Normalize type (dereference pointers, follow symbol types)
+            if (base_type.is_pointer())
+              base_type = base_type.subtype();
+            if (base_type.id() == "symbol")
+              base_type = converter_.ns.follow(base_type);
+
+            // Look up the member in the struct
+            if (base_type.is_struct())
+            {
+              const struct_typet &struct_type = to_struct_type(base_type);
+              std::string attr = node["attr"].get<std::string>();
+              if (struct_type.has_component(attr))
+                return struct_type.get_component(attr).type();
+              // Not an instance member — check for class-level symbol
+              // (e.g. mutable_attr = [] declared in the class body).
+              symbol_id cls_sid(python_file, struct_type.tag().as_string(), "");
+              cls_sid.set_object(attr);
+              symbolt *cls_sym = converter_.find_symbol(cls_sid.to_string());
+              if (cls_sym)
+                return cls_sym->type;
+              return typet();
+            }
             return typet();
           }
           return typet();
-        }
-        return typet();
-      };
+        };
 
-      // Resolve the full attribute chain type
-      typet obj_type = resolve_attr_type(func_json["value"]);
+        // Resolve the full attribute chain type
+        typet obj_type = resolve_attr_type(func_json["value"]);
 
-      if (!obj_type.id().empty())
-      {
-        // If the resolved type is a list (e.g. class-level mutable_attr = []),
-        // map directly to the "list" builtin name.
-        if (is_pylist_object_type(obj_type, converter_.ns))
+        if (!obj_type.id().empty())
         {
-          obj_name = "list";
-        }
-        else
-        {
-          // Normalize the resolved type
-          if (obj_type.is_pointer())
-            obj_type = obj_type.subtype();
-          if (obj_type.id() == "symbol")
-            obj_type = converter_.ns.follow(obj_type);
-
-          // Extract class name from struct type
-          if (obj_type.is_struct())
+          // If the resolved type is a list (e.g. class-level mutable_attr = []),
+          // map directly to the "list" builtin name.
+          if (is_pylist_object_type(obj_type, converter_.ns))
           {
-            std::string tag = to_struct_type(obj_type).tag().as_string();
-            obj_name = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+            obj_name = "list";
           }
           else
           {
-            obj_name = th.type_to_string(obj_type);
+            // Normalize the resolved type
+            if (obj_type.is_pointer())
+              obj_type = obj_type.subtype();
+            if (obj_type.id() == "symbol")
+              obj_type = converter_.ns.follow(obj_type);
+
+            // Extract class name from struct type
+            if (obj_type.is_struct())
+            {
+              std::string tag = to_struct_type(obj_type).tag().as_string();
+              obj_name = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+            }
+            else
+            {
+              obj_name = th.type_to_string(obj_type);
+            }
           }
         }
-      }
-      else
-      {
-        // Fallback: use the direct attribute name
-        // For module.Class.method(), we want "Class" as the object name
-        obj_name = func_json["value"]["attr"].get<std::string>();
+        else
+        {
+          // Fallback: use the direct attribute name
+          // For module.Class.method(), we want "Class" as the object name
+          obj_name = func_json["value"]["attr"].get<std::string>();
+        }
       }
     }
     else if (
@@ -323,17 +339,30 @@ symbol_id function_call_builder::build_function_id() const
         obj_name = "str";
     }
 
-    obj_name = json_utils::get_object_alias(ast, obj_name);
+    if (!obj_name.empty())
+      obj_name = converter_.resolve_object_alias(obj_name);
 
-    if (
+    if (!resolved_module_path.empty())
+    {
+      function_id = symbol_id(
+        resolved_module_path, current_class_name, current_function_name);
+      is_member_function_call = false;
+    }
+    else if (
       !json_utils::is_class(obj_name, ast) &&
       converter_.is_imported_module(obj_name))
     {
-      const auto &module_path = converter_.get_imported_module_path(obj_name);
+      const std::string *module_path = converter_.get_imported_module_path_ptr(obj_name);
+      if (module_path != nullptr)
+      {
+        function_id =
+          symbol_id(*module_path, current_class_name, current_function_name);
+      }
 
-      function_id =
-        symbol_id(module_path, current_class_name, current_function_name);
-
+      // Even when a module path is not materialized in imported_modules
+      // (e.g. import inside function scope), this remains a module call.
+      // Keep member-call resolution disabled to avoid treating the module name
+      // as an instance variable and throwing "Variable <module> not found".
       is_member_function_call = false;
     }
   }
