@@ -5555,6 +5555,9 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     obj_sid.set_object(obj_name);
     const symbolt *obj_sym = symbol_table_.find_symbol(obj_sid.to_string());
 
+    // Methods that emit instructions via converter_.add_instruction() must be
+    // listed here to prevent double-evaluation during type inference.
+    // Sync with is_dict_method_call() for any new value-returning dict methods.
     bool is_dict_method =
       (method == "pop" || method == "get" || method == "setdefault") &&
       obj_sym != nullptr &&
