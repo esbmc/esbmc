@@ -1688,6 +1688,12 @@ exprt python_dict_handler::handle_dict_setdefault(
   return symbol_expr(result_var);
 }
 
+bool python_dict_handler::is_value_returning_method(const std::string &method_name)
+{
+  return method_name == "pop" || method_name == "get" ||
+         method_name == "setdefault";
+}
+
 exprt python_dict_handler::handle_dict_pop(
   const exprt &dict_expr,
   const nlohmann::json &call_node)

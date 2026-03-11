@@ -421,6 +421,21 @@ public:
   handle_dict_pop(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
+   * @brief Returns true for dict methods that return a value and emit IR.
+   *
+   * Used to avoid double-evaluation during type inference: these methods
+   * must not be called via get_expr() in create_symbol_for_unannotated_assign(),
+   * because they already emit GOTO instructions as a side-effect.
+   *
+   * Keep in sync with handle_dict_method() when adding new value-returning
+   * dict methods.
+   *
+   * @param method_name The method name to check.
+   * @return true if the method is a value-returning, IR-emitting dict method.
+   */
+  static bool is_value_returning_method(const std::string &method_name);
+
+  /**
    * @brief Handles dict.update() method calls.
    * Implements Python's dict.update(other) semantics:
    * - For each key-value pair in other: if key exists, update value;

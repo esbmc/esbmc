@@ -2695,8 +2695,8 @@ bool function_call_expr::is_dict_method_call() const
   const std::string &method_name = function_id_.get_function();
 
   if (
-    method_name != "get" && method_name != "setdefault" &&
-    method_name != "update" && method_name != "pop")
+    !python_dict_handler::is_value_returning_method(method_name) &&
+    method_name != "update")
     return false;
 
   // For "pop", which exists on both list and dict, treat as dict.pop() when
