@@ -1,5 +1,6 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_converter.h>
+#include <util/c_types.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
@@ -3184,7 +3185,14 @@ typet python_list::check_homogeneous_list_types(
            (t.is_pointer() && t.subtype() == char_type());
   };
 
-  // Check all other elements have the same type
+  auto is_numeric = [](const typet &t) -> bool {
+    return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv();
+  };
+
+  // Scan all elements to detect mixed int/float
+  bool has_int = elem_type.is_signedbv() || elem_type.is_unsignedbv();
+  bool has_float = elem_type.is_floatbv();
+
   for (size_t i = 1; i < list_size; i++)
   {
     const typet &current_elem_type = type_info[i].second;
@@ -3193,8 +3201,15 @@ typet python_list::check_homogeneous_list_types(
     if (is_string_type(elem_type) && is_string_type(current_elem_type))
       continue;
 
-    // For non-string types, require exact match
-    if (elem_type != current_elem_type)
+    if (current_elem_type.is_floatbv())
+      has_float = true;
+    else if (current_elem_type.is_signedbv() || current_elem_type.is_unsignedbv())
+      has_int = true;
+
+    // Mixed numeric types (int/float) are allowed; anything else is an error.
+    if (
+      elem_type != current_elem_type &&
+      (!is_numeric(elem_type) || !is_numeric(current_elem_type)))
     {
       throw std::runtime_error(
         "Type mismatch in " + func_name +
@@ -3204,7 +3219,106 @@ typet python_list::check_homogeneous_list_types(
     }
   }
 
+  // Mixed int and float: Python promotes int to float for comparisons
+  if (has_int && has_float)
+    return double_type();
+
   return elem_type;
+}
+
+bool python_list::has_mixed_numeric_types(const std::string &list_id)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || it->second.empty())
+    return false;
+  bool has_int = false, has_float = false;
+  for (const auto &elem : it->second)
+  {
+    if (elem.second.is_floatbv())
+      has_float = true;
+    else if (elem.second.is_signedbv() || elem.second.is_unsignedbv())
+      has_int = true;
+  }
+  return has_int && has_float;
+}
+
+exprt python_list::build_min_max_for_mixed_numeric(
+  const exprt &list_arg,
+  const std::string &list_id,
+  const std::string &func_name,
+  irep_idt comparison_op)
+{
+  const TypeInfo &type_info = list_type_map.at(list_id);
+  size_t n = type_info.size();
+
+  if (n == 0)
+    throw std::runtime_error(func_name + "() arg is an empty sequence");
+
+  pointer_typet obj_ptr_type(converter_.get_type_handler().get_list_element_type());
+  const typet double_t = double_type();
+  locationt loc = converter_.get_location_from_decl(list_value_);
+
+  // Access element i from the list and return it promoted to double
+  auto get_elem_as_double = [&](size_t i) -> exprt {
+    typet orig_type = type_info[i].second;
+    exprt index_expr = from_integer(BigInt(i), size_type());
+
+    // Build __ESBMC_list_at call (also emits bounds check IR)
+    exprt list_at = build_list_at_call(list_arg, index_expr, list_value_);
+
+    // Store PyObject* in temp symbol to avoid double-evaluation
+    symbolt &obj_sym = converter_.create_tmp_symbol(
+      list_value_, "$list_obj$", obj_ptr_type, exprt());
+    code_declt obj_decl(symbol_expr(obj_sym));
+    obj_decl.location() = loc;
+    converter_.add_instruction(obj_decl);
+    code_assignt obj_assign(symbol_expr(obj_sym), list_at);
+    obj_assign.location() = loc;
+    converter_.add_instruction(obj_assign);
+
+    // Extract value with original type, then promote to double if needed
+    exprt val = extract_pyobject_value(symbol_expr(obj_sym), orig_type);
+    if (!orig_type.is_floatbv())
+      return typecast_exprt(val, double_t);
+    return val;
+  };
+
+  // Initialize result with the first element
+  symbolt &result_sym = converter_.create_tmp_symbol(
+    list_value_, "$minmax_result$", double_t, exprt());
+  code_declt result_decl(symbol_expr(result_sym));
+  result_decl.location() = loc;
+  converter_.add_instruction(result_decl);
+
+  code_assignt result_init(symbol_expr(result_sym), get_elem_as_double(0));
+  result_init.location() = loc;
+  converter_.add_instruction(result_init);
+
+  // Compare each subsequent element and update result if it wins
+  for (size_t i = 1; i < n; i++)
+  {
+    symbolt &elem_sym = converter_.create_tmp_symbol(
+      list_value_, "$minmax_elem$", double_t, exprt());
+    code_declt elem_decl(symbol_expr(elem_sym));
+    elem_decl.location() = loc;
+    converter_.add_instruction(elem_decl);
+
+    code_assignt elem_assign(symbol_expr(elem_sym), get_elem_as_double(i));
+    elem_assign.location() = loc;
+    converter_.add_instruction(elem_assign);
+
+    // if (elem_sym comparison_op result_sym) result_sym = elem_sym
+    exprt condition(comparison_op, bool_type());
+    condition.copy_to_operands(symbol_expr(elem_sym), symbol_expr(result_sym));
+
+    code_ifthenelset ite;
+    ite.cond() = condition;
+    ite.then_case() = code_assignt(symbol_expr(result_sym), symbol_expr(elem_sym));
+    ite.location() = loc;
+    converter_.add_instruction(ite);
+  }
+
+  return symbol_expr(result_sym);
 }
 
 exprt python_list::build_list_from_range(
