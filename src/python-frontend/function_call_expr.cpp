@@ -2700,9 +2700,7 @@ bool function_call_expr::is_dict_method_call() const
     return false;
 
   // For "pop", which exists on both list and dict, treat as dict.pop() when
-  // the receiver does NOT resolve to a list symbol.  This mirrors the inverse
-  // of the check in is_list_method_call() and works for both annotated and
-  // unannotated dict variables.
+  // the receiver does not resolve to a list symbol.
   if (method_name == "pop")
   {
     std::string dummy;
@@ -2926,12 +2924,18 @@ bool function_call_expr::is_list_method_call() const
 
   // "pop" is shared between list and dict. Disambiguate using the actual
   // symbol type: only treat as list.pop() when the receiver resolves to a
-  // symbol whose type is the list type.  The Subscript/Attribute branches of
-  // get_object_list_symbol() already enforce the type check internally;
-  // the plain-name branch returns whatever symbol is found regardless of type,
-  // so we must verify the type here to avoid misclassifying dict symbols.
+  // symbol whose type is the list type.
   if (method_name == "pop")
   {
+    // A BinOp receiver (e.g., (s1 - s2).pop()) is always a set/list: dicts
+    // do not support arithmetic operators. handle_list_pop() already handles
+    // this case, so route it here before the symbol-type check.
+    if (
+      call_["func"].contains("value") &&
+      call_["func"]["value"].contains("_type") &&
+      call_["func"]["value"]["_type"] == "BinOp")
+      return true;
+
     std::string dummy;
     const symbolt *sym = get_object_list_symbol(dummy);
     const typet list_type = type_handler_.get_list_type();

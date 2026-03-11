@@ -5557,8 +5557,6 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
 
     // Value-returning dict methods emit IR instructions as a side-effect and
     // must not be called via get_expr() during type inference (double-eval).
-    // The authoritative method name set lives in
-    // python_dict_handler::is_value_returning_method().
     bool is_dict_method =
       python_dict_handler::is_value_returning_method(method) &&
       obj_sym != nullptr &&
