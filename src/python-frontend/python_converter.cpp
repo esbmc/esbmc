@@ -41,6 +41,7 @@
 #include <functional>
 #include <iomanip>
 #include <limits>
+#include <numeric>
 #include <regex>
 #include <stdexcept>
 #include <sstream>
@@ -157,34 +158,6 @@ static std::vector<std::string> split_module_path(const std::string &qualified)
   return parts;
 }
 
-static bool extract_attribute_chain(
-  const nlohmann::json &node,
-  std::string &base_name,
-  std::vector<std::string> &attrs)
-{
-  if (!node.is_object() || !node.contains("_type"))
-    return false;
-
-  if (node["_type"] == "Name")
-  {
-    if (!node.contains("id") || !node["id"].is_string())
-      return false;
-    base_name = node["id"].get<std::string>();
-    return true;
-  }
-
-  if (node["_type"] != "Attribute")
-    return false;
-
-  if (!node.contains("value") || !node.contains("attr") || !node["attr"].is_string())
-    return false;
-
-  if (!extract_attribute_chain(node["value"], base_name, attrs))
-    return false;
-  attrs.emplace_back(node["attr"].get<std::string>());
-  return true;
-}
-
 using model_symbol_mapt =
   std::unordered_map<std::string, std::unordered_set<std::string>>;
 using model_manifest_indext = std::unordered_map<std::string, std::string>;
@@ -196,6 +169,11 @@ static void add_model_symbol_candidates(
 {
   if (segments.empty())
     return;
+
+  // Include intermediate path symbols (e.g. "path" in os.path.exists) so
+  // attribute chains can be resolved without requiring full-folder loading.
+  for (const auto &segment : segments)
+    model_symbols[root].emplace(segment);
 
   const std::string &leaf = segments.back();
   model_symbols[root].emplace(leaf);
@@ -536,6 +514,8 @@ build_model_manifest_for_directory(const std::string &dir_path)
 static void append_models_from_manifest(
   std::list<std::string> &file_list,
   std::unordered_map<std::string, std::string> &model_symbol_index,
+  std::unordered_map<std::string, std::unordered_map<std::string, std::string>>
+    &model_symbol_index_by_root,
   const std::string &root,
   const model_manifest_indext &manifest,
   const std::unordered_set<std::string> *selected_symbols)
@@ -609,6 +589,7 @@ static void append_models_from_manifest(
     const std::string &path = entry.second;
     file_list.push_back(root + "/" + stem);
     model_symbol_index[stem] = path;
+    model_symbol_index_by_root[root][stem] = path;
   }
 }
 
@@ -3317,6 +3298,11 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
                                        : parsed.get_function());
 
   const import_lookup_entryt &lookup = get_import_lookup_for_current_ast();
+  if (lookup.unresolved_symbol_cache.find(symbol_id) !=
+      lookup.unresolved_symbol_cache.end())
+  {
+    return nullptr;
+  }
 
   if (auto it = lookup.resolved_symbol_cache.find(symbol_id);
       it != lookup.resolved_symbol_cache.end())
@@ -3326,14 +3312,15 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
     lookup.resolved_symbol_cache.erase(it);
   }
 
+  static const std::string prefix = "py:";
+  const std::size_t start = symbol_id.find(prefix);
+  if (start == std::string::npos)
+    return nullptr;
+  const std::size_t at_pos = symbol_id.find('@', start + prefix.size());
+  if (at_pos == std::string::npos)
+    return nullptr;
+
   auto build_imported_symbol_id = [&](const std::string &full_path) -> std::string {
-    static const std::string prefix = "py:";
-    const std::size_t start = symbol_id.find(prefix);
-    if (start == std::string::npos)
-      return symbol_id;
-    const std::size_t at_pos = symbol_id.find('@', start + prefix.size());
-    if (at_pos == std::string::npos)
-      return symbol_id;
 
     std::string imported_symbol;
     imported_symbol.reserve(
@@ -3352,6 +3339,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       if (lookup.resolved_symbol_cache.size() > 4096)
         lookup.resolved_symbol_cache.clear();
       lookup.resolved_symbol_cache[symbol_id] = imported_symbol;
+      lookup.unresolved_symbol_cache.erase(symbol_id);
     }
     return resolved;
   };
@@ -3380,6 +3368,9 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       return func_symbol;
   }
 
+  if (lookup.unresolved_symbol_cache.size() > 4096)
+    lookup.unresolved_symbol_cache.clear();
+  lookup.unresolved_symbol_cache.emplace(symbol_id);
   return nullptr;
 }
 
@@ -3570,12 +3561,156 @@ bool python_converter::is_user_imported_symbol(const std::string &symbol_id) con
   return find_imported_symbol(symbol_id) != nullptr;
 }
 
+std::string python_converter::resolve_module_chain_path(
+  const std::string &module_root,
+  const std::vector<std::string> &segments) const
+{
+  if (module_root.empty() || segments.empty())
+    return {};
+
+  std::string qualified_chain = module_root;
+  qualified_chain.reserve(
+    module_root.size() + 1 + std::accumulate(
+                                segments.begin(),
+                                segments.end(),
+                                std::size_t{0},
+                                [](std::size_t acc, const std::string &s) {
+                                  return acc + s.size() + 1;
+                                }));
+  for (const auto &segment : segments)
+  {
+    qualified_chain += ".";
+    qualified_chain += segment;
+  }
+
+  const std::string cache_key = current_python_file + ":" + qualified_chain;
+  if (auto it = module_chain_resolution_cache_.find(cache_key);
+      it != module_chain_resolution_cache_.end())
+  {
+    return it->second;
+  }
+
+  std::string resolved_path;
+
+  // First, try direct imported modules (including fully qualified chains).
+  std::string qualified = module_root;
+  qualified.reserve(qualified_chain.size());
+  for (const auto &segment : segments)
+  {
+    qualified += ".";
+    qualified += segment;
+    if (is_imported_module(qualified))
+      resolved_path = get_imported_module_path(qualified);
+  }
+
+  auto try_find_in_index =
+    [&](const std::unordered_map<std::string, std::string> &index,
+        const std::string &candidate) -> bool {
+    auto it = index.find(candidate);
+    if (it == index.end())
+      return false;
+    resolved_path = it->second;
+    return true;
+  };
+
+  auto try_candidates = [&](const std::unordered_map<std::string, std::string> &index)
+    -> bool {
+    for (std::size_t len = segments.size(); len >= 1; --len)
+    {
+      const std::string &leaf = segments[len - 1];
+      if (try_find_in_index(index, leaf))
+        return true;
+
+      std::string underscore;
+      std::string dot;
+      std::string double_underscore;
+      for (std::size_t i = 0; i < len; ++i)
+      {
+        if (i != 0)
+        {
+          underscore += "_";
+          dot += ".";
+          double_underscore += "__";
+        }
+        underscore += segments[i];
+        dot += segments[i];
+        double_underscore += segments[i];
+      }
+
+      if (try_find_in_index(index, underscore))
+        return true;
+      if (try_find_in_index(index, dot))
+        return true;
+      if (try_find_in_index(index, double_underscore))
+        return true;
+    }
+
+    return false;
+  };
+
+  if (resolved_path.empty())
+  {
+    std::string model_root = module_root;
+    if (model_symbol_index_by_root_.find(model_root) == model_symbol_index_by_root_.end())
+    {
+      const std::string *base_module_path = get_imported_module_path_ptr(module_root);
+      if (base_module_path != nullptr)
+      {
+        fs::path p(*base_module_path);
+        model_root = p.stem().string();
+      }
+    }
+
+    if (auto root_it = model_symbol_index_by_root_.find(model_root);
+        root_it != model_symbol_index_by_root_.end())
+    {
+      try_candidates(root_it->second);
+    }
+  }
+
+  if (resolved_path.empty())
+    try_candidates(model_symbol_index_);
+
+  if (module_chain_resolution_cache_.size() > 8192)
+    module_chain_resolution_cache_.clear();
+  module_chain_resolution_cache_[cache_key] = resolved_path;
+  return resolved_path;
+}
+
+std::string python_converter::resolve_object_alias(const std::string &obj_name) const
+{
+  if (obj_name.empty())
+    return obj_name;
+
+  const std::string cache_key = current_python_file + ":" + obj_name;
+  if (auto it = object_alias_cache_.find(cache_key); it != object_alias_cache_.end())
+    return it->second;
+
+  std::string resolved = json_utils::get_object_alias(*ast_json, obj_name);
+  if (object_alias_cache_.size() > 8192)
+    object_alias_cache_.clear();
+  object_alias_cache_.emplace(cache_key, resolved);
+  return resolved;
+}
+
 symbolt *python_converter::find_symbol_in_global_scope(
   const std::string &symbol_id) const
 {
   std::size_t class_start_pos = symbol_id.find("@C@");
   std::size_t func_start_pos = symbol_id.find("@F@");
   std::string sid = symbol_id;
+
+  // First try the direct "remove class scope, keep function/object" form:
+  // py:file@C@Foo@F@bar -> py:file@F@bar
+  if (
+    class_start_pos != std::string::npos && func_start_pos != std::string::npos &&
+    func_start_pos > class_start_pos)
+  {
+    std::string no_class = symbol_id;
+    no_class.erase(class_start_pos, func_start_pos - class_start_pos);
+    if (symbolt *symbol = symbol_table_.find_symbol(no_class))
+      return symbol;
+  }
 
   // Remove class name from symbol
   if (class_start_pos != std::string::npos)
@@ -9816,6 +9951,7 @@ void python_converter::append_models_from_directory(
   const std::string &dir_path)
 {
   fs::path directory(dir_path);
+  const std::string root = directory.filename().string();
 
   // Checks if the directory exists
   if (!fs::exists(directory) || !fs::is_directory(directory))
@@ -9827,11 +9963,14 @@ void python_converter::append_models_from_directory(
     if (fs::is_regular_file(*it) && it->path().extension() == ".json")
     {
       std::string file_name =
-        directory.filename().string() + "/" +
+        root + "/" +
         it->path().stem().string(); // File name without the extension
       file_list.push_back(file_name);
 
-      model_symbol_index_[it->path().stem().string()] = it->path().string();
+      const std::string stem = it->path().stem().string();
+      const std::string path = it->path().string();
+      model_symbol_index_[stem] = path;
+      model_symbol_index_by_root_[root][stem] = path;
     }
   }
 }
@@ -9970,6 +10109,8 @@ void python_converter::process_module_imports(
       (*nested_module_json)["filename"].get<std::string>();
     imported_modules.emplace(module_name, nested_python_file);
     imported_module_presence_cache_.clear();
+    object_alias_cache_.clear();
+    module_chain_resolution_cache_.clear();
 
     // Recursively process nested imports first
     process_module_imports(
@@ -9998,6 +10139,9 @@ void python_converter::convert()
   import_lookup_cache_.clear();
   module_import_names_cache_.clear();
   model_symbol_index_.clear();
+  model_symbol_index_by_root_.clear();
+  object_alias_cache_.clear();
+  module_chain_resolution_cache_.clear();
 
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
@@ -10090,6 +10234,7 @@ void python_converter::convert()
         append_models_from_manifest(
           model_files,
           model_symbol_index_,
+          model_symbol_index_by_root_,
           folder,
           manifest_it->second,
           nullptr);
@@ -10099,6 +10244,7 @@ void python_converter::convert()
         append_models_from_manifest(
           model_files,
           model_symbol_index_,
+          model_symbol_index_by_root_,
           folder,
           manifest_it->second,
           &model_symbols[folder]);
@@ -10268,6 +10414,8 @@ void python_converter::convert()
       current_python_file = (*cached_module)["filename"].get<std::string>();
       imported_modules.emplace(module_name, current_python_file);
       imported_module_presence_cache_.clear();
+      object_alias_cache_.clear();
+      module_chain_resolution_cache_.clear();
 
       // Process nested imports recursively first
       process_module_imports(

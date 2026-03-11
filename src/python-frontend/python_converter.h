@@ -16,6 +16,7 @@
 #include <map>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -193,6 +194,21 @@ public:
 
     return {};
   }
+
+  const std::string *
+  get_imported_module_path_ptr(const std::string &module_name) const
+  {
+    auto it = imported_modules.find(module_name);
+    if (it == imported_modules.end())
+      return nullptr;
+    return &it->second;
+  }
+
+  std::string resolve_object_alias(const std::string &obj_name) const;
+
+  std::string resolve_module_chain_path(
+    const std::string &module_root,
+    const std::vector<std::string> &segments) const;
 
   symbolt create_symbol(
     const std::string &module,
@@ -437,6 +453,7 @@ private:
     std::vector<std::string> all_paths;
     mutable std::unordered_map<std::string, std::string>
       resolved_symbol_cache;
+    mutable std::unordered_set<std::string> unresolved_symbol_cache;
   };
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
@@ -905,8 +922,16 @@ private:
   std::unordered_map<std::string, std::string> imported_modules;
   /// Map model symbol (stem) to model file path.
   std::unordered_map<std::string, std::string> model_symbol_index_;
+  /// Map model root+symbol (e.g. os:path, numpy:linalg) to model file path.
+  std::unordered_map<std::string, std::unordered_map<std::string, std::string>>
+    model_symbol_index_by_root_;
   /// Cache lookups for imported module membership, keyed by file+module.
   mutable std::unordered_map<std::string, bool> imported_module_presence_cache_;
+  /// Cache object aliases, keyed by file+name.
+  mutable std::unordered_map<std::string, std::string> object_alias_cache_;
+  /// Cache module-chain resolution results, keyed by file+qualified chain.
+  mutable std::unordered_map<std::string, std::string>
+    module_chain_resolution_cache_;
   /// Cache pre-indexed import lookup tables per AST context.
   mutable std::unordered_map<std::string, import_lookup_entryt>
     import_lookup_cache_;
