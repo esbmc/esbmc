@@ -352,6 +352,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "use solver with integer/real arithmetic. Integer/real have an unbounded "
      "range, overapproximating normal integers/reals while significantly "
      "boosting performance"},
+    {"ir-ra",
+     NULL,
+     "use integer/real arithmetic with real-arithmetic enclosure constraints "
+     "for floating-point operations"},
     {"parallel-solving",
      NULL,
      "solve each VCC in parallel (this activates --multi-property)"},
