@@ -35,7 +35,7 @@ brew install boost
 brew install z3 
 brew install bison 
 brew install clang 
-brew install llvm
+brew install llvm@18
 
 # Set up Python environment if requested
 if [[ $use_python =~ ^[Yy]$ ]]; then

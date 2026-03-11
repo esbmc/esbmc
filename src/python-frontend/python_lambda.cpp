@@ -226,21 +226,51 @@ void python_lambda::process_lambda_parameters(
       param_type = gen_pointer_type(signed_char_type());
     }
 
-    // Create function argument
+    // Each lambda parameter is modelled as two symbols:
+    //
+    //  1. closure_id  (lam@x): a static symbol that is never passed to
+    //     symex_decl, so it never ends up in frame.local_variables and is
+    //     therefore NOT cleared when the function frame is popped.  Inner
+    //     lambdas look up free variables by name and find this symbol.
+    //
+    //  2. actual_param_id (lam@x$param): the real parameter symbol that
+    //     goto_symex::argument_assignments assigns from the call-site argument.
+    //     It lives in the function's local frame (symex_decl adds it to
+    //     local_variables) and is cleaned up on return as normal.
+    //
+    // The lambda body starts with ASSIGN lam@x = lam@x$param (see
+    // get_lambda_expr), which copies the transient parameter value into the
+    // persistent closure variable via a plain symex_assign (no symex_decl),
+    // preserving it for any inner lambda that captures it.
+    std::string closure_id = param_scope_id + "@" + arg_name;
+    std::string actual_param_id = closure_id + "$param";
+
+    // Create function argument – points to the actual parameter symbol so
+    // that goto_symex assigns the call argument to lam@x$param.
     code_typet::argumentt argument;
     argument.type() = param_type;
     argument.cmt_base_name(arg_name);
-
-    // Use param_scope_id for parameter symbols to enable closure access
-    std::string param_id = param_scope_id + "@" + arg_name;
-    argument.cmt_identifier(param_id);
+    argument.cmt_identifier(actual_param_id);
     argument.location() = location;
     lambda_type.arguments().push_back(argument);
 
-    // Create parameter symbol
-    symbolt param_symbol = create_symbol(
-      param_id,
+    // Static closure variable: persists after the enclosing function returns.
+    symbolt closure_symbol = create_symbol(
+      closure_id,
       arg_name,
+      param_type,
+      location,
+      module_name,
+      true, // file_local
+      false // not a parameter – keeps it out of symex frame locals
+    );
+    closure_symbol.static_lifetime = true;
+    context_.add(closure_symbol);
+
+    // Actual parameter symbol: assigned by argument_assignments at call site.
+    symbolt param_symbol = create_symbol(
+      actual_param_id,
+      arg_name + "$param",
       param_type,
       location,
       module_name,
@@ -258,6 +288,11 @@ exprt python_lambda::process_lambda_body(
 {
   // Get the body expression through the converter
   exprt body_expr = converter_.get_expr(body_node);
+
+  // If the body is a nested lambda (inner function), take its address so
+  // the outer lambda returns a function pointer, not a bare code symbol.
+  if (body_expr.type().is_code() && body_expr.is_symbol())
+    body_expr = address_of_exprt(body_expr);
 
   // Create return statement
   code_returnt return_stmt;
@@ -345,6 +380,56 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   if (element.contains("body"))
   {
     exprt lambda_body = process_lambda_body(element["body"], location);
+
+    // If the body returns a function pointer (nested lambda), update this
+    // lambda's return type to match the actual return value type so that
+    // callers (e.g. g = f(5); g(10)) receive the correct type.
+    // The RETURN statement is lambda_body.operands()[0] at this point (before
+    // we prepend the closure assignments below).
+    if (!lambda_body.operands().empty())
+    {
+      const exprt &ret_stmt = lambda_body.operands()[0];
+      if (
+        ret_stmt.id() == "code" && ret_stmt.get("statement") == "return" &&
+        !ret_stmt.operands().empty())
+      {
+        const typet &actual_ret = ret_stmt.operands()[0].type();
+        if (actual_ret.is_pointer() && actual_ret.subtype().is_code())
+          to_code_type(added_symbol->type).return_type() = actual_ret;
+      }
+    }
+
+    // Prepend closure assignments: lam@x = lam@x$param for each parameter.
+    // This copies the transient argument value (which lives in the symex
+    // local frame and is cleared on return) into the static closure variable
+    // (which is never in frame.local_variables and therefore persists).
+    // Inner lambdas then read the static variable and see the correct value.
+    if (
+      element.contains("args") && element["args"].contains("args") &&
+      element["args"]["args"].is_array() && !element["args"]["args"].empty())
+    {
+      code_blockt closure_body;
+      for (const auto &arg : element["args"]["args"])
+      {
+        std::string arg_name = arg["arg"].get<std::string>();
+        std::string closure_id = param_scope_id + "@" + arg_name;
+        std::string actual_param_id = closure_id + "$param";
+
+        const symbolt *closure_sym = context_.find_symbol(closure_id);
+        const symbolt *param_sym = context_.find_symbol(actual_param_id);
+        if (closure_sym && param_sym)
+        {
+          code_assignt assign(
+            symbol_expr(*closure_sym), symbol_expr(*param_sym));
+          assign.location() = location;
+          closure_body.copy_to_operands(assign);
+        }
+      }
+      for (const auto &op : lambda_body.operands())
+        closure_body.copy_to_operands(op);
+      lambda_body = closure_body;
+    }
+
     added_symbol->value = lambda_body;
   }
 

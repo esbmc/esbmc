@@ -97,6 +97,23 @@ public:
   }
 
   /**
+   * @brief Record a single element-type entry for a list in the static type map.
+   *
+   * @param list_symbol_id  Internal symbol identifier of the list.
+   * @param elem_id         Symbol identifier of the element, or empty when the
+   *                        type is inferred from an annotation rather than from
+   *                        a concrete element expression.
+   * @param elem_type       ESBMC type of the element.
+   */
+  static void add_type_info_entry(
+    const std::string &list_symbol_id,
+    const std::string &elem_id,
+    const typet &elem_type)
+  {
+    list_type_map[list_symbol_id].push_back(std::make_pair(elem_id, elem_type));
+  }
+
+  /**
    * @brief Create an empty set
    * @return Expression representing the empty set
    */
@@ -109,6 +126,13 @@ public:
    */
   static typet
   get_list_element_type(const std::string &list_id, size_t index = 0);
+
+  /**
+   * Get the internal symbol id of the element stored at a given index.
+   * Returns an empty string when the list or index is not found.
+   */
+  static std::string
+  get_list_element_id(const std::string &list_id, size_t index);
 
   /**
    * @brief Convert generator expressions and list comprehensions to lists

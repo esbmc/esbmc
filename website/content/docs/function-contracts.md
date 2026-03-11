@@ -231,7 +231,7 @@ larger programs.
 
 When a function call is replaced:
 
-1. ESBMC **asserts** that the pre-condition is met at the call site.
+1. ESBMC **asserts** that the precondition is met at the call site.
 2. It **havocs** the targets specified by the `__ESBMC_assigns` clause (or all
    static globals if no assigns clause is present).
 3. Finally, it **assumes** the post-condition holds.

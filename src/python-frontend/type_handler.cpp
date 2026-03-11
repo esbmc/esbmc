@@ -2,6 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
 #include <util/context.h>
@@ -180,6 +181,51 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   return std::string();
 }
 
+std::string
+type_handler::get_var_classname(const nlohmann::json &value_node) const
+{
+  if (!value_node.contains("_type") || value_node["_type"] != "Name")
+    return "";
+
+  const std::string var_name = value_node["id"].get<std::string>();
+  auto get_class_name = [this](const std::string &name) -> std::string {
+    if (name.empty())
+      return "";
+
+    const std::string class_name =
+      (name.rfind("tag-", 0) == 0) ? name.substr(4) : name;
+    const std::string class_tag = "tag-" + class_name;
+    return converter_.symbol_table().find_symbol(class_tag) ? class_name : "";
+  };
+
+  symbol_id var_sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  var_sid.set_object(var_name);
+
+  symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+  if (!var_symbol)
+    var_symbol = converter_.find_symbol(var_sid.global_to_string());
+
+  if (var_symbol)
+  {
+    const auto annotation_types =
+      converter_.get_typechecker().get_annotation_types(
+        var_symbol->id.as_string());
+    if (!annotation_types.empty())
+    {
+      typet ann_type = annotation_types.front();
+      if (ann_type.is_pointer())
+        ann_type = ann_type.subtype();
+      if (ann_type.is_struct())
+        return get_class_name(to_struct_type(ann_type).tag().as_string());
+    }
+  }
+
+  return get_class_name(get_var_type(var_name));
+}
+
 /// Check if two types are compatible for list homogeneity
 /// This considers strings of different lengths as the same type
 bool type_handler::are_types_compatible(const typet &t1, const typet &t2) const
@@ -338,6 +384,25 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "bool")
     return bool_type();
 
+  if (ast_type == "complex")
+  {
+    const char *complex_type_id = "tag-complex";
+    contextt &symbol_table = converter_.symbol_table();
+
+    if (!symbol_table.find_symbol(complex_type_id))
+    {
+      symbolt type_symbol;
+      type_symbol.id = complex_type_id;
+      type_symbol.name = "complex";
+      type_symbol.type = get_complex_struct_type();
+      type_symbol.mode = "Python";
+      type_symbol.is_type = true;
+      symbol_table.move_symbol_to_context(type_symbol);
+    }
+
+    return get_complex_struct_type();
+  }
+
   // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
     return uint256_type();
@@ -399,10 +464,8 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "tuple")
     return empty_typet();
 
-  // list — handle list type annotations
-  // For generic "list" without element types, return the list type
-  // so the actual element type is inferred from context
-  if (ast_type == "list")
+  // list/range — range objects are stored as lists in ESBMC's model
+  if (ast_type == "list" || ast_type == "range")
     return get_list_type();
 
   // dict — handle dict type annotations
@@ -461,6 +524,9 @@ typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
     func_name = func["id"].get<std::string>();
     if (type_utils::is_builtin_type(func_name))
       return get_typet(func_name);
+    // User-defined class constructor: A() -> struct type tag-A
+    if (json_utils::is_class(func_name, converter_.ast()))
+      return symbol_typet("tag-" + func_name);
   }
   else if (func["_type"] == "Attribute" && func.contains("attr"))
   {
@@ -811,6 +877,23 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
       return "bool";
     else if (value.is_number_float())
       return "float";
+  }
+  else if (operand["_type"] == "Set")
+  {
+    return "set";
+  }
+  else if (operand["_type"] == "BinOp")
+  {
+    std::string lhs_type = get_operand_type(operand["left"]);
+    std::string rhs_type = get_operand_type(operand["right"]);
+
+    if (!lhs_type.empty() && lhs_type == rhs_type)
+      return lhs_type;
+
+    if (!lhs_type.empty())
+      return lhs_type;
+    if (!rhs_type.empty())
+      return rhs_type;
   }
 
   // Handle list subscript (e.g., `mylist[0]`)

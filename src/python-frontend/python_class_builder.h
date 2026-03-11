@@ -4,7 +4,7 @@
 #include <python-frontend/python_class.h>
 
 class python_converter;
-struct codet;
+class codet;
 class symbolt;
 class struct_typet;
 

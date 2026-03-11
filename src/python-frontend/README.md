@@ -213,6 +213,18 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **Tuple Equality**: Supports equality comparisons between tuples (e.g., `t1 == (1, 2, 3)`).
     - **len() Function**: The built-in `len()` function works with tuples to return the number of elements.
     - **isinstance() Type Checking**: Supports runtime type checking with `isinstance(obj, tuple)`.
+  - **Dictionary Operations**: Supports Python's built-in `dict` type with the following operations:
+    - **Literals**: Creates dictionaries from literal syntax (e.g., `d = {"a": 1, "b": 2}`).
+    - **Subscript access**: Retrieves values by key (e.g., `d["a"]`); raises `KeyError` if the key is absent.
+    - **Subscript assignment**: Inserts or updates a key-value pair (e.g., `d["c"] = 3`).
+    - **Membership testing (`in` / `not in`)**: Checks whether a key exists (e.g., `"a" in d`).
+    - **Key deletion (`del`)**: Removes a key-value pair (e.g., `del d["a"]`); raises `KeyError` if absent.
+    - **Equality comparison**: Compares two dictionaries for equal content regardless of insertion order (e.g., `d1 == d2`).
+    - **Iteration**: Supports `for` loops over `d.keys()`, `d.values()`, and `d.items()`.
+    - **update()**: Merges another dictionary into the current one (e.g., `d.update({"x": 9})`).
+    - **get()**: Returns the value for a key, or a default if the key is absent (e.g., `d.get("a", 0)`).
+    - **setdefault()**: Returns the value for a key if present; otherwise inserts the key with the given default and returns it (e.g., `d.setdefault("d", 4)`). Supports `int`, `float`, `bool`, and `str` value types.
+    - **Nested dictionaries**: Supports dicts whose values are themselves dicts (e.g., `dict[int, dict[int, int]]`).
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
 ### Error Handling and Assertions
@@ -396,7 +408,7 @@ The current version of ESBMC-Python has the following limitations:
 - Only `for` loops using the `range()` function are supported.
 - List and String support are partial and limited in functionality. Currently supported list methods include `append()`, `extend()`, `insert()`, `clear()`, `pop()`, `remove()`, and `copy()`.
 - String slicing does not support step values (e.g., string[::2] for every second character is not supported).
-- Dictionaries are not supported at all.
+- Dictionary support is partial: the supported operations are literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, and `setdefault()`. Other methods (e.g., `pop()`, `copy()`, `popitem()`) are not yet implemented.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
 - `any()` currently supports only list literals as arguments and does not support other iterable types.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).

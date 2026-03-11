@@ -84,7 +84,8 @@ enum PROCESS_TYPE
   BASE_CASE,
   FORWARD_CONDITION,
   INDUCTIVE_STEP,
-  PARENT
+  NUM_CHILD_PROCESSES,
+  PARENT = NUM_CHILD_PROCESSES
 };
 
 struct resultt
@@ -820,21 +821,27 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     close(backward_pipe[0]);
 
     struct resultt a_result;
-    bool bc_finished = false, fc_finished = false, is_finished = false;
-    uint64_t bc_solution = max_k_step, fc_solution = max_k_step,
-             is_solution = max_k_step;
+    bool finished[NUM_CHILD_PROCESSES] = {};
+    bool intentionally_killed[NUM_CHILD_PROCESSES] = {};
+    const char *process_name[NUM_CHILD_PROCESSES] = {
+      "base case", "forward condition", "inductive step"};
+    uint64_t solution[NUM_CHILD_PROCESSES] = {
+      max_k_step, max_k_step, max_k_step};
 
     // Keep reading until we find an answer
-    while (!(bc_finished && fc_finished && is_finished))
+    while (
+      !(finished[BASE_CASE] && finished[FORWARD_CONDITION] &&
+        finished[INDUCTIVE_STEP]))
     {
       // Perform read and interpret the number of bytes read
+      bool valid_read = true;
       int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
       if (read_size != sizeof(resultt))
       {
         if (read_size == 0)
         {
-          // Client hung up; continue on, but don't interpret the result.
-          ;
+          // Client hung up; check child status but don't interpret result.
+          valid_read = false;
         }
         else
         {
@@ -845,83 +852,41 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
       }
 
-      // Eventually the parent process will check if the child process is alive
-
-      // Check base case process
-      if (!bc_finished)
+      // Check if any child process has terminated
+      for (int i = 0; i < NUM_CHILD_PROCESSES; i++)
       {
+        if (finished[i])
+          continue;
+
         int status;
-        pid_t result = waitpid(children_pid[0], &status, WNOHANG);
-        if (result == 0)
+        pid_t result = waitpid(children_pid[i], &status, WNOHANG);
+        if (result <= 0)
+          continue;
+
+        if (intentionally_killed[i] || WIFEXITED(status))
         {
-          // Child still alive
+          finished[i] = true;
         }
-        else if (result == -1)
+        else if (WIFSIGNALED(status))
         {
-          // Error
-        }
-        else
-        {
-          log_warning("base case process crashed.");
-          bc_finished = fc_finished = is_finished = true;
+          log_warning(
+            "{} process was terminated by signal {:d}.",
+            process_name[i],
+            WTERMSIG(status));
+          std::fill(finished, finished + NUM_CHILD_PROCESSES, true);
         }
       }
 
-      // Check forward condition process
-      if (!fc_finished)
-      {
-        int status;
-        pid_t result = waitpid(children_pid[1], &status, WNOHANG);
-        if (result == 0)
-        {
-          // Child still alive
-        }
-        else if (result == -1)
-        {
-          // Error
-        }
-        else
-        {
-          log_warning("forward condition process crashed.");
-          fc_finished = bc_finished = is_finished = true;
-        }
-      }
-
-      // Check inductive step process
-      if (!is_finished)
-      {
-        int status;
-        pid_t result = waitpid(children_pid[2], &status, WNOHANG);
-        if (result == 0)
-        {
-          // Child still alive
-        }
-        else if (result == -1)
-        {
-          // Error
-        }
-        else
-        {
-          log_warning("inductive step process crashed.");
-          is_finished = bc_finished = fc_finished = true;
-        }
-      }
+      if (!valid_read)
+        continue;
 
       switch (a_result.type)
       {
       case BASE_CASE:
-        bc_finished = true;
-        bc_solution = a_result.k;
-        break;
-
       case FORWARD_CONDITION:
-        fc_finished = true;
-        fc_solution = a_result.k;
-        break;
-
       case INDUCTIVE_STEP:
-        is_finished = true;
-        is_solution = a_result.k;
+        finished[a_result.type] = true;
+        solution[a_result.type] = a_result.k;
         break;
 
       default:
@@ -931,27 +896,32 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       // If either the base case found a bug or the forward condition
       // finds a solution, present the result
-      if (bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
+      if (
+        finished[BASE_CASE] && (solution[BASE_CASE] != 0) &&
+        (solution[BASE_CASE] != max_k_step))
         break;
 
       // If the either the forward condition or inductive step finds a
       // solution, first check if base case couldn't find a bug in that code,
       // if there is no bug, inductive step can present the result
-      if (fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
+      if (
+        finished[FORWARD_CONDITION] && (solution[FORWARD_CONDITION] != 0) &&
+        (solution[FORWARD_CONDITION] != max_k_step))
       {
         // If base case finished, then we can present the result
-        if (bc_finished)
+        if (finished[BASE_CASE])
           break;
 
         // Otherwise, kill the inductive step process
-        kill(children_pid[2], SIGKILL);
+        intentionally_killed[INDUCTIVE_STEP] = true;
+        kill(children_pid[INDUCTIVE_STEP], SIGKILL);
 
         // And ask base case for a solution
 
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = fc_solution;
+        r.k = solution[FORWARD_CONDITION];
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -959,21 +929,24 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         (void)len; //ndebug
       }
 
-      if (is_finished && (is_solution != 0) && (is_solution != max_k_step))
+      else if (
+        finished[INDUCTIVE_STEP] && (solution[INDUCTIVE_STEP] != 0) &&
+        (solution[INDUCTIVE_STEP] != max_k_step))
       {
         // If base case finished, then we can present the result
-        if (bc_finished)
+        if (finished[BASE_CASE])
           break;
 
         // Otherwise, kill the forward condition process
-        kill(children_pid[1], SIGKILL);
+        intentionally_killed[FORWARD_CONDITION] = true;
+        kill(children_pid[FORWARD_CONDITION], SIGKILL);
 
         // And ask base case for a solution
 
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = is_solution;
+        r.k = solution[INDUCTIVE_STEP];
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -986,42 +959,48 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       kill(i, SIGKILL);
 
     // Check if a solution was found by the base case
-    if (bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
+    if (
+      finished[BASE_CASE] && (solution[BASE_CASE] != 0) &&
+      (solution[BASE_CASE] != max_k_step))
     {
       log_result(
         "\nBug found by the base case (k = {})\nVERIFICATION FAILED",
-        bc_solution);
+        solution[BASE_CASE]);
       return true;
     }
 
     // Check if a solution was found by the forward condition
-    if (fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
+    if (
+      finished[FORWARD_CONDITION] && (solution[FORWARD_CONDITION] != 0) &&
+      (solution[FORWARD_CONDITION] != max_k_step))
     {
       // We should only present the result if the base case finished
-      // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
-      if (bc_finished && (bc_solution != max_k_step))
+      // and haven't crashed (if it crashed, solution will be UINT_MAX)
+      if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
       {
         log_success(
           "\nSolution found by the forward condition; "
           "all states are reachable (k = {:d})\n"
           "VERIFICATION SUCCESSFUL",
-          fc_solution);
+          solution[FORWARD_CONDITION]);
         return false;
       }
     }
 
     // Check if a solution was found by the inductive step
-    if (is_finished && (is_solution != 0) && (is_solution != max_k_step))
+    if (
+      finished[INDUCTIVE_STEP] && (solution[INDUCTIVE_STEP] != 0) &&
+      (solution[INDUCTIVE_STEP] != max_k_step))
     {
       // We should only present the result if the base case finished
-      // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
-      if (bc_finished && (bc_solution != max_k_step))
+      // and haven't crashed (if it crashed, solution will be UINT_MAX)
+      if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
       {
         log_success(
           "\nSolution found by the inductive step "
           "(k = {:d})\n"
           "VERIFICATION SUCCESSFUL",
-          is_solution);
+          solution[INDUCTIVE_STEP]);
         return false;
       }
     }
