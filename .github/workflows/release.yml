@@ -17,10 +17,13 @@ jobs:
       build-flags: '-b RelWithDebInfo -e OFF'
       testing: false
 
+  build-info:
+    uses: ./.github/workflows/build-info.yml
+
   create-release:
     name: Upload Release Asset
     runs-on: ubuntu-24.04
-    needs: [build]
+    needs: [build, build-info]
     steps:
       - name: Download Linux Build
         uses: actions/download-artifact@v4
@@ -35,7 +38,12 @@ jobs:
           name: release-windows-latest
           path: ./windows-release
       - name: Create Windows Release file
-        run: zip -r esbmc-windows.zip ./windows-release        
+        run: zip -r esbmc-windows.zip ./windows-release
+      - name: Download Info Manual
+        uses: actions/download-artifact@v4
+        with:
+          name: esbmc-info-manual
+          path: .
       - name: Get files
         run: ls
       - name: Do the release
@@ -49,3 +57,4 @@ jobs:
           files: |
             esbmc-linux.zip
             esbmc-windows.zip
+            esbmc.info
