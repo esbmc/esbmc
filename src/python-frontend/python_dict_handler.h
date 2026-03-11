@@ -406,6 +406,21 @@ public:
     const nlohmann::json &call_node);
 
   /**
+   * @brief Handles dict.pop() method calls.
+   *
+   * Implements Python's dict.pop(key[, default]) semantics:
+   * - If key exists: removes it and returns its value.
+   * - If key doesn't exist and default is given: returns default.
+   * - If key doesn't exist and no default: raises KeyError.
+   *
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node containing arguments
+   * @return Expression representing the removed value (or default)
+   */
+  exprt
+  handle_dict_pop(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
    * @brief Handles dict.update() method calls.
    * Implements Python's dict.update(other) semantics:
    * - For each key-value pair in other: if key exists, update value;

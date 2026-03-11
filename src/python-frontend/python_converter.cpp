@@ -5533,6 +5533,50 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   {
     inferred_type = any_type();
   }
+  else if (
+    value_type == "Call" &&
+    ast_node["value"]["func"].value("_type", "") == "Attribute" &&
+    ast_node["value"]["func"]["value"].value("_type", "") == "Name")
+  {
+    // For dict method calls that emit instructions via converter_.add_instruction()
+    // (pop, get, setdefault), calling get_expr() here for type inference would
+    // execute the side effects a second time when the actual assignment is
+    // processed.  Pop is especially harmful: the first evaluation removes the
+    // key, so the second evaluation can't find it and throws KeyError.
+    // Instead, infer the return type directly from the dict's value annotation.
+    const std::string &method =
+      ast_node["value"]["func"]["attr"].get<std::string>();
+    const std::string &obj_name =
+      ast_node["value"]["func"]["value"]["id"].get<std::string>();
+
+    bool is_dict_method =
+      (method == "pop" || method == "get" || method == "setdefault") &&
+      type_handler_.get_var_type(obj_name) == "dict";
+
+    if (is_dict_method)
+    {
+      symbol_id obj_sid = create_symbol_id();
+      obj_sid.set_object(obj_name);
+      const symbolt *obj_sym = symbol_table_.find_symbol(obj_sid.to_string());
+      if (obj_sym)
+        inferred_type =
+          dict_handler_->resolve_expected_type_for_dict_subscript(
+            symbol_expr(*obj_sym));
+      if (inferred_type.is_nil() || inferred_type.is_empty())
+        inferred_type = long_int_type();
+    }
+    else
+    {
+      is_converting_rhs = true;
+      exprt rhs_expr = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+      inferred_type = rhs_expr.type();
+      if (inferred_type.is_empty())
+        inferred_type = any_type();
+      else if (inferred_type.is_code())
+        inferred_type = gen_pointer_type(inferred_type);
+    }
+  }
   else
   {
     // Evaluate the RHS for any expression type (Call, BoolOp, Attribute,

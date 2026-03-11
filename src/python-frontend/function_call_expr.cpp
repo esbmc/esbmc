@@ -2694,9 +2694,16 @@ bool function_call_expr::is_dict_method_call() const
 
   const std::string &method_name = function_id_.get_function();
 
-  // Check if this is a known dict method
-  return method_name == "get" || method_name == "setdefault" ||
-         method_name == "update";
+  if (
+    method_name != "get" && method_name != "setdefault" &&
+    method_name != "update" && method_name != "pop")
+    return false;
+
+  // For "pop", which exists on both list and dict, verify via type annotation.
+  if (method_name == "pop")
+    return type_handler_.get_var_type(get_object_name()) == "dict";
+
+  return true;
 }
 
 exprt function_call_expr::handle_dict_method() const
@@ -2723,6 +2730,10 @@ exprt function_call_expr::handle_dict_method() const
 
   if (method_name == "update")
     return converter_.get_dict_handler()->handle_dict_update(
+      symbol_expr(*dict_symbol), call_);
+
+  if (method_name == "pop")
+    return converter_.get_dict_handler()->handle_dict_pop(
       symbol_expr(*dict_symbol), call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
@@ -2897,12 +2908,20 @@ bool function_call_expr::is_list_method_call() const
 
   const std::string &method_name = function_id_.get_function();
 
-  // Check if this is a known list method
-  return method_name == "append" || method_name == "pop" ||
-         method_name == "insert" || method_name == "remove" ||
-         method_name == "clear" || method_name == "extend" ||
-         method_name == "copy" || method_name == "sort" ||
-         method_name == "reverse";
+  if (
+    method_name != "append" && method_name != "pop" &&
+    method_name != "insert" && method_name != "remove" &&
+    method_name != "clear" && method_name != "extend" &&
+    method_name != "copy" && method_name != "sort" &&
+    method_name != "reverse")
+    return false;
+
+  // "pop" is shared between list and dict; exclude dict objects.
+  if (method_name == "pop" &&
+      type_handler_.get_var_type(get_object_name()) == "dict")
+    return false;
+
+  return true;
 }
 
 exprt function_call_expr::handle_list_method() const
