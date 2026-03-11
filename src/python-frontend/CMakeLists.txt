@@ -31,6 +31,7 @@ add_library(pythonfrontend STATIC
             function_call_expr.cpp
             numpy_call_expr.cpp
             function_call_builder.cpp
+            cmath_lowering_policy.cpp
             string_builder.cpp
             string_handler.cpp
             exception_utils.cpp
