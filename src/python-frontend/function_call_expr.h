@@ -6,6 +6,8 @@
 #include <python-frontend/type_handler.h>
 #include <util/expr.h>
 
+#include <optional>
+
 enum class FunctionType
 {
   Constructor,
@@ -323,19 +325,15 @@ private:
    */
   exprt handle_divmod() const;
 
-  // Handler function type for dispatch table
-  using HandlerFunction = std::function<exprt()>;
-  using PredicateFunction = std::function<bool()>;
+  bool is_cmath_log_call() const;
+  bool is_cmath_inverse_call() const;
+  bool is_math_module_dispatch_target() const;
+  exprt handle_cmath_log_call();
+  exprt handle_cmath_inverse_call();
+  exprt handle_math_module_dispatch();
 
-  struct FunctionHandler
-  {
-    PredicateFunction predicate;
-    HandlerFunction handler;
-    const char *description; // For debugging/documentation
-  };
-
-  // Initialize dispatch table
-  std::vector<FunctionHandler> get_dispatch_table();
+  // Memoized function symbol-id string (hot path in model dispatch/lookup).
+  const std::string &get_function_symbol_id() const;
 
   // General function call handler
   exprt handle_general_function_call();
@@ -346,6 +344,8 @@ protected:
   python_converter &converter_;
   const type_handler &type_handler_;
   FunctionType function_type_;
+  mutable std::optional<std::string> cached_object_name_;
+  mutable std::optional<std::string> cached_function_symbol_id_;
 };
 
 /// Convert a code_function_callt to a side_effect_expr_function_callt so it
