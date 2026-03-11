@@ -158,9 +158,9 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
   }
   else if (is_bv_type(to_type))
   {
-    // When int_encoding is true, fixed- and floating-point types
-    // are represented as reals in the SMT solver, but fp_api expects bitvectors.
-    // Fall back to value-based conversion.
+    // Under --ir-ra, float values are real-encoded; bit-pattern reinterpretation
+    // Under integer encoding (--ir/--ir-ra), fixed- and floating-point values are
+    // real-encoded; fall back to value-based typecast.
     if (int_encoding && (is_fixedbv_type(from) || is_floatbv_type(from)))
       return convert_ast(typecast2tc(to_type, from));
 
