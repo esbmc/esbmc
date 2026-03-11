@@ -12,9 +12,12 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/symbol_generator.h>
+#include <cstdint>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 class codet;
 class struct_typet;
@@ -178,6 +181,7 @@ public:
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
+  bool is_user_imported_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
 
@@ -217,6 +221,14 @@ public:
 
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
+  std::uint64_t get_converter_instance_id() const
+  {
+    return converter_instance_id_;
+  }
+  std::uint64_t get_conversion_epoch() const
+  {
+    return conversion_epoch_;
+  }
 
 private:
   friend class function_call_expr;
@@ -409,7 +421,8 @@ private:
   void process_module_imports(
     const nlohmann::json &module_ast,
     module_locator &locator,
-    code_blockt &accumulated_code);
+    code_blockt &accumulated_code,
+    std::unordered_map<std::string, nlohmann::json> &module_ast_cache);
 
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
@@ -417,8 +430,21 @@ private:
     std::string method_name,
     bool is_ctor) const;
 
+  struct import_lookup_entryt
+  {
+    std::unordered_map<std::string, std::vector<std::string>> named_paths;
+    std::vector<std::string> wildcard_paths;
+    std::vector<std::string> all_paths;
+    mutable std::unordered_map<std::string, std::string>
+      resolved_symbol_cache;
+  };
+
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
+  const import_lookup_entryt &get_import_lookup_for_current_ast() const;
+  const std::vector<std::string> &
+  get_cached_module_import_names(const nlohmann::json &module_ast) const;
+  std::string import_lookup_cache_key() const;
 
   void copy_instance_attributes(
     const std::string &src_obj_id,
@@ -854,7 +880,6 @@ private:
   typet current_func_return_type_;
   std::string main_python_file;
   std::string current_python_file;
-  nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
   code_blockt *current_block;
@@ -878,6 +903,20 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+  /// Map model symbol (stem) to model file path.
+  std::unordered_map<std::string, std::string> model_symbol_index_;
+  /// Cache lookups for imported module membership, keyed by file+module.
+  mutable std::unordered_map<std::string, bool> imported_module_presence_cache_;
+  /// Cache pre-indexed import lookup tables per AST context.
+  mutable std::unordered_map<std::string, import_lookup_entryt>
+    import_lookup_cache_;
+  /// Cache imported module names per parsed module AST.
+  mutable std::unordered_map<std::string, std::vector<std::string>>
+    module_import_names_cache_;
+  /// Monotonic instance identifier for cache keys across converters.
+  std::uint64_t converter_instance_id_ = 0;
+  /// Conversion epoch incremented at each convert() call.
+  std::uint64_t conversion_epoch_ = 0;
   /// Maps any symbol currently known to refer to an input() string
   /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
   std::unordered_map<std::string, std::string> input_str_to_len_sym_;
