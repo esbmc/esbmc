@@ -461,8 +461,8 @@ exprt python_dict_handler::handle_dict_subscript(
     typet keyerror_type = type_handler_.get_typet(keyerror_type_str);
 
     exprt msg_size_expr = constant_exprt(
-      integer2binary(keyerror_msg.size(), bv_width(size_type())),
-      integer2string(keyerror_msg.size()),
+      integer2binary(keyerror_msg.size() + 1, bv_width(size_type())),
+      integer2string(keyerror_msg.size() + 1),
       size_type());
     typet str_arr_type = array_typet(char_type(), msg_size_expr);
 
@@ -851,10 +851,11 @@ void python_dict_handler::handle_dict_delete(
   typet keyerror_type = type_handler_.get_typet(exc_type_str);
   std::string error_msg = "KeyError: key not found in dictionary";
 
-  // Build the error message as a string constant
+  // Build the error message as a string constant (+1 for null terminator,
+  // matching the char[N+1] type produced by build_string_literal).
   exprt msg_size = constant_exprt(
-    integer2binary(error_msg.size(), bv_width(size_type())),
-    integer2string(error_msg.size()),
+    integer2binary(error_msg.size() + 1, bv_width(size_type())),
+    integer2string(error_msg.size() + 1),
     size_type());
   typet str_type = array_typet(char_type(), msg_size);
 
@@ -1884,8 +1885,8 @@ exprt python_dict_handler::handle_dict_pop(
     // Raise KeyError
     std::string error_msg = "KeyError: key not found in dictionary";
     exprt msg_size = constant_exprt(
-      integer2binary(error_msg.size(), bv_width(size_type())),
-      integer2string(error_msg.size()),
+      integer2binary(error_msg.size() + 1, bv_width(size_type())),
+      integer2string(error_msg.size() + 1),
       size_type());
     typet str_type = array_typet(char_type(), msg_size);
 
