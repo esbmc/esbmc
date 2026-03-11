@@ -3499,8 +3499,104 @@ function_call_expr::get_dispatch_table()
        if (is_cpp_throw_expr(ln_base))
          return ln_base;
        return complex_div(ln_z, ln_base);
-     },
+    },
      "cmath log/log10"},
+
+    // cmath inverse functions: use a fast path only on pure-imaginary inputs
+    // and delegate all other cases to the Python cmath model implementation.
+    {[this]() {
+       if (!(call_.contains("func") && call_["func"].contains("_type") &&
+             call_["func"]["_type"] == "Attribute"))
+         return false;
+       const std::string caller = get_object_name();
+       if (caller != "cmath")
+         return false;
+       const std::string &func_name = function_id_.get_function();
+       return (
+         func_name == "asin" || func_name == "atan" || func_name == "asinh" ||
+         func_name == "atanh");
+     },
+     [this]() -> exprt {
+       const std::string &func_name = function_id_.get_function();
+       const auto &args = call_["args"];
+       const auto keywords = call_.contains("keywords")
+                               ? call_["keywords"]
+                               : nlohmann::json::array();
+
+       auto raise_type_error = [this](const std::string &msg) -> exprt {
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", msg);
+       };
+
+       if (!keywords.empty())
+         return raise_type_error(
+           "cmath." + func_name + "() takes no keyword arguments");
+       if (args.size() != 1)
+         return raise_type_error(func_name + "() takes exactly 1 argument");
+
+       exprt z = converter_.get_expr(args[0]);
+       if (is_cpp_throw_expr(z))
+         return z;
+       z = promote_to_complex(z);
+       if (is_cpp_throw_expr(z))
+         return z;
+
+       const symbolt *model_symbol =
+         converter_.find_symbol(function_id_.to_string());
+       if (model_symbol == nullptr)
+       {
+         return converter_.get_exception_handler().gen_exception_raise(
+           "AttributeError",
+           "module 'cmath' has no attribute '" + func_name + "'");
+       }
+
+       side_effect_expr_function_callt model_call;
+       model_call.function() = symbol_expr(*model_symbol);
+       model_call.arguments() = {z};
+       model_call.type() = to_code_type(model_symbol->type).return_type();
+       model_call.location() = converter_.get_location_from_decl(call_);
+
+       exprt zr = member_exprt(z, "real", double_type());
+       exprt zi = member_exprt(z, "imag", double_type());
+
+       exprt imag_result;
+       if (func_name == "asin")
+         imag_result = converter_.get_math_handler().handle_asinh(zi, call_);
+       else if (func_name == "atan")
+         imag_result = converter_.get_math_handler().handle_atanh(zi, call_);
+       else if (func_name == "asinh")
+         imag_result = converter_.get_math_handler().handle_asin(zi, call_);
+       else
+         imag_result = converter_.get_math_handler().handle_atan(zi, call_);
+
+       if (is_cpp_throw_expr(imag_result))
+         return imag_result;
+
+       exprt fast_path =
+         make_complex(from_double(0.0, double_type()), imag_result);
+       exprt zero = from_double(0.0, double_type());
+       exprt fast_guard = equality_exprt(zr, zero);
+
+       // For atan(i*y) and asinh(i*y), the pure-imag shortcut only matches
+       // the principal branch safely within the unit interval.
+       if (func_name == "atan" || func_name == "asinh")
+       {
+         exprt abs_zi = converter_.get_math_handler().handle_fabs(zi, call_);
+         if (is_cpp_throw_expr(abs_zi))
+           return abs_zi;
+
+         exprt one = from_double(1.0, double_type());
+         exprt imag_guard =
+           func_name == "atan" ? static_cast<exprt>(binary_relation_exprt(
+                                  abs_zi, "<", one))
+                               : static_cast<exprt>(binary_relation_exprt(
+                                   abs_zi, "<=", one));
+         fast_guard = and_exprt(fast_guard, imag_guard);
+       }
+
+       return if_exprt(fast_guard, fast_path, model_call);
+     },
+     "cmath inverse pure-imag fast path"},
 
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
     {[this]() {
