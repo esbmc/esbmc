@@ -569,26 +569,22 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
 def check_dependencies():
     """Verify required Python packages are available before processing.
     Also warn for optional dependencies."""
-    required = ["ast2json"]
     optional = ["mypy"]
+    required = ["ast2json"]
 
     missing_optional = [m for m in optional if importlib.util.find_spec(m) is None]
     if missing_optional:
         print(
-            "Warning: Missing optional Python package(s): {}".format(
-                ", ".join(missing_optional)
-            )
+            f"Warning: Missing optional Python package(s): {', '.join(missing_optional)}"
         )
-        print("Install with: pip3 install {}".format(" ".join(missing_optional)))
+        print(f"  Install with: pip3 install {' '.join(missing_optional)}")
 
     missing_required = [m for m in required if importlib.util.find_spec(m) is None]
     if missing_required:
         print(
-            "ERROR: Missing required Python package(s): {}".format(
-                ", ".join(missing_required)
-            )
+            f"ERROR: Missing required Python package(s): {', '.join(missing_required)}"
         )
-        print("Please install with: pip3 install {}".format(" ".join(missing_required)))
+        print(f"  Install with: pip3 install {' '.join(missing_required)}")
         sys.exit(1)
 
 
