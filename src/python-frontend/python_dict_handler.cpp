@@ -450,10 +450,8 @@ exprt python_dict_handler::handle_dict_subscript(
   // If index == SIZE_MAX the key was not found: throw KeyError so that
   // try/except KeyError handlers can catch it (instead of failing the property).
   {
-    constant_exprt size_max(
-      integer2binary(SIZE_MAX, bv_width(size_type())),
-      integer2string(SIZE_MAX),
-      size_type());
+    const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+    constant_exprt size_max(size_max_val, size_type());
     exprt key_not_found = equality_exprt(symbol_expr(index_var), size_max);
 
     std::string keyerror_msg = "KeyError: key not found in dictionary";
@@ -1309,10 +1307,8 @@ exprt python_dict_handler::handle_dict_get(
   converter_.add_instruction(try_find_call);
 
   // Check if key was found (index != SIZE_MAX)
-  constant_exprt size_max(
-    integer2binary(SIZE_MAX, bv_width(size_type())),
-    integer2string(SIZE_MAX),
-    size_type());
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  constant_exprt size_max(size_max_val, size_type());
   exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
 
   // Create result variable
@@ -1533,10 +1529,8 @@ exprt python_dict_handler::handle_dict_setdefault(
   converter_.add_instruction(try_find_call);
 
   // Check if key was found (index != SIZE_MAX)
-  constant_exprt size_max(
-    integer2binary(SIZE_MAX, bv_width(size_type())),
-    integer2string(SIZE_MAX),
-    size_type());
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  constant_exprt size_max(size_max_val, size_type());
   exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
 
   // Create result variable
@@ -1782,10 +1776,8 @@ exprt python_dict_handler::handle_dict_pop(
   try_find_call.location() = location;
   converter_.add_instruction(try_find_call);
 
-  constant_exprt size_max(
-    integer2binary(SIZE_MAX, bv_width(size_type())),
-    integer2string(SIZE_MAX),
-    size_type());
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  constant_exprt size_max(size_max_val, size_type());
   exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
 
   // Create result variable
