@@ -5549,19 +5549,22 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     const std::string &obj_name =
       ast_node["value"]["func"]["value"]["id"].get<std::string>();
 
+    // Disambiguate by checking the actual symbol type, not just the annotation,
+    // so that unannotated dict variables are also handled correctly.
+    symbol_id obj_sid = create_symbol_id();
+    obj_sid.set_object(obj_name);
+    const symbolt *obj_sym = symbol_table_.find_symbol(obj_sid.to_string());
+
     bool is_dict_method =
       (method == "pop" || method == "get" || method == "setdefault") &&
-      type_handler_.get_var_type(obj_name) == "dict";
+      obj_sym != nullptr &&
+      dict_handler_->is_dict_type(ns.follow(obj_sym->type));
 
     if (is_dict_method)
     {
-      symbol_id obj_sid = create_symbol_id();
-      obj_sid.set_object(obj_name);
-      const symbolt *obj_sym = symbol_table_.find_symbol(obj_sid.to_string());
-      if (obj_sym)
-        inferred_type =
-          dict_handler_->resolve_expected_type_for_dict_subscript(
-            symbol_expr(*obj_sym));
+      // obj_sym != nullptr is guaranteed by the is_dict_method check above
+      inferred_type = dict_handler_->resolve_expected_type_for_dict_subscript(
+        symbol_expr(*obj_sym));
       if (inferred_type.is_nil() || inferred_type.is_empty())
         inferred_type = long_int_type();
     }

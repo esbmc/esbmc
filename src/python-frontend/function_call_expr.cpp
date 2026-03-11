@@ -2699,9 +2699,17 @@ bool function_call_expr::is_dict_method_call() const
     method_name != "update" && method_name != "pop")
     return false;
 
-  // For "pop", which exists on both list and dict, verify via type annotation.
+  // For "pop", which exists on both list and dict, treat as dict.pop() when
+  // the receiver does NOT resolve to a list symbol.  This mirrors the inverse
+  // of the check in is_list_method_call() and works for both annotated and
+  // unannotated dict variables.
   if (method_name == "pop")
-    return type_handler_.get_var_type(get_object_name()) == "dict";
+  {
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym == nullptr || sym->type != list_type;
+  }
 
   return true;
 }
@@ -2916,10 +2924,19 @@ bool function_call_expr::is_list_method_call() const
     method_name != "reverse")
     return false;
 
-  // "pop" is shared between list and dict; exclude dict objects.
-  if (method_name == "pop" &&
-      type_handler_.get_var_type(get_object_name()) == "dict")
-    return false;
+  // "pop" is shared between list and dict. Disambiguate using the actual
+  // symbol type: only treat as list.pop() when the receiver resolves to a
+  // symbol whose type is the list type.  The Subscript/Attribute branches of
+  // get_object_list_symbol() already enforce the type check internally;
+  // the plain-name branch returns whatever symbol is found regardless of type,
+  // so we must verify the type here to avoid misclassifying dict symbols.
+  if (method_name == "pop")
+  {
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->type == list_type;
+  }
 
   return true;
 }
