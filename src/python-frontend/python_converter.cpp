@@ -8631,8 +8631,8 @@ void python_converter::get_return_statements(
   else
   {
     // If we're returning an array but the function expects a pointer,
-    // convert the array to a pointer (for string literals)
-    const typet &expected_return_type = current_element_type;
+    // convert the array to a pointer (for string literals).
+    const typet &expected_return_type = current_func_return_type_;
 
     if (expected_return_type.is_pointer() && return_value.type().is_array())
     {
