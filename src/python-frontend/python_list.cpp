@@ -3185,10 +3185,6 @@ typet python_list::check_homogeneous_list_types(
            (t.is_pointer() && t.subtype() == char_type());
   };
 
-  auto is_numeric = [](const typet &t) -> bool {
-    return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv();
-  };
-
   // Scan all elements to detect mixed int/float
   bool has_int = elem_type.is_signedbv() || elem_type.is_unsignedbv();
   bool has_float = elem_type.is_floatbv();
@@ -3206,10 +3202,15 @@ typet python_list::check_homogeneous_list_types(
     else if (current_elem_type.is_signedbv() || current_elem_type.is_unsignedbv())
       has_int = true;
 
-    // Mixed numeric types (int/float) are allowed; anything else is an error.
-    if (
-      elem_type != current_elem_type &&
-      (!is_numeric(elem_type) || !is_numeric(current_elem_type)))
+    // Only int<->float mixing is allowed (Python promotes int to float).
+    // Any other mismatch — including different-width or signed/unsigned integers
+    // — is an error.
+    bool int_float_mix =
+      (elem_type.is_floatbv() &&
+       (current_elem_type.is_signedbv() || current_elem_type.is_unsignedbv())) ||
+      ((elem_type.is_signedbv() || elem_type.is_unsignedbv()) &&
+       current_elem_type.is_floatbv());
+    if (elem_type != current_elem_type && !int_float_mix)
     {
       throw std::runtime_error(
         "Type mismatch in " + func_name +
