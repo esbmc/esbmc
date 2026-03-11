@@ -2005,19 +2005,48 @@ bool esbmc_parseoptionst::process_goto_program(
       interval_analysis(goto_functions, ns, options);
     }
 
-    if (
-      cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-      cmdline.isset("k-induction-parallel"))
+    bool is_k_induction = cmdline.isset("inductive-step") ||
+                          cmdline.isset("k-induction") ||
+                          cmdline.isset("k-induction-parallel");
+
+    if (is_k_induction && cmdline.isset("loop-invariant"))
     {
-      // Always remove skips before doing k-induction.
-      // It seems to fix some issues for now
+      // ── Combined mode: Branch 1 + Branch 2 ──────────────────────────────
+      // Branch 1 (goto_loop_invariant_combined): inserts a non-deterministic
+      //   verification block *before* each annotated loop.  Its ASSERT
+      //   instructions are tagged with property="invariant-base-case" /
+      //   "invariant-inductive-step" so that the verifier can distinguish
+      //   "your invariant is not inductive" from "your program has a bug".
+      //
+      //     Case 1 – invariant WRONG:   Branch 1 asserts FAIL  →  clear
+      //              "invariant not inductive" error; programmer must fix INV.
+      //     Case 2 – invariant correct but WEAK:  Branch 1 passes; Branch 2
+      //              (k-induction + ASSUME(INV)) may still fail to prove the
+      //              post-loop property — the solver needs a stronger INV.
+      //     Case 3 – invariant correct and STRONG: both branches pass  →
+      //              VERIFICATION SUCCESSFUL.
+      //
+      // Branch 2 (goto_k_induction): transforms the original loop for
+      //   k-induction.  Because goto_k_inductiont::convert_finite_loop checks
+      //   config.options("loop-invariant"), it automatically appends
+      //   ASSUME(INV) after the nondet-assign step, tightening the inductive-
+      //   step search space without the false-CEX problem of the standalone
+      //   loop-invariant havoc abstraction.
+      remove_no_op(goto_functions);
+      goto_loop_invariant_combined(goto_functions); // Branch 1
+      goto_k_induction(goto_functions);             // Branch 2
+    }
+    else if (is_k_induction)
+    {
+      // Standalone k-induction (no invariant annotation).
       remove_no_op(goto_functions);
       goto_k_induction(goto_functions);
     }
-
-    if (cmdline.isset("loop-invariant"))
+    else if (cmdline.isset("loop-invariant"))
     {
-      // Process loop invariants and insert assert/assume/havoc
+      // Standalone loop-invariant mode: replace each annotated loop with the
+      // standard three-part inductive check (base-case assert, havoc+assume,
+      // inductive-step assert + assume(false)).
       remove_no_op(goto_functions);
       goto_loop_invariant(goto_functions);
     }

@@ -6,8 +6,25 @@
 #include <util/guard.h>
 #include <irep2/irep2_expr.h>
 #include <set>
+#include <unordered_set>
+#include <vector>
 
 void goto_loop_invariant(goto_functionst &goto_functions);
+
+/**
+ * Combined loop-invariant + k-induction mode.
+ *
+ * Inserts a non-deterministic "Branch 1" verification block immediately
+ * before each annotated loop.  Branch 1 checks that the user-supplied
+ * invariant is actually inductive (base case + inductive step), using
+ * specially tagged ASSERT instructions so the verifier can distinguish
+ * invariant failures from ordinary program assertion failures.
+ *
+ * The original loop is left untouched for subsequent transformation by
+ * goto_k_induction (Branch 2), which adds ASSUME(invariant) after its
+ * nondet-assign step to tighten the inductive-step search space.
+ */
+void goto_loop_invariant_combined(goto_functionst &goto_functions);
 
 class goto_loop_invariantt : public goto_loopst
 {
@@ -73,6 +90,75 @@ protected:
     const loopst &loop,
     const std::vector<expr2tc> &invariants,
     const goto_programt &side_effects);
+};
+
+// ---------------------------------------------------------------------------
+// Combined mode: Branch 1 invariant verification pass
+// ---------------------------------------------------------------------------
+
+/**
+ * Handles the Branch 1 (invariant inductivity check) for one function in
+ * the combined --loop-invariant + --k-induction mode.
+ *
+ * For each loop that carries a LOOP_INVARIANT annotation the pass inserts
+ * a non-deterministic verification branch *before* the original loop:
+ *
+ *   IF !nondet_bool() GOTO original_loop_head   [skip Branch 1]
+ *   ASSERT(INV)          [base case  – tagged property="invariant-base-case"]
+ *   HAVOC(loop_vars)
+ *   ASSUME(INV)
+ *   ASSUME(loop_entry_cond)
+ *   <copy of one loop-body iteration>
+ *   ASSERT(INV)          [step case – tagged property="invariant-inductive-step"]
+ *   ASSUME(false)        [terminate Branch 1 – never fall through]
+ *   original_loop_head:  [unchanged; k-induction will transform this]
+ *
+ * The branch uses std::list::splice() rather than insert_swap() so that
+ * existing backward-GOTO targets (which point to original_loop_head) are
+ * not disturbed.
+ *
+ * Loops whose bodies contain forward GOTOs that jump outside the loop are
+ * skipped (too complex to copy safely); they fall back to the ASSUME-only
+ * k-induction acceleration provided by goto_k_inductiont.
+ */
+class goto_loop_invariant_combinedt : public goto_loopst
+{
+public:
+  goto_loop_invariant_combinedt(
+    const irep_idt &_function_name,
+    goto_functionst &_goto_functions,
+    goto_functiont &_goto_function)
+    : goto_loopst(_function_name, _goto_functions, _goto_function)
+  {
+    if (!function_loops.empty())
+      process_loops_combined();
+  }
+
+private:
+  static constexpr size_t kMaxInvariantSearchBack = 10;
+
+  void process_loops_combined();
+
+  /// Insert the Branch 1 verification block before @p loop.
+  void insert_invariant_verification_branch(loopst &loop);
+
+  /// Extract invariant expressions from the LOOP_INVARIANT instruction
+  /// immediately preceding @p loop 's head.
+  std::vector<expr2tc>
+  extract_loop_invariants_for_branch(const loopst &loop) const;
+
+  /**
+   * Copy the loop body instructions (from the instruction immediately after
+   * @p loop_head up to, but not including, @p loop_exit) into @p out.
+   *
+   * Returns false and leaves @p out empty when the loop body contains a
+   * forward GOTO whose target is outside the loop body – such loops are too
+   * complex to inline safely and Branch 1 is skipped for them.
+   */
+  bool copy_loop_body(
+    goto_programt::targett loop_head,
+    goto_programt::targett loop_exit,
+    goto_programt &out) const;
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_LOOP_INVARIANT_H_ */

@@ -467,3 +467,215 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
   // Insert at the insert point
   goto_function.body.insert_swap(insert_point, dest);
 }
+
+// ---------------------------------------------------------------------------
+// Combined mode implementation
+// ---------------------------------------------------------------------------
+
+void goto_loop_invariant_combined(goto_functionst &goto_functions)
+{
+  Forall_goto_functions(it, goto_functions)
+    if (it->second.body_available)
+      goto_loop_invariant_combinedt(it->first, goto_functions, it->second);
+
+  goto_functions.update();
+}
+
+void goto_loop_invariant_combinedt::process_loops_combined()
+{
+  for (auto &loop : function_loops)
+    insert_invariant_verification_branch(loop);
+}
+
+std::vector<expr2tc>
+goto_loop_invariant_combinedt::extract_loop_invariants_for_branch(
+  const loopst &loop) const
+{
+  std::vector<expr2tc> invariants;
+
+  goto_programt::targett loop_head = loop.get_original_loop_head();
+
+  if (loop_head == goto_function.body.instructions.begin())
+    return invariants;
+
+  goto_programt::targett it = loop_head;
+  size_t dist = 0;
+
+  while (it != goto_function.body.instructions.begin() &&
+         dist < kMaxInvariantSearchBack)
+  {
+    --it;
+    ++dist;
+
+    if (!it->is_loop_invariant())
+      continue;
+
+    const std::list<expr2tc> inv_list = it->get_loop_invariants();
+
+    if (inv_list.empty())
+      continue;
+
+    if (inv_list.size() == 1)
+    {
+      invariants.push_back(inv_list.front());
+    }
+    else
+    {
+      auto jt = inv_list.begin();
+      expr2tc combined = *jt;
+      for (++jt; jt != inv_list.end(); ++jt)
+        combined = and2tc(combined, *jt);
+      invariants.push_back(combined);
+    }
+    break;
+  }
+
+  return invariants;
+}
+
+bool goto_loop_invariant_combinedt::copy_loop_body(
+  goto_programt::targett loop_head,
+  goto_programt::targett loop_exit,
+  goto_programt &out) const
+{
+  // Build the set of location numbers that belong to the loop body
+  // [loop_head, loop_exit] so we can detect outward-jumping GOTOs.
+  std::unordered_set<unsigned> body_locs;
+  for (auto it = loop_head; it != std::next(loop_exit); ++it)
+    if (it->location_number != 0)
+      body_locs.insert(it->location_number);
+
+  // Copy body instructions: (loop_head, loop_exit)  — exclusive on both ends.
+  for (auto it = std::next(loop_head); it != loop_exit; ++it)
+  {
+    // Reject loops that jump out of their own body via a forward GOTO.
+    if (it->is_goto() && !it->is_backwards_goto())
+    {
+      for (const auto &tgt : it->targets)
+      {
+        unsigned tgt_loc = tgt->location_number;
+        if (tgt_loc != 0 &&
+            body_locs.find(tgt_loc) == body_locs.end())
+          return false; // complex loop — skip Branch 1
+      }
+    }
+
+    out.instructions.push_back(*it);
+  }
+
+  return true;
+}
+
+void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
+  loopst &loop)
+{
+  goto_programt::targett loop_head = loop.get_original_loop_head();
+  goto_programt::targett loop_exit = loop.get_original_loop_exit();
+
+  // ── 1. Collect invariant expressions ──────────────────────────────────────
+  std::vector<expr2tc> invariants =
+    extract_loop_invariants_for_branch(loop);
+
+  if (invariants.empty())
+    return;
+
+  // ── 2. Copy loop body (fail gracefully for complex loops) ─────────────────
+  goto_programt body_copy;
+  if (!copy_loop_body(loop_head, loop_exit, body_copy))
+    return; // Fall back to ASSUME-only mode in goto_k_induction
+
+  // ── 3. Extract the loop entry condition ───────────────────────────────────
+  // loop_head is "IF !(cond) GOTO exit", so the entry condition is "cond"
+  // i.e. the negation of the GOTO guard.
+  expr2tc entry_cond;
+  if (loop_head->is_goto() && !loop_head->is_backwards_goto())
+    entry_cond = not2tc(loop_head->guard);
+  // If loop_head is not a conditional GOTO (e.g. do-while), entry_cond
+  // stays nil and we omit the ASSUME(entry_cond) — always enters.
+
+  // ── 4. Build Branch 1 ─────────────────────────────────────────────────────
+  const auto &loop_vars = loop.get_modified_loop_vars();
+  goto_programt branch1;
+
+  // [4a] Base-case ASSERT(INV)
+  for (const auto &inv : invariants)
+  {
+    auto t = branch1.add_instruction(ASSERT);
+    t->guard = inv;
+    t->location = loop_head->location;
+    t->location.comment("loop invariant base case");
+    t->location.property("invariant-base-case");
+  }
+
+  // [4b] HAVOC(loop_vars)
+  for (const auto &var : loop_vars)
+  {
+    if (config.options.get_bool_option("add-symex-value-sets") &&
+        is_pointer_type(var))
+      continue;
+
+    auto t = branch1.add_instruction(ASSIGN);
+    t->code = code_assign2tc(var, gen_nondet(var->type));
+    t->location = loop_head->location;
+    t->location.comment("loop invariant havoc (verification branch)");
+  }
+
+  // [4c] ASSUME(INV)  — constrain the havoc'd state
+  for (const auto &inv : invariants)
+  {
+    auto t = branch1.add_instruction(ASSUME);
+    t->guard = inv;
+    t->location = loop_head->location;
+    t->location.comment("loop invariant assume (verification branch)");
+  }
+
+  // [4d] ASSUME(entry_cond)  — model being inside the loop
+  if (!is_nil_expr(entry_cond) && !is_true(entry_cond))
+  {
+    auto t = branch1.add_instruction(ASSUME);
+    t->guard = entry_cond;
+    t->location = loop_head->location;
+    t->location.comment("loop entry condition (verification branch)");
+  }
+
+  // [4e] One iteration of the loop body
+  branch1.instructions.splice(
+    branch1.instructions.end(), body_copy.instructions);
+
+  // [4f] Inductive-step ASSERT(INV)
+  for (const auto &inv : invariants)
+  {
+    auto t = branch1.add_instruction(ASSERT);
+    t->guard = inv;
+    t->location = loop_exit->location;
+    t->location.comment("loop invariant inductive step");
+    t->location.property("invariant-inductive-step");
+  }
+
+  // [4g] ASSUME(false) — terminate Branch 1; never falls through
+  {
+    auto t = branch1.add_instruction(ASSUME);
+    t->guard = gen_false_expr();
+    t->location = loop_exit->location;
+    t->location.comment("end invariant verification branch");
+  }
+
+  // ── 5. Prepend the nondet gate ────────────────────────────────────────────
+  // "IF !nondet_bool() GOTO loop_head"  →  skip Branch 1 on false branch
+  {
+    goto_programt gate;
+    auto t = gate.add_instruction(GOTO);
+    t->guard = not2tc(gen_nondet(get_bool_type()));
+    t->targets.push_back(loop_head); // jump to original loop head
+    t->location = loop_head->location;
+
+    // Splice the gate at the front of branch1
+    branch1.instructions.splice(branch1.instructions.begin(), gate.instructions);
+  }
+
+  // ── 6. Insert before loop_head using splice (NOT insert_swap) ─────────────
+  // splice() inserts before loop_head without moving it, so any existing
+  // backward-GOTO target that points to loop_head continues to do so.
+  goto_function.body.instructions.splice(
+    loop_head, branch1.instructions);
+}

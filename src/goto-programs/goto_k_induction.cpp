@@ -76,6 +76,14 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
+  // In combined --loop-invariant + --k-induction mode, collect the
+  // user-supplied invariant before any transformation inserts new instructions
+  // (make_nondet_assign advances loop_head, which would make the search
+  // unreliable if done afterwards).
+  std::vector<expr2tc> invariants;
+  if (config.options.get_bool_option("loop-invariant"))
+    invariants = extract_loop_invariants_before_head(loop_head);
+
   guardst guards;
   get_entry_cond_rec(loop_head, loop_exit, guards);
 
@@ -87,6 +95,13 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head, loop);
+
+  // Combined mode: add ASSUME(invariant) after the nondet assigns to constrain
+  // the arbitrary starting state.  A strong invariant lets the inductive step
+  // close at small k; a weak-but-correct invariant falls back to the forward
+  // condition proving all states reachable at a larger k.
+  if (!invariants.empty())
+    add_invariant_assumes(loop_head, invariants);
 
   // Check if the loop exit needs to be updated
   // We must point to the assume that was inserted in the previous
@@ -356,4 +371,73 @@ void goto_k_inductiont::assume_cond(
   e->guard = cond;
   e->location = loc;
   dest.destructive_append(tmp_e);
+}
+
+std::vector<expr2tc>
+goto_k_inductiont::extract_loop_invariants_before_head(
+  goto_programt::targett loop_head) const
+{
+  std::vector<expr2tc> invariants;
+
+  if (loop_head == goto_function.body.instructions.begin())
+    return invariants;
+
+  // Walk backwards with no step-count limit.  The search stops at the first
+  // LOOP_INVARIANT found, which is always the one for the current loop
+  // (__ESBMC_loop_invariant must be placed immediately before its loop).
+  // Branch 1 instructions inserted by goto_loop_invariant_combined (between
+  // the LOOP_INVARIANT and loop_head) are silently skipped.
+  goto_programt::targett it = loop_head;
+  while (it != goto_function.body.instructions.begin())
+  {
+    --it;
+
+    if (!it->is_loop_invariant())
+      continue;
+
+    const std::list<expr2tc> inv_list = it->get_loop_invariants();
+    if (inv_list.empty())
+      continue;
+
+    if (inv_list.size() == 1)
+    {
+      invariants.push_back(inv_list.front());
+    }
+    else
+    {
+      auto jt = inv_list.begin();
+      expr2tc combined = *jt;
+      for (++jt; jt != inv_list.end(); ++jt)
+        combined = and2tc(combined, *jt);
+      invariants.push_back(combined);
+    }
+    break;
+  }
+
+  return invariants;
+}
+
+void goto_k_inductiont::add_invariant_assumes(
+  goto_programt::targett &pos,
+  const std::vector<expr2tc> &invariants)
+{
+  if (invariants.empty())
+    return;
+
+  goto_programt dest;
+  for (const auto &inv : invariants)
+  {
+    goto_programt::targett t = dest.add_instruction(ASSUME);
+    t->inductive_step_instruction = true;
+    t->guard = inv;
+    t->location = pos->location;
+    t->location.comment("loop invariant assumption (k-induction combined mode)");
+  }
+
+  goto_function.body.insert_swap(pos, dest);
+
+  // Advance pos past all newly inserted ASSUMEs so the caller sees the
+  // instruction that was originally at this position.
+  while ((++pos)->inductive_step_instruction)
+    ;
 }
