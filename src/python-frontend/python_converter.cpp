@@ -5386,9 +5386,6 @@ std::string python_converter::infer_type_from_any_annotation(
   const nlohmann::json &ast_node,
   const std::string &lhs_type)
 {
-  if (lhs_type != "Any")
-    return lhs_type;
-
   if (ast_node["value"].is_null() || ast_node["value"]["_type"] != "Call")
     return lhs_type;
 
@@ -5409,8 +5406,29 @@ std::string python_converter::infer_type_from_any_annotation(
   if (func_symbol && func_symbol->type.is_code())
   {
     const code_typet &func_type = to_code_type(func_symbol->type);
-    current_element_type = func_type.return_type();
-    return ""; // Clear to avoid further "Any" processing
+    const typet &ret_type = func_type.return_type();
+
+    if (lhs_type == "Any")
+    {
+      // For Any-annotated variables, always use the function's return type.
+      current_element_type = ret_type;
+      return ""; // Clear to avoid further "Any" processing
+    }
+
+    // Python type annotations are hints only and do not enforce runtime types.
+    // When a function explicitly returns str (char*) but the variable is
+    // annotated with a scalar type (e.g. y: int = f() where f() -> str),
+    // use the actual return type so comparisons like y == "x" work correctly.
+    bool ret_is_charptr =
+      ret_type.is_pointer() && ret_type.subtype() == char_type();
+    bool lhs_is_scalar =
+      !current_element_type.is_pointer() && !current_element_type.is_array() &&
+      !current_element_type.is_struct() && !current_element_type.id().empty();
+    if (ret_is_charptr && lhs_is_scalar)
+    {
+      current_element_type = ret_type;
+      return "";
+    }
   }
 
   return lhs_type;
