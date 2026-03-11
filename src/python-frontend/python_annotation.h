@@ -2252,6 +2252,14 @@ private:
       call["value"]["func"].contains("id"))
       return call["value"]["func"]["id"].template get<std::string>();
 
+    // Handle chained method calls: B().g().f() where B().g() is itself a method
+    // call returning an object. Recursively resolve the return type of B().g()
+    // so that the outer call .f() can look up the method in the right class.
+    if (
+      call["value"]["_type"] == "Call" && call["value"].contains("func") &&
+      call["value"]["func"]["_type"] == "Attribute")
+      return get_type_from_method(call["value"]);
+
     // Handle normal Name values (variable references)
     if (!call["value"].contains("id"))
       return "";
