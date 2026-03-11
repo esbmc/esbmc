@@ -220,9 +220,8 @@ static bool symbol_name_matches(
 /// description; this helper just takes an explicit goto_function parameter so
 /// it can be reused from both passes.
 /// Local helper: collect all symbol names reachable from an expression tree.
-static void collect_symbols_local(
-  const expr2tc &expr,
-  std::set<irep_idt> &symbols)
+static void
+collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
 {
   if (!expr)
     return;
