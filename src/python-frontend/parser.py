@@ -572,6 +572,15 @@ def check_dependencies():
     required = ["ast2json"]
     optional = ["mypy"]
 
+    missing_optional = [m for m in optional if importlib.util.find_spec(m) is None]
+    if missing_optional:
+        print(
+            "Warning: Missing optional Python package(s): {}".format(
+                ", ".join(missing_optional)
+            )
+        )
+        print("Install with: pip3 install {}".format(" ".join(missing_optional)))
+
     missing_required = [m for m in required if importlib.util.find_spec(m) is None]
     if missing_required:
         print(
@@ -582,20 +591,11 @@ def check_dependencies():
         print("Please install with: pip3 install {}".format(" ".join(missing_required)))
         sys.exit(1)
 
-    missing_optional = [m for m in optional if importlib.util.find_spec(m) is None]
-    if missing_optional:
-        print(
-            "Warning: Missing optional Python package(s): {}".format(
-                ", ".join(missing_optional)
-            )
-        )
-        print("Install with: pip3 install {}".format(" ".join(missing_optional)))
-
 
 def main():
     parser = argparse.ArgumentParser(prog="parser.py")
-    parser.add_argument("file-path")
-    parser.add_argument("output-dir")
+    parser.add_argument("file_path")
+    parser.add_argument("output_dir")
     args = parser.parse_args()
 
     check_dependencies()
