@@ -4585,8 +4585,8 @@ exprt function_call_expr::handle_general_function_call()
             // Process the inner call; set its LHS to tmp so the return value
             // is stored there (emits: FUNCTION_CALL: tmp = inner_call(...)).
             exprt inner_call = converter_.get_expr(func_value);
-            if (inner_call.is_code() &&
-                inner_call.statement() == "function_call")
+            if (
+              inner_call.is_code() && inner_call.statement() == "function_call")
             {
               inner_call.op0() = symbol_expr(tmp);
               inner_call.location() = location;
