@@ -1,5 +1,5 @@
 CORE
 main.c
---loop-invariant --k-induction --inductive-step
+--loop-invariant
 ^VERIFICATION SUCCESSFUL$
 Solution found by the forward condition

@@ -34,6 +34,60 @@
 #include <util/options.h>
 #include <irep2/irep2_utils.h>
 
+// ---------------------------------------------------------------------------
+// Shared helper: extract the loop invariant near a loop head
+// ---------------------------------------------------------------------------
+
+/// Maximum number of instructions to search backwards from the loop head
+/// when locating the LOOP_INVARIANT instruction.
+static constexpr size_t kMaxInvariantSearchBack = 10;
+
+/// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
+/// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
+/// Multiple conjuncts are folded into a single and2tc.  Returns an empty
+/// vector when no annotated LOOP_INVARIANT is in range.
+static std::vector<expr2tc> extract_invariants_near(
+  goto_programt::targett loop_head,
+  goto_programt::targett begin)
+{
+  std::vector<expr2tc> invariants;
+
+  if (loop_head == begin)
+    return invariants;
+
+  goto_programt::targett it = loop_head;
+  size_t dist = 0;
+
+  while (it != begin && dist < kMaxInvariantSearchBack)
+  {
+    --it;
+    ++dist;
+
+    if (!it->is_loop_invariant())
+      continue;
+
+    const std::list<expr2tc> &inv_list = it->get_loop_invariants();
+    if (inv_list.empty())
+      continue;
+
+    if (inv_list.size() == 1)
+    {
+      invariants.push_back(inv_list.front());
+    }
+    else
+    {
+      auto jt = inv_list.begin();
+      expr2tc combined = *jt;
+      for (++jt; jt != inv_list.end(); ++jt)
+        combined = and2tc(combined, *jt);
+      invariants.push_back(combined);
+    }
+    break;
+  }
+
+  return invariants;
+}
+
 void goto_loop_invariant(goto_functionst &goto_functions)
 {
   Forall_goto_functions (it, goto_functions)
@@ -85,51 +139,9 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
-  std::vector<expr2tc> invariants;
-
-  goto_programt::targett loop_head = loop.get_original_loop_head();
-
-  // Cannot search backwards past the very first instruction.
-  if (loop_head == goto_function.body.instructions.begin())
-    return invariants;
-
-  // Search backwards from loop head to find the LOOP_INVARIANT instruction.
-  // We stop at the first one found (the invariant for THIS loop), since the
-  // user must place __ESBMC_loop_invariant immediately before its loop.
-  goto_programt::targett search_it = loop_head;
-
-  size_t search_distance = 0;
-
-  while (search_it != goto_function.body.instructions.begin() &&
-         search_distance < kMaxInvariantSearchBack)
-  {
-    --search_it;
-    ++search_distance;
-
-    if (search_it->is_loop_invariant())
-    {
-      auto const &current_invariants = search_it->get_loop_invariants();
-
-      if (current_invariants.size() == 1)
-      {
-        invariants.push_back(current_invariants.front());
-        break;
-      }
-      else if (current_invariants.size() > 1)
-      {
-        // Multiple sub-expressions: fold them into a single && conjunction.
-        auto it = current_invariants.begin();
-        auto combined = *it;
-        for (++it; it != current_invariants.end(); ++it)
-          combined = and2tc(combined, *it);
-        invariants.push_back(combined);
-        break;
-      }
-      // current_invariants.empty(): skip and keep searching backwards.
-    }
-  }
-
-  return invariants;
+  return extract_invariants_near(
+    loop.get_original_loop_head(),
+    goto_function.body.instructions.begin());
 }
 
 void goto_loop_invariantt::collect_symbols(
@@ -487,52 +499,6 @@ void goto_loop_invariant_combinedt::process_loops_combined()
     insert_invariant_verification_branch(loop);
 }
 
-std::vector<expr2tc>
-goto_loop_invariant_combinedt::extract_loop_invariants_for_branch(
-  const loopst &loop) const
-{
-  std::vector<expr2tc> invariants;
-
-  goto_programt::targett loop_head = loop.get_original_loop_head();
-
-  if (loop_head == goto_function.body.instructions.begin())
-    return invariants;
-
-  goto_programt::targett it = loop_head;
-  size_t dist = 0;
-
-  while (it != goto_function.body.instructions.begin() &&
-         dist < kMaxInvariantSearchBack)
-  {
-    --it;
-    ++dist;
-
-    if (!it->is_loop_invariant())
-      continue;
-
-    const std::list<expr2tc> inv_list = it->get_loop_invariants();
-
-    if (inv_list.empty())
-      continue;
-
-    if (inv_list.size() == 1)
-    {
-      invariants.push_back(inv_list.front());
-    }
-    else
-    {
-      auto jt = inv_list.begin();
-      expr2tc combined = *jt;
-      for (++jt; jt != inv_list.end(); ++jt)
-        combined = and2tc(combined, *jt);
-      invariants.push_back(combined);
-    }
-    break;
-  }
-
-  return invariants;
-}
-
 bool goto_loop_invariant_combinedt::copy_loop_body(
   goto_programt::targett loop_head,
   goto_programt::targett loop_exit,
@@ -573,8 +539,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
   // ── 1. Collect invariant expressions ──────────────────────────────────────
-  std::vector<expr2tc> invariants =
-    extract_loop_invariants_for_branch(loop);
+  std::vector<expr2tc> invariants = extract_invariants_near(
+    loop_head, goto_function.body.instructions.begin());
 
   if (invariants.empty())
     return;
@@ -678,4 +644,18 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   // backward-GOTO target that points to loop_head continues to do so.
   goto_function.body.instructions.splice(
     loop_head, branch1.instructions);
+
+  // ── 7. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
+  // Inserting ASSUME(INV) just before loop_exit (the backward GOTO) means
+  // k-induction will see the assumption at the end of every iteration without
+  // any modification to goto_k_induction itself.
+  for (const auto &inv : invariants)
+  {
+    goto_programt assume_inv;
+    auto t = assume_inv.add_instruction(ASSUME);
+    t->guard = inv;
+    t->location = loop_exit->location;
+    t->location.comment("loop invariant assume (k-induction hint)");
+    goto_function.body.instructions.splice(loop_exit, assume_inv.instructions);
+  }
 }

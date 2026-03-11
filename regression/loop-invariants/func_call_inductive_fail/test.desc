@@ -1,4 +1,4 @@
 CORE
 main.c
---loop-invariant --multi-property --unwind 4
+--loop-invariant-check --multi-property --unwind 4
 ^VERIFICATION FAILED$

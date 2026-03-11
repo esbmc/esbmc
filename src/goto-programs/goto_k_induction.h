@@ -5,7 +5,6 @@
 #include <goto-programs/goto_loops.h>
 #include <util/guard.h>
 #include <irep2/irep2_expr.h>
-#include <vector>
 
 void goto_k_induction(goto_functionst &goto_functions);
 
@@ -56,26 +55,6 @@ protected:
 
   void
   assume_cond(const expr2tc &cond, goto_programt &dest, const locationt &loc);
-
-  /**
-   * Search backwards from @p loop_head (no step limit) to find the
-   * LOOP_INVARIANT instruction for this loop.  The search terminates at the
-   * first LOOP_INVARIANT hit, which is always the one for the current loop
-   * because __ESBMC_loop_invariant is placed immediately before its loop.
-   * Branch 1 instructions (inserted by goto_loop_invariant_combined before
-   * loop_head) are transparently skipped.
-   */
-  std::vector<expr2tc>
-  extract_loop_invariants_before_head(goto_programt::targett loop_head) const;
-
-  /**
-   * Insert ASSUME(invariant) instructions at position @p pos.  All inserted
-   * instructions are marked inductive_step_instruction = true.
-   * After the call, @p pos points to the instruction originally at @p pos.
-   */
-  void add_invariant_assumes(
-    goto_programt::targett &pos,
-    const std::vector<expr2tc> &invariants);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

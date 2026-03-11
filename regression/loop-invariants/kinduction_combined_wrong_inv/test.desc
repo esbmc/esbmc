@@ -1,5 +1,5 @@
 CORE
 main.c
---loop-invariant --k-induction --inductive-step
+--loop-invariant
 ^VERIFICATION FAILED$
 loop invariant base case
