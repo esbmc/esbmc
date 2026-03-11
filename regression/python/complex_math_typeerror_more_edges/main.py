@@ -44,6 +44,30 @@ except TypeError:
 assert raised
 
 
+
+
+# 5) Callee local-scope resolution for complex return.
+def ret_complex_local() -> complex:
+    local_z = complex(2.0, 0.0)
+    return local_z
+
+
+raised = False
+try:
+    math.isclose(1.0, ret_complex_local())  # type: ignore
+except TypeError:
+    raised = True
+assert raised
+
+
+# 6) One-arg conversion exception must win over guard TypeError.
+raised_value_error = False
+try:
+    math.sin(complex("bad"))
+except ValueError:
+    raised_value_error = True
+assert raised_value_error
+
 # 4) Dedicated cpp-throw priority checks for guarded two-arg math funcs.
 raised_value_error = False
 try:
@@ -65,3 +89,11 @@ try:
 except ValueError:
     raised_value_error = True
 assert raised_value_error
+
+# 7) Deep static nesting should still be guarded.
+raised = False
+try:
+    math.fsum([[[[[[[[[[[[[[[[[[[[complex(1.0, 0.0)]]]]]]]]]]]]]]]]]]]])  # type: ignore
+except TypeError:
+    raised = True
+assert raised

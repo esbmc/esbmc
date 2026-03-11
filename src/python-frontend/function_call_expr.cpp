@@ -41,6 +41,23 @@ constexpr unsigned int SURROGATE_END = 0xDFFF;
 constexpr const char *CLASS_MARKER = "@C@";
 constexpr const char *FUNCTION_MARKER = "@F@";
 
+bool is_cpp_throw_expr(const exprt &e)
+{
+  return e.statement() == "cpp-throw";
+}
+
+exprt raise_math_real_type_error_expr(python_converter &converter)
+{
+  return converter.get_exception_handler().gen_exception_raise(
+    "TypeError", "must be real number, not complex");
+}
+
+exprt raise_math_int_type_error_expr(python_converter &converter)
+{
+  return converter.get_exception_handler().gen_exception_raise(
+    "TypeError", "'complex' object cannot be interpreted as an integer");
+}
+
 double round_ties_to_even(const double value)
 {
   const double lower = std::floor(value);
@@ -207,25 +224,31 @@ void function_call_expr::get_function_type()
 
     // Check for nested instance attribute (e.g., self.b.a.method())
     // Exclude module.Class.method() pattern
+    // Walk the full attribute chain to find the root Name node, regardless of depth.
     bool is_nested_instance_attr = false;
     if (call_["func"]["value"]["_type"] == "Attribute")
     {
-      if (call_["func"]["value"]["value"]["_type"] == "Name")
+      const nlohmann::json *cur = &call_["func"]["value"];
+      while ((*cur)["_type"] == "Attribute")
+        cur = &(*cur)["value"];
+      if ((*cur)["_type"] == "Name")
       {
-        std::string root_name =
-          call_["func"]["value"]["value"]["id"].get<std::string>();
+        std::string root_name = (*cur)["id"].get<std::string>();
         if (!converter_.is_imported_module(root_name))
-        {
           is_nested_instance_attr = true;
-        }
       }
     }
 
-    // Detect A().f(...): method call on a temporary instance from a constructor.
+    // Detect A().f(...): method call on a temporary instance.
+    // This covers both direct construction (A().f()) and chained method calls
+    // (B().g().f()) — any Call node in the value position means the receiver
+    // is a temporary, so we must treat it as an InstanceMethod regardless of
+    // whether the inferred receiver class name matches a class in the AST.
     bool obj_is_temp_instance =
       call_["func"]["value"]["_type"] == "Call" &&
       call_["func"]["value"].contains("func") &&
-      call_["func"]["value"]["func"]["_type"] == "Name";
+      (call_["func"]["value"]["func"]["_type"] == "Name" ||
+       call_["func"]["value"]["func"]["_type"] == "Attribute");
 
     // Handling a function call as a class method call when:
     // (1) The caller corresponds to a class name, for example: MyClass.foo().
@@ -1436,6 +1459,65 @@ exprt function_call_expr::handle_complex() const
       "ValueError", msg);
   };
   auto zero = []() -> exprt { return from_double(0.0, double_type()); };
+  auto promote_int_arith_to_double =
+    [&](const exprt &input_expr, auto &self, std::size_t depth) -> exprt {
+    if (depth > 64)
+      return typecast_exprt(input_expr, double_type());
+
+    if (is_cpp_throw_expr(input_expr))
+      return input_expr;
+
+    const irep_idt id = input_expr.id();
+    if (
+      (id == "+" || id == "-" || id == "*" || id == "/") &&
+      input_expr.operands().size() == 2)
+    {
+      exprt lhs = self(input_expr.op0(), self, depth + 1);
+      if (is_cpp_throw_expr(lhs))
+        return lhs;
+      exprt rhs = self(input_expr.op1(), self, depth + 1);
+      if (is_cpp_throw_expr(rhs))
+        return rhs;
+
+      exprt op_expr;
+      if (id == "+")
+        op_expr = exprt("ieee_add", double_type());
+      else if (id == "-")
+        op_expr = exprt("ieee_sub", double_type());
+      else if (id == "*")
+        op_expr = exprt("ieee_mul", double_type());
+      else
+        op_expr = exprt("ieee_div", double_type());
+
+      op_expr.copy_to_operands(lhs, rhs);
+      return op_expr;
+    }
+
+    if (input_expr.type() == double_type())
+      return input_expr;
+
+    const typet &expr_type = input_expr.type();
+    const bool numeric_like = expr_type.is_floatbv() ||
+                              expr_type.is_signedbv() ||
+                              expr_type.is_unsignedbv() || expr_type.is_bool();
+    if (!numeric_like)
+      return input_expr;
+
+    return typecast_exprt(input_expr, double_type());
+  };
+  auto normalize_numeric_expr_for_complex = [&](exprt value) -> exprt {
+    if (is_cpp_throw_expr(value))
+      return value;
+    if (is_complex_type(value.type()))
+      return value;
+
+    if (
+      value.type().is_signedbv() || value.type().is_unsignedbv() ||
+      value.type().is_bool())
+      return promote_int_arith_to_double(value, promote_int_arith_to_double, 0);
+
+    return value;
+  };
   auto is_cpp_throw = [](const exprt &e) -> bool {
     return e.statement() == "cpp-throw";
   };
@@ -1791,8 +1873,14 @@ exprt function_call_expr::handle_complex() const
         dunder_value.has_value())
       return *dunder_value;
 
+    value = normalize_numeric_expr_for_complex(value);
+    if (is_cpp_throw_expr(value))
+      return value;
+
     if (value.type() != double_type())
+    {
       value = typecast_exprt(value, double_type());
+    }
 
     return make_complex(value, zero());
   }
@@ -1835,6 +1923,9 @@ exprt function_call_expr::handle_complex() const
       real_arg = *dunder_real;
     }
   }
+  real_arg = normalize_numeric_expr_for_complex(real_arg);
+  if (is_cpp_throw_expr(real_arg))
+    return real_arg;
 
   if (!is_complex_type(imag_arg.type()))
   {
@@ -1847,6 +1938,9 @@ exprt function_call_expr::handle_complex() const
       imag_arg = *dunder_imag;
     }
   }
+  imag_arg = normalize_numeric_expr_for_complex(imag_arg);
+  if (is_cpp_throw_expr(imag_arg))
+    return imag_arg;
 
   // Python semantics: complex(x, y) == x + y * 1j, including complex args.
   real_arg = promote_to_complex(real_arg);
@@ -2364,6 +2458,28 @@ bool function_call_expr::is_min_max_call() const
   return false;
 }
 
+exprt to_value_expr(const exprt &arg, const namespacet &ns)
+{
+  if (!arg.is_code() || !arg.is_function_call())
+    return arg;
+
+  side_effect_expr_function_callt func_call;
+  func_call.function() = arg.op1();
+  for (const auto &operand : to_code(arg).op2().operands())
+    func_call.arguments().push_back(operand);
+
+  const exprt &func_expr = arg.op1();
+  if (func_expr.is_symbol())
+  {
+    const symbolt *sym = ns.lookup(to_symbol_expr(func_expr));
+    if (sym)
+      func_call.type() = to_code_type(sym->type).return_type();
+  }
+  if (func_call.type().is_nil() || func_call.type().id() == "empty")
+    func_call.type() = arg.type();
+  return func_call;
+}
+
 exprt function_call_expr::handle_min_max(
   const std::string &func_name,
   irep_idt comparison_op) const
@@ -2425,10 +2541,10 @@ exprt function_call_expr::handle_min_max(
       func_name + "() with more than 2 arguments not yet supported");
 
   // Two arguments case: min/max(a, b)
-  exprt arg1 = converter_.get_expr(args[0]);
-  exprt arg2 = converter_.get_expr(args[1]);
+  exprt arg1 = to_value_expr(converter_.get_expr(args[0]), converter_.ns);
+  exprt arg2 = to_value_expr(converter_.get_expr(args[1]), converter_.ns);
 
-  // Determine result type (with basic type promotion)
+  // Determine result type (with type promotion)
   typet result_type = arg1.type();
   if (!base_type_eq(result_type, arg2.type(), converter_.ns))
   {
@@ -2436,6 +2552,21 @@ exprt function_call_expr::handle_min_max(
       result_type = arg2.type(); // Promote to float
     else if (result_type.is_floatbv() && arg2.type().is_signedbv())
       ; // Keep float type
+    else if (
+      (result_type.is_signedbv() && arg2.type().is_unsignedbv()) ||
+      (result_type.is_unsignedbv() && arg2.type().is_signedbv()))
+    {
+      // Python integers are signed; normalize both operands to signedbv
+      const unsigned width = std::max(
+        result_type.is_signedbv() ? to_signedbv_type(result_type).get_width()
+                                  : to_unsignedbv_type(result_type).get_width(),
+        arg2.type().is_signedbv()
+          ? to_signedbv_type(arg2.type()).get_width()
+          : to_unsignedbv_type(arg2.type()).get_width());
+      result_type = signedbv_typet(width);
+      arg1 = typecast_exprt(arg1, result_type);
+      arg2 = typecast_exprt(arg2, result_type);
+    }
     else
       throw std::runtime_error(
         func_name + "() arguments must be of comparable types: got " +
@@ -3215,10 +3346,6 @@ function_call_expr::get_dispatch_table()
      [this]() {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
-       auto raise_math_real_type_error = [this]() -> exprt {
-         return converter_.get_exception_handler().gen_exception_raise(
-           "TypeError", "must be real number, not complex");
-       };
 
        if (func_name == "__ESBMC_isnan")
        {
@@ -3226,10 +3353,10 @@ function_call_expr::get_dispatch_table()
            throw std::runtime_error("isnan() expects exactly 1 argument");
 
          exprt arg_expr = converter_.get_expr(args[0]);
-         if (arg_expr.statement() == "cpp-throw")
+         if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
-           return raise_math_real_type_error();
+           return raise_math_real_type_error_expr(converter_);
          exprt isnan_expr("isnan", bool_typet());
          isnan_expr.copy_to_operands(arg_expr);
          return isnan_expr;
@@ -3240,16 +3367,240 @@ function_call_expr::get_dispatch_table()
            throw std::runtime_error("isinf() expects exactly 1 argument");
 
          exprt arg_expr = converter_.get_expr(args[0]);
-         if (arg_expr.statement() == "cpp-throw")
+         if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
-           return raise_math_real_type_error();
+           return raise_math_real_type_error_expr(converter_);
          exprt isinf_expr("isinf", bool_typet());
          isinf_expr.copy_to_operands(arg_expr);
          return isinf_expr;
        }
      },
      "isnan/isinf"},
+
+    // cmath.log / cmath.log10: lower directly to complex-safe IR to avoid
+    // backend typing mismatches from model-level dispatch.
+    {[this]() {
+       if (!(call_.contains("func") && call_["func"].contains("_type") &&
+             call_["func"]["_type"] == "Attribute"))
+         return false;
+       const std::string caller = get_object_name();
+       if (caller != "cmath")
+         return false;
+       const std::string &func_name = function_id_.get_function();
+       return func_name == "log" || func_name == "log10";
+     },
+     [this]() -> exprt {
+       const std::string &func_name = function_id_.get_function();
+       const auto &args = call_["args"];
+       const auto &keywords = call_.contains("keywords")
+                                ? call_["keywords"]
+                                : nlohmann::json::array();
+
+       auto raise_type_error = [this](const std::string &msg) -> exprt {
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", msg);
+       };
+
+       auto as_complex_or_throw = [&](const nlohmann::json &node) -> exprt {
+         exprt value = converter_.get_expr(node);
+         if (is_cpp_throw_expr(value))
+           return value;
+         return promote_to_complex(value);
+       };
+
+       auto ieee_bin =
+         [](const irep_idt &id, const exprt &lhs, const exprt &rhs) -> exprt {
+         exprt out(id, double_type());
+         out.copy_to_operands(lhs, rhs);
+         return out;
+       };
+
+       auto complex_div = [&](const exprt &num, const exprt &den) -> exprt {
+         exprt a = member_exprt(num, "real", double_type());
+         exprt b = member_exprt(num, "imag", double_type());
+         exprt c = member_exprt(den, "real", double_type());
+         exprt d = member_exprt(den, "imag", double_type());
+
+         exprt ac = ieee_bin("ieee_mul", a, c);
+         exprt bd = ieee_bin("ieee_mul", b, d);
+         exprt bc = ieee_bin("ieee_mul", b, c);
+         exprt ad = ieee_bin("ieee_mul", a, d);
+         exprt cc = ieee_bin("ieee_mul", c, c);
+         exprt dd = ieee_bin("ieee_mul", d, d);
+
+         exprt denom = ieee_bin("ieee_add", cc, dd);
+         exprt real_num = ieee_bin("ieee_add", ac, bd);
+         exprt imag_num = ieee_bin("ieee_sub", bc, ad);
+         exprt real = ieee_bin("ieee_div", real_num, denom);
+         exprt imag = ieee_bin("ieee_div", imag_num, denom);
+         return make_complex(real, imag);
+       };
+
+       auto complex_log_or_throw = [&](const exprt &z) -> exprt {
+         exprt real = member_exprt(z, "real", double_type());
+         exprt imag = member_exprt(z, "imag", double_type());
+
+         exprt rr = ieee_bin("ieee_mul", real, real);
+         exprt ii = ieee_bin("ieee_mul", imag, imag);
+         exprt sum = ieee_bin("ieee_add", rr, ii);
+         exprt mag = converter_.get_math_handler().handle_sqrt(sum, call_);
+         if (is_cpp_throw_expr(mag))
+           return mag;
+
+         exprt ln_mag = converter_.get_math_handler().handle_log(mag, call_);
+         if (is_cpp_throw_expr(ln_mag))
+           return ln_mag;
+
+         exprt angle =
+           converter_.get_math_handler().handle_atan2(imag, real, call_);
+         if (is_cpp_throw_expr(angle))
+           return angle;
+
+         return make_complex(ln_mag, angle);
+       };
+
+       if (func_name == "log10")
+       {
+         if (!keywords.empty())
+           return raise_type_error("cmath.log10() takes no keyword arguments");
+         if (args.size() != 1)
+           return raise_type_error("log10() takes exactly 1 argument");
+         exprt z = as_complex_or_throw(args[0]);
+         if (is_cpp_throw_expr(z))
+           return z;
+         exprt ln_z = complex_log_or_throw(z);
+         if (is_cpp_throw_expr(ln_z))
+           return ln_z;
+         exprt ln10 = make_complex(
+           from_double(2.302585092994046, double_type()),
+           from_double(0.0, double_type()));
+         return complex_div(ln_z, ln10);
+       }
+
+       if (args.empty() || args.size() > 2)
+         return raise_type_error(
+           "log() takes from 1 to 2 positional arguments");
+       if (!keywords.empty())
+         return raise_type_error("cmath.log() takes no keyword arguments");
+
+       const nlohmann::json *base_json = nullptr;
+       if (args.size() == 2)
+         base_json = &args[1];
+
+       exprt z = as_complex_or_throw(args[0]);
+       if (is_cpp_throw_expr(z))
+         return z;
+       exprt ln_z = complex_log_or_throw(z);
+       if (is_cpp_throw_expr(ln_z))
+         return ln_z;
+       if (base_json == nullptr)
+         return ln_z;
+
+       exprt base = as_complex_or_throw(*base_json);
+       if (is_cpp_throw_expr(base))
+         return base;
+       exprt ln_base = complex_log_or_throw(base);
+       if (is_cpp_throw_expr(ln_base))
+         return ln_base;
+       return complex_div(ln_z, ln_base);
+     },
+     "cmath log/log10"},
+
+    // cmath inverse functions: use a fast path only on pure-imaginary inputs
+    // and delegate all other cases to the Python cmath model implementation.
+    {[this]() {
+       if (!(call_.contains("func") && call_["func"].contains("_type") &&
+             call_["func"]["_type"] == "Attribute"))
+         return false;
+       const std::string caller = get_object_name();
+       if (caller != "cmath")
+         return false;
+       const std::string &func_name = function_id_.get_function();
+       return (
+         func_name == "asin" || func_name == "atan" || func_name == "asinh" ||
+         func_name == "atanh");
+     },
+     [this]() -> exprt {
+       const std::string &func_name = function_id_.get_function();
+       const auto &args = call_["args"];
+       const auto keywords = call_.contains("keywords")
+                               ? call_["keywords"]
+                               : nlohmann::json::array();
+
+       auto raise_type_error = [this](const std::string &msg) -> exprt {
+         return converter_.get_exception_handler().gen_exception_raise(
+           "TypeError", msg);
+       };
+
+       if (!keywords.empty())
+         return raise_type_error(
+           "cmath." + func_name + "() takes no keyword arguments");
+       if (args.size() != 1)
+         return raise_type_error(func_name + "() takes exactly 1 argument");
+
+       exprt z = converter_.get_expr(args[0]);
+       if (is_cpp_throw_expr(z))
+         return z;
+       z = promote_to_complex(z);
+       if (is_cpp_throw_expr(z))
+         return z;
+
+       const symbolt *model_symbol =
+         converter_.find_symbol(function_id_.to_string());
+       if (model_symbol == nullptr)
+       {
+         return converter_.get_exception_handler().gen_exception_raise(
+           "AttributeError",
+           "module 'cmath' has no attribute '" + func_name + "'");
+       }
+
+       side_effect_expr_function_callt model_call;
+       model_call.function() = symbol_expr(*model_symbol);
+       model_call.arguments() = {z};
+       model_call.type() = to_code_type(model_symbol->type).return_type();
+       model_call.location() = converter_.get_location_from_decl(call_);
+
+       exprt zr = member_exprt(z, "real", double_type());
+       exprt zi = member_exprt(z, "imag", double_type());
+
+       exprt imag_result;
+       if (func_name == "asin")
+         imag_result = converter_.get_math_handler().handle_asinh(zi, call_);
+       else if (func_name == "atan")
+         imag_result = converter_.get_math_handler().handle_atanh(zi, call_);
+       else if (func_name == "asinh")
+         imag_result = converter_.get_math_handler().handle_asin(zi, call_);
+       else
+         imag_result = converter_.get_math_handler().handle_atan(zi, call_);
+
+       if (is_cpp_throw_expr(imag_result))
+         return imag_result;
+
+       exprt fast_path =
+         make_complex(from_double(0.0, double_type()), imag_result);
+       exprt zero = from_double(0.0, double_type());
+       exprt fast_guard = equality_exprt(zr, zero);
+
+       // For atan(i*y) and asinh(i*y), the pure-imag shortcut only matches
+       // the principal branch safely within the unit interval.
+       if (func_name == "atan" || func_name == "asinh")
+       {
+         exprt abs_zi = converter_.get_math_handler().handle_fabs(zi, call_);
+         if (is_cpp_throw_expr(abs_zi))
+           return abs_zi;
+
+         exprt one = from_double(1.0, double_type());
+         exprt imag_guard =
+           func_name == "atan"
+             ? static_cast<exprt>(binary_relation_exprt(abs_zi, "<", one))
+             : static_cast<exprt>(binary_relation_exprt(abs_zi, "<=", one));
+         fast_guard = and_exprt(fast_guard, imag_guard);
+       }
+
+       return if_exprt(fast_guard, fast_path, model_call);
+     },
+     "cmath inverse pure-imag fast path"},
 
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
     {[this]() {
@@ -3273,12 +3624,10 @@ function_call_expr::get_dispatch_table()
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
        auto raise_math_real_type_error = [this]() -> exprt {
-         return converter_.get_exception_handler().gen_exception_raise(
-           "TypeError", "must be real number, not complex");
+         return raise_math_real_type_error_expr(converter_);
        };
        auto raise_math_int_type_error = [this]() -> exprt {
-         return converter_.get_exception_handler().gen_exception_raise(
-           "TypeError", "'complex' object cannot be interpreted as an integer");
+         return raise_math_int_type_error_expr(converter_);
        };
        auto has_complex_arg = [](const exprt &arg_expr) -> bool {
          return is_complex_type(arg_expr.type());
@@ -3303,33 +3652,57 @@ function_call_expr::get_dispatch_table()
              func_name + "() expects exactly 2 arguments");
          return {converter_.get_expr(args[0]), converter_.get_expr(args[1])};
        };
+       auto guard_one_real_arg =
+         [&](const exprt &arg_expr) -> std::optional<exprt> {
+         if (is_cpp_throw_expr(arg_expr))
+           return arg_expr;
+         if (has_complex_arg(arg_expr))
+           return raise_math_real_type_error();
+         return std::nullopt;
+       };
+       auto guard_two_real_args =
+         [&](
+           const exprt &lhs_expr,
+           const exprt &rhs_expr) -> std::optional<exprt> {
+         if (is_cpp_throw_expr(lhs_expr))
+           return lhs_expr;
+         if (is_cpp_throw_expr(rhs_expr))
+           return rhs_expr;
+         if (has_complex_arg(lhs_expr) || has_complex_arg(rhs_expr))
+           return raise_math_real_type_error();
+         return std::nullopt;
+       };
 
        if (func_name == "sin" || func_name == "__ESBMC_sin")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_sin(arg_expr, call_);
        }
        else if (func_name == "cos" || func_name == "__ESBMC_cos")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_cos(arg_expr, call_);
        }
        else if (func_name == "exp" || func_name == "__ESBMC_exp")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_exp(arg_expr, call_);
        }
        else if (func_name == "sqrt" || func_name == "__ESBMC_sqrt")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          // Domain check for sqrt: operand must be >= 0
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3373,8 +3746,9 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "log" || func_name == "__ESBMC_log")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          // Domain check for log: operand must be > 0
          exprt fp_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3403,8 +3777,9 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "acos" || func_name == "__ESBMC_acos")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          // Domain check for acos: operand must be in [-1.0, 1.0]
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3450,152 +3825,177 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "atan" || func_name == "__ESBMC_atan")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_atan(arg_expr, call_);
        }
        else if (func_name == "log2" || func_name == "__ESBMC_log2")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_log2(arg_expr, call_);
        }
        else if (func_name == "tan" || func_name == "__ESBMC_tan")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_tan(arg_expr, call_);
        }
        else if (func_name == "asin" || func_name == "__ESBMC_asin")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_asin(arg_expr, call_);
        }
        else if (func_name == "sinh" || func_name == "__ESBMC_sinh")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_sinh(arg_expr, call_);
        }
        else if (func_name == "cosh" || func_name == "__ESBMC_cosh")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_cosh(arg_expr, call_);
        }
        else if (func_name == "tanh" || func_name == "__ESBMC_tanh")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_tanh(arg_expr, call_);
        }
        else if (func_name == "log10" || func_name == "__ESBMC_log10")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_log10(arg_expr, call_);
        }
        else if (func_name == "expm1" || func_name == "__ESBMC_expm1")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_expm1(arg_expr, call_);
        }
        else if (func_name == "log1p" || func_name == "__ESBMC_log1p")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_log1p(arg_expr, call_);
        }
        else if (func_name == "exp2" || func_name == "__ESBMC_exp2")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_exp2(arg_expr, call_);
        }
        else if (func_name == "asinh" || func_name == "__ESBMC_asinh")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_asinh(arg_expr, call_);
        }
        else if (func_name == "acosh" || func_name == "__ESBMC_acosh")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_acosh(arg_expr, call_);
        }
        else if (func_name == "atanh" || func_name == "__ESBMC_atanh")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_atanh(arg_expr, call_);
        }
        else if (func_name == "fabs" || func_name == "__ESBMC_fabs")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_fabs(arg_expr, call_);
        }
        else if (func_name == "trunc" || func_name == "__ESBMC_trunc")
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_trunc(arg_expr, call_);
        }
        else if (func_name == "atan2" || func_name == "__ESBMC_atan2")
        {
          auto [y_expr, x_expr] = require_two_args();
-         if (has_complex_arg(y_expr) || has_complex_arg(x_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_two_real_args(y_expr, x_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_atan2(
            y_expr, x_expr, call_);
        }
        else if (func_name == "pow" || func_name == "__ESBMC_pow")
        {
          auto [base_expr, exp_expr] = require_two_args();
-         if (has_complex_arg(base_expr) || has_complex_arg(exp_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(base_expr, exp_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_pow(
            base_expr, exp_expr, call_);
        }
        else if (func_name == "fmod" || func_name == "__ESBMC_fmod")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (has_complex_arg(lhs_expr) || has_complex_arg(rhs_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_fmod(
            lhs_expr, rhs_expr, call_);
        }
        else if (func_name == "copysign" || func_name == "__ESBMC_copysign")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (has_complex_arg(lhs_expr) || has_complex_arg(rhs_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_copysign(
            lhs_expr, rhs_expr, call_);
        }
        else if (func_name == "hypot" || func_name == "__ESBMC_hypot")
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (has_complex_arg(lhs_expr) || has_complex_arg(rhs_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
+             guarded.has_value())
+           return *guarded;
          return converter_.get_math_handler().handle_hypot(
            lhs_expr, rhs_expr, call_);
        }
@@ -3604,8 +4004,9 @@ function_call_expr::get_dispatch_table()
            func_name) != 0)
        {
          exprt arg_expr = require_one_arg();
-         if (has_complex_arg(arg_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
          return handle_general_function_call();
        }
        else if (
@@ -3641,8 +4042,10 @@ function_call_expr::get_dispatch_table()
          if (call_has_complex())
            return raise_math_real_type_error();
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (has_complex_arg(lhs_expr) || has_complex_arg(rhs_expr))
-           return raise_math_real_type_error();
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
+             guarded.has_value())
+           return *guarded;
          // Native handler for tuple arguments; lists use the model
          if (lhs_expr.type().is_struct() && rhs_expr.type().is_struct())
          {
@@ -4164,8 +4567,38 @@ exprt function_call_expr::handle_general_function_call()
         }
         else
         {
-          exprt obj_expr = converter_.get_expr(func_value);
-          call.arguments().push_back(gen_address_of(obj_expr));
+          // Chained method call (e.g., B().g().f()): the receiver is the return
+          // value of an inner method call. Create a temp to hold it and use
+          // &temp as self so that self is addressable in the GOTO IR.
+          std::string receiver_type =
+            type_handler_.get_operand_type(func_value);
+          if (!receiver_type.empty())
+          {
+            typet class_type = type_handler_.get_typet(receiver_type);
+            symbolt &tmp = converter_.create_tmp_symbol(
+              func_value, "$inst$", class_type, exprt());
+            converter_.symbol_table().add(tmp);
+            code_declt tmp_decl(symbol_expr(tmp));
+            tmp_decl.location() = location;
+            converter_.current_block->copy_to_operands(tmp_decl);
+
+            // Process the inner call; set its LHS to tmp so the return value
+            // is stored there (emits: FUNCTION_CALL: tmp = inner_call(...)).
+            exprt inner_call = converter_.get_expr(func_value);
+            if (
+              inner_call.is_code() && inner_call.statement() == "function_call")
+            {
+              inner_call.op0() = symbol_expr(tmp);
+              inner_call.location() = location;
+              converter_.add_instruction(inner_call);
+            }
+            call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+          }
+          else
+          {
+            exprt obj_expr = converter_.get_expr(func_value);
+            call.arguments().push_back(gen_address_of(obj_expr));
+          }
         }
       }
       else
