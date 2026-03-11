@@ -185,7 +185,14 @@ public:
   /**
    * @brief Build an inline min/max computation for a mixed int/float list.
    * Accesses each element with its original type, promotes int elements to
-   * double, and returns the result as a double expression.
+   * double for comparison, and returns the winning value as double.
+   *
+   * Note: Python's min/max returns the winning element in its *original* type
+   * (e.g., max([1, 2.5, 3]) returns int 3, not float 3.0). This implementation
+   * always returns double, which is correct for float comparisons and equality
+   * checks (via float promotion in handle_relational_type_mismatches), but will
+   * not work if the result is used as an array index or integer operand.
+   *
    * @param list_arg  Expression for the list symbol
    * @param list_id   Symbol identifier of the list
    * @param func_name "min" or "max" (used in error messages)
