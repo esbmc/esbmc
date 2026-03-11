@@ -1,4 +1,4 @@
-/* Regression: Copilot PR #3777 — copy_loop_body GOTO target remap.
+/* Regression: PR #3777 — copy_loop_body GOTO target remap.
  *
  * The loop body contains a backward GOTO (label L inside the loop).
  * Branch 1 copies this body; if GOTO targets are not remapped, the copied

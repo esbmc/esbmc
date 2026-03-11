@@ -1,4 +1,4 @@
-/* Regression: Copilot PR #3777 — do-while entry_cond (continue condition).
+/* Regression: PR #3777 — do-while entry_cond (continue condition).
  *
  * For do-while, the loop head is not "IF !cond GOTO exit", so entry_cond
  * is left nil and we always assert the inductive-step invariant after the

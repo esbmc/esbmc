@@ -1,4 +1,4 @@
-/* Regression: Copilot PR #3777 — side-effect extraction in combined mode.
+/* Regression: PR #3777 — side-effect extraction in combined mode.
  *
  * The combined --loop-invariant mode uses raw invariant expressions in
  * ASSERT/ASSUME without re-inserting the DECL/FUNCTION_CALL that define

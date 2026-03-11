@@ -33,6 +33,7 @@
 #include <util/std_expr.h>
 #include <util/options.h>
 #include <irep2/irep2_utils.h>
+#include <map>
 
 // ---------------------------------------------------------------------------
 // Shared helper: extract the loop invariant near a loop head
@@ -213,7 +214,35 @@ static bool symbol_name_matches(
          s.compare(suffix_pos, d.size(), d) == 0;
 }
 
-void goto_loop_invariantt::extract_and_remove_side_effects(
+/// Shared implementation used by both the legacy loop-invariant pass and the
+/// combined loop-invariant + k-induction pass.  See the declaration of
+/// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
+/// description; this helper just takes an explicit goto_function parameter so
+/// it can be reused from both passes.
+/// Local helper: collect all symbol names reachable from an expression tree.
+static void collect_symbols_local(
+  const expr2tc &expr,
+  std::set<irep_idt> &symbols)
+{
+  if (!expr)
+    return;
+
+  if (is_symbol2t(expr))
+  {
+    symbols.insert(to_symbol2t(expr).get_symbol_name());
+    return;
+  }
+
+  for (unsigned i = 0; i < expr->get_num_sub_exprs(); ++i)
+  {
+    const expr2tc *sub = expr->get_sub_expr(i);
+    if (sub && *sub)
+      collect_symbols_local(*sub, symbols);
+  }
+}
+
+static void extract_and_remove_side_effects_impl(
+  goto_functiont &goto_function,
   goto_programt::targett loop_head,
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
@@ -222,7 +251,7 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
   // Collect symbol names referenced in the invariants.
   std::set<irep_idt> inv_symbols;
   for (const auto &inv : invariants)
-    collect_symbols(inv, inv_symbols);
+    collect_symbols_local(inv, inv_symbols);
 
   if (inv_symbols.empty())
     return;
@@ -285,7 +314,7 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
       if (is_trivial_rhs(assign.source))
         continue;
       to_remove.push_back(search);
-      collect_symbols(assign.source, dep_symbols);
+      collect_symbols_local(assign.source, dep_symbols);
       continue;
     }
 
@@ -360,6 +389,16 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
     side_effects_out.instructions.push_back(**rit);
     goto_function.body.instructions.erase(*rit);
   }
+}
+
+void goto_loop_invariantt::extract_and_remove_side_effects(
+  goto_programt::targett loop_head,
+  const loopst &loop,
+  const std::vector<expr2tc> &invariants,
+  goto_programt &side_effects_out)
+{
+  extract_and_remove_side_effects_impl(
+    goto_function, loop_head, loop, invariants, side_effects_out);
 }
 
 void goto_loop_invariantt::insert_assert_before_loop(
@@ -503,30 +542,38 @@ bool goto_loop_invariant_combinedt::copy_loop_body(
   goto_programt::targett loop_exit,
   goto_programt &out) const
 {
-  // Build the set of location numbers that belong to the loop body
-  // [loop_head, loop_exit] so we can detect outward-jumping GOTOs.
-  std::unordered_set<unsigned> body_locs;
-  for (auto it = loop_head; it != std::next(loop_exit); ++it)
-    if (it->location_number != 0)
-      body_locs.insert(it->location_number);
+  using const_targett = goto_programt::const_targett;
+  using targett = goto_programt::targett;
 
-  // Copy body instructions: (loop_head, loop_exit)  — exclusive on both ends.
+  std::map<const_targett, targett> target_map;
+
+  // First pass: copy instructions in (loop_head, loop_exit) and record a
+  // mapping from original iterators to their copies in @p out.
   for (auto it = std::next(loop_head); it != loop_exit; ++it)
   {
-    // Reject loops that jump out of their own body via a forward GOTO.
-    if (it->is_goto() && !it->is_backwards_goto())
-    {
-      for (const auto &tgt : it->targets)
-      {
-        unsigned tgt_loc = tgt->location_number;
-        if (tgt_loc != 0 && body_locs.find(tgt_loc) == body_locs.end())
-          return false; // complex loop — skip Branch 1
-      }
-    }
-
-    out.instructions.push_back(*it);
+    targett new_it = out.add_instruction();
+    *new_it = *it;
+    const_targett orig_it = it;
+    target_map[orig_it] = new_it;
   }
 
+  // Second pass: rewrite GOTO targets to point inside the copied body.  If any
+  // target cannot be resolved within the copied slice (including jumps to the
+  // original loop head/exit or outside the loop), we conservatively bail out
+  // and skip Branch 1 for this loop.
+  for (auto &instr : out.instructions)
+  {
+    for (auto &tgt : instr.targets)
+    {
+      auto m_it = target_map.find(tgt);
+      if (m_it == target_map.end())
+        return false; // complex control flow — skip Branch 1
+
+      tgt = m_it->second;
+    }
+  }
+
+  out.compute_target_numbers();
   return true;
 }
 
@@ -542,6 +589,13 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
 
   if (invariants.empty())
     return;
+
+  // Reuse the legacy side-effect extraction so that any temporaries or
+  // function calls used in the invariant are re-evaluated in Branch 1 and
+  // when inserting ASSUME(INV) for Branch 2.
+  goto_programt side_effects;
+  extract_and_remove_side_effects_impl(
+    goto_function, loop_head, loop, invariants, side_effects);
 
   // ── 2. Copy loop body (fail gracefully for complex loops) ─────────────────
   goto_programt body_copy;
@@ -562,6 +616,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   goto_programt branch1;
 
   // [4a] Base-case ASSERT(INV)
+  for (const auto &instr : side_effects.instructions)
+    branch1.instructions.push_back(instr);
   for (const auto &inv : invariants)
   {
     auto t = branch1.add_instruction(ASSERT);
@@ -586,6 +642,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   }
 
   // [4c] ASSUME(INV)  — constrain the havoc'd state
+  for (const auto &instr : side_effects.instructions)
+    branch1.instructions.push_back(instr);
   for (const auto &inv : invariants)
   {
     auto t = branch1.add_instruction(ASSUME);
@@ -608,6 +666,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     branch1.instructions.end(), body_copy.instructions);
 
   // [4f] Inductive-step ASSERT(INV)
+  for (const auto &instr : side_effects.instructions)
+    branch1.instructions.push_back(instr);
   for (const auto &inv : invariants)
   {
     auto t = branch1.add_instruction(ASSERT);
@@ -651,6 +711,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   for (const auto &inv : invariants)
   {
     goto_programt assume_inv;
+    for (const auto &instr : side_effects.instructions)
+      assume_inv.instructions.push_back(instr);
     auto t = assume_inv.add_instruction(ASSUME);
     t->guard = inv;
     t->location = loop_exit->location;
