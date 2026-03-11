@@ -611,12 +611,34 @@ void function_call_expr::get_function_type()
   if (call_["func"]["_type"] == "Attribute")
   {
     std::string caller = get_object_name();
+    bool rooted_in_imported_module =
+      !function_id_.get_filename().empty() &&
+      function_id_.get_filename() != converter_.python_file();
+
+    if (!rooted_in_imported_module && call_["func"].contains("value"))
+    {
+      const nlohmann::json *root = &call_["func"]["value"];
+      while (
+        root->contains("_type") && (*root)["_type"] == "Attribute" &&
+        root->contains("value"))
+      {
+        root = &(*root)["value"];
+      }
+
+      if (
+        root->contains("_type") && (*root)["_type"] == "Name" &&
+        root->contains("id") && (*root)["id"].is_string())
+      {
+        rooted_in_imported_module =
+          converter_.is_imported_module((*root)["id"].get<std::string>());
+      }
+    }
 
     // Check for nested instance attribute (e.g., self.b.a.method())
     // Exclude module.Class.method() pattern
     // Walk the full attribute chain to find the root Name node, regardless of depth.
     bool is_nested_instance_attr = false;
-    if (call_["func"]["value"]["_type"] == "Attribute")
+    if (!rooted_in_imported_module && call_["func"]["value"]["_type"] == "Attribute")
     {
       const nlohmann::json *cur = &call_["func"]["value"];
       while ((*cur)["_type"] == "Attribute")
@@ -654,7 +676,7 @@ void function_call_expr::get_function_type()
     {
       function_type_ = FunctionType::ClassMethod;
     }
-    else if (!converter_.is_imported_module(caller))
+    else if (!converter_.is_imported_module(caller) && !rooted_in_imported_module)
     {
       function_type_ = FunctionType::InstanceMethod;
     }
@@ -4841,7 +4863,7 @@ exprt function_call_expr::handle_general_function_call()
             find_possible_class_types(obj_symbol);
 
           // If no classes found, use the inferred class name
-          if (possible_classes.empty())
+          if (possible_classes.empty() && !class_name.empty())
             possible_classes.push_back(class_name);
 
           // Check if method exists in any of the possible classes
@@ -5850,8 +5872,15 @@ exprt function_call_expr::generate_attribute_error(
   assert_code.location() = location;
   assert_code.location().user_provided(true);
   assert_code.location().comment(error_msg.str());
+  if (converter_.current_block)
+    converter_.current_block->copy_to_operands(assert_code);
 
-  return assert_code;
+  exprt nondet_expr("sideeffect", empty_typet());
+  nondet_expr.statement("nondet");
+  nondet_expr.location() = location;
+  nondet_expr.location().user_provided(true);
+  nondet_expr.location().comment(error_msg.str());
+  return nondet_expr;
 }
 
 exprt function_call_expr::check_argument_types(

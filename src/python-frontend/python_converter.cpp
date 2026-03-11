@@ -110,6 +110,109 @@ static std::string root_module_name(const std::string &qualified_module)
   return qualified_module.substr(0, dot);
 }
 
+static bool is_explicitly_imported_module_in_ast(
+  const nlohmann::json &ast_root,
+  const std::string &module_name)
+{
+  if (module_name.empty())
+    return false;
+
+  std::vector<const nlohmann::json *> worklist;
+  worklist.push_back(&ast_root);
+
+  while (!worklist.empty())
+  {
+    const nlohmann::json *node = worklist.back();
+    worklist.pop_back();
+
+    if (node == nullptr)
+      continue;
+
+    if (node->is_object())
+    {
+      if (
+        node->contains("_type") && (*node)["_type"].is_string() &&
+        node->contains("names") && (*node)["names"].is_array())
+      {
+        const std::string node_type = (*node)["_type"].get<std::string>();
+        if (node_type == "Import")
+        {
+          for (const auto &name : (*node)["names"])
+          {
+            if (!name.contains("name") || !name["name"].is_string())
+              continue;
+
+            const std::string imported_name = name["name"].get<std::string>();
+            if (imported_name == module_name)
+              return true;
+
+            if (root_module_name(imported_name) == module_name)
+              return true;
+
+            if (
+              name.contains("asname") && !name["asname"].is_null() &&
+              name["asname"].is_string() &&
+              name["asname"].get<std::string>() == module_name)
+            {
+              return true;
+            }
+          }
+        }
+        else if (
+          node_type == "ImportFrom" && node->contains("module") &&
+          (*node)["module"].is_string())
+        {
+          const std::string from_module = (*node)["module"].get<std::string>();
+          for (const auto &name : (*node)["names"])
+          {
+            if (!name.contains("name") || !name["name"].is_string())
+              continue;
+
+            const std::string imported_name = name["name"].get<std::string>();
+            if (imported_name == "*")
+              continue;
+
+            const bool is_requested_name =
+              imported_name == module_name ||
+              (name.contains("asname") && !name["asname"].is_null() &&
+               name["asname"].is_string() &&
+               name["asname"].get<std::string>() == module_name);
+
+            if (!is_requested_name)
+              continue;
+
+            // "from pkg import submod" should count as a module only when
+            // "pkg.submod" exists as a module.
+            const std::string candidate_module =
+              from_module.empty() ? imported_name
+                                  : (from_module + "." + imported_name);
+            if (json_utils::is_module(candidate_module, ast_root))
+              return true;
+          }
+        }
+      }
+
+      for (const auto &[_, value] : node->items())
+      {
+        if (value.is_object() || value.is_array())
+          worklist.push_back(&value);
+      }
+      continue;
+    }
+
+    if (node->is_array())
+    {
+      for (const auto &elem : *node)
+      {
+        if (elem.is_object() || elem.is_array())
+          worklist.push_back(&elem);
+      }
+    }
+  }
+
+  return false;
+}
+
 static std::vector<std::string>
 extract_imported_module_names(const nlohmann::json &import_node)
 {
@@ -3735,9 +3838,9 @@ bool python_converter::is_imported_module(const std::string &module_name) const
     return it->second;
   }
 
-  const bool result = imported_modules.find(module_name) != imported_modules.end()
-                        ? true
-                        : json_utils::is_module(module_name, *ast_json);
+  const bool result =
+    imported_modules.find(module_name) != imported_modules.end() ||
+    is_explicitly_imported_module_in_ast(*ast_json, module_name);
   imported_module_presence_cache_.emplace(cache_key, result);
   return result;
 }
@@ -6470,8 +6573,9 @@ void python_converter::handle_function_call_rhs(
   {
     symbolt *func_symbol =
       symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-    assert(func_symbol);
-    if (!static_cast<code_typet &>(func_symbol->type).return_type().is_empty())
+    if (
+      func_symbol != nullptr &&
+      !static_cast<code_typet &>(func_symbol->type).return_type().is_empty())
     {
       if (auto ret = get_return_from_func(func_symbol->id.c_str());
           !ret.is_nil())

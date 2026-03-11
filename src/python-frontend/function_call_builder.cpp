@@ -142,7 +142,6 @@ symbol_id function_call_builder::build_function_id() const
   const std::string &func_type = func_json["_type"];
 
   std::string func_name, obj_name, class_name;
-  std::string resolved_module_path;
 
   symbol_id function_id(python_file, current_class_name, current_function_name);
 
@@ -158,6 +157,7 @@ symbol_id function_call_builder::build_function_id() const
   {
     is_member_function_call = true;
     func_name = func_json["attr"];
+    std::string resolved_module_path;
 
     // Get object name
     if (func_json["value"]["_type"] == "Attribute")
@@ -568,22 +568,47 @@ symbol_id function_call_builder::build_function_id() const
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
       if (!var_symbol)
-        throw std::runtime_error("Variable " + obj_name + " not found");
+      {
+        // Keep strict error for true unknown objects, but allow a conservative
+        // fallback when the receiver name matches an available module model.
+        // This preserves fail-tests that intentionally call module APIs
+        // without an explicit import (e.g. random.random()).
+        if (json_utils::is_module(obj_name, ast))
+        {
+          // Avoid accidental resolution to an unrelated plain function with
+          // the same short name (e.g. random). Keep this unresolved so the
+          // generic unsupported-function path triggers verification failure.
+          func_name = obj_name + "." + func_name;
+          is_member_function_call = false;
+        }
+        else
+          throw std::runtime_error("Variable " + obj_name + " not found");
+      }
 
       // Extract class name from the type, following symbol references
-      typet var_type = var_symbol->type.is_pointer()
-                         ? var_symbol->type.subtype()
-                         : var_symbol->type;
+      typet var_type;
+      if (var_symbol != nullptr)
+      {
+        var_type = var_symbol->type.is_pointer() ? var_symbol->type.subtype()
+                                                 : var_symbol->type;
+      }
+      else
+      {
+        // Conservatively skip class/member binding; the call will be handled
+        // by the general-function fallback path.
+        var_type = typet();
+      }
 
       // Follow symbol type references using the converter's namespace
-      var_type = converter_.ns.follow(var_type);
+      if (!var_type.id().empty())
+        var_type = converter_.ns.follow(var_type);
 
       if (var_type.is_struct())
       {
         const struct_typet &struct_type = to_struct_type(var_type);
         class_name = struct_type.tag().as_string();
       }
-      else
+      else if (!var_type.id().empty())
         class_name = th.type_to_string(var_type);
     }
   }
