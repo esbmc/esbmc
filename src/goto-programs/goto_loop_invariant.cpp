@@ -140,8 +140,7 @@ std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
   return extract_invariants_near(
-    loop.get_original_loop_head(),
-    goto_function.body.instructions.begin());
+    loop.get_original_loop_head(), goto_function.body.instructions.begin());
 }
 
 void goto_loop_invariantt::collect_symbols(
@@ -486,7 +485,7 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
 
 void goto_loop_invariant_combined(goto_functionst &goto_functions)
 {
-  Forall_goto_functions(it, goto_functions)
+  Forall_goto_functions (it, goto_functions)
     if (it->second.body_available)
       goto_loop_invariant_combinedt(it->first, goto_functions, it->second);
 
@@ -520,8 +519,7 @@ bool goto_loop_invariant_combinedt::copy_loop_body(
       for (const auto &tgt : it->targets)
       {
         unsigned tgt_loc = tgt->location_number;
-        if (tgt_loc != 0 &&
-            body_locs.find(tgt_loc) == body_locs.end())
+        if (tgt_loc != 0 && body_locs.find(tgt_loc) == body_locs.end())
           return false; // complex loop — skip Branch 1
       }
     }
@@ -539,8 +537,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
   // ── 1. Collect invariant expressions ──────────────────────────────────────
-  std::vector<expr2tc> invariants = extract_invariants_near(
-    loop_head, goto_function.body.instructions.begin());
+  std::vector<expr2tc> invariants =
+    extract_invariants_near(loop_head, goto_function.body.instructions.begin());
 
   if (invariants.empty())
     return;
@@ -576,8 +574,9 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   // [4b] HAVOC(loop_vars)
   for (const auto &var : loop_vars)
   {
-    if (config.options.get_bool_option("add-symex-value-sets") &&
-        is_pointer_type(var))
+    if (
+      config.options.get_bool_option("add-symex-value-sets") &&
+      is_pointer_type(var))
       continue;
 
     auto t = branch1.add_instruction(ASSIGN);
@@ -636,14 +635,14 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     t->location = loop_head->location;
 
     // Splice the gate at the front of branch1
-    branch1.instructions.splice(branch1.instructions.begin(), gate.instructions);
+    branch1.instructions.splice(
+      branch1.instructions.begin(), gate.instructions);
   }
 
   // ── 6. Insert before loop_head using splice (NOT insert_swap) ─────────────
   // splice() inserts before loop_head without moving it, so any existing
   // backward-GOTO target that points to loop_head continues to do so.
-  goto_function.body.instructions.splice(
-    loop_head, branch1.instructions);
+  goto_function.body.instructions.splice(loop_head, branch1.instructions);
 
   // ── 7. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
   // Inserting ASSUME(INV) just before loop_exit (the backward GOTO) means
