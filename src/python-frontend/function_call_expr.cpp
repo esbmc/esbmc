@@ -3499,7 +3499,7 @@ function_call_expr::get_dispatch_table()
        if (is_cpp_throw_expr(ln_base))
          return ln_base;
        return complex_div(ln_z, ln_base);
-    },
+     },
      "cmath log/log10"},
 
     // cmath inverse functions: use a fast path only on pure-imaginary inputs
@@ -3587,10 +3587,9 @@ function_call_expr::get_dispatch_table()
 
          exprt one = from_double(1.0, double_type());
          exprt imag_guard =
-           func_name == "atan" ? static_cast<exprt>(binary_relation_exprt(
-                                  abs_zi, "<", one))
-                               : static_cast<exprt>(binary_relation_exprt(
-                                   abs_zi, "<=", one));
+           func_name == "atan"
+             ? static_cast<exprt>(binary_relation_exprt(abs_zi, "<", one))
+             : static_cast<exprt>(binary_relation_exprt(abs_zi, "<=", one));
          fast_guard = and_exprt(fast_guard, imag_guard);
        }
 
