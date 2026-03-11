@@ -321,6 +321,7 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
 
 smt_astt smt_convt::get_zero_real()
 {
+  // Returns SMT representation of zero (0.0)
   return mk_smt_real("0");
 }
 
@@ -677,7 +678,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
-
   case expr2t::mul_id:
   {
     // Fixedbvs are handled separately
@@ -741,7 +741,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
-
   case expr2t::ieee_add_id:
   {
     assert(is_floatbv_type(expr));
@@ -859,9 +858,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt val1 = convert_ast(to_ieee_fma2t(expr).value_1);
       smt_astt val2 = convert_ast(to_ieee_fma2t(expr).value_2);
       smt_astt val3 = convert_ast(to_ieee_fma2t(expr).value_3);
+
       // Fused multiply-add: (val1 * val2) + val3
+      // In true FMA, the intermediate result isn't rounded
       smt_astt intermediate = mk_mul(val1, val2);
       smt_astt real_result = mk_add(intermediate, val3);
+
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
@@ -875,7 +877,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
-
   case expr2t::ieee_sqrt_id:
   {
     assert(is_floatbv_type(expr));
