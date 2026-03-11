@@ -749,6 +749,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt side1 = convert_ast(to_ieee_add2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_add2t(expr).side_2);
       smt_astt real_result = mk_add(side1, side2);
+
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
@@ -769,6 +770,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt side1 = convert_ast(to_ieee_sub2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_sub2t(expr).side_2);
       smt_astt real_result = mk_sub(side1, side2);
+
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
@@ -792,6 +794,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       // Check if either operand is zero for special-case handling in IEEE mul
       smt_astt zero = mk_smt_real("0.0");
       smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
+
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       a = apply_ieee754_semantics(real_result, fbv_type, operand_is_zero);
     }
