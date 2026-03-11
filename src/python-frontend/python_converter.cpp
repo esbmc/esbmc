@@ -5403,6 +5403,33 @@ std::string python_converter::infer_type_from_any_annotation(
   symbol_id func_sid(current_python_file, "", func_name);
   symbolt *func_symbol = symbol_table_.find_symbol(func_sid.to_string());
 
+  // For method calls (e.g., b.f()), the method symbol is stored under the
+  // class scope (py:file@C@ClassName@F@method), not the top-level scope.
+  // Look up the object's class and retry the symbol lookup.
+  if (
+    !func_symbol && func_node["_type"] == "Attribute" &&
+    func_node["value"].contains("id"))
+  {
+    const std::string obj_name = func_node["value"]["id"].get<std::string>();
+    symbol_id obj_sid = create_symbol_id();
+    obj_sid.set_object(obj_name);
+    const symbolt *obj_sym = symbol_table_.find_symbol(obj_sid.to_string());
+    if (obj_sym)
+    {
+      typet obj_type = ns.follow(obj_sym->type);
+      std::string class_name;
+      if (obj_type.is_struct())
+        class_name = to_struct_type(obj_type).tag().as_string();
+      if (class_name.rfind("tag-", 0) == 0)
+        class_name = class_name.substr(4);
+      if (!class_name.empty())
+      {
+        symbol_id method_sid(current_python_file, class_name, func_name);
+        func_symbol = symbol_table_.find_symbol(method_sid.to_string());
+      }
+    }
+  }
+
   if (func_symbol && func_symbol->type.is_code())
   {
     const code_typet &func_type = to_code_type(func_symbol->type);
@@ -8605,8 +8632,8 @@ void python_converter::get_return_statements(
   else
   {
     // If we're returning an array but the function expects a pointer,
-    // convert the array to a pointer (for string literals)
-    const typet &expected_return_type = current_element_type;
+    // convert the array to a pointer (for string literals).
+    const typet &expected_return_type = current_func_return_type_;
 
     if (expected_return_type.is_pointer() && return_value.type().is_array())
     {
