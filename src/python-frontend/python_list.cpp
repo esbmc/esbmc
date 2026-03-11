@@ -3258,67 +3258,50 @@ exprt python_list::build_min_max_for_mixed_numeric(
   const typet double_t = double_type();
   locationt loc = converter_.get_location_from_decl(list_value_);
 
-  // Access element i from the list and return it promoted to double
-  auto get_elem_as_double = [&](size_t i) -> exprt {
-    typet orig_type = type_info[i].second;
-    exprt index_expr = from_integer(BigInt(i), size_type());
-
-    // Build __ESBMC_list_at call (also emits bounds check IR)
-    exprt list_at = build_list_at_call(list_arg, index_expr, list_value_);
-
-    // Store PyObject* in temp symbol to avoid double-evaluation
-    symbolt &obj_sym = converter_.create_tmp_symbol(
-      list_value_, "$list_obj$", obj_ptr_type, exprt());
-    code_declt obj_decl(symbol_expr(obj_sym));
-    obj_decl.location() = loc;
-    converter_.add_instruction(obj_decl);
-    code_assignt obj_assign(symbol_expr(obj_sym), list_at);
-    obj_assign.location() = loc;
-    converter_.add_instruction(obj_assign);
-
-    // Extract value with original type, then promote to double if needed
-    exprt val = extract_pyobject_value(symbol_expr(obj_sym), orig_type);
-    if (!orig_type.is_floatbv())
-      return typecast_exprt(val, double_t);
-    return val;
+  // Declare a temp symbol, emit its declaration, and return its symbol_expr.
+  auto make_tmp = [&](const std::string &name, const typet &type) -> exprt {
+    symbolt &sym = converter_.create_tmp_symbol(list_value_, name, type, exprt());
+    code_declt decl(symbol_expr(sym));
+    decl.location() = loc;
+    converter_.add_instruction(decl);
+    return symbol_expr(sym);
   };
 
-  // Initialize result with the first element
-  symbolt &result_sym = converter_.create_tmp_symbol(
-    list_value_, "$minmax_result$", double_t, exprt());
-  code_declt result_decl(symbol_expr(result_sym));
-  result_decl.location() = loc;
-  converter_.add_instruction(result_decl);
+  // Access element i from the list and return it promoted to double.
+  auto get_elem_as_double = [&](size_t i) -> exprt {
+    typet orig_type = type_info[i].second;
+    exprt list_at =
+      build_list_at_call(list_arg, from_integer(BigInt(i), size_type()), list_value_);
+    exprt obj = make_tmp("$list_obj$", obj_ptr_type);
+    code_assignt assign_obj(obj, list_at);
+    assign_obj.location() = loc;
+    converter_.add_instruction(assign_obj);
+    exprt val = extract_pyobject_value(obj, orig_type);
+    return orig_type.is_floatbv() ? val : typecast_exprt(val, double_t);
+  };
 
-  code_assignt result_init(symbol_expr(result_sym), get_elem_as_double(0));
-  result_init.location() = loc;
-  converter_.add_instruction(result_init);
+  exprt result = make_tmp("$minmax_result$", double_t);
+  code_assignt init(result, get_elem_as_double(0));
+  init.location() = loc;
+  converter_.add_instruction(init);
 
-  // Compare each subsequent element and update result if it wins
   for (size_t i = 1; i < n; i++)
   {
-    symbolt &elem_sym = converter_.create_tmp_symbol(
-      list_value_, "$minmax_elem$", double_t, exprt());
-    code_declt elem_decl(symbol_expr(elem_sym));
-    elem_decl.location() = loc;
-    converter_.add_instruction(elem_decl);
+    exprt elem = make_tmp("$minmax_elem$", double_t);
+    code_assignt assign_elem(elem, get_elem_as_double(i));
+    assign_elem.location() = loc;
+    converter_.add_instruction(assign_elem);
 
-    code_assignt elem_assign(symbol_expr(elem_sym), get_elem_as_double(i));
-    elem_assign.location() = loc;
-    converter_.add_instruction(elem_assign);
-
-    // if (elem_sym comparison_op result_sym) result_sym = elem_sym
     exprt condition(comparison_op, bool_type());
-    condition.copy_to_operands(symbol_expr(elem_sym), symbol_expr(result_sym));
-
+    condition.copy_to_operands(elem, result);
     code_ifthenelset ite;
     ite.cond() = condition;
-    ite.then_case() = code_assignt(symbol_expr(result_sym), symbol_expr(elem_sym));
+    ite.then_case() = code_assignt(result, elem);
     ite.location() = loc;
     converter_.add_instruction(ite);
   }
 
-  return symbol_expr(result_sym);
+  return result;
 }
 
 exprt python_list::build_list_from_range(
