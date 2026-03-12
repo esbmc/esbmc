@@ -239,11 +239,16 @@ void function_call_expr::get_function_type()
       }
     }
 
-    // Detect A().f(...): method call on a temporary instance from a constructor.
+    // Detect A().f(...): method call on a temporary instance.
+    // This covers both direct construction (A().f()) and chained method calls
+    // (B().g().f()) — any Call node in the value position means the receiver
+    // is a temporary, so we must treat it as an InstanceMethod regardless of
+    // whether the inferred receiver class name matches a class in the AST.
     bool obj_is_temp_instance =
       call_["func"]["value"]["_type"] == "Call" &&
       call_["func"]["value"].contains("func") &&
-      call_["func"]["value"]["func"]["_type"] == "Name";
+      (call_["func"]["value"]["func"]["_type"] == "Name" ||
+       call_["func"]["value"]["func"]["_type"] == "Attribute");
 
     // Handling a function call as a class method call when:
     // (1) The caller corresponds to a class name, for example: MyClass.foo().
@@ -4602,8 +4607,38 @@ exprt function_call_expr::handle_general_function_call()
         }
         else
         {
-          exprt obj_expr = converter_.get_expr(func_value);
-          call.arguments().push_back(gen_address_of(obj_expr));
+          // Chained method call (e.g., B().g().f()): the receiver is the return
+          // value of an inner method call. Create a temp to hold it and use
+          // &temp as self so that self is addressable in the GOTO IR.
+          std::string receiver_type =
+            type_handler_.get_operand_type(func_value);
+          if (!receiver_type.empty())
+          {
+            typet class_type = type_handler_.get_typet(receiver_type);
+            symbolt &tmp = converter_.create_tmp_symbol(
+              func_value, "$inst$", class_type, exprt());
+            converter_.symbol_table().add(tmp);
+            code_declt tmp_decl(symbol_expr(tmp));
+            tmp_decl.location() = location;
+            converter_.current_block->copy_to_operands(tmp_decl);
+
+            // Process the inner call; set its LHS to tmp so the return value
+            // is stored there (emits: FUNCTION_CALL: tmp = inner_call(...)).
+            exprt inner_call = converter_.get_expr(func_value);
+            if (
+              inner_call.is_code() && inner_call.statement() == "function_call")
+            {
+              inner_call.op0() = symbol_expr(tmp);
+              inner_call.location() = location;
+              converter_.add_instruction(inner_call);
+            }
+            call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+          }
+          else
+          {
+            exprt obj_expr = converter_.get_expr(func_value);
+            call.arguments().push_back(gen_address_of(obj_expr));
+          }
         }
       }
       else
