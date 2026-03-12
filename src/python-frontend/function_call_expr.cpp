@@ -2714,6 +2714,7 @@ bool function_call_expr::is_dict_method_call() const
     return sym == nullptr || sym->type != list_type;
   }
 
+  // "popitem" is dict-only (lists have no popitem), no disambiguation needed.
   return true;
 }
 
@@ -2745,6 +2746,10 @@ exprt function_call_expr::handle_dict_method() const
 
   if (method_name == "pop")
     return converter_.get_dict_handler()->handle_dict_pop(
+      symbol_expr(*dict_symbol), call_);
+
+  if (method_name == "popitem")
+    return converter_.get_dict_handler()->handle_dict_popitem(
       symbol_expr(*dict_symbol), call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
