@@ -163,15 +163,47 @@ public:
   extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
 
   /**
-   * @brief Check if all elements in a list have the same type
+   * @brief Check if all elements in a list have the same type.
+   * For mixed int/float lists, returns double_type() (Python promotes int to
+   * float for comparisons). Throws for other mixed-type combinations.
    * @param list_id The list identifier
    * @param func_name The function name (for error messages)
-   * @return The common element type if all types match, empty typet() otherwise
-   * @throws std::runtime_error if mixed types are detected
+   * @return The common element type, double_type() for int/float mix, or
+   *         empty typet() when the list is unknown.
+   * @throws std::runtime_error if incompatible mixed types are detected
    */
   static typet check_homogeneous_list_types(
     const std::string &list_id,
     const std::string &func_name);
+
+  /**
+   * @brief Return true when the list contains both integer and float elements.
+   * Used to detect mixed-numeric lists that need special handling in min/max.
+   */
+  static bool has_mixed_numeric_types(const std::string &list_id);
+
+  /**
+   * @brief Build an inline min/max computation for a mixed int/float list.
+   * Accesses each element with its original type, promotes int elements to
+   * double for comparison, and returns the winning value as double.
+   *
+   * Note: Python's min/max returns the winning element in its *original* type
+   * (e.g., max([1, 2.5, 3]) returns int 3, not float 3.0). This implementation
+   * always returns double, which is correct for float comparisons and equality
+   * checks (via float promotion in handle_relational_type_mismatches), but will
+   * not work if the result is used as an array index or integer operand.
+   *
+   * @param list_arg  Expression for the list symbol
+   * @param list_id   Symbol identifier of the list
+   * @param func_name "min" or "max" (used in error messages)
+   * @param comparison_op  exprt::i_gt for max, exprt::i_lt for min
+   * @return Expression of type double_type() holding the min/max value
+   */
+  exprt build_min_max_for_mixed_numeric(
+    const exprt &list_arg,
+    const std::string &list_id,
+    const std::string &func_name,
+    irep_idt comparison_op);
 
   /**
    * @brief Create a list from a range() call

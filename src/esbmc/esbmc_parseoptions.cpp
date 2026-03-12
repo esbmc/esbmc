@@ -409,6 +409,11 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", false);
   }
 
+  // --loop-invariant implicitly enables k-induction solving so that
+  // do_bmc_strategy runs the full base/forward/inductive-step loop.
+  if (cmdline.isset("loop-invariant"))
+    options.set_option("k-induction", true);
+
   // Check for conflicting strategies
   if (cmdline.isset("k-induction") && cmdline.isset("termination"))
   {
@@ -699,7 +704,8 @@ int esbmc_parseoptionst::doit()
   // Now run one of the chosen strategies
   if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction"))
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant"))
     return do_bmc_strategy(options, goto_functions);
 
   // If no strategy is chosen, just rely on the simplifier
@@ -2005,21 +2011,30 @@ bool esbmc_parseoptionst::process_goto_program(
       interval_analysis(goto_functions, ns, options);
     }
 
-    if (
-      cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-      cmdline.isset("k-induction-parallel"))
-    {
-      // Always remove skips before doing k-induction.
-      // It seems to fix some issues for now
-      remove_no_op(goto_functions);
-      goto_k_induction(goto_functions);
-    }
+    bool is_k_induction = cmdline.isset("inductive-step") ||
+                          cmdline.isset("k-induction") ||
+                          cmdline.isset("k-induction-parallel");
 
     if (cmdline.isset("loop-invariant"))
     {
-      // Process loop invariants and insert assert/assume/havoc
+      // Combined mode: Branch 1 (invariant inductivity check) +
+      // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
-      goto_loop_invariant(goto_functions);
+      goto_loop_invariant_combined(goto_functions);
+      goto_k_induction(goto_functions);
+    }
+    else
+    {
+      // --k-induction and --loop-invariant-check are independent and may
+      // both be specified.  remove_no_op only needs to run once.
+      if (is_k_induction || cmdline.isset("loop-invariant-check"))
+        remove_no_op(goto_functions);
+
+      if (is_k_induction)
+        goto_k_induction(goto_functions);
+
+      if (cmdline.isset("loop-invariant-check"))
+        goto_loop_invariant(goto_functions);
     }
 
     if (

@@ -2318,6 +2318,14 @@ exprt python_converter::handle_relational_type_mismatches(
     return handle_float_vs_string(binary_expr, op);
   }
 
+  // Float vs integer: Python promotes int to float for all comparisons.
+  // e.g., 3.0 == 3  →  3.0 == 3.0  (True)
+  if (lhs_is_float && (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+    rhs = typecast_exprt(rhs, lhs.type());
+  else if (
+    rhs_is_float && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+    lhs = typecast_exprt(lhs, rhs.type());
+
   return nil_exprt();
 }
 
@@ -5532,6 +5540,55 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   if (value_type == "Lambda")
   {
     inferred_type = any_type();
+  }
+  else if (
+    value_type == "Call" &&
+    ast_node["value"]["func"].value("_type", "") == "Attribute" &&
+    ast_node["value"]["func"]["value"].value("_type", "") == "Name")
+  {
+    // For dict method calls that emit instructions via converter_.add_instruction()
+    // (pop, get, setdefault), calling get_expr() here for type inference would
+    // execute the side effects a second time when the actual assignment is
+    // processed.  Pop is especially harmful: the first evaluation removes the
+    // key, so the second evaluation can't find it and throws KeyError.
+    // Instead, infer the return type directly from the dict's value annotation.
+    const std::string &method =
+      ast_node["value"]["func"]["attr"].get<std::string>();
+    const std::string &obj_name =
+      ast_node["value"]["func"]["value"]["id"].get<std::string>();
+
+    // Disambiguate by checking the actual symbol type, not just the annotation,
+    // so that unannotated dict variables are also handled correctly.
+    symbol_id obj_sid = create_symbol_id();
+    obj_sid.set_object(obj_name);
+    const symbolt *obj_sym = symbol_table_.find_symbol(obj_sid.to_string());
+
+    // Value-returning dict methods emit IR instructions as a side-effect and
+    // must not be called via get_expr() during type inference (double-eval).
+    bool is_dict_method =
+      python_dict_handler::is_value_returning_method(method) &&
+      obj_sym != nullptr &&
+      dict_handler_->is_dict_type(ns.follow(obj_sym->type));
+
+    if (is_dict_method)
+    {
+      // obj_sym != nullptr is guaranteed by the is_dict_method check above
+      inferred_type = dict_handler_->resolve_expected_type_for_dict_subscript(
+        symbol_expr(*obj_sym));
+      if (inferred_type.is_nil() || inferred_type.is_empty())
+        inferred_type = long_int_type();
+    }
+    else
+    {
+      is_converting_rhs = true;
+      exprt rhs_expr = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+      inferred_type = rhs_expr.type();
+      if (inferred_type.is_empty())
+        inferred_type = any_type();
+      else if (inferred_type.is_code())
+        inferred_type = gen_pointer_type(inferred_type);
+    }
   }
   else
   {
