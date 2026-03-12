@@ -14,7 +14,7 @@ N.B. Make sure the `clang++` binary you'll be using points to the one used by ES
 
 The following subsections uses the example TC `regression/esbmc-cpp/stream/istream_get_1`. So, `test_main.cpp` == `regression/esbmc-cpp/stream/istream_get_1/main.cpp`, and `../library/` == `src/cpp/library`.
 
-# Get a list of included library dependencies for a specific TC
+## Get a list of included library dependencies for a specific TC
 ```
 clang++ -H test_main.cpp -I ../library/ -ferror-limit=1 -v -w
 ```
@@ -47,7 +47,7 @@ Manually deleting the error (if there is any) gives the following list:
 .... ../library/exception
 ```
 
-# Get all errors for a specific TC
+## Get all errors for a specific TC
 Do NOT simply use the clang invocation cmd line as it will probably show more errors, such as missing declaration for "__ESBMC__assert" or some intrinsics. 
 
 Use the following patch to view all errors in an OM: 
@@ -60,7 +60,7 @@ where main.cpp is the sanity check TC for an OM, library points to our OMs as in
 
 This command outputs everything to `error.txt` file which contains all erorrs reported by clang for each dependency OM. 
 
-# Get the number of errors in each dependency OM for a specifc TC: 
+## Get the number of errors in each dependency OM for a specifc TC:
 ```
 egrep "/library.*:[0-9]+:[0-9]+: error" error.txt -o | cut -d':' -f1 | sort | uniq -c
 ```
@@ -78,7 +78,7 @@ Output:
 
 Then we know how many errors we need to fix in each dependency OM for a specific test case. See next subsection for guidelines to fix them.
 
-# Guideline to fix errors in each OM:
+## Guideline to fix errors in each OM:
 First we need to separate this OM from the include tree using the following TC template
 ```cpp
 #include <your-target-OM>
@@ -93,12 +93,12 @@ int main()
 Then fix all errors reported by clang, and submit a PR that enables the above test case. 
 
 
-# What kind of APIs should a OM provide? 
+## What kind of APIs should a OM provide?
 To answer this question, we need to look at what kind of APIS are provided in the corresponding C++ standard library. The following links gives a good overview of the standard libraries. 
 
 - cppreferenc.com: https://en.cppreference.com/w/cpp/header/cstring
 - cplusplus.com: https://cplusplus.com/reference/cstring/ 
 
-### OM dev tracking: 
+## OM dev tracking:
 
 See wiki page https://github.com/esbmc/esbmc/wiki/OM-Workload-Estimate-and-Tracking

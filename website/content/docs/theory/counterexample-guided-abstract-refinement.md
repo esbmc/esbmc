@@ -3,7 +3,7 @@ title:
   "Counterexample Guided Abstract Refinement: Integer vs. Bit-Vector Encoding"
 ---
 
-### Example 1: Checking the Pythagorean Theorem
+## Example 1: Checking the Pythagorean Theorem
 
 Consider the following C program that resembles the Pythagorean theorem in
 mathematics:
@@ -66,7 +66,7 @@ example1-test: example1-test.c:9: int main(): Assertion `(a * a) + (b * b) == (c
 Aborted (core dumped)
 ```
 
-### Key Takeaways:
+## Key Takeaways:
 
 - Bit-vector encoding makes it harder for SMT solvers to find counterexamples
   due to the bit-precise arithmetic at large bit-widths.
@@ -75,7 +75,7 @@ Aborted (core dumped)
 - This demonstrates the impact of encoding choices on the efficiency of
   SMT-based verification tools.
 
-### Example 2: Handling Overflow in Integer Addition
+## Example 2: Handling Overflow in Integer Addition
 
 However, let's now consider that we have this C program:
 
