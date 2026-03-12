@@ -8,6 +8,7 @@
 #include <util/message.h>
 
 #include <string>
+#include <unordered_set>
 
 enum class InferResult
 {
@@ -605,6 +606,47 @@ private:
     }
   }
 
+  // Returns the ancestors of a class (including itself) in BFS order via
+  // "bases". Handles multiple inheritance and cycle-safe (visited guard).
+  // "object" is intentionally excluded — it has no ESBMC IR representation.
+  std::vector<std::string> get_class_ancestors(const std::string &class_name)
+  {
+    std::vector<std::string> ancestors;
+    std::unordered_set<std::string> visited;
+    std::vector<std::string> worklist = {class_name};
+    size_t idx = 0;
+    while (idx < worklist.size())
+    {
+      std::string cur = worklist[idx++];
+      if (cur.empty() || cur == "object" || visited.count(cur))
+        continue;
+      visited.insert(cur);
+      ancestors.push_back(cur);
+      Json cls = json_utils::find_class(ast_["body"], cur);
+      if (cls.empty() || !cls.contains("bases"))
+        continue;
+      for (const auto &base : cls["bases"])
+        if (base.contains("id"))
+          worklist.push_back(base["id"].template get<std::string>());
+    }
+    return ancestors;
+  }
+
+  // Returns the lowest common ancestor of two user-defined class types, or "".
+  std::string find_common_ancestor(
+    const std::string &type_a,
+    const std::string &type_b)
+  {
+    std::vector<std::string> ancestors_a = get_class_ancestors(type_a);
+    std::unordered_set<std::string> ancestors_b_set;
+    for (const auto &anc : get_class_ancestors(type_b))
+      ancestors_b_set.insert(anc);
+    for (const auto &anc : ancestors_a)
+      if (ancestors_b_set.count(anc))
+        return anc;
+    return "";
+  }
+
   // Method to infer parameter type from function calls
   std::string infer_parameter_type_from_calls(
     size_t param_index,
@@ -625,16 +667,11 @@ private:
             inferred_type = arg_type;
           else if (inferred_type != arg_type)
           {
-            // Type conflict between calls, use int as safe fallback
-            log_warning(
-              "Type inference conflict for parameter {}: {} vs {}. Using 'int' "
-              "as fallback ({}:{})",
-              param_index,
-              inferred_type,
-              arg_type,
-              python_filename_,
-              current_line_);
-            return "int";
+            std::string common = find_common_ancestor(inferred_type, arg_type);
+            if (!common.empty())
+              inferred_type = common;
+            else
+              return "Any";
           }
         }
       }
