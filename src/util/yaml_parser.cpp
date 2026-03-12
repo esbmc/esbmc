@@ -2,7 +2,10 @@
 #include <util/c_string2expr.h>
 #include <util/expr_util.h>
 
-yaml_parser::yaml_parser(const std::string &path, contextt &ns, optionst &options)
+yaml_parser::yaml_parser(
+  const std::string &path,
+  contextt &ns,
+  optionst &options)
   : file_path_(path), context_(ns), options_(options)
 {
 }
