@@ -27,7 +27,7 @@ endif()
 endif()
 
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
-
+set(ESBMC_TEST_TIMEOUT 1000 CACHE STRING "Per-test timeout in seconds for regression tests")
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
   #   - BENCHMARK_TO_RUN: user-specified benchmark to run
@@ -51,11 +51,12 @@ function(add_esbmc_regression_test folder modes test)
                      --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
                      --modes ${modes}
                      --file=${test}
+                     --timeout=${ESBMC_TEST_TIMEOUT}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
     # TODO: Testing Tool should have a command to dump the TAG of a test
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
-      TIMEOUT 1000
+      TIMEOUT ${ESBMC_TEST_TIMEOUT}
       LABELS "regression;${folder}")
 endfunction()
 

@@ -170,8 +170,15 @@ class Executor:
 
         except subprocess.CalledProcessError:
             return None, None, 0
-        except subprocess.TimeoutExpired:
-            return None, None, 1
+        except subprocess.TimeoutExpired as e:
+            msg = "Process timed out after {}s\nCommand: {}".format(
+                e.timeout, " ".join(str(a) for a in e.cmd))
+            partial = b""
+            if e.stdout:
+                partial += e.stdout
+            if e.stderr:
+                partial += e.stderr
+            return None, msg.encode() + b"\n" + partial, 1
 
         return p.stdout, p.stderr, p.returncode
 
@@ -191,7 +198,7 @@ class RegressionBase(unittest.TestCase):
     longMessage = True
 
     FAIL_WITH_WORD: str = None
-    TIMEOUT = 1000
+    TIMEOUT = None  # set via --timeout from CMake
     MEMORY_LIMIT = 8 * 1024 * 1024 * 1024  # 8 GB; use --memory-limit to change
 
     def setUp(self):
@@ -211,8 +218,10 @@ def _add_test(test_case, executor):
     def test(self):
         stdout, stderr, rc = executor.run(test_case)
 
-        if stdout == None:
+        if stdout is None:
             timeout_message = "\nTIMEOUT TEST: " + str(test_case.test_dir)
+            if stderr:
+                timeout_message += "\n" + stderr.decode(errors="replace")
             self.fail(timeout_message)
 
         if TestCase.RUN_ONLY:
@@ -317,10 +326,10 @@ def _arg_parsing():
     )
 
     main_args = parser.parse_args()
-    if main_args.timeout:
-        RegressionBase.TIMEOUT = int(main_args.timeout)
-    if main_args.memory_limit:
-        RegressionBase.MEMORY_LIMIT = main_args.memory_limit * 1024 * 1024
+    if main_args.timeout is not None:
+        RegressionBase.TIMEOUT = int(main_args.timeout) or None
+    if main_args.memory_limit is not None:
+        RegressionBase.MEMORY_LIMIT = (main_args.memory_limit * 1024 * 1024) or None
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
     regression_path = os.path.join(

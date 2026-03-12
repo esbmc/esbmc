@@ -495,10 +495,10 @@ void bmct::report_multi_property_trace(
     std::string witness_graphml_output =
       options.get_option("witness-output-graphml");
     std::string witness_yaml_output = options.get_option("witness-output-yaml");
-    if (witness_graphml_output != "")
+    if (!witness_graphml_output.empty())
       violation_graphml_goto_trace(options, ns, goto_trace);
 
-    if (witness_yaml_output != "")
+    if (!witness_yaml_output.empty())
       violation_yaml_goto_trace(options, ns, goto_trace);
 
     if (options.get_bool_option("generate-testcase"))
