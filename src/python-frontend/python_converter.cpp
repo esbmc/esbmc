@@ -2320,13 +2320,10 @@ exprt python_converter::handle_relational_type_mismatches(
 
   // Float vs integer: Python promotes int to float for all comparisons.
   // e.g., 3.0 == 3  →  3.0 == 3.0  (True)
-  if (
-    lhs_is_float &&
-    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+  if (lhs_is_float && (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
     rhs = typecast_exprt(rhs, lhs.type());
   else if (
-    rhs_is_float &&
-    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+    rhs_is_float && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
     lhs = typecast_exprt(lhs, rhs.type());
 
   return nil_exprt();

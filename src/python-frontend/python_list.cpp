@@ -3199,15 +3199,16 @@ typet python_list::check_homogeneous_list_types(
 
     if (current_elem_type.is_floatbv())
       has_float = true;
-    else if (current_elem_type.is_signedbv() || current_elem_type.is_unsignedbv())
+    else if (
+      current_elem_type.is_signedbv() || current_elem_type.is_unsignedbv())
       has_int = true;
 
     // Only int<->float mixing is allowed (Python promotes int to float).
     // Any other mismatch — including different-width or signed/unsigned integers
     // — is an error.
     bool int_float_mix =
-      (elem_type.is_floatbv() &&
-       (current_elem_type.is_signedbv() || current_elem_type.is_unsignedbv())) ||
+      (elem_type.is_floatbv() && (current_elem_type.is_signedbv() ||
+                                  current_elem_type.is_unsignedbv())) ||
       ((elem_type.is_signedbv() || elem_type.is_unsignedbv()) &&
        current_elem_type.is_floatbv());
     if (elem_type != current_elem_type && !int_float_mix)
@@ -3255,13 +3256,15 @@ exprt python_list::build_min_max_for_mixed_numeric(
   if (n == 0)
     throw std::runtime_error(func_name + "() arg is an empty sequence");
 
-  pointer_typet obj_ptr_type(converter_.get_type_handler().get_list_element_type());
+  pointer_typet obj_ptr_type(
+    converter_.get_type_handler().get_list_element_type());
   const typet double_t = double_type();
   locationt loc = converter_.get_location_from_decl(list_value_);
 
   // Declare a temp symbol, emit its declaration, and return its symbol_expr.
   auto make_tmp = [&](const std::string &name, const typet &type) -> exprt {
-    symbolt &sym = converter_.create_tmp_symbol(list_value_, name, type, exprt());
+    symbolt &sym =
+      converter_.create_tmp_symbol(list_value_, name, type, exprt());
     code_declt decl(symbol_expr(sym));
     decl.location() = loc;
     converter_.add_instruction(decl);
@@ -3271,8 +3274,8 @@ exprt python_list::build_min_max_for_mixed_numeric(
   // Access element i from the list and return it promoted to double.
   auto get_elem_as_double = [&](size_t i) -> exprt {
     typet orig_type = type_info[i].second;
-    exprt list_at =
-      build_list_at_call(list_arg, from_integer(BigInt(i), size_type()), list_value_);
+    exprt list_at = build_list_at_call(
+      list_arg, from_integer(BigInt(i), size_type()), list_value_);
     exprt obj = make_tmp("$list_obj$", obj_ptr_type);
     code_assignt assign_obj(obj, list_at);
     assign_obj.location() = loc;

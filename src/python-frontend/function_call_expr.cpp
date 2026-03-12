@@ -4198,8 +4198,7 @@ exprt function_call_expr::handle_general_function_call()
       // Mixed int/float list: inline the comparison to avoid type confusion
       // when passing the list to max_float/min_float model functions.
       if (
-        elem_type.is_floatbv() &&
-        (func_name == "min" || func_name == "max") &&
+        elem_type.is_floatbv() && (func_name == "min" || func_name == "max") &&
         python_list::has_mixed_numeric_types(list_id))
       {
         irep_idt comparison_op =
