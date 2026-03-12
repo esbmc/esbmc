@@ -2030,12 +2030,16 @@ bool esbmc_parseoptionst::process_goto_program(
         return true;
       }
 
-      yaml_parser parser(path);
+      yaml_parser parser(path, context, options);
       if (parser.load_file())
         return true;
 
       if (parser.inject_loop_invariants(goto_functions))
         return true;
+
+      goto_functions.update();
+      remove_no_op(goto_functions);
+      goto_loop_invariant(goto_functions);
     }
 
     if (cmdline.isset("loop-invariant"))
