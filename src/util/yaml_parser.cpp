@@ -1,7 +1,9 @@
 #include <yaml_parser.h>
-#include <c_string2expr.h>
+#include <util/c_string2expr.h>
+#include <util/expr_util.h>
 
-yaml_parser::yaml_parser(const std::string &path) : file_path_(path)
+yaml_parser::yaml_parser(const std::string &path, contextt &ns, optionst &options)
+  : file_path_(path), context_(ns), options_(options)
 {
 }
 
@@ -10,6 +12,8 @@ bool yaml_parser::load_file()
   try
   {
     root_ = YAML::LoadFile(file_path_);
+    if (get_invariants())
+      return true;
   }
   catch (const YAML::Exception &e)
   {
@@ -88,9 +92,70 @@ invariant::Type yaml_parser::type_from_string(const std::string &s) const
 bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
 {
   expression_parser parser;
-  const expression_node *root = parser.parse("s.x <= i*255 && i->y > 0");
-  root->dump();
-  return true;
+  for (const auto &inv : parsed_invariants_)
+  {
+    std::string func_id = "c:@F@" + inv.function;
+    goto_functionst::function_mapt::iterator m_it =
+      goto_functions.function_map.find(func_id);
+    bool match_line = false;
+    if (m_it != goto_functions.function_map.end())
+    {
+      goto_programt &func = m_it->second.body;
+      Forall_goto_program_instructions (it, func)
+      {
+        int line = std::stoi(it->location.line().as_string());
+        if (it->is_goto() && line == inv.line)
+        {
+          match_line = true;
+          const expression_node *root = nullptr;
+          if (parser.parse(inv.value, root))
+          {
+            log_warning(
+              "failed to build the AST of witness expression: {}, skip it",
+              inv.value);
+            continue;
+          }
 
-  //return false;
+          if (options_.get_bool_option("witness-parse-tree"))
+            root->dump();
+
+          expression_converter converter(context_);
+          exprt expr;
+
+          if (converter.convert(root, expr))
+          {
+            log_warning(
+              "failed to convert the witness AST: {}, skip it", inv.value);
+            continue;
+          }
+
+          expr2tc gaurd;
+          migrate_expr(expr, gaurd);
+
+          goto_programt::targett t = func.insert(it);
+          t->type = LOOP_INVARIANT;
+          t->add_loop_invariant(gaurd);
+          t->location = it->location;
+          log_progress(
+            "Applied loop invariant: {} in line {}",
+            inv.value,
+            t->location.line());
+          break;
+        }
+      }
+      if (!match_line)
+        log_warning("can not find a loop in line '{}'", inv.line);
+    }
+    else
+    {
+      log_warning("can not find wintness function '{}'", inv.value);
+      continue;
+    }
+  }
+
+  if (options_.get_bool_option("witness-parse-tree"))
+    // stop verify for debug
+    return true;
+
+  return false;
 }
