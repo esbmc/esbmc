@@ -1,5 +1,6 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_converter.h>
+#include <util/c_types.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
@@ -1920,6 +1921,19 @@ exprt python_list::handle_index_access(
           }
         }
 
+        // If array is a constant placeholder (e.g., from a chained OOB access),
+        // we're in dead code after a prior IndexError. Emit IndexError and return
+        // a placeholder rather than crashing the frontend.
+        if (!array.is_symbol() && array.is_constant())
+        {
+          exprt raise = converter_.get_exception_handler().gen_exception_raise(
+            "IndexError", "list index out of range");
+          codet throw_code("expression");
+          throw_code.operands().push_back(raise);
+          converter_.add_instruction(throw_code);
+          return gen_zero(size_type());
+        }
+
         const locationt l = converter_.get_location_from_decl(list_value_);
         throw std::runtime_error(
           "List out of bounds at " + l.get_file().as_string() +
@@ -3171,7 +3185,10 @@ typet python_list::check_homogeneous_list_types(
            (t.is_pointer() && t.subtype() == char_type());
   };
 
-  // Check all other elements have the same type
+  // Scan all elements to detect mixed int/float
+  bool has_int = elem_type.is_signedbv() || elem_type.is_unsignedbv();
+  bool has_float = elem_type.is_floatbv();
+
   for (size_t i = 1; i < list_size; i++)
   {
     const typet &current_elem_type = type_info[i].second;
@@ -3180,8 +3197,21 @@ typet python_list::check_homogeneous_list_types(
     if (is_string_type(elem_type) && is_string_type(current_elem_type))
       continue;
 
-    // For non-string types, require exact match
-    if (elem_type != current_elem_type)
+    if (current_elem_type.is_floatbv())
+      has_float = true;
+    else if (
+      current_elem_type.is_signedbv() || current_elem_type.is_unsignedbv())
+      has_int = true;
+
+    // Only int<->float mixing is allowed (Python promotes int to float).
+    // Any other mismatch — including different-width or signed/unsigned integers
+    // — is an error.
+    bool int_float_mix =
+      (elem_type.is_floatbv() && (current_elem_type.is_signedbv() ||
+                                  current_elem_type.is_unsignedbv())) ||
+      ((elem_type.is_signedbv() || elem_type.is_unsignedbv()) &&
+       current_elem_type.is_floatbv());
+    if (elem_type != current_elem_type && !int_float_mix)
     {
       throw std::runtime_error(
         "Type mismatch in " + func_name +
@@ -3191,7 +3221,91 @@ typet python_list::check_homogeneous_list_types(
     }
   }
 
+  // Mixed int and float: Python promotes int to float for comparisons
+  if (has_int && has_float)
+    return double_type();
+
   return elem_type;
+}
+
+bool python_list::has_mixed_numeric_types(const std::string &list_id)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || it->second.empty())
+    return false;
+  bool has_int = false, has_float = false;
+  for (const auto &elem : it->second)
+  {
+    if (elem.second.is_floatbv())
+      has_float = true;
+    else if (elem.second.is_signedbv() || elem.second.is_unsignedbv())
+      has_int = true;
+  }
+  return has_int && has_float;
+}
+
+exprt python_list::build_min_max_for_mixed_numeric(
+  const exprt &list_arg,
+  const std::string &list_id,
+  const std::string &func_name,
+  irep_idt comparison_op)
+{
+  const TypeInfo &type_info = list_type_map.at(list_id);
+  size_t n = type_info.size();
+
+  if (n == 0)
+    throw std::runtime_error(func_name + "() arg is an empty sequence");
+
+  pointer_typet obj_ptr_type(
+    converter_.get_type_handler().get_list_element_type());
+  const typet double_t = double_type();
+  locationt loc = converter_.get_location_from_decl(list_value_);
+
+  // Declare a temp symbol, emit its declaration, and return its symbol_expr.
+  auto make_tmp = [&](const std::string &name, const typet &type) -> exprt {
+    symbolt &sym =
+      converter_.create_tmp_symbol(list_value_, name, type, exprt());
+    code_declt decl(symbol_expr(sym));
+    decl.location() = loc;
+    converter_.add_instruction(decl);
+    return symbol_expr(sym);
+  };
+
+  // Access element i from the list and return it promoted to double.
+  auto get_elem_as_double = [&](size_t i) -> exprt {
+    typet orig_type = type_info[i].second;
+    exprt list_at = build_list_at_call(
+      list_arg, from_integer(BigInt(i), size_type()), list_value_);
+    exprt obj = make_tmp("$list_obj$", obj_ptr_type);
+    code_assignt assign_obj(obj, list_at);
+    assign_obj.location() = loc;
+    converter_.add_instruction(assign_obj);
+    exprt val = extract_pyobject_value(obj, orig_type);
+    return orig_type.is_floatbv() ? val : typecast_exprt(val, double_t);
+  };
+
+  exprt result = make_tmp("$minmax_result$", double_t);
+  code_assignt init(result, get_elem_as_double(0));
+  init.location() = loc;
+  converter_.add_instruction(init);
+
+  for (size_t i = 1; i < n; i++)
+  {
+    exprt elem = make_tmp("$minmax_elem$", double_t);
+    code_assignt assign_elem(elem, get_elem_as_double(i));
+    assign_elem.location() = loc;
+    converter_.add_instruction(assign_elem);
+
+    exprt condition(comparison_op, bool_type());
+    condition.copy_to_operands(elem, result);
+    code_ifthenelset ite;
+    ite.cond() = condition;
+    ite.then_case() = code_assignt(result, elem);
+    ite.location() = loc;
+    converter_.add_instruction(ite);
+  }
+
+  return result;
 }
 
 exprt python_list::build_list_from_range(

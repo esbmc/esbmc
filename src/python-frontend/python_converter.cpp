@@ -36,6 +36,7 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <regex>
 #include <stdexcept>
 #include <sstream>
@@ -1648,6 +1649,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Convert function calls to side effects
   convert_function_calls_to_side_effects(lhs, rhs);
+  if (lhs.statement() == "cpp-throw")
+    return lhs;
+  if (rhs.statement() == "cpp-throw")
+    return rhs;
 
   // Dispatch dunder methods for user-defined struct types
   {
@@ -1706,6 +1711,77 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       out.copy_to_operands(x, y);
       return out;
     };
+    auto complex_mul = [&](const exprt &x, const exprt &y) -> exprt {
+      const exprt xr = member(x, "real");
+      const exprt xi = member(x, "imag");
+      const exprt yr = member(y, "real");
+      const exprt yi = member(y, "imag");
+      exprt ac = ieee_binop("ieee_mul", xr, yr);
+      exprt bd = ieee_binop("ieee_mul", xi, yi);
+      exprt ad = ieee_binop("ieee_mul", xr, yi);
+      exprt bc = ieee_binop("ieee_mul", xi, yr);
+      return make_complex(
+        ieee_binop("ieee_sub", ac, bd), ieee_binop("ieee_add", ad, bc));
+    };
+    auto complex_div = [&](const exprt &x, const exprt &y) -> exprt {
+      const exprt xr = member(x, "real");
+      const exprt xi = member(x, "imag");
+      const exprt yr = member(y, "real");
+      const exprt yi = member(y, "imag");
+      exprt ac = ieee_binop("ieee_mul", xr, yr);
+      exprt bd = ieee_binop("ieee_mul", xi, yi);
+      exprt bc = ieee_binop("ieee_mul", xi, yr);
+      exprt ad = ieee_binop("ieee_mul", xr, yi);
+      exprt c2 = ieee_binop("ieee_mul", yr, yr);
+      exprt d2 = ieee_binop("ieee_mul", yi, yi);
+      exprt numer_real = ieee_binop("ieee_add", ac, bd);
+      exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
+      exprt denom = ieee_binop("ieee_add", c2, d2);
+      return make_complex(
+        ieee_binop("ieee_div", numer_real, denom),
+        ieee_binop("ieee_div", numer_imag, denom));
+    };
+    auto complex_log = [&](const exprt &z) -> exprt {
+      const exprt zr = member(z, "real");
+      const exprt zi = member(z, "imag");
+      const exprt zr2 = ieee_binop("ieee_mul", zr, zr);
+      const exprt zi2 = ieee_binop("ieee_mul", zi, zi);
+      const exprt abs2 = ieee_binop("ieee_add", zr2, zi2);
+
+      exprt abs_z = get_math_handler().handle_sqrt(abs2, element);
+      if (abs_z.statement() == "cpp-throw")
+        return abs_z;
+
+      exprt ln_abs = get_math_handler().handle_log(abs_z, element);
+      if (ln_abs.statement() == "cpp-throw")
+        return ln_abs;
+
+      exprt arg_z = get_math_handler().handle_atan2(zi, zr, element);
+      if (arg_z.statement() == "cpp-throw")
+        return arg_z;
+
+      return make_complex(ln_abs, arg_z);
+    };
+    auto complex_exp = [&](const exprt &z) -> exprt {
+      const exprt zr = member(z, "real");
+      const exprt zi = member(z, "imag");
+
+      exprt exp_real = get_math_handler().handle_exp(zr, element);
+      if (exp_real.statement() == "cpp-throw")
+        return exp_real;
+
+      exprt cos_imag = get_math_handler().handle_cos(zi, element);
+      if (cos_imag.statement() == "cpp-throw")
+        return cos_imag;
+
+      exprt sin_imag = get_math_handler().handle_sin(zi, element);
+      if (sin_imag.statement() == "cpp-throw")
+        return sin_imag;
+
+      exprt real = ieee_binop("ieee_mul", exp_real, cos_imag);
+      exprt imag = ieee_binop("ieee_mul", exp_real, sin_imag);
+      return make_complex(real, imag);
+    };
 
     if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
       return raise_complex_type_error(
@@ -1714,6 +1790,132 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (op == "FloorDiv" || op == "Mod")
       return raise_complex_type_error(
         "can't take floor or mod of complex number");
+
+    if (op == "Pow")
+    {
+      if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
+        return raise_complex_type_error(
+          "unsupported operand type(s) for " + op_symbol(op) + ": '" +
+          expr_python_type_name(lhs) + "' and '" + expr_python_type_name(rhs) +
+          "'");
+
+      exprt lhs_complex = promote_to_complex(lhs);
+      if (lhs_complex.statement() == "cpp-throw")
+        return lhs_complex;
+
+      exprt resolved_rhs = rhs;
+      if (rhs.is_symbol())
+      {
+        const symbolt *s = symbol_table_.find_symbol(rhs.identifier());
+        if (s && !s->value.is_nil())
+          resolved_rhs = s->value;
+      }
+      else if (
+        rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" ||
+        rhs.id() == "/")
+      {
+        resolved_rhs = get_math_handler().compute_expr(rhs);
+      }
+      if (resolved_rhs.statement() == "cpp-throw")
+        return resolved_rhs;
+
+      BigInt exponent_big;
+      bool has_integer_exponent = false;
+
+      if (resolved_rhs.is_true())
+      {
+        exponent_big = BigInt(1);
+        has_integer_exponent = true;
+      }
+      else if (resolved_rhs.is_false())
+      {
+        exponent_big = BigInt(0);
+        has_integer_exponent = true;
+      }
+      else if (
+        resolved_rhs.id() == "unary-" && resolved_rhs.operands().size() == 1)
+      {
+        BigInt inner;
+        if (!to_integer(resolved_rhs.op0(), inner))
+        {
+          exponent_big = -inner;
+          has_integer_exponent = true;
+        }
+      }
+      else if (
+        resolved_rhs.id() == "unary+" && resolved_rhs.operands().size() == 1)
+      {
+        BigInt inner;
+        if (!to_integer(resolved_rhs.op0(), inner))
+        {
+          exponent_big = inner;
+          has_integer_exponent = true;
+        }
+      }
+      else if (!to_integer(resolved_rhs, exponent_big))
+      {
+        has_integer_exponent = true;
+      }
+
+      if (!has_integer_exponent)
+      {
+        exprt rhs_complex = promote_to_complex(resolved_rhs);
+        if (rhs_complex.statement() == "cpp-throw")
+          return rhs_complex;
+
+        exprt lhs_log = complex_log(lhs_complex);
+        if (lhs_log.statement() == "cpp-throw")
+          return lhs_log;
+
+        exprt product = complex_mul(rhs_complex, lhs_log);
+        return complex_exp(product);
+      }
+
+      static const BigInt min_long = BigInt(std::numeric_limits<long>::min());
+      static const BigInt max_long = BigInt(std::numeric_limits<long>::max());
+      if (exponent_big < min_long || exponent_big > max_long)
+      {
+        return raise_complex_type_error(
+          "complex exponent out of supported integer range");
+      }
+
+      auto pow_nonnegative = [&](unsigned long long exponent_abs) -> exprt {
+        exprt acc = make_complex(
+          from_double(1.0, double_type()), from_double(0.0, double_type()));
+        exprt base = lhs_complex;
+
+        while (exponent_abs > 0)
+        {
+          if ((exponent_abs & 1ULL) != 0ULL)
+            acc = complex_mul(acc, base);
+
+          exponent_abs >>= 1U;
+          if (exponent_abs > 0)
+            base = complex_mul(base, base);
+        }
+
+        return acc;
+      };
+
+      const long exponent = exponent_big.to_int64();
+      if (exponent >= 0)
+      {
+        return pow_nonnegative(static_cast<unsigned long long>(exponent));
+      }
+
+      if (exponent == std::numeric_limits<long>::min())
+      {
+        return raise_complex_type_error(
+          "complex exponent out of supported integer range");
+      }
+
+      const unsigned long long exponent_abs =
+        static_cast<unsigned long long>(-exponent);
+      exprt positive_power = pow_nonnegative(exponent_abs);
+      exprt one = make_complex(
+        from_double(1.0, double_type()), from_double(0.0, double_type()));
+      return complex_div(one, positive_power);
+    }
 
     if (
       op == "Add" || op == "Sub" || op == "Mult" || op == "Div" || op == "Eq" ||
@@ -1735,6 +1937,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
       exprt lhs_complex = promote_to_complex(lhs);
       exprt rhs_complex = promote_to_complex(rhs);
+      if (lhs_complex.statement() == "cpp-throw")
+        return lhs_complex;
+      if (rhs_complex.statement() == "cpp-throw")
+        return rhs_complex;
 
       const exprt a = member(lhs_complex, "real");
       const exprt b = member(lhs_complex, "imag");
@@ -2111,6 +2317,14 @@ exprt python_converter::handle_relational_type_mismatches(
 
     return handle_float_vs_string(binary_expr, op);
   }
+
+  // Float vs integer: Python promotes int to float for all comparisons.
+  // e.g., 3.0 == 3  →  3.0 == 3.0  (True)
+  if (lhs_is_float && (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+    rhs = typecast_exprt(rhs, lhs.type());
+  else if (
+    rhs_is_float && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+    lhs = typecast_exprt(lhs, rhs.type());
 
   return nil_exprt();
 }
@@ -3254,15 +3468,20 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     for (const auto &kw : element["keywords"])
     {
       std::string arg_name = kw["arg"].get<std::string>();
-      exprt arg_expr = get_expr(kw["value"]);
 
       auto it = param_positions.find(arg_name);
       if (it == param_positions.end())
       {
-        throw std::runtime_error(
-          "Unknown keyword argument: " + arg_name + " in function " +
-          func_symbol->name.as_string());
+        // For user-defined functions, unknown kwargs are a TypeError.
+        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently skip.
+        if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
+          throw std::runtime_error(
+            "Unknown keyword argument: " + arg_name + " in function " +
+            func_symbol->name.as_string());
+        continue;
       }
+
+      exprt arg_expr = get_expr(kw["value"]);
 
       // Convert array to pointer to match parameter type
       const typet &param_type = params[it->second].type();
@@ -3634,6 +3853,17 @@ symbolt *python_converter::find_dunder_method(
 
   symbol_id sid(file, class_name, dunder_name);
   return find_symbol(sid.to_string());
+}
+
+bool python_converter::has_dunder_method(
+  const nlohmann::json &value_node,
+  const std::string &dunder_name)
+{
+  const std::string class_name = type_handler_.get_var_classname(value_node);
+  if (class_name.empty())
+    return false;
+
+  return find_dunder_method(class_name, dunder_name) != nullptr;
 }
 
 exprt python_converter::dispatch_dunder_operator(
@@ -4412,16 +4642,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     exprt array = get_expr(element["value"]);
     const nlohmann::json &slice = element["slice"];
+    typet array_type = ns.follow(array.type());
 
     // Handle tuple subscripting - tuples are structs, not arrays
-    if (tuple_handler_->is_tuple_type(array.type()))
+    if (tuple_handler_->is_tuple_type(array_type))
     {
       expr = tuple_handler_->handle_tuple_subscript(array, slice, element);
       break;
     }
 
     // Handle dictionary subscript with type inference from annotations
-    if (array.type().is_struct() && dict_handler_->is_dict_type(array.type()))
+    if (array_type.is_struct() && dict_handler_->is_dict_type(array_type))
     {
       // Try to resolve the expected return type from the dict's type annotation
       typet expected_type =
@@ -4430,6 +4661,32 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Pass the expected type to the dict handler
       // If empty, the handler will use its default heuristics
       expr = dict_handler_->handle_dict_subscript(array, slice, expected_type);
+      break;
+    }
+
+    // Handle object subscripting through __getitem__:
+    //   obj[key] -> obj.__getitem__(key)
+    if (has_dunder_method(element["value"], "__getitem__"))
+    {
+      nlohmann::json call_node;
+      call_node["_type"] = "Call";
+      call_node["func"] = {
+        {"_type", "Attribute"},
+        {"value", element["value"]},
+        {"attr", "__getitem__"}};
+      call_node["args"] = nlohmann::json::array();
+      call_node["args"].push_back(slice);
+      call_node["keywords"] = nlohmann::json::array();
+      if (element.contains("lineno"))
+        call_node["lineno"] = element["lineno"];
+      if (element.contains("col_offset"))
+        call_node["col_offset"] = element["col_offset"];
+      if (element.contains("end_lineno"))
+        call_node["end_lineno"] = element["end_lineno"];
+      if (element.contains("end_col_offset"))
+        call_node["end_col_offset"] = element["end_col_offset"];
+
+      expr = get_function_call(call_node);
       break;
     }
 
@@ -5137,9 +5394,6 @@ std::string python_converter::infer_type_from_any_annotation(
   const nlohmann::json &ast_node,
   const std::string &lhs_type)
 {
-  if (lhs_type != "Any")
-    return lhs_type;
-
   if (ast_node["value"].is_null() || ast_node["value"]["_type"] != "Call")
     return lhs_type;
 
@@ -5157,11 +5411,59 @@ std::string python_converter::infer_type_from_any_annotation(
   symbol_id func_sid(current_python_file, "", func_name);
   symbolt *func_symbol = symbol_table_.find_symbol(func_sid.to_string());
 
+  // For method calls (e.g., b.f()), the method symbol is stored under the
+  // class scope (py:file@C@ClassName@F@method), not the top-level scope.
+  // Look up the object's class and retry the symbol lookup.
+  if (
+    !func_symbol && func_node["_type"] == "Attribute" &&
+    func_node["value"].contains("id"))
+  {
+    const std::string obj_name = func_node["value"]["id"].get<std::string>();
+    symbol_id obj_sid = create_symbol_id();
+    obj_sid.set_object(obj_name);
+    const symbolt *obj_sym = symbol_table_.find_symbol(obj_sid.to_string());
+    if (obj_sym)
+    {
+      typet obj_type = ns.follow(obj_sym->type);
+      std::string class_name;
+      if (obj_type.is_struct())
+        class_name = to_struct_type(obj_type).tag().as_string();
+      if (class_name.rfind("tag-", 0) == 0)
+        class_name = class_name.substr(4);
+      if (!class_name.empty())
+      {
+        symbol_id method_sid(current_python_file, class_name, func_name);
+        func_symbol = symbol_table_.find_symbol(method_sid.to_string());
+      }
+    }
+  }
+
   if (func_symbol && func_symbol->type.is_code())
   {
     const code_typet &func_type = to_code_type(func_symbol->type);
-    current_element_type = func_type.return_type();
-    return ""; // Clear to avoid further "Any" processing
+    const typet &ret_type = func_type.return_type();
+
+    if (lhs_type == "Any")
+    {
+      // For Any-annotated variables, always use the function's return type.
+      current_element_type = ret_type;
+      return ""; // Clear to avoid further "Any" processing
+    }
+
+    // Python type annotations are hints only and do not enforce runtime types.
+    // When a function explicitly returns str (char*) but the variable is
+    // annotated with a scalar type (e.g. y: int = f() where f() -> str),
+    // use the actual return type so comparisons like y == "x" work correctly.
+    bool ret_is_charptr =
+      ret_type.is_pointer() && ret_type.subtype() == char_type();
+    bool lhs_is_scalar =
+      !current_element_type.is_pointer() && !current_element_type.is_array() &&
+      !current_element_type.is_struct() && !current_element_type.id().empty();
+    if (ret_is_charptr && lhs_is_scalar)
+    {
+      current_element_type = ret_type;
+      return "";
+    }
   }
 
   return lhs_type;
@@ -5525,11 +5827,12 @@ void python_converter::get_var_assign(
         *this, ast_node, target, target_block))
     return;
 
-  // Tuple subscript assignment: tuples are immutable, raise TypeError
-  if (target["_type"] == "Subscript")
+  if (target.contains("_type") && target["_type"] == "Subscript")
   {
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
+
+    // Tuple subscript assignment: tuples are immutable, raise TypeError
     if (tuple_handler_->is_tuple_type(container_type))
     {
       exprt raise = get_exception_handler().gen_exception_raise(
@@ -5537,6 +5840,37 @@ void python_converter::get_var_assign(
       codet throw_code("expression");
       throw_code.operands().push_back(raise);
       target_block.copy_to_operands(throw_code);
+      return;
+    }
+
+    // Handle object subscript assignment via __setitem__:
+    //   obj[key] = value  ->  obj.__setitem__(key, value)
+    if (
+      target.contains("value") && target.contains("slice") &&
+      ast_node.contains("value") && !ast_node["value"].is_null() &&
+      has_dunder_method(target["value"], "__setitem__"))
+    {
+      nlohmann::json call_node;
+      call_node["_type"] = "Call";
+      call_node["func"] = {
+        {"_type", "Attribute"},
+        {"value", target["value"]},
+        {"attr", "__setitem__"}};
+      call_node["args"] = nlohmann::json::array();
+      call_node["args"].push_back(target["slice"]);
+      call_node["args"].push_back(ast_node["value"]);
+      call_node["keywords"] = nlohmann::json::array();
+      if (ast_node.contains("lineno"))
+        call_node["lineno"] = ast_node["lineno"];
+      if (ast_node.contains("col_offset"))
+        call_node["col_offset"] = ast_node["col_offset"];
+      if (ast_node.contains("end_lineno"))
+        call_node["end_lineno"] = ast_node["end_lineno"];
+      if (ast_node.contains("end_col_offset"))
+        call_node["end_col_offset"] = ast_node["end_col_offset"];
+
+      exprt setitem_call = get_function_call(call_node);
+      target_block.copy_to_operands(convert_expression_to_code(setitem_call));
       return;
     }
   }
@@ -6451,7 +6785,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // bool(z) == (z.real != 0.0 or z.imag != 0.0).
   if (is_complex_type(cond.type()))
   {
-    cond = complex_to_bool_expr(cond);
+    exprt real = member_exprt(cond, "real", double_type());
+    exprt imag = member_exprt(cond, "imag", double_type());
+    exprt zero = from_double(0.0, double_type());
+    cond = or_exprt(
+      not_exprt(equality_exprt(real, zero)),
+      not_exprt(equality_exprt(imag, zero)));
     cond.location() = get_location_from_decl(ast_node["test"]);
   }
 
@@ -6491,6 +6830,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // ternary operator
   if (type == "IfExp")
   {
+    // Normalize branches: code_function_callt must become side_effect_expr so
+    // that migration to irep2 preserves the correct return type in if2t.
+    then = to_value_expr(then, ns);
+    else_expr = to_value_expr(else_expr, ns);
+
     // Resolve result type based on branch types
     typet result_type =
       resolve_ternary_type(then.type(), else_expr.type(), current_element_type);
@@ -7808,18 +8152,63 @@ void python_converter::get_function_definition(
 
   symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
-  // Pre-scan: for unannotated functions, detect mixed value+None returns
-  // and set return type to Optional so None checks work correctly at runtime
-  if (type.return_type().is_empty())
+  // Pre-scan: detect mixed value+None returns and upgrade return type to
+  // Optional so None checks work correctly at runtime.
+  // This applies even when the function has an explicit return annotation:
+  // Python does not enforce annotations, so `-> int` with `return None` in
+  // the body must be modelled as Optional[int].
+  auto body_has_none_return = [](const nlohmann::json &body) -> bool {
+    std::function<bool(const nlohmann::json &)> scan =
+      [&](const nlohmann::json &stmts) -> bool {
+      for (const auto &s : stmts)
+      {
+        if (s["_type"] == "Return")
+        {
+          if (s["value"].is_null())
+            return true;
+          if (
+            s["value"]["_type"] == "Constant" && s["value"]["value"].is_null())
+            return true;
+        }
+        if (s.contains("body") && s["body"].is_array() && scan(s["body"]))
+          return true;
+        if (s.contains("orelse") && s["orelse"].is_array() && scan(s["orelse"]))
+          return true;
+      }
+      return false;
+    };
+    return scan(body);
+  };
+
+  bool already_optional =
+    type.return_type().is_struct() && to_struct_type(type.return_type())
+                                        .tag()
+                                        .as_string()
+                                        .starts_with("tag-Optional_");
+  if (!already_optional && body_has_none_return(function_node["body"]))
   {
-    TypeFlags return_flags = infer_types_from_returns(function_node["body"]);
-    bool has_value_return =
-      return_flags.has_int || return_flags.has_float || return_flags.has_bool;
-    if (has_value_return && return_flags.has_none)
+    if (type.return_type().is_empty())
     {
-      typet value_type =
-        type_utils::select_widest_type(return_flags, long_long_int_type());
-      typet optional_type = type_handler_.build_optional_type(value_type);
+      // Unannotated function: need full type inference to pick value_type
+      TypeFlags return_flags = infer_types_from_returns(function_node["body"]);
+      bool has_value_return =
+        return_flags.has_int || return_flags.has_float || return_flags.has_bool;
+      if (has_value_return)
+      {
+        typet value_type =
+          type_utils::select_widest_type(return_flags, long_long_int_type());
+        typet optional_type = type_handler_.build_optional_type(value_type);
+        type.return_type() = optional_type;
+        current_element_type = optional_type;
+        added_symbol->type = type;
+      }
+    }
+    else
+    {
+      // Explicitly-annotated function (e.g., -> int) with return None paths:
+      // upgrade the annotated type to Optional[annotated_type].
+      typet optional_type =
+        type_handler_.build_optional_type(type.return_type());
       type.return_type() = optional_type;
       current_element_type = optional_type;
       added_symbol->type = type;
@@ -8251,8 +8640,8 @@ void python_converter::get_return_statements(
   else
   {
     // If we're returning an array but the function expects a pointer,
-    // convert the array to a pointer (for string literals)
-    const typet &expected_return_type = current_element_type;
+    // convert the array to a pointer (for string literals).
+    const typet &expected_return_type = current_func_return_type_;
 
     if (expected_return_type.is_pointer() && return_value.type().is_array())
     {

@@ -17,7 +17,7 @@
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
  *  smt_convt is the base class for everything that attempts to convert the
- *  contents of an SSA program into something else, generally SMT- or SAT-based.
+ *  contents of an SSA program into something else, generally SMT or SAT based.
  *
  *  The class itself does various accounting and structuring of the conversion,
  *  however the challenge is that as we convert the SSA program into anything
@@ -87,17 +87,18 @@
 // Forward dec.
 class fp_convt;
 class smt_convt;
+class ra_apit;
 
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/fp/fp_conv.h>
 
 /** The base SMT-conversion class/interface.
- *  smt_convt handles some decisions that must be made when
+ *  smt_convt handles a number of decisions that must be made when
  *  deconstructing ESBMC expressions down into SMT representation. See
- *  smt_conv.h for more high-level documentation of this.
+ *  smt_conv.h for more high level documentation of this.
  *
- *  The basic flow is thus: a class that can create an SMT formula in some solver
+ *  The basic flow is thus: a class that can create SMT formula in some solver
  *  subclasses smt_convt, implementing abstract methods, in particular
  *  mk_func_app. The rest of ESBMC then calls convert with an expression, and
  *  this class deconstructs it into a series of applications, as documented by
@@ -109,7 +110,7 @@ class smt_convt;
  *  although smt_convt posesses a cache, so they generally have a reference
  *  in there. This will probably be fixed in the future.
  *
- *  In theory, this class supports pushing and popping of solver contexts,
+ *  In theory this class supports pushing and popping of solver contexts,
  *  although of course that depends too on the subclass supporting it. However,
  *  this hasn't really been tested since everything here was rewritten from
  *  The Old Way, so don't trust it.
@@ -152,7 +153,7 @@ public:
   virtual ~smt_convt() = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
-   *  model data for tracking; however, we can't do it from the constructor because
+   *  model data for tracking, however can't do it from the constructor because
    *  the solver converter itself won't have been initialized itself at that
    *  point. So, once it's ready, the solver converter should call this from
    *  it's constructor. */
@@ -269,7 +270,6 @@ public:
     (void)denominator;
     return false;
   }
-
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -286,7 +286,7 @@ public:
   virtual const std::string solver_text() = 0;
 
   /** Fetch the value of a boolean sorted smt_ast. (The 'l' is for literal, and
-   *  is historic). Returns a three-valued result, of true, false, or
+   *  is historic). Returns a three valued result, of true, false, or
    *  unassigned.
    *  @param a The boolean sorted ast to fetch the value of.
    *  @return A three-valued return val, of the assignment to a. */
@@ -734,8 +734,9 @@ public:
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
   void set_fp_conv(fp_convt *iface);
-  /** Store a new address-allocation record into the address space accounting.
-   *  idx indicates the object number of this record. */
+  /** Stores handle for the real-arithmetic/enclosure interface. */
+  void set_ra_conv(ra_apit *iface);
+
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
@@ -941,6 +942,7 @@ public:
   tuple_iface *tuple_api;
   array_iface *array_api;
   fp_convt *fp_api;
+  ra_apit *ra_api;
 
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.

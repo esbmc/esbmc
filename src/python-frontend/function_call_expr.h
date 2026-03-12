@@ -347,3 +347,7 @@ protected:
   const type_handler &type_handler_;
   FunctionType function_type_;
 };
+
+/// Convert a code_function_callt to a side_effect_expr_function_callt so it
+/// can be used as a value expression (e.g., as an operand of if_exprt).
+exprt to_value_expr(const exprt &arg, const namespacet &ns);

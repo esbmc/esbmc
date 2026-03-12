@@ -1502,6 +1502,14 @@ private:
               // Try to extract id if it exists
               if (returns.contains("id"))
               {
+                // If the body also has `return None` paths, the function
+                // actually returns Optional[T] regardless of the annotation.
+                // Return "" so the converter handles this as Optional.
+                if (has_return_none(func_elem["body"]))
+                {
+                  functions_in_analysis_.erase(func_name);
+                  return "";
+                }
                 functions_in_analysis_.erase(func_name);
                 return returns["id"];
               }
@@ -2243,6 +2251,14 @@ private:
       call["value"]["func"]["_type"] == "Name" &&
       call["value"]["func"].contains("id"))
       return call["value"]["func"]["id"].template get<std::string>();
+
+    // Handle chained method calls: B().g().f() where B().g() is itself a method
+    // call returning an object. Recursively resolve the return type of B().g()
+    // so that the outer call .f() can look up the method in the right class.
+    if (
+      call["value"]["_type"] == "Call" && call["value"].contains("func") &&
+      call["value"]["func"]["_type"] == "Attribute")
+      return get_type_from_method(call["value"]);
 
     // Handle normal Name values (variable references)
     if (!call["value"].contains("id"))

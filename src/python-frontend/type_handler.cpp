@@ -2,6 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
 #include <util/context.h>
@@ -178,6 +179,51 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   }
 
   return std::string();
+}
+
+std::string
+type_handler::get_var_classname(const nlohmann::json &value_node) const
+{
+  if (!value_node.contains("_type") || value_node["_type"] != "Name")
+    return "";
+
+  const std::string var_name = value_node["id"].get<std::string>();
+  auto get_class_name = [this](const std::string &name) -> std::string {
+    if (name.empty())
+      return "";
+
+    const std::string class_name =
+      (name.rfind("tag-", 0) == 0) ? name.substr(4) : name;
+    const std::string class_tag = "tag-" + class_name;
+    return converter_.symbol_table().find_symbol(class_tag) ? class_name : "";
+  };
+
+  symbol_id var_sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  var_sid.set_object(var_name);
+
+  symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+  if (!var_symbol)
+    var_symbol = converter_.find_symbol(var_sid.global_to_string());
+
+  if (var_symbol)
+  {
+    const auto annotation_types =
+      converter_.get_typechecker().get_annotation_types(
+        var_symbol->id.as_string());
+    if (!annotation_types.empty())
+    {
+      typet ann_type = annotation_types.front();
+      if (ann_type.is_pointer())
+        ann_type = ann_type.subtype();
+      if (ann_type.is_struct())
+        return get_class_name(to_struct_type(ann_type).tag().as_string());
+    }
+  }
+
+  return get_class_name(get_var_type(var_name));
 }
 
 /// Check if two types are compatible for list homogeneity
@@ -848,6 +894,39 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
       return lhs_type;
     if (!rhs_type.empty())
       return rhs_type;
+  }
+
+  // Handle call expressions: constructor calls like A() and method calls like B().g()
+  else if (operand["_type"] == "Call" && operand.contains("func"))
+  {
+    const auto &func = operand["func"];
+    // Direct constructor call: A() — return the class name as the type
+    if (func["_type"] == "Name" && func.contains("id"))
+      return func["id"].get<std::string>();
+    // Method call: obj.method() — infer the return type from the class definition
+    if (
+      func["_type"] == "Attribute" && func.contains("attr") &&
+      func.contains("value"))
+    {
+      std::string obj_type = get_operand_type(func["value"]);
+      if (!obj_type.empty())
+      {
+        std::string method_name = func["attr"].get<std::string>();
+        const auto &ast = converter_.ast();
+        nlohmann::json class_node =
+          json_utils::find_class(ast["body"], obj_type);
+        if (class_node.empty() || !class_node.contains("body"))
+          return std::string();
+        for (const auto &member : class_node["body"])
+        {
+          if (
+            member["_type"] == "FunctionDef" && member["name"] == method_name &&
+            member.contains("returns") && !member["returns"].is_null() &&
+            member["returns"].contains("id"))
+            return member["returns"]["id"].get<std::string>();
+        }
+      }
+    }
   }
 
   // Handle list subscript (e.g., `mylist[0]`)
