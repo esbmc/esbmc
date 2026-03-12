@@ -32,6 +32,29 @@ static exprt rebuild_and_chain(const exprt::operandst &conjuncts, std::size_t i)
   return result;
 }
 
+/// Recursively flatten a (possibly nested) binary || expression into a flat
+/// list of disjuncts.  Clang represents A || B || C as or(or(A,B),C).
+static void collect_or_disjuncts(const exprt &expr, exprt::operandst &out)
+{
+  if (expr.id() == "or")
+    for (const auto &op : expr.operands())
+      collect_or_disjuncts(op, out);
+  else
+    out.push_back(expr);
+}
+
+/// Rebuild a right-to-left nested binary || from a flat list of disjuncts
+/// starting at index @p i.
+static exprt rebuild_or_chain(const exprt::operandst &disjuncts, std::size_t i)
+{
+  assert(i < disjuncts.size());
+  if (i + 1 == disjuncts.size())
+    return disjuncts[i];
+  exprt result = exprt("or", bool_type());
+  result.copy_to_operands(disjuncts[i], rebuild_or_chain(disjuncts, i + 1));
+  return result;
+}
+
 void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
 {
   const locationt location = expr.find_location();
@@ -360,6 +383,59 @@ void goto_convertt::remove_sideeffects(
         // Only bypass Forall_operands when we actually rewrote the && chain;
         // otherwise (e.g. single foo(x) or foo(x)==0) fall through to normal path.
         if (and_expr)
+        {
+          remove_function_call(expr, dest, result_is_used);
+          return;
+        }
+      }
+
+      // Special handling for __ESBMC_ensures and __ESBMC_requires with
+      // && or || chains.
+      //
+      // Clang lowers A || B and A && B into short-circuit GOTO patterns
+      // (if-then-else control flow) whenever either operand has a side
+      // effect.  When the contract clause is later extracted from the GOTO
+      // program, only one branch of the short-circuit survives, producing
+      // an incomplete boolean expression.
+      //
+      // Fix: flatten the top-level && / || chain, call remove_sideeffects()
+      // on each operand independently, and rebuild a plain and/or expression.
+      // This keeps the full formula intact in the stored contract instruction.
+      if (
+        fsym &&
+        (fsym->name == "__ESBMC_ensures" || fsym->name == "__ESBMC_requires"))
+      {
+        exprt::operandst &args = expr.op1().operands();
+        bool rewrote = false;
+        if (args.size() == 1 && has_sideeffect(args.front()))
+        {
+          // Look through any implicit typecast (_Bool cast on the argument).
+          exprt *inner = &args.front();
+          if (
+            inner->id() == "typecast" && inner->operands().size() == 1 &&
+            (inner->op0().is_and() || inner->op0().id() == "or"))
+            inner = &inner->op0();
+
+          if (inner->is_and())
+          {
+            exprt::operandst parts;
+            collect_and_conjuncts(*inner, parts);
+            for (auto &p : parts)
+              remove_sideeffects(p, dest);
+            args.front() = rebuild_and_chain(parts, 0);
+            rewrote = true;
+          }
+          else if (inner->id() == "or")
+          {
+            exprt::operandst parts;
+            collect_or_disjuncts(*inner, parts);
+            for (auto &p : parts)
+              remove_sideeffects(p, dest);
+            args.front() = rebuild_or_chain(parts, 0);
+            rewrote = true;
+          }
+        }
+        if (rewrote)
         {
           remove_function_call(expr, dest, result_is_used);
           return;

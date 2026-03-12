@@ -23,9 +23,14 @@
  * (flatten and, remove_sideeffects per conjunct, rebuild and), so the stored
  * invariant is always the full expression and no short-circuit recovery is
  * needed here.
+ *
+ * When --loop-frame-rule is enabled, the havoc step is enhanced with:
+ *   Snapshot -> Havoc -> FrameRule(Assume unchanged == snapshot) -> Assume invariants
+ * This preserves the relationship between modified and unmodified variables.
  */
 
 #include <goto-programs/goto_loop_invariant.h>
+#include <goto-programs/frame_enforcer.h>
 #include <goto-programs/remove_no_op.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
@@ -34,11 +39,15 @@
 #include <util/options.h>
 #include <irep2/irep2_utils.h>
 
-void goto_loop_invariant(goto_functionst &goto_functions)
+void goto_loop_invariant(
+  goto_functionst &goto_functions,
+  contextt &context,
+  bool use_frame_rule)
 {
   Forall_goto_functions (it, goto_functions)
     if (it->second.body_available)
-      goto_loop_invariantt(it->first, goto_functions, it->second);
+      goto_loop_invariantt(
+        it->first, goto_functions, it->second, context, use_frame_rule);
 
   goto_functions.update();
 }
@@ -64,7 +73,15 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   std::vector<expr2tc> invariants = extract_loop_invariants(loop);
 
   if (invariants.empty())
-    return; // No invariants found, skip this loop
+    return;
+
+  log_status(
+    "Processing {} loop invariant{}",
+    invariants.size(),
+    invariants.size() == 1 ? "" : "s");
+
+  // Extract loop assigns targets (for frame rule)
+  std::vector<expr2tc> loop_assigns = extract_loop_assigns(loop);
 
   // Extract invariant-related DECL/FUNCTION_CALLs and re-insert before each
   // ASSERT/ASSUME.
@@ -76,7 +93,7 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 
   // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
   insert_havoc_and_assume_before_condition(
-    loop_head, loop, invariants, side_effects);
+    loop_head, loop, invariants, loop_assigns, side_effects);
 
   // 3. Insert inductive step verification and loop termination
   insert_inductive_step_and_termination(loop, invariants, side_effects);
@@ -130,6 +147,40 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
   }
 
   return invariants;
+}
+
+std::vector<expr2tc>
+goto_loop_invariantt::extract_loop_assigns(const loopst &loop)
+{
+  std::vector<expr2tc> assigns;
+
+  goto_programt::targett loop_head = loop.get_original_loop_head();
+
+  if (loop_head == goto_function.body.instructions.begin())
+    return assigns;
+
+  // Search backwards from loop head to find LOOP_INVARIANT with assigns targets
+  goto_programt::targett search_it = loop_head;
+  size_t search_distance = 0;
+
+  while (search_it != goto_function.body.instructions.begin() &&
+         search_distance < kMaxInvariantSearchBack)
+  {
+    --search_it;
+    ++search_distance;
+
+    if (search_it->is_loop_invariant())
+    {
+      auto const &targets = search_it->get_loop_assigns_targets();
+      for (const auto &target : targets)
+      {
+        assigns.push_back(target);
+      }
+      break;
+    }
+  }
+
+  return assigns;
 }
 
 void goto_loop_invariantt::collect_symbols(
@@ -378,6 +429,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   goto_programt::targett &loop_head,
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
+  const std::vector<expr2tc> &loop_assigns,
   const goto_programt &side_effects)
 {
   // Find the loop condition (IF instruction) - this should be right at loop_head
@@ -394,8 +446,28 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
   goto_programt dest;
 
-  // 1. Insert HAVOC (nondet assignments) before the loop condition
   auto const &loop_vars = loop.get_modified_loop_vars();
+
+  // =========================================================
+  // Frame Rule Step 1: Materialize Snapshots (if enabled)
+  // Capture pre-state before havoc for frame rule enforcement
+  // =========================================================
+  frame_enforcert *frame_enforcer = nullptr;
+  if (use_frame_rule)
+  {
+    frame_enforcer = new frame_enforcert(context);
+
+    std::vector<expr2tc> vars_to_snapshot;
+    for (const auto &v : loop_vars)
+      vars_to_snapshot.push_back(v);
+
+    frame_enforcer->materialize_snapshots(
+      vars_to_snapshot, dest, loop_head->location, "loop");
+  }
+
+  // =========================================================
+  // Step 2: Standard Havoc — assign nondet to all modified variables
+  // =========================================================
   for (auto const &lhs : loop_vars)
   {
     // do not assign nondeterministic value to pointers if we assume
@@ -415,19 +487,39 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->location.comment("loop invariant havoc");
   }
 
-  // 2. Emit side-effect instructions (use havoc'd variables).
+  // =========================================================
+  // Frame Rule Step 3: Enforce Frame Conditions (if enabled)
+  // For vars NOT in assigns set, assume var == snapshot
+  // =========================================================
+  if (use_frame_rule && frame_enforcer && !loop_assigns.empty())
+  {
+    frame_enforcer->enforce_frame_rule(loop_assigns, dest, loop_head->location);
+  }
+
+  // Emit side-effect instructions (use havoc'd variables).
   for (const auto &instr : side_effects.instructions)
     dest.instructions.push_back(instr);
 
-  // 3. ASSUME invariants (entering the loop).
+  // Assume invariants (entering the loop).
   for (const auto &invariant : invariants)
   {
+    expr2tc inst_invariant = invariant;
+
+    // If frame rule is enabled, replace any old() references with snapshots
+    if (use_frame_rule && frame_enforcer)
+    {
+      inst_invariant = frame_enforcer->replace_old_with_snapshots(invariant);
+    }
+
     // Create assume instruction: just the invariant
     goto_programt::targett t = dest.add_instruction(ASSUME);
-    t->guard = invariant;
+    t->guard = inst_invariant;
     t->location = loop_head->location;
     t->location.comment("loop invariant step case");
   }
+
+  // Clean up
+  delete frame_enforcer;
 
   // Insert before the loop condition
   goto_function.body.insert_swap(insert_point, dest);

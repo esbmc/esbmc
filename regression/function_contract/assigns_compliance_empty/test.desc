@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract pure_read --function pure_read --enforce-assigns-check
+^VERIFICATION SUCCESSFUL$
