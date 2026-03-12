@@ -2699,9 +2699,22 @@ bool function_call_expr::is_dict_method_call() const
 
   const std::string &method_name = function_id_.get_function();
 
-  // Check if this is a known dict method
-  return method_name == "get" || method_name == "setdefault" ||
-         method_name == "update";
+  if (
+    !python_dict_handler::is_value_returning_method(method_name) &&
+    method_name != "update")
+    return false;
+
+  // For "pop", which exists on both list and dict, treat as dict.pop() when
+  // the receiver does not resolve to a list symbol.
+  if (method_name == "pop")
+  {
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym == nullptr || sym->type != list_type;
+  }
+
+  return true;
 }
 
 exprt function_call_expr::handle_dict_method() const
@@ -2728,6 +2741,10 @@ exprt function_call_expr::handle_dict_method() const
 
   if (method_name == "update")
     return converter_.get_dict_handler()->handle_dict_update(
+      symbol_expr(*dict_symbol), call_);
+
+  if (method_name == "pop")
+    return converter_.get_dict_handler()->handle_dict_pop(
       symbol_expr(*dict_symbol), call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
@@ -2902,12 +2919,34 @@ bool function_call_expr::is_list_method_call() const
 
   const std::string &method_name = function_id_.get_function();
 
-  // Check if this is a known list method
-  return method_name == "append" || method_name == "pop" ||
-         method_name == "insert" || method_name == "remove" ||
-         method_name == "clear" || method_name == "extend" ||
-         method_name == "copy" || method_name == "sort" ||
-         method_name == "reverse";
+  if (
+    method_name != "append" && method_name != "pop" &&
+    method_name != "insert" && method_name != "remove" &&
+    method_name != "clear" && method_name != "extend" &&
+    method_name != "copy" && method_name != "sort" && method_name != "reverse")
+    return false;
+
+  // "pop" is shared between list and dict. Disambiguate using the actual
+  // symbol type: only treat as list.pop() when the receiver resolves to a
+  // symbol whose type is the list type.
+  if (method_name == "pop")
+  {
+    // A BinOp receiver (e.g., (s1 - s2).pop()) is always a set/list: dicts
+    // do not support arithmetic operators. handle_list_pop() already handles
+    // this case, so route it here before the symbol-type check.
+    if (
+      call_["func"].contains("value") &&
+      call_["func"]["value"].contains("_type") &&
+      call_["func"]["value"]["_type"] == "BinOp")
+      return true;
+
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->type == list_type;
+  }
+
+  return true;
 }
 
 exprt function_call_expr::handle_list_method() const
