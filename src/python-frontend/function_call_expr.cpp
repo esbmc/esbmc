@@ -2923,8 +2923,7 @@ bool function_call_expr::is_list_method_call() const
     method_name != "append" && method_name != "pop" &&
     method_name != "insert" && method_name != "remove" &&
     method_name != "clear" && method_name != "extend" &&
-    method_name != "copy" && method_name != "sort" &&
-    method_name != "reverse")
+    method_name != "copy" && method_name != "sort" && method_name != "reverse")
     return false;
 
   // "pop" is shared between list and dict. Disambiguate using the actual
