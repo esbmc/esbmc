@@ -224,6 +224,8 @@ Below is an overview of ESBMC-Python's key capabilities:
     - **update()**: Merges another dictionary into the current one (e.g., `d.update({"x": 9})`).
     - **get()**: Returns the value for a key, or a default if the key is absent (e.g., `d.get("a", 0)`).
     - **setdefault()**: Returns the value for a key if present; otherwise inserts the key with the given default and returns it (e.g., `d.setdefault("d", 4)`). Supports `int`, `float`, `bool`, and `str` value types.
+    - **pop()**: Removes a key and returns its value (e.g., `d.pop("a")`); raises `KeyError` if the key is absent and no default is provided.
+    - **popitem()**: Removes and returns the last inserted `(key, value)` pair as a tuple (e.g., `key, value = d.popitem()`); raises `KeyError` if the dictionary is empty.
     - **Nested dictionaries**: Supports dicts whose values are themselves dicts (e.g., `dict[int, dict[int, int]]`).
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 
@@ -408,7 +410,7 @@ The current version of ESBMC-Python has the following limitations:
 - Only `for` loops using the `range()` function are supported.
 - List and String support are partial and limited in functionality. Currently supported list methods include `append()`, `extend()`, `insert()`, `clear()`, `pop()`, `remove()`, and `copy()`.
 - String slicing does not support step values (e.g., string[::2] for every second character is not supported).
-- Dictionary support is partial: the supported operations are literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, and `setdefault()`. Other methods (e.g., `pop()`, `copy()`, `popitem()`) are not yet implemented.
+- Dictionary support is partial: the supported operations are literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, `setdefault()`, `pop()`, and `popitem()`. Other methods (e.g., `copy()`) are not yet implemented.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
 - `any()` currently supports only list literals as arguments and does not support other iterable types.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).

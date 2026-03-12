@@ -5573,10 +5573,19 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     if (is_dict_method)
     {
       // obj_sym != nullptr is guaranteed by the is_dict_method check above
-      inferred_type = dict_handler_->resolve_expected_type_for_dict_subscript(
-        symbol_expr(*obj_sym));
-      if (inferred_type.is_nil() || inferred_type.is_empty())
-        inferred_type = long_int_type();
+      if (method == "popitem")
+      {
+        // popitem() returns (key, value) tuple — infer the full tuple type
+        inferred_type =
+          dict_handler_->get_popitem_tuple_type(symbol_expr(*obj_sym));
+      }
+      else
+      {
+        inferred_type = dict_handler_->resolve_expected_type_for_dict_subscript(
+          symbol_expr(*obj_sym));
+        if (inferred_type.is_nil() || inferred_type.is_empty())
+          inferred_type = long_int_type();
+      }
     }
     else
     {

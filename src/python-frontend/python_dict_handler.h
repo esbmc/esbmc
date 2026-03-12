@@ -321,6 +321,25 @@ public:
   get_dict_value_type_from_annotation(const nlohmann::json &annotation_node);
 
   /**
+   * @brief Returns the tuple type (key_type, value_type) for dict.popitem().
+   * @param dict_expr The dictionary expression (must be a symbol)
+   * @return struct_typet with element_0=key_type, element_1=value_type
+   */
+  typet get_popitem_tuple_type(const exprt &dict_expr);
+
+  /**
+   * @brief Handles dict.popitem() method calls.
+   * Implements Python's dict.popitem() semantics:
+   * - Raises KeyError if the dictionary is empty.
+   * - Otherwise removes and returns the last (key, value) pair as a tuple.
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node
+   * @return Expression representing the (key, value) tuple
+   */
+  exprt
+  handle_dict_popitem(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
    * @brief Resolve expected type for dict subscript using variable annotation
    *
    * Looks up the dict variable's annotation to determine what type
@@ -481,6 +500,15 @@ private:
 
   /// Counter for generating unique dictionary variable names
   static int dict_counter_;
+
+  /**
+   * @brief Extract key type from dict type annotation.
+   * For annotations like `dict[K, V]`, extracts the key type K.
+   * @param annotation_node The annotation AST node (Subscript with slice)
+   * @return The key type, or empty_typet if cannot be determined
+   */
+  typet
+  get_dict_key_type_from_annotation(const nlohmann::json &annotation_node);
 
   /**
    * @brief Extracts the key expression from a subscript slice node.
