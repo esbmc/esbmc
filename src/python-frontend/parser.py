@@ -4,11 +4,7 @@ import sys
 PY3 = sys.version_info[0] == 3
 
 if not PY3:
-    print(
-        "Python version: {}.{}.{}".format(
-            sys.version_info.major, sys.version_info.minor, sys.version_info.micro
-        )
-    )
+    print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro))
     print("ERROR: Please ensure Python 3 is available in your environment.")
     sys.exit(1)
 
@@ -20,8 +16,6 @@ import os
 import glob
 import base64
 from preprocessor import Preprocessor
-import argparse
-
 
 def run_mypy_strict(filename):
     """Run mypy in-process when available; skip otherwise."""
@@ -37,15 +31,18 @@ def run_mypy_strict(filename):
     return exit_status, output
 
 
+def check_usage():
+    if len(sys.argv) != 3:
+        print("Usage: python astgen.py <file path> <output directory>")
+        sys.exit(2)
+
 def is_imported_model(module_name):
     models = ["math", "os", "numpy", "esbmc", "decimal"]
     return module_name in models
 
-
 def is_unsupported_module(module_name):
     unsuported_modules = ["blah"]
     return module_name in unsuported_modules
-
 
 def is_testing_framework(module_name):
     # Check if module is a testing framework that should be skipped.
@@ -57,7 +54,7 @@ def is_testing_framework(module_name):
 
 def import_module_by_name(module_name, output_dir):
     if is_unsupported_module(module_name):
-        print('ERROR: "import {}" is not supported'.format(module_name))
+        print("ERROR: \"import {}\" is not supported".format(module_name))
         sys.exit(3)
 
     base_module = module_name.split(".")[0]
@@ -97,8 +94,7 @@ def import_module_by_name(module_name, output_dir):
 
 
 def encode_bytes(value):
-    return base64.b64encode(value).decode("ascii")
-
+    return base64.b64encode(value).decode('ascii')
 
 def annotate_constant_node(value_node):
     # Python 3.8+ uses ast.Constant instead of ast.Str, ast.Num, ast.Bytes, etc.
@@ -122,34 +118,33 @@ def add_type_annotation(node):
 
 def is_standard_library_file(filename):
     stdlib_paths = [
-        "/usr/lib/python",
-        "/usr/local/lib/python",
-        "/Library/Frameworks/Python.framework",
-        "/opt/homebrew/Cellar/python",  # Homebrew Python on macOS (Apple Silicon)
-        "/usr/local/Cellar/python",  # Homebrew Python on macOS (Intel)
-        "/opt/conda/lib/python",  # Conda standard installation path
+        '/usr/lib/python',
+        '/usr/local/lib/python',
+        '/Library/Frameworks/Python.framework',
+        '/opt/homebrew/Cellar/python',  # Homebrew Python on macOS (Apple Silicon)
+        '/usr/local/Cellar/python',     # Homebrew Python on macOS (Intel)
+        '/opt/conda/lib/python',       # Conda standard installation path
     ]
     # Check fixed paths first (no expanduser needed)
     if any(filename.startswith(path) for path in stdlib_paths):
         return True
     # Check pyenv paths
-    pyenv_root = os.environ.get("PYENV_ROOT", os.path.expanduser("~/.pyenv"))
+    pyenv_root = os.environ.get('PYENV_ROOT', os.path.expanduser('~/.pyenv'))
     if pyenv_root and filename.startswith(pyenv_root):
         # Check if it's in the versions directory (standard library location)
-        if "/versions/" in filename and "/lib/python" in filename:
+        if '/versions/' in filename and '/lib/python' in filename:
             return True
     # Check conda paths (including user installations)
-    if filename.startswith(
-        os.path.expanduser("~/miniconda3/lib/python")
-    ) or filename.startswith(os.path.expanduser("~/anaconda3/lib/python")):
+    if filename.startswith(os.path.expanduser('~/miniconda3/lib/python')) or \
+       filename.startswith(os.path.expanduser('~/anaconda3/lib/python')):
         return True
     return False
 
 
 def expand_star_import(module) -> list[str] | None:
-    names = getattr(module, "__all__", None)
+    names = getattr(module, '__all__', None)
     if names is None:
-        names = [n for n in dir(module) if not n.startswith("_")]
+        names = [n for n in dir(module) if not n.startswith('_')]
     return names
 
 
@@ -183,11 +178,9 @@ def get_referenced_names(node):
 
     return referenced
 
-
 import_aliases = {}
 # Track all imports per module to combine them
 module_imports = {}
-
 
 def process_imports(node, output_dir):
     """
@@ -197,6 +190,7 @@ def process_imports(node, output_dir):
         - node: The import node to process.
         - output_dir: The directory to save the generated JSON files.
     """
+
 
     if isinstance(node, (ast.Import)):
         module_names = []
@@ -211,7 +205,7 @@ def process_imports(node, output_dir):
     elif isinstance(node, ast.ImportFrom):
         module_name = node.module
         # If it's a star import, set the list to None to import everything
-        if any(a.name == "*" for a in node.names):
+        if any(a.name == '*' for a in node.names):
             imported_elements = None
         else:
             imported_elements = node.names
@@ -224,15 +218,15 @@ def process_imports(node, output_dir):
     # Track imports for this module
     for module_name in module_names:
         if module_name not in module_imports:
-            module_imports[module_name] = {"import_all": False, "specific_names": set()}
+            module_imports[module_name] = {'import_all': False, 'specific_names': set()}
 
         if imported_elements is None:
             # This is an "import module" or "from module import *"; mark to import everything
-            module_imports[module_name]["import_all"] = True
+            module_imports[module_name]['import_all'] = True
         else:
             # Add specific names to the set
             for elem in imported_elements:
-                module_imports[module_name]["specific_names"].add(elem.name)
+                module_imports[module_name]['specific_names'].add(elem.name)
 
         # Check if module is available/installed
         if is_imported_model(module_name):
@@ -246,7 +240,7 @@ def process_imports(node, output_dir):
                 continue
 
             # Check if module has __file__ attribute (built-in C extensions don't)
-            if not hasattr(module, "__file__") or module.__file__ is None:
+            if not hasattr(module, '__file__') or module.__file__ is None:
                 # Skip built-in C extension modules (e.g., _sre, _socket, etc.)
                 continue
 
@@ -304,7 +298,6 @@ def filter_imports(tree: ast.AST) -> ast.AST:
     tree.body = filtered_body
     return tree
 
-
 def parse_file(filename: str) -> ast.AST:
     """Open, parse, and run Preprocessor on a Python source file."""
     with open(filename, "r", encoding="utf-8") as src:
@@ -355,15 +348,12 @@ def process_collected_imports(output_dir):
             import_info = module_imports[module_name]
             processed_modules.add(module_name)
 
-            imported_elements = (
-                None
-                if import_info["import_all"]
-                else [ast.alias(name, None) for name in import_info["specific_names"]]
-            )
+            imported_elements = None if import_info['import_all'] \
+                else [ast.alias(name, None) for name in import_info['specific_names']]
 
             # Attempt to resolve and emit JSON for imported submodules (e.g., "pkg.sub")
-            if import_info["specific_names"]:
-                for name in list(import_info["specific_names"]):
+            if import_info['specific_names']:
+                for name in list(import_info['specific_names']):
                     emit_module_json(f"{module_name}.{name}", output_dir)
 
             # Emit the module itself
@@ -378,13 +368,7 @@ def process_collected_imports(output_dir):
                     rewrite_relative_import(subnode, module_name)
                     process_imports(subnode, output_dir)
 
-            generate_ast_json(
-                tree,
-                filename,
-                imported_elements,
-                output_dir,
-                module_qualname=module_name,
-            )
+            generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
 
 
 def rewrite_relative_import(node, parent_module: str | None):
@@ -426,9 +410,7 @@ def rewrite_relative_import(node, parent_module: str | None):
     node.level = 0
 
 
-def generate_ast_json(
-    tree, python_filename, elements_to_import, output_dir, module_qualname=None
-):
+def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
     """
     Generate AST JSON from the given Python AST tree.
 
@@ -459,7 +441,7 @@ def generate_ast_json(
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
                 # Always include ESBMC helper functions
-                if node.name in ["ESBMC_range_has_next_", "ESBMC_range_next_"]:
+                if node.name in ['ESBMC_range_has_next_', 'ESBMC_range_next_']:
                     filtered_nodes.append(node)
                 # Include explicitly imported items
                 elif node.name in explicitly_imported:
@@ -475,19 +457,17 @@ def generate_ast_json(
 
     # Convert AST to JSON
     ast2json_module = import_module_by_name("ast2json", "")
-    ast_json = ast2json_module.ast2json(
-        ast.Module(body=filtered_nodes) if filtered_nodes else tree
-    )
+    ast_json = ast2json_module.ast2json(ast.Module(body=filtered_nodes) if filtered_nodes else tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
 
-    # Build JSON path
+     # Build JSON path
     if module_qualname:
         parts = module_qualname.split(".")
         json_dir = os.path.join(output_dir, *parts[:-1])  # package subdirs
         json_filename = os.path.join(json_dir, f"{parts[-1]}.json")
     else:
-        if python_filename.endswith("__init__.py"):
+        if python_filename.endswith('__init__.py'):
             dir_name = os.path.basename(os.path.dirname(python_filename))
             json_filename = os.path.join(output_dir, f"{dir_name}.json")
         else:
@@ -544,60 +524,26 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
             else:
                 file_path = module.__file__
 
-            if file_path.endswith("__init__.py") or os.path.isdir(file_path):
+            if file_path.endswith('__init__.py') or os.path.isdir(file_path):
                 module_dir = os.path.dirname(file_path)
             else:
                 module_dir = os.path.dirname(file_path)
 
             for root, dirs, files in os.walk(module_dir):
                 for file in files:
-                    if file.endswith(".py"):
+                    if file.endswith('.py'):
                         full_path = os.path.join(root, file)
                         try:
                             with open(full_path, "r", encoding="utf-8") as f:
                                 tree = ast.parse(f.read())
-                                generate_ast_json(
-                                    tree,
-                                    full_path,
-                                    None,
-                                    output_dir + "/" + base_module,
-                                )
+                                generate_ast_json(tree, full_path, None, output_dir + "/" + base_module)
                         except UnicodeDecodeError:
                             continue
 
-
-def check_dependencies():
-    """Verify required Python packages are available before processing.
-    Also warn for optional dependencies."""
-    optional = ["mypy"]
-    required = ["ast2json"]
-
-    missing_optional = [m for m in optional if importlib.util.find_spec(m) is None]
-    if missing_optional:
-        print(
-            f"Warning: Missing optional Python package(s): {', '.join(missing_optional)}"
-        )
-        print(f"  Install with: pip3 install {' '.join(missing_optional)}")
-
-    missing_required = [m for m in required if importlib.util.find_spec(m) is None]
-    if missing_required:
-        print(
-            f"ERROR: Missing required Python package(s): {', '.join(missing_required)}"
-        )
-        print(f"  Install with: pip3 install {' '.join(missing_required)}")
-        sys.exit(1)
-
-
 def main():
-    parser = argparse.ArgumentParser(prog="parser.py")
-    parser.add_argument("file_path")
-    parser.add_argument("output_dir")
-    args = parser.parse_args()
-
-    check_dependencies()
-
-    filename = args.file_path
-    output_dir = args.output_dir
+    check_usage()
+    filename = sys.argv[1]
+    output_dir = sys.argv[2]
 
     # Type checking input program with mypy.
     returncode, mypy_output = run_mypy_strict(filename)
@@ -653,7 +599,7 @@ def main():
         module_name = filename[:-3]
 
         if is_imported_model(module_name):
-            continue
+            continue;
 
         with open(python_file) as model:
             model_tree = ast.parse(model.read())
