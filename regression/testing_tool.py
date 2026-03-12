@@ -127,6 +127,14 @@ class TestCase:
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
 
 
+def _set_memory_limit():
+    """Set per-process virtual memory limit for the child process."""
+    if os.name == "posix" and RegressionBase.MEMORY_LIMIT:
+        import resource
+        limit = RegressionBase.MEMORY_LIMIT
+        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+
+
 class Executor:
     def __init__(self, tool="esbmc"):
         self.tool = shlex.split(tool)
@@ -135,6 +143,7 @@ class Executor:
     def run(self, test_case: TestCase):
         """Execute the test case with `executable`"""
         cmd = test_case.generate_run_argument_list(*self.tool)
+        preexec = _set_memory_limit if os.name == "posix" else None
 
         try:
             # use subprocess.run because we want to wait for the subprocess to finish
@@ -143,6 +152,7 @@ class Executor:
                 stdout=PIPE,
                 stderr=PIPE,
                 timeout=self.timeout,
+                preexec_fn=preexec,
                 env=dict(os.environ, ESBMC_CONFIG_FILE=""),
             )
 
@@ -160,6 +170,8 @@ class Executor:
 
         except subprocess.CalledProcessError:
             return None, None, 0
+        except subprocess.TimeoutExpired:
+            return None, None, 1
 
         return p.stdout, p.stderr, p.returncode
 
@@ -179,7 +191,8 @@ class RegressionBase(unittest.TestCase):
     longMessage = True
 
     FAIL_WITH_WORD: str = None
-    TIMEOUT = None
+    TIMEOUT = 1000
+    MEMORY_LIMIT = 8 * 1024 * 1024 * 1024  # 8 GB; use --memory-limit to change
 
     def setUp(self):
         self.startTime = time.time()
@@ -296,10 +309,18 @@ def _arg_parsing():
         action="store_true",
         help="Replaces usual tests with crash check while producing formulas (adds --smt-formula-only).",
     )
+    parser.add_argument(
+        "--memory-limit",
+        required=False,
+        type=int,
+        help="Per-test virtual memory limit in megabytes",
+    )
 
     main_args = parser.parse_args()
     if main_args.timeout:
         RegressionBase.TIMEOUT = int(main_args.timeout)
+    if main_args.memory_limit:
+        RegressionBase.MEMORY_LIMIT = main_args.memory_limit * 1024 * 1024
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
     regression_path = os.path.join(

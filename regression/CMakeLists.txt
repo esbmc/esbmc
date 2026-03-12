@@ -52,9 +52,10 @@ function(add_esbmc_regression_test folder modes test)
                      --modes ${modes}
                      --file=${test}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
-    # TODO: Testing Tool should have a command to dump the TAG of a test		   
+    # TODO: Testing Tool should have a command to dump the TAG of a test
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
+      TIMEOUT 1000
       LABELS "regression;${folder}")
 endfunction()
 
