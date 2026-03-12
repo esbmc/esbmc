@@ -2714,7 +2714,6 @@ bool function_call_expr::is_dict_method_call() const
     return sym == nullptr || sym->type != list_type;
   }
 
-  // "popitem" is dict-only (lists have no popitem), no disambiguation needed.
   return true;
 }
 

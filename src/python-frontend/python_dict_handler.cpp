@@ -1978,10 +1978,6 @@ typet python_dict_handler::get_popitem_tuple_type(const exprt &dict_expr)
               get_dict_key_type_from_annotation(func_def["returns"]);
           }
         }
-        else
-        {
-          key_type = get_dict_key_type_from_annotation(var_decl["annotation"]);
-        }
       }
     }
   }
@@ -1992,8 +1988,7 @@ typet python_dict_handler::get_popitem_tuple_type(const exprt &dict_expr)
 
   // Get value type from annotation (default: long int)
   typet val_type = resolve_expected_type_for_dict_subscript(dict_expr);
-  if (val_type.is_nil() || val_type.is_empty())
-    val_type = long_int_type();
+  assert(!val_type.is_empty());
   if (val_type.is_array() && val_type.subtype() == char_type())
     val_type = gen_pointer_type(char_type());
 
@@ -2095,7 +2090,7 @@ exprt python_dict_handler::handle_dict_popitem(
     empty_block.copy_to_operands(raise_code);
   }
 
-  // Non-empty → get last (key, value), remove, build tuple
+  // Non-empty: get last (key, value), remove, build tuple
   code_blockt nonempty_block;
   {
     // last_idx = size - 1
@@ -2129,8 +2124,7 @@ exprt python_dict_handler::handle_dict_popitem(
     key_at_call.location() = location;
     nonempty_block.copy_to_operands(key_at_call);
 
-    // Assign key into tuple BEFORE removing from list (avoid use-after-free
-    // if __ESBMC_list_remove_at frees the PyListObj storage).
+    // Assign key into tuple before removing from list
     member_exprt key_obj_value(
       dereference_exprt(
         symbol_expr(key_obj_var), type_handler_.get_list_element_type()),
@@ -2157,7 +2151,7 @@ exprt python_dict_handler::handle_dict_popitem(
     val_at_call.location() = location;
     nonempty_block.copy_to_operands(val_at_call);
 
-    // Assign value into tuple BEFORE removing from list.
+    // Assign value into tuple before removing from list.
     member_exprt val_obj_value(
       dereference_exprt(
         symbol_expr(val_obj_var), type_handler_.get_list_element_type()),
