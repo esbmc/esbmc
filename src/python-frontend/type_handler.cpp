@@ -896,6 +896,39 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
       return rhs_type;
   }
 
+  // Handle call expressions: constructor calls like A() and method calls like B().g()
+  else if (operand["_type"] == "Call" && operand.contains("func"))
+  {
+    const auto &func = operand["func"];
+    // Direct constructor call: A() — return the class name as the type
+    if (func["_type"] == "Name" && func.contains("id"))
+      return func["id"].get<std::string>();
+    // Method call: obj.method() — infer the return type from the class definition
+    if (
+      func["_type"] == "Attribute" && func.contains("attr") &&
+      func.contains("value"))
+    {
+      std::string obj_type = get_operand_type(func["value"]);
+      if (!obj_type.empty())
+      {
+        std::string method_name = func["attr"].get<std::string>();
+        const auto &ast = converter_.ast();
+        nlohmann::json class_node =
+          json_utils::find_class(ast["body"], obj_type);
+        if (class_node.empty() || !class_node.contains("body"))
+          return std::string();
+        for (const auto &member : class_node["body"])
+        {
+          if (
+            member["_type"] == "FunctionDef" && member["name"] == method_name &&
+            member.contains("returns") && !member["returns"].is_null() &&
+            member["returns"].contains("id"))
+            return member["returns"]["id"].get<std::string>();
+        }
+      }
+    }
+  }
+
   // Handle list subscript (e.g., `mylist[0]`)
   else if (
     operand["_type"] == "Subscript" && operand.contains("value") &&

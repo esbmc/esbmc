@@ -239,11 +239,16 @@ void function_call_expr::get_function_type()
       }
     }
 
-    // Detect A().f(...): method call on a temporary instance from a constructor.
+    // Detect A().f(...): method call on a temporary instance.
+    // This covers both direct construction (A().f()) and chained method calls
+    // (B().g().f()) — any Call node in the value position means the receiver
+    // is a temporary, so we must treat it as an InstanceMethod regardless of
+    // whether the inferred receiver class name matches a class in the AST.
     bool obj_is_temp_instance =
       call_["func"]["value"]["_type"] == "Call" &&
       call_["func"]["value"].contains("func") &&
-      call_["func"]["value"]["func"]["_type"] == "Name";
+      (call_["func"]["value"]["func"]["_type"] == "Name" ||
+       call_["func"]["value"]["func"]["_type"] == "Attribute");
 
     // Handling a function call as a class method call when:
     // (1) The caller corresponds to a class name, for example: MyClass.foo().
@@ -2694,9 +2699,22 @@ bool function_call_expr::is_dict_method_call() const
 
   const std::string &method_name = function_id_.get_function();
 
-  // Check if this is a known dict method
-  return method_name == "get" || method_name == "setdefault" ||
-         method_name == "update";
+  if (
+    !python_dict_handler::is_value_returning_method(method_name) &&
+    method_name != "update")
+    return false;
+
+  // For "pop", which exists on both list and dict, treat as dict.pop() when
+  // the receiver does not resolve to a list symbol.
+  if (method_name == "pop")
+  {
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym == nullptr || sym->type != list_type;
+  }
+
+  return true;
 }
 
 exprt function_call_expr::handle_dict_method() const
@@ -2723,6 +2741,10 @@ exprt function_call_expr::handle_dict_method() const
 
   if (method_name == "update")
     return converter_.get_dict_handler()->handle_dict_update(
+      symbol_expr(*dict_symbol), call_);
+
+  if (method_name == "pop")
+    return converter_.get_dict_handler()->handle_dict_pop(
       symbol_expr(*dict_symbol), call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
@@ -2897,12 +2919,34 @@ bool function_call_expr::is_list_method_call() const
 
   const std::string &method_name = function_id_.get_function();
 
-  // Check if this is a known list method
-  return method_name == "append" || method_name == "pop" ||
-         method_name == "insert" || method_name == "remove" ||
-         method_name == "clear" || method_name == "extend" ||
-         method_name == "copy" || method_name == "sort" ||
-         method_name == "reverse";
+  if (
+    method_name != "append" && method_name != "pop" &&
+    method_name != "insert" && method_name != "remove" &&
+    method_name != "clear" && method_name != "extend" &&
+    method_name != "copy" && method_name != "sort" && method_name != "reverse")
+    return false;
+
+  // "pop" is shared between list and dict. Disambiguate using the actual
+  // symbol type: only treat as list.pop() when the receiver resolves to a
+  // symbol whose type is the list type.
+  if (method_name == "pop")
+  {
+    // A BinOp receiver (e.g., (s1 - s2).pop()) is always a set/list: dicts
+    // do not support arithmetic operators. handle_list_pop() already handles
+    // this case, so route it here before the symbol-type check.
+    if (
+      call_["func"].contains("value") &&
+      call_["func"]["value"].contains("_type") &&
+      call_["func"]["value"]["_type"] == "BinOp")
+      return true;
+
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->type == list_type;
+  }
+
+  return true;
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -4187,7 +4231,21 @@ exprt function_call_expr::handle_general_function_call()
     {
       const std::string &list_id = list_arg.identifier().as_string();
       // Check that all elements have the same type and get the common type
+      // Returns double_type() for mixed int/float lists (Python semantics)
       elem_type = python_list::check_homogeneous_list_types(list_id, func_name);
+
+      // Mixed int/float list: inline the comparison to avoid type confusion
+      // when passing the list to max_float/min_float model functions.
+      if (
+        elem_type.is_floatbv() && (func_name == "min" || func_name == "max") &&
+        python_list::has_mixed_numeric_types(list_id))
+      {
+        irep_idt comparison_op =
+          (func_name == "max") ? exprt::i_gt : exprt::i_lt;
+        python_list list_helper(converter_, call_["args"][0]);
+        return list_helper.build_min_max_for_mixed_numeric(
+          list_arg, list_id, func_name, comparison_op);
+      }
     }
     // Dispatch to typed builtin based on element type
     if (!elem_type.is_nil())
@@ -4562,8 +4620,38 @@ exprt function_call_expr::handle_general_function_call()
         }
         else
         {
-          exprt obj_expr = converter_.get_expr(func_value);
-          call.arguments().push_back(gen_address_of(obj_expr));
+          // Chained method call (e.g., B().g().f()): the receiver is the return
+          // value of an inner method call. Create a temp to hold it and use
+          // &temp as self so that self is addressable in the GOTO IR.
+          std::string receiver_type =
+            type_handler_.get_operand_type(func_value);
+          if (!receiver_type.empty())
+          {
+            typet class_type = type_handler_.get_typet(receiver_type);
+            symbolt &tmp = converter_.create_tmp_symbol(
+              func_value, "$inst$", class_type, exprt());
+            converter_.symbol_table().add(tmp);
+            code_declt tmp_decl(symbol_expr(tmp));
+            tmp_decl.location() = location;
+            converter_.current_block->copy_to_operands(tmp_decl);
+
+            // Process the inner call; set its LHS to tmp so the return value
+            // is stored there (emits: FUNCTION_CALL: tmp = inner_call(...)).
+            exprt inner_call = converter_.get_expr(func_value);
+            if (
+              inner_call.is_code() && inner_call.statement() == "function_call")
+            {
+              inner_call.op0() = symbol_expr(tmp);
+              inner_call.location() = location;
+              converter_.add_instruction(inner_call);
+            }
+            call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+          }
+          else
+          {
+            exprt obj_expr = converter_.get_expr(func_value);
+            call.arguments().push_back(gen_address_of(obj_expr));
+          }
         }
       }
       else

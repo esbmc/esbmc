@@ -450,10 +450,8 @@ exprt python_dict_handler::handle_dict_subscript(
   // If index == SIZE_MAX the key was not found: throw KeyError so that
   // try/except KeyError handlers can catch it (instead of failing the property).
   {
-    constant_exprt size_max(
-      integer2binary(SIZE_MAX, bv_width(size_type())),
-      integer2string(SIZE_MAX),
-      size_type());
+    const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+    constant_exprt size_max(size_max_val, size_type());
     exprt key_not_found = equality_exprt(symbol_expr(index_var), size_max);
 
     std::string keyerror_msg = "KeyError: key not found in dictionary";
@@ -461,8 +459,8 @@ exprt python_dict_handler::handle_dict_subscript(
     typet keyerror_type = type_handler_.get_typet(keyerror_type_str);
 
     exprt msg_size_expr = constant_exprt(
-      integer2binary(keyerror_msg.size(), bv_width(size_type())),
-      integer2string(keyerror_msg.size()),
+      integer2binary(keyerror_msg.size() + 1, bv_width(size_type())),
+      integer2string(keyerror_msg.size() + 1),
       size_type());
     typet str_arr_type = array_typet(char_type(), msg_size_expr);
 
@@ -851,10 +849,11 @@ void python_dict_handler::handle_dict_delete(
   typet keyerror_type = type_handler_.get_typet(exc_type_str);
   std::string error_msg = "KeyError: key not found in dictionary";
 
-  // Build the error message as a string constant
+  // Build the error message as a string constant (+1 for null terminator,
+  // matching the char[N+1] type produced by build_string_literal).
   exprt msg_size = constant_exprt(
-    integer2binary(error_msg.size(), bv_width(size_type())),
-    integer2string(error_msg.size()),
+    integer2binary(error_msg.size() + 1, bv_width(size_type())),
+    integer2string(error_msg.size() + 1),
     size_type());
   typet str_type = array_typet(char_type(), msg_size);
 
@@ -1308,10 +1307,8 @@ exprt python_dict_handler::handle_dict_get(
   converter_.add_instruction(try_find_call);
 
   // Check if key was found (index != SIZE_MAX)
-  constant_exprt size_max(
-    integer2binary(SIZE_MAX, bv_width(size_type())),
-    integer2string(SIZE_MAX),
-    size_type());
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  constant_exprt size_max(size_max_val, size_type());
   exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
 
   // Create result variable
@@ -1532,10 +1529,8 @@ exprt python_dict_handler::handle_dict_setdefault(
   converter_.add_instruction(try_find_call);
 
   // Check if key was found (index != SIZE_MAX)
-  constant_exprt size_max(
-    integer2binary(SIZE_MAX, bv_width(size_type())),
-    integer2string(SIZE_MAX),
-    size_type());
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  constant_exprt size_max(size_max_val, size_type());
   exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
 
   // Create result variable
@@ -1683,6 +1678,244 @@ exprt python_dict_handler::handle_dict_setdefault(
   }
 
   // Create if-then-else
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = key_found;
+  if_stmt.then_case() = then_block;
+  if_stmt.else_case() = else_block;
+  if_stmt.location() = location;
+  converter_.add_instruction(if_stmt);
+
+  return symbol_expr(result_var);
+}
+
+bool python_dict_handler::is_value_returning_method(
+  const std::string &method_name)
+{
+  return method_name == "pop" || method_name == "get" ||
+         method_name == "setdefault";
+}
+
+exprt python_dict_handler::handle_dict_pop(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  locationt location = converter_.get_location_from_decl(call_node);
+  typet list_type = type_handler_.get_list_type();
+
+  const auto &args = call_node["args"];
+  if (args.empty())
+    throw std::runtime_error("pop() missing required argument: 'key'");
+
+  exprt key_expr = converter_.get_expr(args[0]);
+  const bool has_default = (args.size() >= 2);
+
+  exprt default_value;
+  if (has_default)
+  {
+    default_value = converter_.get_expr(args[1]);
+    default_value = converter_.unwrap_optional_if_needed(default_value);
+  }
+
+  // Infer result type
+  typet result_type = resolve_expected_type_for_dict_subscript(dict_expr);
+  if (result_type.is_nil() || result_type.is_empty())
+  {
+    if (has_default && default_value.type() != none_type())
+      result_type = default_value.type();
+    else
+      result_type = long_int_type();
+  }
+
+  // Normalize string types to char*
+  const bool is_string_result =
+    (result_type.is_array() && result_type.subtype() == char_type()) ||
+    (result_type.is_pointer() && result_type.subtype() == char_type());
+  if (is_string_result)
+    result_type = gen_pointer_type(char_type());
+
+  member_exprt keys_member(dict_expr, "keys", list_type);
+  member_exprt values_member(dict_expr, "values", list_type);
+
+  const symbolt *try_find_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
+  if (!try_find_func)
+    throw std::runtime_error("__ESBMC_list_try_find_index not found");
+
+  const symbolt *at_func = symbol_table_.find_symbol("c:@F@__ESBMC_list_at");
+  if (!at_func)
+    throw std::runtime_error("__ESBMC_list_at not found");
+
+  const symbolt *remove_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_remove_at");
+  if (!remove_func)
+    throw std::runtime_error("__ESBMC_list_remove_at not found");
+
+  // Create temp for index result
+  symbolt &index_var = converter_.create_tmp_symbol(
+    call_node, "$dict_pop_idx$", size_type(), exprt());
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  // Get element info for the key
+  python_list list_handler(converter_, call_node);
+  list_elem_info key_info =
+    list_handler.get_list_element_info(call_node, key_expr);
+
+  // Call try_find_index (returns SIZE_MAX if not found)
+  code_function_callt try_find_call;
+  try_find_call.function() = symbol_expr(*try_find_func);
+  try_find_call.lhs() = symbol_expr(index_var);
+  try_find_call.arguments().push_back(keys_member);
+
+  exprt key_arg;
+  if (
+    key_info.elem_symbol->type.is_pointer() &&
+    key_info.elem_symbol->type.subtype() == char_type())
+    key_arg = symbol_expr(*key_info.elem_symbol);
+  else
+    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+
+  try_find_call.arguments().push_back(key_arg);
+  try_find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  try_find_call.arguments().push_back(key_info.elem_size);
+  try_find_call.type() = size_type();
+  try_find_call.location() = location;
+  converter_.add_instruction(try_find_call);
+
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  constant_exprt size_max(size_max_val, size_type());
+  exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
+
+  // Create result variable
+  symbolt &result_var = converter_.create_tmp_symbol(
+    call_node, "$dict_pop_result$", result_type, exprt());
+  code_declt result_decl(symbol_expr(result_var));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Then-branch: key found — retrieve value, remove from both lists
+  code_blockt then_block;
+
+  typet obj_ptr_type = pointer_typet(type_handler_.get_list_element_type());
+  symbolt &obj_var = converter_.create_tmp_symbol(
+    call_node, "$dict_pop_obj$", obj_ptr_type, exprt());
+  code_declt obj_decl(symbol_expr(obj_var));
+  obj_decl.location() = location;
+  then_block.copy_to_operands(obj_decl);
+
+  code_function_callt at_call;
+  at_call.function() = symbol_expr(*at_func);
+  at_call.lhs() = symbol_expr(obj_var);
+  at_call.arguments().push_back(values_member);
+  at_call.arguments().push_back(symbol_expr(index_var));
+  at_call.type() = obj_ptr_type;
+  at_call.location() = location;
+  then_block.copy_to_operands(at_call);
+
+  member_exprt obj_value(
+    dereference_exprt(
+      symbol_expr(obj_var), type_handler_.get_list_element_type()),
+    "value",
+    pointer_typet(empty_typet()));
+
+  exprt retrieved_value;
+  if (result_type.is_floatbv())
+  {
+    typecast_exprt value_as_float_ptr(obj_value, pointer_typet(result_type));
+    retrieved_value = dereference_exprt(value_as_float_ptr, result_type);
+  }
+  else if (result_type.is_signedbv() || result_type.is_unsignedbv())
+  {
+    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(result_type));
+    retrieved_value = dereference_exprt(value_as_int_ptr, result_type);
+  }
+  else if (result_type.is_bool())
+  {
+    typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
+    retrieved_value = dereference_exprt(value_as_bool_ptr, bool_type());
+  }
+  else if (is_string_result)
+  {
+    typecast_exprt value_as_string(obj_value, gen_pointer_type(char_type()));
+    retrieved_value = value_as_string;
+  }
+  else
+  {
+    typecast_exprt value_as_typed(obj_value, result_type);
+    retrieved_value = value_as_typed;
+  }
+
+  code_assignt value_assign(symbol_expr(result_var), retrieved_value);
+  value_assign.location() = location;
+  then_block.copy_to_operands(value_assign);
+
+  // Remove key and value at found index from both lists
+  code_function_callt remove_key_call;
+  remove_key_call.function() = symbol_expr(*remove_func);
+  remove_key_call.arguments().push_back(keys_member);
+  remove_key_call.arguments().push_back(symbol_expr(index_var));
+  remove_key_call.type() = bool_type();
+  remove_key_call.location() = location;
+  then_block.copy_to_operands(remove_key_call);
+
+  code_function_callt remove_value_call;
+  remove_value_call.function() = symbol_expr(*remove_func);
+  remove_value_call.arguments().push_back(values_member);
+  remove_value_call.arguments().push_back(symbol_expr(index_var));
+  remove_value_call.type() = bool_type();
+  remove_value_call.location() = location;
+  then_block.copy_to_operands(remove_value_call);
+
+  // Else-branch: key not found
+  code_blockt else_block;
+
+  if (has_default)
+  {
+    exprt coerced_default = default_value;
+    if (default_value.type() != result_type)
+      coerced_default = typecast_exprt(default_value, result_type);
+    code_assignt default_assign(symbol_expr(result_var), coerced_default);
+    default_assign.location() = location;
+    else_block.copy_to_operands(default_assign);
+  }
+  else
+  {
+    // Raise KeyError
+    std::string error_msg = "KeyError: key not found in dictionary";
+    exprt msg_size = constant_exprt(
+      integer2binary(error_msg.size() + 1, bv_width(size_type())),
+      integer2string(error_msg.size() + 1),
+      size_type());
+    typet str_type = array_typet(char_type(), msg_size);
+
+    symbolt &error_msg_var = converter_.create_tmp_symbol(
+      call_node, "$keyerror_msg$", str_type, exprt());
+    code_declt error_msg_decl(symbol_expr(error_msg_var));
+    error_msg_decl.location() = location;
+    else_block.copy_to_operands(error_msg_decl);
+
+    exprt error_string =
+      converter_.get_string_builder().build_string_literal(error_msg);
+    code_assignt error_msg_assign(symbol_expr(error_msg_var), error_string);
+    error_msg_assign.location() = location;
+    else_block.copy_to_operands(error_msg_assign);
+
+    std::string keyerror_type_str = "KeyError";
+    typet keyerror_type = type_handler_.get_typet(keyerror_type_str);
+    exprt exception_struct("struct", keyerror_type);
+    exception_struct.copy_to_operands(
+      address_of_exprt(symbol_expr(error_msg_var)));
+
+    exprt raise_keyerror = side_effect_exprt("cpp-throw", keyerror_type);
+    raise_keyerror.move_to_operands(exception_struct);
+    raise_keyerror.location() = location;
+
+    code_expressiont raise_code(raise_keyerror);
+    raise_code.location() = location;
+    else_block.copy_to_operands(raise_code);
+  }
+
   code_ifthenelset if_stmt;
   if_stmt.cond() = key_found;
   if_stmt.then_case() = then_block;
