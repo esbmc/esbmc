@@ -300,6 +300,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   std::string op(element["op"]["_type"].get<std::string>());
+  bool is_or = (op == "Or");
   exprt logical_expr(map_operator(op, bool_type()), bool_type());
   bool contains_non_boolean = false;
 
@@ -308,10 +309,92 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   bool old_is_converting_rhs = is_converting_rhs;
   is_converting_rhs = true;
 
-  // Iterate over operands of logical operations (and/or)
+  // Iterate over operands of logical operations (and/or).
+  // For operands after the first, redirect side-effect emission to a temporary
+  // block so we can wrap them in a short-circuit guard — matching Python's
+  // lazy evaluation semantics.  Without this, e.g. the dict subscript in
+  //   if length == longest or val < arr[ends[length + 1]]:
+  // would be materialised unconditionally before the short-circuit check.
+  bool is_first = true;
   for (const auto &operand : element["values"])
   {
-    exprt operand_expr = get_expr(operand);
+    exprt operand_expr;
+
+    if (is_first || !current_block)
+    {
+      // First operand is always evaluated unconditionally.
+      // When current_block is null there is no statement context and we
+      // cannot emit conditional wrapping — fall back to eager evaluation.
+      operand_expr = get_expr(operand);
+      is_first = false;
+    }
+    else
+    {
+      // Redirect side-effect emission to a temporary block.
+      code_blockt rhs_stmts;
+      code_blockt *saved_block = current_block;
+      current_block = &rhs_stmts;
+      operand_expr = get_expr(operand);
+      current_block = saved_block;
+
+      if (!rhs_stmts.operands().empty())
+      {
+        // The RHS operand emitted statements (e.g. dict subscript try-find).
+        // Wrap them in a guard so they only run when the short-circuit
+        // condition is not yet satisfied.
+        locationt loc = get_location_from_decl(element);
+
+        // Create a temp bool to hold the RHS result.
+        // Default to false for `or` (LHS true → result true without RHS).
+        // Default to true  for `and` (LHS false → result false without RHS).
+        exprt default_val =
+          is_or ? gen_zero(bool_type()) : gen_one(bool_type());
+        symbolt &sc_sym =
+          create_tmp_symbol(element, "$sc$", bool_type(), default_val);
+        code_declt sc_decl(symbol_expr(sc_sym));
+        sc_decl.location() = loc;
+        current_block->copy_to_operands(sc_decl);
+
+        // Append `sc = rhs_expr` as the last statement in the RHS block.
+        exprt rhs_bool = operand_expr;
+        if (!rhs_bool.is_boolean())
+          rhs_bool = typecast_exprt(rhs_bool, bool_type());
+        code_assignt sc_assign(symbol_expr(sc_sym), rhs_bool);
+        sc_assign.location() = loc;
+        rhs_stmts.copy_to_operands(sc_assign);
+
+        // Build the accumulated LHS condition from operands seen so far.
+        exprt lhs_cond;
+        if (logical_expr.operands().size() == 1)
+        {
+          lhs_cond = logical_expr.operands()[0];
+        }
+        else
+        {
+          lhs_cond = exprt(map_operator(op, bool_type()), bool_type());
+          for (const auto &prev_op : logical_expr.operands())
+            lhs_cond.copy_to_operands(prev_op);
+        }
+        if (!lhs_cond.is_boolean())
+          lhs_cond = typecast_exprt(lhs_cond, bool_type());
+
+        // For `or`:  guard = !lhs  (run RHS only when LHS is false)
+        // For `and`: guard =  lhs  (run RHS only when LHS is true)
+        exprt guard = is_or ? exprt("not", bool_type()) : lhs_cond;
+        if (is_or)
+          guard.copy_to_operands(lhs_cond);
+
+        code_ifthenelset guard_if;
+        guard_if.cond() = guard;
+        guard_if.then_case() = rhs_stmts;
+        guard_if.location() = loc;
+        current_block->copy_to_operands(guard_if);
+
+        // Replace the operand expression with the temp symbol.
+        operand_expr = symbol_expr(sc_sym);
+      }
+    }
+
     if (operand_expr.is_code() && operand_expr.statement() == "function_call")
     {
       const code_function_callt &code_call =
@@ -6841,6 +6924,55 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       not_exprt(equality_exprt(real, zero)),
       not_exprt(equality_exprt(imag, zero)));
     cond.location() = get_location_from_decl(ast_node["test"]);
+  }
+
+  // Python truthiness for list/dict: empty container is falsy.
+  // A PyListObject* is always non-null, so a raw pointer check would always be
+  // true. Convert to __ESBMC_list_size(list) != 0 instead.
+  if (current_block)
+  {
+    locationt cond_loc = get_location_from_decl(ast_node["test"]);
+    const typet list_type = type_handler_.get_list_type();
+    const symbolt *size_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+
+    auto make_size_check = [&](exprt container) -> exprt {
+      symbolt &size_sym = create_tmp_symbol(
+        ast_node,
+        "$cond_size$",
+        signedbv_typet(64),
+        gen_zero(signedbv_typet(64)));
+      code_declt size_decl(symbol_expr(size_sym));
+      size_decl.location() = cond_loc;
+      current_block->copy_to_operands(size_decl);
+
+      code_function_callt size_call;
+      size_call.function() = symbol_expr(*size_func);
+      size_call.lhs() = symbol_expr(size_sym);
+      size_call.arguments().push_back(container);
+      size_call.type() = signedbv_typet(64);
+      size_call.location() = cond_loc;
+      current_block->copy_to_operands(size_call);
+
+      exprt not_empty("notequal", bool_type());
+      not_empty.copy_to_operands(
+        symbol_expr(size_sym), gen_zero(signedbv_typet(64)));
+      not_empty.location() = cond_loc;
+      return not_empty;
+    };
+
+    if (
+      size_func &&
+      (cond.type() == list_type ||
+       (cond.type().is_pointer() && cond.type().subtype() == list_type)))
+    {
+      cond = make_size_check(cond);
+    }
+    else if (size_func && dict_handler_->is_dict_type(cond.type()))
+    {
+      member_exprt keys(cond, "keys", list_type);
+      cond = make_size_check(keys);
+    }
   }
 
   // Recover type

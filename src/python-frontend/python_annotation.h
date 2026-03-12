@@ -625,16 +625,31 @@ private:
             inferred_type = arg_type;
           else if (inferred_type != arg_type)
           {
-            // Type conflict between calls, use int as safe fallback
-            log_warning(
-              "Type inference conflict for parameter {}: {} vs {}. Using 'int' "
-              "as fallback ({}:{})",
-              param_index,
-              inferred_type,
-              arg_type,
-              python_filename_,
-              current_line_);
-            return "int";
+            // If one type is a specialisation of the other (e.g. "list" vs
+            // "list[int]"), prefer the more specific one.
+            auto is_prefix =
+              [](const std::string &base, const std::string &specific) {
+                return specific.size() > base.size() &&
+                       specific.substr(0, base.size()) == base &&
+                       specific[base.size()] == '[';
+              };
+            if (is_prefix(inferred_type, arg_type))
+            {
+              inferred_type = arg_type;
+            }
+            else if (!is_prefix(arg_type, inferred_type))
+            {
+              // Truly incompatible types — fall back to int
+              log_warning(
+                "Type inference conflict for parameter {}: {} vs {}. Using "
+                "'int' as fallback ({}:{})",
+                param_index,
+                inferred_type,
+                arg_type,
+                python_filename_,
+                current_line_);
+              return "int";
+            }
           }
         }
       }
@@ -1755,6 +1770,49 @@ private:
     return false;
   }
 
+  // Search body statements (recursively through for/while/if/with bodies)
+  // for the first `var_name[key] = value` assignment and return the type of
+  // the RHS value.  Returns empty string if none found.
+  std::string find_dict_subscript_assign_value_type(
+    const std::string &var_name,
+    const Json &stmts)
+  {
+    for (const auto &stmt : stmts)
+    {
+      const std::string &stype =
+        stmt.contains("_type") ? stmt["_type"].template get<std::string>() : "";
+
+      // Direct assignment: var[key] = value
+      if (stype == "Assign" && stmt.contains("targets"))
+      {
+        for (const auto &tgt : stmt["targets"])
+        {
+          if (
+            tgt["_type"] == "Subscript" && tgt.contains("value") &&
+            tgt["value"]["_type"] == "Name" && tgt["value"]["id"] == var_name)
+          {
+            std::string vt = get_argument_type(stmt["value"]);
+            if (!vt.empty() && vt != "Any")
+              return vt;
+          }
+        }
+      }
+
+      // Recurse into nested statement bodies
+      for (const char *key : {"body", "orelse", "handlers", "finalbody"})
+      {
+        if (stmt.contains(key) && stmt[key].is_array())
+        {
+          std::string found =
+            find_dict_subscript_assign_value_type(var_name, stmt[key]);
+          if (!found.empty())
+            return found;
+        }
+      }
+    }
+    return "";
+  }
+
   std::string infer_dict_value_type(const Json &var_node)
   {
     if (!var_node.contains("value") || var_node["value"].is_null())
@@ -1780,7 +1838,7 @@ private:
       }
     }
 
-    // Handle dict initialized from function call
+    // Handle dict initialized from a non-empty dict literal
     if (
       dict_init["_type"] == "Dict" && dict_init.contains("values") &&
       !dict_init["values"].empty())
@@ -1790,6 +1848,38 @@ private:
 
       if (!value_type.empty())
         return value_type;
+    }
+
+    // For empty dict literals `{}`, infer value type from subscript assignments
+    // in the enclosing function body (e.g. `ends[k] = i` → int).
+    if (dict_init["_type"] == "Dict")
+    {
+      // Extract variable name from the declaration node
+      std::string var_name;
+      if (var_node.contains("target") && var_node["target"].contains("id"))
+        var_name = var_node["target"]["id"].template get<std::string>();
+      else if (
+        var_node.contains("targets") && !var_node["targets"].empty() &&
+        var_node["targets"][0].contains("id"))
+        var_name = var_node["targets"][0]["id"].template get<std::string>();
+
+      if (!var_name.empty())
+      {
+        std::string func_name = get_current_func_name();
+        // Strip nested-function suffix to reach the enclosing function
+        std::size_t at_pos = func_name.rfind("@F@");
+        std::string top_func = (at_pos != std::string::npos)
+                                 ? func_name.substr(at_pos + 3)
+                                 : func_name;
+        Json func_def = find_function_recursive(top_func, ast_["body"]);
+        if (!func_def.empty() && func_def.contains("body"))
+        {
+          std::string found =
+            find_dict_subscript_assign_value_type(var_name, func_def["body"]);
+          if (!found.empty())
+            return found;
+        }
+      }
     }
 
     return "Any";
@@ -2873,7 +2963,15 @@ private:
           inferred_type = "dict";
       }
       else
-        inferred_type = "dict";
+      {
+        // Empty dict literal: try to infer value type from subscript assignments
+        // e.g. `ends = {}` with later `ends[k] = i` (i: int) → "dict[Any, int]"
+        std::string found_value_type = infer_dict_value_type(stmt);
+        if (!found_value_type.empty() && found_value_type != "Any")
+          inferred_type = "dict[Any, " + found_value_type + "]";
+        else
+          inferred_type = "dict";
+      }
     }
     else if (value_type == "Compare")
       inferred_type = "bool";

@@ -1063,6 +1063,96 @@ typet python_dict_handler::get_dict_value_type_from_annotation(
   return empty_typet();
 }
 
+/// Return the type string for expression `node`, using AST post-annotation
+/// info and the symbol table.  Returns "" when the type cannot be determined.
+static std::string infer_node_type_str(
+  const nlohmann::json &node,
+  const std::string &func_name,
+  const nlohmann::json &ast)
+{
+  if (!node.contains("_type"))
+    return "";
+  const std::string &nt = node["_type"].get<std::string>();
+
+  if (nt == "Constant")
+  {
+    if (!node.contains("value") || node["value"].is_null())
+      return "";
+    if (node["value"].is_boolean())
+      return "bool";
+    if (node["value"].is_number_integer() || node["value"].is_number_unsigned())
+      return "int";
+    if (node["value"].is_number_float())
+      return "float";
+    if (node["value"].is_string())
+      return "str";
+    return "";
+  }
+
+  if (nt == "Name")
+  {
+    const std::string &name = node["id"].get<std::string>();
+    nlohmann::json vd = json_utils::find_var_decl(name, func_name, ast);
+    if (
+      !vd.empty() && vd.contains("annotation") && !vd["annotation"].is_null() &&
+      vd["annotation"].contains("id"))
+      return vd["annotation"]["id"].get<std::string>();
+    return "";
+  }
+
+  // Arithmetic operations on integers yield int
+  if (nt == "BinOp" || nt == "UnaryOp")
+    return "int";
+
+  return "";
+}
+
+/// Recursively search `stmts` for `var_name[key] = value` assignments and
+/// return the inferred value type string.
+static std::string search_dict_value_type_in_stmts(
+  const std::string &var_name,
+  const std::string &func_name,
+  const nlohmann::json &stmts,
+  const nlohmann::json &ast)
+{
+  for (const auto &stmt : stmts)
+  {
+    const std::string &stype =
+      stmt.contains("_type") ? stmt["_type"].get<std::string>() : "";
+
+    if (stype == "Assign" && stmt.contains("targets"))
+    {
+      for (const auto &tgt : stmt["targets"])
+      {
+        if (
+          tgt.contains("_type") && tgt["_type"] == "Subscript" &&
+          tgt.contains("value") && tgt["value"].contains("_type") &&
+          tgt["value"]["_type"] == "Name" &&
+          tgt["value"]["id"].get<std::string>() == var_name &&
+          stmt.contains("value"))
+        {
+          std::string vt = infer_node_type_str(stmt["value"], func_name, ast);
+          if (!vt.empty() && vt != "Any")
+            return vt;
+        }
+      }
+    }
+
+    // Recurse into nested bodies (for/while/if/try/with/else)
+    for (const char *key : {"body", "orelse", "handlers", "finalbody"})
+    {
+      if (stmt.contains(key) && stmt[key].is_array())
+      {
+        std::string found =
+          search_dict_value_type_in_stmts(var_name, func_name, stmt[key], ast);
+        if (!found.empty())
+          return found;
+      }
+    }
+  }
+  return "";
+}
+
 typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   const exprt &dict_expr)
 {
@@ -1076,8 +1166,9 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
 
   // Look up the variable's declaration in the AST to get its annotation
   std::string var_name = sym->name.as_string();
-  nlohmann::json var_decl = json_utils::find_var_decl(
-    var_name, converter_.get_current_func_name(), converter_.get_ast_json());
+  const std::string &func_name = converter_.get_current_func_name();
+  const nlohmann::json &ast = converter_.get_ast_json();
+  nlohmann::json var_decl = json_utils::find_var_decl(var_name, func_name, ast);
 
   if (var_decl.empty() || !var_decl.contains("annotation"))
     return empty_typet();
@@ -1092,11 +1183,10 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
     const auto &call_node = var_decl["value"];
     if (call_node["func"]["_type"] == "Name")
     {
-      std::string func_name = call_node["func"]["id"].get<std::string>();
+      std::string fn = call_node["func"]["id"].get<std::string>();
 
       // Find the function definition to get its return type annotation
-      nlohmann::json func_def =
-        json_utils::find_function(converter_.get_ast_json()["body"], func_name);
+      nlohmann::json func_def = json_utils::find_function(ast["body"], fn);
 
       if (
         !func_def.empty() && func_def.contains("returns") &&
@@ -1111,7 +1201,36 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   }
 
   // Extract the value type from the dict annotation
-  return get_dict_value_type_from_annotation(var_decl["annotation"]);
+  typet from_annotation =
+    get_dict_value_type_from_annotation(var_decl["annotation"]);
+  if (!from_annotation.is_nil() && !from_annotation.is_empty())
+    return from_annotation;
+
+  // Fallback: for bare "dict" annotations (no type params), infer value type
+  // by searching the enclosing function body for var[key] = value assignments.
+  if (
+    var_decl["annotation"].contains("_type") &&
+    var_decl["annotation"]["_type"] == "Name" &&
+    var_decl["annotation"].contains("id") &&
+    var_decl["annotation"]["id"].get<std::string>() == "dict")
+  {
+    // Find the enclosing function body
+    std::string top_func = func_name;
+    std::size_t at = top_func.rfind("@F@");
+    if (at != std::string::npos)
+      top_func = top_func.substr(at + 3);
+    nlohmann::json func_def = json_utils::find_function(ast["body"], top_func);
+
+    if (!func_def.empty() && func_def.contains("body"))
+    {
+      std::string vt_str = search_dict_value_type_in_stmts(
+        var_name, func_name, func_def["body"], ast);
+      if (!vt_str.empty())
+        return type_handler_.get_typet(vt_str);
+    }
+  }
+
+  return empty_typet();
 }
 
 bool python_dict_handler::handle_subscript_assignment_check(
