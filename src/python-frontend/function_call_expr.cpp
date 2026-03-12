@@ -4231,7 +4231,21 @@ exprt function_call_expr::handle_general_function_call()
     {
       const std::string &list_id = list_arg.identifier().as_string();
       // Check that all elements have the same type and get the common type
+      // Returns double_type() for mixed int/float lists (Python semantics)
       elem_type = python_list::check_homogeneous_list_types(list_id, func_name);
+
+      // Mixed int/float list: inline the comparison to avoid type confusion
+      // when passing the list to max_float/min_float model functions.
+      if (
+        elem_type.is_floatbv() && (func_name == "min" || func_name == "max") &&
+        python_list::has_mixed_numeric_types(list_id))
+      {
+        irep_idt comparison_op =
+          (func_name == "max") ? exprt::i_gt : exprt::i_lt;
+        python_list list_helper(converter_, call_["args"][0]);
+        return list_helper.build_min_max_for_mixed_numeric(
+          list_arg, list_id, func_name, comparison_op);
+      }
     }
     // Dispatch to typed builtin based on element type
     if (!elem_type.is_nil())
