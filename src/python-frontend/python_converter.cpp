@@ -307,7 +307,8 @@ static const nlohmann::json *load_module_ast_cached(
   module_locator &locator,
   std::unordered_map<std::string, nlohmann::json> &module_ast_cache)
 {
-  if (auto it = module_ast_cache.find(module_name); it != module_ast_cache.end())
+  if (auto it = module_ast_cache.find(module_name);
+      it != module_ast_cache.end())
     return &it->second;
 
   std::ifstream imported_file = locator.open_module_file(module_name);
@@ -345,11 +346,7 @@ static void collect_transitive_import_roots_recursive(
       return;
 
     collect_transitive_import_roots_recursive(
-      *nested_module_json,
-      locator,
-      visited_modules,
-      roots,
-      module_ast_cache);
+      *nested_module_json, locator, visited_modules, roots, module_ast_cache);
   };
 
   for (const auto &elem : module_ast["body"])
@@ -411,7 +408,8 @@ static void collect_model_symbols_from_module(
         continue;
       for (const auto &imported_name : elem["names"])
       {
-        if (!imported_name.contains("name") || !imported_name["name"].is_string())
+        if (
+          !imported_name.contains("name") || !imported_name["name"].is_string())
           continue;
 
         const std::string qualified = imported_name["name"].get<std::string>();
@@ -421,7 +419,8 @@ static void collect_model_symbols_from_module(
 
         std::string alias = root;
         if (
-          imported_name.contains("asname") && !imported_name["asname"].is_null() &&
+          imported_name.contains("asname") &&
+          !imported_name["asname"].is_null() &&
           imported_name["asname"].is_string())
         {
           alias = imported_name["asname"].get<std::string>();
@@ -447,7 +446,8 @@ static void collect_model_symbols_from_module(
 
       for (const auto &imported_name : elem["names"])
       {
-        if (!imported_name.contains("name") || !imported_name["name"].is_string())
+        if (
+          !imported_name.contains("name") || !imported_name["name"].is_string())
           continue;
         const std::string symbol = imported_name["name"].get<std::string>();
         if (symbol == "*")
@@ -458,7 +458,8 @@ static void collect_model_symbols_from_module(
 
         std::string alias = symbol;
         if (
-          imported_name.contains("asname") && !imported_name["asname"].is_null() &&
+          imported_name.contains("asname") &&
+          !imported_name["asname"].is_null() &&
           imported_name["asname"].is_string())
         {
           alias = imported_name["asname"].get<std::string>();
@@ -500,19 +501,23 @@ static void collect_model_symbols_from_module(
                   std::vector<std::string> module_parts =
                     split_module_path(qualified_module);
                   if (!module_parts.empty())
-                    module_parts.erase(module_parts.begin()); // drop root segment
+                    module_parts.erase(
+                      module_parts.begin()); // drop root segment
                   full_segments.insert(
-                    full_segments.end(), module_parts.begin(), module_parts.end());
+                    full_segments.end(),
+                    module_parts.begin(),
+                    module_parts.end());
                   full_segments.insert(
                     full_segments.end(), attr_chain.begin(), attr_chain.end());
-                  add_model_symbol_candidates(root, full_segments, model_symbols);
+                  add_model_symbol_candidates(
+                    root, full_segments, model_symbols);
                 }
               }
             }
           }
           else if (
-            func.contains("_type") && func["_type"] == "Name" && func.contains("id") &&
-            func["id"].is_string())
+            func.contains("_type") && func["_type"] == "Name" &&
+            func.contains("id") && func["id"].is_string())
           {
             const std::string name = func["id"].get<std::string>();
             if (auto it = direct_name_to_root_symbol.find(name);
@@ -562,7 +567,8 @@ build_model_manifest_for_directory(const std::string &dir_path)
     std::time_t cached_mtime = 0;
     try
     {
-      cached_mtime = static_cast<std::time_t>(std::stoll(header_line.substr(7)));
+      cached_mtime =
+        static_cast<std::time_t>(std::stoll(header_line.substr(7)));
     }
     catch (const std::exception &)
     {
@@ -578,7 +584,9 @@ build_model_manifest_for_directory(const std::string &dir_path)
       if (line.empty())
         continue;
       const std::size_t tab_pos = line.find('\t');
-      if (tab_pos == std::string::npos || tab_pos == 0 || tab_pos + 1 >= line.size())
+      if (
+        tab_pos == std::string::npos || tab_pos == 0 ||
+        tab_pos + 1 >= line.size())
         continue;
 
       const std::string stem = line.substr(0, tab_pos);
@@ -2354,16 +2362,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         const double denom = yr_const * yr_const + yi_const * yi_const;
         if (denom != 0.0 && std::isfinite(denom))
         {
-          const double real = (xr_const * yr_const + xi_const * yi_const) / denom;
-          const double imag = (xi_const * yr_const - xr_const * yi_const) / denom;
+          const double real =
+            (xr_const * yr_const + xi_const * yi_const) / denom;
+          const double imag =
+            (xi_const * yr_const - xr_const * yi_const) / denom;
           return make_complex(
-            from_double(real, double_type()),
-            from_double(imag, double_type()));
+            from_double(real, double_type()), from_double(imag, double_type()));
         }
       }
 
-      if (get_const_double(xi, xi_const) && xi_const == 0.0 &&
-          get_const_double(yi, yi_const) && yi_const == 0.0)
+      if (
+        get_const_double(xi, xi_const) && xi_const == 0.0 &&
+        get_const_double(yi, yi_const) && yi_const == 0.0)
       {
         return make_complex(
           ieee_binop("ieee_div", xr, yr), from_double(0.0, double_type()));
@@ -3409,8 +3419,9 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
                                        : parsed.get_function());
 
   const import_lookup_entryt &lookup = get_import_lookup_for_current_ast();
-  if (lookup.unresolved_symbol_cache.find(symbol_id) !=
-      lookup.unresolved_symbol_cache.end())
+  if (
+    lookup.unresolved_symbol_cache.find(symbol_id) !=
+    lookup.unresolved_symbol_cache.end())
   {
     return nullptr;
   }
@@ -3431,8 +3442,8 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   if (at_pos == std::string::npos)
     return nullptr;
 
-  auto build_imported_symbol_id = [&](const std::string &full_path) -> std::string {
-
+  auto build_imported_symbol_id =
+    [&](const std::string &full_path) -> std::string {
     std::string imported_symbol;
     imported_symbol.reserve(
       (start + prefix.size()) + full_path.size() + (symbol_id.size() - at_pos));
@@ -3457,7 +3468,8 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
 
   if (!lookup_name.empty())
   {
-    if (auto it = lookup.named_paths.find(lookup_name); it != lookup.named_paths.end())
+    if (auto it = lookup.named_paths.find(lookup_name);
+        it != lookup.named_paths.end())
     {
       for (const auto &full_path : it->second)
       {
@@ -3488,9 +3500,8 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
 std::string python_converter::import_lookup_cache_key() const
 {
   return current_python_file + ":" +
-         std::to_string(
-           static_cast<std::uint64_t>(
-             reinterpret_cast<std::uintptr_t>(ast_json))) +
+         std::to_string(static_cast<std::uint64_t>(
+           reinterpret_cast<std::uintptr_t>(ast_json))) +
          ":" + std::to_string(converter_instance_id_) + ":" +
          std::to_string(conversion_epoch_);
 }
@@ -3503,11 +3514,8 @@ python_converter::get_cached_module_import_names(
   if (module_ast.contains("filename") && module_ast["filename"].is_string())
     cache_key = module_ast["filename"].get<std::string>();
   else
-    cache_key =
-      "__anon__:" +
-      std::to_string(
-        static_cast<std::uint64_t>(
-          reinterpret_cast<std::uintptr_t>(&module_ast)));
+    cache_key = "__anon__:" + std::to_string(static_cast<std::uint64_t>(
+                                reinterpret_cast<std::uintptr_t>(&module_ast)));
 
   if (auto it = module_import_names_cache_.find(cache_key);
       it != module_import_names_cache_.end())
@@ -3535,7 +3543,8 @@ python_converter::get_cached_module_import_names(
     }
   }
 
-  auto [it, _] = module_import_names_cache_.emplace(cache_key, std::move(imports));
+  auto [it, _] =
+    module_import_names_cache_.emplace(cache_key, std::move(imports));
   return it->second;
 }
 
@@ -3543,7 +3552,8 @@ const python_converter::import_lookup_entryt &
 python_converter::get_import_lookup_for_current_ast() const
 {
   const std::string key = import_lookup_cache_key();
-  if (auto it = import_lookup_cache_.find(key); it != import_lookup_cache_.end())
+  if (auto it = import_lookup_cache_.find(key);
+      it != import_lookup_cache_.end())
     return it->second;
 
   import_lookup_entryt entry;
@@ -3667,7 +3677,8 @@ symbolt *python_converter::find_symbol(const std::string &sym_id) const
   return find_imported_symbol(sym_id);
 }
 
-bool python_converter::is_user_imported_symbol(const std::string &symbol_id) const
+bool python_converter::is_user_imported_symbol(
+  const std::string &symbol_id) const
 {
   return find_imported_symbol(symbol_id) != nullptr;
 }
@@ -3681,13 +3692,14 @@ std::string python_converter::resolve_module_chain_path(
 
   std::string qualified_chain = module_root;
   qualified_chain.reserve(
-    module_root.size() + 1 + std::accumulate(
-                                segments.begin(),
-                                segments.end(),
-                                std::size_t{0},
-                                [](std::size_t acc, const std::string &s) {
-                                  return acc + s.size() + 1;
-                                }));
+    module_root.size() + 1 +
+    std::accumulate(
+      segments.begin(),
+      segments.end(),
+      std::size_t{0},
+      [](std::size_t acc, const std::string &s) {
+        return acc + s.size() + 1;
+      }));
   for (const auto &segment : segments)
   {
     qualified_chain += ".";
@@ -3715,8 +3727,9 @@ std::string python_converter::resolve_module_chain_path(
   }
 
   auto try_find_in_index =
-    [&](const std::unordered_map<std::string, std::string> &index,
-        const std::string &candidate) -> bool {
+    [&](
+      const std::unordered_map<std::string, std::string> &index,
+      const std::string &candidate) -> bool {
     auto it = index.find(candidate);
     if (it == index.end())
       return false;
@@ -3724,8 +3737,8 @@ std::string python_converter::resolve_module_chain_path(
     return true;
   };
 
-  auto try_candidates = [&](const std::unordered_map<std::string, std::string> &index)
-    -> bool {
+  auto try_candidates =
+    [&](const std::unordered_map<std::string, std::string> &index) -> bool {
     for (std::size_t len = segments.size(); len >= 1; --len)
     {
       const std::string &leaf = segments[len - 1];
@@ -3762,9 +3775,12 @@ std::string python_converter::resolve_module_chain_path(
   if (resolved_path.empty())
   {
     std::string model_root = module_root;
-    if (model_symbol_index_by_root_.find(model_root) == model_symbol_index_by_root_.end())
+    if (
+      model_symbol_index_by_root_.find(model_root) ==
+      model_symbol_index_by_root_.end())
     {
-      const std::string *base_module_path = get_imported_module_path_ptr(module_root);
+      const std::string *base_module_path =
+        get_imported_module_path_ptr(module_root);
       if (base_module_path != nullptr)
       {
         fs::path p(*base_module_path);
@@ -3788,13 +3804,15 @@ std::string python_converter::resolve_module_chain_path(
   return resolved_path;
 }
 
-std::string python_converter::resolve_object_alias(const std::string &obj_name) const
+std::string
+python_converter::resolve_object_alias(const std::string &obj_name) const
 {
   if (obj_name.empty())
     return obj_name;
 
   const std::string cache_key = current_python_file + ":" + obj_name;
-  if (auto it = object_alias_cache_.find(cache_key); it != object_alias_cache_.end())
+  if (auto it = object_alias_cache_.find(cache_key);
+      it != object_alias_cache_.end())
     return it->second;
 
   std::string resolved = json_utils::get_object_alias(*ast_json, obj_name);
@@ -3814,8 +3832,8 @@ symbolt *python_converter::find_symbol_in_global_scope(
   // First try the direct "remove class scope, keep function/object" form:
   // py:file@C@Foo@F@bar -> py:file@F@bar
   if (
-    class_start_pos != std::string::npos && func_start_pos != std::string::npos &&
-    func_start_pos > class_start_pos)
+    class_start_pos != std::string::npos &&
+    func_start_pos != std::string::npos && func_start_pos > class_start_pos)
   {
     std::string no_class = symbol_id;
     no_class.erase(class_start_pos, func_start_pos - class_start_pos);
@@ -10332,10 +10350,12 @@ void python_converter::convert()
 
     module_locator import_locator(ast_output_dir);
     const std::unordered_set<std::string> transitive_import_roots =
-      collect_transitive_import_roots(*ast_json, import_locator, module_ast_cache);
+      collect_transitive_import_roots(
+        *ast_json, import_locator, module_ast_cache);
     model_symbol_mapt model_symbols;
     std::unordered_set<std::string> need_full_folder;
-    const std::unordered_set<std::string> selective_model_roots = {"os", "numpy"};
+    const std::unordered_set<std::string> selective_model_roots = {
+      "os", "numpy"};
     using model_scan_cache_valuet =
       std::pair<model_symbol_mapt, std::unordered_set<std::string>>;
     std::unordered_map<std::string, model_scan_cache_valuet> model_scan_cache;
@@ -10375,7 +10395,8 @@ void python_converter::convert()
       if (transitive_import_roots.find(folder) == transitive_import_roots.end())
         continue;
       model_manifests.emplace(
-        folder, build_model_manifest_for_directory(ast_output_dir + "/" + folder));
+        folder,
+        build_model_manifest_for_directory(ast_output_dir + "/" + folder));
     }
 
     for (const auto &folder : model_folders)
@@ -10591,9 +10612,8 @@ void python_converter::convert()
         const_cast<global_scope &>(global_scope_));
       imported_annotator.add_type_annotation();
 
-      exprt imported_code = with_ast(cached_module, [&]() {
-        return get_block((*cached_module)["body"]);
-      });
+      exprt imported_code = with_ast(
+        cached_module, [&]() { return get_block((*cached_module)["body"]); });
 
       convert_expression_to_code(imported_code);
 

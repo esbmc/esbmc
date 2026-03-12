@@ -43,12 +43,14 @@ constexpr std::size_t reason_count =
     cmath_lowering_policy::fallback_reasont::domain_guard_failed) +
   1;
 
-const std::array<const char *, bucket_count> bucket_names = {
-  "asin", "atan", "asinh", "atanh", "log", "log10", "other"};
+const std::array<const char *, bucket_count> bucket_names =
+  {"asin", "atan", "asinh", "atanh", "log", "log10", "other"};
 
 std::array<std::atomic<std::size_t>, bucket_count> g_fast_path_hits_by_bucket{};
-std::array<std::atomic<std::size_t>, bucket_count> g_model_fallbacks_by_bucket{};
-std::array<std::atomic<std::size_t>, bucket_count> g_budget_bailouts_by_bucket{};
+std::array<std::atomic<std::size_t>, bucket_count>
+  g_model_fallbacks_by_bucket{};
+std::array<std::atomic<std::size_t>, bucket_count>
+  g_budget_bailouts_by_bucket{};
 std::array<std::array<std::atomic<std::size_t>, reason_count>, bucket_count>
   g_fallback_reasons_by_bucket{};
 
@@ -337,7 +339,8 @@ get_function_telemetry_snapshot()
     stats.budget_bailouts =
       g_budget_bailouts_by_bucket[bucket].load(std::memory_order_relaxed);
 
-    for (std::size_t reason_index = 0; reason_index < reason_count; ++reason_index)
+    for (std::size_t reason_index = 0; reason_index < reason_count;
+         ++reason_index)
     {
       const std::size_t count =
         g_fallback_reasons_by_bucket[bucket][reason_index].load(

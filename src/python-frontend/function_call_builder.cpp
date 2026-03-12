@@ -352,7 +352,8 @@ symbol_id function_call_builder::build_function_id() const
       !json_utils::is_class(obj_name, ast) &&
       converter_.is_imported_module(obj_name))
     {
-      const std::string *module_path = converter_.get_imported_module_path_ptr(obj_name);
+      const std::string *module_path =
+        converter_.get_imported_module_path_ptr(obj_name);
       if (module_path != nullptr)
       {
         function_id =

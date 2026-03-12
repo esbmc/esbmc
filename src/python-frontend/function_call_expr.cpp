@@ -69,9 +69,9 @@ find_symbol_cached(python_converter &converter, const std::string &symbol_id)
   using cache_keyt = std::string;
   static thread_local std::unordered_map<cache_keyt, const symbolt *> cache;
 
-  const std::string key = std::to_string(converter.get_converter_instance_id()) +
-                          ":" + std::to_string(converter.get_conversion_epoch()) +
-                          ":" + symbol_id;
+  const std::string key =
+    std::to_string(converter.get_converter_instance_id()) + ":" +
+    std::to_string(converter.get_conversion_epoch()) + ":" + symbol_id;
   if (auto it = cache.find(key); it != cache.end())
     return it->second;
 
@@ -93,9 +93,9 @@ const symbolt *find_model_symbol_for_callsite_cached(
   using cache_keyt = std::string;
   static thread_local std::unordered_map<cache_keyt, const symbolt *> cache;
 
-  std::string key = std::to_string(converter.get_converter_instance_id()) + ":" +
-                    std::to_string(converter.get_conversion_epoch()) + ":" +
-                    symbol_id + "#" + std::to_string(model_args.size());
+  std::string key = std::to_string(converter.get_converter_instance_id()) +
+                    ":" + std::to_string(converter.get_conversion_epoch()) +
+                    ":" + symbol_id + "#" + std::to_string(model_args.size());
   for (const auto &arg : model_args)
     key += ":" + id2string(arg.type().id());
 
@@ -112,15 +112,16 @@ const symbolt *find_model_symbol_for_callsite_cached(
   return sym;
 }
 
-bool
-is_user_imported_symbol_cached(python_converter &converter, const std::string &symbol_id)
+bool is_user_imported_symbol_cached(
+  python_converter &converter,
+  const std::string &symbol_id)
 {
   using cache_keyt = std::string;
   static thread_local std::unordered_map<cache_keyt, bool> cache;
 
-  const std::string key = std::to_string(converter.get_converter_instance_id()) +
-                          ":" + std::to_string(converter.get_conversion_epoch()) +
-                          ":" + symbol_id;
+  const std::string key =
+    std::to_string(converter.get_converter_instance_id()) + ":" +
+    std::to_string(converter.get_conversion_epoch()) + ":" + symbol_id;
   if (auto it = cache.find(key); it != cache.end())
     return it->second;
 
@@ -145,8 +146,7 @@ exprt one_double_expr()
 
 exprt cached_real_part(const exprt &complex_expr)
 {
-  using cachet =
-    std::unordered_map<exprt, exprt, irep_full_hash, irep_full_eq>;
+  using cachet = std::unordered_map<exprt, exprt, irep_full_hash, irep_full_eq>;
   static thread_local cachet cache;
 
   if (auto it = cache.find(complex_expr); it != cache.end())
@@ -161,8 +161,7 @@ exprt cached_real_part(const exprt &complex_expr)
 
 exprt cached_imag_part(const exprt &complex_expr)
 {
-  using cachet =
-    std::unordered_map<exprt, exprt, irep_full_hash, irep_full_eq>;
+  using cachet = std::unordered_map<exprt, exprt, irep_full_hash, irep_full_eq>;
   static thread_local cachet cache;
 
   if (auto it = cache.find(complex_expr); it != cache.end())
@@ -201,7 +200,8 @@ bool try_extract_constant_complex_value(
   if (expr.id() == "symbol")
   {
     const auto &sym_expr = to_symbol_expr(expr);
-    const symbolt *sym = converter.symbol_table().find_symbol(sym_expr.get_identifier());
+    const symbolt *sym =
+      converter.symbol_table().find_symbol(sym_expr.get_identifier());
     if (sym != nullptr && !sym->value.is_nil() && sym->value != expr)
     {
       return try_extract_constant_complex_value(
@@ -333,14 +333,17 @@ bool resolve_constant_number_from_ast(
 
   if (kind == "BinOp")
   {
-    if (!node.contains("left") || !node.contains("right") || !node.contains("op"))
+    if (
+      !node.contains("left") || !node.contains("right") || !node.contains("op"))
       return false;
     if (!node["op"].contains("_type"))
       return false;
     double lhs = 0.0, rhs = 0.0;
-    if (!resolve_constant_number_from_ast(module_ast, node["left"], lhs, visiting, depth + 1))
+    if (!resolve_constant_number_from_ast(
+          module_ast, node["left"], lhs, visiting, depth + 1))
       return false;
-    if (!resolve_constant_number_from_ast(module_ast, node["right"], rhs, visiting, depth + 1))
+    if (!resolve_constant_number_from_ast(
+          module_ast, node["right"], rhs, visiting, depth + 1))
       return false;
     const std::string op_kind = node["op"]["_type"].get<std::string>();
     if (op_kind == "Add")
@@ -380,11 +383,14 @@ bool resolve_constant_complex_from_ast(
       return false;
     if (!func.contains("id") || func["id"] != "complex")
       return false;
-    if (!node["args"].is_array() || node["args"].empty() || node["args"].size() > 2)
+    if (
+      !node["args"].is_array() || node["args"].empty() ||
+      node["args"].size() > 2)
       return false;
 
     double r = 0.0, i = 0.0;
-    if (!resolve_constant_number_from_ast(module_ast, node["args"][0], r, visiting, depth + 1))
+    if (!resolve_constant_number_from_ast(
+          module_ast, node["args"][0], r, visiting, depth + 1))
       return false;
     if (node["args"].size() == 2)
     {
@@ -618,9 +624,8 @@ void function_call_expr::get_function_type()
     if (!rooted_in_imported_module && call_["func"].contains("value"))
     {
       const nlohmann::json *root = &call_["func"]["value"];
-      while (
-        root->contains("_type") && (*root)["_type"] == "Attribute" &&
-        root->contains("value"))
+      while (root->contains("_type") && (*root)["_type"] == "Attribute" &&
+             root->contains("value"))
       {
         root = &(*root)["value"];
       }
@@ -638,7 +643,9 @@ void function_call_expr::get_function_type()
     // Exclude module.Class.method() pattern
     // Walk the full attribute chain to find the root Name node, regardless of depth.
     bool is_nested_instance_attr = false;
-    if (!rooted_in_imported_module && call_["func"]["value"]["_type"] == "Attribute")
+    if (
+      !rooted_in_imported_module &&
+      call_["func"]["value"]["_type"] == "Attribute")
     {
       const nlohmann::json *cur = &call_["func"]["value"];
       while ((*cur)["_type"] == "Attribute")
@@ -676,7 +683,8 @@ void function_call_expr::get_function_type()
     {
       function_type_ = FunctionType::ClassMethod;
     }
-    else if (!converter_.is_imported_module(caller) && !rooted_in_imported_module)
+    else if (
+      !converter_.is_imported_module(caller) && !rooted_in_imported_module)
     {
       function_type_ = FunctionType::InstanceMethod;
     }
@@ -2737,7 +2745,8 @@ std::string function_call_expr::get_object_name() const
       obj_name = subelement["id"].get<std::string>();
   }
 
-  cached_object_name_ = json_utils::get_object_alias(converter_.ast(), obj_name);
+  cached_object_name_ =
+    json_utils::get_object_alias(converter_.ast(), obj_name);
   return *cached_object_name_;
 }
 
@@ -2770,7 +2779,8 @@ bool function_call_expr::is_cmath_inverse_call() const
   if (get_object_name() != "cmath")
     return false;
 
-  return cmath_lowering_policy::is_inverse_function(function_id_.get_function());
+  return cmath_lowering_policy::is_inverse_function(
+    function_id_.get_function());
 }
 
 bool function_call_expr::is_math_module_dispatch_target() const
@@ -2787,7 +2797,8 @@ bool function_call_expr::is_math_module_dispatch_target() const
     math_guard_utils::math_wrapper_function_names().count(func_name) != 0;
 
   return (is_math_module &&
-          math_guard_utils::math_module_function_names().count(func_name) != 0) ||
+          math_guard_utils::math_module_function_names().count(func_name) !=
+            0) ||
          is_math_wrapper;
 }
 
@@ -2799,7 +2810,8 @@ exprt function_call_expr::handle_cmath_log_call()
     call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
 
   auto raise_type_error = [this](const std::string &msg) -> exprt {
-    return converter_.get_exception_handler().gen_exception_raise("TypeError", msg);
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", msg);
   };
 
   auto build_model_call_or_attr_error =
@@ -2809,7 +2821,8 @@ exprt function_call_expr::handle_cmath_log_call()
     if (model_symbol == nullptr)
     {
       return converter_.get_exception_handler().gen_exception_raise(
-        "AttributeError", "module 'cmath' has no attribute '" + func_name + "'");
+        "AttributeError",
+        "module 'cmath' has no attribute '" + func_name + "'");
     }
 
     side_effect_expr_function_callt model_call;
@@ -2906,8 +2919,9 @@ exprt function_call_expr::handle_cmath_log_call()
       return make_complex(real, zero_double_expr());
     }
 
-    if (cmath_lowering_policy::is_structural_one(c) &&
-        cmath_lowering_policy::is_structural_zero(d))
+    if (
+      cmath_lowering_policy::is_structural_one(c) &&
+      cmath_lowering_policy::is_structural_zero(d))
       return num;
 
     exprt cc = ieee_bin("ieee_mul", c, c);
@@ -2943,7 +2957,8 @@ exprt function_call_expr::handle_cmath_log_call()
         const double ln_mag = 0.5 * std::log(abs2);
         const double angle = std::atan2(imag_const, real_const);
         return make_complex(
-          from_double(ln_mag, double_type()), from_double(angle, double_type()));
+          from_double(ln_mag, double_type()),
+          from_double(angle, double_type()));
       }
     }
 
@@ -2951,8 +2966,8 @@ exprt function_call_expr::handle_cmath_log_call()
     {
       double real_value = 0.0;
       if (
-        get_constant_double_value(real, real_value) && std::isfinite(real_value) &&
-        real_value > 0.0)
+        get_constant_double_value(real, real_value) &&
+        std::isfinite(real_value) && real_value > 0.0)
       {
         if (real_value == 1.0)
           return make_complex(zero_double_expr(), zero_double_expr());
@@ -3005,8 +3020,8 @@ exprt function_call_expr::handle_cmath_log_call()
     if (is_cpp_throw_expr(ln_z))
       return ln_z;
 
-    exprt ln10 =
-      make_complex(from_double(2.302585092994046, double_type()), zero_double_expr());
+    exprt ln10 = make_complex(
+      from_double(2.302585092994046, double_type()), zero_double_expr());
     cmath_lowering_policy::record_fast_path_hit(func_name);
     return complex_div(ln_z, ln10);
   }
@@ -3024,7 +3039,9 @@ exprt function_call_expr::handle_cmath_log_call()
   if (is_cpp_throw_expr(z))
     return z;
 
-  if (base_json == nullptr && !cmath_lowering_policy::is_within_budget(func_name, z))
+  if (
+    base_json == nullptr &&
+    !cmath_lowering_policy::is_within_budget(func_name, z))
   {
     cmath_lowering_policy::record_model_fallback(
       func_name,
@@ -3072,7 +3089,8 @@ exprt function_call_expr::handle_cmath_inverse_call()
     call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
 
   auto raise_type_error = [this](const std::string &msg) -> exprt {
-    return converter_.get_exception_handler().gen_exception_raise("TypeError", msg);
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", msg);
   };
 
   auto build_model_call_or_attr_error =
@@ -3082,7 +3100,8 @@ exprt function_call_expr::handle_cmath_inverse_call()
     if (model_symbol == nullptr)
     {
       return converter_.get_exception_handler().gen_exception_raise(
-        "AttributeError", "module 'cmath' has no attribute '" + func_name + "'");
+        "AttributeError",
+        "module 'cmath' has no attribute '" + func_name + "'");
     }
 
     side_effect_expr_function_callt model_call;
@@ -3094,11 +3113,13 @@ exprt function_call_expr::handle_cmath_inverse_call()
   };
 
   if (!keywords.empty())
-    return raise_type_error("cmath." + func_name + "() takes no keyword arguments");
+    return raise_type_error(
+      "cmath." + func_name + "() takes no keyword arguments");
   if (args.size() != 1)
     return raise_type_error(func_name + "() takes exactly 1 argument");
 
-  auto fold_constant_inverse = [&](const double real_v, const double imag_v) -> exprt {
+  auto fold_constant_inverse =
+    [&](const double real_v, const double imag_v) -> exprt {
     // Preserve CPython semantics: cmath.atanh(±1+0j) raises ValueError.
     if (
       func_name == "atanh" && imag_v == 0.0 &&
@@ -3151,7 +3172,8 @@ exprt function_call_expr::handle_cmath_inverse_call()
   std::optional<exprt> model_fallback_cache;
   auto get_model_fallback = [&]() -> exprt {
     if (!model_fallback_cache.has_value())
-      model_fallback_cache = build_model_call_or_attr_error(exprt::operandst{z});
+      model_fallback_cache =
+        build_model_call_or_attr_error(exprt::operandst{z});
     return *model_fallback_cache;
   };
 
@@ -3287,10 +3309,7 @@ exprt function_call_expr::handle_math_module_dispatch()
   };
   const auto call_has_complex = [&]() -> bool {
     return math_guard_utils::call_has_complex_in_args_or_keywords(
-      call_,
-      converter_,
-      type_handler_,
-      converter_.current_function_name());
+      call_, converter_, type_handler_, converter_.current_function_name());
   };
   auto require_one_arg = [&]() -> exprt {
     if (args.size() != 1)
@@ -3619,7 +3638,8 @@ exprt function_call_expr::handle_math_module_dispatch()
     if (std::optional<exprt> guarded = guard_two_real_args(lhs_expr, rhs_expr);
         guarded.has_value())
       return *guarded;
-    return converter_.get_math_handler().handle_hypot(lhs_expr, rhs_expr, call_);
+    return converter_.get_math_handler().handle_hypot(
+      lhs_expr, rhs_expr, call_);
   }
   else if (
     math_guard_utils::math_guard_real_general_functions().count(func_name) != 0)
@@ -3680,7 +3700,8 @@ exprt function_call_expr::handle_math_module_dispatch()
       };
       materialize(lhs_expr);
       materialize(rhs_expr);
-      return converter_.get_math_handler().handle_dist(lhs_expr, rhs_expr, call_);
+      return converter_.get_math_handler().handle_dist(
+        lhs_expr, rhs_expr, call_);
     }
     return handle_general_function_call();
   }
@@ -4732,7 +4753,8 @@ exprt function_call_expr::get()
     const auto &args = call_["args"];
     if (args.size() != 1)
     {
-      const std::string name = (func_name == "__ESBMC_isnan") ? "isnan" : "isinf";
+      const std::string name =
+        (func_name == "__ESBMC_isnan") ? "isnan" : "isinf";
       throw std::runtime_error(name + "() expects exactly 1 argument");
     }
 

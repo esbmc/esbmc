@@ -451,8 +451,7 @@ private:
     std::unordered_map<std::string, std::vector<std::string>> named_paths;
     std::vector<std::string> wildcard_paths;
     std::vector<std::string> all_paths;
-    mutable std::unordered_map<std::string, std::string>
-      resolved_symbol_cache;
+    mutable std::unordered_map<std::string, std::string> resolved_symbol_cache;
     mutable std::unordered_set<std::string> unresolved_symbol_cache;
   };
 

@@ -198,7 +198,9 @@ bool extract_attribute_chain(
   if (node["_type"] != "Attribute")
     return false;
 
-  if (!node.contains("value") || !node.contains("attr") || !node["attr"].is_string())
+  if (
+    !node.contains("value") || !node.contains("attr") ||
+    !node["attr"].is_string())
     return false;
 
   if (!extract_attribute_chain(node["value"], base_name, attrs))
