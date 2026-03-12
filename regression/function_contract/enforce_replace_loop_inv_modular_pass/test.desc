@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract count_to --loop-invariant
+^VERIFICATION SUCCESSFUL$

@@ -73,7 +73,12 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   std::vector<expr2tc> invariants = extract_loop_invariants(loop);
 
   if (invariants.empty())
-    return; // No invariants found, skip this loop
+    return;
+
+  log_status(
+    "Processing {} loop invariant{}",
+    invariants.size(),
+    invariants.size() == 1 ? "" : "s");
 
   // Extract loop assigns targets (for frame rule)
   std::vector<expr2tc> loop_assigns = extract_loop_assigns(loop);
