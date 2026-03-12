@@ -2747,6 +2747,10 @@ exprt function_call_expr::handle_dict_method() const
     return converter_.get_dict_handler()->handle_dict_pop(
       symbol_expr(*dict_symbol), call_);
 
+  if (method_name == "popitem")
+    return converter_.get_dict_handler()->handle_dict_popitem(
+      symbol_expr(*dict_symbol), call_);
+
   throw std::runtime_error("Unsupported dict method: " + method_name);
 }
 
