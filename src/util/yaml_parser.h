@@ -9,7 +9,7 @@
 class yaml_parser
 {
 public:
-  explicit yaml_parser(const std::string &path);
+  explicit yaml_parser(const std::string &path, contextt &ns, optionst &options);
   ~yaml_parser() = default;
 
   // load the witness file in YAML format
@@ -23,6 +23,8 @@ private:
   // path to witness file
   std::string file_path_;
   YAML::Node root_;
+  contextt &context_;
+  optionst &options_;
   typedef std::vector<invariant> invariantst;
   invariantst parsed_invariants_;
   invariant parse_invariant(const YAML::Node &node) const;
