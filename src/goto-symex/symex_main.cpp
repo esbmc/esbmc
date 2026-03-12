@@ -1475,4 +1475,3 @@ void goto_symext::add_memory_leak_checks()
       "dereference failure: forgotten memory: " + get_pretty_name(it.name));
   }
 }
-
