@@ -1988,7 +1988,8 @@ typet python_dict_handler::get_popitem_tuple_type(const exprt &dict_expr)
 
   // Get value type from annotation (default: long int)
   typet val_type = resolve_expected_type_for_dict_subscript(dict_expr);
-  assert(!val_type.is_empty());
+  if (val_type.is_nil() || val_type.is_empty())
+    val_type = long_int_type();
   if (val_type.is_array() && val_type.subtype() == char_type())
     val_type = gen_pointer_type(char_type());
 
