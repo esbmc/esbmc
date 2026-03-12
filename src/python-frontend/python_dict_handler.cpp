@@ -1698,9 +1698,8 @@ bool python_dict_handler::is_value_returning_method(
 
 // Retrieve a typed value from a PyObj's void* value field.
 // Used by both handle_dict_pop and handle_dict_popitem.
-static exprt retrieve_list_value(
-  const exprt &obj_value,
-  const typet &result_type)
+static exprt
+retrieve_list_value(const exprt &obj_value, const typet &result_type)
 {
   if (result_type.is_pointer() && result_type.subtype() == char_type())
     return typecast_exprt(obj_value, gen_pointer_type(char_type()));
@@ -1962,8 +1961,7 @@ typet python_dict_handler::get_popitem_tuple_type(const exprt &dict_expr)
         if (
           var_decl["annotation"]["_type"] == "Name" &&
           var_decl["annotation"]["id"] == "dict" &&
-          var_decl.contains("value") &&
-          var_decl["value"]["_type"] == "Call" &&
+          var_decl.contains("value") && var_decl["value"]["_type"] == "Call" &&
           var_decl["value"]["func"]["_type"] == "Name")
         {
           std::string func_name =
@@ -1974,8 +1972,7 @@ typet python_dict_handler::get_popitem_tuple_type(const exprt &dict_expr)
             !func_def.empty() && func_def.contains("returns") &&
             !func_def["returns"].is_null())
           {
-            key_type =
-              get_dict_key_type_from_annotation(func_def["returns"]);
+            key_type = get_dict_key_type_from_annotation(func_def["returns"]);
           }
         }
       }
@@ -2053,8 +2050,7 @@ exprt python_dict_handler::handle_dict_popitem(
   converter_.add_instruction(size_call);
 
   // Empty dict → raise KeyError
-  exprt is_empty =
-    equality_exprt(symbol_expr(size_var), gen_zero(size_type()));
+  exprt is_empty = equality_exprt(symbol_expr(size_var), gen_zero(size_type()));
 
   code_blockt empty_block;
   {
@@ -2132,7 +2128,8 @@ exprt python_dict_handler::handle_dict_popitem(
       "value",
       pointer_typet(empty_typet()));
     member_exprt key_field(symbol_expr(result_var), "element_0", key_type);
-    code_assignt key_assign(key_field, retrieve_list_value(key_obj_value, key_type));
+    code_assignt key_assign(
+      key_field, retrieve_list_value(key_obj_value, key_type));
     key_assign.location() = location;
     nonempty_block.copy_to_operands(key_assign);
 
@@ -2159,7 +2156,8 @@ exprt python_dict_handler::handle_dict_popitem(
       "value",
       pointer_typet(empty_typet()));
     member_exprt val_field(symbol_expr(result_var), "element_1", val_type);
-    code_assignt val_assign(val_field, retrieve_list_value(val_obj_value, val_type));
+    code_assignt val_assign(
+      val_field, retrieve_list_value(val_obj_value, val_type));
     val_assign.location() = location;
     nonempty_block.copy_to_operands(val_assign);
 
