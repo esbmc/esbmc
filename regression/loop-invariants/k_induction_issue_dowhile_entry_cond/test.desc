@@ -1,5 +1,4 @@
 CORE
 main.c
---loop-invariant-check
+--loop-invariant
 ^VERIFICATION SUCCESSFUL$
-
