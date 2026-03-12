@@ -10319,6 +10319,7 @@ void python_converter::convert()
   module_import_names_cache_.clear();
   model_symbol_index_.clear();
   model_symbol_index_by_root_.clear();
+  imported_module_presence_cache_.clear();
   object_alias_cache_.clear();
   module_chain_resolution_cache_.clear();
 
@@ -10448,9 +10449,24 @@ void python_converter::convert()
       size_t pos = file.rfind("/");
       if (pos != std::string::npos)
       {
-        std::string filename = file.substr(pos + 1);
-        if (model_symbol_index_.find(filename) != model_symbol_index_.end())
-          current_python_file = model_symbol_index_[filename];
+        const std::string root = file.substr(0, pos);
+        const std::string stem = file.substr(pos + 1);
+
+        if (auto root_it = model_symbol_index_by_root_.find(root);
+            root_it != model_symbol_index_by_root_.end())
+        {
+          if (auto stem_it = root_it->second.find(stem);
+              stem_it != root_it->second.end())
+          {
+            current_python_file = stem_it->second;
+          }
+        }
+        else if (auto it = model_symbol_index_.find(stem);
+                 it != model_symbol_index_.end())
+        {
+          // Fallback for legacy manifests that only index by symbol stem.
+          current_python_file = it->second;
+        }
       }
 
       exprt model_code =
