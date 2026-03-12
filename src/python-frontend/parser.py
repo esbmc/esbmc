@@ -24,17 +24,23 @@ import argparse
 
 
 def run_mypy_strict(filename):
-    """Run mypy in-process when available; skip otherwise."""
-    try:
-        from mypy import api as mypy_api
-    except ImportError:
+    """Run mypy as a subprocess when available; skip otherwise."""
+    import shutil
+    import subprocess
+
+    mypy_path = shutil.which("mypy")
+    if mypy_path is None:
         return 0, ""
 
-    stdout, stderr, exit_status = mypy_api.run(["--strict", filename])
-    output = stdout
-    if stderr:
-        output += stderr
-    return exit_status, output
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "--strict", filename],
+        capture_output=True,
+        text=True,
+    )
+    output = result.stdout
+    if result.stderr:
+        output += result.stderr
+    return result.returncode, output
 
 
 def is_imported_model(module_name):
@@ -474,8 +480,9 @@ def generate_ast_json(
                     filtered_nodes.append(node)
 
     # Convert AST to JSON
-    ast2json_module = import_module_by_name("ast2json", "")
-    ast_json = ast2json_module.ast2json(
+    from libs.ast2json import ast2json as ast2json_func
+
+    ast_json = ast2json_func(
         ast.Module(body=filtered_nodes) if filtered_nodes else tree
     )
     ast_json["filename"] = python_filename
@@ -570,7 +577,7 @@ def check_dependencies():
     """Verify required Python packages are available before processing.
     Also warn for optional dependencies."""
     optional = ["mypy"]
-    required = ["ast2json"]
+    required = []
 
     missing_optional = [m for m in optional if importlib.util.find_spec(m) is None]
     if missing_optional:
