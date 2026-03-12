@@ -4,8 +4,21 @@ use subs;
 use strict;
 use warnings;
 use File::Basename;
+use Fcntl qw(O_CREAT O_EXCL O_WRONLY);
 
 use Cwd;
+my $timeout_bin = `command -v timeout 2>/dev/null`;
+chomp $timeout_bin;
+if($timeout_bin eq "") {
+  $timeout_bin = `command -v gtimeout 2>/dev/null`;
+  chomp $timeout_bin;
+}
+my $global_timeout = $ENV{TEST_TIMEOUT};
+my $timeout_requested =
+  defined($global_timeout) && $global_timeout =~ /^\d+$/ && $global_timeout > 0;
+my $timeout_unavailable_sentinel =
+  getcwd() . "/.timeout_unavailable_once.$$." . time();
+unlink $timeout_unavailable_sentinel if -e $timeout_unavailable_sentinel;
 
 my $has_thread_pool = eval
 {
@@ -20,12 +33,43 @@ my $has_thread_pool = eval
 #
 # runs a test and check its output
 
+sub timeout_unavailable_first_notice() {
+  return 0 unless $timeout_requested;
+  return 0 unless $timeout_bin eq "";
+
+  if(sysopen(my $sfh, $timeout_unavailable_sentinel, O_CREAT | O_EXCL | O_WRONLY)) {
+    print $sfh "1\n";
+    close $sfh;
+    return 1;
+  }
+
+  return 0;
+}
+
+END {
+  unlink $timeout_unavailable_sentinel if defined($timeout_unavailable_sentinel) && -e $timeout_unavailable_sentinel;
+}
+
 sub run($$$$$) {
   my ($name, $input, $cmd, $options, $output) = @_;
   my $cmdline = "$cmd $options '$input' >'$output' 2>&1";
+  my $exec_cmdline = $cmdline;
+  my $wrapped_with_timeout = 0;
+  my $first_timeout_unavailable_notice = 0;
+  if($timeout_requested && $timeout_bin ne "") {
+    $exec_cmdline = "$timeout_bin --kill-after=5s ${global_timeout}s $cmdline";
+    $wrapped_with_timeout = 1;
+  } elsif($timeout_requested) {
+    $first_timeout_unavailable_notice = timeout_unavailable_first_notice();
+    if($first_timeout_unavailable_notice) {
+      my $warning = "WARNING: TEST_TIMEOUT is set but neither 'timeout' nor 'gtimeout' is available; running without watchdog timeout.\n";
+      print $warning;
+      print LOG $warning;
+    }
+  }
 
-  print LOG "Running $cmdline\n";
-  system("bash", "-c", "cd '$name' ; $cmdline");
+  print LOG "Running $exec_cmdline\n";
+  system("bash", "-c", "cd '$name' ; $exec_cmdline");
   my $exit_value = $? >> 8;
   my $signal_num = $? & 127;
   my $dumped_core = $? & 128;
@@ -34,6 +78,7 @@ sub run($$$$$) {
   print LOG "  Exit: $exit_value\n";
   print LOG "  Signal: $signal_num\n";
   print LOG "  Core: $dumped_core\n";
+  print LOG "  Timeout: yes\n" if($wrapped_with_timeout && $exit_value == 124);
 
   if($signal_num != 0) {
     print "Killed by signal $signal_num";
@@ -45,7 +90,16 @@ sub run($$$$$) {
   open my $FH, ">>$name/$output";
   print $FH "EXIT=$exit_value\n";
   print $FH "SIGNAL=$signal_num\n";
+  print $FH "TIMEOUT=1\n" if($wrapped_with_timeout && $exit_value == 124);
+  if($first_timeout_unavailable_notice) {
+    print $FH "TIMEOUT_UNAVAILABLE=1\n";
+  }
   close $FH;
+
+  if($wrapped_with_timeout && $exit_value == 124) {
+    print "\nProgram under test timed out after ${global_timeout}s\n";
+    $failed = 1;
+  }
 
   if($signal_num == 2) {
     print "\nProgram under test interrupted; stopping\n";
@@ -367,6 +421,7 @@ print "\n";
 
 
 close LOG;
+unlink $timeout_unavailable_sentinel if -e $timeout_unavailable_sentinel;
 
 if($opt_p && $failures != 0) {
   open LOG,"<tests.log" or die "Failed to open tests.log\n";
