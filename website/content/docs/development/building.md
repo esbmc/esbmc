@@ -428,7 +428,7 @@ cmake --build . && ninja install
 
 Once it is finished, ESBMC should be available in the _release_ folder.
 
-# ESBMC Shared Builds
+## ESBMC Shared Builds
 
 It is also possible to build a non-static version of ESBMC that links to
 system libraries and/or solvers installed system-wide.
@@ -486,7 +486,7 @@ passing the CMake flags
 ```
 e.g. the 'path' should point to `$HOME/cheri/output/sdk/sysroot-riscv64-purecap`. As for the `sysroot-riscv64-purecap` part, you may want to use a diffrent directory if you used a different variant in the `cheribuild.py` command above.
 
-# ESBMC Fuzzing Tests
+## ESBMC Fuzzing Tests
 
 ESBMC has a number of fuzzing test targets that are used with libFuzzer to test parts of ESBMC. Building these targets requires additional CMake configuration.
 
