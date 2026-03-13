@@ -2922,14 +2922,30 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return set_handler.get_from_iterable(iterable_expr, element);
   }
 
-  // Handle list(range(...))
+  // Handle list(...) calls
   if (
     element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
-    element["args"].size() == 1 && element["args"][0]["_type"] == "Call" &&
-    element["args"][0]["func"]["id"] == "range")
+    element.contains("args") && element["args"].size() == 1)
   {
-    const auto &range_args = element["args"][0]["args"];
-    return python_list::build_list_from_range(*this, range_args, element);
+    const auto &list_arg = element["args"][0];
+
+    // Handle list(range(...))
+    if (
+      list_arg["_type"] == "Call" && list_arg["func"]["_type"] == "Name" &&
+      list_arg["func"]["id"] == "range")
+    {
+      return python_list::build_list_from_range(
+        *this, list_arg["args"], element);
+    }
+
+    // Handle list(iterable) where iterable evaluates to a list — e.g.
+    // list(d.items()), list(d.keys()), list(d.values()), list(some_list).
+    // d.items() returns the keys member as a placeholder list (correct size).
+    exprt arg_expr = get_expr(list_arg);
+    if (arg_expr.type() == type_handler_.get_list_type())
+      return arg_expr;
+    // Fall through to the generic function-call builder below for non-list
+    // iterables (e.g. list("abc") or list(42)).
   }
 
   // Handle dict.keys(), dict.values(), and dict.items() methods
@@ -2976,9 +2992,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // For-loop uses of items() are rewritten by the preprocessor into
           // separate keys()/values() accesses and never reach here.
           // For standalone/discarded calls (e.g. bare `d.items()` statement),
-          // return the keys member as a harmless placeholder — the result is
-          // not consumed so soundness is unaffected.
-          // Storing and consuming d.items() outside a for-loop is not supported.
+          // return the keys member as a placeholder — same size as the dict,
+          // so size/emptiness comparisons (e.g. list(d.items()) == []) work.
+          // Full (key, value) tuple semantics are not modelled.
           member_exprt member(obj_expr, "keys", list_type);
           return member;
         }
