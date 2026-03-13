@@ -1006,7 +1006,8 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(v_var, ast.Name):
                 self.variable_annotations[v_var.id] = val_ann
         elif hasattr(target, 'id'):
-            self.variable_annotations[target.id] = key_ann
+            # d.items() yields (key, value) tuples regardless of unpacking
+            self.variable_annotations[target.id] = ast.Name(id='tuple', ctx=ast.Load())
 
     def visit_For(self, node):
         """
@@ -1544,11 +1545,7 @@ class Preprocessor(ast.NodeTransformer):
         """
         Transform dict.items() for loops to while loops.
 
-        Transforms:
-            for k, v in d.items():
-                # body
-
-        Into:
+        Tuple-unpacking form (for k, v in d.items()):
             ESBMC_keys_N: list[key_type] = d.keys()
             ESBMC_vals_N: list[val_type] = d.values()
             ESBMC_index_N: int = 0
@@ -1556,6 +1553,16 @@ class Preprocessor(ast.NodeTransformer):
             while ESBMC_index_N < ESBMC_length_N:
                 k: key_type = ESBMC_keys_N[ESBMC_index_N]
                 v: val_type = ESBMC_vals_N[ESBMC_index_N]
+                ESBMC_index_N: int = ESBMC_index_N + 1
+                # body
+
+        Single-variable form (for item in d.items()):
+            ESBMC_keys_N: list[key_type] = d.keys()
+            ESBMC_vals_N: list[val_type] = d.values()
+            ESBMC_index_N: int = 0
+            ESBMC_length_N: int = len(ESBMC_keys_N)
+            while ESBMC_index_N < ESBMC_length_N:
+                item: tuple = (ESBMC_keys_N[ESBMC_index_N], ESBMC_vals_N[ESBMC_index_N])
                 ESBMC_index_N: int = ESBMC_index_N + 1
                 # body
 
@@ -1665,10 +1672,33 @@ class Preprocessor(ast.NodeTransformer):
             body.append(self._create_var_subscript_assign(
                 node, val_var_name, vals_var, index_var, val_ann))
         else:
-            # Single variable: assign the key (matches Python's dict iteration semantics)
+            # Single variable: d.items() yields (key, value) tuples per Python semantics.
             single_var = target.id if hasattr(target, 'id') else 'ESBMC_loop_var'
-            body.append(self._create_var_subscript_assign(
-                node, single_var, keys_var, index_var, key_ann))
+            key_subscript = ast.Subscript(
+                value=ast.Name(id=keys_var, ctx=ast.Load()),
+                slice=ast.Name(id=index_var, ctx=ast.Load()),
+                ctx=ast.Load()
+            )
+            self.ensure_all_locations(key_subscript, node)
+            val_subscript = ast.Subscript(
+                value=ast.Name(id=vals_var, ctx=ast.Load()),
+                slice=ast.Name(id=index_var, ctx=ast.Load()),
+                ctx=ast.Load()
+            )
+            self.ensure_all_locations(val_subscript, node)
+            tuple_value = ast.Tuple(
+                elts=[key_subscript, val_subscript],
+                ctx=ast.Load()
+            )
+            self.ensure_all_locations(tuple_value, node)
+            tuple_assign = ast.AnnAssign(
+                target=ast.Name(id=single_var, ctx=ast.Store()),
+                annotation=ast.Name(id='tuple', ctx=ast.Load()),
+                value=tuple_value,
+                simple=1
+            )
+            self.ensure_all_locations(tuple_assign, node)
+            body.append(tuple_assign)
 
         body.append(self._create_index_increment(node, index_var))
         body.extend(node.body)
