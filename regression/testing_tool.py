@@ -135,7 +135,10 @@ def _prepare_child():
     if RegressionBase.MEMORY_LIMIT:
         import resource
         limit = RegressionBase.MEMORY_LIMIT
-        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+        try:
+            resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+        except (ValueError, OSError):
+            pass  # macOS does not support RLIMIT_AS
 # Seconds to wait between SIGTERM and SIGKILL
 # when cleaning up timed-out process group.
 _TERM_GRACE = 3
