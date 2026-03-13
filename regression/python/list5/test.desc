@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.py
 --z3 --no-standard-checks --unwind 5 --smt-during-symex --smt-symex-guard
 ^VERIFICATION SUCCESSFUL$
