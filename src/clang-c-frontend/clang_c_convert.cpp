@@ -570,6 +570,22 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
       is_aggregate_type(vd.getType()) &&
       stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
 
+    if (vd.isStaticDataMember() && vd.isOutOfLine())
+    {
+      // Reorder to respect definition order for static_lifetime_init()
+      // C++ class static members are inserted into ordered_symbols when the
+      // class body is processed (in declaration order), but their out-of-class
+      // definitions appear later in textual order. Both C and C++ require
+      // initialization in definition order
+      symbolt *s = context.find_symbol(symbol.id);
+      if (s && vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
+        // In AST, nodes will be generated for the template Instantiation. 
+        // We have already initialized it, so skip it
+
+        // Remove the zero initialization symbol and re-arrange the initialization order
+        context.erase_symbol(s->id);
+    }
+
     added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
     if (!aggregate_without_init)

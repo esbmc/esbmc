@@ -135,24 +135,10 @@ symbolt *contextt::move_symbol_to_context(symbolt &symbol)
       if (symbol.type.is_not_nil() && !s->type.is_not_nil())
         s->swap(symbol);
     }
-    else
-    {
+    else if (s->is_extern && !symbol.is_extern)
       // Variable symbol already in context. Apply extern→non-extern swap if
       // needed, then reorder to preserve definition order.
-      if (s->is_extern && !symbol.is_extern)
-        s->swap(symbol);
-
-      // Reorder to respect definition order for static_lifetime_init().
-      // C++ class static members are inserted into ordered_symbols when the
-      // class body is processed (in declaration order), but their out-of-class
-      // definitions appear later in textual order. Both C and C++ require
-      // initialization in definition order, so move the symbol to the end of
-      // ordered_symbols whenever its definition is (re-)processed.
-      auto it = std::find(ordered_symbols.begin(), ordered_symbols.end(), s);
-      assert(it != ordered_symbols.end());
-      ordered_symbols.erase(it);
-      ordered_symbols.push_back(s);
-    }
+      s->swap(symbol);
   }
   return s;
 }
