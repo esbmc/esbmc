@@ -3,6 +3,7 @@
 #include <python-frontend/function_call_builder.h>
 #include <python-frontend/python_consteval.h>
 #include <python-frontend/function_call_expr.h>
+#include <python-frontend/cmath_lowering_policy.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/python_annotation.h>
@@ -23,6 +24,7 @@
 #include <util/c_types.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
+#include <util/ieee_float.h>
 #include <util/irep.h>
 #include <util/message.h>
 #include <util/python_types.h>
@@ -31,21 +33,30 @@
 #include <util/symbolic_types.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <limits>
+#include <numeric>
 #include <regex>
 #include <stdexcept>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include <boost/filesystem.hpp>
 
 using namespace json_utils;
 namespace fs = boost::filesystem;
+namespace
+{
+std::atomic<std::uint64_t> g_python_converter_instance_counter{0};
+}
 
 static const std::unordered_map<std::string, std::string> operator_map = {
   {"add", "+"},         {"sub", "-"},         {"subtract", "-"},
@@ -89,6 +100,608 @@ static StatementType get_statement_type(const nlohmann::json &element)
 
   auto it = statement_map.find(element["_type"]);
   return (it != statement_map.end()) ? it->second : StatementType::UNKNOWN;
+}
+
+static std::string root_module_name(const std::string &qualified_module)
+{
+  const std::size_t dot = qualified_module.find('.');
+  if (dot == std::string::npos)
+    return qualified_module;
+  return qualified_module.substr(0, dot);
+}
+
+static bool is_explicitly_imported_module_in_ast(
+  const nlohmann::json &ast_root,
+  const std::string &module_name)
+{
+  if (module_name.empty())
+    return false;
+
+  std::vector<const nlohmann::json *> worklist;
+  worklist.push_back(&ast_root);
+
+  while (!worklist.empty())
+  {
+    const nlohmann::json *node = worklist.back();
+    worklist.pop_back();
+
+    if (node == nullptr)
+      continue;
+
+    if (node->is_object())
+    {
+      if (
+        node->contains("_type") && (*node)["_type"].is_string() &&
+        node->contains("names") && (*node)["names"].is_array())
+      {
+        const std::string node_type = (*node)["_type"].get<std::string>();
+        if (node_type == "Import")
+        {
+          for (const auto &name : (*node)["names"])
+          {
+            if (!name.contains("name") || !name["name"].is_string())
+              continue;
+
+            const std::string imported_name = name["name"].get<std::string>();
+            if (imported_name == module_name)
+              return true;
+
+            if (root_module_name(imported_name) == module_name)
+              return true;
+
+            if (
+              name.contains("asname") && !name["asname"].is_null() &&
+              name["asname"].is_string() &&
+              name["asname"].get<std::string>() == module_name)
+            {
+              return true;
+            }
+          }
+        }
+        else if (
+          node_type == "ImportFrom" && node->contains("module") &&
+          (*node)["module"].is_string())
+        {
+          const std::string from_module = (*node)["module"].get<std::string>();
+          for (const auto &name : (*node)["names"])
+          {
+            if (!name.contains("name") || !name["name"].is_string())
+              continue;
+
+            const std::string imported_name = name["name"].get<std::string>();
+            if (imported_name == "*")
+              continue;
+
+            const bool is_requested_name =
+              imported_name == module_name ||
+              (name.contains("asname") && !name["asname"].is_null() &&
+               name["asname"].is_string() &&
+               name["asname"].get<std::string>() == module_name);
+
+            if (!is_requested_name)
+              continue;
+
+            // "from pkg import submod" should count as a module only when
+            // "pkg.submod" exists as a module.
+            const std::string candidate_module =
+              from_module.empty() ? imported_name
+                                  : (from_module + "." + imported_name);
+            if (json_utils::is_module(candidate_module, ast_root))
+              return true;
+          }
+        }
+      }
+
+      for (const auto &[_, value] : node->items())
+      {
+        if (value.is_object() || value.is_array())
+          worklist.push_back(&value);
+      }
+      continue;
+    }
+
+    if (node->is_array())
+    {
+      for (const auto &elem : *node)
+      {
+        if (elem.is_object() || elem.is_array())
+          worklist.push_back(&elem);
+      }
+    }
+  }
+
+  return false;
+}
+
+static std::vector<std::string>
+extract_imported_module_names(const nlohmann::json &import_node)
+{
+  std::vector<std::string> module_names;
+  if (!import_node.contains("_type"))
+    return module_names;
+
+  if (import_node["_type"] == "Import")
+  {
+    if (!import_node.contains("names") || !import_node["names"].is_array())
+      return module_names;
+
+    for (const auto &name : import_node["names"])
+    {
+      if (name.contains("name") && name["name"].is_string())
+        module_names.push_back(name["name"].get<std::string>());
+    }
+  }
+  else if (
+    import_node["_type"] == "ImportFrom" && import_node.contains("module") &&
+    import_node["module"].is_string())
+  {
+    module_names.push_back(import_node["module"].get<std::string>());
+  }
+
+  return module_names;
+}
+
+static std::vector<std::string> split_module_path(const std::string &qualified)
+{
+  std::vector<std::string> parts;
+  std::size_t start = 0;
+  while (start <= qualified.size())
+  {
+    const std::size_t dot = qualified.find('.', start);
+    if (dot == std::string::npos)
+    {
+      if (start < qualified.size())
+        parts.emplace_back(qualified.substr(start));
+      break;
+    }
+    if (dot > start)
+      parts.emplace_back(qualified.substr(start, dot - start));
+    start = dot + 1;
+  }
+  return parts;
+}
+
+using model_symbol_mapt =
+  std::unordered_map<std::string, std::unordered_set<std::string>>;
+using model_manifest_indext = std::unordered_map<std::string, std::string>;
+
+static void add_model_symbol_candidates(
+  const std::string &root,
+  const std::vector<std::string> &segments,
+  model_symbol_mapt &model_symbols)
+{
+  if (segments.empty())
+    return;
+
+  // Include intermediate path symbols (e.g. "path" in os.path.exists) so
+  // attribute chains can be resolved without requiring full-folder loading.
+  for (const auto &segment : segments)
+    model_symbols[root].emplace(segment);
+
+  const std::string &leaf = segments.back();
+  model_symbols[root].emplace(leaf);
+
+  std::string underscore_joined;
+  std::string dot_joined;
+  std::string double_underscore_joined;
+  for (std::size_t i = 0; i < segments.size(); ++i)
+  {
+    if (i != 0)
+    {
+      underscore_joined += "_";
+      dot_joined += ".";
+      double_underscore_joined += "__";
+    }
+    underscore_joined += segments[i];
+    dot_joined += segments[i];
+    double_underscore_joined += segments[i];
+  }
+
+  model_symbols[root].emplace(underscore_joined);
+  model_symbols[root].emplace(dot_joined);
+  model_symbols[root].emplace(double_underscore_joined);
+}
+
+static const nlohmann::json *load_module_ast_cached(
+  const std::string &module_name,
+  module_locator &locator,
+  std::unordered_map<std::string, nlohmann::json> &module_ast_cache)
+{
+  if (auto it = module_ast_cache.find(module_name);
+      it != module_ast_cache.end())
+    return &it->second;
+
+  std::ifstream imported_file = locator.open_module_file(module_name);
+  if (!imported_file.is_open())
+    return nullptr;
+
+  nlohmann::json module_json;
+  imported_file >> module_json;
+  auto [inserted_it, _] =
+    module_ast_cache.emplace(module_name, std::move(module_json));
+  return &inserted_it->second;
+}
+
+static void collect_transitive_import_roots_recursive(
+  const nlohmann::json &module_ast,
+  module_locator &locator,
+  std::unordered_set<std::string> &visited_modules,
+  std::unordered_set<std::string> &roots,
+  std::unordered_map<std::string, nlohmann::json> &module_ast_cache)
+{
+  if (!module_ast.contains("body") || !module_ast["body"].is_array())
+    return;
+
+  auto visit_module = [&](const std::string &module_name) {
+    if (module_name.empty())
+      return;
+
+    roots.emplace(root_module_name(module_name));
+    if (!visited_modules.emplace(module_name).second)
+      return;
+
+    const nlohmann::json *nested_module_json =
+      load_module_ast_cached(module_name, locator, module_ast_cache);
+    if (nested_module_json == nullptr)
+      return;
+
+    collect_transitive_import_roots_recursive(
+      *nested_module_json, locator, visited_modules, roots, module_ast_cache);
+  };
+
+  for (const auto &elem : module_ast["body"])
+  {
+    if (!elem.contains("_type"))
+      continue;
+
+    if (elem["_type"] == "Import")
+    {
+      if (!elem.contains("names") || !elem["names"].is_array())
+        continue;
+      for (const auto &imported_name : elem["names"])
+      {
+        if (imported_name.contains("name") && imported_name["name"].is_string())
+          visit_module(imported_name["name"].get<std::string>());
+      }
+    }
+    else if (elem["_type"] == "ImportFrom")
+    {
+      if (elem.contains("module") && elem["module"].is_string())
+        visit_module(elem["module"].get<std::string>());
+    }
+  }
+}
+
+static std::unordered_set<std::string> collect_transitive_import_roots(
+  const nlohmann::json &module_ast,
+  module_locator &locator,
+  std::unordered_map<std::string, nlohmann::json> &module_ast_cache)
+{
+  std::unordered_set<std::string> visited_modules;
+  std::unordered_set<std::string> roots;
+  collect_transitive_import_roots_recursive(
+    module_ast, locator, visited_modules, roots, module_ast_cache);
+  return roots;
+}
+
+static void collect_model_symbols_from_module(
+  const nlohmann::json &module_ast,
+  const std::unordered_set<std::string> &model_roots,
+  model_symbol_mapt &model_symbols,
+  std::unordered_set<std::string> &need_full_folder)
+{
+  if (!module_ast.contains("body") || !module_ast["body"].is_array())
+    return;
+
+  std::unordered_map<std::string, std::string> alias_to_module;
+  std::unordered_map<std::string, std::pair<std::string, std::string>>
+    direct_name_to_root_symbol;
+
+  for (const auto &elem : module_ast["body"])
+  {
+    if (!elem.contains("_type"))
+      continue;
+
+    if (elem["_type"] == "Import")
+    {
+      if (!elem.contains("names") || !elem["names"].is_array())
+        continue;
+      for (const auto &imported_name : elem["names"])
+      {
+        if (
+          !imported_name.contains("name") || !imported_name["name"].is_string())
+          continue;
+
+        const std::string qualified = imported_name["name"].get<std::string>();
+        const std::string root = root_module_name(qualified);
+        if (model_roots.find(root) == model_roots.end())
+          continue;
+
+        std::string alias = root;
+        if (
+          imported_name.contains("asname") &&
+          !imported_name["asname"].is_null() &&
+          imported_name["asname"].is_string())
+        {
+          alias = imported_name["asname"].get<std::string>();
+        }
+        alias_to_module[alias] = qualified;
+      }
+    }
+    else if (elem["_type"] == "ImportFrom")
+    {
+      if (!elem.contains("module") || !elem["module"].is_string())
+        continue;
+
+      const std::string qualified = elem["module"].get<std::string>();
+      const std::string root = root_module_name(qualified);
+      if (model_roots.find(root) == model_roots.end())
+        continue;
+
+      if (!elem.contains("names") || !elem["names"].is_array())
+      {
+        need_full_folder.emplace(root);
+        continue;
+      }
+
+      for (const auto &imported_name : elem["names"])
+      {
+        if (
+          !imported_name.contains("name") || !imported_name["name"].is_string())
+          continue;
+        const std::string symbol = imported_name["name"].get<std::string>();
+        if (symbol == "*")
+        {
+          need_full_folder.emplace(root);
+          continue;
+        }
+
+        std::string alias = symbol;
+        if (
+          imported_name.contains("asname") &&
+          !imported_name["asname"].is_null() &&
+          imported_name["asname"].is_string())
+        {
+          alias = imported_name["asname"].get<std::string>();
+        }
+
+        direct_name_to_root_symbol[alias] = {root, symbol};
+        alias_to_module[alias] = qualified + "." + symbol;
+        model_symbols[root].emplace(symbol);
+      }
+    }
+  }
+
+  std::function<void(const nlohmann::json &)> collect_calls =
+    [&](const nlohmann::json &node) {
+      if (node.is_object())
+      {
+        if (
+          node.contains("_type") && node["_type"] == "Call" &&
+          node.contains("func"))
+        {
+          const auto &func = node["func"];
+          if (func.contains("_type") && func["_type"] == "Attribute")
+          {
+            std::string base_alias;
+            std::vector<std::string> attr_chain;
+            const bool has_chain =
+              extract_attribute_chain(func, base_alias, attr_chain) &&
+              !attr_chain.empty();
+            if (has_chain)
+            {
+              if (auto it = alias_to_module.find(base_alias);
+                  it != alias_to_module.end())
+              {
+                const std::string &qualified_module = it->second;
+                const std::string root = root_module_name(qualified_module);
+                if (model_roots.find(root) != model_roots.end())
+                {
+                  std::vector<std::string> full_segments;
+                  std::vector<std::string> module_parts =
+                    split_module_path(qualified_module);
+                  if (!module_parts.empty())
+                    module_parts.erase(
+                      module_parts.begin()); // drop root segment
+                  full_segments.insert(
+                    full_segments.end(),
+                    module_parts.begin(),
+                    module_parts.end());
+                  full_segments.insert(
+                    full_segments.end(), attr_chain.begin(), attr_chain.end());
+                  add_model_symbol_candidates(
+                    root, full_segments, model_symbols);
+                }
+              }
+            }
+          }
+          else if (
+            func.contains("_type") && func["_type"] == "Name" &&
+            func.contains("id") && func["id"].is_string())
+          {
+            const std::string name = func["id"].get<std::string>();
+            if (auto it = direct_name_to_root_symbol.find(name);
+                it != direct_name_to_root_symbol.end())
+            {
+              model_symbols[it->second.first].emplace(it->second.second);
+            }
+          }
+        }
+
+        for (auto it = node.begin(); it != node.end(); ++it)
+          collect_calls(it.value());
+      }
+      else if (node.is_array())
+      {
+        for (const auto &item : node)
+          collect_calls(item);
+      }
+    };
+
+  collect_calls(module_ast);
+}
+
+static model_manifest_indext
+build_model_manifest_for_directory(const std::string &dir_path)
+{
+  model_manifest_indext manifest;
+  fs::path directory(dir_path);
+  if (!fs::exists(directory) || !fs::is_directory(directory))
+    return manifest;
+
+  const fs::path cache_path = directory / ".esbmc_model_manifest.idx";
+  const std::time_t directory_mtime = fs::last_write_time(directory);
+  auto try_load_cached_manifest = [&]() -> bool {
+    std::ifstream cache_file(cache_path.string());
+    if (!cache_file.is_open())
+      return false;
+
+    std::string header_line;
+    if (!std::getline(cache_file, header_line))
+      return false;
+
+    constexpr const char *prefix = "#mtime:";
+    if (header_line.rfind(prefix, 0) != 0)
+      return false;
+
+    std::time_t cached_mtime = 0;
+    try
+    {
+      cached_mtime =
+        static_cast<std::time_t>(std::stoll(header_line.substr(7)));
+    }
+    catch (const std::exception &)
+    {
+      return false;
+    }
+
+    if (cached_mtime != directory_mtime)
+      return false;
+
+    std::string line;
+    while (std::getline(cache_file, line))
+    {
+      if (line.empty())
+        continue;
+      const std::size_t tab_pos = line.find('\t');
+      if (
+        tab_pos == std::string::npos || tab_pos == 0 ||
+        tab_pos + 1 >= line.size())
+        continue;
+
+      const std::string stem = line.substr(0, tab_pos);
+      const std::string path = line.substr(tab_pos + 1);
+      if (!fs::exists(path))
+        return false;
+      manifest.emplace(stem, path);
+    }
+
+    return true;
+  };
+
+  if (try_load_cached_manifest())
+    return manifest;
+
+  for (fs::directory_iterator it(directory), end_it; it != end_it; ++it)
+  {
+    if (!(fs::is_regular_file(*it) && it->path().extension() == ".json"))
+      continue;
+
+    const std::string stem = it->path().stem().string();
+    manifest.emplace(stem, it->path().string());
+  }
+
+  std::ofstream cache_out(cache_path.string(), std::ios::trunc);
+  if (cache_out.is_open())
+  {
+    cache_out << "#mtime:" << static_cast<long long>(directory_mtime) << '\n';
+    for (const auto &entry : manifest)
+      cache_out << entry.first << '\t' << entry.second << '\n';
+  }
+
+  return manifest;
+}
+
+static void append_models_from_manifest(
+  std::list<std::string> &file_list,
+  std::unordered_map<std::string, std::string> &model_symbol_index,
+  std::unordered_map<std::string, std::unordered_map<std::string, std::string>>
+    &model_symbol_index_by_root,
+  const std::string &root,
+  const model_manifest_indext &manifest,
+  const std::unordered_set<std::string> *selected_symbols)
+{
+  if (manifest.empty())
+    return;
+
+  std::vector<std::pair<std::string, std::string>> selected_entries;
+  selected_entries.reserve(manifest.size());
+
+  auto try_select = [&](const std::string &symbol) {
+    auto it = manifest.find(symbol);
+    if (it == manifest.end())
+      return;
+    selected_entries.emplace_back(symbol, it->second);
+  };
+
+  if (selected_symbols == nullptr || selected_symbols->empty())
+  {
+    for (const auto &entry : manifest)
+      selected_entries.emplace_back(entry.first, entry.second);
+  }
+  else
+  {
+    for (const auto &symbol : *selected_symbols)
+    {
+      try_select(symbol);
+      if (symbol.find('.') != std::string::npos)
+      {
+        std::string underscore = symbol;
+        std::replace(underscore.begin(), underscore.end(), '.', '_');
+        try_select(underscore);
+
+        std::string double_underscore = symbol;
+        while (true)
+        {
+          const std::size_t pos = double_underscore.find('.');
+          if (pos == std::string::npos)
+            break;
+          double_underscore.replace(pos, 1, "__");
+        }
+        try_select(double_underscore);
+      }
+
+      const std::size_t dot = symbol.rfind('.');
+      if (dot != std::string::npos && dot + 1 < symbol.size())
+        try_select(symbol.substr(dot + 1));
+    }
+
+    if (selected_entries.empty())
+    {
+      for (const auto &entry : manifest)
+        selected_entries.emplace_back(entry.first, entry.second);
+    }
+  }
+
+  std::sort(
+    selected_entries.begin(),
+    selected_entries.end(),
+    [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
+  selected_entries.erase(
+    std::unique(
+      selected_entries.begin(),
+      selected_entries.end(),
+      [](const auto &lhs, const auto &rhs) { return lhs.first == rhs.first; }),
+    selected_entries.end());
+
+  for (const auto &entry : selected_entries)
+  {
+    const std::string &stem = entry.first;
+    const std::string &path = entry.second;
+    file_list.push_back(root + "/" + stem);
+    model_symbol_index[stem] = path;
+    model_symbol_index_by_root[root][stem] = path;
+  }
 }
 
 // Returns true if the named class inherits from Python's Enum
@@ -1711,6 +2324,16 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       out.copy_to_operands(x, y);
       return out;
     };
+    auto get_const_double = [](const exprt &expr, double &out) -> bool {
+      const exprt *value = &expr;
+      while (value->id() == "typecast" && !value->operands().empty())
+        value = &value->op0();
+      if (!value->is_constant() || !value->type().is_floatbv())
+        return false;
+      ieee_floatt fp_value(to_constant_expr(*value));
+      out = fp_value.to_double();
+      return true;
+    };
     auto complex_mul = [&](const exprt &x, const exprt &y) -> exprt {
       const exprt xr = member(x, "real");
       const exprt xi = member(x, "imag");
@@ -1728,6 +2351,34 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       const exprt xi = member(x, "imag");
       const exprt yr = member(y, "real");
       const exprt yi = member(y, "imag");
+
+      double xr_const = 0.0, xi_const = 0.0, yr_const = 0.0, yi_const = 0.0;
+      if (
+        get_const_double(xr, xr_const) && get_const_double(xi, xi_const) &&
+        get_const_double(yr, yr_const) && get_const_double(yi, yi_const) &&
+        std::isfinite(xr_const) && std::isfinite(xi_const) &&
+        std::isfinite(yr_const) && std::isfinite(yi_const))
+      {
+        const double denom = yr_const * yr_const + yi_const * yi_const;
+        if (denom != 0.0 && std::isfinite(denom))
+        {
+          const double real =
+            (xr_const * yr_const + xi_const * yi_const) / denom;
+          const double imag =
+            (xi_const * yr_const - xr_const * yi_const) / denom;
+          return make_complex(
+            from_double(real, double_type()), from_double(imag, double_type()));
+        }
+      }
+
+      if (
+        get_const_double(xi, xi_const) && xi_const == 0.0 &&
+        get_const_double(yi, yi_const) && yi_const == 0.0)
+      {
+        return make_complex(
+          ieee_binop("ieee_div", xr, yr), from_double(0.0, double_type()));
+      }
+
       exprt ac = ieee_binop("ieee_mul", xr, yr);
       exprt bd = ieee_binop("ieee_mul", xi, yi);
       exprt bc = ieee_binop("ieee_mul", xi, yr);
@@ -1744,6 +2395,23 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     auto complex_log = [&](const exprt &z) -> exprt {
       const exprt zr = member(z, "real");
       const exprt zi = member(z, "imag");
+
+      double zr_const = 0.0, zi_const = 0.0;
+      if (
+        get_const_double(zr, zr_const) && get_const_double(zi, zi_const) &&
+        std::isfinite(zr_const) && std::isfinite(zi_const))
+      {
+        const double abs2 = zr_const * zr_const + zi_const * zi_const;
+        if (abs2 > 0.0)
+        {
+          const double ln_mag = 0.5 * std::log(abs2);
+          const double angle = std::atan2(zi_const, zr_const);
+          return make_complex(
+            from_double(ln_mag, double_type()),
+            from_double(angle, double_type()));
+        }
+      }
+
       const exprt zr2 = ieee_binop("ieee_mul", zr, zr);
       const exprt zi2 = ieee_binop("ieee_mul", zi, zi);
       const exprt abs2 = ieee_binop("ieee_add", zr2, zi2);
@@ -2750,50 +3418,218 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       : (parsed.get_function().empty() ? parsed.get_object()
                                        : parsed.get_function());
 
-  for (const auto &obj : (*ast_json)["body"])
+  const import_lookup_entryt &lookup = get_import_lookup_for_current_ast();
+  if (
+    lookup.unresolved_symbol_cache.find(symbol_id) !=
+    lookup.unresolved_symbol_cache.end())
   {
-    if (
-      (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
-      obj.contains("full_path") && !obj["full_path"].is_null())
+    return nullptr;
+  }
+
+  if (auto it = lookup.resolved_symbol_cache.find(symbol_id);
+      it != lookup.resolved_symbol_cache.end())
+  {
+    if (symbolt *cached = symbol_table_.find_symbol(it->second.c_str()))
+      return cached;
+    lookup.resolved_symbol_cache.erase(it);
+  }
+
+  static const std::string prefix = "py:";
+  const std::size_t start = symbol_id.find(prefix);
+  if (start == std::string::npos)
+    return nullptr;
+  const std::size_t at_pos = symbol_id.find('@', start + prefix.size());
+  if (at_pos == std::string::npos)
+    return nullptr;
+
+  auto build_imported_symbol_id =
+    [&](const std::string &full_path) -> std::string {
+    std::string imported_symbol;
+    imported_symbol.reserve(
+      (start + prefix.size()) + full_path.size() + (symbol_id.size() - at_pos));
+    imported_symbol.append(symbol_id, 0, start + prefix.size());
+    imported_symbol.append(full_path);
+    imported_symbol.append(symbol_id, at_pos, std::string::npos);
+    return imported_symbol;
+  };
+
+  auto try_resolve_from_path = [&](const std::string &full_path) -> symbolt * {
+    const std::string imported_symbol = build_imported_symbol_id(full_path);
+    symbolt *resolved = symbol_table_.find_symbol(imported_symbol.c_str());
+    if (resolved != nullptr)
     {
-      // For ImportFrom, only match if the specific name was imported.
-      // This prevents "from other import sum" from also hijacking "max".
-      if (
-        obj["_type"] == "ImportFrom" && obj.contains("names") &&
-        !lookup_name.empty())
+      if (lookup.resolved_symbol_cache.size() > 4096)
+        lookup.resolved_symbol_cache.clear();
+      lookup.resolved_symbol_cache[symbol_id] = imported_symbol;
+      lookup.unresolved_symbol_cache.erase(symbol_id);
+    }
+    return resolved;
+  };
+
+  if (!lookup_name.empty())
+  {
+    if (auto it = lookup.named_paths.find(lookup_name);
+        it != lookup.named_paths.end())
+    {
+      for (const auto &full_path : it->second)
       {
-        bool name_imported = false;
-        for (const auto &name : obj["names"])
-        {
-          const std::string &n = name["name"].get<std::string>();
-          if (n == "*" || n == lookup_name)
-          {
-            name_imported = true;
-            break;
-          }
-          if (
-            name.contains("asname") && !name["asname"].is_null() &&
-            name["asname"].get<std::string>() == lookup_name)
-          {
-            name_imported = true;
-            break;
-          }
-        }
-        if (!name_imported)
-          continue;
+        if (symbolt *func_symbol = try_resolve_from_path(full_path))
+          return func_symbol;
       }
-
-      std::regex pattern("py:(.*?)@");
-      std::string imported_symbol = std::regex_replace(
-        symbol_id, pattern, "py:" + obj["full_path"].get<std::string>() + "@");
-
-      if (
-        symbolt *func_symbol =
-          symbol_table_.find_symbol(imported_symbol.c_str()))
-        return func_symbol;
     }
   }
+
+  for (const auto &full_path : lookup.wildcard_paths)
+  {
+    if (symbolt *func_symbol = try_resolve_from_path(full_path))
+      return func_symbol;
+  }
+
+  for (const auto &full_path : lookup.all_paths)
+  {
+    if (symbolt *func_symbol = try_resolve_from_path(full_path))
+      return func_symbol;
+  }
+
+  if (lookup.unresolved_symbol_cache.size() > 4096)
+    lookup.unresolved_symbol_cache.clear();
+  lookup.unresolved_symbol_cache.emplace(symbol_id);
   return nullptr;
+}
+
+std::string python_converter::import_lookup_cache_key() const
+{
+  return current_python_file + ":" +
+         std::to_string(static_cast<std::uint64_t>(
+           reinterpret_cast<std::uintptr_t>(ast_json))) +
+         ":" + std::to_string(converter_instance_id_) + ":" +
+         std::to_string(conversion_epoch_);
+}
+
+const std::vector<std::string> &
+python_converter::get_cached_module_import_names(
+  const nlohmann::json &module_ast) const
+{
+  std::string cache_key;
+  if (module_ast.contains("filename") && module_ast["filename"].is_string())
+    cache_key = module_ast["filename"].get<std::string>();
+  else
+    cache_key = "__anon__:" + std::to_string(static_cast<std::uint64_t>(
+                                reinterpret_cast<std::uintptr_t>(&module_ast)));
+
+  if (auto it = module_import_names_cache_.find(cache_key);
+      it != module_import_names_cache_.end())
+  {
+    return it->second;
+  }
+
+  std::vector<std::string> imports;
+  std::unordered_set<std::string> seen;
+  if (module_ast.contains("body") && module_ast["body"].is_array())
+  {
+    for (const auto &elem : module_ast["body"])
+    {
+      if (!elem.contains("_type"))
+        continue;
+      if (!(elem["_type"] == "ImportFrom" || elem["_type"] == "Import"))
+        continue;
+      const std::vector<std::string> module_names =
+        extract_imported_module_names(elem);
+      for (const auto &module_name : module_names)
+      {
+        if (seen.insert(module_name).second)
+          imports.push_back(module_name);
+      }
+    }
+  }
+
+  auto [it, _] =
+    module_import_names_cache_.emplace(cache_key, std::move(imports));
+  return it->second;
+}
+
+const python_converter::import_lookup_entryt &
+python_converter::get_import_lookup_for_current_ast() const
+{
+  const std::string key = import_lookup_cache_key();
+  if (auto it = import_lookup_cache_.find(key);
+      it != import_lookup_cache_.end())
+    return it->second;
+
+  import_lookup_entryt entry;
+  if (ast_json->contains("body") && (*ast_json)["body"].is_array())
+  {
+    for (const auto &obj : (*ast_json)["body"])
+    {
+      if (!obj.contains("_type"))
+        continue;
+      if (!(obj["_type"] == "ImportFrom" || obj["_type"] == "Import"))
+        continue;
+      if (!obj.contains("full_path") || obj["full_path"].is_null())
+        continue;
+      const std::string full_path = obj["full_path"].get<std::string>();
+      entry.all_paths.push_back(full_path);
+
+      if (obj["_type"] == "Import")
+      {
+        if (!obj.contains("names") || !obj["names"].is_array())
+          continue;
+        entry.wildcard_paths.push_back(full_path);
+        for (const auto &name : obj["names"])
+        {
+          if (!name.contains("name") || !name["name"].is_string())
+            continue;
+          const std::string qualified = name["name"].get<std::string>();
+          const std::string root = root_module_name(qualified);
+          std::string alias = root;
+          if (
+            name.contains("asname") && !name["asname"].is_null() &&
+            name["asname"].is_string())
+          {
+            alias = name["asname"].get<std::string>();
+          }
+          entry.named_paths[alias].push_back(full_path);
+        }
+      }
+      else
+      {
+        if (!obj.contains("names") || !obj["names"].is_array())
+          continue;
+        for (const auto &name : obj["names"])
+        {
+          if (!name.contains("name") || !name["name"].is_string())
+            continue;
+          const std::string imported_name = name["name"].get<std::string>();
+          if (imported_name == "*")
+          {
+            entry.wildcard_paths.push_back(full_path);
+            continue;
+          }
+
+          entry.named_paths[imported_name].push_back(full_path);
+          if (
+            name.contains("asname") && !name["asname"].is_null() &&
+            name["asname"].is_string())
+          {
+            entry.named_paths[name["asname"].get<std::string>()].push_back(
+              full_path);
+          }
+        }
+      }
+    }
+  }
+
+  auto dedup_paths = [](std::vector<std::string> &paths) {
+    std::sort(paths.begin(), paths.end());
+    paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
+  };
+  dedup_paths(entry.wildcard_paths);
+  dedup_paths(entry.all_paths);
+  for (auto &named_entry : entry.named_paths)
+    dedup_paths(named_entry.second);
+
+  auto [it, _] = import_lookup_cache_.emplace(key, std::move(entry));
+  return it->second;
 }
 
 symbolt *python_converter::find_symbol(const std::string &sym_id) const
@@ -2841,12 +3677,169 @@ symbolt *python_converter::find_symbol(const std::string &sym_id) const
   return find_imported_symbol(sym_id);
 }
 
+bool python_converter::is_user_imported_symbol(
+  const std::string &symbol_id) const
+{
+  return find_imported_symbol(symbol_id) != nullptr;
+}
+
+std::string python_converter::resolve_module_chain_path(
+  const std::string &module_root,
+  const std::vector<std::string> &segments) const
+{
+  if (module_root.empty() || segments.empty())
+    return {};
+
+  std::string qualified_chain = module_root;
+  qualified_chain.reserve(
+    module_root.size() + 1 +
+    std::accumulate(
+      segments.begin(),
+      segments.end(),
+      std::size_t{0},
+      [](std::size_t acc, const std::string &s) {
+        return acc + s.size() + 1;
+      }));
+  for (const auto &segment : segments)
+  {
+    qualified_chain += ".";
+    qualified_chain += segment;
+  }
+
+  const std::string cache_key = current_python_file + ":" + qualified_chain;
+  if (auto it = module_chain_resolution_cache_.find(cache_key);
+      it != module_chain_resolution_cache_.end())
+  {
+    return it->second;
+  }
+
+  std::string resolved_path;
+
+  // First, try direct imported modules (including fully qualified chains).
+  std::string qualified = module_root;
+  qualified.reserve(qualified_chain.size());
+  for (const auto &segment : segments)
+  {
+    qualified += ".";
+    qualified += segment;
+    if (is_imported_module(qualified))
+      resolved_path = get_imported_module_path(qualified);
+  }
+
+  auto try_find_in_index =
+    [&](
+      const std::unordered_map<std::string, std::string> &index,
+      const std::string &candidate) -> bool {
+    auto it = index.find(candidate);
+    if (it == index.end())
+      return false;
+    resolved_path = it->second;
+    return true;
+  };
+
+  auto try_candidates =
+    [&](const std::unordered_map<std::string, std::string> &index) -> bool {
+    for (std::size_t len = segments.size(); len >= 1; --len)
+    {
+      const std::string &leaf = segments[len - 1];
+      if (try_find_in_index(index, leaf))
+        return true;
+
+      std::string underscore;
+      std::string dot;
+      std::string double_underscore;
+      for (std::size_t i = 0; i < len; ++i)
+      {
+        if (i != 0)
+        {
+          underscore += "_";
+          dot += ".";
+          double_underscore += "__";
+        }
+        underscore += segments[i];
+        dot += segments[i];
+        double_underscore += segments[i];
+      }
+
+      if (try_find_in_index(index, underscore))
+        return true;
+      if (try_find_in_index(index, dot))
+        return true;
+      if (try_find_in_index(index, double_underscore))
+        return true;
+    }
+
+    return false;
+  };
+
+  if (resolved_path.empty())
+  {
+    std::string model_root = module_root;
+    if (
+      model_symbol_index_by_root_.find(model_root) ==
+      model_symbol_index_by_root_.end())
+    {
+      const std::string *base_module_path =
+        get_imported_module_path_ptr(module_root);
+      if (base_module_path != nullptr)
+      {
+        fs::path p(*base_module_path);
+        model_root = p.stem().string();
+      }
+    }
+
+    if (auto root_it = model_symbol_index_by_root_.find(model_root);
+        root_it != model_symbol_index_by_root_.end())
+    {
+      try_candidates(root_it->second);
+    }
+  }
+
+  if (resolved_path.empty())
+    try_candidates(model_symbol_index_);
+
+  if (module_chain_resolution_cache_.size() > 8192)
+    module_chain_resolution_cache_.clear();
+  module_chain_resolution_cache_[cache_key] = resolved_path;
+  return resolved_path;
+}
+
+std::string
+python_converter::resolve_object_alias(const std::string &obj_name) const
+{
+  if (obj_name.empty())
+    return obj_name;
+
+  const std::string cache_key = current_python_file + ":" + obj_name;
+  if (auto it = object_alias_cache_.find(cache_key);
+      it != object_alias_cache_.end())
+    return it->second;
+
+  std::string resolved = json_utils::get_object_alias(*ast_json, obj_name);
+  if (object_alias_cache_.size() > 8192)
+    object_alias_cache_.clear();
+  object_alias_cache_.emplace(cache_key, resolved);
+  return resolved;
+}
+
 symbolt *python_converter::find_symbol_in_global_scope(
   const std::string &symbol_id) const
 {
   std::size_t class_start_pos = symbol_id.find("@C@");
   std::size_t func_start_pos = symbol_id.find("@F@");
   std::string sid = symbol_id;
+
+  // First try the direct "remove class scope, keep function/object" form:
+  // py:file@C@Foo@F@bar -> py:file@F@bar
+  if (
+    class_start_pos != std::string::npos &&
+    func_start_pos != std::string::npos && func_start_pos > class_start_pos)
+  {
+    std::string no_class = symbol_id;
+    no_class.erase(class_start_pos, func_start_pos - class_start_pos);
+    if (symbolt *symbol = symbol_table_.find_symbol(no_class))
+      return symbol;
+  }
 
   // Remove class name from symbol
   if (class_start_pos != std::string::npos)
@@ -2864,10 +3857,18 @@ symbolt *python_converter::find_symbol_in_global_scope(
 
 bool python_converter::is_imported_module(const std::string &module_name) const
 {
-  if (imported_modules.find(module_name) != imported_modules.end())
-    return true;
+  const std::string cache_key = current_python_file + ":" + module_name;
+  if (auto it = imported_module_presence_cache_.find(cache_key);
+      it != imported_module_presence_cache_.end())
+  {
+    return it->second;
+  }
 
-  return json_utils::is_module(module_name, *ast_json);
+  const bool result =
+    imported_modules.find(module_name) != imported_modules.end() ||
+    is_explicitly_imported_module_in_ast(*ast_json, module_name);
+  imported_module_presence_cache_.emplace(cache_key, result);
+  return result;
 }
 
 exprt python_converter::wrap_in_optional(
@@ -5656,8 +6657,9 @@ void python_converter::handle_function_call_rhs(
   {
     symbolt *func_symbol =
       symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-    assert(func_symbol);
-    if (!static_cast<code_typet &>(func_symbol->type).return_type().is_empty())
+    if (
+      func_symbol != nullptr &&
+      !static_cast<code_typet &>(func_symbol->type).return_type().is_empty())
     {
       if (auto ret = get_return_from_func(func_symbol->id.c_str());
           !ret.is_nil())
@@ -9109,6 +10111,7 @@ python_converter::python_converter(
     lambda_handler_(new python_lambda(*this, _context, type_handler_)),
     exception_handler_(new python_exception_handler(*this, type_handler_))
 {
+  converter_instance_id_ = ++g_python_converter_instance_counter;
 }
 
 python_converter::~python_converter()
@@ -9151,6 +10154,7 @@ void python_converter::append_models_from_directory(
   const std::string &dir_path)
 {
   fs::path directory(dir_path);
+  const std::string root = directory.filename().string();
 
   // Checks if the directory exists
   if (!fs::exists(directory) || !fs::is_directory(directory))
@@ -9162,11 +10166,14 @@ void python_converter::append_models_from_directory(
     if (fs::is_regular_file(*it) && it->path().extension() == ".json")
     {
       std::string file_name =
-        directory.filename().string() + "/" +
+        root + "/" +
         it->path().stem().string(); // File name without the extension
       file_list.push_back(file_name);
 
-      imported_modules[it->path().stem().string()] = it->path().string();
+      const std::string stem = it->path().stem().string();
+      const std::string path = it->path().string();
+      model_symbol_index_[stem] = path;
+      model_symbol_index_by_root_[root][stem] = path;
     }
   }
 }
@@ -9286,55 +10293,60 @@ void python_converter::create_builtin_symbols()
 void python_converter::process_module_imports(
   const nlohmann::json &module_ast,
   module_locator &locator,
-  code_blockt &accumulated_code)
+  code_blockt &accumulated_code,
+  std::unordered_map<std::string, nlohmann::json> &module_ast_cache)
 {
-  // Process imports in this module first (depth-first)
-  for (const auto &elem : module_ast["body"])
+  // Process imports in this module first (depth-first).
+  for (const auto &module_name : get_cached_module_import_names(module_ast))
   {
-    if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
-    {
-      const std::string &module_name = (elem["_type"] == "ImportFrom")
-                                         ? elem["module"]
-                                         : elem["names"][0]["name"];
+    // Skip if already imported
+    if (imported_modules.find(module_name) != imported_modules.end())
+      continue;
 
-      // Skip if already imported
-      if (imported_modules.find(module_name) != imported_modules.end())
-        continue;
+    const nlohmann::json *nested_module_json =
+      load_module_ast_cached(module_name, locator, module_ast_cache);
+    if (nested_module_json == nullptr)
+      continue; // Skip missing modules
 
-      std::ifstream imported_file = locator.open_module_file(module_name);
-      if (!imported_file.is_open())
-        continue; // Skip missing modules
+    std::string nested_python_file =
+      (*nested_module_json)["filename"].get<std::string>();
+    imported_modules.emplace(module_name, nested_python_file);
+    imported_module_presence_cache_.clear();
+    object_alias_cache_.clear();
+    module_chain_resolution_cache_.clear();
 
-      nlohmann::json nested_module_json;
-      imported_file >> nested_module_json;
+    // Recursively process nested imports first
+    process_module_imports(
+      *nested_module_json, locator, accumulated_code, module_ast_cache);
 
-      std::string nested_python_file =
-        nested_module_json["filename"].get<std::string>();
-      imported_modules.emplace(module_name, nested_python_file);
+    // Then process this module's definitions
+    std::string saved_file = current_python_file;
+    current_python_file = nested_python_file;
 
-      // Recursively process nested imports first
-      process_module_imports(nested_module_json, locator, accumulated_code);
+    create_builtin_symbols();
+    exprt imported_code = with_ast(nested_module_json, [&]() {
+      return get_block((*nested_module_json)["body"]);
+    });
+    convert_expression_to_code(imported_code);
 
-      // Then process this module's definitions
-      std::string saved_file = current_python_file;
-      current_python_file = nested_python_file;
+    // Accumulate this module's code
+    accumulated_code.copy_to_operands(imported_code);
 
-      create_builtin_symbols();
-      exprt imported_code = with_ast(&nested_module_json, [&]() {
-        return get_block(nested_module_json["body"]);
-      });
-      convert_expression_to_code(imported_code);
-
-      // Accumulate this module's code
-      accumulated_code.copy_to_operands(imported_code);
-
-      current_python_file = saved_file;
-    }
+    current_python_file = saved_file;
   }
 }
 
 void python_converter::convert()
 {
+  ++conversion_epoch_;
+  import_lookup_cache_.clear();
+  module_import_names_cache_.clear();
+  model_symbol_index_.clear();
+  model_symbol_index_by_root_.clear();
+  imported_module_presence_cache_.clear();
+  object_alias_cache_.clear();
+  module_chain_resolution_cache_.clear();
+
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
 
@@ -9343,6 +10355,7 @@ void python_converter::convert()
 
   // Block to accumulate model library code
   code_blockt models_block;
+  std::unordered_map<std::string, nlohmann::json> module_ast_cache;
 
   if (!config.options.get_bool_option("no-library"))
   {
@@ -9360,9 +10373,89 @@ void python_converter::convert()
       "nondet"};
     std::list<std::string> model_folders = {"os", "numpy"};
 
+    module_locator import_locator(ast_output_dir);
+    const std::unordered_set<std::string> transitive_import_roots =
+      collect_transitive_import_roots(
+        *ast_json, import_locator, module_ast_cache);
+    model_symbol_mapt model_symbols;
+    std::unordered_set<std::string> need_full_folder;
+    const std::unordered_set<std::string> selective_model_roots = {
+      "os", "numpy"};
+    using model_scan_cache_valuet =
+      std::pair<model_symbol_mapt, std::unordered_set<std::string>>;
+    std::unordered_map<std::string, model_scan_cache_valuet> model_scan_cache;
+
+    auto collect_symbols_cached =
+      [&](const std::string &module_name, const nlohmann::json &module_ast) {
+        if (auto it = model_scan_cache.find(module_name);
+            it != model_scan_cache.end())
+        {
+          for (const auto &root_entry : it->second.first)
+            model_symbols[root_entry.first].insert(
+              root_entry.second.begin(), root_entry.second.end());
+          need_full_folder.insert(
+            it->second.second.begin(), it->second.second.end());
+          return;
+        }
+
+        model_symbol_mapt local_symbols;
+        std::unordered_set<std::string> local_need_full;
+        collect_model_symbols_from_module(
+          module_ast, selective_model_roots, local_symbols, local_need_full);
+        model_scan_cache.emplace(
+          module_name, model_scan_cache_valuet{local_symbols, local_need_full});
+        for (const auto &root_entry : local_symbols)
+          model_symbols[root_entry.first].insert(
+            root_entry.second.begin(), root_entry.second.end());
+        need_full_folder.insert(local_need_full.begin(), local_need_full.end());
+      };
+
+    collect_symbols_cached("__main__", *ast_json);
+    for (const auto &entry : module_ast_cache)
+      collect_symbols_cached(entry.first, entry.second);
+
+    std::unordered_map<std::string, model_manifest_indext> model_manifests;
     for (const auto &folder : model_folders)
     {
-      append_models_from_directory(model_files, ast_output_dir + "/" + folder);
+      if (transitive_import_roots.find(folder) == transitive_import_roots.end())
+        continue;
+      model_manifests.emplace(
+        folder,
+        build_model_manifest_for_directory(ast_output_dir + "/" + folder));
+    }
+
+    for (const auto &folder : model_folders)
+    {
+      if (transitive_import_roots.find(folder) == transitive_import_roots.end())
+        continue;
+
+      const auto manifest_it = model_manifests.find(folder);
+      if (manifest_it == model_manifests.end())
+        continue;
+
+      if (
+        need_full_folder.find(folder) != need_full_folder.end() ||
+        model_symbols.find(folder) == model_symbols.end() ||
+        model_symbols[folder].empty())
+      {
+        append_models_from_manifest(
+          model_files,
+          model_symbol_index_,
+          model_symbol_index_by_root_,
+          folder,
+          manifest_it->second,
+          nullptr);
+      }
+      else
+      {
+        append_models_from_manifest(
+          model_files,
+          model_symbol_index_,
+          model_symbol_index_by_root_,
+          folder,
+          manifest_it->second,
+          &model_symbols[folder]);
+      }
     }
 
     is_loading_models = true;
@@ -9380,9 +10473,24 @@ void python_converter::convert()
       size_t pos = file.rfind("/");
       if (pos != std::string::npos)
       {
-        std::string filename = file.substr(pos + 1);
-        if (imported_modules.find(filename) != imported_modules.end())
-          current_python_file = imported_modules[filename];
+        const std::string root = file.substr(0, pos);
+        const std::string stem = file.substr(pos + 1);
+
+        if (auto root_it = model_symbol_index_by_root_.find(root);
+            root_it != model_symbol_index_by_root_.end())
+        {
+          if (auto stem_it = root_it->second.find(stem);
+              stem_it != root_it->second.end())
+          {
+            current_python_file = stem_it->second;
+          }
+        }
+        else if (auto it = model_symbol_index_.find(stem);
+                 it != model_symbol_index_.end())
+        {
+          // Fallback for legacy manifests that only index by symbol stem.
+          current_python_file = it->second;
+        }
       }
 
       exprt model_code =
@@ -9509,55 +10617,48 @@ void python_converter::convert()
     // Accumulate all imports
     code_blockt all_imports_block;
 
-    for (const auto &elem : (*ast_json)["body"])
+    for (const auto &module_name : get_cached_module_import_names(*ast_json))
     {
-      if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
+      is_importing_module = true;
+
+      // Skip if already processed by recursive import
+      if (imported_modules.find(module_name) != imported_modules.end())
+        continue;
+
+      const nlohmann::json *cached_module =
+        load_module_ast_cached(module_name, locator, module_ast_cache);
+      if (cached_module == nullptr)
       {
-        is_importing_module = true;
-        const std::string &module_name = (elem["_type"] == "ImportFrom")
-                                           ? elem["module"]
-                                           : elem["names"][0]["name"];
-
-        // Skip if already processed by recursive import
-        if (imported_modules.find(module_name) != imported_modules.end())
-          continue;
-
-        std::ifstream imported_file = locator.open_module_file(module_name);
-        if (!imported_file.is_open())
-        {
-          throw std::runtime_error(
-            "Cannot open file: " + locator.module_path(module_name));
-        }
-
-        imported_file >> imported_module_json;
-
-        current_python_file =
-          imported_module_json["filename"].get<std::string>();
-        imported_modules.emplace(module_name, current_python_file);
-
-        // Process nested imports recursively first
-        process_module_imports(
-          imported_module_json, locator, all_imports_block);
-
-        // Create built-in symbols for imported module
-        create_builtin_symbols();
-
-        // Annotate types in imported module before conversion
-        python_annotation<nlohmann::json> imported_annotator(
-          imported_module_json, const_cast<global_scope &>(global_scope_));
-        imported_annotator.add_type_annotation();
-
-        exprt imported_code = with_ast(&imported_module_json, [&]() {
-          return get_block(imported_module_json["body"]);
-        });
-
-        convert_expression_to_code(imported_code);
-
-        // Accumulate imported code instead of overwriting
-        all_imports_block.copy_to_operands(imported_code);
-
-        imported_module_json.clear();
+        throw std::runtime_error(
+          "Cannot open file: " + locator.module_path(module_name));
       }
+
+      current_python_file = (*cached_module)["filename"].get<std::string>();
+      imported_modules.emplace(module_name, current_python_file);
+      imported_module_presence_cache_.clear();
+      object_alias_cache_.clear();
+      module_chain_resolution_cache_.clear();
+
+      // Process nested imports recursively first
+      process_module_imports(
+        *cached_module, locator, all_imports_block, module_ast_cache);
+
+      // Create built-in symbols for imported module
+      create_builtin_symbols();
+
+      // Annotate types in imported module before conversion
+      python_annotation<nlohmann::json> imported_annotator(
+        const_cast<nlohmann::json &>(*cached_module),
+        const_cast<global_scope &>(global_scope_));
+      imported_annotator.add_type_annotation();
+
+      exprt imported_code = with_ast(
+        cached_module, [&]() { return get_block((*cached_module)["body"]); });
+
+      convert_expression_to_code(imported_code);
+
+      // Accumulate imported code instead of overwriting
+      all_imports_block.copy_to_operands(imported_code);
     }
 
     is_importing_module = false;
@@ -9701,6 +10802,8 @@ void python_converter::convert()
     throw std::runtime_error(
       "The main function is already defined in another module");
   }
+
+  cmath_lowering_policy::log_telemetry_if_verbose();
 }
 
 exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)

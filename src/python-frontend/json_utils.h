@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <functional>
+#include <vector>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
@@ -175,6 +176,37 @@ get_object_alias(const JsonType &ast, const std::string &obj_name)
     return resolved_prefix + suffix;
 
   return obj_name;
+}
+
+template <typename JsonType>
+bool extract_attribute_chain(
+  const JsonType &node,
+  std::string &base_name,
+  std::vector<std::string> &attrs)
+{
+  if (!node.is_object() || !node.contains("_type"))
+    return false;
+
+  if (node["_type"] == "Name")
+  {
+    if (!node.contains("id") || !node["id"].is_string())
+      return false;
+    base_name = node["id"].template get<std::string>();
+    return true;
+  }
+
+  if (node["_type"] != "Attribute")
+    return false;
+
+  if (
+    !node.contains("value") || !node.contains("attr") ||
+    !node["attr"].is_string())
+    return false;
+
+  if (!extract_attribute_chain(node["value"], base_name, attrs))
+    return false;
+  attrs.emplace_back(node["attr"].template get<std::string>());
+  return true;
 }
 
 template <typename JsonType>
