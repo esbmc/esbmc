@@ -28,6 +28,14 @@ endif()
 
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 
+# Per-test timeout, injected into the runner via
+# the ESBMC_REGRESS_TIMEOUT environment variable
+#so the Python side never needs its own default.
+set(ESBMC_REGRESS_TIMEOUT 1200 CACHE STRING
+    "Per-test timeout in seconds for regression tests")
+set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
+    "Per-test virtual memory limit")
+
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
   #   - BENCHMARK_TO_RUN: user-specified benchmark to run
@@ -39,8 +47,10 @@ if(BENCHBRINGUP)
    message( FATAL_ERROR "Please make sure ENV vars `BENCHMARK_TO_RUN`, `LOG_DIR` and `TEST_TIMEOUT` are defined" )
   endif()
 
-  message(STATUS "Benchmark to run: $ENV{BENCHMARK_TO_RUN} with timeout $ENV{TEST_TIMEOUT}")
-  set(BENCHBRINGUP_ARGS --timeout=$ENV{TEST_TIMEOUT} --benchbringup)
+  # Override the cache value with the CI-supplied one.
+  set(ESBMC_REGRESS_TIMEOUT $ENV{TEST_TIMEOUT})
+  message(STATUS "Benchmark to run: $ENV{BENCHMARK_TO_RUN} with timeout ${ESBMC_REGRESS_TIMEOUT}")
+  set(BENCHBRINGUP_ARGS --benchbringup)
 endif()
 
 function(add_esbmc_regression_test folder modes test)
@@ -52,9 +62,11 @@ function(add_esbmc_regression_test folder modes test)
                      --modes ${modes}
                      --file=${test}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
-    # TODO: Testing Tool should have a command to dump the TAG of a test		   
+    # Timeout and memory limit are passed via environment
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
+      TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
+      ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
       LABELS "regression;${folder}")
 endfunction()
 
