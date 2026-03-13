@@ -578,8 +578,10 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
       // definitions appear later in textual order. Both C and C++ require
       // initialization in definition order
       symbolt *s = context.find_symbol(symbol.id);
-      if (s && vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
-        // In AST, nodes will be generated for the template Instantiation. 
+      if (
+        s &&
+        vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
+        // In AST, nodes will be generated for the template Instantiation.
         // We have already initialized it, so skip it
 
         // Remove the zero initialization symbol and re-arrange the initialization order
