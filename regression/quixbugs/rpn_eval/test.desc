@@ -1,4 +1,4 @@
 KNOWNBUG
 main.py
---no-standard-checks --unwind 1 --bitwuzla
+--no-standard-checks --unwind 1 --bitwuzla --smt-during-symex --smt-symex-guard
 ^VERIFICATION SUCCESSFUL$
