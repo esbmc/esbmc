@@ -633,9 +633,8 @@ private:
   }
 
   // Returns the lowest common ancestor of two user-defined class types, or "".
-  std::string find_common_ancestor(
-    const std::string &type_a,
-    const std::string &type_b)
+  std::string
+  find_common_ancestor(const std::string &type_a, const std::string &type_b)
   {
     std::vector<std::string> ancestors_a = get_class_ancestors(type_a);
     std::unordered_set<std::string> ancestors_b_set;
