@@ -6908,19 +6908,34 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
 
-    // Resolve result type based on branch types
-    typet result_type =
-      resolve_ternary_type(then.type(), else_expr.type(), current_element_type);
+    bool then_is_none = (then.type() == none_type());
+    bool else_is_none = (else_expr.type() == none_type());
 
-    // Handle array-to-pointer conversion for ternary expressions
-    // When assigning to a pointer (e.g., str field), convert array branches to pointers
-    if (
-      then.type().is_array() && else_expr.type().is_array() && current_lhs &&
-      current_lhs->type().is_pointer())
+    typet result_type;
+    if (then_is_none != else_is_none)
     {
-      then = string_handler_.get_array_base_address(then);
-      else_expr = string_handler_.get_array_base_address(else_expr);
-      result_type = then.type(); // Use pointer type as result
+      // One branch is None, the other is T → Optional[T] models Python's T | None
+      typet concrete_type = then_is_none ? else_expr.type() : then.type();
+      result_type = type_handler_.build_optional_type(concrete_type);
+      then = wrap_in_optional(then, result_type);
+      else_expr = wrap_in_optional(else_expr, result_type);
+    }
+    else
+    {
+      // Resolve result type based on branch types
+      result_type = resolve_ternary_type(
+        then.type(), else_expr.type(), current_element_type);
+
+      // Handle array-to-pointer conversion for ternary expressions
+      // When assigning to a pointer (e.g., str field), convert array branches to pointers
+      if (
+        then.type().is_array() && else_expr.type().is_array() && current_lhs &&
+        current_lhs->type().is_pointer())
+      {
+        then = string_handler_.get_array_base_address(then);
+        else_expr = string_handler_.get_array_base_address(else_expr);
+        result_type = then.type(); // Use pointer type as result
+      }
     }
 
     // Create fully symbolic if expression
