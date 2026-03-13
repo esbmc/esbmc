@@ -33,6 +33,8 @@ set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 #so the Python side never needs its own default.
 set(ESBMC_REGRESS_TIMEOUT 1200 CACHE STRING
     "Per-test timeout in seconds for regression tests")
+set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
+    "Per-test virtual memory limit")
 
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
@@ -60,12 +62,11 @@ function(add_esbmc_regression_test folder modes test)
                      --modes ${modes}
                      --file=${test}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
-    # Timeout is passed via environment
-    # Python runner sees without needing a dedicated CLI flag.
+    # Timeout and memory limit are passed via environment
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
       TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
-      ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT}"
+      ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
       LABELS "regression;${folder}")
 endfunction()
 

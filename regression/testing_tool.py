@@ -17,7 +17,7 @@ import subprocess
 # Environment variable injected by CMake
 # set_tests_properties(ENVIRONMENT).
 _TIMEOUT_ENVVAR = "ESBMC_REGRESS_TIMEOUT"
-
+_MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
 #####################
 # Testing Tool
 #####################
@@ -206,7 +206,8 @@ class RegressionBase(unittest.TestCase):
     FAIL_WITH_WORD: str = None
     # The env var set by CMake.
     TIMEOUT = int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None
-    MEMORY_LIMIT = 8 * 1024 * 1024 * 1024  # 8 GB; override via --memory-limit
+    _mem_mb = int(os.environ.get(_MEMORY_LIMIT_ENVVAR, 0))
+    MEMORY_LIMIT = _mem_mb * 1024 * 1024 if _mem_mb else None
 
     def setUp(self):
         self.startTime = time.time()
@@ -334,7 +335,6 @@ def _arg_parsing():
     )
 
     main_args = parser.parse_args()
-    # can use --timeout CLI overrides the env-var default when provided.
     if main_args.timeout:
         RegressionBase.TIMEOUT = int(main_args.timeout)
     if main_args.memory_limit:
