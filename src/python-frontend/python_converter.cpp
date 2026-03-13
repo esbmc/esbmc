@@ -6900,8 +6900,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     if (then_is_none != else_is_none)
     {
       // One branch is None, the other is T → Optional[T] models Python's T | None
-      typet concrete_type =
-        then_is_none ? else_expr.type() : then.type();
+      typet concrete_type = then_is_none ? else_expr.type() : then.type();
       result_type = type_handler_.build_optional_type(concrete_type);
       then = wrap_in_optional(then, result_type);
       else_expr = wrap_in_optional(else_expr, result_type);
@@ -6909,8 +6908,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     else
     {
       // Resolve result type based on branch types
-      result_type =
-        resolve_ternary_type(then.type(), else_expr.type(), current_element_type);
+      result_type = resolve_ternary_type(
+        then.type(), else_expr.type(), current_element_type);
 
       // Handle array-to-pointer conversion for ternary expressions
       // When assigning to a pointer (e.g., str field), convert array branches to pointers

@@ -396,9 +396,8 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
       {
         const typet &actual_ret = ret_stmt.operands()[0].type();
         bool is_optional_struct =
-          actual_ret.is_struct() &&
-          actual_ret.get("tag").as_string().find("Optional_") !=
-            std::string::npos;
+          actual_ret.is_struct() && actual_ret.get("tag").as_string().find(
+                                      "Optional_") != std::string::npos;
         if (
           (actual_ret.is_pointer() && actual_ret.subtype().is_code()) ||
           is_optional_struct)
