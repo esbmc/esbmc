@@ -2934,7 +2934,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       list_arg["_type"] == "Call" && list_arg["func"]["_type"] == "Name" &&
       list_arg["func"]["id"] == "range")
     {
-      return python_list::build_list_from_range(*this, list_arg["args"], element);
+      return python_list::build_list_from_range(
+        *this, list_arg["args"], element);
     }
 
     // Handle list(iterable) where iterable evaluates to a list — e.g.
