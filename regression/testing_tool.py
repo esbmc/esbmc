@@ -3,6 +3,7 @@
 
 import os.path
 import os
+import signal
 import sys
 import unittest
 from subprocess import Popen, PIPE, STDOUT
@@ -128,13 +129,16 @@ class TestCase:
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
 
 
-def _set_memory_limit():
-    """preexec_fn: apply virtual memory cap."""
+def _prepare_child():
+    """preexec_fn: new process group + memory cap."""
+    os.setpgrp()
     if RegressionBase.MEMORY_LIMIT:
         import resource
         limit = RegressionBase.MEMORY_LIMIT
         resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-
+# Seconds to wait between SIGTERM and SIGKILL
+# when cleaning up timed-out process group.
+_TERM_GRACE = 3
 
 class Executor:
     def __init__(self, tool="esbmc"):
@@ -144,38 +148,45 @@ class Executor:
     def run(self, test_case: TestCase):
         """Execute the test case with `executable`"""
         cmd = test_case.generate_run_argument_list(*self.tool)
-        preexec = _set_memory_limit if os.name == "posix" else None
+        preexec = _prepare_child if os.name == "posix" else None
 
-        try:
-            p = subprocess.run(
-                cmd,
-                stdout=PIPE,
-                stderr=PIPE,
-                timeout=self.timeout,
-                preexec_fn=preexec,
-                env=dict(os.environ, ESBMC_CONFIG_FILE=""),
-            )
+        with subprocess.Popen(
+            cmd,
+            stdout=PIPE,
+            stderr=PIPE,
+            preexec_fn=preexec,
+            env=dict(os.environ, ESBMC_CONFIG_FILE=""),
+        ) as proc:
+            try:
+                stdout, stderr = proc.communicate(timeout=self.timeout)
+            except subprocess.TimeoutExpired:
+                # Gracefully shut down the whole process group so
+                # grandchildren don't linger and starve the CI runner.
+                if os.name == "posix":
+                    try:
+                        os.killpg(proc.pid, signal.SIGTERM)
+                        proc.wait(timeout=_TERM_GRACE)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                else:
+                    proc.kill()
+                stdout, stderr = proc.communicate()
+                msg = "Timed out ({}s limit)\nCommand: {}".format(
+                    self.timeout, " ".join(str(a) for a in cmd))
+                partial = b""
+                if stdout:
+                    partial += stdout
+                if stderr:
+                    partial += stderr
+                return None, msg.encode() + b"\n" + partial, 1
 
             if sys.platform.startswith("linux"):
                 import resource
                 rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
                 print("mem_usage={0} kilobytes".format(rss))
-
-        except subprocess.CalledProcessError:
-            return None, None, 0
-        except subprocess.TimeoutExpired as e:
-            # subprocess.run killed the direct child;
-            # any orphaned grandchildren will be reaped by CTest's TIMEOUT.
-            msg = "Timed out ({}s limit)\nCommand: {}".format(
-                e.timeout, " ".join(str(a) for a in e.cmd))
-            partial = b""
-            if e.stdout:
-                partial += e.stdout
-            if e.stderr:
-                partial += e.stderr
-            return None, msg.encode() + b"\n" + partial, 1
-
-        return p.stdout, p.stderr, p.returncode
+            return stdout, stderr, proc.returncode
 
 
 def get_test_objects(base_dir: str):
