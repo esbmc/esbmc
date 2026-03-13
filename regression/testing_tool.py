@@ -13,8 +13,9 @@ import time
 import shlex
 import subprocess
 
-if sys.platform.startswith("linux"):
-    from resource import *
+# Environment variable injected by CMake
+# set_tests_properties(ENVIRONMENT).
+_TIMEOUT_ENVVAR = "ESBMC_REGRESS_TIMEOUT"
 
 #####################
 # Testing Tool
@@ -128,8 +129,8 @@ class TestCase:
 
 
 def _set_memory_limit():
-    """Set per-process virtual memory limit for the child process."""
-    if os.name == "posix" and RegressionBase.MEMORY_LIMIT:
+    """preexec_fn: apply virtual memory cap."""
+    if RegressionBase.MEMORY_LIMIT:
         import resource
         limit = RegressionBase.MEMORY_LIMIT
         resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
@@ -146,7 +147,6 @@ class Executor:
         preexec = _set_memory_limit if os.name == "posix" else None
 
         try:
-            # use subprocess.run because we want to wait for the subprocess to finish
             p = subprocess.run(
                 cmd,
                 stdout=PIPE,
@@ -156,22 +156,17 @@ class Executor:
                 env=dict(os.environ, ESBMC_CONFIG_FILE=""),
             )
 
-            # get the RSS (resident set size) of the subprocess that just terminated.
-            # Save the output in a tmp.log and then use the command below
-            # to get the total maximum RSS:
-            #   egrep "mem_usage=[0-9]+" tmp.log -o | cut -d'=' -f2 | paste -sd+ - | bc
-            # see https://docs.python.org/3/library/resource.html for more details
             if sys.platform.startswith("linux"):
-                print(
-                    "mem_usage={0} kilobytes".format(
-                        getrusage(RUSAGE_CHILDREN).ru_maxrss
-                    )
-                )
+                import resource
+                rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+                print("mem_usage={0} kilobytes".format(rss))
 
         except subprocess.CalledProcessError:
             return None, None, 0
         except subprocess.TimeoutExpired as e:
-            msg = "Process timed out after {}s\nCommand: {}".format(
+            # subprocess.run killed the direct child;
+            # any orphaned grandchildren will be reaped by CTest's TIMEOUT.
+            msg = "Timed out ({}s limit)\nCommand: {}".format(
                 e.timeout, " ".join(str(a) for a in e.cmd))
             partial = b""
             if e.stdout:
@@ -198,18 +193,19 @@ class RegressionBase(unittest.TestCase):
     longMessage = True
 
     FAIL_WITH_WORD: str = None
-    TIMEOUT = None  # set via --timeout from CMake
-    MEMORY_LIMIT = 8 * 1024 * 1024 * 1024  # 8 GB; use --memory-limit to change
+    # The env var set by CMake.
+    TIMEOUT = int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None
+    MEMORY_LIMIT = 8 * 1024 * 1024 * 1024  # 8 GB; override via --memory-limit
 
     def setUp(self):
         self.startTime = time.time()
 
     def tearDown(self):
-        t = time.time() - self.startTime
-        if RegressionBase.TIMEOUT and t >= RegressionBase.TIMEOUT:
-            print("TIMEOUT")
+        elapsed = time.time() - self.startTime
+        if RegressionBase.TIMEOUT and elapsed >= RegressionBase.TIMEOUT:
+            print("TIMEOUT after %.1fs (limit %ss)" % (elapsed, RegressionBase.TIMEOUT))
         else:
-            print("%.3f" % t)
+            print("%.3fs" % elapsed)
 
 
 def _add_test(test_case, executor):
@@ -219,7 +215,8 @@ def _add_test(test_case, executor):
         stdout, stderr, rc = executor.run(test_case)
 
         if stdout is None:
-            timeout_message = "\nTIMEOUT TEST: " + str(test_case.test_dir)
+            timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
+                test_case.test_dir, executor.timeout or "none")
             if stderr:
                 timeout_message += "\n" + stderr.decode(errors="replace")
             self.fail(timeout_message)
@@ -229,7 +226,7 @@ def _add_test(test_case, executor):
                 self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
             return
 
-        output_to_validate = stdout.decode() + stderr.decode()
+        output_to_validate = stdout.decode(errors="replace") + stderr.decode(errors="replace")
         error_message_prefix = (
             "\nTEST: "
             + str(test_case.test_dir)
@@ -326,10 +323,11 @@ def _arg_parsing():
     )
 
     main_args = parser.parse_args()
-    if main_args.timeout is not None:
-        RegressionBase.TIMEOUT = int(main_args.timeout) or None
-    if main_args.memory_limit is not None:
-        RegressionBase.MEMORY_LIMIT = (main_args.memory_limit * 1024 * 1024) or None
+    # can use --timeout CLI overrides the env-var default when provided.
+    if main_args.timeout:
+        RegressionBase.TIMEOUT = int(main_args.timeout)
+    if main_args.memory_limit:
+        RegressionBase.MEMORY_LIMIT = main_args.memory_limit * 1024 * 1024
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
     regression_path = os.path.join(
