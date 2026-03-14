@@ -4378,12 +4378,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     symbolt *symbol = nullptr;
     if (!(symbol = find_symbol(sid_str)))
     {
-      // Fallback for global variables accessed inside functions
+      // Fallback for global variables accessed inside functions or class methods
       if (!is_class_attr && element["_type"] == "Name")
       {
         sid.set_function(""); // remove function scope
         sid_str = sid.to_string();
         symbol = find_symbol(sid_str);
+        if (!symbol)
+        {
+          // also try module-level global (strips class scope too)
+          symbol = find_symbol(sid.global_to_string());
+        }
       }
       if (!symbol)
       {
