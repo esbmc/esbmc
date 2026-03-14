@@ -422,6 +422,103 @@ class Preprocessor(ast.NodeTransformer):
                 return False
         return False
 
+    @staticmethod
+    def _is_recursive_call(func_name, body):
+        """Return True if any Call node in body has func.id == func_name."""
+        for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+            if (isinstance(node, ast.Call) and
+                    isinstance(node.func, ast.Name) and
+                    node.func.id == func_name):
+                return True
+        return False
+
+    class _YieldToAppend(ast.NodeTransformer):
+        """Replace `yield expr` statements with `ESBMC_gen_result.append(expr)`."""
+        def __init__(self, result_var, template):
+            self.result_var = result_var
+            self.template = template
+
+        def visit_Expr(self, node):
+            if not isinstance(node.value, ast.Yield):
+                return self.generic_visit(node)
+            yield_val = node.value.value
+            if yield_val is None:
+                yield_val = ast.Constant(value=None)
+            append_call = ast.Expr(value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=self.result_var, ctx=ast.Load()),
+                    attr='append',
+                    ctx=ast.Load()),
+                args=[yield_val],
+                keywords=[]))
+            ast.copy_location(append_call, node)
+            ast.fix_missing_locations(append_call)
+            return append_call
+
+        # Do not descend into nested function definitions
+        def visit_FunctionDef(self, node):
+            return node
+
+    def _transform_recursive_generator(self, node):
+        """Transform a recursive generator function to accumulate-and-return.
+
+        Converts:
+            def f(args):
+                ...
+                yield val
+                ...
+
+        Into:
+            def f(args) -> list:
+                ESBMC_gen_result: list = []
+                ...
+                ESBMC_gen_result.append(val)
+                ...
+                return ESBMC_gen_result
+        """
+        result_var = 'ESBMC_gen_result'
+        template = node.body[0] if node.body else node
+
+        # Annotate unannotated parameters as list[Any].  Without this the C++
+        # annotator infers Any from the recursive call site (flatten(x) where
+        # x: Any), which types the parameter as void*.  Subscripting void*
+        # then crashes the index2t IR constructor.  Recursive generators always
+        # recurse on a list-like iterable, so list[Any] is the right type.
+        for arg in node.args.args:
+            if arg.annotation is None:
+                ann = ast.Subscript(
+                    value=ast.Name(id='list', ctx=ast.Load()),
+                    slice=ast.Name(id='Any', ctx=ast.Load()),
+                    ctx=ast.Load()
+                )
+                ast.copy_location(ann, template)
+                ast.fix_missing_locations(ann)
+                arg.annotation = ann
+
+        # Add result list initialisation at the start of the body
+        init = ast.AnnAssign(
+            target=ast.Name(id=result_var, ctx=ast.Store()),
+            annotation=ast.Name(id='list', ctx=ast.Load()),
+            value=ast.List(elts=[], ctx=ast.Load()),
+            simple=1)
+        ast.copy_location(init, template)
+        ast.fix_missing_locations(init)
+
+        # Replace all yield statements with append calls
+        new_body = [self._YieldToAppend(result_var, template).visit(s)
+                    for s in node.body]
+
+        # Append return statement
+        ret = ast.Return(value=ast.Name(id=result_var, ctx=ast.Load()))
+        ast.copy_location(ret, template)
+        ast.fix_missing_locations(ret)
+
+        node.body = [init] + new_body + [ret]
+        node.returns = ast.Name(id='list', ctx=ast.Load())
+        ast.copy_location(node.returns, template)
+        ast.fix_missing_locations(node.returns)
+        return node
+
     class _YieldReplacer(ast.NodeTransformer):
         """Replace `yield val` expressions with `target = val; for_body`."""
         def __init__(self, target_name, for_body, template):
@@ -1987,6 +2084,18 @@ class Preprocessor(ast.NodeTransformer):
                 slice=ast.Name(id=element_type, ctx=ast.Load()),
                 ctx=ast.Load()
             )
+        elif annotation_id in ('list', 'List', 'tuple', 'Tuple'):
+            # Use list[Any] rather than bare Any so the C++ converter treats
+            # ESBMC_iter as an indexable list (avoiding the index2t assertion
+            # that fires when subscripting a void* variable).  Bare 'list'
+            # must be avoided because get_elem_type_from_annotation would then
+            # return list_type itself as the element type, causing ptr+ptr
+            # arithmetic crashes in arith_2ops.
+            iter_annotation = ast.Subscript(
+                value=ast.Name(id='list', ctx=ast.Load()),
+                slice=ast.Name(id='Any', ctx=ast.Load()),
+                ctx=ast.Load()
+            )
         else:
             # Use 'Any' instead of bare 'list' to avoid misinterpreting the
             # container type as the element type in the C++ converter,
@@ -2951,9 +3060,16 @@ class Preprocessor(ast.NodeTransformer):
         # Detect generator functions: any function that contains yield
         is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
         if is_generator:
-            self.generator_funcs.add(node.name)
-            if self._has_early_return_before_yield(node.body):
-                self.early_return_generator_funcs.add(node.name)
+            # Recursive generators cannot be inlined: transform them to an
+            # accumulate-and-return function so ESBMC can verify them via
+            # bounded recursion without needing generator protocol support.
+            if self._is_recursive_call(node.name, node.body):
+                node = self._transform_recursive_generator(node)
+                is_generator = False
+            else:
+                self.generator_funcs.add(node.name)
+                if self._has_early_return_before_yield(node.body):
+                    self.early_return_generator_funcs.add(node.name)
 
         # Store return type annotation so call-expression iterables can resolve types
         if node.returns is not None:
