@@ -1168,7 +1168,12 @@ class Preprocessor(ast.NodeTransformer):
                 keywords=[],
             )
             new_stop = ast.BinOp(left=copy.deepcopy(start), op=ast.Sub(), right=copy.deepcopy(step))
-            new_step = ast.UnaryOp(op=ast.USub(), operand=copy.deepcopy(step))
+            # Constant-fold -step so that step==0 remains an ast.Constant and
+            # _transform_range_for's compile-time ValueError check still fires.
+            if isinstance(step, ast.Constant):
+                new_step = ast.Constant(value=-step.value)
+            else:
+                new_step = ast.UnaryOp(op=ast.USub(), operand=copy.deepcopy(step))
             new_args = [new_start, new_stop, new_step]
         else:
             # Invalid number of range args — let the existing validator raise.
