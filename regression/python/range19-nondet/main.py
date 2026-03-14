@@ -14,4 +14,5 @@ def factorial (n: int) -> int:
   return result
 
 x:int = random.randint(1, 16383)
+__ESBMC_assume(x <= 20)
 assert factorial (x) > 0

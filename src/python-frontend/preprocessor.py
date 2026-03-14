@@ -1,4 +1,5 @@
 import ast
+import copy
 
 class Preprocessor(ast.NodeTransformer):
     def __init__(self, module_name):
@@ -129,7 +130,103 @@ class Preprocessor(ast.NodeTransformer):
             col_offset=0
         )
 
-        return [range_next_func, range_has_next_func]
+        # ESBMC_reversed_range_start_ function
+        #
+        # Returns the first element of reversed(range(start, stop, step)), i.e.
+        # the last element of the original range.  When the original range is
+        # empty the function returns (start - step) so that the caller's
+        # range(result, start-step, -step) is trivially empty as well.
+        #
+        # Python:
+        #   def ESBMC_reversed_range_start_(start, stop, step):
+        #       if step > 0:
+        #           if stop <= start:
+        #               return start - step
+        #           n = (stop - start - 1) // step
+        #           return start + n * step
+        #       else:
+        #           if stop >= start:
+        #               return start - step
+        #           n = (start - stop - 1) // (-step)
+        #           return start + n * step
+        #
+        # All divisions involve same-sign operands (positive numerator and
+        # positive denominator), so Python // and C / agree — no floor-mod
+        # correction is needed.
+        def _make_int_arg(name):
+            return ast.arg(arg=name, annotation=ast.Name(id='int', ctx=ast.Load()))
+
+        def _name(n):
+            return ast.Name(id=n, ctx=ast.Load())
+
+        def _binop(l, op, r):
+            return ast.BinOp(left=l, op=op, right=r)
+
+        def _cmp(l, op, r):
+            return ast.Compare(left=l, ops=[op], comparators=[r])
+
+        # Shared tail: n = ...; return start + n * step
+        def _last_element_block(n_expr):
+            n_assign = ast.AnnAssign(
+                target=ast.Name(id='n', ctx=ast.Store()),
+                annotation=ast.Name(id='int', ctx=ast.Load()),
+                value=n_expr,
+                simple=1,
+            )
+            ret = ast.Return(value=_binop(
+                _name('start'), ast.Add(),
+                _binop(_name('n'), ast.Mult(), _name('step'))
+            ))
+            return [n_assign, ret]
+
+        reversed_range_start_func = ast.FunctionDef(
+            name='ESBMC_reversed_range_start_',
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[_make_int_arg('start'), _make_int_arg('stop'), _make_int_arg('step')],
+                vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[],
+            ),
+            body=[
+                ast.If(
+                    # if step > 0:
+                    test=_cmp(_name('step'), ast.Gt(), ast.Constant(value=0)),
+                    body=[
+                        ast.If(
+                            # if stop <= start: return start - step
+                            test=_cmp(_name('stop'), ast.LtE(), _name('start')),
+                            body=[ast.Return(value=_binop(_name('start'), ast.Sub(), _name('step')))],
+                            orelse=[],
+                        ),
+                        # n = (stop - start - 1) // step; return start + n * step
+                        *_last_element_block(_binop(
+                            _binop(_binop(_name('stop'), ast.Sub(), _name('start')), ast.Sub(), ast.Constant(value=1)),
+                            ast.FloorDiv(),
+                            _name('step'),
+                        )),
+                    ],
+                    orelse=[
+                        ast.If(
+                            # if stop >= start: return start - step
+                            test=_cmp(_name('stop'), ast.GtE(), _name('start')),
+                            body=[ast.Return(value=_binop(_name('start'), ast.Sub(), _name('step')))],
+                            orelse=[],
+                        ),
+                        # n = (start - stop - 1) // (-step); return start + n * step
+                        *_last_element_block(_binop(
+                            _binop(_binop(_name('start'), ast.Sub(), _name('stop')), ast.Sub(), ast.Constant(value=1)),
+                            ast.FloorDiv(),
+                            ast.UnaryOp(op=ast.USub(), operand=_name('step')),
+                        )),
+                    ],
+                )
+            ],
+            decorator_list=[],
+            returns=ast.Name(id='int', ctx=ast.Load()),
+            lineno=1,
+            col_offset=0,
+        )
+
+        return [range_next_func, range_has_next_func, reversed_range_start_func]
 
     def visit_Module(self, node):
         """Visit the module and inject helper functions if needed"""
@@ -1009,11 +1106,98 @@ class Preprocessor(ast.NodeTransformer):
             # d.items() yields (key, value) tuples regardless of unpacking
             self.variable_annotations[target.id] = ast.Name(id='tuple', ctx=ast.Load())
 
+    def _is_reversed_range_call(self, iter_node):
+        """Return True if iter_node is reversed(range(...))."""
+        return (
+            isinstance(iter_node, ast.Call) and
+            isinstance(iter_node.func, ast.Name) and
+            iter_node.func.id == "reversed" and
+            len(iter_node.args) == 1 and
+            not iter_node.keywords and
+            isinstance(iter_node.args[0], ast.Call) and
+            isinstance(iter_node.args[0].func, ast.Name) and
+            iter_node.args[0].func.id == "range"
+        )
+
+    def _transform_reversed_range(self, reversed_call):
+        """
+        Transform reversed(range(args)) into an equivalent range(new_args) call.
+
+        Python semantics:
+          reversed(range(n))             → range(n-1, -1, -1)
+          reversed(range(start, stop))   → range(stop-1, start-1, -1)
+          reversed(range(start, stop, step))
+            → range(ESBMC_reversed_range_start_(start, stop, step),
+                    start-step, -step)
+
+        The helper function computes the last element of the original range
+        (or start-step for an empty range, keeping the reversed range empty).
+        All divisions inside the helper use same-sign operands, so C and
+        Python floor-division agree without any adjustment.
+        """
+        range_call = reversed_call.args[0]
+        args = range_call.args
+
+        if len(args) == 1:
+            n = args[0]
+            new_args = [
+                ast.BinOp(left=n, op=ast.Sub(), right=ast.Constant(value=1)),
+                ast.Constant(value=-1),
+                ast.Constant(value=-1),
+            ]
+        elif len(args) == 2:
+            start, stop = args
+            new_args = [
+                ast.BinOp(left=stop, op=ast.Sub(), right=ast.Constant(value=1)),
+                ast.BinOp(left=start, op=ast.Sub(), right=ast.Constant(value=1)),
+                ast.Constant(value=-1),
+            ]
+        elif len(args) == 3:
+            start, stop, step = args
+            # new_start = ESBMC_reversed_range_start_(start, stop, step)
+            # new_stop  = start - step
+            # new_step  = -step
+            #
+            # The helper function correctly computes the last element of
+            # range(start, stop, step) (or start-step for an empty range,
+            # which makes the caller's reversed range trivially empty too).
+            # It avoids mixed-sign floor-division so C and Python agree.
+            new_start = ast.Call(
+                func=ast.Name(id='ESBMC_reversed_range_start_', ctx=ast.Load()),
+                args=[copy.deepcopy(start), copy.deepcopy(stop), copy.deepcopy(step)],
+                keywords=[],
+            )
+            new_stop = ast.BinOp(left=copy.deepcopy(start), op=ast.Sub(), right=copy.deepcopy(step))
+            # Constant-fold -step so that step==0 remains an ast.Constant and
+            # _transform_range_for's compile-time ValueError check still fires.
+            if isinstance(step, ast.Constant):
+                new_step = ast.Constant(value=-step.value)
+            else:
+                new_step = ast.UnaryOp(op=ast.USub(), operand=copy.deepcopy(step))
+            new_args = [new_start, new_stop, new_step]
+        else:
+            # Invalid number of range args — let the existing validator raise.
+            return reversed_call
+
+        new_range = ast.Call(
+            func=ast.Name(id='range', ctx=ast.Load()),
+            args=new_args,
+            keywords=[],
+        )
+        ast.copy_location(new_range, reversed_call)
+        ast.fix_missing_locations(new_range)
+        return new_range
+
     def visit_For(self, node):
         """
         Transform for loops into while loops.
         Handles range() calls, enumerate() calls, dict.items(), and general iterables.
         """
+        # Rewrite reversed(range(...)) to an equivalent range(...) call so that
+        # the normal range-loop path can handle it without any extra machinery.
+        if self._is_reversed_range_call(node.iter):
+            node.iter = self._transform_reversed_range(node.iter)
+
         # Detect range call before generic_visit so we can hoist generator
         # outer_init (e.g. `i = 0`) before the loop.  Without hoisting, the
         # init ends up inside the while body and re-runs every iteration.
