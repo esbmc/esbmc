@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 
+import os
+import signal
+import subprocess
+import shutil
+import tempfile
+import textwrap
+import time
 import unittest
+from unittest import mock
 from testing_tool import *
 
 
@@ -145,6 +153,229 @@ class ToolTest2(CTest4):
                     '--overflow-check',
                     '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c']
         self.assertEqual(argument_list, expected, str(argument_list))
+
+
+class TimeoutBehaviorTest(unittest.TestCase):
+    def _create_temp_case(self, test_args: str, runner_body: str):
+        tmpdir = tempfile.TemporaryDirectory()
+        test_name = "tcase"
+        case_dir = os.path.join(tmpdir.name, test_name)
+        os.makedirs(case_dir, exist_ok=True)
+
+        with open(os.path.join(case_dir, "test.desc"), "w") as f:
+            f.write("CORE\n")
+            f.write("main.c\n")
+            f.write(f"{test_args}\n")
+            f.write(".*\n")
+
+        with open(os.path.join(case_dir, "main.c"), "w") as f:
+            f.write("int main(void){return 0;}\n")
+
+        with open(os.path.join(case_dir, "runner.py"), "w") as f:
+            f.write(textwrap.dedent(runner_body))
+
+        return tmpdir, TestCase(case_dir, test_name)
+
+    def test_timeout_respects_test_desc_value(self):
+        tmpdir, case = self._create_temp_case(
+            "runner.py --timeout 3",
+            """
+            import time
+            time.sleep(2)
+            print("done")
+            """,
+        )
+        self.addCleanup(tmpdir.cleanup)
+
+        RegressionBase.TIMEOUT = 1
+        executor = Executor("python3")
+        stdout, stderr, rc = executor.run(case)
+
+        self.assertIsNotNone(stdout)
+        self.assertEqual(rc, 0)
+        self.assertIn("done", stdout.decode())
+
+    def test_timeout_kills_process_tree(self):
+        tmpdir, case = self._create_temp_case(
+            "runner.py",
+            """
+            import os
+            import subprocess
+            import sys
+            import time
+
+            child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+            pid_path = os.path.join(os.path.dirname(__file__), "child.pid")
+            with open(pid_path, "w") as f:
+                f.write(str(child.pid))
+            time.sleep(30)
+            """,
+        )
+        self.addCleanup(tmpdir.cleanup)
+        pid_file = os.path.join(case.test_dir, "child.pid")
+        self.addCleanup(lambda: os.path.exists(pid_file) and os.remove(pid_file))
+
+        RegressionBase.TIMEOUT = 1
+        executor = Executor("python3")
+        stdout, stderr, rc = executor.run(case)
+
+        self.assertIsNone(stdout)
+        self.assertEqual(rc, -1)
+
+        self.assertTrue(os.path.exists(pid_file))
+        with open(pid_file) as f:
+            child_pid = int(f.read().strip())
+
+        time.sleep(0.2)
+        try:
+            os.kill(child_pid, 0)
+            still_alive = True
+        except OSError:
+            still_alive = False
+
+        if still_alive:
+            os.kill(child_pid, signal.SIGKILL)
+        self.assertFalse(still_alive)
+
+
+class WindowsTimeoutFallbackTest(unittest.TestCase):
+    def test_windows_taskkill_fallback_kills_parent_when_still_alive(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            case_dir = os.path.join(tmpdir, "tcase")
+            os.makedirs(case_dir, exist_ok=True)
+            with open(os.path.join(case_dir, "test.desc"), "w") as f:
+                f.write("CORE\n")
+                f.write("main.c\n")
+                f.write("\n")
+                f.write(".*\n")
+            with open(os.path.join(case_dir, "main.c"), "w") as f:
+                f.write("int main(void){return 0;}\n")
+
+            case = TestCase(case_dir, "tcase")
+            executor = Executor("esbmc")
+            fake_proc = mock.Mock()
+            fake_proc.pid = 4321
+            fake_proc.communicate.side_effect = subprocess.TimeoutExpired(
+                cmd=["esbmc"], timeout=1
+            )
+            fake_proc.poll.return_value = None
+            fake_proc.stdout = None
+            fake_proc.stderr = None
+
+            with mock.patch("testing_tool.sys.platform", "win32"), mock.patch(
+                "testing_tool.subprocess.Popen", return_value=fake_proc
+            ), mock.patch("testing_tool.subprocess.run") as mock_run:
+                stdout, stderr, rc = executor.run(case)
+
+            self.assertIsNone(stdout)
+            self.assertIsNone(stderr)
+            self.assertEqual(rc, -1)
+            mock_run.assert_called_once_with(
+                ["taskkill", "/PID", "4321", "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            fake_proc.kill.assert_called_once()
+            fake_proc.wait.assert_called_once()
+
+    def test_windows_taskkill_success_does_not_kill_parent_again(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            case_dir = os.path.join(tmpdir, "tcase")
+            os.makedirs(case_dir, exist_ok=True)
+            with open(os.path.join(case_dir, "test.desc"), "w") as f:
+                f.write("CORE\n")
+                f.write("main.c\n")
+                f.write("\n")
+                f.write(".*\n")
+            with open(os.path.join(case_dir, "main.c"), "w") as f:
+                f.write("int main(void){return 0;}\n")
+
+            case = TestCase(case_dir, "tcase")
+            executor = Executor("esbmc")
+            fake_proc = mock.Mock()
+            fake_proc.pid = 9876
+            fake_proc.communicate.side_effect = subprocess.TimeoutExpired(
+                cmd=["esbmc"], timeout=1
+            )
+            # Simulate process already terminated by taskkill.
+            fake_proc.poll.return_value = 0
+            fake_proc.stdout = None
+            fake_proc.stderr = None
+
+            with mock.patch("testing_tool.sys.platform", "win32"), mock.patch(
+                "testing_tool.subprocess.Popen", return_value=fake_proc
+            ), mock.patch("testing_tool.subprocess.run") as mock_run:
+                stdout, stderr, rc = executor.run(case)
+
+            self.assertIsNone(stdout)
+            self.assertIsNone(stderr)
+            self.assertEqual(rc, -1)
+            mock_run.assert_called_once_with(
+                ["taskkill", "/PID", "9876", "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            fake_proc.kill.assert_not_called()
+            fake_proc.wait.assert_called_once()
+
+
+class TestPlIntegrationTest(unittest.TestCase):
+    def test_timeout_unavailable_is_emitted_once_per_run(self):
+        perl_bin = shutil.which("perl")
+        bash_bin = shutil.which("bash")
+        self.assertIsNotNone(perl_bin)
+        self.assertIsNotNone(bash_bin)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            t1 = os.path.join(tmpdir, "t1")
+            t2 = os.path.join(tmpdir, "t2")
+            os.makedirs(t1, exist_ok=True)
+            os.makedirs(t2, exist_ok=True)
+
+            for tdir in (t1, t2):
+                with open(os.path.join(tdir, "main.c"), "w") as f:
+                    f.write("int main(void){return 0;}\n")
+                with open(os.path.join(tdir, "test.desc"), "w") as f:
+                    f.write("CORE\n")
+                    f.write("main.c\n")
+                    f.write("\n")
+                    f.write("ok\n")
+
+            # Build a PATH that contains bash but not timeout/gtimeout.
+            fake_bin = os.path.join(tmpdir, "bin")
+            os.makedirs(fake_bin, exist_ok=True)
+            os.symlink(bash_bin, os.path.join(fake_bin, "bash"))
+
+            env = dict(os.environ)
+            env["TEST_TIMEOUT"] = "1"
+            env["PATH"] = fake_bin
+
+            test_pl = os.path.join(os.path.dirname(__file__), "test.pl")
+            proc = subprocess.run(
+                [perl_bin, test_pl, "-c", "echo ok", "t1", "t2"],
+                cwd=tmpdir,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                proc.returncode,
+                0,
+                msg=f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}",
+            )
+
+            with open(os.path.join(t1, "test.out")) as f:
+                out1 = f.read()
+            with open(os.path.join(t2, "test.out")) as f:
+                out2 = f.read()
+            unavailable_count = out1.count("TIMEOUT_UNAVAILABLE=1") + out2.count(
+                "TIMEOUT_UNAVAILABLE=1"
+            )
+            self.assertEqual(unavailable_count, 1)
 
 
 if __name__ == '__main__':

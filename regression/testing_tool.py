@@ -148,48 +148,72 @@ class Executor:
         self.tool = shlex.split(tool)
         self.timeout = RegressionBase.TIMEOUT
 
+    def _effective_timeout(self, test_case: TestCase):
+        """Get timeout for this run, allowing test.desc to override global timeout."""
+        timeout = self.timeout
+        args = shlex.split(test_case.test_args) if test_case.test_args else []
+        for i, arg in enumerate(args):
+            if arg == "--timeout" and i + 1 < len(args):
+                try:
+                    parsed = int(args[i + 1])
+                    if parsed > 0:
+                        timeout = parsed
+                except ValueError:
+                    pass
+                break
+        return timeout
+
     def run(self, test_case: TestCase):
         """Execute the test case with `executable`"""
         cmd = test_case.generate_run_argument_list(*self.tool)
         preexec = _prepare_child if os.name == "posix" else None
+        timeout = self._effective_timeout(test_case)
 
-        with subprocess.Popen(
+        proc = subprocess.Popen(
             cmd,
             stdout=PIPE,
             stderr=PIPE,
             preexec_fn=preexec,
             env=dict(os.environ, ESBMC_CONFIG_FILE=""),
-        ) as proc:
-            try:
-                stdout, stderr = proc.communicate(timeout=self.timeout)
-            except subprocess.TimeoutExpired:
-                # Gracefully shut down the whole process group so
-                # grandchildren don't linger and starve the CI runner.
-                if os.name == "posix":
-                    try:
-                        os.killpg(proc.pid, signal.SIGTERM)
-                        proc.wait(timeout=_TERM_GRACE)
-                    except subprocess.TimeoutExpired:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                else:
-                    proc.kill()
-                stdout, stderr = proc.communicate()
-                msg = "Timed out ({}s limit)\nCommand: {}".format(
-                    self.timeout, " ".join(str(a) for a in cmd))
-                partial = b""
-                if stdout:
-                    partial += stdout
-                if stderr:
-                    partial += stderr
-                return None, msg.encode() + b"\n" + partial, 1
+        )
 
-            if sys.platform.startswith("linux"):
-                import resource
-                rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
-                print("mem_usage={0} kilobytes".format(rss))
-            return stdout, stderr, proc.returncode
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # Gracefully shut down the whole process group so
+            # grandchildren don't linger and starve the CI runner.
+            if sys.platform.startswith("win32"):
+                subprocess.run(
+                    ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                if proc.poll() is None:
+                    proc.kill()
+                proc.wait()
+            elif os.name == "posix":
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                    proc.wait(timeout=_TERM_GRACE)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                proc.kill()
+                proc.wait()
+            if proc.stdout:
+                proc.stdout.close()
+            if proc.stderr:
+                proc.stderr.close()
+            return None, None, -1
+
+        if sys.platform.startswith("linux"):
+            import resource
+            rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+            print("mem_usage={0} kilobytes".format(rss))
+        return stdout, stderr, proc.returncode
 
 
 def get_test_objects(base_dir: str):

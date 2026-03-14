@@ -540,6 +540,7 @@ Options [defaults]:
   -c VERS    use packaged clang-VERS [16 on Linux, >=17 required on macOS]
   -C         build an SV-COMP version [disabled]
   -B ON|OFF  enable/disable esbmc bundled libc [ON]
+  -R ON|OFF  enable/disable CORE-only regression selection [ON]
   -x ON|OFF  enable/disable esbmc cheri [OFF]
 
 Commands:
@@ -558,7 +559,7 @@ USAGE
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
+while getopts "hb:s:e:r:dS:c:CB:R:x:" flag; do
   case "$flag" in
     h)
       usage
@@ -606,6 +607,10 @@ while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
     B)
       require_on_off "-B" "$OPTARG"
       BASE_ARGS+=("-DESBMC_BUNDLE_LIBC=$OPTARG")
+      ;;
+    R)
+      require_on_off "-R" "$OPTARG"
+      BASE_ARGS+=("-DCORE_REGRESSION_ONLY=$OPTARG")
       ;;
     x)
       require_on_off "-x" "$OPTARG"
