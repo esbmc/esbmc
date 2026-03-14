@@ -243,7 +243,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   BigInt &unwinding_counter = cur_state->function_unwind[identifier];
 
-  // see if it's too much
+  // NOTE: for k-way recursive functions (e.g. doubly-recursive fibonacci),
+  // each of the k recursive call sites can independently recurse to depth N,
+  // producing O(k^N) total inlinings for --unwind N.  Use --unwind D+1 where
+  // D is the maximum recursion depth reachable under the input constraints.
   if (get_unwind_recursion(identifier, unwinding_counter))
   {
     if (!no_unwinding_assertions)
