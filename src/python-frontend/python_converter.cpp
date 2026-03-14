@@ -3660,6 +3660,21 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             param_type.is_pointer() && arg_actual_type.is_struct() &&
             !arg.is_address_of() && !arg_actual_type.is_pointer())
             arg = gen_address_of(arg);
+
+          // Propagate instance attributes set on this parameter back to the
+          // caller's argument. This models Python's pass-by-object-reference:
+          // if o.x = 5 is set inside f(a) via parameter o, then a.x should
+          // reflect the instance attribute rather than the class attribute.
+          // Note: this relies on the callee body being processed before the
+          // call site (true for top-level sequential Python), so that
+          // instance_attr_map[param] is already populated here.
+          const exprt *arg_sym = &args[i];
+          if (arg_sym->is_address_of())
+            arg_sym = &arg_sym->op0();
+          if (arg_sym->is_symbol())
+            copy_instance_attributes(
+              params[i].identifier().as_string(),
+              arg_sym->identifier().as_string());
         }
       }
     }
@@ -4378,12 +4393,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     symbolt *symbol = nullptr;
     if (!(symbol = find_symbol(sid_str)))
     {
-      // Fallback for global variables accessed inside functions
+      // Fallback for global variables accessed inside functions or class methods
       if (!is_class_attr && element["_type"] == "Name")
       {
         sid.set_function(""); // remove function scope
         sid_str = sid.to_string();
         symbol = find_symbol(sid_str);
+        if (!symbol)
+        {
+          // also try module-level global (strips class scope too)
+          symbol = find_symbol(sid.global_to_string());
+        }
       }
       if (!symbol)
       {
