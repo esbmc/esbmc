@@ -2817,17 +2817,33 @@ class Preprocessor(ast.NodeTransformer):
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
         else:
-            assignments = []
-            for target in node.targets:
-                if isinstance(target, (ast.Tuple, ast.List)):
-                    # This is tuple unpacking in a chain assignment - handle specially
-                    unpacked_assignments = self._handle_tuple_unpacking(target, node.value, node)
-                    assignments.extend(unpacked_assignments)
-                else:
+            has_tuple_target = any(isinstance(t, (ast.Tuple, ast.List)) for t in node.targets)
+            if has_tuple_target:
+                # Chained assignment with at least one tuple target: evaluate RHS exactly once.
+                # E.g., (x, y) = (u, v) = f()  →  _tmp = f(); (x, y) = _tmp; (u, v) = _tmp
+                tmp_name = f"ESBMC_chain_{self.listcomp_counter}"
+                self.listcomp_counter += 1
+                tmp_store = ast.Name(id=tmp_name, ctx=ast.Store())
+                self._copy_location_info(node, tmp_store)
+                tmp_assign = self._create_individual_assignment(tmp_store, node.value, node)
+                ast.fix_missing_locations(tmp_assign)
+                tmp_load = ast.Name(id=tmp_name, ctx=ast.Load())
+                self._copy_location_info(node, tmp_load)
+                assignments = [tmp_assign]
+                for target in node.targets:
+                    sub_assign = self._create_individual_assignment(target, tmp_load, node)
+                    ast.fix_missing_locations(sub_assign)
+                    if isinstance(target, ast.Name):
+                        self._update_variable_types_simple(target, node.value)
+                    assignments.append(sub_assign)
+                return assignments
+            else:
+                assignments = []
+                for target in node.targets:
                     individual_assign = self._create_individual_assignment(target, node.value, node)
                     self._update_variable_types_simple(target, node.value)
                     assignments.append(individual_assign)
-            return assignments
+                return assignments
 
     def visit_AnnAssign(self, node):
         """Track type annotations from annotated assignments like x: int = 5"""
