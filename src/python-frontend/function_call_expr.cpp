@@ -2869,49 +2869,8 @@ exprt function_call_expr::handle_list_sort() const
 
   int type_flag = 0;
   size_t float_type_id = 0;
-
-  {
-    const type_handler &th = converter_.get_type_handler();
-    bool has_float = false;
-    bool has_int = false;
-    bool is_string = false;
-
-    const size_t map_size = python_list::get_list_type_map_size(list_id);
-
-    for (size_t k = 0; k < map_size; ++k)
-    {
-      const typet elem_type = python_list::get_list_element_type(list_id, k);
-
-      if (elem_type.is_floatbv())
-      {
-        if (!has_float)
-        {
-          // Same hash used by python_list::get_list_element_info:
-          //   std::hash<std::string>{}(type_handler_.type_to_string(elem))
-          const std::string type_name = th.type_to_string(elem_type);
-          float_type_id = std::hash<std::string>{}(type_name);
-          has_float = true;
-        }
-      }
-      else if (
-        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
-        (elem_type.is_array() && elem_type.subtype() == char_type()))
-      {
-        is_string = true;
-      }
-      else
-        has_int = true;
-    }
-
-    if (is_string)
-      type_flag = 2;
-    else if (has_float && has_int)
-      type_flag = 3; // mixed → per-element dispatch in C model
-    else if (has_float)
-      type_flag = 1; // all-float
-    else
-      type_flag = 0; // all-integer (default, most common)
-  }
+  python_list::get_list_type_flags(
+    list_id, converter_.get_type_handler(), type_flag, float_type_id);
 
   // ── Locate the C model function ────────────────────────────────────────────
   const symbolt *sort_func =

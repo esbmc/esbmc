@@ -10,6 +10,7 @@
 class exprt;
 class symbolt;
 class python_converter;
+class type_handler;
 
 using TypeInfo = std::vector<std::pair<std::string, typet>>;
 
@@ -248,6 +249,19 @@ public:
    *          list is unknown or was constructed with no recorded elements.
    */
   static size_t get_list_type_map_size(const std::string &list_id);
+
+  /** Compute the type_flag and float_type_id for a list, using the same
+   *  encoding as __ESBMC_list_sort and __ESBMC_list_lt:
+   *    0 = all-integer, 1 = all-float, 2 = string, 3 = mixed int+float.
+   *  Only examines the element types recorded in list_type_map for list_id.
+   *  Note: currently only inspects a single list; for mixed-type comparisons
+   *  (e.g. int list vs float list) the caller should merge flags from both
+   *  operands. */
+  static void get_list_type_flags(
+    const std::string &list_id,
+    const type_handler &th,
+    int &type_flag,
+    size_t &float_type_id);
 
   /**
    * @brief Reverse the compile-time type-info vector for a list.
