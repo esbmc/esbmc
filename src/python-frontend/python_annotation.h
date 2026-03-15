@@ -2608,8 +2608,7 @@ private:
               var_node["annotation"]["id"].template get<std::string>();
           // Assign: a = A()
           else if (
-            var_node.contains("value") &&
-            var_node["value"].contains("_type") &&
+            var_node.contains("value") && var_node["value"].contains("_type") &&
             var_node["value"]["_type"] == "Call" &&
             var_node["value"].contains("func") &&
             var_node["value"]["func"].contains("_type") &&
@@ -2650,8 +2649,7 @@ private:
           for (const Json &member : current_class["body"])
           {
             if (
-              member["_type"] != "FunctionDef" ||
-              member["name"] != "__init__")
+              member["_type"] != "FunctionDef" || member["name"] != "__init__")
               continue;
             for (const Json &stmt : member["body"])
             {
@@ -2662,8 +2660,7 @@ private:
                 stmt["target"]["value"].contains("id") &&
                 stmt["target"]["value"]["id"] == "self" &&
                 stmt["target"]["attr"] == chain_attr &&
-                stmt.contains("annotation") &&
-                !stmt["annotation"].is_null() &&
+                stmt.contains("annotation") && !stmt["annotation"].is_null() &&
                 stmt["annotation"].contains("id") &&
                 !stmt["annotation"]["id"].is_null())
               {
@@ -2674,15 +2671,14 @@ private:
               }
               // Assign: self.attr = SomeClass()
               if (
-                stmt["_type"] == "Assign" &&
-                stmt.contains("targets") && !stmt["targets"].empty() &&
+                stmt["_type"] == "Assign" && stmt.contains("targets") &&
+                !stmt["targets"].empty() &&
                 stmt["targets"][0].contains("_type") &&
                 stmt["targets"][0]["_type"] == "Attribute" &&
                 stmt["targets"][0]["value"].contains("id") &&
                 stmt["targets"][0]["value"]["id"] == "self" &&
                 stmt["targets"][0]["attr"] == chain_attr &&
-                stmt.contains("value") &&
-                stmt["value"].contains("_type") &&
+                stmt.contains("value") && stmt["value"].contains("_type") &&
                 stmt["value"]["_type"] == "Call" &&
                 stmt["value"].contains("func") &&
                 stmt["value"]["func"].contains("_type") &&
@@ -2717,17 +2713,14 @@ private:
                   method["name"] == method_name)
                 {
                   if (
-                    method.contains("returns") &&
-                    !method["returns"].is_null())
+                    method.contains("returns") && !method["returns"].is_null())
                   {
                     const auto &ret = method["returns"];
                     if (ret.contains("id"))
                       return ret["id"].template get<std::string>();
                     if (
-                      ret.contains("_type") &&
-                      ret["_type"] == "Subscript" &&
-                      ret.contains("value") &&
-                      ret["value"].contains("id"))
+                      ret.contains("_type") && ret["_type"] == "Subscript" &&
+                      ret.contains("value") && ret["value"].contains("id"))
                       return ret["value"]["id"].template get<std::string>();
                   }
                   // Infer return type from return statements when no annotation
