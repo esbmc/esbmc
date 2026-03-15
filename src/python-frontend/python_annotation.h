@@ -2708,7 +2708,8 @@ private:
               json_utils::find_class(ast_["body"], current_type);
             if (!final_class.empty())
             {
-              const std::string &method_name = call["func"]["attr"];
+              const std::string method_name =
+                call["func"]["attr"].template get<std::string>();
               for (const Json &method : final_class["body"])
               {
                 if (
