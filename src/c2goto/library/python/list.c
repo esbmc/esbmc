@@ -736,7 +736,7 @@ bool __ESBMC_list_lt(
   const PyListObject *l1,
   const PyListObject *l2,
   int type_flag,
-  uint64_t float_type_id)
+  size_t float_type_id)
 {
   if (!l1 || !l2)
     return false;
