@@ -2718,8 +2718,18 @@ private:
                 {
                   if (
                     method.contains("returns") &&
-                    method["returns"].contains("id"))
-                    return method["returns"]["id"].template get<std::string>();
+                    !method["returns"].is_null())
+                  {
+                    const auto &ret = method["returns"];
+                    if (ret.contains("id"))
+                      return ret["id"].template get<std::string>();
+                    if (
+                      ret.contains("_type") &&
+                      ret["_type"] == "Subscript" &&
+                      ret.contains("value") &&
+                      ret["value"].contains("id"))
+                      return ret["value"]["id"].template get<std::string>();
+                  }
                   // Infer return type from return statements when no annotation
                   std::string inferred =
                     infer_from_return_statements(method["body"], method_name);
