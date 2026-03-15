@@ -406,6 +406,11 @@ private:
 
   void create_builtin_symbols();
 
+  bool import_module_into_block(
+    const nlohmann::json &import_node,
+    module_locator &locator,
+    code_blockt &code);
+
   void process_module_imports(
     const nlohmann::json &module_ast,
     module_locator &locator,
