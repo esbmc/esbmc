@@ -2234,7 +2234,8 @@ exprt python_converter::handle_list_operations(
   // List comparison
   if (
     lhs.type() == list_type && rhs.type() == list_type &&
-    (op == "Eq" || op == "NotEq"))
+    (op == "Eq" || op == "NotEq" || op == "Lt" || op == "LtE" || op == "Gt" ||
+     op == "GtE"))
   {
     python_list list(*this, element);
     return list.compare(lhs, rhs, op);

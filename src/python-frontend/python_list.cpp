@@ -2100,6 +2100,52 @@ exprt python_list::handle_index_access(
   return index_exprt(array, pos_expr, array.type().subtype());
 }
 
+void python_list::get_list_type_flags(
+  const std::string &list_id,
+  const type_handler &th,
+  int &type_flag,
+  size_t &float_type_id)
+{
+  type_flag = 0;
+  float_type_id = 0;
+
+  bool has_float = false;
+  bool has_int = false;
+  bool is_string = false;
+
+  size_t map_size = python_list::get_list_type_map_size(list_id);
+  for (size_t k = 0; k < map_size; ++k)
+  {
+    const typet elem_type = python_list::get_list_element_type(list_id, k);
+    if (elem_type.is_floatbv())
+    {
+      if (!has_float)
+      {
+        float_type_id =
+          std::hash<std::string>{}(th.type_to_string(elem_type));
+        has_float = true;
+      }
+    }
+    else if (
+      (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
+      (elem_type.is_array() && elem_type.subtype() == char_type()))
+    {
+      is_string = true;
+    }
+    else
+      has_int = true;
+  }
+
+  if (is_string)
+    type_flag = 2;
+  else if (has_float && has_int)
+    type_flag = 3;
+  else if (has_float)
+    type_flag = 1;
+  else
+    type_flag = 0;
+}
+
 exprt python_list::compare(
   const exprt &l1,
   const exprt &l2,
@@ -2144,6 +2190,9 @@ exprt python_list::compare(
 
   const bool lhs_is_set = lhs_symbol->is_set;
   const bool rhs_is_set = rhs_symbol->is_set;
+  // Note: Python set ordering (< as strict subset, <= as subset-or-equal)
+  // is not yet implemented here.  Ordering operators on sets currently
+  // fall through to the Eq/NotEq path and will return incorrect results.
   if (lhs_is_set || rhs_is_set)
   {
     if (!(lhs_is_set && rhs_is_set))
@@ -2202,6 +2251,90 @@ exprt python_list::compare(
     return cond;
   }
 
+  // ── Ordering operators: Lt, LtE, Gt, GtE ──────────────────────────────────
+  // Implemented via __ESBMC_list_lt (lexicographic less-than):
+  //   Lt  : list_lt(l1, l2)
+  //   LtE : !list_lt(l2, l1)    (i.e. !(l1 > l2))
+  //   Gt  : list_lt(l2, l1)
+  //   GtE : !list_lt(l1, l2)    (i.e. !(l1 < l2))
+  if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
+  {
+    // Look up or register the __ESBMC_list_lt symbol.
+    const symbolt *list_lt_func_sym =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_lt");
+    if (!list_lt_func_sym)
+    {
+      symbolt new_symbol;
+      new_symbol.name = "__ESBMC_list_lt";
+      new_symbol.id = "c:@F@__ESBMC_list_lt";
+      new_symbol.mode = "C";
+      new_symbol.is_extern = true;
+
+      code_typet func_type;
+      func_type.return_type() = bool_type();
+      typet list_ptr = converter_.get_type_handler().get_list_type();
+      func_type.arguments().push_back(code_typet::argumentt(list_ptr));
+      func_type.arguments().push_back(code_typet::argumentt(list_ptr));
+      func_type.arguments().push_back(code_typet::argumentt(int_type()));
+      func_type.arguments().push_back(
+        code_typet::argumentt(unsignedbv_typet(config.ansi_c.address_width)));
+      new_symbol.type = func_type;
+
+      converter_.symbol_table().add(new_symbol);
+      list_lt_func_sym =
+        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_lt");
+    }
+    assert(list_lt_func_sym);
+
+    // Determine element type flags from the LHS list.
+    int type_flag = 0;
+    size_t float_type_id = 0;
+    get_list_type_flags(
+      lhs_symbol->id.as_string(),
+      converter_.get_type_handler(),
+      type_flag,
+      float_type_id);
+
+    // Emit: lt_ret = __ESBMC_list_lt(a, b, type_flag, float_type_id)
+    // Derivations (total order):
+    //   Lt  : list_lt(l1, l2) == true   → no swap, check true
+    //   LtE : !list_lt(l2, l1) == true  → swap,    check false
+    //   Gt  : list_lt(l2, l1) == true   → swap,    check true
+    //   GtE : !list_lt(l1, l2) == true  → no swap, check false
+    const bool swap = (op == "LtE" || op == "Gt");
+    const symbolt *a_sym = swap ? rhs_symbol : lhs_symbol;
+    const symbolt *b_sym = swap ? lhs_symbol : rhs_symbol;
+
+    symbolt &lt_ret = converter_.create_tmp_symbol(
+      list_value_, "lt_tmp", bool_type(), gen_boolean(false));
+    code_declt lt_ret_decl(symbol_expr(lt_ret));
+    converter_.add_instruction(lt_ret_decl);
+
+    code_function_callt lt_call;
+    lt_call.function() = symbol_expr(*list_lt_func_sym);
+    lt_call.lhs() = symbol_expr(lt_ret);
+    lt_call.arguments().push_back(symbol_expr(*a_sym));
+    lt_call.arguments().push_back(symbol_expr(*b_sym));
+    lt_call.arguments().push_back(from_integer(type_flag, int_type()));
+    lt_call.arguments().push_back(from_integer(
+      float_type_id, unsignedbv_typet(config.ansi_c.address_width)));
+    lt_call.type() = bool_type();
+    lt_call.location() = converter_.get_location_from_decl(list_value_);
+    converter_.add_instruction(lt_call);
+
+    // Lt / Gt → lt_ret must be true; LtE / GtE → lt_ret must be false
+    exprt cond("=", bool_type());
+    cond.copy_to_operands(symbol_expr(lt_ret));
+    if (op == "Lt" || op == "Gt")
+      cond.copy_to_operands(gen_boolean(true));
+    else
+      cond.copy_to_operands(gen_boolean(false));
+
+    return cond;
+  }
+
+  // ── Equality operators: Eq, NotEq ─────────────────────────────────────────
+
   // Compute list type_id for nested list detection
   const typet &list_type = l1.type();
   const std::string list_type_name =
@@ -2233,7 +2366,6 @@ exprt python_list::compare(
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
 
-  //return list_eq_func_call;
   exprt cond("=", bool_type());
   cond.copy_to_operands(symbol_expr(eq_ret));
   if (op == "Eq")
