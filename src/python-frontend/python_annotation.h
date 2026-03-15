@@ -2568,11 +2568,12 @@ private:
       // For self.b.a, we get [a, b] but need [b, a] to process left to right
       std::reverse(attr_chain.begin(), attr_chain.end());
 
-      // If base object is "self" and we have at least one attribute, resolve the chain
-      if (base_obj == "self" && !attr_chain.empty() && current_func != nullptr)
+      // Determine the initial class type of the base object.
+      // Handles both "self" (look up current class) and arbitrary variables
+      // (look up variable type from annotation or constructor call).
+      std::string initial_type;
+      if (base_obj == "self" && current_func != nullptr)
       {
-        // Get the class name from current_func's context
-        std::string class_name = "";
         for (const Json &elem : ast_["body"])
         {
           if (elem["_type"] == "ClassDef" && elem.contains("body"))
@@ -2583,73 +2584,128 @@ private:
                 member["_type"] == "FunctionDef" &&
                 member["name"] == (*current_func)["name"])
               {
-                class_name = elem["name"].template get<std::string>();
+                initial_type = elem["name"].template get<std::string>();
                 break;
               }
             }
-            if (!class_name.empty())
+            if (!initial_type.empty())
               break;
           }
         }
+      }
+      else if (!base_obj.empty())
+      {
+        Json var_node =
+          json_utils::find_var_decl(base_obj, get_current_func_name(), ast_);
+        if (!var_node.empty())
+        {
+          // AnnAssign: a: A = ...
+          if (
+            var_node.contains("annotation") &&
+            !var_node["annotation"].is_null() &&
+            var_node["annotation"].contains("id"))
+            initial_type =
+              var_node["annotation"]["id"].template get<std::string>();
+          // Assign: a = A()
+          else if (
+            var_node.contains("value") && var_node["value"].contains("_type") &&
+            var_node["value"]["_type"] == "Call" &&
+            var_node["value"].contains("func") &&
+            var_node["value"]["func"].contains("_type") &&
+            var_node["value"]["func"]["_type"] == "Name" &&
+            var_node["value"]["func"].contains("id"))
+            initial_type =
+              var_node["value"]["func"]["id"].template get<std::string>();
+        }
+        // Also check function parameters
+        if (
+          initial_type.empty() && current_func != nullptr &&
+          (*current_func).contains("args") &&
+          (*current_func)["args"].contains("args"))
+        {
+          Json param =
+            find_annotated_assign(base_obj, (*current_func)["args"]["args"]);
+          if (
+            !param.empty() && param.contains("annotation") &&
+            !param["annotation"].is_null() &&
+            param["annotation"].contains("id"))
+            initial_type =
+              param["annotation"]["id"].template get<std::string>();
+        }
+      }
 
-        // Recursively resolve the attribute chain
-        std::string current_type = class_name;
+      if (!initial_type.empty() && !attr_chain.empty())
+      {
+        std::string current_type = initial_type;
         for (size_t i = 0; i < attr_chain.size(); ++i)
         {
-          const std::string &attr_name = attr_chain[i];
-
-          // Find the current class
+          const std::string &chain_attr = attr_chain[i];
           Json current_class =
             json_utils::find_class(ast_["body"], current_type);
           if (current_class.empty())
             break;
 
-          // Look for the attribute in __init__ method
           bool found = false;
           for (const Json &member : current_class["body"])
           {
             if (
-              member["_type"] == "FunctionDef" && member["name"] == "__init__")
+              member["_type"] != "FunctionDef" || member["name"] != "__init__")
+              continue;
+            for (const Json &stmt : member["body"])
             {
-              for (const Json &stmt : member["body"])
+              // AnnAssign: self.attr: Type = value
+              if (
+                stmt["_type"] == "AnnAssign" &&
+                stmt["target"]["_type"] == "Attribute" &&
+                stmt["target"]["value"].contains("id") &&
+                stmt["target"]["value"]["id"] == "self" &&
+                stmt["target"]["attr"] == chain_attr &&
+                stmt.contains("annotation") && !stmt["annotation"].is_null() &&
+                stmt["annotation"].contains("id") &&
+                !stmt["annotation"]["id"].is_null())
               {
-                // Check for AnnAssign: self.attr: Type = value
-                if (
-                  stmt["_type"] == "AnnAssign" &&
-                  stmt["target"]["_type"] == "Attribute" &&
-                  stmt["target"]["value"]["id"] == "self" &&
-                  stmt["target"]["attr"] == attr_name)
-                {
-                  // Found the attribute, get its type
-                  if (
-                    stmt.contains("annotation") &&
-                    !stmt["annotation"].is_null() &&
-                    stmt["annotation"].contains("id") &&
-                    !stmt["annotation"]["id"].is_null())
-                  {
-                    current_type =
-                      stmt["annotation"]["id"].template get<std::string>();
-                    found = true;
-                    break;
-                  }
-                }
-              }
-              if (found)
+                current_type =
+                  stmt["annotation"]["id"].template get<std::string>();
+                found = true;
                 break;
+              }
+              // Assign: self.attr = SomeClass()
+              if (
+                stmt["_type"] == "Assign" && stmt.contains("targets") &&
+                !stmt["targets"].empty() &&
+                stmt["targets"][0].contains("_type") &&
+                stmt["targets"][0]["_type"] == "Attribute" &&
+                stmt["targets"][0]["value"].contains("id") &&
+                stmt["targets"][0]["value"]["id"] == "self" &&
+                stmt["targets"][0]["attr"] == chain_attr &&
+                stmt.contains("value") && stmt["value"].contains("_type") &&
+                stmt["value"]["_type"] == "Call" &&
+                stmt["value"].contains("func") &&
+                stmt["value"]["func"].contains("_type") &&
+                stmt["value"]["func"]["_type"] == "Name" &&
+                stmt["value"]["func"].contains("id"))
+              {
+                current_type =
+                  stmt["value"]["func"]["id"].template get<std::string>();
+                found = true;
+                break;
+              }
             }
+            if (found)
+              break;
           }
 
           if (!found)
             break;
 
-          // If this is the last attribute in the chain, find the method return type
           if (i == attr_chain.size() - 1)
           {
             Json final_class =
               json_utils::find_class(ast_["body"], current_type);
             if (!final_class.empty())
             {
-              const std::string &method_name = call["func"]["attr"];
+              const std::string method_name =
+                call["func"]["attr"].template get<std::string>();
               for (const Json &method : final_class["body"])
               {
                 if (
@@ -2657,17 +2713,30 @@ private:
                   method["name"] == method_name)
                 {
                   if (
-                    method.contains("returns") &&
-                    method["returns"].contains("id"))
+                    method.contains("returns") && !method["returns"].is_null())
                   {
-                    return method["returns"]["id"].template get<std::string>();
+                    const auto &ret = method["returns"];
+                    if (ret.contains("id"))
+                      return ret["id"].template get<std::string>();
+                    if (
+                      ret.contains("_type") && ret["_type"] == "Subscript" &&
+                      ret.contains("value") && ret["value"].contains("id"))
+                      return ret["value"]["id"].template get<std::string>();
                   }
+                  // Infer return type from return statements when no annotation
+                  std::string inferred =
+                    infer_from_return_statements(method["body"], method_name);
+                  return inferred.empty() ? "Any" : inferred;
                 }
               }
             }
+            // Chain resolved but method not in final class
+            return "";
           }
         }
       }
+      // Could not resolve chain - return empty rather than throwing
+      return "";
     }
 
     if (obj_node.empty())
@@ -3006,6 +3075,11 @@ private:
         // Method call on temporary instance (e.g., A().f()): let converter infer
         // if get_type_from_method couldn't resolve (class not in AST etc.)
         else if (func.contains("value") && func["value"]["_type"] == "Call")
+          return InferResult::UNKNOWN;
+        // Method call on nested attribute chain (e.g., a.b.c.f()): could not
+        // resolve type - let converter infer
+        else if (
+          func.contains("value") && func["value"]["_type"] == "Attribute")
           return InferResult::UNKNOWN;
       }
     }
