@@ -9,7 +9,10 @@
 class yaml_parser
 {
 public:
-  explicit yaml_parser(const std::string &path, contextt &ns, optionst &options);
+  explicit yaml_parser(
+    const std::string &path,
+    contextt &ns,
+    optionst &options);
   ~yaml_parser() = default;
 
   // load the witness file in YAML format

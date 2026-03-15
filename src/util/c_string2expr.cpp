@@ -813,7 +813,7 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
 
   case expression_node::node_kind::greater_equal:
   {
-    expr = exprt(">", bool_type());
+    expr = exprt(">=", bool_type());
     exprt left;
     get_expr(*node.left, left);
     exprt right;

@@ -2,7 +2,10 @@
 #include <util/c_string2expr.h>
 #include <util/expr_util.h>
 
-yaml_parser::yaml_parser(const std::string &path, contextt &ns, optionst &options)
+yaml_parser::yaml_parser(
+  const std::string &path,
+  contextt &ns,
+  optionst &options)
   : file_path_(path), context_(ns), options_(options)
 {
 }
@@ -94,10 +97,15 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
   expression_parser parser;
   for (const auto &inv : parsed_invariants_)
   {
+    if (inv.type != invariant::loop_invariant)
+    {
+      log_warning("currently, only loop invariants are supported");
+      continue;
+    }
+
     std::string func_id = "c:@F@" + inv.function;
     goto_functionst::function_mapt::iterator m_it =
       goto_functions.function_map.find(func_id);
-    bool match_line = false;
     if (m_it != goto_functions.function_map.end())
     {
       goto_programt &func = m_it->second.body;
@@ -106,7 +114,6 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
         int line = std::stoi(it->location.line().as_string());
         if (it->is_goto() && line == inv.line)
         {
-          match_line = true;
           const expression_node *root = nullptr;
           if (parser.parse(inv.value, root))
           {
@@ -117,7 +124,10 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
           }
 
           if (options_.get_bool_option("witness-parse-tree"))
+          {
             root->dump();
+            continue;
+          }
 
           expression_converter converter(context_);
           exprt expr;
@@ -143,8 +153,6 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
           break;
         }
       }
-      if (!match_line)
-        log_warning("can not find a loop in line '{}'", inv.line);
     }
     else
     {
@@ -154,7 +162,7 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
   }
 
   if (options_.get_bool_option("witness-parse-tree"))
-    // stop verify for debug
+    // stop verify for debugging
     return true;
 
   return false;

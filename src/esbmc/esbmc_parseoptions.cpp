@@ -412,7 +412,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   // --loop-invariant implicitly enables k-induction solving so that
   // do_bmc_strategy runs the full base/forward/inductive-step loop.
-  if (cmdline.isset("loop-invariant"))
+  if (
+    cmdline.isset("loop-invariant") ||
+    cmdline.isset("validate-correctness-witness"))
     options.set_option("k-induction", true);
 
   // Check for conflicting strategies
@@ -2037,9 +2039,8 @@ bool esbmc_parseoptionst::process_goto_program(
       if (parser.inject_loop_invariants(goto_functions))
         return true;
 
-      goto_functions.update();
       remove_no_op(goto_functions);
-      goto_loop_invariant(goto_functions);
+      goto_loop_invariant_combined(goto_functions);
     }
 
     if (cmdline.isset("loop-invariant"))
