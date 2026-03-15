@@ -2277,7 +2277,7 @@ exprt python_list::compare(
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
       func_type.arguments().push_back(code_typet::argumentt(int_type()));
       func_type.arguments().push_back(
-        code_typet::argumentt(unsignedbv_typet(config.ansi_c.address_width)));
+        code_typet::argumentt(size_type()));
       new_symbol.type = func_type;
 
       converter_.symbol_table().add(new_symbol);
@@ -2343,7 +2343,7 @@ exprt python_list::compare(
     lt_call.arguments().push_back(symbol_expr(*b_sym));
     lt_call.arguments().push_back(from_integer(type_flag, int_type()));
     lt_call.arguments().push_back(from_integer(
-      float_type_id, unsignedbv_typet(config.ansi_c.address_width)));
+      float_type_id, size_type()));
     lt_call.type() = bool_type();
     lt_call.location() = converter_.get_location_from_decl(list_value_);
     converter_.add_instruction(lt_call);
