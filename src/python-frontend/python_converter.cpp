@@ -2750,8 +2750,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       : (parsed.get_function().empty() ? parsed.get_object()
                                        : parsed.get_function());
 
-  for (const auto &obj : (*ast_json)["body"])
-  {
+  auto find_in_import = [&](const nlohmann::json &obj) -> symbolt * {
     if (
       (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
       obj.contains("full_path") && !obj["full_path"].is_null())
@@ -2780,7 +2779,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
           }
         }
         if (!name_imported)
-          continue;
+          return nullptr;
       }
 
       std::regex pattern("py:(.*?)@");
@@ -2792,7 +2791,31 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
           symbol_table_.find_symbol(imported_symbol.c_str()))
         return func_symbol;
     }
+
+    return nullptr;
+  };
+
+  for (const auto &obj : (*ast_json)["body"])
+  {
+    if (symbolt *func_symbol = find_in_import(obj))
+      return func_symbol;
   }
+
+  // Also check imports inside function bodies.
+  for (const auto &obj : (*ast_json)["body"])
+  {
+    if (
+      obj["_type"] == "FunctionDef" && obj.contains("body") &&
+      obj["body"].is_array())
+    {
+      for (const auto &stmt : obj["body"])
+      {
+        if (symbolt *func_symbol = find_in_import(stmt))
+          return func_symbol;
+      }
+    }
+  }
+
   return nullptr;
 }
 
@@ -9319,51 +9342,60 @@ void python_converter::create_builtin_symbols()
   symbol_table_.add(name_symbol);
 }
 
+bool python_converter::import_module_into_block(
+  const nlohmann::json &import_node,
+  module_locator &locator,
+  code_blockt &block)
+{
+  const std::string &module_name = (import_node["_type"] == "ImportFrom")
+                                     ? import_node["module"]
+                                     : import_node["names"][0]["name"];
+
+  if (imported_modules.find(module_name) != imported_modules.end())
+    return true;
+
+  std::ifstream imported_file = locator.open_module_file(module_name);
+  if (!imported_file.is_open())
+    return false;
+
+  nlohmann::json nested_module_json;
+  imported_file >> nested_module_json;
+
+  current_python_file = nested_module_json["filename"].get<std::string>();
+  imported_modules.emplace(module_name, current_python_file);
+
+  // Process nested imports first.
+  process_module_imports(nested_module_json, locator, block);
+
+  // Then process this module's definitions.
+  create_builtin_symbols();
+  python_annotation<nlohmann::json> imported_annotator(
+    nested_module_json, const_cast<global_scope &>(global_scope_));
+  imported_annotator.add_type_annotation();
+
+  exprt imported_code = with_ast(&nested_module_json, [&]() {
+    return get_block(nested_module_json["body"]);
+  });
+
+  convert_expression_to_code(imported_code);
+
+  // Add imported module code.
+  block.copy_to_operands(imported_code);
+  return true;
+}
+
 void python_converter::process_module_imports(
   const nlohmann::json &module_ast,
   module_locator &locator,
-  code_blockt &accumulated_code)
+  code_blockt &block)
 {
   // Process imports in this module first (depth-first)
   for (const auto &elem : module_ast["body"])
   {
     if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
     {
-      const std::string &module_name = (elem["_type"] == "ImportFrom")
-                                         ? elem["module"]
-                                         : elem["names"][0]["name"];
-
-      // Skip if already imported
-      if (imported_modules.find(module_name) != imported_modules.end())
-        continue;
-
-      std::ifstream imported_file = locator.open_module_file(module_name);
-      if (!imported_file.is_open())
-        continue; // Skip missing modules
-
-      nlohmann::json nested_module_json;
-      imported_file >> nested_module_json;
-
-      std::string nested_python_file =
-        nested_module_json["filename"].get<std::string>();
-      imported_modules.emplace(module_name, nested_python_file);
-
-      // Recursively process nested imports first
-      process_module_imports(nested_module_json, locator, accumulated_code);
-
-      // Then process this module's definitions
       std::string saved_file = current_python_file;
-      current_python_file = nested_python_file;
-
-      create_builtin_symbols();
-      exprt imported_code = with_ast(&nested_module_json, [&]() {
-        return get_block(nested_module_json["body"]);
-      });
-      convert_expression_to_code(imported_code);
-
-      // Accumulate this module's code
-      accumulated_code.copy_to_operands(imported_code);
-
+      import_module_into_block(elem, locator, block);
       current_python_file = saved_file;
     }
   }
@@ -9550,49 +9582,39 @@ void python_converter::convert()
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
       {
         is_importing_module = true;
-        const std::string &module_name = (elem["_type"] == "ImportFrom")
-                                           ? elem["module"]
-                                           : elem["names"][0]["name"];
-
-        // Skip if already processed by recursive import
-        if (imported_modules.find(module_name) != imported_modules.end())
-          continue;
-
-        std::ifstream imported_file = locator.open_module_file(module_name);
-        if (!imported_file.is_open())
+        if (!import_module_into_block(elem, locator, all_imports_block))
         {
+          const std::string &module_name = (elem["_type"] == "ImportFrom")
+                                             ? elem["module"]
+                                             : elem["names"][0]["name"];
           throw std::runtime_error(
             "Cannot open file: " + locator.module_path(module_name));
         }
+      }
+    }
 
-        imported_file >> imported_module_json;
+    // Do the same for imports that appear directly inside functions.
+    for (const auto &elem : (*ast_json)["body"])
+    {
+      if (
+        elem["_type"] != "FunctionDef" || !elem.contains("body") ||
+        !elem["body"].is_array())
+        continue;
 
-        current_python_file =
-          imported_module_json["filename"].get<std::string>();
-        imported_modules.emplace(module_name, current_python_file);
+      for (const auto &stmt : elem["body"])
+      {
+        if (stmt["_type"] != "ImportFrom" && stmt["_type"] != "Import")
+          continue;
 
-        // Process nested imports recursively first
-        process_module_imports(
-          imported_module_json, locator, all_imports_block);
-
-        // Create built-in symbols for imported module
-        create_builtin_symbols();
-
-        // Annotate types in imported module before conversion
-        python_annotation<nlohmann::json> imported_annotator(
-          imported_module_json, const_cast<global_scope &>(global_scope_));
-        imported_annotator.add_type_annotation();
-
-        exprt imported_code = with_ast(&imported_module_json, [&]() {
-          return get_block(imported_module_json["body"]);
-        });
-
-        convert_expression_to_code(imported_code);
-
-        // Accumulate imported code instead of overwriting
-        all_imports_block.copy_to_operands(imported_code);
-
-        imported_module_json.clear();
+        is_importing_module = true;
+        if (!import_module_into_block(stmt, locator, all_imports_block))
+        {
+          const std::string &module_name = (stmt["_type"] == "ImportFrom")
+                                             ? stmt["module"]
+                                             : stmt["names"][0]["name"];
+          throw std::runtime_error(
+            "Cannot open file: " + locator.module_path(module_name));
+        }
       }
     }
 

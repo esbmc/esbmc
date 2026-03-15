@@ -1889,6 +1889,37 @@ private:
     return base_type;
   }
 
+  bool
+  is_imported_name_in_body(const std::string &name, const Json &stmts) const
+  {
+    // Imported names inside a function body are visible to later calls in that
+    // same body, even though they are not present in the module AST.
+    for (const auto &stmt : stmts)
+    {
+      if (!stmt.contains("_type"))
+        continue;
+
+      const std::string &stype = stmt["_type"];
+      if (
+        (stype == "ImportFrom" || stype == "Import") && stmt.contains("names"))
+      {
+        for (const auto &alias : stmt["names"])
+        {
+          if (
+            alias.contains("name") &&
+            alias["name"].template get<std::string>() == name)
+            return true;
+          if (
+            alias.contains("asname") && !alias["asname"].is_null() &&
+            alias["asname"].template get<std::string>() == name)
+            return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   std::string get_type_from_rhs_variable(const Json &element, const Json &body)
   {
     const auto &value_type = element["value"]["_type"];
@@ -2159,6 +2190,12 @@ private:
         {
           const nlohmann::json &body =
             static_cast<const nlohmann::json &>(ast_["body"]);
+          // Keep imported names intact here; the converter resolves them later.
+          if (
+            is_imported_name_in_body(func_id, body) ||
+            (current_func != nullptr && (*current_func).contains("body") &&
+             is_imported_name_in_body(func_id, (*current_func)["body"])))
+            return func_id;
           for (const auto &stmt : body)
           {
             if (!stmt.contains("_type"))
