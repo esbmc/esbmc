@@ -2398,23 +2398,39 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
   if (func_value["_type"] == "Attribute")
   {
     const exprt attr_expr = converter_.get_expr(func_value);
+    const typet list_type = converter_.get_type_handler().get_list_type();
+
+    if (
+      func_value.contains("value") && func_value["value"].contains("id") &&
+      func_value.contains("attr"))
+    {
+      display_name = func_value["value"]["id"].get<std::string>() + "." +
+                     func_value["attr"].get<std::string>();
+    }
+
     if (attr_expr.is_symbol())
     {
       const symbolt *sym =
         converter_.find_symbol(attr_expr.identifier().as_string());
-      const typet list_type = converter_.get_type_handler().get_list_type();
       if (sym && sym->type == list_type)
-      {
-        if (
-          func_value.contains("value") && func_value["value"].contains("id") &&
-          func_value.contains("attr"))
-        {
-          display_name = func_value["value"]["id"].get<std::string>() + "." +
-                         func_value["attr"].get<std::string>();
-        }
         return sym;
-      }
     }
+
+    // Instance attribute: attr_expr is a member_exprt (struct field access) of
+    // list pointer type. list_type is PyListObject*, so both the temp and the
+    // struct member point to the same PyListObject. All list mutations through
+    // the temp are visible via the original member (same pointer, same object).
+    //
+    // The temp symbol stores attr_expr as its value so that
+    // materialize_list_symbol() can emit the declaration lazily — only in
+    // handler methods, never inside discriminators (is_list_method_call, etc.).
+    if (attr_expr.type() == list_type)
+    {
+      symbolt &tmp = converter_.create_tmp_symbol(
+        call_, "$attr_list$", list_type, attr_expr);
+      return &tmp;
+    }
+
     return nullptr;
   }
 
@@ -2423,6 +2439,33 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
   symbol_id list_symbol_id = converter_.create_symbol_id();
   list_symbol_id.set_object(display_name);
   return converter_.find_symbol(list_symbol_id.to_string());
+}
+
+// Emit the IR declaration for an instance-attribute list temp symbol.
+//
+// get_object_list_symbol() creates a temp symbol (named "$attr_list$...") that
+// holds the member_exprt of an instance attribute list as its value.  This is
+// kept as a pure lookup so that discriminators (is_list_method_call, etc.) do
+// not emit IR as a side-effect.  Each list method handler calls this function
+// once, just after get_object_list_symbol(), to emit the actual code_declt that
+// initialises the temp pointer from the struct member.
+//
+// For non-instance-attribute symbols (global lists, class-level lists) the
+// function is a no-op.
+void function_call_expr::materialize_list_symbol(const symbolt *sym) const
+{
+  if (!sym || sym->value.is_nil())
+    return;
+  // Only emit a declaration for instance-attribute temp symbols produced by
+  // get_object_list_symbol().  These are identified by their name prefix
+  // "$attr_list$".  Regular list symbols have a nil value and are declared
+  // elsewhere; this guard prevents accidentally re-declaring them.
+  if (sym->name.as_string().find("$attr_list$") == std::string::npos)
+    return;
+  code_declt decl(symbol_expr(*sym));
+  decl.copy_to_operands(sym->value);
+  decl.location() = sym->location;
+  converter_.current_block->copy_to_operands(decl);
 }
 
 bool function_call_expr::is_min_max_call() const
@@ -2593,6 +2636,7 @@ exprt function_call_expr::handle_list_insert() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2623,6 +2667,7 @@ exprt function_call_expr::handle_list_clear() const
 {
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2670,6 +2715,7 @@ exprt function_call_expr::handle_list_pop() const
   {
     std::string list_display_name;
     list_symbol = get_object_list_symbol(list_display_name);
+    materialize_list_symbol(list_symbol);
     if (!list_symbol)
       throw std::runtime_error("List variable not found: " + list_display_name);
   }
@@ -2763,6 +2809,7 @@ exprt function_call_expr::handle_list_copy() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2781,6 +2828,7 @@ exprt function_call_expr::handle_list_remove() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2804,6 +2852,7 @@ exprt function_call_expr::handle_list_sort() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2893,6 +2942,7 @@ exprt function_call_expr::handle_list_reverse() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2989,6 +3039,7 @@ exprt function_call_expr::handle_list_append() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -3097,6 +3148,7 @@ exprt function_call_expr::handle_list_extend() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
