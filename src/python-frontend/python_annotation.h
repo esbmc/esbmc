@@ -2458,6 +2458,47 @@ private:
                               ? call["func"]["attr"].template get<std::string>()
                               : "";
 
+    // Handle super().method() calls: look up the method in the parent class.
+    // Only handles simple base class names; dotted names (e.g. module.Base)
+    // and multiple-inheritance MRO traversal beyond the first base are not
+    // supported — they fall back to "Any".
+    if (obj == "super" && !attr_name.empty() && !current_class_name_.empty())
+    {
+      Json class_node = json_utils::find_class(ast_["body"], current_class_name_);
+      if (
+        !class_node.empty() && class_node.contains("bases") &&
+        !class_node["bases"].empty() &&
+        class_node["bases"][0].contains("id"))
+      {
+        const std::string base_name =
+          class_node["bases"][0]["id"].template get<std::string>();
+        Json base_class = json_utils::find_class(ast_["body"], base_name);
+        if (!base_class.empty())
+        {
+          for (const Json &member : base_class["body"])
+          {
+            if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
+              continue;
+            if (member.contains("returns") && !member["returns"].is_null())
+            {
+              const Json &ret = member["returns"];
+              if (ret.contains("id"))
+                return ret["id"].template get<std::string>();
+              if (
+                ret.contains("_type") && ret["_type"] == "Subscript" &&
+                ret.contains("value") && ret["value"].contains("id"))
+                return ret["value"]["id"].template get<std::string>();
+            }
+            // attr_name == member["name"] by the loop invariant above
+            std::string inferred =
+              infer_from_return_statements(member["body"], attr_name);
+            return inferred.empty() ? "Any" : inferred;
+          }
+        }
+      }
+      return "Any";
+    }
+
     // Handle dict.keys() and dict.values()
     if (attr_name == "keys" || attr_name == "values")
     {
