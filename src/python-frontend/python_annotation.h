@@ -1885,11 +1885,12 @@ private:
     if (base_type == "str")
       return "str";
 
-  // For other types, return the base type
-  return base_type;
+    // For other types, return the base type
+    return base_type;
   }
 
-  bool is_imported_name_in_body(const std::string &name, const Json &stmts) const
+  bool
+  is_imported_name_in_body(const std::string &name, const Json &stmts) const
   {
     // Imported names inside a function body are visible to later calls in that
     // same body, even though they are not present in the module AST.
@@ -1899,7 +1900,8 @@ private:
         continue;
 
       const std::string &stype = stmt["_type"];
-      if ((stype == "ImportFrom" || stype == "Import") && stmt.contains("names"))
+      if (
+        (stype == "ImportFrom" || stype == "Import") && stmt.contains("names"))
       {
         for (const auto &alias : stmt["names"])
         {
