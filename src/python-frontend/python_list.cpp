@@ -2286,14 +2286,40 @@ exprt python_list::compare(
     }
     assert(list_lt_func_sym);
 
-    // Determine element type flags from the LHS list.
-    int type_flag = 0;
-    size_t float_type_id = 0;
+    // Determine element type flags from both lists and merge them so that
+    // cross-type comparisons like [1,2] < [1.0,2.0] are handled correctly.
+    int type_flag_lhs = 0, type_flag_rhs = 0;
+    size_t float_type_id_lhs = 0, float_type_id_rhs = 0;
     get_list_type_flags(
       lhs_symbol->id.as_string(),
       converter_.get_type_handler(),
-      type_flag,
-      float_type_id);
+      type_flag_lhs,
+      float_type_id_lhs);
+    get_list_type_flags(
+      rhs_symbol->id.as_string(),
+      converter_.get_type_handler(),
+      type_flag_rhs,
+      float_type_id_rhs);
+
+    const bool lhs_has_float = (type_flag_lhs == 1 || type_flag_lhs == 3);
+    const bool lhs_has_int = (type_flag_lhs == 0 || type_flag_lhs == 3);
+    const bool rhs_has_float = (type_flag_rhs == 1 || type_flag_rhs == 3);
+    const bool rhs_has_int = (type_flag_rhs == 0 || type_flag_rhs == 3);
+    const bool is_string = (type_flag_lhs == 2 || type_flag_rhs == 2);
+    const bool has_float = lhs_has_float || rhs_has_float;
+    const bool has_int = lhs_has_int || rhs_has_int;
+    const size_t float_type_id =
+      float_type_id_lhs ? float_type_id_lhs : float_type_id_rhs;
+
+    int type_flag;
+    if (is_string)
+      type_flag = 2;
+    else if (has_float && has_int)
+      type_flag = 3;
+    else if (has_float)
+      type_flag = 1;
+    else
+      type_flag = 0;
 
     // Emit: lt_ret = __ESBMC_list_lt(a, b, type_flag, float_type_id)
     // Derivations (total order):
