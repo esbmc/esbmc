@@ -2052,15 +2052,31 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (!type_mismatch_result.is_nil())
     return type_mismatch_result;
 
-  // Handle Any-typed (void*) operands in comparisons: cast the concrete side
-  // to void* make sure like `y == False` work when y is Any-typed.
+  // Detect any_type (void*) operands — unannotated Python parameters.
+  auto is_any_ptr = [](const exprt &e) {
+    return e.type().is_pointer() && e.type().subtype().id() == "empty";
+  };
+  auto is_integer = [](const exprt &e) {
+    return e.type().is_signedbv() || e.type().is_unsignedbv();
+  };
+
+  // For arithmetic operations (Sub, Add, Mult, etc.) on an any_type (void*)
+  // operand combined with an integer operand, cast the void* to the integer type.
   if (
-    type_utils::is_relational_op(op) || op == "Is" || op == "IsNot" ||
-    op == "In" || op == "NotIn")
+    !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
+    op != "In" && op != "NotIn")
   {
-    auto is_any_ptr = [](const exprt &e) {
-      return e.type().is_pointer() && e.type().subtype().id() == "empty";
-    };
+    if (is_any_ptr(lhs) && is_integer(rhs))
+      lhs = typecast_exprt(lhs, rhs.type());
+    else if (is_any_ptr(rhs) && is_integer(lhs))
+      rhs = typecast_exprt(rhs, lhs.type());
+  }
+
+  // Handle Any-typed (void*) operands in comparisons.
+  if (
+    type_utils::is_ordered_comparison(op) || op == "Eq" || op == "NotEq" ||
+    op == "Is" || op == "IsNot" || op == "In" || op == "NotIn")
+  {
     auto cast_to_void_ptr = [](exprt &e, const typet &ptr_type) {
       if (e.type().is_floatbv())
       {
@@ -2072,9 +2088,19 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       e = typecast_exprt(e, ptr_type);
     };
     if (is_any_ptr(lhs) && !is_any_ptr(rhs) && !rhs.type().is_pointer())
-      cast_to_void_ptr(rhs, lhs.type());
+    {
+      if (type_utils::is_ordered_comparison(op) && is_integer(rhs))
+        lhs = typecast_exprt(lhs, rhs.type()); // cast void* to integer
+      else
+        cast_to_void_ptr(rhs, lhs.type()); // cast integer to void*
+    }
     else if (is_any_ptr(rhs) && !is_any_ptr(lhs) && !lhs.type().is_pointer())
-      cast_to_void_ptr(lhs, rhs.type());
+    {
+      if (type_utils::is_ordered_comparison(op) && is_integer(lhs))
+        rhs = typecast_exprt(rhs, lhs.type()); // cast void* to integer
+      else
+        cast_to_void_ptr(lhs, rhs.type()); // cast integer to void*
+    }
   }
 
   // Handle special mathematical operations
