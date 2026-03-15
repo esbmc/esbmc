@@ -778,12 +778,12 @@ bool __ESBMC_list_lt(
     }
     else if (a->size == 8 && type_flag == 3)
     {
-      double av = (a->type_id == float_type_id) ? *(const double *)a->value
-                                                 : (double)(*(const int64_t *)a->value);
-      double bv = (b->type_id == float_type_id)
-                    ? *(const double *)b->value
-                    : (b->size == 1) ? (double)(*(const uint8_t *)b->value)
-                                     : (double)(*(const int64_t *)b->value);
+      double av = (a->type_id == float_type_id)
+                    ? *(const double *)a->value
+                    : (double)(*(const int64_t *)a->value);
+      double bv = (b->type_id == float_type_id) ? *(const double *)b->value
+                  : (b->size == 1) ? (double)(*(const uint8_t *)b->value)
+                                   : (double)(*(const int64_t *)b->value);
       if (av != bv)
         return av < bv;
     }
