@@ -138,12 +138,12 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
             continue;
           }
 
-          expr2tc gaurd;
-          migrate_expr(expr, gaurd);
+          expr2tc guard;
+          migrate_expr(expr, guard);
 
           goto_programt::targett t = func.insert(it);
           t->type = LOOP_INVARIANT;
-          t->add_loop_invariant(gaurd);
+          t->add_loop_invariant(guard);
           t->location = it->location;
           log_progress(
             "Applied loop invariant: {} in line {}",
