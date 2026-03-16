@@ -2188,10 +2188,6 @@ private:
         }
         catch (std::runtime_error &)
         {
-          // Special case: collections.defaultdict → treat as dict for type inference
-          if (func_id == "defaultdict")
-            return "dict";
-
           const nlohmann::json &body =
             static_cast<const nlohmann::json &>(ast_["body"]);
           // Keep imported names intact here; the converter resolves them later.

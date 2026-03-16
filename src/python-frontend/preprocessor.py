@@ -2648,7 +2648,7 @@ class Preprocessor(ast.NodeTransformer):
             return None
         if call_node.args:
             return call_node.args[0]
-        return ast.Constant(value=None)
+        return None
 
     def _make_defaultdict_missing_check(self, dict_name, key_node, factory_node, template):
         """Generate: if key not in dict: dict[key] = factory()
@@ -2865,27 +2865,26 @@ class Preprocessor(ast.NodeTransformer):
                             self.het_dict_literals[target.id] = node.value
                         if self._has_heterogeneous_values(node.value):
                             self.het_value_dict_literals[target.id] = node.value
-                    # Track class instantiations: c = C()
-                    if (isinstance(node.value, ast.Call) and
-                            isinstance(node.value.func, ast.Name)):
-                        self.instance_class_map[target.id] = node.value.func.id
-                        # Track generator variables: g = gen() where gen is a generator.
-                        # Replace the call with a non-None sentinel (True) so that
-                        # 'g is not None' holds: generator objects are always non-None.
-                        if node.value.func.id in self.generator_funcs:
-                            self.generator_vars[target.id] = node.value.func.id
-                            sentinel = ast.Constant(value=True)
-                            ast.copy_location(sentinel, node.value)
-                            node.value = sentinel
-                    # Track dict.items() assignments: items = d.items()
+                    # Track call-expression RHS patterns
                     if isinstance(node.value, ast.Call):
+                        # Track class instantiations: c = C()
+                        if isinstance(node.value.func, ast.Name):
+                            self.instance_class_map[target.id] = node.value.func.id
+                            # Track generator variables: g = gen() where gen is a generator.
+                            # Replace the call with a non-None sentinel (True) so that
+                            # 'g is not None' holds: generator objects are always non-None.
+                            if node.value.func.id in self.generator_funcs:
+                                self.generator_vars[target.id] = node.value.func.id
+                                sentinel = ast.Constant(value=True)
+                                ast.copy_location(sentinel, node.value)
+                                node.value = sentinel
+                        # Track dict.items() assignments: items = d.items()
                         dict_expr = self._get_dict_expr_from_items_call(node.value)
                         if dict_expr is not None:
                             self.dict_items_vars[target.id] = dict_expr
-                    # Track defaultdict construction: d = defaultdict(factory)
-                    # Also rewrite defaultdict(factory) -> {} so the C++ backend
-                    # never sees 'int' (or other types) passed as a call argument.
-                    if isinstance(node.value, ast.Call):
+                        # Track defaultdict construction: d = defaultdict(factory)
+                        # Also rewrite defaultdict(factory) -> {} so the C++ backend
+                        # never sees 'int' (or other types) passed as a call argument.
                         factory = self._get_defaultdict_factory(node.value)
                         if factory is not None:
                             self._defaultdict_factory[target.id] = factory
@@ -2940,7 +2939,8 @@ class Preprocessor(ast.NodeTransformer):
                 return assignments
 
     def visit_AnnAssign(self, node):
-        """Track type annotations from annotated assignments like x: int = 5"""
+        """Track type annotations from annotated assignments like x: int = 5.
+        Also handles defaultdict rewriting and list comprehension lowering."""
         # First visit child nodes
         node = self.generic_visit(node)
 
@@ -2970,6 +2970,16 @@ class Preprocessor(ast.NodeTransformer):
             # Store full annotation for generic type extraction
             self.variable_annotations[var_name] = node.annotation
 
+            # Handle: d: dict = defaultdict(factory)  →  track factory, rewrite to d: dict = {}
+            if (node.value is not None and isinstance(node.value, ast.Call)):
+                factory = self._get_defaultdict_factory(node.value)
+                if factory is not None:
+                    self._defaultdict_factory[var_name] = factory
+                    empty_dict = ast.Dict(keys=[], values=[])
+                    ast.copy_location(empty_dict, node.value)
+                    ast.fix_missing_locations(empty_dict)
+                    node.value = empty_dict
+
         return node
 
     def _as_load_target(self, target, source_node):
@@ -2986,22 +2996,6 @@ class Preprocessor(ast.NodeTransformer):
         else:
             load_target = target
         return self.ensure_all_locations(load_target, source_node)
-
-    def visit_AnnAssign(self, node):
-        """Handle annotated assignments, especially d: dict = defaultdict(factory)."""
-        node = self.generic_visit(node)
-        # Handle: d: dict = defaultdict(factory)  →  track factory, rewrite to d: dict = {}
-        if (node.value is not None and
-                isinstance(node.target, ast.Name) and
-                isinstance(node.value, ast.Call)):
-            factory = self._get_defaultdict_factory(node.value)
-            if factory is not None:
-                self._defaultdict_factory[node.target.id] = factory
-                empty_dict = ast.Dict(keys=[], values=[])
-                ast.copy_location(empty_dict, node.value)
-                ast.fix_missing_locations(empty_dict)
-                node.value = empty_dict
-        return node
 
     def visit_AugAssign(self, node):
         """Lower augmented assignment into a simple assignment."""
