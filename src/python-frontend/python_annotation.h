@@ -3508,12 +3508,6 @@ private:
 
   void update_assignment_node(Json &element, const std::string &inferred_type)
   {
-    // Update type field
-    element["_type"] = "AnnAssign";
-    // Mark as inferred to distinguish from explicit
-    // annotations like `x: Any = ...` during assignment type handling.
-    element["_inferred_annotation"] = true;
-
     auto target = element["targets"][0];
     std::string id;
 
@@ -3527,7 +3521,13 @@ private:
            target["attr"].template get<std::string>();
     }
     else if (target.contains("slice"))
-      return; // No need to annotate assignments to array elements.
+      return; // No need to annotate subscript assignments (e.g. d["k"] = v).
+
+    // Update type field only after confirming this is an annotatable target.
+    element["_type"] = "AnnAssign";
+    // Mark as inferred to distinguish from explicit
+    // annotations like `x: Any = ...` during assignment type handling.
+    element["_inferred_annotation"] = true;
 
     assert(!id.empty());
 

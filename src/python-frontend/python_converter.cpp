@@ -6034,6 +6034,9 @@ void python_converter::preregister_global_variables(
     if (element.value("_type", "") != "AnnAssign")
       continue;
 
+    if (!element.contains("target"))
+      continue;
+
     const auto &target = element["target"];
     if (!target.contains("id"))
       continue;
