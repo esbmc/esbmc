@@ -1,0 +1,5 @@
+THOROUGH
+main.c
+--validate-correctness-witness --witness witness.yml --k-induction
+
+^VERIFICATION SUCCESSFUL$
