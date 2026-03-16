@@ -2752,15 +2752,20 @@ class Preprocessor(ast.NodeTransformer):
 
         prefix, lowered_value = self._lower_listcomp_in_expr(node.value)
         if prefix:
-            if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
-                raise NotImplementedError("List comprehension assignment requires a simple target name")
-            node.value = lowered_value
-            lowered_assign = ast.Assign(targets=node.targets, value=node.value)
-            self._copy_location_info(node, lowered_assign)
-            self.ensure_all_locations(lowered_assign, node)
-            ast.fix_missing_locations(lowered_assign)
-            self.known_variable_types[node.targets[0].id] = 'list'
-            return prefix + [lowered_assign]
+            if not all(isinstance(t, ast.Name) for t in node.targets):
+                raise NotImplementedError("List comprehension assignment requires simple target names")
+            # lowered_value is a Name node referencing the same temp variable;
+            # sharing it across assignments correctly models Python's single-evaluation
+            # semantics for chained assignments (a = b = expr evaluates expr once).
+            assigns = []
+            for target in node.targets:
+                assign = ast.Assign(targets=[target], value=lowered_value)
+                self._copy_location_info(node, assign)
+                self.ensure_all_locations(assign, node)
+                ast.fix_missing_locations(assign)
+                self.known_variable_types[target.id] = 'list'
+                assigns.append(assign)
+            return prefix + assigns
 
         # Handle single target (most common case)
         if len(node.targets) == 1:
