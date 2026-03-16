@@ -2464,11 +2464,11 @@ private:
     // supported — they fall back to "Any".
     if (obj == "super" && !attr_name.empty() && !current_class_name_.empty())
     {
-      Json class_node = json_utils::find_class(ast_["body"], current_class_name_);
+      Json class_node =
+        json_utils::find_class(ast_["body"], current_class_name_);
       if (
         !class_node.empty() && class_node.contains("bases") &&
-        !class_node["bases"].empty() &&
-        class_node["bases"][0].contains("id"))
+        !class_node["bases"].empty() && class_node["bases"][0].contains("id"))
       {
         const std::string base_name =
           class_node["bases"][0]["id"].template get<std::string>();
