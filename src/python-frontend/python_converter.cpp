@@ -6822,7 +6822,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
     code_blockt *saved_block = current_block;
     current_block = &loop_body;
+    exprt *saved_lhs = current_lhs;
+    current_lhs = nullptr;
     exprt func_call = get_expr(call_node);
+    current_lhs = saved_lhs;
     current_block = saved_block;
 
     if (func_call.is_function_call())
@@ -6882,9 +6885,26 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   {
     locationt location = get_location_from_decl(call_node);
 
+    auto apply_wrapped_unary = [&](const exprt &base_expr) -> exprt {
+      if (!is_wrapped_in_unary)
+        return base_expr;
+
+      auto op = ast_node["test"]["op"]["_type"].get<std::string>();
+      if (op == "Not")
+      {
+        exprt unary_expr("not", bool_type());
+        unary_expr.copy_to_operands(base_expr);
+        return unary_expr;
+      }
+      return base_expr;
+    };
+
     // Get the function call expression with special handling
     // Temporarily disable the conditional processing to avoid recursion
+    exprt *saved_lhs = current_lhs;
+    current_lhs = nullptr;
     exprt func_call = get_expr(call_node);
+    current_lhs = saved_lhs;
 
     if (func_call.is_function_call())
     {
@@ -6909,33 +6929,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         current_block->copy_to_operands(func_call);
       }
 
-      // Build the final condition expression
-      if (is_wrapped_in_unary)
-      {
-        // Rebuild the UnaryOp with our temp var
-        auto op = ast_node["test"]["op"]["_type"].get<std::string>();
-        if (op == "Not")
-        {
-          cond = exprt("not", bool_type());
-          cond.copy_to_operands(temp_var_expr);
-        }
-        else
-        {
-          // For other unary operators, try to build them manually
-          // This avoids calling get_expr which might cause recursion
-          cond = temp_var_expr;
-        }
-      }
-      else
-      {
-        // Direct call: use the temp var
-        cond = temp_var_expr;
-      }
+      cond = apply_wrapped_unary(temp_var_expr);
     }
     else
     {
-      // If it's not actually a function call, fall back to normal processing
-      cond = get_expr(ast_node["test"]);
+      cond = apply_wrapped_unary(func_call);
     }
   }
   else
@@ -6946,14 +6944,38 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   cond.location() = get_location_from_decl(ast_node["test"]);
 
-  if (!cond.type().is_bool() && has_dunder_method(ast_node["test"], "__bool__"))
+  if (!cond.type().is_bool())
   {
-    nlohmann::json call_node = build_dunder_call(
-      ast_node["test"], "__bool__", nlohmann::json::array(), ast_node["test"]);
-    exprt bool_call = get_expr(call_node);
-    cond = store_call_result(
-      bool_call, get_location_from_decl(ast_node["test"]), "cond_bool");
-    cond.location() = get_location_from_decl(ast_node["test"]);
+    const locationt location = get_location_from_decl(ast_node["test"]);
+    typet value_type = ns.follow(cond.type());
+    if (value_type.is_pointer())
+      value_type = ns.follow(value_type.subtype());
+
+    // Objects in conditions are converted with __bool__() when available.
+    if (value_type.is_struct())
+    {
+      if (const std::string class_name =
+        extract_class_name_from_tag(
+          to_struct_type(value_type).tag().as_string());
+          !class_name.empty())
+      {
+        if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
+        {
+          exprt bool_object = cond;
+          // __bool__ expects self by address, so the condition must be an object.
+          if (!bool_object.is_symbol())
+            bool_object = store_call_result(bool_object, location, "cond_obj");
+          const code_typet &method_type = to_code_type(bool_method->type);
+          side_effect_expr_function_callt bool_call;
+          bool_call.function() = symbol_expr(*bool_method);
+          bool_call.type() = method_type.return_type();
+          bool_call.location() = location;
+          bool_call.arguments().push_back(gen_address_of(bool_object));
+          cond = store_call_result(bool_call, location, "cond_bool");
+          cond.location() = location;
+        }
+      }
+    }
   }
 
   // Python truthiness for complex in conditional contexts:
