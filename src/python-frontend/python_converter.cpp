@@ -3956,9 +3956,7 @@ nlohmann::json python_converter::build_dunder_call(
   nlohmann::json call_node;
   call_node["_type"] = "Call";
   call_node["func"] = {
-    {"_type", "Attribute"},
-    {"value", object},
-    {"attr", dunder_name}};
+    {"_type", "Attribute"}, {"value", object}, {"attr", dunder_name}};
   call_node["args"] = args;
   call_node["keywords"] = nlohmann::json::array();
   if (source_node.contains("lineno"))
@@ -6951,10 +6949,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   if (!cond.type().is_bool() && has_dunder_method(ast_node["test"], "__bool__"))
   {
     nlohmann::json call_node = build_dunder_call(
-      ast_node["test"],
-      "__bool__",
-      nlohmann::json::array(),
-      ast_node["test"]);
+      ast_node["test"], "__bool__", nlohmann::json::array(), ast_node["test"]);
     exprt bool_call = get_expr(call_node);
     cond = store_call_result(
       bool_call, get_location_from_decl(ast_node["test"]), "cond_bool");
