@@ -3877,7 +3877,7 @@ void python_list::handle_list_var_unpacking(
     symbolt &size_var = converter_.create_tmp_symbol(
       list_value_, "$unpack_size$", size_type(), gen_zero(size_type()));
     code_declt size_decl(symbol_expr(size_var));
-    converter_.add_instruction(size_decl);
+    target_block.copy_to_operands(size_decl);
 
     code_function_callt size_call;
     size_call.function() = symbol_expr(*size_func);
@@ -3886,7 +3886,7 @@ void python_list::handle_list_var_unpacking(
     size_call.lhs() = symbol_expr(size_var);
     size_call.type() = size_type();
     size_call.location() = loc;
-    converter_.add_instruction(size_call);
+    target_block.copy_to_operands(size_call);
 
     // upper = size - after_star
     exprt upper_expr;
@@ -3905,7 +3905,7 @@ void python_list::handle_list_var_unpacking(
     symbolt &loop_idx = converter_.create_tmp_symbol(
       list_value_, "$i$", size_type(), gen_zero(size_type()));
     code_assignt idx_init(symbol_expr(loop_idx), from_integer(before_star, size_type()));
-    converter_.add_instruction(idx_init);
+    target_block.copy_to_operands(idx_init);
 
     exprt loop_cond("<", bool_type());
     loop_cond.copy_to_operands(symbol_expr(loop_idx), upper_expr);
@@ -3947,7 +3947,7 @@ void python_list::handle_list_var_unpacking(
     codet while_loop;
     while_loop.set_statement("while");
     while_loop.copy_to_operands(loop_cond, loop_body);
-    converter_.add_instruction(while_loop);
+    target_block.copy_to_operands(while_loop);
 
     // Record element type for the starred list
     python_list::add_type_info_entry(star_list.id.as_string(), "", elem_type);
