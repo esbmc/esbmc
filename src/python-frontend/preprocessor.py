@@ -24,6 +24,10 @@ class Preprocessor(ast.NodeTransformer):
         self.decimal_module_imported = False
         self.decimal_class_alias = None
         self.decimal_module_alias = None
+        self.defaultdict_imported = False
+        self.defaultdict_alias = None       # alias for the name (from collections import defaultdict as dd)
+        self.collections_module_imported = False
+        self.collections_module_alias = None  # alias for the module (import collections as col)
         self._subscript_inferred_vars = set()  # vars whose annotations came from subscript inference
         self.generator_funcs = set()  # all generator functions (contain yield)
         self.early_return_generator_funcs = set()  # generators with early return before first yield
@@ -2641,11 +2645,35 @@ class Preprocessor(ast.NodeTransformer):
         return None
 
     def _get_defaultdict_factory(self, call_node):
-        """Return factory node if call_node is defaultdict(factory), else None."""
-        if not (isinstance(call_node, ast.Call) and
-                isinstance(call_node.func, ast.Name) and
-                call_node.func.id == 'defaultdict'):
+        """Return factory node if call_node is defaultdict(factory), else None.
+
+        Matches only when defaultdict was actually imported from collections,
+        so a user-defined function with the same name is not rewritten.
+        Handles both:
+          from collections import defaultdict        → defaultdict(factory)
+          from collections import defaultdict as dd  → dd(factory)
+          import collections                         → collections.defaultdict(factory)
+          import collections as col                  → col.defaultdict(factory)
+        """
+        if not isinstance(call_node, ast.Call):
             return None
+
+        func = call_node.func
+        # from collections import defaultdict [as alias]
+        if self.defaultdict_imported and isinstance(func, ast.Name):
+            expected = self.defaultdict_alias or 'defaultdict'
+            if func.id != expected:
+                return None
+        # import collections [as alias]
+        elif self.collections_module_imported and isinstance(func, ast.Attribute):
+            module_name = self.collections_module_alias or 'collections'
+            if not (isinstance(func.value, ast.Name) and
+                    func.value.id == module_name and
+                    func.attr == 'defaultdict'):
+                return None
+        else:
+            return None
+
         if call_node.args:
             return call_node.args[0]
         return None
@@ -3367,6 +3395,12 @@ class Preprocessor(ast.NodeTransformer):
                     self.decimal_imported = True
                     if alias.asname:
                         self.decimal_class_alias = alias.asname
+        if node.module == "collections":
+            for alias in node.names:
+                if alias.name == "defaultdict" or alias.name == "*":
+                    self.defaultdict_imported = True
+                    if alias.asname:
+                        self.defaultdict_alias = alias.asname
         self.generic_visit(node)
         return node
 
@@ -3376,6 +3410,10 @@ class Preprocessor(ast.NodeTransformer):
                 self.decimal_module_imported = True
                 if alias.asname:
                     self.decimal_module_alias = alias.asname
+            if alias.name == "collections":
+                self.collections_module_imported = True
+                if alias.asname:
+                    self.collections_module_alias = alias.asname
         self.generic_visit(node)
         return node
 
