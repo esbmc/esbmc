@@ -3026,6 +3026,19 @@ class Preprocessor(ast.NodeTransformer):
                     ast.fix_missing_locations(empty_dict)
                     node.value = empty_dict
 
+        # Handle: v: T = d[key] where d is a defaultdict (subscript read)
+        if (node.value is not None and
+                isinstance(node.value, ast.Subscript) and
+                isinstance(node.value.value, ast.Name) and
+                node.value.value.id in self._defaultdict_factory):
+            dict_name = node.value.value.id
+            key_node = node.value.slice
+            factory = self._defaultdict_factory[dict_name]
+            init_stmts, key_expr = self._make_defaultdict_missing_check(
+                dict_name, key_node, factory, node)
+            node.value.slice = key_expr
+            return init_stmts + [node]
+
         return node
 
     def _as_load_target(self, target, source_node):
