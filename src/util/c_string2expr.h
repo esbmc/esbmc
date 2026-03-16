@@ -159,11 +159,12 @@ private:
 class expression_converter
 {
 public:
-  explicit expression_converter(contextt &ns);
+  explicit expression_converter(contextt &ns, locationt &location);
   // Entry point
   bool convert(const expression_node *root, exprt &expr);
   bool get_expr(const expression_node &node, exprt &expr);
 
 private:
   contextt &context_;
+  locationt &location_;
 };

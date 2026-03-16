@@ -1,4 +1,5 @@
 #include <c_string2expr.h>
+#include <clang-c-frontend/typecast.h>
 
 #include <cctype>
 #include <iostream>
@@ -647,7 +648,8 @@ const expression_node *expression_parser::make_node(
   return &node;
 }
 
-expression_converter::expression_converter(contextt &ns) : context_(ns)
+expression_converter::expression_converter(contextt &ns, locationt &location)
+  : context_(ns), location_(location)
 {
 }
 
@@ -669,9 +671,18 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
     forall_symbol_base_map (
       it, context_.symbol_base_map, std::string(node.value))
     {
-      // TODO: match the scope
       const symbolt *s = context_.find_symbol(it->second);
-      if (s)
+      if (!s)
+        continue;
+
+      // Match the scope
+      // case 1:
+      // void func() {int x;} match the function name
+      // case 2:
+      // int x; void func() {} global var is match every func name
+      if (
+        (s->location.function() == location_.function()) ||
+        (s->static_lifetime && s->location.function() == ""))
         matches.push_back(symbol_expr(*s));
     }
 
@@ -701,7 +712,8 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("unary+", uint_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
 
     expr.move_to_operands(left);
     break;
@@ -711,7 +723,8 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("unary-", uint_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
 
     expr.move_to_operands(left);
     break;
@@ -721,7 +734,8 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("not", bool_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
 
     expr.move_to_operands(left);
     break;
@@ -731,10 +745,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("+", uint_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -743,10 +760,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("-", uint_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -755,10 +775,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("*", uint_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -767,10 +790,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("/", uint_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -779,10 +805,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("<", bool_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -791,10 +820,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("<=", bool_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -803,10 +835,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt(">", bool_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -815,10 +850,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt(">=", bool_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -827,10 +865,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("=", bool_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -839,10 +880,13 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("notequal", bool_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
+    gen_typecast_arithmetic(context_, left, right);
     expr.move_to_operands(left, right);
     break;
   }
@@ -851,9 +895,11 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("and", bool_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
     expr.move_to_operands(left, right);
     break;
@@ -863,9 +909,11 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   {
     expr = exprt("or", bool_type());
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
     expr.move_to_operands(left, right);
     break;
@@ -874,17 +922,35 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
   case expression_node::node_kind::member:
   {
     exprt left;
-    get_expr(*node.left, left);
-    expr = member_exprt(left, std::string(node.right->value), uint_type());
+    if (get_expr(*node.left, left))
+      return true;
+
+    if (!left.type().is_struct() && !left.type().is_union())
+    {
+      log_error("expect struct or union types");
+      return true;
+    }
+
+    struct_union_typet type = to_struct_union_type(left.type());
+    std::string comp = std::string(node.right->value);
+    if (!type.has_component(comp))
+    {
+      log_error("struct or union types don't have component {}", comp);
+      return true;
+    }
+
+    expr = member_exprt(left, comp, type.get_component(comp).type());
     break;
   }
 
   case expression_node::node_kind::index:
   {
     exprt left;
-    get_expr(*node.left, left);
+    if (get_expr(*node.left, left))
+      return true;
     exprt right;
-    get_expr(*node.right, right);
+    if (get_expr(*node.right, right))
+      return true;
 
     expr = exprt("index", left.type().subtype());
     expr.move_to_operands(left);
