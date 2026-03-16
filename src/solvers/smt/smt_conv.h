@@ -436,6 +436,12 @@ public:
   smt_astt get_single_min_subnormal();
   // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
+  // Returns SMT AST for the double precision relative error bound under
+  // round-to-nearest: half machine epsilon = 2^-53 ~ 1.11e-16
+  smt_astt get_double_eps_rel();
+  // Returns SMT AST for the single precision relative error bound under
+  // round-to-nearest: half machine epsilon = 2^-24 ~ 5.96e-08
+  smt_astt get_single_eps_rel();
 
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
@@ -574,7 +580,6 @@ public:
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();
 
-  //virtual void smt
 
   /** Method to print the SMT model */
   virtual void print_model();
