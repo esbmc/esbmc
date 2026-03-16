@@ -6021,6 +6021,49 @@ python_converter::extract_target_name(const nlohmann::json &target) const
     "Unsupported assignment target type: " + target_type.get<std::string>());
 }
 
+void python_converter::preregister_global_variables(
+  const nlohmann::json &ast_body)
+{
+  // Pre-register module-level annotated variable symbols so that class methods
+  // can reference globals declared later in the source (Python LEGB rule).
+  // Only annotated assignments (AnnAssign) carry enough type information for
+  // symbol registration; plain Assign without annotation is skipped via the
+  // nil-type guard below.
+  for (const auto &element : ast_body)
+  {
+    if (element.value("_type", "") != "AnnAssign")
+      continue;
+
+    const auto &target = element["target"];
+    if (!target.contains("id"))
+      continue;
+
+    const std::string var_name = target["id"].get<std::string>();
+
+    symbol_id sid(current_python_file, "", "");
+    sid.set_object(var_name);
+
+    if (symbol_table_.find_symbol(sid.to_string()))
+      continue;
+
+    typet var_type = extract_type_info(element).second;
+    if (var_type.is_nil() || var_type.is_empty())
+      continue;
+
+    locationt location = get_location_from_decl(element);
+    std::string module_name =
+      current_python_file.substr(0, current_python_file.find_last_of("."));
+
+    symbolt symbol =
+      create_symbol(module_name, var_name, sid.to_string(), location, var_type);
+    symbol.lvalue = true;
+    symbol.file_local = true;
+    symbol.is_extern = false;
+
+    symbol_table_.move_symbol_to_context(symbol);
+  }
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -9827,6 +9870,10 @@ void python_converter::convert()
   // Create a block to hold intrinsic assignments and load C intrinsics
   code_blockt intrinsic_block;
   load_c_intrisics(intrinsic_block);
+
+  // Pre-register module-level variable symbols so class methods can reference
+  // globals declared later in the file (Python LEGB rule).
+  preregister_global_variables((*ast_json)["body"]);
 
   // Variables to hold user code and initialization code
   codet user_code;

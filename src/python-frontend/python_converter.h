@@ -258,6 +258,8 @@ private:
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 
+  void preregister_global_variables(const nlohmann::json &ast_body);
+
   typet
   resolve_variable_type(const std::string &var_name, const locationt &loc);
 
