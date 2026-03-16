@@ -411,6 +411,17 @@ private:
     module_locator &locator,
     code_blockt &code);
 
+  nlohmann::json build_dunder_call(
+    const nlohmann::json &object,
+    const std::string &dunder_name,
+    const nlohmann::json &args,
+    const nlohmann::json &source_node) const;
+
+  exprt store_call_result(
+    exprt call_expr,
+    const locationt &location,
+    const std::string &temp_prefix);
+
   void process_module_imports(
     const nlohmann::json &module_ast,
     module_locator &locator,

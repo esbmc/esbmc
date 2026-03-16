@@ -3947,6 +3947,55 @@ bool python_converter::has_dunder_method(
   return find_dunder_method(class_name, dunder_name) != nullptr;
 }
 
+nlohmann::json python_converter::build_dunder_call(
+  const nlohmann::json &object,
+  const std::string &dunder_name,
+  const nlohmann::json &args,
+  const nlohmann::json &source_node) const
+{
+  nlohmann::json call_node;
+  call_node["_type"] = "Call";
+  call_node["func"] = {
+    {"_type", "Attribute"}, {"value", object}, {"attr", dunder_name}};
+  call_node["args"] = args;
+  call_node["keywords"] = nlohmann::json::array();
+  if (source_node.contains("lineno"))
+    call_node["lineno"] = source_node["lineno"];
+  if (source_node.contains("col_offset"))
+    call_node["col_offset"] = source_node["col_offset"];
+  if (source_node.contains("end_lineno"))
+    call_node["end_lineno"] = source_node["end_lineno"];
+  if (source_node.contains("end_col_offset"))
+    call_node["end_col_offset"] = source_node["end_col_offset"];
+  return call_node;
+}
+
+exprt python_converter::store_call_result(
+  exprt call_expr,
+  const locationt &location,
+  const std::string &temp_prefix)
+{
+  if (!call_expr.is_function_call())
+    return call_expr;
+
+  symbolt temp_symbol =
+    create_return_temp_variable(call_expr.type(), location, temp_prefix);
+  symbol_table_.add(temp_symbol);
+  exprt temp_var_expr = symbol_expr(temp_symbol);
+
+  code_declt temp_decl(temp_var_expr);
+  temp_decl.location() = location;
+  if (!call_expr.type().is_empty())
+    call_expr.op0() = temp_var_expr;
+  if (current_block)
+  {
+    current_block->copy_to_operands(temp_decl);
+    current_block->copy_to_operands(call_expr);
+  }
+
+  return temp_var_expr;
+}
+
 exprt python_converter::dispatch_dunder_operator(
   const std::string &op,
   exprt &lhs,
@@ -4754,24 +4803,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     //   obj[key] -> obj.__getitem__(key)
     if (has_dunder_method(element["value"], "__getitem__"))
     {
-      nlohmann::json call_node;
-      call_node["_type"] = "Call";
-      call_node["func"] = {
-        {"_type", "Attribute"},
-        {"value", element["value"]},
-        {"attr", "__getitem__"}};
-      call_node["args"] = nlohmann::json::array();
-      call_node["args"].push_back(slice);
-      call_node["keywords"] = nlohmann::json::array();
-      if (element.contains("lineno"))
-        call_node["lineno"] = element["lineno"];
-      if (element.contains("col_offset"))
-        call_node["col_offset"] = element["col_offset"];
-      if (element.contains("end_lineno"))
-        call_node["end_lineno"] = element["end_lineno"];
-      if (element.contains("end_col_offset"))
-        call_node["end_col_offset"] = element["end_col_offset"];
-
+      nlohmann::json args = nlohmann::json::array();
+      args.push_back(slice);
+      nlohmann::json call_node =
+        build_dunder_call(element["value"], "__getitem__", args, element);
       expr = get_function_call(call_node);
       break;
     }
@@ -5994,25 +6029,11 @@ void python_converter::get_var_assign(
       ast_node.contains("value") && !ast_node["value"].is_null() &&
       has_dunder_method(target["value"], "__setitem__"))
     {
-      nlohmann::json call_node;
-      call_node["_type"] = "Call";
-      call_node["func"] = {
-        {"_type", "Attribute"},
-        {"value", target["value"]},
-        {"attr", "__setitem__"}};
-      call_node["args"] = nlohmann::json::array();
-      call_node["args"].push_back(target["slice"]);
-      call_node["args"].push_back(ast_node["value"]);
-      call_node["keywords"] = nlohmann::json::array();
-      if (ast_node.contains("lineno"))
-        call_node["lineno"] = ast_node["lineno"];
-      if (ast_node.contains("col_offset"))
-        call_node["col_offset"] = ast_node["col_offset"];
-      if (ast_node.contains("end_lineno"))
-        call_node["end_lineno"] = ast_node["end_lineno"];
-      if (ast_node.contains("end_col_offset"))
-        call_node["end_col_offset"] = ast_node["end_col_offset"];
-
+      nlohmann::json args = nlohmann::json::array();
+      args.push_back(target["slice"]);
+      args.push_back(ast_node["value"]);
+      nlohmann::json call_node =
+        build_dunder_call(target["value"], "__setitem__", args, ast_node);
       exprt setitem_call = get_function_call(call_node);
       target_block.copy_to_operands(convert_expression_to_code(setitem_call));
       return;
@@ -6924,6 +6945,16 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   }
 
   cond.location() = get_location_from_decl(ast_node["test"]);
+
+  if (!cond.type().is_bool() && has_dunder_method(ast_node["test"], "__bool__"))
+  {
+    nlohmann::json call_node = build_dunder_call(
+      ast_node["test"], "__bool__", nlohmann::json::array(), ast_node["test"]);
+    exprt bool_call = get_expr(call_node);
+    cond = store_call_result(
+      bool_call, get_location_from_decl(ast_node["test"]), "cond_bool");
+    cond.location() = get_location_from_decl(ast_node["test"]);
+  }
 
   // Python truthiness for complex in conditional contexts:
   // bool(z) == (z.real != 0.0 or z.imag != 0.0).
