@@ -5627,6 +5627,12 @@ bool python_converter::handle_unpacking_assignment(
       handle_list_literal_unpacking(ast_node, target, target_block);
       return true;
     }
+    if (rhs.type() == get_type_handler().get_list_type())
+    {
+      python_list list(*this, ast_node["value"]);
+      list.handle_list_var_unpacking(ast_node, target, rhs, target_block);
+      return true;
+    }
   }
 
   throw std::runtime_error(
