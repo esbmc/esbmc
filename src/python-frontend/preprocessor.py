@@ -2644,34 +2644,46 @@ class Preprocessor(ast.NodeTransformer):
 
         return None
 
-    def _get_defaultdict_factory(self, call_node):
-        """Return factory node if call_node is defaultdict(factory), else None.
+    def _is_defaultdict_call(self, call_node):
+        """Return True if call_node is a collections.defaultdict(...) call.
 
-        Matches only when defaultdict was actually imported from collections,
-        so a user-defined function with the same name is not rewritten.
+        Matches only when defaultdict was actually imported from collections.
         Handles both:
-          from collections import defaultdict        → defaultdict(factory)
-          from collections import defaultdict as dd  → dd(factory)
-          import collections                         → collections.defaultdict(factory)
-          import collections as col                  → col.defaultdict(factory)
+          from collections import defaultdict        → defaultdict(...)
+          from collections import defaultdict as dd  → dd(...)
+          import collections                         → collections.defaultdict(...)
+          import collections as col                  → col.defaultdict(...)
         """
         if not isinstance(call_node, ast.Call):
-            return None
+            return False
 
         func = call_node.func
         # from collections import defaultdict [as alias]
         if self.defaultdict_imported and isinstance(func, ast.Name):
             expected = self.defaultdict_alias or 'defaultdict'
-            if func.id != expected:
-                return None
+            return func.id == expected
         # import collections [as alias]
-        elif self.collections_module_imported and isinstance(func, ast.Attribute):
+        if self.collections_module_imported and isinstance(func, ast.Attribute):
             module_name = self.collections_module_alias or 'collections'
-            if not (isinstance(func.value, ast.Name) and
+            return (isinstance(func.value, ast.Name) and
                     func.value.id == module_name and
-                    func.attr == 'defaultdict'):
-                return None
-        else:
+                    func.attr == 'defaultdict')
+        return False
+
+    def _get_defaultdict_factory(self, call_node):
+        """Return the factory node for a collections.defaultdict call, or None.
+
+        Returns None when:
+          - call_node is not a defaultdict call (_is_defaultdict_call is False)
+          - defaultdict() called with no args (no auto-insertion)
+          - defaultdict(None) called with explicit None (no auto-insertion)
+
+        Callers that need to distinguish "not a defaultdict" from "defaultdict
+        without a factory" should call _is_defaultdict_call() separately and
+        always rewrite the construction to {}, only recording a factory when
+        this method returns non-None.
+        """
+        if not self._is_defaultdict_call(call_node):
             return None
 
         if call_node.args:
@@ -2926,13 +2938,14 @@ class Preprocessor(ast.NodeTransformer):
                         if dict_expr is not None:
                             self.dict_items_vars[target.id] = dict_expr
                         # Track defaultdict construction: d = defaultdict(factory)
-                        # Also rewrite defaultdict(factory) -> {} so the C++ backend
-                        # never sees 'int' (or other types) passed as a call argument.
-                        factory = self._get_defaultdict_factory(node.value)
-                        if factory is not None:
-                            self._defaultdict_factory[target.id] = factory
-                            # Replace defaultdict(factory) with {} so the C++
-                            # backend sees a plain dict construction.
+                        # Always rewrite any collections.defaultdict(...) call to {}
+                        # so the C++ backend never sees the call. Only record a
+                        # factory when one is present (defaultdict() / defaultdict(None)
+                        # behave like plain dicts with no auto-insertion).
+                        if self._is_defaultdict_call(node.value):
+                            factory = self._get_defaultdict_factory(node.value)
+                            if factory is not None:
+                                self._defaultdict_factory[target.id] = factory
                             empty_dict = ast.Dict(keys=[], values=[])
                             ast.copy_location(empty_dict, node.value)
                             ast.fix_missing_locations(empty_dict)
@@ -3017,14 +3030,18 @@ class Preprocessor(ast.NodeTransformer):
             self.variable_annotations[var_name] = node.annotation
 
             # Handle: d: dict = defaultdict(factory)  →  track factory, rewrite to d: dict = {}
-            if (node.value is not None and isinstance(node.value, ast.Call)):
+            # Always rewrite any collections.defaultdict(...) call to {} so the
+            # C++ backend never sees the call. Only record a factory when present.
+            if (node.value is not None and
+                    isinstance(node.value, ast.Call) and
+                    self._is_defaultdict_call(node.value)):
                 factory = self._get_defaultdict_factory(node.value)
                 if factory is not None:
                     self._defaultdict_factory[var_name] = factory
-                    empty_dict = ast.Dict(keys=[], values=[])
-                    ast.copy_location(empty_dict, node.value)
-                    ast.fix_missing_locations(empty_dict)
-                    node.value = empty_dict
+                empty_dict = ast.Dict(keys=[], values=[])
+                ast.copy_location(empty_dict, node.value)
+                ast.fix_missing_locations(empty_dict)
+                node.value = empty_dict
 
         # Handle: v: T = d[key] where d is a defaultdict (subscript read)
         if (node.value is not None and
