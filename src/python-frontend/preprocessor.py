@@ -2675,20 +2675,37 @@ class Preprocessor(ast.NodeTransformer):
             return None
 
         if call_node.args:
-            return call_node.args[0]
+            factory = call_node.args[0]
+            # defaultdict(None) means no auto-insertion; treat like no factory.
+            if isinstance(factory, ast.Constant) and factory.value is None:
+                return None
+            return factory
         return None
 
     def _make_defaultdict_missing_check(self, dict_name, key_node, factory_node, template):
         """Generate: if key not in dict: dict[key] = factory()
-        Returns an ast.If node. If key_node is not a simple Name, a temp variable is
-        introduced to avoid duplicate evaluation."""
+
+        Returns (stmts, key_expr) where:
+          - stmts  is the list of AST statements to insert before the original node
+          - key_expr is the safe key expression to use in the original subscript
+
+        When key_node is a complex expression (not a bare Name), a temp variable
+        is introduced so the expression is evaluated exactly once. The caller must
+        replace the original subscript's slice with the returned key_expr to avoid
+        a second evaluation.
+        """
         # If the key is a complex expression, store it in a temporary variable first
         pre_stmts = []
-        if isinstance(key_node, ast.Name):
-            key_load = ast.Name(id=key_node.id, ctx=ast.Load())
-            ast.copy_location(key_load, template)
+        if isinstance(key_node, ast.Name) or isinstance(key_node, ast.Constant):
+            key_load = ast.copy_location(
+                ast.Name(id=key_node.id, ctx=ast.Load())
+                if isinstance(key_node, ast.Name)
+                else key_node,
+                template
+            )
         else:
-            # Create a temporary variable to hold the key expression
+            # Create a temporary variable to hold the key expression so that
+            # complex expressions (e.g. f()) are evaluated only once.
             tmp_name = '__defaultdict_key_tmp_{}'.format(id(key_node))
             tmp_assign = ast.Assign(
                 targets=[ast.Name(id=tmp_name, ctx=ast.Store())],
@@ -2727,9 +2744,7 @@ class Preprocessor(ast.NodeTransformer):
         ast.copy_location(if_stmt, template)
         ast.fix_missing_locations(if_stmt)
 
-        if pre_stmts:
-            return pre_stmts + [if_stmt]
-        return [if_stmt]
+        return pre_stmts + [if_stmt], key_load
 
     def _get_dict_expr_from_items_call(self, call_node):
         """If call_node is d.items() on a known dict, return the dict expression. Else None."""
@@ -2930,8 +2945,11 @@ class Preprocessor(ast.NodeTransformer):
                     dict_name = node.value.value.id
                     key_node = node.value.slice
                     factory = self._defaultdict_factory[dict_name]
-                    init_stmts = self._make_defaultdict_missing_check(
+                    init_stmts, key_expr = self._make_defaultdict_missing_check(
                         dict_name, key_node, factory, node)
+                    # Patch the original subscript to use the (possibly temp) key
+                    # expression so a complex key like f() is evaluated only once.
+                    node.value.slice = key_expr
                     return init_stmts + [node]
 
                 return node
@@ -3042,8 +3060,11 @@ class Preprocessor(ast.NodeTransformer):
             dict_name = node.target.value.id
             key_node = node.target.slice
             factory = self._defaultdict_factory[dict_name]
-            pre_stmts = self._make_defaultdict_missing_check(
+            pre_stmts, key_expr = self._make_defaultdict_missing_check(
                 dict_name, key_node, factory, node)
+            # Patch the augmented-assignment target to use the (possibly temp)
+            # key expression so a complex key like f() is evaluated only once.
+            node.target.slice = key_expr
 
         # Convert "target op= value" into "target = target op value".
         load_target = self._as_load_target(node.target, node)
