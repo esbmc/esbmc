@@ -2,6 +2,7 @@
 
 from typing import Any, Optional
 
+
 def defaultdict(default_factory: Optional[Any] = None, *args, **kwargs) -> dict:
     """Create a defaultdict - modeled as a plain dict for verification purposes.
 
