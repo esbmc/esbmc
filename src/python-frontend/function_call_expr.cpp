@@ -2478,8 +2478,8 @@ bool function_call_expr::is_min_max_call() const
 
   const auto &args = call_["args"];
 
-  // Handle two-argument case: min(a, b) or max(a, b)
-  if (args.size() == 2)
+  // Handle N >= 2 direct arguments: min(a, b), min(a, b, c), etc.
+  if (args.size() >= 2)
     return true;
 
   // Handle single-argument case if it's a tuple
@@ -2579,50 +2579,55 @@ exprt function_call_expr::handle_min_max(
     }
   }
 
-  if (args.size() > 2)
-    throw std::runtime_error(
-      func_name + "() with more than 2 arguments not yet supported");
+  // N >= 2 direct arguments: min(a, b, c, ...) — build a comparison chain.
+  std::vector<exprt> exprs;
+  exprs.reserve(args.size());
+  for (const auto &arg : args)
+    exprs.push_back(to_value_expr(converter_.get_expr(arg), converter_.ns));
 
-  // Two arguments case: min/max(a, b)
-  exprt arg1 = to_value_expr(converter_.get_expr(args[0]), converter_.ns);
-  exprt arg2 = to_value_expr(converter_.get_expr(args[1]), converter_.ns);
-
-  // Determine result type (with type promotion)
-  typet result_type = arg1.type();
-  if (!base_type_eq(result_type, arg2.type(), converter_.ns))
+  // Determine common promoted type across all arguments.
+  typet result_type = exprs[0].type();
+  for (size_t i = 1; i < exprs.size(); ++i)
   {
-    if (result_type.is_signedbv() && arg2.type().is_floatbv())
-      result_type = arg2.type(); // Promote to float
-    else if (result_type.is_floatbv() && arg2.type().is_signedbv())
-      ; // Keep float type
+    const typet &t = exprs[i].type();
+    if (base_type_eq(result_type, t, converter_.ns))
+      continue;
+    if (result_type.is_floatbv() && t.is_signedbv())
+      continue; // keep float
+    else if (result_type.is_signedbv() && t.is_floatbv())
+      result_type = t; // promote int -> float
     else if (
-      (result_type.is_signedbv() && arg2.type().is_unsignedbv()) ||
-      (result_type.is_unsignedbv() && arg2.type().is_signedbv()))
+      (result_type.is_signedbv() || result_type.is_unsignedbv()) &&
+      (t.is_signedbv() || t.is_unsignedbv()))
     {
-      // Python integers are signed; normalize both operands to signedbv
-      const unsigned width = std::max(
-        result_type.is_signedbv() ? to_signedbv_type(result_type).get_width()
-                                  : to_unsignedbv_type(result_type).get_width(),
-        arg2.type().is_signedbv()
-          ? to_signedbv_type(arg2.type()).get_width()
-          : to_unsignedbv_type(arg2.type()).get_width());
-      result_type = signedbv_typet(width);
-      arg1 = typecast_exprt(arg1, result_type);
-      arg2 = typecast_exprt(arg2, result_type);
+      unsigned wa = result_type.is_signedbv()
+                      ? to_signedbv_type(result_type).get_width()
+                      : to_unsignedbv_type(result_type).get_width();
+      unsigned wb = t.is_signedbv() ? to_signedbv_type(t).get_width()
+                                    : to_unsignedbv_type(t).get_width();
+      result_type = signedbv_typet(std::max(wa, wb));
     }
     else
       throw std::runtime_error(
         func_name + "() arguments must be of comparable types: got " +
-        result_type.pretty() + " and " + arg2.type().pretty());
+        result_type.pretty() + " and " + t.pretty());
   }
 
-  // Create condition: arg1 < arg2 (for min) or arg1 > arg2 (for max)
-  exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
-  condition.copy_to_operands(arg1, arg2);
+  // Cast all args to the common type.
+  for (auto &e : exprs)
+    if (!base_type_eq(e.type(), result_type, converter_.ns))
+      e = typecast_exprt(e, result_type);
 
-  // Create if expression: condition ? arg1 : arg2
-  if_exprt result(condition, arg1, arg2);
-  result.type() = result_type;
+  // Fold: result = exprs[0]; for each subsequent arg update via if-expr.
+  exprt result = exprs[0];
+  for (size_t i = 1; i < exprs.size(); ++i)
+  {
+    exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
+    condition.copy_to_operands(exprs[i], result);
+    if_exprt update(condition, exprs[i], result);
+    update.type() = result_type;
+    result = update;
+  }
 
   return result;
 }
