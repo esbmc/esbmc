@@ -1111,6 +1111,26 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
     }
   }
 
+  // Handle defaultdict(factory): value type comes from the factory argument
+  if (
+    var_decl["annotation"]["_type"] == "Name" &&
+    var_decl["annotation"]["id"] == "dict" && var_decl.contains("value") &&
+    var_decl["value"]["_type"] == "Call" &&
+    var_decl["value"].contains("func") &&
+    var_decl["value"]["func"]["_type"] == "Name" &&
+    var_decl["value"]["func"]["id"] == "defaultdict" &&
+    var_decl["value"].contains("args") && !var_decl["value"]["args"].empty())
+  {
+    const auto &factory_arg = var_decl["value"]["args"][0];
+    if (factory_arg.contains("id"))
+    {
+      typet value_type =
+        type_handler_.get_typet(factory_arg["id"].get<std::string>());
+      if (!value_type.is_nil() && !value_type.is_empty())
+        return value_type;
+    }
+  }
+
   // Extract the value type from the dict annotation
   return get_dict_value_type_from_annotation(var_decl["annotation"]);
 }

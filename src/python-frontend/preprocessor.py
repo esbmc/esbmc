@@ -32,6 +32,7 @@ class Preprocessor(ast.NodeTransformer):
         self.generator_next_index = {}  # gen_var -> next yield index for next() calls
         self.generator_emitted_init = set()  # gen_vars whose outer_init has been emitted
         self.dict_items_vars = {}  # {var_name: dict_expr} for X = d.items() assignments
+        self._defaultdict_factory = {}  # {var_name: factory AST node} for defaultdict vars
         self.het_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous key types
         self.het_value_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous value types
         self.bound_method_vars = {}  # {var_name: ast.Attribute} for g = obj.method assignments
@@ -2639,6 +2640,69 @@ class Preprocessor(ast.NodeTransformer):
 
         return None
 
+    def _get_defaultdict_factory(self, call_node):
+        """Return factory node if call_node is defaultdict(factory), else None."""
+        if not (isinstance(call_node, ast.Call) and
+                isinstance(call_node.func, ast.Name) and
+                call_node.func.id == 'defaultdict'):
+            return None
+        if call_node.args:
+            return call_node.args[0]
+        return ast.Constant(value=None)
+
+    def _make_defaultdict_missing_check(self, dict_name, key_node, factory_node, template):
+        """Generate: if key not in dict: dict[key] = factory()
+        Returns an ast.If node. If key_node is not a simple Name, a temp variable is
+        introduced to avoid duplicate evaluation."""
+        # If the key is a complex expression, store it in a temporary variable first
+        pre_stmts = []
+        if isinstance(key_node, ast.Name):
+            key_load = ast.Name(id=key_node.id, ctx=ast.Load())
+            ast.copy_location(key_load, template)
+        else:
+            # Create a temporary variable to hold the key expression
+            tmp_name = '__defaultdict_key_tmp_{}'.format(id(key_node))
+            tmp_assign = ast.Assign(
+                targets=[ast.Name(id=tmp_name, ctx=ast.Store())],
+                value=key_node,
+                type_comment=None
+            )
+            ast.copy_location(tmp_assign, template)
+            ast.fix_missing_locations(tmp_assign)
+            pre_stmts.append(tmp_assign)
+            key_load = ast.Name(id=tmp_name, ctx=ast.Load())
+            ast.copy_location(key_load, template)
+
+        # if key not in dict_name:
+        not_in = ast.Compare(
+            left=key_load,
+            ops=[ast.NotIn()],
+            comparators=[ast.Name(id=dict_name, ctx=ast.Load())]
+        )
+        ast.copy_location(not_in, template)
+        ast.fix_missing_locations(not_in)
+
+        # dict_name[key] = factory()
+        subscript = ast.Subscript(
+            value=ast.Name(id=dict_name, ctx=ast.Load()),
+            slice=key_load,
+            ctx=ast.Store()
+        )
+        ast.copy_location(subscript, template)
+        factory_call = ast.Call(func=factory_node, args=[], keywords=[])
+        ast.copy_location(factory_call, template)
+        assign = ast.Assign(targets=[subscript], value=factory_call, type_comment=None)
+        ast.copy_location(assign, template)
+        ast.fix_missing_locations(assign)
+
+        if_stmt = ast.If(test=not_in, body=[assign], orelse=[])
+        ast.copy_location(if_stmt, template)
+        ast.fix_missing_locations(if_stmt)
+
+        if pre_stmts:
+            return pre_stmts + [if_stmt]
+        return [if_stmt]
+
     def _get_dict_expr_from_items_call(self, call_node):
         """If call_node is d.items() on a known dict, return the dict expression. Else None."""
         if not (isinstance(call_node, ast.Call) and
@@ -2818,6 +2882,31 @@ class Preprocessor(ast.NodeTransformer):
                         dict_expr = self._get_dict_expr_from_items_call(node.value)
                         if dict_expr is not None:
                             self.dict_items_vars[target.id] = dict_expr
+                    # Track defaultdict construction: d = defaultdict(factory)
+                    # Also rewrite defaultdict(factory) -> {} so the C++ backend
+                    # never sees 'int' (or other types) passed as a call argument.
+                    if isinstance(node.value, ast.Call):
+                        factory = self._get_defaultdict_factory(node.value)
+                        if factory is not None:
+                            self._defaultdict_factory[target.id] = factory
+                            # Replace defaultdict(factory) with {} so the C++
+                            # backend sees a plain dict construction.
+                            empty_dict = ast.Dict(keys=[], values=[])
+                            ast.copy_location(empty_dict, node.value)
+                            ast.fix_missing_locations(empty_dict)
+                            node.value = empty_dict
+
+                # Handle: val = x[key] where x is a defaultdict (subscript read)
+                if (isinstance(node.value, ast.Subscript) and
+                        isinstance(node.value.value, ast.Name) and
+                        node.value.value.id in self._defaultdict_factory):
+                    dict_name = node.value.value.id
+                    key_node = node.value.slice
+                    factory = self._defaultdict_factory[dict_name]
+                    init_stmts = self._make_defaultdict_missing_check(
+                        dict_name, key_node, factory, node)
+                    return init_stmts + [node]
+
                 return node
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
@@ -2898,6 +2987,22 @@ class Preprocessor(ast.NodeTransformer):
             load_target = target
         return self.ensure_all_locations(load_target, source_node)
 
+    def visit_AnnAssign(self, node):
+        """Handle annotated assignments, especially d: dict = defaultdict(factory)."""
+        node = self.generic_visit(node)
+        # Handle: d: dict = defaultdict(factory)  →  track factory, rewrite to d: dict = {}
+        if (node.value is not None and
+                isinstance(node.target, ast.Name) and
+                isinstance(node.value, ast.Call)):
+            factory = self._get_defaultdict_factory(node.value)
+            if factory is not None:
+                self._defaultdict_factory[node.target.id] = factory
+                empty_dict = ast.Dict(keys=[], values=[])
+                ast.copy_location(empty_dict, node.value)
+                ast.fix_missing_locations(empty_dict)
+                node.value = empty_dict
+        return node
+
     def visit_AugAssign(self, node):
         """Lower augmented assignment into a simple assignment."""
         # Transform children first so nested expressions are already lowered.
@@ -2906,6 +3011,17 @@ class Preprocessor(ast.NodeTransformer):
         # Only lower subscript targets; other augmented assignments are handled downstream.
         if not isinstance(node.target, ast.Subscript):
             return node
+
+        # Handle: x[key] op= val where x is a defaultdict
+        # Insert missing-key check before the augmented assignment
+        pre_stmts = []
+        if (isinstance(node.target.value, ast.Name) and
+                node.target.value.id in self._defaultdict_factory):
+            dict_name = node.target.value.id
+            key_node = node.target.slice
+            factory = self._defaultdict_factory[dict_name]
+            pre_stmts = self._make_defaultdict_missing_check(
+                dict_name, key_node, factory, node)
 
         # Convert "target op= value" into "target = target op value".
         load_target = self._as_load_target(node.target, node)
@@ -2917,6 +3033,9 @@ class Preprocessor(ast.NodeTransformer):
         self._copy_location_info(node, assign)
         self.ensure_all_locations(assign, node)
         ast.fix_missing_locations(assign)
+
+        if pre_stmts:
+            return pre_stmts + [assign]
         return assign
 
 
