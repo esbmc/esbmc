@@ -724,6 +724,100 @@ void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
   }
 }
 
+// Lexicographic less-than for Python lists.
+// type_flag:  0=int  1=float  2=str  3=mixed-int+float  (same encoding as
+//             __ESBMC_list_sort)
+// float_type_id: type_id hash for float elements (used when type_flag == 3)
+//
+// Returns true iff l1 < l2 under Python lexicographic ordering:
+//   1. Compare element by element; the first unequal pair decides.
+//   2. If all shared elements are equal, the shorter list is smaller.
+bool __ESBMC_list_lt(
+  const PyListObject *l1,
+  const PyListObject *l2,
+  int type_flag,
+  size_t float_type_id)
+{
+  if (!l1 || !l2)
+    return false;
+
+  size_t n = l1->size < l2->size ? l1->size : l2->size;
+  size_t i = 0;
+  while (i < n)
+  {
+    const PyObject *a = &l1->items[i];
+    const PyObject *b = &l2->items[i];
+    i++;
+
+    // Same pointer → elements are identical
+    if (a->value == b->value)
+      continue;
+
+    if (type_flag == 2)
+    {
+      // String / lexicographic comparison.  a->size / b->size include the
+      // null terminator (matching __ESBMC_list_sort convention).  Using
+      // min_size (which includes the null byte of the shorter string) in
+      // memcmp is safe: when two strings have the same content up to that
+      // length, the null byte in the shorter string compares as 0 < any
+      // real character, giving the correct "shorter < longer" result.
+      size_t min_size = a->size < b->size ? a->size : b->size;
+      int cmp = memcmp(a->value, b->value, min_size);
+      if (cmp != 0)
+        return cmp < 0;
+      if (a->size != b->size)
+        return a->size < b->size;
+      // Strings are equal; continue to next element.
+    }
+    else if (a->size == 8 && type_flag == 1)
+    {
+      double av = *(const double *)a->value;
+      double bv = *(const double *)b->value;
+      if (av != bv)
+        return av < bv;
+    }
+    else if (a->size == 8 && type_flag == 3)
+    {
+      double av = (a->type_id == float_type_id)
+                    ? *(const double *)a->value
+                    : (double)(*(const int64_t *)a->value);
+      double bv = (b->type_id == float_type_id) ? *(const double *)b->value
+                  : (b->size == 1) ? (double)(*(const uint8_t *)b->value)
+                                   : (double)(*(const int64_t *)b->value);
+      if (av != bv)
+        return av < bv;
+    }
+    else if (a->size == 8)
+    {
+      // Integer (type_flag == 0)
+      int64_t av = *(const int64_t *)a->value;
+      int64_t bv = *(const int64_t *)b->value;
+      if (av != bv)
+        return av < bv;
+    }
+    else if (a->size == 1)
+    {
+      uint8_t av = *(const uint8_t *)a->value;
+      uint8_t bv = *(const uint8_t *)b->value;
+      if (av != bv)
+        return av < bv;
+    }
+    else
+    {
+      // Fallback: byte-wise comparison (handles unusual sizes)
+      size_t min_size = a->size < b->size ? a->size : b->size;
+      int cmp = memcmp(a->value, b->value, min_size);
+      if (cmp != 0)
+        return cmp < 0;
+      if (a->size != b->size)
+        return a->size < b->size;
+    }
+  }
+
+  // All shared elements equal: shorter list is less.
+  return l1->size < l2->size;
+}
+
 void __ESBMC_list_reverse(PyListObject *l)
 {
   if (!l || l->size <= 1)
