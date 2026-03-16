@@ -3773,3 +3773,207 @@ void python_list::reverse_type_info(const std::string &list_id)
     return;
   std::reverse(it->second.begin(), it->second.end());
 }
+
+void python_list::handle_list_var_unpacking(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  const exprt &list_expr,
+  codet &target_block)
+{
+  const auto &targets = target["elts"];
+  const locationt loc = converter_.get_location_from_decl(ast_node);
+
+  // Find starred target index (-1 if none)
+  int star_idx = -1;
+  for (size_t i = 0; i < targets.size(); i++)
+  {
+    if (targets[i]["_type"] == "Starred")
+    {
+      star_idx = static_cast<int>(i);
+      break;
+    }
+  }
+
+  const size_t before_star =
+    (star_idx >= 0) ? static_cast<size_t>(star_idx) : targets.size();
+  const size_t after_star =
+    (star_idx >= 0) ? targets.size() - static_cast<size_t>(star_idx) - 1 : 0;
+
+  // Get element type from list_type_map or from the variable's annotation
+  typet elem_type;
+  if (list_expr.is_symbol())
+  {
+    const std::string &list_id = list_expr.identifier().as_string();
+    auto it = list_type_map.find(list_id);
+    if (it != list_type_map.end() && !it->second.empty())
+      elem_type = it->second[0].second;
+  }
+  if (elem_type == typet() && ast_node["value"].contains("id"))
+  {
+    const std::string &var_name = ast_node["value"]["id"].get<std::string>();
+    nlohmann::json decl = json_utils::find_var_decl(
+      var_name, converter_.current_function_name(), converter_.ast());
+    elem_type = get_elem_type_from_annotation(decl, converter_.get_type_handler());
+  }
+  if (elem_type == typet())
+    throw std::runtime_error(
+      "Cannot determine element type for list variable unpacking");
+
+  // Helper: find or create a variable symbol and assign an expression to it
+  auto assign_to_target = [&](const nlohmann::json &tgt_node, const exprt &val) {
+    if (tgt_node["_type"] != "Name")
+      throw std::runtime_error(
+        "List unpacking only supports simple names, not " +
+        tgt_node["_type"].get<std::string>());
+
+    const std::string var_name = tgt_node["id"].get<std::string>();
+    symbol_id var_sid = converter_.create_symbol_id();
+    var_sid.set_object(var_name);
+    symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+    if (!var_symbol)
+    {
+      symbolt new_symbol = converter_.create_symbol(
+        loc.get_file().as_string(),
+        var_name,
+        var_sid.to_string(),
+        loc,
+        val.type());
+      new_symbol.lvalue = true;
+      new_symbol.file_local = true;
+      new_symbol.is_extern = false;
+      var_symbol = converter_.symbol_table().move_symbol_to_context(new_symbol);
+    }
+    code_assignt assign(symbol_expr(*var_symbol), val);
+    assign.location() = loc;
+    target_block.copy_to_operands(assign);
+  };
+
+  // Assign targets before the star using concrete indices
+  for (size_t i = 0; i < before_star; i++)
+  {
+    exprt idx = from_integer(i, size_type());
+    exprt list_at = build_list_at_call(list_expr, idx, list_value_);
+    exprt val = extract_pyobject_value(list_at, elem_type);
+    assign_to_target(targets[i], val);
+  }
+
+  // Handle starred target: collect remaining elements into a new list
+  if (star_idx >= 0)
+  {
+    const auto &star_value = targets[static_cast<size_t>(star_idx)]["value"];
+    if (star_value["_type"] != "Name")
+      throw std::runtime_error(
+        "Starred unpacking only supports simple names, not " +
+        star_value["_type"].get<std::string>());
+
+    // Create new list for the starred variable
+    symbolt &star_list = create_list();
+
+    // Compute source list size once
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    assert(size_func);
+
+    symbolt &size_var = converter_.create_tmp_symbol(
+      list_value_, "$unpack_size$", size_type(), gen_zero(size_type()));
+    code_declt size_decl(symbol_expr(size_var));
+    converter_.add_instruction(size_decl);
+
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.arguments().push_back(
+      list_expr.type().is_pointer() ? list_expr : address_of_exprt(list_expr));
+    size_call.lhs() = symbol_expr(size_var);
+    size_call.type() = size_type();
+    size_call.location() = loc;
+    converter_.add_instruction(size_call);
+
+    // upper = size - after_star
+    exprt upper_expr;
+    if (after_star > 0)
+    {
+      upper_expr = exprt("-", size_type());
+      upper_expr.copy_to_operands(
+        symbol_expr(size_var), from_integer(after_star, size_type()));
+    }
+    else
+    {
+      upper_expr = symbol_expr(size_var);
+    }
+
+    // Loop: for loop_idx = before_star; loop_idx < upper; loop_idx++
+    symbolt &loop_idx = converter_.create_tmp_symbol(
+      list_value_, "$i$", size_type(), gen_zero(size_type()));
+    code_assignt idx_init(symbol_expr(loop_idx), from_integer(before_star, size_type()));
+    converter_.add_instruction(idx_init);
+
+    exprt loop_cond("<", bool_type());
+    loop_cond.copy_to_operands(symbol_expr(loop_idx), upper_expr);
+
+    code_blockt loop_body;
+
+    // tmp_at = __ESBMC_list_at(list_expr, loop_idx)
+    const exprt at_call =
+      build_list_at_call(list_expr, symbol_expr(loop_idx), list_value_);
+    symbolt &tmp_at = converter_.create_tmp_symbol(
+      list_value_,
+      "tmp_unpack_at",
+      pointer_typet(converter_.get_type_handler().get_list_element_type()),
+      exprt());
+    code_declt tmp_at_decl(symbol_expr(tmp_at));
+    tmp_at_decl.copy_to_operands(at_call);
+    loop_body.copy_to_operands(tmp_at_decl);
+
+    // __ESBMC_list_push_object(star_list, tmp_at)
+    const symbolt *push_obj_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+    assert(push_obj_func);
+
+    side_effect_expr_function_callt push_call;
+    push_call.function() = symbol_expr(*push_obj_func);
+    push_call.arguments().push_back(symbol_expr(star_list));
+    push_call.arguments().push_back(symbol_expr(tmp_at));
+    push_call.type() = bool_type();
+    push_call.location() = loc;
+    loop_body.copy_to_operands(
+      converter_.convert_expression_to_code(push_call));
+
+    // loop_idx++
+    exprt inc("+", size_type());
+    inc.copy_to_operands(symbol_expr(loop_idx), gen_one(size_type()));
+    code_assignt inc_assign(symbol_expr(loop_idx), inc);
+    loop_body.copy_to_operands(inc_assign);
+
+    codet while_loop;
+    while_loop.set_statement("while");
+    while_loop.copy_to_operands(loop_cond, loop_body);
+    converter_.add_instruction(while_loop);
+
+    // Record element type for the starred list
+    python_list::add_type_info_entry(star_list.id.as_string(), "", elem_type);
+
+    // Assign the new list to the starred variable and register its type info
+    assign_to_target(star_value, symbol_expr(star_list));
+    // Also register the starred variable's own symbol id so subsequent list
+    // method calls (e.g., rest.append(x)) can look up the element type.
+    {
+      const std::string var_name = star_value["id"].get<std::string>();
+      symbol_id var_sid = converter_.create_symbol_id();
+      var_sid.set_object(var_name);
+      python_list::add_type_info_entry(var_sid.to_string(), "", elem_type);
+    }
+
+    // Assign targets after the star using size_var
+    for (size_t j = 0; j < after_star; j++)
+    {
+      size_t target_idx = static_cast<size_t>(star_idx) + 1 + j;
+      // index = size - after_star + j
+      exprt after_idx = exprt("-", size_type());
+      after_idx.copy_to_operands(
+        symbol_expr(size_var), from_integer(after_star - j, size_type()));
+      exprt list_at = build_list_at_call(list_expr, after_idx, list_value_);
+      exprt val = extract_pyobject_value(list_at, elem_type);
+      assign_to_target(targets[target_idx], val);
+    }
+  }
+}
