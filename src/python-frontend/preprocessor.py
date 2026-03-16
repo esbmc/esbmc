@@ -816,6 +816,9 @@ class Preprocessor(ast.NodeTransformer):
         node = self.generic_visit(node)
         prefix, new_value = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
+        if node.value is not None:
+            dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
+            prefix = dd_inits + prefix
         if prefix:
             return prefix + [node]
         return node
@@ -836,6 +839,8 @@ class Preprocessor(ast.NodeTransformer):
 
         prefix, new_value = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
+        dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
+        prefix = dd_inits + prefix
         if prefix:
             return prefix + [node]
         return node
@@ -922,6 +927,8 @@ class Preprocessor(ast.NodeTransformer):
         node.test = self._simplify_isinstance(node.test)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
+        dd_inits, node.test = self._lower_defaultdict_reads_in_expr(node.test, node)
+        prefix = dd_inits + prefix
         if node.msg:
             msg_prefix, new_msg = self._lower_listcomp_in_expr(node.msg)
             node.msg = new_msg
@@ -2757,6 +2764,40 @@ class Preprocessor(ast.NodeTransformer):
         ast.fix_missing_locations(if_stmt)
 
         return pre_stmts + [if_stmt], key_load
+
+    def _lower_defaultdict_reads_in_expr(self, expr, template):
+        """Walk expr, find all Load-context d[k] where d is a known defaultdict,
+        generate missing-key init stmts, and rewrite each subscript slice to use
+        the (possibly temp) key expression.
+
+        Returns (init_stmts, new_expr). init_stmts is a (possibly empty) list of
+        AST statements that must be prepended before the containing statement.
+
+        This enables correct auto-insertion semantics for defaultdict reads that
+        appear inside arbitrary expressions (assert, return, function args, etc.)
+        rather than only as the direct RHS of an assignment.
+        """
+        outer = self
+        all_inits = []
+
+        class _Lowerer(ast.NodeTransformer):
+            def visit_Subscript(self, node):
+                # Recurse into children first (handles nested subscripts).
+                self.generic_visit(node)
+                if not (isinstance(node.ctx, ast.Load) and
+                        isinstance(node.value, ast.Name) and
+                        node.value.id in outer._defaultdict_factory):
+                    return node
+                dict_name = node.value.id
+                factory = outer._defaultdict_factory[dict_name]
+                stmts, key_expr = outer._make_defaultdict_missing_check(
+                    dict_name, node.slice, factory, template)
+                all_inits.extend(stmts)
+                node.slice = key_expr
+                return node
+
+        new_expr = _Lowerer().visit(expr)
+        return all_inits, new_expr
 
     def _get_dict_expr_from_items_call(self, call_node):
         """If call_node is d.items() on a known dict, return the dict expression. Else None."""

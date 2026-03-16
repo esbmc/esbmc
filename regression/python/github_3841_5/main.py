@@ -5,4 +5,6 @@ from collections import defaultdict
 d: dict = defaultdict(int)
 v: int = d["missing"]
 assert v == 0
-assert d["missing"] == 0
+
+# Direct assert on a fresh key (no prior assignment) must also auto-insert.
+assert d["another"] == 0
