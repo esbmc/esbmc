@@ -901,9 +901,10 @@ void bmct::report_result(smt_convt::resultt &res)
       // verdict is printed by do_bmc_strategy once the loop terminates.
       // Exception: assertion-coverage mode always reports success after
       // coverage analysis, regardless of any violations found.
-      if (!options.get_bool_option("kind-violation-found") ||
-          options.get_bool_option("assertion-coverage") ||
-          options.get_bool_option("assertion-coverage-claims"))
+      if (
+        !options.get_bool_option("kind-violation-found") ||
+        options.get_bool_option("assertion-coverage") ||
+        options.get_bool_option("assertion-coverage-claims"))
         report_success();
     }
     else
