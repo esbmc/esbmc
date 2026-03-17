@@ -416,9 +416,11 @@ smt_astt smt_convt::apply_ieee754_semantics(
     smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
     smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
     assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= r - B(r)
-    assert_ast(mk_le(ra_lo_expr, ra_lo)); // r - B(r) <= ra_lo  =>  ra_lo == r - B(r)
+    assert_ast(
+      mk_le(ra_lo_expr, ra_lo)); // r - B(r) <= ra_lo  =>  ra_lo == r - B(r)
     assert_ast(mk_le(ra_hi, ra_hi_expr)); // ra_hi <= r + B(r)
-    assert_ast(mk_le(ra_hi_expr, ra_hi)); // r + B(r) <= ra_hi  =>  ra_hi == r + B(r)
+    assert_ast(
+      mk_le(ra_hi_expr, ra_hi)); // r + B(r) <= ra_hi  =>  ra_hi == r + B(r)
 
     // Containment: ra_lo <= result <= ra_hi
     assert_ast(mk_le(ra_lo, real_result));

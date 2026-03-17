@@ -580,7 +580,6 @@ public:
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();
 
-
   /** Method to print the SMT model */
   virtual void print_model();
 
