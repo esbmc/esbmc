@@ -866,8 +866,10 @@ private:
         const std::string &func_name = arg["func"]["id"];
 
         // Class constructor call: A() produces an instance of A
-        if (json_utils::is_class(func_name, ast_))
-          return func_name;
+        // Resolve possible import aliases before checking if this is a class
+        const std::string class_name = json_utils::get_object_alias(ast_, func_name);
+        if (json_utils::is_class(class_name, ast_))
+            return class_name;
 
         // Check built-in functions first
         auto it = builtin_functions.find(func_name);
