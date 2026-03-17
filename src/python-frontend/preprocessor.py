@@ -806,6 +806,81 @@ class Preprocessor(ast.NodeTransformer):
 
         return result
 
+    def _inline_generator_call_for(self, node):
+        """Inline a for loop over a direct generator function call.
+
+        Transforms:
+            for x in gen_func(a, b):
+                body
+
+        Into the generator body with each `yield val` replaced by:
+            param_0 = a
+            param_1 = b
+            x = val
+            body
+
+        Returns the list of inlined statements, or None if inlining is not
+        possible (unknown generator, keyword args, arg count mismatch,
+        non-simple loop target, or generator body contains return/yield-from).
+        """
+        import copy
+
+        gen_call = node.iter
+        func_name = gen_call.func.id
+
+        body_stmts = self.generator_func_defs.get(func_name)
+        if body_stmts is None:
+            return None
+
+        if gen_call.keywords:
+            return None
+
+        # Generators with early return or yield-from cannot be safely inlined:
+        # a bare `return` inlined into the enclosing scope would prematurely
+        # exit it instead of just stopping the inner generator's iteration.
+        if (self._body_has_node_shallow(body_stmts, ast.Return) or
+                self._body_has_node_shallow(body_stmts, ast.YieldFrom)):
+            return None
+
+        param_names = self.functionParams.get(func_name, [])
+        call_args = gen_call.args
+        if len(param_names) != len(call_args):
+            return None
+
+        if not hasattr(node.target, 'id'):
+            return None
+
+        target_name = node.target.id
+
+        stmts = []
+        for param, arg in zip(param_names, call_args):
+            assign = ast.Assign(
+                targets=[ast.Name(id=param, ctx=ast.Store())],
+                value=copy.deepcopy(arg),
+                type_comment=None)
+            stmts.append(assign)
+
+        inlined = copy.deepcopy(body_stmts)
+        replacer = self._YieldReplacer(target_name, node.body, node)
+        try:
+            for stmt in inlined:
+                out = replacer.visit(stmt)
+                if isinstance(out, list):
+                    stmts.extend(out)
+                elif out is not None:
+                    stmts.append(out)
+        except NotImplementedError as e:
+            import sys
+            print(f"warning: cannot inline generator '{func_name}': {e}",
+                  file=sys.stderr)
+            return None
+
+        for stmt in stmts:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        return stmts
+
     @staticmethod
     def _has_yield(node):
         """Return True if node contains a Yield or YieldFrom expression."""
@@ -1464,6 +1539,16 @@ class Preprocessor(ast.NodeTransformer):
             # Check if iterating over a generator variable
             if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
                 inlined = self._inline_generator_for(node)
+                if inlined is not None:
+                    return inlined
+            # Check if iterating directly over a generator function call, e.g.
+            # `for y in gen1(arr): body`.  Without this, _transform_iterable_for
+            # would emit `ESBMC_iter: list = gen1(arr)` which assigns a generator
+            # object to a list variable — ESBMC cannot model generator objects.
+            if (isinstance(node.iter, ast.Call) and
+                    isinstance(node.iter.func, ast.Name) and
+                    node.iter.func.id in self.generator_funcs):
+                inlined = self._inline_generator_call_for(node)
                 if inlined is not None:
                     return inlined
             # Unwrap explicit d.keys() into d so the heterogeneous-key handler
