@@ -11,6 +11,7 @@ class exprt;
 class symbolt;
 class python_converter;
 class type_handler;
+class codet;
 
 using TypeInfo = std::vector<std::pair<std::string, typet>>;
 
@@ -278,6 +279,23 @@ public:
    *                 "c:main.py@42@F@main@lst").
    */
   static void reverse_type_info(const std::string &list_id);
+
+  /**
+   * @brief Unpack a list variable into multiple targets, supporting starred expressions.
+   *
+   * Handles assignments like `a, *b, c = lst` where `lst` is a list variable.
+   * Uses __ESBMC_list_at for element access and builds a new list for the starred target.
+   *
+   * @param ast_node The assignment AST node (for location info and value["id"])
+   * @param target   The tuple/list target node containing the target variables
+   * @param list_expr The expression representing the source list (pointer type)
+   * @param target_block The code block to append assignment instructions to
+   */
+  void handle_list_var_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const exprt &list_expr,
+    codet &target_block);
 
 private:
   friend class python_dict_handler;

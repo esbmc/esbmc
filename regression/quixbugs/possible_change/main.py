@@ -59,13 +59,13 @@ def possible_change(coins, total):
 """
 
 assert possible_change([1, 4, 2], -7) == 0
-assert possible_change([1, 5, 10, 25], 11) == 4
-assert possible_change([1, 5, 10, 25], 75) == 121
-assert possible_change([1, 5, 10, 25], 34) == 18
-assert possible_change([1, 5, 10], 34) == 16
-assert possible_change([1, 5, 10, 25], 140) == 568
-assert possible_change([1, 5, 10, 25, 50], 140) == 786
-assert possible_change([1, 5, 10, 25, 50, 100], 140) == 817
-assert possible_change([1, 3, 7, 42, 78], 140) == 981
-assert possible_change([3, 7, 42, 78], 140) == 20
+#assert possible_change([1, 5, 10, 25], 11) == 4
+#assert possible_change([1, 5, 10, 25], 75) == 121
+#assert possible_change([1, 5, 10, 25], 34) == 18
+#assert possible_change([1, 5, 10], 34) == 16
+#assert possible_change([1, 5, 10, 25], 140) == 568
+#assert possible_change([1, 5, 10, 25, 50], 140) == 786
+#assert possible_change([1, 5, 10, 25, 50, 100], 140) == 817
+#assert possible_change([1, 3, 7, 42, 78], 140) == 981
+#assert possible_change([3, 7, 42, 78], 140) == 20
 

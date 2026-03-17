@@ -5,6 +5,28 @@ toc: true
 
 <h2 id="sv-competitions">Intl. Software Verification Competitions (SV-Comp)</h2>
 <h3>    
+  <a href="https://sv-comp.sosy-lab.org/2026/" target="_blank">
+    SV-COMP 2026
+  </a>
+</h3>   
+<ul>
+  <li><strong>Competing Version:</strong> ESBMC 7.11
+<!--  - **System Description**:
+  [ESBMC at the SV-COMP 2026](https://sv-comp.sosy-lab.org/2026/results/results-verified/) --></li>
+  <li><strong>Divisions Entered:</strong>
+    <ul>  
+      <li><em>Overall:</em> ReachSafety, MemSafety, ConcurrencySafety, NoOverflows, Termination, SoftwareSystems.</li>       
+      <li><em>Falsification Overall:</em> ReachSafety, MemSafety, ConcurrencySafety, NoOverflows, Termination, SoftwareSystems.</li>
+    </ul> 
+  </li>   
+  <li><strong>Award:</strong>
+    <ul>
+      <li><strong>2<sup>nd</sup></strong> Place in ReachSafety</li>
+    </ul>
+  </li>
+</ul>
+<h3>
+<h3>    
   <a href="https://sv-comp.sosy-lab.org/2025/" target="_blank">
     SV-COMP 2025
   </a>

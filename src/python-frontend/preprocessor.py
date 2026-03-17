@@ -24,6 +24,10 @@ class Preprocessor(ast.NodeTransformer):
         self.decimal_module_imported = False
         self.decimal_class_alias = None
         self.decimal_module_alias = None
+        self.defaultdict_imported = False
+        self.defaultdict_alias = None       # alias for the name (from collections import defaultdict as dd)
+        self.collections_module_imported = False
+        self.collections_module_alias = None  # alias for the module (import collections as col)
         self._subscript_inferred_vars = set()  # vars whose annotations came from subscript inference
         self.generator_funcs = set()  # all generator functions (contain yield)
         self.early_return_generator_funcs = set()  # generators with early return before first yield
@@ -32,6 +36,7 @@ class Preprocessor(ast.NodeTransformer):
         self.generator_next_index = {}  # gen_var -> next yield index for next() calls
         self.generator_emitted_init = set()  # gen_vars whose outer_init has been emitted
         self.dict_items_vars = {}  # {var_name: dict_expr} for X = d.items() assignments
+        self._defaultdict_factory = {}  # {var_name: factory AST node} for defaultdict vars
         self.het_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous key types
         self.het_value_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous value types
         self.bound_method_vars = {}  # {var_name: ast.Attribute} for g = obj.method assignments
@@ -811,6 +816,9 @@ class Preprocessor(ast.NodeTransformer):
         node = self.generic_visit(node)
         prefix, new_value = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
+        if node.value is not None:
+            dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
+            prefix = dd_inits + prefix
         if prefix:
             return prefix + [node]
         return node
@@ -831,6 +839,8 @@ class Preprocessor(ast.NodeTransformer):
 
         prefix, new_value = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
+        dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
+        prefix = dd_inits + prefix
         if prefix:
             return prefix + [node]
         return node
@@ -917,6 +927,8 @@ class Preprocessor(ast.NodeTransformer):
         node.test = self._simplify_isinstance(node.test)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
+        dd_inits, node.test = self._lower_defaultdict_reads_in_expr(node.test, node)
+        prefix = dd_inits + prefix
         if node.msg:
             msg_prefix, new_msg = self._lower_listcomp_in_expr(node.msg)
             node.msg = new_msg
@@ -2639,6 +2651,154 @@ class Preprocessor(ast.NodeTransformer):
 
         return None
 
+    def _is_defaultdict_call(self, call_node):
+        """Return True if call_node is a collections.defaultdict(...) call.
+
+        Matches only when defaultdict was actually imported from collections.
+        Handles both:
+          from collections import defaultdict        → defaultdict(...)
+          from collections import defaultdict as dd  → dd(...)
+          import collections                         → collections.defaultdict(...)
+          import collections as col                  → col.defaultdict(...)
+        """
+        if not isinstance(call_node, ast.Call):
+            return False
+
+        func = call_node.func
+        # from collections import defaultdict [as alias]
+        if self.defaultdict_imported and isinstance(func, ast.Name):
+            expected = self.defaultdict_alias or 'defaultdict'
+            return func.id == expected
+        # import collections [as alias]
+        if self.collections_module_imported and isinstance(func, ast.Attribute):
+            module_name = self.collections_module_alias or 'collections'
+            return (isinstance(func.value, ast.Name) and
+                    func.value.id == module_name and
+                    func.attr == 'defaultdict')
+        return False
+
+    def _get_defaultdict_factory(self, call_node):
+        """Return the factory node for a collections.defaultdict call, or None.
+
+        Returns None when:
+          - call_node is not a defaultdict call (_is_defaultdict_call is False)
+          - defaultdict() called with no args (no auto-insertion)
+          - defaultdict(None) called with explicit None (no auto-insertion)
+
+        Callers that need to distinguish "not a defaultdict" from "defaultdict
+        without a factory" should call _is_defaultdict_call() separately and
+        always rewrite the construction to {}, only recording a factory when
+        this method returns non-None.
+        """
+        if not self._is_defaultdict_call(call_node):
+            return None
+
+        if call_node.args:
+            factory = call_node.args[0]
+            # defaultdict(None) means no auto-insertion; treat like no factory.
+            if isinstance(factory, ast.Constant) and factory.value is None:
+                return None
+            return factory
+        return None
+
+    def _make_defaultdict_missing_check(self, dict_name, key_node, factory_node, template):
+        """Generate: if key not in dict: dict[key] = factory()
+
+        Returns (stmts, key_expr) where:
+          - stmts  is the list of AST statements to insert before the original node
+          - key_expr is the safe key expression to use in the original subscript
+
+        When key_node is a complex expression (not a bare Name), a temp variable
+        is introduced so the expression is evaluated exactly once. The caller must
+        replace the original subscript's slice with the returned key_expr to avoid
+        a second evaluation.
+        """
+        # If the key is a complex expression, store it in a temporary variable first
+        pre_stmts = []
+        if isinstance(key_node, ast.Name) or isinstance(key_node, ast.Constant):
+            key_load = ast.copy_location(
+                ast.Name(id=key_node.id, ctx=ast.Load())
+                if isinstance(key_node, ast.Name)
+                else key_node,
+                template
+            )
+        else:
+            # Create a temporary variable to hold the key expression so that
+            # complex expressions (e.g. f()) are evaluated only once.
+            tmp_name = '__defaultdict_key_tmp_{}'.format(id(key_node))
+            tmp_assign = ast.Assign(
+                targets=[ast.Name(id=tmp_name, ctx=ast.Store())],
+                value=key_node,
+                type_comment=None
+            )
+            ast.copy_location(tmp_assign, template)
+            ast.fix_missing_locations(tmp_assign)
+            pre_stmts.append(tmp_assign)
+            key_load = ast.Name(id=tmp_name, ctx=ast.Load())
+            ast.copy_location(key_load, template)
+
+        # if key not in dict_name:
+        not_in = ast.Compare(
+            left=key_load,
+            ops=[ast.NotIn()],
+            comparators=[ast.Name(id=dict_name, ctx=ast.Load())]
+        )
+        ast.copy_location(not_in, template)
+        ast.fix_missing_locations(not_in)
+
+        # dict_name[key] = factory()
+        subscript = ast.Subscript(
+            value=ast.Name(id=dict_name, ctx=ast.Load()),
+            slice=key_load,
+            ctx=ast.Store()
+        )
+        ast.copy_location(subscript, template)
+        factory_call = ast.Call(func=factory_node, args=[], keywords=[])
+        ast.copy_location(factory_call, template)
+        assign = ast.Assign(targets=[subscript], value=factory_call, type_comment=None)
+        ast.copy_location(assign, template)
+        ast.fix_missing_locations(assign)
+
+        if_stmt = ast.If(test=not_in, body=[assign], orelse=[])
+        ast.copy_location(if_stmt, template)
+        ast.fix_missing_locations(if_stmt)
+
+        return pre_stmts + [if_stmt], key_load
+
+    def _lower_defaultdict_reads_in_expr(self, expr, template):
+        """Walk expr, find all Load-context d[k] where d is a known defaultdict,
+        generate missing-key init stmts, and rewrite each subscript slice to use
+        the (possibly temp) key expression.
+
+        Returns (init_stmts, new_expr). init_stmts is a (possibly empty) list of
+        AST statements that must be prepended before the containing statement.
+
+        This enables correct auto-insertion semantics for defaultdict reads that
+        appear inside arbitrary expressions (assert, return, function args, etc.)
+        rather than only as the direct RHS of an assignment.
+        """
+        outer = self
+        all_inits = []
+
+        class _Lowerer(ast.NodeTransformer):
+            def visit_Subscript(self, node):
+                # Recurse into children first (handles nested subscripts).
+                self.generic_visit(node)
+                if not (isinstance(node.ctx, ast.Load) and
+                        isinstance(node.value, ast.Name) and
+                        node.value.id in outer._defaultdict_factory):
+                    return node
+                dict_name = node.value.id
+                factory = outer._defaultdict_factory[dict_name]
+                stmts, key_expr = outer._make_defaultdict_missing_check(
+                    dict_name, node.slice, factory, template)
+                all_inits.extend(stmts)
+                node.slice = key_expr
+                return node
+
+        new_expr = _Lowerer().visit(expr)
+        return all_inits, new_expr
+
     def _get_dict_expr_from_items_call(self, call_node):
         """If call_node is d.items() on a known dict, return the dict expression. Else None."""
         if not (isinstance(call_node, ast.Call) and
@@ -2801,23 +2961,51 @@ class Preprocessor(ast.NodeTransformer):
                             self.het_dict_literals[target.id] = node.value
                         if self._has_heterogeneous_values(node.value):
                             self.het_value_dict_literals[target.id] = node.value
-                    # Track class instantiations: c = C()
-                    if (isinstance(node.value, ast.Call) and
-                            isinstance(node.value.func, ast.Name)):
-                        self.instance_class_map[target.id] = node.value.func.id
-                        # Track generator variables: g = gen() where gen is a generator.
-                        # Replace the call with a non-None sentinel (True) so that
-                        # 'g is not None' holds: generator objects are always non-None.
-                        if node.value.func.id in self.generator_funcs:
-                            self.generator_vars[target.id] = node.value.func.id
-                            sentinel = ast.Constant(value=True)
-                            ast.copy_location(sentinel, node.value)
-                            node.value = sentinel
-                    # Track dict.items() assignments: items = d.items()
+                    # Track call-expression RHS patterns
                     if isinstance(node.value, ast.Call):
+                        # Track class instantiations: c = C()
+                        if isinstance(node.value.func, ast.Name):
+                            self.instance_class_map[target.id] = node.value.func.id
+                            # Track generator variables: g = gen() where gen is a generator.
+                            # Replace the call with a non-None sentinel (True) so that
+                            # 'g is not None' holds: generator objects are always non-None.
+                            if node.value.func.id in self.generator_funcs:
+                                self.generator_vars[target.id] = node.value.func.id
+                                sentinel = ast.Constant(value=True)
+                                ast.copy_location(sentinel, node.value)
+                                node.value = sentinel
+                        # Track dict.items() assignments: items = d.items()
                         dict_expr = self._get_dict_expr_from_items_call(node.value)
                         if dict_expr is not None:
                             self.dict_items_vars[target.id] = dict_expr
+                        # Track defaultdict construction: d = defaultdict(factory)
+                        # Always rewrite any collections.defaultdict(...) call to {}
+                        # so the C++ backend never sees the call. Only record a
+                        # factory when one is present (defaultdict() / defaultdict(None)
+                        # behave like plain dicts with no auto-insertion).
+                        if self._is_defaultdict_call(node.value):
+                            factory = self._get_defaultdict_factory(node.value)
+                            if factory is not None:
+                                self._defaultdict_factory[target.id] = factory
+                            empty_dict = ast.Dict(keys=[], values=[])
+                            ast.copy_location(empty_dict, node.value)
+                            ast.fix_missing_locations(empty_dict)
+                            node.value = empty_dict
+
+                # Handle: val = x[key] where x is a defaultdict (subscript read)
+                if (isinstance(node.value, ast.Subscript) and
+                        isinstance(node.value.value, ast.Name) and
+                        node.value.value.id in self._defaultdict_factory):
+                    dict_name = node.value.value.id
+                    key_node = node.value.slice
+                    factory = self._defaultdict_factory[dict_name]
+                    init_stmts, key_expr = self._make_defaultdict_missing_check(
+                        dict_name, key_node, factory, node)
+                    # Patch the original subscript to use the (possibly temp) key
+                    # expression so a complex key like f() is evaluated only once.
+                    node.value.slice = key_expr
+                    return init_stmts + [node]
+
                 return node
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
@@ -2851,7 +3039,8 @@ class Preprocessor(ast.NodeTransformer):
                 return assignments
 
     def visit_AnnAssign(self, node):
-        """Track type annotations from annotated assignments like x: int = 5"""
+        """Track type annotations from annotated assignments like x: int = 5.
+        Also handles defaultdict rewriting and list comprehension lowering."""
         # First visit child nodes
         node = self.generic_visit(node)
 
@@ -2881,6 +3070,33 @@ class Preprocessor(ast.NodeTransformer):
             # Store full annotation for generic type extraction
             self.variable_annotations[var_name] = node.annotation
 
+            # Handle: d: dict = defaultdict(factory)  →  track factory, rewrite to d: dict = {}
+            # Always rewrite any collections.defaultdict(...) call to {} so the
+            # C++ backend never sees the call. Only record a factory when present.
+            if (node.value is not None and
+                    isinstance(node.value, ast.Call) and
+                    self._is_defaultdict_call(node.value)):
+                factory = self._get_defaultdict_factory(node.value)
+                if factory is not None:
+                    self._defaultdict_factory[var_name] = factory
+                empty_dict = ast.Dict(keys=[], values=[])
+                ast.copy_location(empty_dict, node.value)
+                ast.fix_missing_locations(empty_dict)
+                node.value = empty_dict
+
+        # Handle: v: T = d[key] where d is a defaultdict (subscript read)
+        if (node.value is not None and
+                isinstance(node.value, ast.Subscript) and
+                isinstance(node.value.value, ast.Name) and
+                node.value.value.id in self._defaultdict_factory):
+            dict_name = node.value.value.id
+            key_node = node.value.slice
+            factory = self._defaultdict_factory[dict_name]
+            init_stmts, key_expr = self._make_defaultdict_missing_check(
+                dict_name, key_node, factory, node)
+            node.value.slice = key_expr
+            return init_stmts + [node]
+
         return node
 
     def _as_load_target(self, target, source_node):
@@ -2907,6 +3123,20 @@ class Preprocessor(ast.NodeTransformer):
         if not isinstance(node.target, ast.Subscript):
             return node
 
+        # Handle: x[key] op= val where x is a defaultdict
+        # Insert missing-key check before the augmented assignment
+        pre_stmts = []
+        if (isinstance(node.target.value, ast.Name) and
+                node.target.value.id in self._defaultdict_factory):
+            dict_name = node.target.value.id
+            key_node = node.target.slice
+            factory = self._defaultdict_factory[dict_name]
+            pre_stmts, key_expr = self._make_defaultdict_missing_check(
+                dict_name, key_node, factory, node)
+            # Patch the augmented-assignment target to use the (possibly temp)
+            # key expression so a complex key like f() is evaluated only once.
+            node.target.slice = key_expr
+
         # Convert "target op= value" into "target = target op value".
         load_target = self._as_load_target(node.target, node)
         # Build the RHS binary operation using the original operator.
@@ -2917,6 +3147,9 @@ class Preprocessor(ast.NodeTransformer):
         self._copy_location_info(node, assign)
         self.ensure_all_locations(assign, node)
         ast.fix_missing_locations(assign)
+
+        if pre_stmts:
+            return pre_stmts + [assign]
         return assign
 
 
@@ -3254,6 +3487,12 @@ class Preprocessor(ast.NodeTransformer):
                     self.decimal_imported = True
                     if alias.asname:
                         self.decimal_class_alias = alias.asname
+        if node.module == "collections":
+            for alias in node.names:
+                if alias.name == "defaultdict" or alias.name == "*":
+                    self.defaultdict_imported = True
+                    if alias.asname:
+                        self.defaultdict_alias = alias.asname
         self.generic_visit(node)
         return node
 
@@ -3263,6 +3502,10 @@ class Preprocessor(ast.NodeTransformer):
                 self.decimal_module_imported = True
                 if alias.asname:
                     self.decimal_module_alias = alias.asname
+            if alias.name == "collections":
+                self.collections_module_imported = True
+                if alias.asname:
+                    self.collections_module_alias = alias.asname
         self.generic_visit(node)
         return node
 
