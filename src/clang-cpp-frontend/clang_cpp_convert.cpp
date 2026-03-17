@@ -360,6 +360,21 @@ bool clang_cpp_convertert::get_method(
   if (clang_c_convertert::get_function(md, new_expr))
     return true;
 
+  // For implicit or explicitly-defaulted trivial destructors, Clang does not
+  // synthesize a body (hasBody() returns false), leaving symbol.value as nil.
+  // This causes a "no body for function ~T#" warning when destructor calls are
+  // emitted at scope exit. A trivial destructor is a no-op: generate an empty body.
+  if (
+    llvm::isa<clang::CXXDestructorDecl>(md) && !md.hasBody() &&
+    (md.isImplicit() || md.isExplicitlyDefaulted()))
+  {
+    std::string id, unused_name;
+    get_decl_name(md, unused_name, id);
+    symbolt *s = context.find_symbol(id);
+    if (s && s->value.is_nil())
+      s->value = code_blockt();
+  }
+
   if (annotate_class_method(md, new_expr))
     return true;
 
