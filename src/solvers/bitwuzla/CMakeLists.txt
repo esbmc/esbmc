@@ -10,14 +10,14 @@ else()
             NAME bitwuzla
             DOWNLOAD_ONLY YES
             GITHUB_REPOSITORY bitwuzla/bitwuzla
-            GIT_TAG 0.8.2)
-	  
+            GIT_TAG 0.9.0)
+
 	  message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
         message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
         execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR}
           WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
 
-	
+
         message("[bitwuzla] Building...")
         execute_process(COMMAND meson install
           WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build
@@ -33,7 +33,7 @@ if(EXISTS $ENV{HOME}/bitwuzla)
 endif()
 
 if(ENABLE_BITWUZLA)
-  
+
   if(Bitwuzla_DIR)
     # We need to tell cmake where to look for the .pc file exported by bitwuzla
     list(APPEND CMAKE_PREFIX_PATH "${Bitwuzla_DIR}")

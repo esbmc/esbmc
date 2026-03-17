@@ -246,6 +246,7 @@ collect_ubuntu_packages() {
     libboost-iostreams-dev
     libboost-system-dev
     libboost-filesystem-dev
+    libmpfr-dev
     ninja-build
     python3-setuptools
     libncurses-dev
@@ -279,6 +280,7 @@ collect_macos_formulae() {
     cmake
     z3
     gmp
+    mpfr
     csmith
     boost
     ninja
