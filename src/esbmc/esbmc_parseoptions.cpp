@@ -1338,7 +1338,6 @@ int esbmc_parseoptionst::do_bmc_strategy(
         any_violation_found = true;
         // Suppress spurious VERIFICATION SUCCESSFUL from report_result at
         // subsequent k steps where no new violations are found.
-        options.set_option("kind-violation-found", true);
       }
 
       if (
@@ -1381,7 +1380,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
               goto_functions.reached_mul_claims,
               pytest_gen,
               ctest_gen);
-          if (options.get_bool_option("kind-violation-found"))
+          if (any_violation_found)
           {
             log_fail("\nVERIFICATION FAILED");
             return 1;
