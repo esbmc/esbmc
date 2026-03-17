@@ -68,6 +68,12 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   // To avoid repeated filesystem reads across calls
   static std::unordered_map<std::string, JsonType> module_cache;
 
+  // ast_output_dir may be absent in minimal/test JSON documents
+  // that have no imported modules;
+  // skip the import scan in that case.
+  if (!ast_json.contains("ast_output_dir"))
+    return false;
+
   const std::string output_dir =
     ast_json["ast_output_dir"].template get<std::string>();
 
