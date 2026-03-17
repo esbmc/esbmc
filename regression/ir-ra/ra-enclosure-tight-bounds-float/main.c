@@ -48,7 +48,7 @@
  *
  * The first four patterns are absent in the old weak encoding.  The eps_rel
  * numerator 5960464477539063 is also distinct from the double-precision
- * numerator 2220446049250313, so the test specifically targets the
+ * numerator 5551115123125783, so the test specifically targets the
  * single-precision path in apply_ieee754_semantics.
  */
 #include <assert.h>
