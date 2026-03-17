@@ -513,7 +513,113 @@ class Preprocessor(ast.NodeTransformer):
                 ast.fix_missing_locations(listcomp)
                 return self.visit(listcomp)
 
+            # Lower list(gen_func(args...)) to an inline list construction
+            if (isinstance(node.func, ast.Name) and node.func.id == 'list'
+                    and len(node.args) == 1 and not node.keywords
+                    and isinstance(node.args[0], ast.Call)
+                    and isinstance(node.args[0].func, ast.Name)
+                    and node.args[0].func.id in self.preprocessor.generator_funcs):
+                prefix, result = self.preprocessor._lower_list_gen_call(node.args[0], node)
+                if prefix is not None:
+                    self.statements.extend(prefix)
+                    return result
+
             return self.generic_visit(node)
+
+    @staticmethod
+    def _body_has_node_shallow(body_stmts, node_type):
+        """Return True if node_type appears in body_stmts without descending
+        into nested function definitions or lambdas."""
+        def _walk(node):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                return
+            if isinstance(node, node_type):
+                yield node
+            for child in ast.iter_child_nodes(node):
+                yield from _walk(child)
+        module = ast.Module(body=list(body_stmts), type_ignores=[])
+        return any(True for _ in _walk(module))
+
+    def _lower_list_gen_call(self, gen_call_node, parent_node):
+        """Lower list(gen_func(args...)) to an inline list construction.
+
+        Transforms list(gen_func(a, b)) into:
+            param_0 = a
+            param_1 = b
+            ESBMC_list_gen_N: list = []
+            # generator body with yield val -> ESBMC_list_gen_N.append(val)
+
+        Returns (prefix_stmts, result_name_expr), or (None, gen_call_node) if
+        inlining is not possible (body has return/yield-from, keyword args, or
+        positional-arg count mismatch).
+        """
+        func_name = gen_call_node.func.id
+        # Defensive: generator_funcs and generator_func_defs are kept in sync
+        # by visit_FunctionDef, so this guard should never fire in practice.
+        body_stmts = self.generator_func_defs.get(func_name)
+        if body_stmts is None:
+            return None, gen_call_node
+
+        # Keyword arguments on the generator call are not handled.
+        if gen_call_node.keywords:
+            return None, gen_call_node
+
+        # Generators with return or yield-from cannot be safely inlined at the
+        # call site: 'return' would exit the enclosing scope, and 'yield from'
+        # is not transformed by _YieldToAppend.
+        if (self._body_has_node_shallow(body_stmts, ast.Return) or
+                self._body_has_node_shallow(body_stmts, ast.YieldFrom)):
+            return None, gen_call_node
+
+        # Emit parameter assignments so inlined body can reference them.
+        param_names = self.functionParams.get(func_name, [])
+        call_args = gen_call_node.args
+        if len(param_names) != len(call_args):
+            return None, gen_call_node
+
+        result_var = f'ESBMC_list_gen_{self.listcomp_counter}'
+        self.listcomp_counter += 1
+
+        stmts = []
+        for param, arg in zip(param_names, call_args):
+            assign = ast.Assign(
+                targets=[ast.Name(id=param, ctx=ast.Store())],
+                value=copy.deepcopy(arg),
+                type_comment=None)
+            self.ensure_all_locations(assign, parent_node)
+            ast.fix_missing_locations(assign)
+            stmts.append(assign)
+
+        # result_var: list = []
+        init = ast.AnnAssign(
+            target=ast.Name(id=result_var, ctx=ast.Store()),
+            annotation=ast.Name(id='list', ctx=ast.Load()),
+            value=ast.List(elts=[], ctx=ast.Load()),
+            simple=1)
+        self.ensure_all_locations(init, parent_node)
+        ast.fix_missing_locations(init)
+        stmts.append(init)
+
+        # Replace every `yield val` in the body with `result_var.append(val)`.
+        transformer = self._YieldToAppend(result_var, parent_node)
+        for stmt in body_stmts:
+            transformed = transformer.visit(copy.deepcopy(stmt))
+            if isinstance(transformed, list):
+                stmts.extend(transformed)
+            else:
+                stmts.append(transformed)
+
+        for stmt in stmts:
+            self.ensure_all_locations(stmt, parent_node)
+            ast.fix_missing_locations(stmt)
+
+        self.known_variable_types[result_var] = 'list'
+
+        result_expr = ast.Name(id=result_var, ctx=ast.Load())
+        self.ensure_all_locations(result_expr, parent_node)
+        ast.fix_missing_locations(result_expr)
+
+        return stmts, result_expr
 
     def _has_early_return_before_yield(self, body):
         """Return True if body has a Return statement before any Yield (linear top-level scan)."""
