@@ -3813,14 +3813,16 @@ void python_list::handle_list_var_unpacking(
     const std::string &var_name = ast_node["value"]["id"].get<std::string>();
     nlohmann::json decl = json_utils::find_var_decl(
       var_name, converter_.current_function_name(), converter_.ast());
-    elem_type = get_elem_type_from_annotation(decl, converter_.get_type_handler());
+    elem_type =
+      get_elem_type_from_annotation(decl, converter_.get_type_handler());
   }
   if (elem_type == typet())
     throw std::runtime_error(
       "Cannot determine element type for list variable unpacking");
 
   // Helper: find or create a variable symbol and assign an expression to it
-  auto assign_to_target = [&](const nlohmann::json &tgt_node, const exprt &val) {
+  auto assign_to_target = [&](
+                            const nlohmann::json &tgt_node, const exprt &val) {
     if (tgt_node["_type"] != "Name")
       throw std::runtime_error(
         "List unpacking only supports simple names, not " +
@@ -3904,7 +3906,8 @@ void python_list::handle_list_var_unpacking(
     // Loop: for loop_idx = before_star; loop_idx < upper; loop_idx++
     symbolt &loop_idx = converter_.create_tmp_symbol(
       list_value_, "$i$", size_type(), gen_zero(size_type()));
-    code_assignt idx_init(symbol_expr(loop_idx), from_integer(before_star, size_type()));
+    code_assignt idx_init(
+      symbol_expr(loop_idx), from_integer(before_star, size_type()));
     target_block.copy_to_operands(idx_init);
 
     exprt loop_cond("<", bool_type());
