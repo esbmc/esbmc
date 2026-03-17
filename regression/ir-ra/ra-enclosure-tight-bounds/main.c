@@ -21,7 +21,7 @@
  *     ra_lo = r - B(r),   ra_hi = r + B(r)
  *   encoded as:
  *     (ite (< r 0.0) (- 0.0 r) r)               <- |r| via ITE
- *     (* (/ 2220446049250313.0 ...) |r|)         <- eps_rel = 2^-53
+ *     (* (/ 5551115123125783.0 ...) |r|)         <- eps_rel = 2^-53
  *
  * WHY THE VERDICT ALONE IS NOT ENOUGH
  * ------------------------------------
@@ -42,7 +42,7 @@
  *   \(declare-fun \|smt_conv::ra_lo::0\| \(\) Real\)  -- symbol declared
  *   \(declare-fun \|smt_conv::ra_hi::0\| \(\) Real\)  -- symbol declared
  *   \(ite                                              -- |r| absolute value
- *   2220446049250313                                   -- eps_rel numerator
+ *   5551115123125783                                   -- eps_rel numerator
  *   ^VERIFICATION FAILED$                             -- run completed
  *
  * The first four patterns are absent in the old weak encoding; the last is
