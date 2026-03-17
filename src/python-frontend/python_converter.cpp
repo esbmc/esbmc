@@ -6960,9 +6960,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // Objects in conditions are converted with __bool__() when available.
     if (value_type.is_struct())
     {
-      if (const std::string class_name =
-        extract_class_name_from_tag(
-          to_struct_type(value_type).tag().as_string());
+      if (const std::string class_name = extract_class_name_from_tag(
+            to_struct_type(value_type).tag().as_string());
           !class_name.empty())
       {
         if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
