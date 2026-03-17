@@ -49,6 +49,39 @@ Finally, there's some boilerplate in solvers/solve.cpp for creating
 solvers. The idea is to implement the factory pattern for solver
 creation, avoiding general-esbmc code having to touch solver-specific stuff.
 
+Interval/Real-Arithmetic (--ir-ra) mode
+----------------------------------------
+When the --ir-ra flag is enabled, floating-point operations are encoded
+in real arithmetic rather than bit-precise FP. The key entry point is
+smt_convt::apply_ieee754_semantics (smt_conv.cpp), which wraps each
+real-valued FP result in a sound symmetric error enclosure.
+
+For each FP operation whose exact real value is r, the round-to-nearest
+rounding error satisfies the standard model:
+
+  |fl(r) - r| <= eps_rel * |r| + eps_abs
+
+where eps_rel is half the machine epsilon (2^-53 for double, 2^-24 for
+single) and eps_abs is the minimum positive subnormal (2^-1074 for
+double, 2^-149 for single), covering the underflow region. The enclosure
+is therefore:
+
+  ra_lo = r - (eps_rel * |r| + eps_abs)
+  ra_hi = r + (eps_rel * |r| + eps_abs)
+
+and the assertions ra_lo <= result <= ra_hi and ra_lo <= ra_hi are
+added to the formula. The enclosure bounds are pinned via bidirectional
+inequalities (rather than equalities) to survive Z3's solve-eqs tactic.
+
+The epsilon constants are provided by four helpers in smt_conv.cpp:
+get_double_eps_rel, get_single_eps_rel, get_double_min_subnormal, and
+get_single_min_subnormal. Each decimal literal is rounded upward at the
+last digit to guarantee the SMT solver parses it as a value >= the true
+power-of-two, preserving soundness of the enclosure.
+
+Non-standard FP formats fall back to an unconstrained (weak) enclosure
+until theorem-driven bounds are implemented for them.
+
 [0] It's variardic; I thought that'd be useful then; see
 boolector_convt::mk_sort for an implementation. In reality, it could have
 been more useful.
