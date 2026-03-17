@@ -334,7 +334,8 @@ smt_astt smt_convt::get_double_min_normal()
 smt_astt smt_convt::get_double_min_subnormal()
 {
   // IEEE 754 double precision minimum positive subnormal value (2^-1074)
-  return mk_smt_real("4.9406564584124654e-324");
+  // Rounded UP at the last digit to ensure the enclosure is conservative.
+  return mk_smt_real("4.9406564584124655e-324");
 }
 
 smt_astt smt_convt::apply_ieee754_semantics(
@@ -549,8 +550,9 @@ smt_astt smt_convt::get_single_max_normal()
 smt_astt smt_convt::get_double_eps_rel()
 {
   // Relative error bound for IEEE 754 double under round-to-nearest:
-  // half machine epsilon = 2^-53
-  return mk_smt_real("1.1102230246251565e-16");
+  // half machine epsilon = 2^-53; rounded UP at the last digit to ensure
+  // the enclosure is conservative.
+  return mk_smt_real("1.1102230246251566e-16");
 }
 
 smt_astt smt_convt::get_single_eps_rel()
