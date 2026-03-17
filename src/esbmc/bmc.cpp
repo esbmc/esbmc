@@ -896,7 +896,11 @@ void bmct::report_result(smt_convt::resultt &res)
     }
     else if (!bs || mul)
     {
-      report_success();
+      // Suppress spurious success when a violation was already found in a
+      // previous k step (multi-property sequential k-induction).  The final
+      // verdict is printed by do_bmc_strategy once the loop terminates.
+      if (!options.get_bool_option("kind-violation-found"))
+        report_success();
     }
     else
     {
