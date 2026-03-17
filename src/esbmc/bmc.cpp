@@ -899,7 +899,11 @@ void bmct::report_result(smt_convt::resultt &res)
       // Suppress spurious success when a violation was already found in a
       // previous k step (multi-property sequential k-induction).  The final
       // verdict is printed by do_bmc_strategy once the loop terminates.
-      if (!options.get_bool_option("kind-violation-found"))
+      // Exception: assertion-coverage mode always reports success after
+      // coverage analysis, regardless of any violations found.
+      if (!options.get_bool_option("kind-violation-found") ||
+          options.get_bool_option("assertion-coverage") ||
+          options.get_bool_option("assertion-coverage-claims"))
         report_success();
     }
     else

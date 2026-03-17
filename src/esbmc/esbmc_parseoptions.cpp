@@ -1329,7 +1329,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // have continued past an earlier violation, so we must return 1 even when
   // the closing step (FC/IS) itself succeeds.
   auto conclude = [&]() -> int {
-    if (any_violation_found)
+    // In coverage mode violations are expected; always report success.
+    if (any_violation_found && !is_coverage)
     {
       log_fail("\nVERIFICATION FAILED");
       return 1;
