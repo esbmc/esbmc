@@ -5621,6 +5621,18 @@ bool python_converter::handle_unpacking_assignment(
   }
   else if (rhs.type().is_pointer())
   {
+    typet pointed_type = ns.follow(rhs.type().subtype());
+    if (
+      pointed_type.id() == "struct" &&
+      tuple_handler_->is_tuple_type(pointed_type))
+    {
+      exprt tuple_value = dereference_exprt(rhs, pointed_type);
+      tuple_value.location() = rhs.location();
+      tuple_handler_->handle_tuple_unpacking(
+        ast_node, target, tuple_value, target_block);
+      return true;
+    }
+
     const auto &value_node = ast_node["value"];
     if (value_node["_type"] == "List")
     {
@@ -7248,6 +7260,9 @@ typet python_converter::get_type_from_annotation(
 
     if (value_id == "dict" || value_id == "Dict")
       return dict_handler_->get_dict_struct_type();
+
+    if (value_id == "tuple" || value_id == "Tuple")
+      return tuple_handler_->get_tuple_type_from_annotation(annotation_node);
 
     // Handle Literal[T]: extract the type from the literal value
     if (value_id == "Literal")
