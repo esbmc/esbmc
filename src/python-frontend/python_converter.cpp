@@ -5622,7 +5622,9 @@ bool python_converter::handle_unpacking_assignment(
   else if (rhs.type().is_pointer())
   {
     typet pointed_type = ns.follow(rhs.type().subtype());
-    if (pointed_type.id() == "struct" && tuple_handler_->is_tuple_type(pointed_type))
+    if (
+      pointed_type.id() == "struct" &&
+      tuple_handler_->is_tuple_type(pointed_type))
     {
       exprt tuple_value = dereference_exprt(rhs, pointed_type);
       tuple_value.location() = rhs.location();
