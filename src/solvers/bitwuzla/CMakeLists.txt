@@ -13,8 +13,11 @@ else()
             GIT_TAG 0.9.0)
 
 	  message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
-        message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
-        execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR}
+        # Use Kissat instead of CaDiCaL to avoid duplicate symbol conflicts with
+        # CVC5's bundled libcadical.a when linking statically. Kissat gained
+        # incremental solving support in Bitwuzla 0.9.0 making it a full replacement.
+        message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR} --no-cadical --kissat")
+        execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR} --no-cadical --kissat
           WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
 
 
