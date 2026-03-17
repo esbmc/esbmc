@@ -1324,6 +1324,19 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // remaining properties, so we must remember the failure for the final verdict.
   bool any_violation_found = false;
 
+  // Helper: emit the final verdict and return the correct exit code once a
+  // proof or refutation has been found.  In multi-property mode the loop may
+  // have continued past an earlier violation, so we must return 1 even when
+  // the closing step (FC/IS) itself succeeds.
+  auto conclude = [&]() -> int {
+    if (any_violation_found)
+    {
+      log_fail("\nVERIFICATION FAILED");
+      return 1;
+    }
+    return 0;
+  };
+
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
   for (uint64_t k_step = k_step_base; k_step <= max_k_step;
        k_step += k_step_inc)
@@ -1338,6 +1351,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
         any_violation_found = true;
         // Suppress spurious VERIFICATION SUCCESSFUL from report_result at
         // subsequent k steps where no new violations are found.
+        options.set_option("kind-violation-found", true);
       }
 
       if (
@@ -1358,12 +1372,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
             goto_functions.reached_mul_claims,
             pytest_gen,
             ctest_gen);
-        if (any_violation_found)
-        {
-          log_fail("\nVERIFICATION FAILED");
-          return 1;
-        }
-        return 0;
+        return conclude();
       }
 
       // Don't run inductive step for k_step == 1
@@ -1380,12 +1389,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
               goto_functions.reached_mul_claims,
               pytest_gen,
               ctest_gen);
-          if (any_violation_found)
-          {
-            log_fail("\nVERIFICATION FAILED");
-            return 1;
-          }
-          return 0;
+          return conclude();
         }
       }
     }
@@ -1428,12 +1432,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
             goto_functions.reached_mul_claims,
             pytest_gen,
             ctest_gen);
-        if (any_violation_found)
-        {
-          log_fail("\nVERIFICATION FAILED");
-          return 1;
-        }
-        return 0;
+        return conclude();
       }
     }
     // falsification
