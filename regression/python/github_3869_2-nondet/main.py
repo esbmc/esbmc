@@ -5,7 +5,7 @@ def flatten(arr):
             yield y
         yield x
 
-x: int
-y: int
-z: int
+x = nondet_int()
+y = nondet_int()
+z = nondet_int()
 assert list(flatten([x, y, z])) == [x, y, z]
