@@ -10,15 +10,15 @@
  *
  *   else {
  *     // theorem-driven bounds not yet implemented for non-standard formats
- *     ra_lo = mk_fresh(Real);
- *     ra_hi = mk_fresh(Real);
+ *     ra_lo_weak = mk_fresh(Real);
+ *     ra_hi_weak = mk_fresh(Real);
  *     assert ra_lo <= result <= ra_hi  and  ra_lo <= ra_hi;
  *   }
  *
  * WHAT IS CHECKED
  * ---------------
  * The test checks that:
- *   (a) ra_lo and ra_hi are still declared (the weak enclosure fires, not a crash)
+ *   (a) ra_lo_weak and ra_hi_weak are still declared (the weak enclosure fires, not a crash)
  *   (b) the run completes with VERIFICATION FAILED
  *
  * Notably, no ITE (absolute-value term) and no eps_rel numerator appear in the
@@ -36,8 +36,8 @@
  *
  * PATTERNS CHECKED (see test.desc)
  * ---------------------------------
- *   \(declare-fun \|smt_conv::ra_lo::0\| \(\) Real\)  -- weak enclosure declared
- *   \(declare-fun \|smt_conv::ra_hi::0\| \(\) Real\)  -- weak enclosure declared
+ *   \(declare-fun \|smt_conv::ra_lo_weak::0\| \(\) Real\)  -- weak enclosure declared
+ *   \(declare-fun \|smt_conv::ra_hi_weak::0\| \(\) Real\)  -- weak enclosure declared
  *   ^VERIFICATION FAILED$                             -- run completed
  */
 #include <assert.h>
@@ -48,7 +48,7 @@ int main(void)
 {
   long double x = __VERIFIER_nondet_long_double();
   long double y = __VERIFIER_nondet_long_double();
-  long double z = x + y; /* triggers apply_ieee754_semantics -> ra_lo::0, ra_hi::0 */
+  long double z = x + y; /* triggers apply_ieee754_semantics -> ra_lo_weak::0, ra_hi_weak::0 */
 
   /* Always false in real/integer encoding: z == x+y exactly.
    * Gives a deterministic VERIFICATION FAILED to confirm the run completed. */
