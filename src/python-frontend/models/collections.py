@@ -15,3 +15,30 @@ def defaultdict(default_factory: Optional[Any] = None, *args, **kwargs) -> dict:
       will be present in the verification model.
     """
     return {}
+
+
+class Counter:
+
+    def __init__(self) -> None:
+        self.data: dict[tuple[int, int], int]
+        self.data = {}
+        self.count: int = 0
+
+    def __getitem__(self, key: tuple[int, int]) -> int:
+        try:
+            return self.data[key]
+        except KeyError:
+            return 0
+
+    def __setitem__(self, key: tuple[int, int], value: int) -> None:
+        try:
+            self.data[key]
+        except KeyError:
+            self.count = self.count + 1
+        self.data[key] = value
+
+    def values(self) -> list[int]:
+        return self.data.values()
+
+    def __bool__(self) -> bool:
+        return self.count != 0
