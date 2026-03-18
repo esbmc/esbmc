@@ -1,4 +1,4 @@
 CORE
-main.c
---ir-ra --z3
+main.py
+--incremental-bmc
 ^VERIFICATION FAILED$
