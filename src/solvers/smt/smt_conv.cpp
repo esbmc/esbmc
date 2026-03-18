@@ -365,7 +365,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
     // a future PR.
 
     // Guard: if the rounding mode is not concrete round-to-nearest, emit only
-    // the weak containment enclosure (sound but unprecise) and return.
+    // the weak containment enclosure (sound but imprecise) and return.
     if (!is_nearest_rounding_mode(rounding_mode))
     {
       smt_sortt rs = mk_real_sort();
