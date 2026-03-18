@@ -369,8 +369,8 @@ smt_astt smt_convt::apply_ieee754_semantics(
     if (!is_nearest_rounding_mode(rounding_mode))
     {
       smt_sortt rs = mk_real_sort();
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
       assert_ast(mk_le(ra_lo, real_result));
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
@@ -417,8 +417,8 @@ smt_astt smt_convt::apply_ieee754_semantics(
       // TODO: theorem-driven bounds for non-standard formats are not yet
       // implemented; fall back to unconstrained enclosure (sound but weak).
       smt_sortt rs = mk_real_sort();
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
       assert_ast(mk_le(ra_lo, real_result));
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));

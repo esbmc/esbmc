@@ -22,7 +22,7 @@
  *
  * WHAT IS CHECKED
  * ---------------
- *   ra_lo / ra_hi symbols are declared  -- weak path was taken
+ *   ra_lo_weak / ra_hi_weak symbols are declared  -- weak path was taken
  *   ^VERIFICATION FAILED$               -- run completed
  *
  * NOTE: the tight-path epsilon numerator (5551115123125783 for double) would
