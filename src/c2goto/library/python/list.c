@@ -172,10 +172,21 @@ bool __ESBMC_list_eq(
     // Validation checks
     if (!a->value || !b->value)
       return false;
-    if (a->type_id != b->type_id)
-      return false;
     if (a->size != b->size)
       return false;
+
+    // When type IDs differ (e.g., void*/Any vs int from recursive generator
+    // parameter type erasure), fall back to byte-wise value comparison.
+    // This is safe because Any elements store the same bit pattern as the
+    // original concrete-typed elements (the value, not a pointer to it).
+    if (a->type_id != b->type_id)
+    {
+      // size == 0 means a dict pointer or None element — stored by pointer
+      // identity, not byte content, so cross-type-id comparison is unsound.
+      if (a->size == 0 || !__ESBMC_values_equal(a->value, b->value, a->size))
+        return false;
+      continue;
+    }
 
     // Check if elements are nested lists
     if (a->type_id == list_type_id)
