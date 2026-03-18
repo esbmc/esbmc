@@ -716,12 +716,12 @@ bool clang_c_convertert::get_function(
   added_symbol.type = type;
   new_expr.type() = type;
 
-  // We need: a type, a name, and an optional body
-  if (fd.hasBody())
-  {
-    if (get_function_body(fd, added_symbol.value, type))
-      return true;
-  }
+  // We need: a type, a name, and an optional body.
+  // Always call get_function_body so overrides (e.g. the C++ frontend) can
+  // synthesise a body for bodyless declarations such as trivial destructors.
+  // The base implementation returns immediately when fd.hasBody() is false.
+  if (get_function_body(fd, added_symbol.value, type))
+    return true;
 
   // Restore old functionDecl
   current_functionDecl = old_functionDecl;
@@ -734,7 +734,8 @@ bool clang_c_convertert::get_function_body(
   exprt &new_expr,
   const code_typet &)
 {
-  assert(fd.hasBody());
+  if (!fd.hasBody())
+    return false;
 
   exprt body_exprt;
   if (get_expr(*fd.getBody(), body_exprt))
