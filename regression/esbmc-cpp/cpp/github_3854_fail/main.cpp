@@ -1,6 +1,5 @@
 // Regression test for GitHub issue #3854 (expected failure):
-// Verify ESBMC correctly finds counterexamples (not masked by destructor
-// warning false negatives) for classes with implicit trivial destructors.
+// A class with an implicit trivial destructor where an assertion is violated.
 class Num
 {
 private:
