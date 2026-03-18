@@ -8562,7 +8562,12 @@ void python_converter::get_attributes_from_self(
   for (const auto &stmt : method_body)
   {
     if (
-      stmt["_type"] == "AnnAssign" && stmt["target"]["_type"] == "Attribute" &&
+      stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+      stmt.contains("target") && stmt["target"].is_object() &&
+      stmt["target"].contains("_type") &&
+      stmt["target"]["_type"] == "Attribute" &&
+      stmt["target"].contains("value") && stmt["target"]["value"].is_object() &&
+      stmt["target"]["value"].contains("id") &&
       stmt["target"]["value"]["id"] == "self")
     {
       const std::string &attr_name = stmt["target"]["attr"];
@@ -8670,7 +8675,14 @@ void python_converter::get_attributes_from_self(
         class_components.push_back(comp);
     }
     else if (
-      stmt["_type"] == "Assign" && stmt["targets"][0]["_type"] == "Attribute" &&
+      stmt.contains("_type") && stmt["_type"] == "Assign" &&
+      stmt.contains("targets") && stmt["targets"].is_array() &&
+      !stmt["targets"].empty() && stmt["targets"][0].is_object() &&
+      stmt["targets"][0].contains("_type") &&
+      stmt["targets"][0]["_type"] == "Attribute" &&
+      stmt["targets"][0].contains("value") &&
+      stmt["targets"][0]["value"].is_object() &&
+      stmt["targets"][0]["value"].contains("id") &&
       stmt["targets"][0]["value"]["id"] == "self")
     {
       // A member is initialized with something that might be not annotated
