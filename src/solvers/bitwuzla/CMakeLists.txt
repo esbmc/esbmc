@@ -16,9 +16,12 @@ else()
         # Use Kissat instead of CaDiCaL to avoid duplicate symbol conflicts with
         # CVC5's bundled libcadical.a when linking statically. Kissat gained
         # incremental solving support in Bitwuzla 0.9.0 making it a full replacement.
+        # Note: since Kissat does not support incremental solving natively, Bitwuzla
+        # creates a fresh Kissat instance for each SAT query.
         message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR} --no-cadical --kissat")
         execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR} --no-cadical --kissat
           WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
+        set(BITWUZLA_KISSAT_ONLY ON)
 
 
         message("[bitwuzla] Building...")
@@ -60,6 +63,9 @@ if(ENABLE_BITWUZLA)
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla)
+    if(BITWUZLA_KISSAT_ONLY)
+        target_compile_definitions(solverbitw PRIVATE ESBMC_BITWUZLA_KISSAT_ONLY=1)
+    endif()
 
     target_link_libraries(solvers INTERFACE solverbitw)
 

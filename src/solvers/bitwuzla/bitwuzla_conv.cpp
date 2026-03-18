@@ -35,6 +35,12 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   bitw_options = bitwuzla_options_new();
   bitw_term_manager = bitwuzla_term_manager_new();
   bitwuzla_set_option(bitw_options, BITWUZLA_OPT_PRODUCE_MODELS, 1);
+#ifdef ESBMC_BITWUZLA_KISSAT_ONLY
+  // Bitwuzla was built without CaDiCaL; select Kissat as the SAT backend.
+  // Kissat lacks native incremental support, so Bitwuzla creates a fresh
+  // Kissat instance for each SAT query.
+  bitwuzla_set_option_mode(bitw_options, BITWUZLA_OPT_SAT_SOLVER, "kissat");
+#endif
   bitwuzla_set_abort_callback(bitwuzla_error_handler);
   bitw = bitwuzla_new(bitw_term_manager, bitw_options);
 }
