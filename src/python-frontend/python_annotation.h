@@ -2740,8 +2740,12 @@ private:
             {
               // AnnAssign: self.attr: Type = value
               if (
-                stmt["_type"] == "AnnAssign" &&
+                stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+                stmt.contains("target") && stmt["target"].is_object() &&
+                stmt["target"].contains("_type") &&
                 stmt["target"]["_type"] == "Attribute" &&
+                stmt["target"].contains("value") &&
+                stmt["target"]["value"].is_object() &&
                 stmt["target"]["value"].contains("id") &&
                 stmt["target"]["value"]["id"] == "self" &&
                 stmt["target"]["attr"] == chain_attr &&
@@ -2756,10 +2760,13 @@ private:
               }
               // Assign: self.attr = SomeClass()
               if (
-                stmt["_type"] == "Assign" && stmt.contains("targets") &&
-                !stmt["targets"].empty() &&
+                stmt.contains("_type") && stmt["_type"] == "Assign" &&
+                stmt.contains("targets") && stmt["targets"].is_array() &&
+                !stmt["targets"].empty() && stmt["targets"][0].is_object() &&
                 stmt["targets"][0].contains("_type") &&
                 stmt["targets"][0]["_type"] == "Attribute" &&
+                stmt["targets"][0].contains("value") &&
+                stmt["targets"][0]["value"].is_object() &&
                 stmt["targets"][0]["value"].contains("id") &&
                 stmt["targets"][0]["value"]["id"] == "self" &&
                 stmt["targets"][0]["attr"] == chain_attr &&
