@@ -122,14 +122,15 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
 // Check whether apply_intrinsic_unroller correctly annotates loops
 // that are preceded by __ESBMC_unroll(N) calls.
 
-static unsigned count_pragma_unroll_instructions(goto_functionst &goto_functions)
+static unsigned
+count_pragma_unroll_instructions(goto_functionst &goto_functions)
 {
   unsigned count = 0;
-  Forall_goto_functions(fit, goto_functions)
+  Forall_goto_functions (fit, goto_functions)
   {
-    forall_goto_program_instructions(iit, fit->second.body)
+    forall_goto_program_instructions (iit, fit->second.body)
     {
-      if(iit->pragma_unroll_count > 0)
+      if (iit->pragma_unroll_count > 0)
         count++;
     }
   }
@@ -139,20 +140,18 @@ static unsigned count_pragma_unroll_instructions(goto_functionst &goto_functions
 static unsigned max_pragma_unroll_count(goto_functionst &goto_functions)
 {
   unsigned max_count = 0;
-  Forall_goto_functions(fit, goto_functions)
+  Forall_goto_functions (fit, goto_functions)
   {
-    forall_goto_program_instructions(iit, fit->second.body)
+    forall_goto_program_instructions (iit, fit->second.body)
     {
-      if(iit->pragma_unroll_count > max_count)
+      if (iit->pragma_unroll_count > max_count)
         max_count = iit->pragma_unroll_count;
     }
   }
   return max_count;
 }
 
-SCENARIO(
-  "the intrinsic unroller detects __ESBMC_unroll calls",
-  "[algorithms]")
+SCENARIO("the intrinsic unroller detects __ESBMC_unroll calls", "[algorithms]")
 {
   GIVEN("An empty goto-functions")
   {

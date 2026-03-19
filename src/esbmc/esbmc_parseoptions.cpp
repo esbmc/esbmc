@@ -647,7 +647,8 @@ int esbmc_parseoptionst::doit()
     }
 
     // Unroll intrinsic support
-    goto_preprocess_algorithms.emplace_back(std::make_unique<apply_intrinsic_unroller>());
+    goto_preprocess_algorithms.emplace_back(
+      std::make_unique<apply_intrinsic_unroller>());
 
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
