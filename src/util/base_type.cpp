@@ -419,6 +419,9 @@ static std::string reformat_class_name(const std::string &from)
   return classname;
 }
 
+// Returns true if the class named 'subname' is a (direct or indirect)
+// subclass of the class named 'supername'. Parameter order: super first,
+// sub second — i.e. is_subclass_of_rec(super, sub, ns).
 static bool is_subclass_of_rec(
   const std::string &supername,
   const std::string &subname,
@@ -459,7 +462,7 @@ bool is_subclass_of(
   // following:
   std::string supername = reformat_class_name(superclass_r.name.as_string());
   std::string subname = reformat_class_name(subclass_r.name.as_string());
-  return is_subclass_of_rec(subname, supername, ns);
+  return is_subclass_of_rec(supername, subname, ns);
 }
 
 bool is_subclass_of(
