@@ -3120,6 +3120,11 @@ bool clang_c_convertert::get_cast_expr(
       clang::isa<clang::CXXThisExpr>(cast.getSubExpr());
     if (!is_method_receiver)
     {
+      // Check whether the immediate parent is a MemberExpr (the object slot of
+      // a method call). Intermediate nodes such as ParenExpr or ExprWithCleanups
+      // appear either below this cast (as its sub-expression) or above the
+      // MemberExpr (wrapping the full call), so checking only the first parent
+      // is sufficient for the patterns Clang actually produces here.
       auto parents = ASTContext->getParents(cast);
       if (!parents.empty() && parents.begin()->get<clang::MemberExpr>())
         is_method_receiver = true;
