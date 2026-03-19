@@ -3125,7 +3125,7 @@ bool clang_c_convertert::get_cast_expr(
         is_method_receiver = true;
     }
 
-    if (adjust && total_offset > 0 && is_method_receiver)
+    if (adjust && total_offset > 0 && is_method_receiver && expr.type().is_pointer())
     {
       // Cast to char*, add byte offset, then cast to the target pointer type.
       // index_type() is signed address-width (ptrdiff_t), matching ESBMC's
