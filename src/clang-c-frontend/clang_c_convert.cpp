@@ -3113,6 +3113,9 @@ bool clang_c_convertert::get_cast_expr(
     // pointer conversions such as 'Base2 *o = new Derived()' that must
     // remain unadjusted for ESBMC's delete model (the virtual-destructor
     // thunk handles adjustment there separately).
+    // NOTE: 'static_cast<B8*>(ptr)->eval()' is NOT yet handled — in that
+    // case the cast's parent is a CXXMemberCallExpr, not a MemberExpr, so
+    // is_method_receiver remains false and no adjustment is emitted.
     bool is_method_receiver =
       clang::isa<clang::CXXThisExpr>(cast.getSubExpr());
     if (!is_method_receiver)
