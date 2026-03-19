@@ -301,6 +301,11 @@ void clang_cpp_convertert::add_thunk_method(
   // Compute the byte offset of the base class sub-object within the derived
   // class. For non-first base classes in multiple inheritance this is non-zero,
   // and the thunk must subtract it from its Base* this to recover Derived*.
+  // TODO: This loop only searches direct bases of derived_rd. If base_rd is
+  // an indirect base (e.g. Derived : Middle, Middle : B8), base_offset will
+  // incorrectly remain 0. A complete fix requires summing offsets along the
+  // full inheritance path using CXXBasePaths::isDerivedFrom or a recursive
+  // walk — to be addressed as a follow-up.
   uint64_t base_offset = 0;
   const clang::CXXRecordDecl *base_rd = md.getParent();
   const clang::ASTRecordLayout &layout =
