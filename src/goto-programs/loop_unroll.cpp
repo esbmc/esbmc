@@ -174,14 +174,7 @@ bool apply_intrinsic_unroller::runOnLoop(
     if (!(is_symbol2t(to_code_function_call2t(it->code).function) &&
           to_symbol2t(to_code_function_call2t(it->code).function)
               .get_symbol_name() == "c:@F@__ESBMC_unroll"))
-    {
-      log_status(
-        "got some weird symbol {}",
-        to_symbol2t(to_code_function_call2t(it->code).function)
-          .get_symbol_name());
       return false;
-    }
-
     if (
       to_code_function_call2t(it->code).operands.size() != 1 ||
       !is_constant_number(to_code_function_call2t(it->code).operands[0]))
