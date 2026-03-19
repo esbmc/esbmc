@@ -2883,7 +2883,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       // Check sub class
       if (
         base_type_eq(expect_type->type, value->type, ns) ||
-        is_subclass_of(expect_type->type, value->type, ns))
+        is_subclass_of(value->type, expect_type->type, ns))
         expr = gen_true_expr();
       else
         expr = gen_false_expr();
