@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwinding-assertions
+^Applying #pragma unroll 4 to loop
+^VERIFICATION FAILED$

@@ -646,6 +646,9 @@ int esbmc_parseoptionst::doit()
         std::make_unique<bounded_loop_unroller>(unroll_limit));
     }
 
+    // Unroll intrinsic support
+    goto_preprocess_algorithms.emplace_back(std::make_unique<apply_intrinsic_unroller>());
+
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));

@@ -86,4 +86,31 @@ private:
   unsigned number_of_bounded_loops = 0;
 };
 
+
+/**
+ * @brief This transformation detects whether the unroll intrinsic was
+ * used and then mark the loop with the specific unwind
+ *
+ * __ESBMC_unroll(4);
+ * for(int i = 0; i < 4; i++)
+ *
+ * vvvvv
+ *
+ * FUNCTION_CALL __ESBMC_unroll(N)
+ * DECL i
+ * i = 0
+ * 1: ...
+ * 
+ * We want to automatically set the next loop unwinding to 4.
+ */
+class apply_intrinsic_unroller : public goto_functions_algorithm {
+public:
+  apply_intrinsic_unroller() : goto_functions_algorithm(true)
+  {
+  }
+protected:
+  bool runOnLoop(loopst &loop, goto_programt &goto_program) override;
+};
+
+
 #endif
