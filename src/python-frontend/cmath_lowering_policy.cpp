@@ -2,7 +2,6 @@
 
 namespace cmath_lowering_policy
 {
-
 static void
 measure_recursive(const nlohmann::json &node, size_t depth, expr_cost &cost)
 {

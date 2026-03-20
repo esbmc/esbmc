@@ -123,9 +123,8 @@ bool is_module(const std::string &module_name, const JsonType &ast)
   if (!ast.contains("ast_output_dir"))
     return false;
 
-  const std::string path =
-    ast["ast_output_dir"].template get<std::string>() + "/" + module_name +
-    ".json";
+  const std::string path = ast["ast_output_dir"].template get<std::string>() +
+                           "/" + module_name + ".json";
 
   auto it = is_module_cache.find(path);
   if (it != is_module_cache.end())

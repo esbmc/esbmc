@@ -9,7 +9,6 @@
 /// the budget caps structural cost of the argument AST to prevent that.
 namespace cmath_lowering_policy
 {
-
 struct expr_cost
 {
   size_t node_count = 0;

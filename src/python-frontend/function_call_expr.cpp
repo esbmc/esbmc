@@ -124,13 +124,13 @@ function_call_expr::function_call_expr(
   get_function_type();
 }
 
-const symbolt*
-function_call_expr::cached_find_symbol(const std::string& id) const
+const symbolt *
+function_call_expr::cached_find_symbol(const std::string &id) const
 {
   auto it = sym_cache_.find(id);
   if (it != sym_cache_.end())
     return it->second;
-  const symbolt* sym = converter_.find_symbol(id);
+  const symbolt *sym = converter_.find_symbol(id);
   if (sym)
     sym_cache_.emplace(id, sym);
   return sym;
@@ -3478,7 +3478,7 @@ function_call_expr::get_dispatch_table()
        // model symbol exists, delegate to avoid solver blow-up.
        if (args.size() == 1 && !cmath_lowering_policy::within_budget(args[0]))
        {
-         const symbolt* model_sym =
+         const symbolt *model_sym =
            cached_find_symbol(function_id_.to_string());
          if (model_sym)
          {
@@ -3489,7 +3489,7 @@ function_call_expr::get_dispatch_table()
            {
              side_effect_expr_function_callt model_call;
              model_call.function() = symbol_expr(*model_sym);
-             model_call.arguments() = { z };
+             model_call.arguments() = {z};
              model_call.type() = to_code_type(model_sym->type).return_type();
              model_call.location() = converter_.get_location_from_decl(call_);
              return model_call;
@@ -4341,7 +4341,7 @@ exprt function_call_expr::handle_general_function_call()
   assert(!func_symbol_id.empty());
 
   // Find function symbol (O1: use per-call cache to avoid redundant lookups)
-  const symbolt* func_symbol = cached_find_symbol(func_symbol_id);
+  const symbolt *func_symbol = cached_find_symbol(func_symbol_id);
 
   if (func_symbol == nullptr)
   {
