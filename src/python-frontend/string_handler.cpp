@@ -967,7 +967,7 @@ exprt string_handler::handle_string_lstrip(
     }
   }
 
-  if (chars_arg.is_nil() && string_builder_ && can_fold_constant)
+  if (string_builder_ && can_fold_constant)
   {
     std::vector<exprt> chars = string_builder_->extract_string_chars(str_expr);
     bool all_constant = true;
@@ -983,18 +983,56 @@ exprt string_handler::handle_string_lstrip(
 
     if (all_constant)
     {
-      auto is_whitespace = [](const exprt &ch) -> bool {
-        BigInt char_val =
-          binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-        char c = static_cast<char>(char_val.to_uint64());
-        return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
-               c == '\r';
-      };
+      if (chars_arg.is_nil())
+      {
+        auto is_whitespace = [](const exprt &ch) -> bool {
+          BigInt char_val =
+            binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+          char c = static_cast<char>(char_val.to_uint64());
+          return c == ' ' || c == '\t' || c == '\n' || c == '\v' ||
+                 c == '\f' || c == '\r';
+        };
 
-      while (!chars.empty() && is_whitespace(chars.front()))
-        chars.erase(chars.begin());
+        while (!chars.empty() && is_whitespace(chars.front()))
+          chars.erase(chars.begin());
 
-      return string_builder_->build_null_terminated_string(chars);
+        return string_builder_->build_null_terminated_string(chars);
+      }
+
+      // With chars argument: fold if chars_arg is also constant
+      bool chars_foldable =
+        (chars_arg.is_constant() && chars_arg.type().is_array());
+      if (!chars_foldable && chars_arg.is_symbol())
+      {
+        const symbolt *sym = symbol_table_.find_symbol(chars_arg.identifier());
+        chars_foldable =
+          sym && sym->value.is_constant() && sym->value.type().is_array();
+      }
+
+      if (chars_foldable)
+      {
+        std::vector<exprt> strip_set =
+          string_builder_->extract_string_chars(chars_arg);
+
+        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
+          BigInt cv =
+            binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+          char c = static_cast<char>(cv.to_uint64());
+          for (const auto &sc : strip_set)
+          {
+            BigInt sv =
+              binary2integer(sc.value().as_string(), sc.type().is_signedbv());
+            if (c == static_cast<char>(sv.to_uint64()))
+              return true;
+          }
+          return false;
+        };
+
+        while (!chars.empty() && is_in_strip_set(chars.front()))
+          chars.erase(chars.begin());
+
+        return string_builder_->build_null_terminated_string(chars);
+      }
     }
   }
 
@@ -1119,7 +1157,7 @@ exprt string_handler::handle_string_strip(
     }
   }
 
-  if (chars_arg.is_nil() && string_builder_ && can_fold_constant)
+  if (string_builder_ && can_fold_constant)
   {
     std::vector<exprt> chars = string_builder_->extract_string_chars(str_expr);
     bool all_constant = true;
@@ -1135,21 +1173,62 @@ exprt string_handler::handle_string_strip(
 
     if (all_constant)
     {
-      auto is_whitespace = [](const exprt &ch) -> bool {
-        BigInt char_val =
-          binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-        char c = static_cast<char>(char_val.to_uint64());
-        return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
-               c == '\r';
-      };
+      if (chars_arg.is_nil())
+      {
+        auto is_whitespace = [](const exprt &ch) -> bool {
+          BigInt char_val =
+            binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+          char c = static_cast<char>(char_val.to_uint64());
+          return c == ' ' || c == '\t' || c == '\n' || c == '\v' ||
+                 c == '\f' || c == '\r';
+        };
 
-      while (!chars.empty() && is_whitespace(chars.front()))
-        chars.erase(chars.begin());
+        while (!chars.empty() && is_whitespace(chars.front()))
+          chars.erase(chars.begin());
 
-      while (!chars.empty() && is_whitespace(chars.back()))
-        chars.pop_back();
+        while (!chars.empty() && is_whitespace(chars.back()))
+          chars.pop_back();
 
-      return string_builder_->build_null_terminated_string(chars);
+        return string_builder_->build_null_terminated_string(chars);
+      }
+
+      // With chars argument: fold if chars_arg is also constant
+      bool chars_foldable =
+        (chars_arg.is_constant() && chars_arg.type().is_array());
+      if (!chars_foldable && chars_arg.is_symbol())
+      {
+        const symbolt *sym = symbol_table_.find_symbol(chars_arg.identifier());
+        chars_foldable =
+          sym && sym->value.is_constant() && sym->value.type().is_array();
+      }
+
+      if (chars_foldable)
+      {
+        std::vector<exprt> strip_set =
+          string_builder_->extract_string_chars(chars_arg);
+
+        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
+          BigInt cv =
+            binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+          char c = static_cast<char>(cv.to_uint64());
+          for (const auto &sc : strip_set)
+          {
+            BigInt sv =
+              binary2integer(sc.value().as_string(), sc.type().is_signedbv());
+            if (c == static_cast<char>(sv.to_uint64()))
+              return true;
+          }
+          return false;
+        };
+
+        while (!chars.empty() && is_in_strip_set(chars.front()))
+          chars.erase(chars.begin());
+
+        while (!chars.empty() && is_in_strip_set(chars.back()))
+          chars.pop_back();
+
+        return string_builder_->build_null_terminated_string(chars);
+      }
     }
   }
 
@@ -1234,6 +1313,84 @@ exprt string_handler::handle_string_rstrip(
   const exprt &chars_arg,
   const locationt &location)
 {
+  bool can_fold_constant = str_expr.type().is_array();
+  if (!can_fold_constant && str_expr.is_symbol())
+  {
+    const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
+    if (
+      symbol && symbol->value.is_constant() && symbol->value.type().is_array())
+      can_fold_constant = true;
+  }
+
+  if (string_builder_ && can_fold_constant)
+  {
+    std::vector<exprt> chars = string_builder_->extract_string_chars(str_expr);
+    bool all_constant = true;
+
+    for (const auto &ch : chars)
+    {
+      if (!ch.is_constant())
+      {
+        all_constant = false;
+        break;
+      }
+    }
+
+    if (all_constant)
+    {
+      if (chars_arg.is_nil())
+      {
+        auto is_whitespace = [](const exprt &ch) -> bool {
+          BigInt char_val =
+            binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+          char c = static_cast<char>(char_val.to_uint64());
+          return c == ' ' || c == '\t' || c == '\n' || c == '\v' ||
+                 c == '\f' || c == '\r';
+        };
+
+        while (!chars.empty() && is_whitespace(chars.back()))
+          chars.pop_back();
+
+        return string_builder_->build_null_terminated_string(chars);
+      }
+
+      // With chars argument: fold if chars_arg is also constant
+      bool chars_foldable =
+        (chars_arg.is_constant() && chars_arg.type().is_array());
+      if (!chars_foldable && chars_arg.is_symbol())
+      {
+        const symbolt *sym = symbol_table_.find_symbol(chars_arg.identifier());
+        chars_foldable =
+          sym && sym->value.is_constant() && sym->value.type().is_array();
+      }
+
+      if (chars_foldable)
+      {
+        std::vector<exprt> strip_set =
+          string_builder_->extract_string_chars(chars_arg);
+
+        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
+          BigInt cv =
+            binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+          char c = static_cast<char>(cv.to_uint64());
+          for (const auto &sc : strip_set)
+          {
+            BigInt sv =
+              binary2integer(sc.value().as_string(), sc.type().is_signedbv());
+            if (c == static_cast<char>(sv.to_uint64()))
+              return true;
+          }
+          return false;
+        };
+
+        while (!chars.empty() && is_in_strip_set(chars.back()))
+          chars.pop_back();
+
+        return string_builder_->build_null_terminated_string(chars);
+      }
+    }
+  }
+
   // If chars_arg is provided, use __python_str_rstrip_chars
   if (chars_arg.is_not_nil())
   {
@@ -1270,47 +1427,6 @@ exprt string_handler::handle_string_rstrip(
     call.type() = pointer_typet(char_type());
     call.location() = location;
     return call;
-  }
-
-  // Default behavior: strip whitespace (existing code)
-  bool can_fold_constant = str_expr.type().is_array();
-
-  if (!can_fold_constant && str_expr.is_symbol())
-  {
-    const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
-    if (symbol && symbol->value.type().is_array())
-      can_fold_constant = true;
-  }
-
-  if (can_fold_constant && string_builder_)
-  {
-    std::vector<exprt> chars = string_builder_->extract_string_chars(str_expr);
-    bool all_constant = true;
-
-    for (const auto &ch : chars)
-    {
-      if (!ch.is_constant())
-      {
-        all_constant = false;
-        break;
-      }
-    }
-
-    if (all_constant)
-    {
-      auto is_whitespace = [](const exprt &ch) -> bool {
-        BigInt char_val =
-          binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-        char c = static_cast<char>(char_val.to_uint64());
-        return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
-               c == '\r';
-      };
-
-      while (!chars.empty() && is_whitespace(chars.back()))
-        chars.pop_back();
-
-      return string_builder_->build_null_terminated_string(chars);
-    }
   }
 
   std::string func_symbol_id = ensure_string_function_symbol(
