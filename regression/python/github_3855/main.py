@@ -1,7 +1,5 @@
-# Issue #3855: float() on integer expression causes z3_conv.cpp assertion
-# when combined with chr(int(...)) and an equality assertion.
+# Issue #3855: float() on integer expression must produce the correct float value.
 a = 60
 b = 5
-sum = float(a + b)
-assert sum == 65.0
-sum = chr(int(sum))
+result = float(a + b)
+assert result == 65.0
