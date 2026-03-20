@@ -5,6 +5,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
 #include <util/expr.h>
+#include <unordered_map>
 
 enum class FunctionType
 {
@@ -341,12 +342,16 @@ private:
   // General function call handler
   exprt handle_general_function_call();
 
+  const symbolt* cached_find_symbol(const std::string& id) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
   python_converter &converter_;
   const type_handler &type_handler_;
   FunctionType function_type_;
+
+  mutable std::unordered_map<std::string, const symbolt*> sym_cache_;
 };
 
 /// Convert a code_function_callt to a side_effect_expr_function_callt so it
