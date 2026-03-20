@@ -338,14 +338,47 @@ smt_astt smt_convt::get_double_min_subnormal()
   return mk_smt_real("4.9406564584124655e-324");
 }
 
+// Returns true iff the rounding mode expression is a concrete integer constant
+// equal to ieee_floatt::ROUND_TO_EVEN (round-to-nearest-ties-to-even).
+// Directed modes (ROUND_TO_AWAY, ROUND_TO_PLUS_INF, ROUND_TO_MINUS_INF,
+// ROUND_TO_ZERO), symbolic rounding modes, and nil expr2tc all return false.
+static bool is_nearest_rounding_mode(const expr2tc &rounding_mode)
+{
+  if (is_nil_expr(rounding_mode))
+    return false;
+  if (!is_constant_int2t(rounding_mode))
+    return false;
+  return to_constant_int2t(rounding_mode).value ==
+         BigInt(ieee_floatt::ROUND_TO_EVEN);
+}
+
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
   const floatbv_type2t &fbv_type,
-  smt_astt operand_zero_check)
+  smt_astt operand_zero_check,
+  const expr2tc &rounding_mode)
 {
   if (this->options.get_bool_option("ir-ra"))
   {
-    // First step: attach a sound symmetric enclosure around the real semantic
+    // NOTE: directed rounding modes (FE_UPWARD, FE_DOWNWARD, FE_TOWARDZERO)
+    // fall back to the weak unconstrained enclosure below and are deferred to
+    // a future PR.
+
+    // Guard: if the rounding mode is not concrete round-to-nearest, emit only
+    // the weak containment enclosure (sound but imprecise) and return.
+    if (!is_nearest_rounding_mode(rounding_mode))
+    {
+      smt_sortt rs = mk_real_sort();
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
+      assert_ast(mk_le(ra_lo, real_result));
+      assert_ast(mk_le(real_result, ra_hi));
+      assert_ast(mk_le(ra_lo, ra_hi));
+      return real_result;
+    }
+
+    // Tight path: rounding mode is concrete round-to-nearest.
+    // Attach a sound symmetric enclosure around the real semantic
     // term `r` for nearest rounding mode.
     //
     // For an FP operation whose exact real value is r, the round-to-nearest
@@ -359,8 +392,6 @@ smt_astt smt_convt::apply_ieee754_semantics(
     //
     // and assert  ra_lo <= result <= ra_hi  and  ra_lo <= ra_hi.
     //
-    // TODO: add directed-rounding modes (up/down/zero) once the rounding mode
-    //       is threaded through apply_ieee754_semantics.
     // TODO: extend to non-standard FP formats beyond single and double.
 
     unsigned int fraction_bits = fbv_type.fraction;
@@ -386,8 +417,8 @@ smt_astt smt_convt::apply_ieee754_semantics(
       // TODO: theorem-driven bounds for non-standard formats are not yet
       // implemented; fall back to unconstrained enclosure (sound but weak).
       smt_sortt rs = mk_real_sort();
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
       assert_ast(mk_le(ra_lo, real_result));
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
@@ -841,7 +872,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt real_result = mk_add(side1, side2);
 
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      a = apply_ieee754_semantics(
+        real_result, fbv_type, nullptr, to_ieee_add2t(expr).rounding_mode);
     }
     else
     {
@@ -862,7 +894,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt real_result = mk_sub(side1, side2);
 
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      a = apply_ieee754_semantics(
+        real_result, fbv_type, nullptr, to_ieee_sub2t(expr).rounding_mode);
     }
     else
     {
@@ -886,7 +919,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
 
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(real_result, fbv_type, operand_is_zero);
+      a = apply_ieee754_semantics(
+        real_result,
+        fbv_type,
+        operand_is_zero,
+        to_ieee_mul2t(expr).rounding_mode);
     }
     else
     {
@@ -921,7 +958,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       if (!is_single && !is_double)
       {
         smt_astt real_result = mk_div(side1, side2);
-        a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+        a = apply_ieee754_semantics(
+          real_result, fbv_type, nullptr, to_ieee_div2t(expr).rounding_mode);
         break;
       }
 
@@ -930,8 +968,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt inf_result =
         mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
       smt_astt real_result = mk_div(side1, side2);
-      smt_astt ieee_result =
-        apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      smt_astt ieee_result = apply_ieee754_semantics(
+        real_result, fbv_type, nullptr, to_ieee_div2t(expr).rounding_mode);
       a = mk_ite(div_by_zero, inf_result, ieee_result);
     }
     else
@@ -958,7 +996,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt real_result = mk_add(intermediate, val3);
 
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+      a = apply_ieee754_semantics(
+        real_result, fbv_type, nullptr, to_ieee_fma2t(expr).rounding_mode);
     }
     else
     {

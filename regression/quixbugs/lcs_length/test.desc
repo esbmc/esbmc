@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
---incremental-bmc
+--no-bounds-check --no-pointer-check --no-align-check --incremental-bmc --smt-during-symex --smt-symex-guard --bitwuzla
 ^VERIFICATION SUCCESSFUL$

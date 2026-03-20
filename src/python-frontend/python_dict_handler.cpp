@@ -1067,6 +1067,62 @@ typet python_dict_handler::get_dict_value_type_from_annotation(
 typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   const exprt &dict_expr)
 {
+  if (dict_expr.id() == "member")
+  {
+    const auto &member = to_member_expr(dict_expr);
+    typet class_type = member.struct_op().type();
+    namespacet ns(symbol_table_);
+
+    if (class_type.is_pointer())
+      class_type = ns.follow(class_type.subtype());
+    else
+      class_type = ns.follow(class_type);
+
+    assert(class_type.is_struct());
+
+    // For self.data[key], look up the dict value type from the class
+    // annotation before falling back to the usual symbol-based path.
+    const std::string class_name = converter_.extract_class_name_from_tag(
+      to_struct_type(class_type).tag().as_string());
+    const nlohmann::json class_node =
+      json_utils::find_class(converter_.get_ast_json()["body"], class_name);
+
+    if (!class_node.empty() && class_node.contains("body"))
+    {
+      for (const auto &class_elem : class_node["body"])
+      {
+        if (
+          class_elem.contains("_type") &&
+          class_elem["_type"] == "FunctionDef" && class_elem.contains("name") &&
+          class_elem["name"] == "__init__" && class_elem.contains("body"))
+        {
+          for (const auto &stmt : class_elem["body"])
+          {
+            if (
+              stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+              stmt.contains("target") && stmt["target"].is_object() &&
+              stmt["target"].contains("_type") &&
+              stmt["target"]["_type"] == "Attribute" &&
+              stmt["target"].contains("value") &&
+              stmt["target"]["value"].is_object() &&
+              stmt["target"]["value"].contains("id") &&
+              stmt["target"]["value"]["id"] == "self" &&
+              stmt["target"].contains("attr") &&
+              stmt["target"]["attr"].get<std::string>() ==
+                member.get_component_name().as_string() &&
+              stmt.contains("annotation"))
+            {
+              typet result =
+                get_dict_value_type_from_annotation(stmt["annotation"]);
+              if (!result.is_nil() && !result.is_empty())
+                return result;
+            }
+          }
+        }
+      }
+    }
+  }
+
   // Only works if dict_expr is a symbol (variable reference)
   if (!dict_expr.is_symbol())
     return empty_typet();

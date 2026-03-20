@@ -6,6 +6,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
 #include <clang/AST/ParentMapContext.h>
+#include <clang/AST/RecordLayout.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/Version.inc>
@@ -716,12 +717,12 @@ bool clang_c_convertert::get_function(
   added_symbol.type = type;
   new_expr.type() = type;
 
-  // We need: a type, a name, and an optional body
-  if (fd.hasBody())
-  {
-    if (get_function_body(fd, added_symbol.value, type))
-      return true;
-  }
+  // We need: a type, a name, and an optional body.
+  // Always call get_function_body so overrides (e.g. the C++ frontend) can
+  // synthesise a body for bodyless declarations such as trivial destructors.
+  // The base implementation returns immediately when fd.hasBody() is false.
+  if (get_function_body(fd, added_symbol.value, type))
+    return true;
 
   // Restore old functionDecl
   current_functionDecl = old_functionDecl;
@@ -734,7 +735,8 @@ bool clang_c_convertert::get_function_body(
   exprt &new_expr,
   const code_typet &)
 {
-  assert(fd.hasBody());
+  if (!fd.hasBody())
+    return false;
 
   exprt body_exprt;
   if (get_expr(*fd.getBody(), body_exprt))
@@ -3065,10 +3067,101 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_ArrayToPointerDecay:
   case clang::CK_FunctionToPointerDecay:
   case clang::CK_BuiltinFnToFnPtr:
-  case clang::CK_UncheckedDerivedToBase:
     break;
 
+  case clang::CK_UncheckedDerivedToBase:
   case clang::CK_DerivedToBase:
+  {
+    // For multiple inheritance, the base class sub-object may reside at a
+    // non-zero byte offset within the derived object. Compute the total
+    // offset by following the cast path through the class hierarchy, then
+    // adjust the pointer by that many bytes so that virtual dispatch via
+    // the base vtable uses the correct vtable pointer.
+    clang::QualType cur_qt = cast.getSubExpr()->getType();
+    if (cur_qt->isPointerType() || cur_qt->isReferenceType())
+      cur_qt = cur_qt->getPointeeType();
+
+    uint64_t total_offset = 0;
+    bool adjust = true;
+    for (auto it = cast.path_begin(); it != cast.path_end(); ++it)
+    {
+      const clang::CXXBaseSpecifier *spec = *it;
+      if (spec->isVirtual())
+      {
+        // Virtual base offsets are dynamic; skip static adjustment.
+        adjust = false;
+        break;
+      }
+      const clang::CXXRecordDecl *cur_decl = cur_qt->getAsCXXRecordDecl();
+      const clang::CXXRecordDecl *base_decl =
+        spec->getType()->getAsCXXRecordDecl();
+      if (!cur_decl || !base_decl)
+      {
+        adjust = false;
+        break;
+      }
+      total_offset += ASTContext->getASTRecordLayout(cur_decl)
+                        .getBaseClassOffset(base_decl)
+                        .getQuantity();
+      cur_qt = spec->getType();
+    }
+
+    // Apply the byte-offset adjustment only when this cast is the implicit
+    // object of a CXXMemberCallExpr (i.e. parent is MemberExpr AND
+    // grandparent is CXXMemberCallExpr). This covers:
+    //   - 'this->B8::eval()' (CXXThisExpr sub-expr)
+    //   - 'ptr->eval()' (DeclRefExpr sub-expr via MemberExpr)
+    // and excludes:
+    //   - Field accesses like 'return j' via 'using Baz::j' — parent is
+    //     MemberExpr but grandparent is ReturnStmt, not CXXMemberCallExpr.
+    //     ESBMC uses named field access for inherited members, so adding a
+    //     byte offset here would corrupt the symbolic model.
+    //   - 'Base2 *o = new Derived()' — parent is not MemberExpr at all.
+    //     Must remain unadjusted for ESBMC's delete model.
+    // NOTE: 'static_cast<B8*>(ptr)->eval()' is not yet handled correctly
+    // (separate issue tracked by the github_3876_static_cast KNOWNBUG test).
+    bool is_method_receiver = false;
+    {
+      auto parents = ASTContext->getParents(cast);
+      if (!parents.empty())
+      {
+        const clang::MemberExpr *me = parents.begin()->get<clang::MemberExpr>();
+        if (me)
+        {
+          auto grandparents = ASTContext->getParents(*me);
+          if (
+            !grandparents.empty() &&
+            grandparents.begin()->get<clang::CXXMemberCallExpr>())
+            is_method_receiver = true;
+        }
+      }
+    }
+
+    bool did_adjust = false;
+    if (
+      adjust && total_offset > 0 && is_method_receiver &&
+      expr.type().is_pointer())
+    {
+      // Cast to char*, add byte offset, then cast to the target pointer type.
+      // index_type() is signed address-width (ptrdiff_t), matching ESBMC's
+      // pointer arithmetic IR convention.
+      typet char_ptr = pointer_typet(char_type());
+      gen_typecast(ns, expr, char_ptr);
+      plus_exprt adjusted(expr, from_integer(total_offset, index_type()));
+      adjusted.type() = char_ptr;
+      expr = adjusted;
+      did_adjust = true;
+    }
+
+    // Preserve original behaviour: CK_DerivedToBase always called gen_typecast;
+    // CK_UncheckedDerivedToBase was a no-op (break) and should only typecast
+    // when we actually applied a byte-offset adjustment above.
+    if (cast.getCastKind() == clang::CK_DerivedToBase || did_adjust)
+      gen_typecast(ns, expr, type);
+
+    break;
+  }
+
   case clang::CK_BaseToDerived:
   case clang::CK_Dynamic:
 

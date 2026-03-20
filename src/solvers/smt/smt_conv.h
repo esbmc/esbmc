@@ -566,16 +566,24 @@ public:
    *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
    *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
    *  Other formats return the original result unchanged.
+   *  Under --ir-ra, when rounding_mode is a concrete round-to-nearest constant
+   *  (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is asserted.
+   *  For symbolic or directed rounding modes the function falls back to a weak
+   *  unconstrained enclosure (sound but imprecise); tight directed bounds are
+   *  deferred to a future PR.
    *  @param real_result The result of exact real arithmetic operation
    *  @param fbv_type The floating-point type information (exponent/fraction bits)
    *  @param operand_zero_check Optional boolean AST for special zero handling
    *         (e.g., multiplication where either operand is zero should yield zero
    *         regardless of the other operand, even if it would cause underflow)
+   *  @param rounding_mode The rounding mode expr2tc from the IR operation node;
+   *         typically a constant_int2t or the __ESBMC_rounding_mode symbol.
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
   virtual smt_astt apply_ieee754_semantics(
     smt_astt real_result,
     const floatbv_type2t &fbv_type,
-    smt_astt operand_zero_check = nullptr);
+    smt_astt operand_zero_check = nullptr,
+    const expr2tc &rounding_mode = expr2tc());
 
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();
