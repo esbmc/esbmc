@@ -507,7 +507,7 @@ void __ESBMC_loop_invariant(_Bool);
     __ESBMC_builtin_object_size(ptr, type)
 
 // __ESBMC_unroll(N): sets the number of iterations for the next loop in the code.
-void __ESBMC_unroll(int N);
+void __ESBMC_unroll(int);
 
 #define __ESBMC_contract __attribute__((annotate("__ESBMC_contract")))
     )";
