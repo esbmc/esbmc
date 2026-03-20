@@ -6381,6 +6381,20 @@ void python_converter::get_var_assign(
       (lhs.type().is_floatbv() || lhs.type().is_signedbv() ||
        lhs.type().is_unsignedbv() || lhs.type().is_bool()))
     {
+      // Still emit the RHS as a void call so exceptions/side-effects are
+      // preserved (e.g. chr() out-of-range ValueError).
+      if (
+        rhs.id() == "sideeffect" &&
+        rhs.statement() == irep_idt("function_call"))
+      {
+        const side_effect_expr_function_callt &se =
+          to_side_effect_expr_function_call(rhs);
+        code_function_callt void_call;
+        void_call.function() = se.function();
+        void_call.arguments() = se.arguments();
+        void_call.location() = rhs.location();
+        add_instruction(void_call);
+      }
       current_lhs = nullptr;
       return;
     }
