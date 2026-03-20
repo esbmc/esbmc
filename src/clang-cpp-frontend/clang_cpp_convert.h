@@ -390,6 +390,7 @@ protected:
    *  - type: ESBMC IR representing the derived class' type
    */
   void add_thunk_method(
+    const clang::CXXRecordDecl &derived_rd,
     const clang::CXXMethodDecl &md,
     const struct_typet::componentt &component,
     struct_typet &type);
@@ -413,7 +414,8 @@ protected:
    */
   void add_thunk_method_body(
     symbolt &thunk_func_symb,
-    const struct_typet::componentt &component);
+    const struct_typet::componentt &component,
+    uint64_t base_offset);
   /*
    * Add thunk body that contains return value
    * Params:
@@ -424,7 +426,7 @@ protected:
   void add_thunk_method_body_return(
     symbolt &thunk_func_symb,
     const struct_typet::componentt &component,
-    const typecast_exprt &late_cast_this);
+    const exprt &late_cast_this);
   /*
    * Add thunk body that does NOT contain return value
    * Params:
@@ -435,7 +437,7 @@ protected:
   void add_thunk_method_body_no_return(
     symbolt &thunk_func_symb,
     const struct_typet::componentt &component,
-    const typecast_exprt &late_cast_this);
+    const exprt &late_cast_this);
   /*
    * Add thunk function as a `method` in the derived class' type
    * Params:
