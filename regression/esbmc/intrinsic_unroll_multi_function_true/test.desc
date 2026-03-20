@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^Applying #pragma unroll 6 to loop
+^Applying #pragma unroll 11 to loop
+^VERIFICATION SUCCESSFUL$

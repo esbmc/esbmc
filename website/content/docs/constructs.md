@@ -134,3 +134,19 @@ int main() {
     return 0;
 }
 ```
+
+Alternatively, the same behavior can be obtained through the `__ESBMC_unroll(LOOP_BOUND)` intrinsic.
+
+```c
+#define LOOP_BOUND 80
+int main() {
+    unsigned int x = nondet_uint();
+    __ESBMC_assume(x > 50 && x < 100);
+    __ESBMC_unroll(LOOP_BOUND);
+    for (int i = x - 1; x >= 0; x--) {
+        y += x;
+    }
+    assert(y > 100);
+    return 0;
+}
+```
