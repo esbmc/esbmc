@@ -52,7 +52,7 @@ function(add_esbmc_regression_test folder modes test)
       PROPERTIES SKIP_RETURN_CODE 10
       TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
-      LABELS "regression;${folder}")
+      LABELS "regression;${folder}/")
 endfunction()
 
 function(add_esbmc_regression folder modes)
@@ -116,6 +116,7 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/destructors
                       esbmc-cpp/polymorphism_bringup
                       esbmc-cpp/polymorphism_bringup_overload
+                      esbmc-cpp/inheritance
                       esbmc-cpp/inheritance_bringup
                       esbmc-cpp/bug_fixes
                       esbmc-cpp/OM_sanity_checks
@@ -193,8 +194,10 @@ if(APPLE)
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_Z3}
                     incremental-smt
-                    esbmc-cpp11/cpp
-                    esbmc-cpp11/cbmc-constructors
+                    ${REGRESSIONS_CPP03}
+                    ${REGRESSIONS_CPP11}
+                    ${REGRESSIONS_CPP14}
+                    ${REGRESSIONS_CPP17}
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
