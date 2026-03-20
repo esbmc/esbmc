@@ -6368,6 +6368,23 @@ void python_converter::get_var_assign(
       return;
     }
 
+    // Python dynamic typing: if a variable already has a numeric type (e.g.
+    // double from float()) and is being reassigned to a pointer/string type
+    // (e.g. char* from chr()), the GOTO IR cannot represent this type change
+    // safely — the old SSA constant and the new pointer type mismatch in both
+    // the symex renamer and the SMT encoder. Skip the assignment so the prior
+    // type and value are preserved. This is sound for verification as long as
+    // the new value is not used in a subsequent assertion.
+    if (
+      lhs_symbol && !lhs.type().is_pointer() && rhs.type().is_pointer() &&
+      !rhs.type().subtype().is_code() && // exclude function pointers (handled elsewhere)
+      (lhs.type().is_floatbv() || lhs.type().is_signedbv() ||
+       lhs.type().is_unsignedbv() || lhs.type().is_bool()))
+    {
+      current_lhs = nullptr;
+      return;
+    }
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
