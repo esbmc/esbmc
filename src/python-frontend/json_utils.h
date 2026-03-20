@@ -118,11 +118,23 @@ bool is_class(const std::string &name, const JsonType &ast_json)
 template <typename JsonType>
 bool is_module(const std::string &module_name, const JsonType &ast)
 {
-  std::stringstream file_path;
-  file_path << ast["ast_output_dir"].template get<std::string>() << "/"
-            << module_name << ".json";
-  std::ifstream file(file_path.str());
-  return file.is_open();
+  static std::unordered_map<std::string, bool> is_module_cache;
+
+  if (!ast.contains("ast_output_dir"))
+    return false;
+
+  const std::string path =
+    ast["ast_output_dir"].template get<std::string>() + "/" + module_name +
+    ".json";
+
+  auto it = is_module_cache.find(path);
+  if (it != is_module_cache.end())
+    return it->second;
+
+  std::ifstream file(path);
+  bool result = file.is_open();
+  is_module_cache.emplace(path, result);
+  return result;
 }
 
 template <typename JsonType>
