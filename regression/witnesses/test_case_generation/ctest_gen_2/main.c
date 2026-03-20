@@ -6,7 +6,7 @@ int main(void) {
     _Bool flag = __VERIFIER_nondet_bool();
 
     if (flag) {
-        return 1;
+        return 0;
     }
 
     return 0;
