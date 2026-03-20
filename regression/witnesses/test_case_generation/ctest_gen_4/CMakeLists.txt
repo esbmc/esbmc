@@ -27,3 +27,23 @@ add_executable(test_case_4 main.c test_case_4.c)
 add_test(NAME test_case_4 COMMAND test_case_4)
 target_compile_options(test_case_4 PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/esbmc_verifier.h)
 
+add_executable(test_case_5 main.c test_case_5.c)
+add_test(NAME test_case_5 COMMAND test_case_5)
+target_compile_options(test_case_5 PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/esbmc_verifier.h)
+
+add_executable(test_case_6 main.c test_case_6.c)
+add_test(NAME test_case_6 COMMAND test_case_6)
+target_compile_options(test_case_6 PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/esbmc_verifier.h)
+
+add_executable(test_case_7 main.c test_case_7.c)
+add_test(NAME test_case_7 COMMAND test_case_7)
+target_compile_options(test_case_7 PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/esbmc_verifier.h)
+
+add_executable(test_case_8 main.c test_case_8.c)
+add_test(NAME test_case_8 COMMAND test_case_8)
+target_compile_options(test_case_8 PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/esbmc_verifier.h)
+
+add_executable(test_case_9 main.c test_case_9.c)
+add_test(NAME test_case_9 COMMAND test_case_9)
+target_compile_options(test_case_9 PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/esbmc_verifier.h)
+
