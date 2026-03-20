@@ -6377,7 +6377,8 @@ void python_converter::get_var_assign(
     // the new value is not used in a subsequent assertion.
     if (
       lhs_symbol && !lhs.type().is_pointer() && rhs.type().is_pointer() &&
-      rhs.type().subtype() == char_type() && // only skip string (char*) reassignment, not None (void*/bool*)
+      rhs.type().subtype() ==
+        char_type() && // only skip string (char*) reassignment, not None (void*/bool*)
       (lhs.type().is_floatbv() || lhs.type().is_signedbv() ||
        lhs.type().is_unsignedbv() || lhs.type().is_bool()))
     {

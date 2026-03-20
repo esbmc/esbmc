@@ -989,8 +989,8 @@ exprt string_handler::handle_string_lstrip(
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(char_val.to_uint64());
-          return c == ' ' || c == '\t' || c == '\n' || c == '\v' ||
-                 c == '\f' || c == '\r';
+          return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+                 c == '\r';
         };
 
         while (!chars.empty() && is_whitespace(chars.front()))
@@ -1179,8 +1179,8 @@ exprt string_handler::handle_string_strip(
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(char_val.to_uint64());
-          return c == ' ' || c == '\t' || c == '\n' || c == '\v' ||
-                 c == '\f' || c == '\r';
+          return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+                 c == '\r';
         };
 
         while (!chars.empty() && is_whitespace(chars.front()))
@@ -1344,8 +1344,8 @@ exprt string_handler::handle_string_rstrip(
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(char_val.to_uint64());
-          return c == ' ' || c == '\t' || c == '\n' || c == '\v' ||
-                 c == '\f' || c == '\r';
+          return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+                 c == '\r';
         };
 
         while (!chars.empty() && is_whitespace(chars.back()))
