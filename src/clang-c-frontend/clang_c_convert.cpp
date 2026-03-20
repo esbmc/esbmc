@@ -3125,8 +3125,7 @@ bool clang_c_convertert::get_cast_expr(
       auto parents = ASTContext->getParents(cast);
       if (!parents.empty())
       {
-        const clang::MemberExpr *me =
-          parents.begin()->get<clang::MemberExpr>();
+        const clang::MemberExpr *me = parents.begin()->get<clang::MemberExpr>();
         if (me)
         {
           auto grandparents = ASTContext->getParents(*me);
@@ -3139,7 +3138,9 @@ bool clang_c_convertert::get_cast_expr(
     }
 
     bool did_adjust = false;
-    if (adjust && total_offset > 0 && is_method_receiver && expr.type().is_pointer())
+    if (
+      adjust && total_offset > 0 && is_method_receiver &&
+      expr.type().is_pointer())
     {
       // Cast to char*, add byte offset, then cast to the target pointer type.
       // index_type() is signed address-width (ptrdiff_t), matching ESBMC's
@@ -3155,9 +3156,7 @@ bool clang_c_convertert::get_cast_expr(
     // Preserve original behaviour: CK_DerivedToBase always called gen_typecast;
     // CK_UncheckedDerivedToBase was a no-op (break) and should only typecast
     // when we actually applied a byte-offset adjustment above.
-    if (
-      cast.getCastKind() == clang::CK_DerivedToBase ||
-      did_adjust)
+    if (cast.getCastKind() == clang::CK_DerivedToBase || did_adjust)
       gen_typecast(ns, expr, type);
 
     break;
