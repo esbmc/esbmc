@@ -422,6 +422,12 @@ static std::string reformat_class_name(const std::string &from)
 // Returns true if the class named 'subname' is a (direct or indirect)
 // subclass of the class named 'supername'. Parameter order: super first,
 // sub second — i.e. is_subclass_of_rec(super, sub, ns).
+// NOTE: The type2tc overload of is_subclass_of() below intentionally calls
+// this with args transposed (subname first, supername second), producing an
+// inverted result for that overload. Several call sites in dereference.cpp
+// and smt_casts.cpp rely on that inverted behaviour (they expect false for
+// valid derived→base cases so their own struct-prefix logic fires instead).
+// Do NOT "fix" the type2tc overload without first auditing those call sites.
 static bool is_subclass_of_rec(
   const std::string &supername,
   const std::string &subname,
@@ -462,7 +468,8 @@ bool is_subclass_of(
   // following:
   std::string supername = reformat_class_name(superclass_r.name.as_string());
   std::string subname = reformat_class_name(subclass_r.name.as_string());
-  return is_subclass_of_rec(supername, subname, ns);
+  // Intentionally transposed: see NOTE on is_subclass_of_rec above.
+  return is_subclass_of_rec(subname, supername, ns);
 }
 
 bool is_subclass_of(

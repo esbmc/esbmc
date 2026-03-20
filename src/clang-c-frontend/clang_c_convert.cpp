@@ -3106,30 +3106,39 @@ bool clang_c_convertert::get_cast_expr(
       cur_qt = spec->getType();
     }
 
-    // Apply the byte-offset adjustment only when this cast forms the
-    // implicit object of a member call (i.e. its parent AST node is a
-    // MemberExpr). This covers both 'this->B8::eval()' (CXXThisExpr) and
-    // 'ptr->eval()' (DeclRefExpr via MemberExpr), while excluding general
-    // pointer conversions such as 'Base2 *o = new Derived()' that must
-    // remain unadjusted for ESBMC's delete model (the virtual-destructor
-    // thunk handles adjustment there separately).
-    // NOTE: 'static_cast<B8*>(ptr)->eval()' is NOT yet handled — in that
-    // case the cast's parent is a CXXMemberCallExpr, not a MemberExpr, so
-    // is_method_receiver remains false and no adjustment is emitted.
-    bool is_method_receiver =
-      clang::isa<clang::CXXThisExpr>(cast.getSubExpr());
-    if (!is_method_receiver)
+    // Apply the byte-offset adjustment only when this cast is the implicit
+    // object of a CXXMemberCallExpr (i.e. parent is MemberExpr AND
+    // grandparent is CXXMemberCallExpr). This covers:
+    //   - 'this->B8::eval()' (CXXThisExpr sub-expr)
+    //   - 'ptr->eval()' (DeclRefExpr sub-expr via MemberExpr)
+    // and excludes:
+    //   - Field accesses like 'return j' via 'using Baz::j' — parent is
+    //     MemberExpr but grandparent is ReturnStmt, not CXXMemberCallExpr.
+    //     ESBMC uses named field access for inherited members, so adding a
+    //     byte offset here would corrupt the symbolic model.
+    //   - 'Base2 *o = new Derived()' — parent is not MemberExpr at all.
+    //     Must remain unadjusted for ESBMC's delete model.
+    // NOTE: 'static_cast<B8*>(ptr)->eval()' is not yet handled correctly
+    // (separate issue tracked by the github_3876_static_cast KNOWNBUG test).
+    bool is_method_receiver = false;
     {
-      // Check whether the immediate parent is a MemberExpr (the object slot of
-      // a method call). Intermediate nodes such as ParenExpr or ExprWithCleanups
-      // appear either below this cast (as its sub-expression) or above the
-      // MemberExpr (wrapping the full call), so checking only the first parent
-      // is sufficient for the patterns Clang actually produces here.
       auto parents = ASTContext->getParents(cast);
-      if (!parents.empty() && parents.begin()->get<clang::MemberExpr>())
-        is_method_receiver = true;
+      if (!parents.empty())
+      {
+        const clang::MemberExpr *me =
+          parents.begin()->get<clang::MemberExpr>();
+        if (me)
+        {
+          auto grandparents = ASTContext->getParents(*me);
+          if (
+            !grandparents.empty() &&
+            grandparents.begin()->get<clang::CXXMemberCallExpr>())
+            is_method_receiver = true;
+        }
+      }
     }
 
+    bool did_adjust = false;
     if (adjust && total_offset > 0 && is_method_receiver && expr.type().is_pointer())
     {
       // Cast to char*, add byte offset, then cast to the target pointer type.
@@ -3140,9 +3149,17 @@ bool clang_c_convertert::get_cast_expr(
       plus_exprt adjusted(expr, from_integer(total_offset, index_type()));
       adjusted.type() = char_ptr;
       expr = adjusted;
+      did_adjust = true;
     }
 
-    gen_typecast(ns, expr, type);
+    // Preserve original behaviour: CK_DerivedToBase always called gen_typecast;
+    // CK_UncheckedDerivedToBase was a no-op (break) and should only typecast
+    // when we actually applied a byte-offset adjustment above.
+    if (
+      cast.getCastKind() == clang::CK_DerivedToBase ||
+      did_adjust)
+      gen_typecast(ns, expr, type);
+
     break;
   }
 
