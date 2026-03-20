@@ -132,6 +132,15 @@ copy(InputIterator first, InputIterator last, ForwardIterator result)
 template <class T>
 struct default_delete
 {
+  constexpr default_delete() noexcept = default;
+
+  // Converting constructor: allows default_delete<U> -> default_delete<T>
+  // when U* is implicitly convertible to T* (e.g. Derived* -> Base*).
+  template <class U>
+  default_delete(const default_delete<U> &) noexcept
+  {
+  }
+
   void operator()(T *ptr) const
   {
     delete ptr;
@@ -168,6 +177,27 @@ public:
       deleter = std::move(other.deleter);
       other.ptr = nullptr;
     }
+    return *this;
+  }
+
+  // Converting move constructor: allows unique_ptr<U> -> unique_ptr<T>
+  // when U* is implicitly convertible to T* (e.g. Derived* -> Base*).
+  template <class U, class E>
+  unique_ptr(unique_ptr<U, E> &&other) noexcept
+    : ptr(other.release()), deleter(std::move(other.get_deleter()))
+  {
+  }
+
+  // Converting move assignment: allows unique_ptr<U> -> unique_ptr<T>
+  // when U* is implicitly convertible to T* (e.g. Derived* -> Base*).
+  // No self-assignment check needed: U != T guarantees different objects.
+  template <class U, class E>
+  unique_ptr &operator=(unique_ptr<U, E> &&other) noexcept
+  {
+    if (ptr)
+      deleter(ptr);
+    ptr = other.release();
+    deleter = std::move(other.get_deleter());
     return *this;
   }
 
