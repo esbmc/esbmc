@@ -5375,7 +5375,8 @@ bool function_call_expr::method_exists_in_class_hierarchy(
 
 exprt function_call_expr::generate_attribute_error(
   const std::string &method_name,
-  const std::vector<std::string> &possible_classes) const
+  const std::vector<std::string> &possible_classes,
+  const typet &expected_type) const
 {
   locationt location = converter_.get_location_from_decl(call_);
   std::ostringstream error_msg;
@@ -5411,7 +5412,17 @@ exprt function_call_expr::generate_attribute_error(
   assert_code.location().user_provided(true);
   assert_code.location().comment(error_msg.str());
 
-  return assert_code;
+  converter_.add_instruction(assert_code);
+
+  // Compute fallback type: use expected_type if valid, otherwise Any
+  typet fallback_type = expected_type;
+  if (fallback_type.is_nil() || fallback_type == empty_typet())
+    fallback_type = any_type();
+
+  exprt nondet_fallback("sideeffect", fallback_type);
+  nondet_fallback.statement("nondet");
+
+  return nondet_fallback;
 }
 
 exprt function_call_expr::check_argument_types(
