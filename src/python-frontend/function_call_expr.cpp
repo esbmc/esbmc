@@ -4409,6 +4409,8 @@ exprt function_call_expr::handle_general_function_call()
           bool method_exists = false;
           for (const auto &check_class : possible_classes)
           {
+            if (check_class.empty())
+              continue;
             if (method_exists_in_class_hierarchy(check_class, method_name))
             {
               method_exists = true;
@@ -5417,6 +5419,14 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
   {
     // Malformed AST — return whatever we gathered so far.
   }
+
+  // Remove empty class names before caching.
+  possible_classes.erase(
+    std::remove_if(
+      possible_classes.begin(),
+      possible_classes.end(),
+      [](const std::string& s) { return s.empty(); }),
+    possible_classes.end());
 
   // Deduplicate before caching.
   std::sort(possible_classes.begin(), possible_classes.end());
