@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cctype>
 #include <stdexcept>
+#include <unordered_set>
 
 using namespace json_utils;
 namespace
@@ -4405,16 +4406,38 @@ exprt function_call_expr::handle_general_function_call()
           if (possible_classes.empty())
             possible_classes.push_back(class_name);
 
-          // Check if method exists in any of the possible classes
+          // When there are multiple possible classes (polymorphic object),
+          // the method must exist in ALL of them; otherwise it is an
+          // AttributeError (the object could be any of those types at
+          // runtime and at least one path would fail).
+          // For a single class, it suffices that the method exists.
           bool method_exists = false;
-          for (const auto &check_class : possible_classes)
+          if (possible_classes.size() > 1)
           {
-            if (check_class.empty())
-              continue;
-            if (method_exists_in_class_hierarchy(check_class, method_name))
+            bool all_have_method = true;
+            for (const auto& check_class : possible_classes)
             {
-              method_exists = true;
-              break;
+              if (check_class.empty())
+                continue;
+              if (!method_exists_in_class_hierarchy(check_class, method_name))
+              {
+                all_have_method = false;
+                break;
+              }
+            }
+            method_exists = all_have_method;
+          }
+          else
+          {
+            for (const auto& check_class : possible_classes)
+            {
+              if (check_class.empty())
+                continue;
+              if (method_exists_in_class_hierarchy(check_class, method_name))
+              {
+                method_exists = true;
+                break;
+              }
             }
           }
 
@@ -5428,11 +5451,17 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
       [](const std::string& s) { return s.empty(); }),
     possible_classes.end());
 
-  // Deduplicate before caching.
-  std::sort(possible_classes.begin(), possible_classes.end());
-  possible_classes.erase(
-    std::unique(possible_classes.begin(), possible_classes.end()),
-    possible_classes.end());
+  // Deduplicate while preserving order of appearance in the AST.
+  {
+    std::vector<std::string> unique;
+    std::unordered_set<std::string> seen;
+    for (const auto& cls : possible_classes)
+    {
+      if (seen.insert(cls).second)
+        unique.push_back(cls);
+    }
+    possible_classes = std::move(unique);
+  }
 
   converter_.get_function_call_cache().set_possible_class_types(
     cache_key, possible_classes);

@@ -1,4 +1,9 @@
+// Catch2 header with main
 #define CATCH_CONFIG_MAIN
+#include <catch2/catch.hpp>
+
+// System includes before custom ones with ESBMC macros
+#include <nlohmann/json.hpp>
 
 // Allow test access to private members
 #define private public
@@ -7,9 +12,6 @@
 #include <python-frontend/python_converter.h>
 #undef private
 #undef protected
-
-#include <catch2/catch.hpp>
-#include <nlohmann/json.hpp>
 #include <python-frontend/function_call_cache.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/symbol_id.h>
@@ -355,3 +357,4 @@ TEST_CASE(
     REQUIRE(result.empty());
   }
 }
+
