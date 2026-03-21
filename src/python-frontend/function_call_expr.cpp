@@ -5433,26 +5433,72 @@ bool function_call_expr::method_exists_in_class_hierarchy(
   const std::string &class_name,
   const std::string &method_name) const
 {
+  // Reject empty inputs early.
+  if (class_name.empty() || method_name.empty())
+    return false;
+
+  std::string cache_key = class_name + "::" + method_name;
+
+  // Cache lookup first.
+  auto cached =
+    converter_.get_function_call_cache().get_method_exists(cache_key);
+  if (cached.has_value())
+    return cached.value();
+
+  // Provisional negative cache write to break recursive cycles (A->B->A).
+  converter_.get_function_call_cache().set_method_exists(cache_key, false);
+
   const auto &class_node =
     json_utils::find_class(converter_.ast()["body"], class_name);
 
-  if (class_node.empty())
+  if (class_node.empty() || !class_node.is_object())
+  {
+    // Already cached as false.
     return false;
+  }
 
-  // Check if method exists in this class
-  if (json_utils::search_function_in_ast(class_node["body"], method_name))
-    return true;
+  // Check only top-level class methods (FunctionDef / AsyncFunctionDef).
+  if (class_node.contains("body") && class_node["body"].is_array())
+  {
+    for (const auto& member : class_node["body"])
+    {
+      if (!member.is_object() || !member.contains("_type") ||
+        !member["_type"].is_string())
+        continue;
 
-  // Check base classes
-  if (class_node.contains("bases"))
+      const std::string& member_type = member["_type"].get<std::string>();
+      if (
+        (member_type == "FunctionDef" || member_type == "AsyncFunctionDef") &&
+        member.contains("name") && member["name"].is_string() &&
+        member["name"].get<std::string>() == method_name)
+      {
+        // Method found — upgrade cache to true.
+        converter_.get_function_call_cache().set_method_exists(
+          cache_key, true);
+        return true;
+      }
+    }
+  }
+
+  // Traverse bases — only if base node is valid and base id is non-empty.
+  if (class_node.contains("bases") && class_node["bases"].is_array())
   {
     for (const auto &base : class_node["bases"])
     {
-      if (base.contains("id"))
+      if (!base.is_object() || !base.contains("id") ||
+        !base["id"].is_string())
+        continue;
+
+      std::string base_name = base["id"].get<std::string>();
+      if (base_name.empty())
+        continue;
+
+      if (method_exists_in_class_hierarchy(base_name, method_name))
       {
-        std::string base_name = base["id"].get<std::string>();
-        if (method_exists_in_class_hierarchy(base_name, method_name))
-          return true;
+        // Found in ancestor — upgrade cache to true.
+        converter_.get_function_call_cache().set_method_exists(
+          cache_key, true);
+        return true;
       }
     }
   }
