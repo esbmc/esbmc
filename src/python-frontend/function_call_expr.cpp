@@ -20,6 +20,7 @@
 #include <util/string_constant.h>
 
 #include <regex>
+#include <algorithm>
 #include <cmath>
 #include <cctype>
 #include <stdexcept>
@@ -5256,6 +5257,18 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
   if (!obj_symbol)
     return possible_classes;
 
+  // Build cache key from symbol id; fallback to function + symbol name.
+  std::string cache_key = obj_symbol->id.as_string();
+  if (cache_key.empty())
+    cache_key =
+    converter_.current_function_name() + "::" + obj_symbol->name.as_string();
+
+  // Check cache first.
+  auto cached =
+    converter_.get_function_call_cache().get_possible_class_types(cache_key);
+  if (cached.has_value())
+    return cached.value();
+
   typet obj_type = obj_symbol->type;
   if (obj_type.is_pointer())
     obj_type = obj_type.subtype();
@@ -5269,6 +5282,8 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
     std::string tag = struct_type.tag().as_string();
     std::string actual_class = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
     possible_classes.push_back(actual_class);
+    converter_.get_function_call_cache().set_possible_class_types(
+      cache_key, possible_classes);
     return possible_classes;
   }
 
@@ -5278,13 +5293,21 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
     var_name, converter_.current_function_name(), converter_.ast());
 
   if (var_decl.empty() || !var_decl.contains("value"))
+  {
+    converter_.get_function_call_cache().set_possible_class_types(
+      cache_key, possible_classes);
     return possible_classes;
+  }
 
   const auto &value = var_decl["value"];
 
   // Check if assigned from a function call
   if (value["_type"] != "Call" || value["func"]["_type"] != "Name")
+  {
+    converter_.get_function_call_cache().set_possible_class_types(
+      cache_key, possible_classes);
     return possible_classes;
+  }
 
   std::string func_name = value["func"]["id"].get<std::string>();
 
@@ -5295,11 +5318,19 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
   if (
     func_node.empty() || !func_node.contains("returns") ||
     func_node["returns"].is_null())
+  {
+    converter_.get_function_call_cache().set_possible_class_types(
+      cache_key, possible_classes);
     return possible_classes;
+  }
 
   const auto &returns = func_node["returns"];
   if (returns["_type"] != "Name" || !returns.contains("id"))
+  {
+    converter_.get_function_call_cache().set_possible_class_types(
+      cache_key, possible_classes);
     return possible_classes;
+  }
 
   std::string return_type = returns["id"].get<std::string>();
 
@@ -5339,6 +5370,14 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
       find_returns(stmt);
   }
 
+  // Deduplicate before caching.
+  std::sort(possible_classes.begin(), possible_classes.end());
+  possible_classes.erase(
+    std::unique(possible_classes.begin(), possible_classes.end()),
+    possible_classes.end());
+
+  converter_.get_function_call_cache().set_possible_class_types(
+    cache_key, possible_classes);
   return possible_classes;
 }
 
