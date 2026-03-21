@@ -5487,8 +5487,12 @@ bool function_call_expr::method_exists_in_class_hierarchy(
   // Provisional negative cache write to break recursive cycles (A->B->A).
   converter_.get_function_call_cache().set_method_exists(cache_key, false);
 
+  const auto& ast = converter_.ast();
+  if (!ast.is_object() || !ast.contains("body") || !ast["body"].is_array())
+    return false;
+
   const auto &class_node =
-    json_utils::find_class(converter_.ast()["body"], class_name);
+    json_utils::find_class(ast["body"], class_name);
 
   if (class_node.empty() || !class_node.is_object())
   {
@@ -5593,6 +5597,9 @@ exprt function_call_expr::generate_attribute_error(
 
   exprt nondet_fallback("sideeffect", fallback_type);
   nondet_fallback.statement("nondet");
+  nondet_fallback.location() = location;
+  nondet_fallback.location().user_provided(true);
+  nondet_fallback.location().comment(error_msg.str());
 
   return nondet_fallback;
 }

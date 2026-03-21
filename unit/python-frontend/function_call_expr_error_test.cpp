@@ -80,7 +80,8 @@ TEST_CASE(
 
     // The assert instruction should have been emitted into the block.
     REQUIRE(block.operands().size() == 1);
-    REQUIRE(block.operands()[0].id() == "code_assert");
+    REQUIRE(block.operands()[0].is_code());
+    REQUIRE(to_code(block.operands()[0]).get_statement() == "assert");
 
     // Returned expression must be a sideeffect/nondet with the expected type.
     REQUIRE(result.id() == "sideeffect");
@@ -186,7 +187,7 @@ TEST_CASE(
   "[python-frontend][hierarchy]")
 {
   cmdlinet cmdline;
-  config.set(cmdline);
+  REQUIRE_FALSE(config.set(cmdline));
 
   json call = make_dummy_call();
   contextt ctx;
@@ -337,7 +338,7 @@ TEST_CASE(
   "[python-frontend][class-inference]")
 {
   cmdlinet cmdline;
-  config.set(cmdline);
+  REQUIRE_FALSE(config.set(cmdline));
 
   json call = make_dummy_call();
   contextt ctx;
