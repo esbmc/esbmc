@@ -6368,6 +6368,38 @@ void python_converter::get_var_assign(
       return;
     }
 
+    // Python dynamic typing: if a variable already has a numeric type (e.g.
+    // double from float()) and is being reassigned to a pointer/string type
+    // (e.g. char* from chr()), the GOTO IR cannot represent this type change
+    // safely — the old SSA constant and the new pointer type mismatch in both
+    // the symex renamer and the SMT encoder. Skip the assignment so the prior
+    // type and value are preserved. This is sound for verification as long as
+    // the new value is not used in a subsequent assertion.
+    if (
+      lhs_symbol && !lhs.type().is_pointer() && rhs.type().is_pointer() &&
+      rhs.type().subtype() ==
+        char_type() && // only skip string (char*) reassignment, not None (void*/bool*)
+      (lhs.type().is_floatbv() || lhs.type().is_signedbv() ||
+       lhs.type().is_unsignedbv() || lhs.type().is_bool()))
+    {
+      // Still emit the RHS as a void call so exceptions/side-effects are
+      // preserved (e.g. chr() out-of-range ValueError).
+      if (
+        rhs.id() == "sideeffect" &&
+        rhs.statement() == irep_idt("function_call"))
+      {
+        const side_effect_expr_function_callt &se =
+          to_side_effect_expr_function_call(rhs);
+        code_function_callt void_call;
+        void_call.function() = se.function();
+        void_call.arguments() = se.arguments();
+        void_call.location() = rhs.location();
+        add_instruction(void_call);
+      }
+      current_lhs = nullptr;
+      return;
+    }
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
@@ -6992,6 +7024,43 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           cond.location() = location;
         }
       }
+    }
+
+    typet list_type = type_handler_.get_list_type();
+    // Python treats lists in conditions by their size, for example:
+    // `1 if xs else 0`.
+    if (
+      current_block &&
+      (cond.type() == list_type ||
+       (cond.type().is_pointer() && cond.type().subtype() == list_type)))
+    {
+      const symbolt *size_func =
+        symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+      if (!size_func)
+        throw std::runtime_error(
+          "__ESBMC_list_size not found for list condition check");
+
+      symbolt &size_result = create_tmp_symbol(
+        ast_node["test"], "$list_size$", size_type(), gen_zero(size_type()));
+      code_declt size_decl(symbol_expr(size_result));
+      size_decl.location() = location;
+      current_block->copy_to_operands(size_decl);
+
+      // Use `__ESBMC_list_size(cond) != 0` to evaluate the list condition.
+      code_function_callt size_call;
+      size_call.function() = symbol_expr(*size_func);
+      size_call.lhs() = symbol_expr(size_result);
+      if (cond.type().is_pointer())
+        size_call.arguments().push_back(cond);
+      else
+        size_call.arguments().push_back(address_of_exprt(cond));
+      size_call.type() = size_type();
+      size_call.location() = location;
+      current_block->copy_to_operands(size_call);
+
+      cond = exprt("notequal", bool_type());
+      cond.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+      cond.location() = location;
     }
   }
 
