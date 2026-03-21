@@ -9353,6 +9353,7 @@ python_converter::python_converter(
 
 python_converter::~python_converter()
 {
+  function_call_cache_.clear();
   delete string_builder_;
   delete tuple_handler_;
   delete dict_handler_;
