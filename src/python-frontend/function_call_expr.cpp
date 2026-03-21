@@ -1,4 +1,5 @@
 #include <python-frontend/function_call_expr.h>
+#include <python-frontend/cmath_lowering_policy.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math_guard_utils.h>
@@ -121,6 +122,18 @@ function_call_expr::function_call_expr(
     function_type_(FunctionType::FreeFunction)
 {
   get_function_type();
+}
+
+const symbolt *
+function_call_expr::cached_find_symbol(const std::string &id) const
+{
+  auto it = sym_cache_.find(id);
+  if (it != sym_cache_.end())
+    return it->second;
+  const symbolt *sym = converter_.find_symbol(id);
+  if (sym)
+    sym_cache_.emplace(id, sym);
+  return sym;
 }
 
 bool function_call_expr::is_string_arg(const nlohmann::json &arg) const
@@ -3461,6 +3474,29 @@ function_call_expr::get_dispatch_table()
            "TypeError", msg);
        };
 
+       // Budget guard: when the argument is structurally expensive and the
+       // model symbol exists, delegate to avoid solver blow-up.
+       if (args.size() == 1 && !cmath_lowering_policy::within_budget(args[0]))
+       {
+         const symbolt *model_sym =
+           cached_find_symbol(function_id_.to_string());
+         if (model_sym)
+         {
+           exprt z = converter_.get_expr(args[0]);
+           if (!is_cpp_throw_expr(z))
+             z = promote_to_complex(z);
+           if (!is_cpp_throw_expr(z))
+           {
+             side_effect_expr_function_callt model_call;
+             model_call.function() = symbol_expr(*model_sym);
+             model_call.arguments() = {z};
+             model_call.type() = to_code_type(model_sym->type).return_type();
+             model_call.location() = converter_.get_location_from_decl(call_);
+             return model_call;
+           }
+         }
+       }
+
        auto as_complex_or_throw = [&](const nlohmann::json &node) -> exprt {
          exprt value = converter_.get_expr(node);
          if (is_cpp_throw_expr(value))
@@ -3606,7 +3642,7 @@ function_call_expr::get_dispatch_table()
          return z;
 
        const symbolt *model_symbol =
-         converter_.find_symbol(function_id_.to_string());
+         cached_find_symbol(function_id_.to_string());
        if (model_symbol == nullptr)
        {
          return converter_.get_exception_handler().gen_exception_raise(
@@ -4304,8 +4340,8 @@ exprt function_call_expr::handle_general_function_call()
 
   assert(!func_symbol_id.empty());
 
-  // Find function symbol
-  const symbolt *func_symbol = converter_.find_symbol(func_symbol_id);
+  // Find function symbol (O1: use per-call cache to avoid redundant lookups)
+  const symbolt *func_symbol = cached_find_symbol(func_symbol_id);
 
   if (func_symbol == nullptr)
   {

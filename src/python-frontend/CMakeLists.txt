@@ -28,6 +28,7 @@ add_library(pythonfrontend STATIC
             module_locator.cpp
             symbol_id.cpp
             type_handler.cpp
+            cmath_lowering_policy.cpp
             function_call_expr.cpp
             numpy_call_expr.cpp
             function_call_builder.cpp
