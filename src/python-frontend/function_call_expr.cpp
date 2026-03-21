@@ -5269,105 +5269,153 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
   if (cached.has_value())
     return cached.value();
 
-  typet obj_type = obj_symbol->type;
-  if (obj_type.is_pointer())
-    obj_type = obj_type.subtype();
-  if (obj_type.id() == "symbol")
-    obj_type = converter_.ns.follow(obj_type);
-
-  // If type is a struct, extract the class name from the struct tag
-  if (obj_type.is_struct())
+  try
   {
-    const struct_typet &struct_type = to_struct_type(obj_type);
-    std::string tag = struct_type.tag().as_string();
-    std::string actual_class = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
-    possible_classes.push_back(actual_class);
-    converter_.get_function_call_cache().set_possible_class_types(
-      cache_key, possible_classes);
-    return possible_classes;
-  }
+    typet obj_type = obj_symbol->type;
+    if (obj_type.is_pointer())
+      obj_type = obj_type.subtype();
+    if (obj_type.id() == "symbol")
+      obj_type = converter_.ns.follow(obj_type);
 
-  // Type is a primitive (e.g., floatbv) - trace through AST to find actual types
-  std::string var_name = obj_symbol->name.as_string();
-  nlohmann::json var_decl = json_utils::find_var_decl(
-    var_name, converter_.current_function_name(), converter_.ast());
+    // If type is a struct, extract the class name from the struct tag
+    if (obj_type.is_struct())
+    {
+      const struct_typet& struct_type = to_struct_type(obj_type);
+      std::string tag = struct_type.tag().as_string();
+      std::string actual_class = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+      possible_classes.push_back(actual_class);
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  if (var_decl.empty() || !var_decl.contains("value"))
-  {
-    converter_.get_function_call_cache().set_possible_class_types(
-      cache_key, possible_classes);
-    return possible_classes;
-  }
+    // Type is a primitive (e.g., floatbv) - trace through AST to find actual types
+    std::string var_name = obj_symbol->name.as_string();
+    nlohmann::json var_decl = json_utils::find_var_decl(
+      var_name, converter_.current_function_name(), converter_.ast());
 
-  const auto &value = var_decl["value"];
+    if (
+      var_decl.empty() || !var_decl.is_object() ||
+      !var_decl.contains("value"))
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  // Check if assigned from a function call
-  if (value["_type"] != "Call" || value["func"]["_type"] != "Name")
-  {
-    converter_.get_function_call_cache().set_possible_class_types(
-      cache_key, possible_classes);
-    return possible_classes;
-  }
+    const auto& value = var_decl["value"];
 
-  std::string func_name = value["func"]["id"].get<std::string>();
+    // Validate JSON shape before accessing nested fields.
+    if (
+      !value.is_object() || !value.contains("_type") ||
+      !value["_type"].is_string())
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  // Look up the function definition
-  const auto &func_node =
-    json_utils::find_function(converter_.ast()["body"], func_name);
+    // Check if assigned from a function call
+    if (value["_type"] != "Call")
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  if (
-    func_node.empty() || !func_node.contains("returns") ||
-    func_node["returns"].is_null())
-  {
-    converter_.get_function_call_cache().set_possible_class_types(
-      cache_key, possible_classes);
-    return possible_classes;
-  }
+    if (
+      !value.contains("func") || !value["func"].is_object() ||
+      !value["func"].contains("_type") ||
+      !value["func"]["_type"].is_string() ||
+      value["func"]["_type"] != "Name" || !value["func"].contains("id") ||
+      !value["func"]["id"].is_string())
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  const auto &returns = func_node["returns"];
-  if (returns["_type"] != "Name" || !returns.contains("id"))
-  {
-    converter_.get_function_call_cache().set_possible_class_types(
-      cache_key, possible_classes);
-    return possible_classes;
-  }
+    std::string func_name = value["func"]["id"].get<std::string>();
 
-  std::string return_type = returns["id"].get<std::string>();
+    // Look up the function definition
+    const auto& func_node =
+      json_utils::find_function(converter_.ast()["body"], func_name);
 
-  // If return type is 'Any', analyze the function body to find actual return classes
-  if (return_type == "Any" && func_node.contains("body"))
-  {
-    std::function<void(const nlohmann::json &)> find_returns;
-    find_returns = [&](const nlohmann::json &node) {
-      if (!node.is_object())
-        return;
+    if (
+      func_node.empty() || !func_node.is_object() ||
+      !func_node.contains("returns") || func_node["returns"].is_null())
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-      std::string node_type = node["_type"].get<std::string>();
+    const auto& returns = func_node["returns"];
+    if (
+      !returns.is_object() || !returns.contains("_type") ||
+      !returns["_type"].is_string() || returns["_type"] != "Name" ||
+      !returns.contains("id") || !returns["id"].is_string())
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-      if (node_type == "Return" && node.contains("value"))
-      {
-        const auto &ret_val = node["value"];
-        if (ret_val["_type"] == "Call" && ret_val["func"]["_type"] == "Name")
+    std::string return_type = returns["id"].get<std::string>();
+
+    // If return type is 'Any', analyze the function body to find actual return classes
+    if (
+      return_type == "Any" && func_node.contains("body") &&
+      func_node["body"].is_array())
+    {
+      std::function<void(const nlohmann::json&)> find_returns;
+      find_returns = [&](const nlohmann::json& node) {
+        if (!node.is_object() || !node.contains("_type") ||
+          !node["_type"].is_string())
+          return;
+
+        std::string node_type = node["_type"].get<std::string>();
+
+        if (
+          node_type == "Return" && node.contains("value") &&
+          node["value"].is_object())
         {
-          std::string class_name = ret_val["func"]["id"].get<std::string>();
-          if (json_utils::is_class(class_name, converter_.ast()))
-            possible_classes.push_back(class_name);
+          const auto& ret_val = node["value"];
+          if (
+            ret_val.contains("_type") && ret_val["_type"].is_string() &&
+            ret_val["_type"] == "Call" && ret_val.contains("func") &&
+            ret_val["func"].is_object() &&
+            ret_val["func"].contains("_type") &&
+            ret_val["func"]["_type"].is_string() &&
+            ret_val["func"]["_type"] == "Name" &&
+            ret_val["func"].contains("id") &&
+            ret_val["func"]["id"].is_string())
+          {
+            std::string class_name =
+              ret_val["func"]["id"].get<std::string>();
+            if (json_utils::is_class(class_name, converter_.ast()))
+              possible_classes.push_back(class_name);
+          }
         }
-      }
-      else if (node_type == "If")
-      {
-        // Check both branches
-        if (node.contains("body"))
-          for (const auto &stmt : node["body"])
-            find_returns(stmt);
-        if (node.contains("orelse"))
-          for (const auto &stmt : node["orelse"])
-            find_returns(stmt);
-      }
-    };
+        else if (node_type == "If")
+        {
+          // Check both branches
+          if (node.contains("body") && node["body"].is_array())
+            for (const auto& stmt : node["body"])
+              find_returns(stmt);
+          if (node.contains("orelse") && node["orelse"].is_array())
+            for (const auto& stmt : node["orelse"])
+              find_returns(stmt);
+        }
+        };
 
-    for (const auto &stmt : func_node["body"])
-      find_returns(stmt);
+      for (const auto& stmt : func_node["body"])
+        find_returns(stmt);
+    }
+  }
+  catch (...)
+  {
+    // Malformed AST — return whatever we gathered so far.
   }
 
   // Deduplicate before caching.
