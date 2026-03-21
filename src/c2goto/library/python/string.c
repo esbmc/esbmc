@@ -305,7 +305,7 @@ __ESBMC_HIDE:;
   if (!chars || !*chars)
     return __python_str_lstrip(s);
 
-  // Skip leading chars
+  // Skip leading chars; return pointer into original string (no copy needed)
   while (*s)
   {
     _Bool found = 0;
@@ -321,28 +321,7 @@ __ESBMC_HIDE:;
     s++;
   }
 
-  const char *start = s;
-  const char *end = start;
-
-  // Find the end
-  while (*end)
-  {
-    end++;
-  }
-
-  size_t len = (size_t)(end - start);
-  char *buffer = __ESBMC_alloca(len + 1);
-
-  size_t i = 0;
-  while (i < len)
-  {
-    buffer[i] = start[i];
-    ++i;
-  }
-
-  buffer[len] = '\0';
-
-  return buffer;
+  return s;
 }
 
 // Python string rstrip with custom chars - removes chars from right

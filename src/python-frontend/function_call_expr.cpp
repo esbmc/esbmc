@@ -2193,7 +2193,9 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "float" && arg["_type"] == "Name")
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
-    if (sym && sym->value.is_constant())
+    if (
+      sym && sym->value.is_constant() &&
+      type_utils::is_string_type(sym->value.type()))
       return handle_str_symbol_to_float(sym);
     else
     {
@@ -2202,12 +2204,17 @@ exprt function_call_expr::build_constant_from_arg() const
       if (type_utils::is_string_type(expr.type()))
       {
         std::string var_name = arg["id"].get<std::string>();
-        std::string m = "float() conversion may fail - variable" + var_name +
-                        "may contain non-float string";
+        std::string m = "float() conversion may fail - variable " + var_name +
+                        " may contain non-float string";
 
         return converter_.get_exception_handler().gen_exception_raise(
           "ValueError", m);
       }
+      // Numeric variable: emit a proper typecast to avoid mislabeled IR
+      typet float_t = type_handler_.get_typet("float", 0);
+      if (!expr.type().is_floatbv())
+        return typecast_exprt(expr, float_t);
+      return expr;
     }
   }
 
@@ -2262,6 +2269,13 @@ exprt function_call_expr::build_constant_from_arg() const
 
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
+
+  // For float(), emit a proper typecast instead of relabeling the type.
+  // Simply changing expr.type() on an integer expression creates IR where
+  // the type tag says float but the operation is bitvector arithmetic,
+  // causing sort mismatches in the SMT encoder.
+  if (func_name == "float" && !expr.type().is_floatbv())
+    return typecast_exprt(expr, t);
 
   if (func_name != "str")
     expr.type() = t;
