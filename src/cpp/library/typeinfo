@@ -1,0 +1,104 @@
+// ESBMC model for <typeinfo>
+//
+// Replaces the ABI-specific system header with a portable representation.
+// The actual libc++ implementation on ARM64 macOS stores the type name as a
+// uintptr_t (__non_unique_arm_rtti_bit_impl), which causes an SMT sort
+// mismatch when ESBMC constructs a type_info struct for typeid() expressions.
+//
+// By providing our own model with a concrete char* field, we ensure:
+//   - The struct layout matches the two operands emitted by CXXTypeidExprClass:
+//       op0 = address_of(type_name_string)   → const char* __name
+//       op1 = gen_zero(pointer_type())        → void* __impl (zero placeholder)
+//   - operator==() compares string pointers directly (no strcmp needed).
+//   - name() returns a concrete, dereferenceable char*.
+//
+// Polymorphism is not supported (consistent with the existing ESBMC comment
+// in clang_cpp_convert.cpp: "Front end can't account for polymorphism").
+
+#ifndef ESBMC_TYPEINFO
+#define ESBMC_TYPEINFO
+
+// Prevent the system <typeinfo> from redefining std::type_info after us.
+// The guard name matches the libc++ system header include guard.
+#define _LIBCPP_TYPEINFO
+
+#include <cstddef>
+
+namespace std
+{
+
+class type_info
+{
+  // Field 0: type-name string pointer.
+  // CXXTypeidExprClass fills this with address_of_exprt(string_name).
+  const char *__name;
+
+  // Field 1: ABI placeholder (vtable pointer in real implementations).
+  // CXXTypeidExprClass fills this with gen_zero(pointer_type()) = null.
+  const void *__impl;
+
+  type_info(const type_info &) = delete;
+  type_info &operator=(const type_info &) = delete;
+
+public:
+  ~type_info()
+  {
+  }
+
+  // Pointer equality: two typeid results for the same type get the same
+  // string literal address, so this is both fast and correct.
+  bool operator==(const type_info &arg) const noexcept
+  {
+    return __name == arg.__name;
+  }
+
+  bool operator!=(const type_info &arg) const noexcept
+  {
+    return __name != arg.__name;
+  }
+
+  // Returns the concrete string pointer set by CXXTypeidExprClass.
+  const char *name() const noexcept
+  {
+    return __name;
+  }
+
+  size_t hash_code() const noexcept
+  {
+    return (size_t)__name;
+  }
+
+  bool before(const type_info &arg) const noexcept
+  {
+    return __name < arg.__name;
+  }
+};
+
+// Minimal bad_cast / bad_typeid without pulling in <exception>.
+class bad_cast
+{
+public:
+  bad_cast() noexcept
+  {
+  }
+  const char *what() const noexcept
+  {
+    return "bad_cast";
+  }
+};
+
+class bad_typeid
+{
+public:
+  bad_typeid() noexcept
+  {
+  }
+  const char *what() const noexcept
+  {
+    return "bad_typeid";
+  }
+};
+
+} // namespace std
+
+#endif // ESBMC_TYPEINFO

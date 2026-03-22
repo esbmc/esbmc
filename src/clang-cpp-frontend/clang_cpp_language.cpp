@@ -50,6 +50,12 @@ void clang_cpp_languaget::build_include_args(
     // Let the cpp include "overtake" others.
     compiler_args.push_back("-isystem");
     compiler_args.push_back(cppinc);
+    // On macOS, libc++ uses inline namespace std::__1, which causes symbol
+    // ambiguity when both ESBMC's bundled headers and the system headers
+    // define the same names (char_traits, istream, remove_reference, etc.).
+    // Suppress system C++ standard library headers to avoid conflicts.
+    if (config.ansi_c.target.is_macos())
+      compiler_args.push_back("-nostdinc++");
   }
 
   clang_c_languaget::build_include_args(compiler_args);
