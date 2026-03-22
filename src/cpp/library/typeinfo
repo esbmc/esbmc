@@ -70,7 +70,7 @@ public:
 
   bool before(const type_info &arg) const noexcept
   {
-    return __name < arg.__name;
+    return (size_t)__name < (size_t)arg.__name;
   }
 };
 

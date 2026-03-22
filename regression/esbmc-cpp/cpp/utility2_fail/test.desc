@@ -2,13 +2,13 @@ CORE
 main.cpp
 --multi-property
 ^VERIFICATION FAILED$
-assertion ref != 10
-assertion b != 5
-assertion a != 10
-assertion r != 42
-assertion p4.first != 1 && p4.second == 2
-assertion p3.first != 3 && p3.second == 4
-assertion p2.second != 3.14
-assertion p2.first != 20
-assertion p1.second != 5.5
-assertion p1.first != 10
+ref != 10
+b != 5
+a != 10
+r != 42
+p4.first != 1 && p4.second == 2
+p3.first != 3 && p3.second == 4
+p2.second != 3.1
+p2.first != 20
+p1.second != 5.5
+p1.first != 10
