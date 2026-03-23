@@ -170,8 +170,7 @@ bool apply_intrinsic_unroller::runOnLoop(
   loopst &loop,
   goto_programt &goto_program)
 {
-  auto instrument_function = [&loop](goto_programt::targett &it) -> bool
-  {
+  auto instrument_function = [&loop](goto_programt::targett &it) -> bool {
     if (!(is_symbol2t(to_code_function_call2t(it->code).function) &&
           to_symbol2t(to_code_function_call2t(it->code).function)
               .get_symbol_name() == "c:@F@__ESBMC_unroll"))
