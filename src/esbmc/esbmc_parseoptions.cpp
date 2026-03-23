@@ -2408,9 +2408,15 @@ bool esbmc_parseoptionst::output_goto_program(
 
             std::string loc;
             if (!i_it->location.get_file().empty())
-              loc = " [" + i_it->location.get_file().as_string() + ":" +
-                    i_it->location.get_line().as_string() + "]";
+            {
+              const auto &file = i_it->location.get_file();
+              const auto &line = i_it->location.get_line();
 
+              if (!line.empty())
+                loc = " [" + file.as_string() + ":" + line.as_string() + "]";
+              else
+                loc = " [" + file.as_string() + "]";
+            }
             log_status("{} -> {}({}){}", caller, callee, args, loc);
           }
         }
