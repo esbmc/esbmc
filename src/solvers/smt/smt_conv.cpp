@@ -458,7 +458,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
     else if (is_round_to_plus_inf(rounding_mode))
     {
       // Asymmetric tight enclosure for ROUND_TO_PLUS_INF:
-      //   fl_RUP(r) >= r  (exact lower bound; round-up always overshoots)
+      //   fl_RUP(r) >= r  (exact lower bound; round-up never undershoots)
       //   fl_RUP(r) <= r + B_dir(r)
       // where B_dir(r) = eps_rel_dir * |r| + eps_abs
       //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- the full machine epsilon
