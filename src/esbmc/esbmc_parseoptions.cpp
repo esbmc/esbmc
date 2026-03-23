@@ -2421,7 +2421,7 @@ bool esbmc_parseoptionst::output_goto_program(
           }
         }
       }
-      return true;
+      std::exit(0);
     }
 
     // Translate the GOTO program to C and output it into the log or
