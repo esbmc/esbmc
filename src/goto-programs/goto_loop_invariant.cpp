@@ -566,14 +566,14 @@ bool goto_loop_invariant_combinedt::copy_loop_body(
     {
       auto m_it = target_map.find(tgt);
       if (m_it == target_map.end())
-        return false; // complex control flow — skip Branch 1
+        return true; // complex control flow — skip Branch 1
 
       tgt = m_it->second;
     }
   }
 
   out.compute_target_numbers();
-  return true;
+  return false;
 }
 
 void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
@@ -598,7 +598,7 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
 
   // ── 2. Copy loop body (fail gracefully for complex loops) ─────────────────
   goto_programt body_copy;
-  if (!copy_loop_body(loop_head, loop_exit, body_copy))
+  if (copy_loop_body(loop_head, loop_exit, body_copy))
     return; // Fall back to ASSUME-only mode in goto_k_induction
 
   // ── 3. Extract the loop entry condition ───────────────────────────────────
@@ -661,8 +661,7 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   }
 
   // [4e] One iteration of the loop body
-  branch1.instructions.splice(
-    branch1.instructions.end(), body_copy.instructions);
+  branch1.destructive_insert(branch1.instructions.end(), body_copy);
 
   // [4f] Inductive-step ASSERT(INV)
   for (const auto &instr : side_effects.instructions)
@@ -694,19 +693,19 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     t->location = loop_head->location;
 
     // Splice the gate at the front of branch1
-    branch1.instructions.splice(
-      branch1.instructions.begin(), gate.instructions);
+    branch1.destructive_insert(branch1.instructions.begin(), gate);
   }
 
-  // ── 6. Insert before loop_head using splice (NOT insert_swap) ─────────────
-  // splice() inserts before loop_head without moving it, so any existing
-  // backward-GOTO target that points to loop_head continues to do so.
-  goto_function.body.instructions.splice(loop_head, branch1.instructions);
-
-  // ── 7. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
+  // ── 6. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
   // Inserting ASSUME(INV) just before loop_exit (the backward GOTO) means
   // k-induction will see the assumption at the end of every iteration without
   // any modification to goto_k_induction itself.
+
+  // ── 7. Insert before loop_head using splice (NOT insert_swap) ─────────────
+  // splice() inserts before loop_head without moving it, so any existing
+  // backward-GOTO target that points to loop_head continues to do so.
+  goto_function.body.destructive_insert(loop_head, branch1);
+
   for (const auto &inv : invariants)
   {
     goto_programt assume_inv;
@@ -714,8 +713,10 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
       assume_inv.instructions.push_back(instr);
     auto t = assume_inv.add_instruction(ASSUME);
     t->guard = inv;
-    t->location = loop_exit->location;
+    t->location = loop_head->location;
     t->location.comment("loop invariant assume (k-induction hint)");
-    goto_function.body.instructions.splice(loop_exit, assume_inv.instructions);
+    loop_head++;
+    goto_function.body.insert_swap(loop_head, assume_inv);
+    loop_head--;
   }
 }
