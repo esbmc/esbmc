@@ -1,0 +1,23 @@
+CORE
+main.c
+--show-call-sites
+^c:@F@main -> c:@F@distance\(p1, p2\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@scale\(&p1, 3\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@process\(&values\[0\], 3\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@clamp\(d, 0, total\) \[.*main\.c:\d+\]$
+^c:@F@process -> c:@F@clamp\(arr\[\(signed long int\)i\], 0, 100\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@add\(d, d2\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@clamp\(return_value\$_add\$\d+, 0, 100\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@clamp\(d, 0, 50\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@clamp\(d2, 10, 90\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@add\(return_value\$_clamp\$\d+, return_value\$_clamp\$\d+\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@clamp\(total, 0, 200\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@add\(return_value\$_clamp\$\d+, c\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@clamp\(return_value\$_add\$\d+, 0, 500\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@sum_of_squares\(d, d2\) \[.*main\.c:\d+\]$
+^c:@F@sum_of_squares -> c:@F@square\(a\) \[.*main\.c:\d+\]$
+^c:@F@sum_of_squares -> c:@F@square\(b\) \[.*main\.c:\d+\]$
+^c:@F@sum_of_squares -> c:@F@add\(return_value\$_square\$\d+, return_value\$_square\$\d+\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@normalize\(total, 0, 300\) \[.*main\.c:\d+\]$
+^c:@F@normalize -> c:@F@clamp\(val, lo, hi\) \[.*main\.c:\d+\]$
+^__ESBMC_main -> c:@F@main\(\) \[.*main\.c:\d+\]$

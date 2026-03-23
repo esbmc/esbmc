@@ -55,6 +55,7 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
+#include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
 #include <util/yaml_parser.h>
 
@@ -2368,6 +2369,45 @@ bool esbmc_parseoptionst::output_goto_program(
     {
       goto_cfg cfg(goto_functions);
       cfg.dump_graph();
+      return true;
+    }
+
+    if (cmdline.isset("show-call-sites"))
+    {
+      for (const auto &f : goto_functions.function_map)
+      {
+        if (!f.second.body_available)
+          continue;
+        const std::string caller = f.first.as_string();
+        forall_goto_program_instructions(i_it, f.second.body)
+        {
+          if (i_it->is_function_call())
+          {
+            const auto &fc = to_code_function_call2t(i_it->code);
+            std::string callee;
+            if (is_symbol2t(fc.function))
+              callee = to_symbol2t(fc.function).get_symbol_name();
+            else
+              callee = from_expr(ns, "", fc.function);
+
+            std::string args;
+            for (size_t i = 0; i < fc.operands.size(); i++)
+            {
+              if (i > 0)
+                args += ", ";
+              args += from_expr(ns, "", fc.operands[i]);
+            }
+
+            std::string loc;
+            if (!i_it->location.get_file().empty())
+              loc = " [" + i_it->location.get_file().as_string() +
+                    ":" + i_it->location.get_line().as_string() +
+                    "]";
+
+            log_status("{} -> {}({}){}", caller, callee, args, loc);
+          }
+        }
+      }
       return true;
     }
 
