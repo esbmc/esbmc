@@ -354,6 +354,8 @@ static bool is_nearest_rounding_mode(const expr2tc &rounding_mode)
 
 static bool is_round_to_plus_inf(const expr2tc &rounding_mode)
 {
+  if (is_nil_expr(rounding_mode))
+    return false;
   if (!is_constant_int2t(rounding_mode))
     return false;
   return to_constant_int2t(rounding_mode).value ==
