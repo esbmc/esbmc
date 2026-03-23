@@ -197,8 +197,8 @@ TEST_CASE(
   {
     // A -> B -> A (cycle)
     json body = json::array(
-      {make_class("A", {make_funcdef("foo")}, {make_base("B")}),
-       make_class("B", {}, {make_base("A")})});
+      { make_class("A", json::array({make_funcdef("foo")}), json::array({make_base("B")})),
+       make_class("B", json::array(), json::array({make_base("A")})) });
     json ast = make_ast_with_classes(body);
 
     python_converter converter(ctx, &ast, gs);
@@ -217,8 +217,8 @@ TEST_CASE(
   SECTION("provisional false is upgraded to true when method found")
   {
     json body = json::array(
-      {make_class("Base", {make_funcdef("greet")}),
-       make_class("Child", {}, {make_base("Base")})});
+      { make_class("Base", json::array({make_funcdef("greet")})),
+       make_class("Child", json::array(), json::array({make_base("Base")})) });
     json ast = make_ast_with_classes(body);
 
     python_converter converter(ctx, &ast, gs);
@@ -243,7 +243,7 @@ TEST_CASE(
     json nested_func = make_funcdef("inner_helper");
     json outer_func = make_funcdef("outer");
     outer_func["body"] = json::array({nested_func});
-    json body = json::array({make_class("MyClass", {outer_func})});
+    json body = json::array({ make_class("MyClass", json::array({outer_func})) });
     json ast = make_ast_with_classes(body);
 
     python_converter converter(ctx, &ast, gs);
@@ -264,7 +264,7 @@ TEST_CASE(
   SECTION("malformed class members are skipped without crash")
   {
     json bad_member = json::object({{"_type", 42}}); // _type is not a string
-    json body = json::array({make_class("BadClass", {bad_member})});
+    json body = json::array({ make_class("BadClass", json::array({bad_member})) });
     json ast = make_ast_with_classes(body);
 
     python_converter converter(ctx, &ast, gs);
@@ -300,7 +300,7 @@ TEST_CASE(
   SECTION("async method detection")
   {
     json body = json::array(
-      {make_class("AsyncClass", {make_async_funcdef("async_method")})});
+      { make_class("AsyncClass", json::array({make_async_funcdef("async_method")})) });
     json ast = make_ast_with_classes(body);
 
     python_converter converter(ctx, &ast, gs);
@@ -317,7 +317,7 @@ TEST_CASE(
 
   SECTION("empty class/method names return false")
   {
-    json body = json::array({make_class("X", {make_funcdef("m")})});
+    json body = json::array({ make_class("X", json::array({make_funcdef("m")})) });
     json ast = make_ast_with_classes(body);
 
     python_converter converter(ctx, &ast, gs);

@@ -5592,7 +5592,9 @@ exprt function_call_expr::generate_attribute_error(
 
   // Compute fallback type: use expected_type if valid, otherwise Any
   typet fallback_type = expected_type;
-  if (fallback_type.is_nil() || fallback_type == empty_typet())
+  if (
+    fallback_type.is_nil() || fallback_type == empty_typet() ||
+    fallback_type == typet())
     fallback_type = any_type();
 
   exprt nondet_fallback("sideeffect", fallback_type);
