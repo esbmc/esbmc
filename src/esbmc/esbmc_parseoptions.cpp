@@ -2383,7 +2383,7 @@ bool esbmc_parseoptionst::output_goto_program(
         if (!f.second.body_available)
           continue;
         const std::string caller = f.first.as_string();
-        forall_goto_program_instructions(i_it, f.second.body)
+        forall_goto_program_instructions (i_it, f.second.body)
         {
           if (i_it->is_function_call())
           {
@@ -2408,9 +2408,8 @@ bool esbmc_parseoptionst::output_goto_program(
 
             std::string loc;
             if (!i_it->location.get_file().empty())
-              loc = " [" + i_it->location.get_file().as_string() +
-                    ":" + i_it->location.get_line().as_string() +
-                    "]";
+              loc = " [" + i_it->location.get_file().as_string() + ":" +
+                    i_it->location.get_line().as_string() + "]";
 
             log_status("{} -> {}({}){}", caller, callee, args, loc);
           }
