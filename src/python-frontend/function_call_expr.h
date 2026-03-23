@@ -79,7 +79,8 @@ private:
 
   exprt generate_attribute_error(
     const std::string &method_name,
-    const std::vector<std::string> &possible_classes) const;
+    const std::vector<std::string> &possible_classes,
+    const typet &expected_type = typet()) const;
 
   /**
    * Determines whether a non-deterministic function is being invoked.
