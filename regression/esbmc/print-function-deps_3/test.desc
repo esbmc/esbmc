@@ -5,7 +5,7 @@ main.c
 ^c:@F@main -> c:@F@scale\(&p1, 3\) \[.*main\.c:\d+\]$
 ^c:@F@main -> c:@F@process\(&values\[0\], 3\) \[.*main\.c:\d+\]$
 ^c:@F@main -> c:@F@clamp\(d, 0, total\) \[.*main\.c:\d+\]$
-^c:@F@process -> c:@F@clamp\(arr\[\(signed long int\)i\], 0, 100\) \[.*main\.c:\d+\]$
+^c:@F@process -> c:@F@clamp\(arr\[\(signed long( long)? int\)i\], 0, 100\) \[.*main\.c:\d+\]$
 ^c:@F@main -> c:@F@add\(d, d2\) \[.*main\.c:\d+\]$
 ^c:@F@main -> c:@F@clamp\(return_value\$_add\$\d+, 0, 100\) \[.*main\.c:\d+\]$
 ^c:@F@main -> c:@F@clamp\(d, 0, 50\) \[.*main\.c:\d+\]$
