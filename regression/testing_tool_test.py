@@ -2,7 +2,8 @@
 
 import unittest
 from pathlib import Path
-from testing_tool import get_test_objects
+from unittest.mock import patch
+from testing_tool import RegressionBase, _arg_parsing, get_test_objects
 from testing_model import TestDescription, TestMode
 
 REGRESSION_ROOT = Path(".")
@@ -147,6 +148,30 @@ class ToolTest2(CTest4):
                     '--overflow-check',
                     '--unwind', '3', '--32', str(Path("nonz3/29_exStbHwAcc/main.c"))]
         self.assertEqual(argument_list, expected, str(argument_list))
+
+
+class ArgumentParsingTest(unittest.TestCase):
+    def setUp(self):
+        self.old_memory_limit = RegressionBase.MEMORY_LIMIT
+
+    def tearDown(self):
+        RegressionBase.MEMORY_LIMIT = self.old_memory_limit
+
+    def test_memory_limit_keeps_megabyte_units(self):
+        argv = [
+            "testing_tool.py",
+            "--tool=esbmc",
+            "--regression=llvm",
+            "--modes",
+            "CORE",
+            "--file=arr",
+            "--memory-limit=64",
+        ]
+
+        with patch("testing_tool.gen_one_test"), patch("testing_tool.sys.argv", argv):
+            _arg_parsing()
+
+        self.assertEqual(RegressionBase.MEMORY_LIMIT, 64)
 
 
 if __name__ == '__main__':

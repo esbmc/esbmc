@@ -90,11 +90,10 @@ class DiscoveryTest(unittest.TestCase):
             self.assertIn('"/path/to/testing_tool.py"', output)
             self.assertIn('"--file=suite_a/subsuite/case_one"', output)
             self.assertIn(f'"--regression={root_dir}"', output)
+            self.assertIn('"--timeout=17"', output)
+            self.assertIn('"--memory-limit=64"', output)
             self.assertIn('"TIMEOUT" "17"', output)
-            self.assertIn(
-                '"ENVIRONMENT" "ESBMC_REGRESS_TIMEOUT=17;ESBMC_REGRESS_MEMORY_LIMIT=64"',
-                output,
-            )
+            self.assertNotIn('"ENVIRONMENT"', output)
             self.assertIn('"LABELS" "regression;suite_a/subsuite/"', output)
             self.assertNotIn("suite_a/ignored/case_two", output)
 

@@ -16,10 +16,6 @@ import shlex
 import subprocess
 from testing_model import TestDescription, FAIL_MODES, TestMode
 
-# Environment variable injected by CMake
-# set_tests_properties(ENVIRONMENT).
-_TIMEOUT_ENVVAR = "ESBMC_REGRESS_TIMEOUT"
-_MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
 #####################
 # Testing Tool
 #####################
@@ -130,10 +126,10 @@ class RegressionBase(unittest.TestCase):
     longMessage = True
 
     FAIL_WITH_WORD: str = None
-    # The env var set by CMake.
-    TIMEOUT = int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None
-    _mem_mb = int(os.environ.get(_MEMORY_LIMIT_ENVVAR, 0))
-    MEMORY_LIMIT = _mem_mb * 1024 * 1024 if _mem_mb else None
+    # Timeout in seconds
+    TIMEOUT: int | None = None
+    # Memory limit in megabytes
+    MEMORY_LIMIT: int | None = None
 
     def setUp(self):
         self.startTime = time.time()
@@ -227,7 +223,7 @@ def _arg_parsing():
     parser.add_argument(
         "--tool", required=False, help="tool executable path + optional args"
     )
-    parser.add_argument("--timeout", required=False, help="timeout value")
+    parser.add_argument("--timeout", required=False, type=int, help="timeout value")
     parser.add_argument("--modes", nargs="+", help="a list of modes that are supported")
     parser.add_argument("--regression", required=False, help="regression suite path")
     parser.add_argument(
@@ -263,9 +259,9 @@ def _arg_parsing():
 
     main_args = parser.parse_args()
     if main_args.timeout:
-        RegressionBase.TIMEOUT = int(main_args.timeout)
+        RegressionBase.TIMEOUT = main_args.timeout
     if main_args.memory_limit:
-        RegressionBase.MEMORY_LIMIT = main_args.memory_limit * 1024 * 1024
+        RegressionBase.MEMORY_LIMIT = main_args.memory_limit
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
     regression_path = os.path.join(

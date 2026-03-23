@@ -9,9 +9,6 @@ from testing_model import TestDescription
 
 RelativePath = PurePosixPath
 
-_TIMEOUT_ENVVAR: str = "ESBMC_REGRESS_TIMEOUT"
-_MEMORY_LIMIT_ENVVAR: str = "ESBMC_REGRESS_MEMORY_LIMIT"
-
 
 def _relative_path(path: str | Path) -> RelativePath:
     normalized = os.fspath(path).replace("\\", "/").strip("/")
@@ -174,6 +171,10 @@ def generate_ctest_discovery(
             *modes,
             f"--file={test.test_dir.name}",
         ]
+        if timeout is not None:
+            command.append(f"--timeout={timeout}")
+        if memory_limit is not None:
+            command.append(f"--memory-limit={memory_limit}")
         if benchbringup:
             command.append("--benchbringup")
 
@@ -182,14 +183,6 @@ def generate_ctest_discovery(
         properties: list[str] = ["SKIP_RETURN_CODE", "10"]
         if timeout is not None:
             properties.extend(["TIMEOUT", str(timeout)])
-
-        environment: list[str] = []
-        if timeout is not None:
-            environment.append(f"{_TIMEOUT_ENVVAR}={timeout}")
-        if memory_limit is not None:
-            environment.append(f"{_MEMORY_LIMIT_ENVVAR}={memory_limit}")
-        if environment:
-            properties.extend(["ENVIRONMENT", ";".join(environment)])
 
         labels = ";".join(test.labels + _default_labels(relative_dir))
         if labels:

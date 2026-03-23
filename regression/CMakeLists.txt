@@ -17,9 +17,8 @@ set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 set(ESBMC_REGRESSION_DISCOVER_TOOL
     "${CMAKE_CURRENT_SOURCE_DIR}/testing_discover_tool.py")
 
-# Per-test timeout, injected into the runner via
-# the ESBMC_REGRESS_TIMEOUT environment variable
-#so the Python side never needs its own default.
+# Per-test timeout and memory limit, passed through discovery
+# into the generated runner flags.
 set(ESBMC_REGRESS_TIMEOUT 1200 CACHE STRING
     "Per-test timeout in seconds for regression tests")
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
