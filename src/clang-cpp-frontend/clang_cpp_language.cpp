@@ -47,18 +47,15 @@ void clang_cpp_languaget::build_include_args(
   {
     cppinc = esbmct::abstract_cpp_includes();
     log_debug("c++", "Adding CPP includes: {}", cppinc);
-    // On macOS, libc++ uses inline namespace std::__1, which causes symbol
-    // ambiguity when both ESBMC's bundled headers and the system headers
-    // define the same names (char_traits, istream, remove_reference, etc.).
-    // The macos/ sub-directory provides minimal STL stubs (utility,
-    // type_traits, typeinfo, etc.) that are only needed when the system
-    // libc++ headers are suppressed.  Add it first so these stubs take
-    // precedence, then suppress the system C++ headers entirely.
+    // On macOS, the system libc++ <typeinfo> stores the type name as a
+    // uintptr_t (ARM RTTI bit trick) instead of const char*, which causes
+    // an SMT sort mismatch in ESBMC.  The macos/ sub-directory provides a
+    // replacement <typeinfo> model; add it before the main library dir so
+    // it takes precedence over the system header on macOS only.
     if (config.ansi_c.target.is_macos())
     {
       compiler_args.push_back("-isystem");
       compiler_args.push_back(cppinc + "/macos");
-      compiler_args.push_back("-nostdinc++");
     }
     // Let the cpp include "overtake" others.
     compiler_args.push_back("-isystem");
