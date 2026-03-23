@@ -165,12 +165,12 @@ public:
     return ns;
   }
 
-  function_call_cache& get_function_call_cache()
+  function_call_cache &get_function_call_cache()
   {
     return function_call_cache_;
   }
 
-  const function_call_cache& get_function_call_cache() const
+  const function_call_cache &get_function_call_cache() const
   {
     return function_call_cache_;
   }
