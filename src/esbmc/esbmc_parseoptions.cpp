@@ -2372,6 +2372,10 @@ bool esbmc_parseoptionst::output_goto_program(
       return true;
     }
 
+    // Print a flat list of every function call site with its arguments.
+    // Output format: caller -> callee(arg1, arg2, ...) [file:line]
+    // Nested calls appear as separate lines with compiler-generated
+    // temporaries (e.g. return_value$_add$5) showing data flow.
     if (cmdline.isset("show-call-sites"))
     {
       for (const auto &f : goto_functions.function_map)
@@ -2384,12 +2388,16 @@ bool esbmc_parseoptionst::output_goto_program(
           if (i_it->is_function_call())
           {
             const auto &fc = to_code_function_call2t(i_it->code);
+
+            // Direct calls have a symbol; indirect calls (function
+            // pointers) fall back to pretty-printing the expression.
             std::string callee;
             if (is_symbol2t(fc.function))
               callee = to_symbol2t(fc.function).get_symbol_name();
             else
               callee = from_expr(ns, "", fc.function);
 
+            // Pretty-print each actual argument as a comma-separated list
             std::string args;
             for (size_t i = 0; i < fc.operands.size(); i++)
             {
