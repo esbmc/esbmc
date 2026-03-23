@@ -350,6 +350,12 @@ private:
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
+  bool is_coverage_mode() const;
+
+  bool is_pytest_generation_mode() const;
+
+  bool is_model_file(const nlohmann::json &node) const;
+
   exprt get_function_call(const nlohmann::json &ast_block);
 
   exprt get_block(const nlohmann::json &ast_block);
