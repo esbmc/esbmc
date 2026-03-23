@@ -21,13 +21,10 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/AST/ParentMapContext.h>
-#include <clang/AST/RecordLayout.h>
 #include <llvm/Support/raw_os_ostream.h>
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
 
@@ -88,7 +85,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
       get_overriden_methods(*md, cxxmethods_overriden);
 
       for (const auto &overriden_md_entry : cxxmethods_overriden)
-        add_thunk_method(cxxrd, overriden_md_entry.second, comp, type);
+        add_thunk_method(overriden_md_entry.second, comp, type);
     }
   }
 
@@ -259,7 +256,6 @@ void clang_cpp_convertert::add_vtable_type_entry(
 }
 
 void clang_cpp_convertert::add_thunk_method(
-  const clang::CXXRecordDecl &derived_rd,
   const clang::CXXMethodDecl &md,
   const struct_typet::componentt &component,
   struct_typet &type)
@@ -298,29 +294,6 @@ void clang_cpp_convertert::add_thunk_method(
   std::string base_class_id, base_class_name;
   get_decl_name(*md.getParent(), base_class_name, base_class_id);
 
-  // Compute the byte offset of the base class sub-object within the derived
-  // class. For non-first base classes in multiple inheritance this is non-zero,
-  // and the thunk must subtract it from its Base* this to recover Derived*.
-  // TODO: This loop only searches direct bases of derived_rd. If base_rd is
-  // an indirect base (e.g. Derived : Middle, Middle : B8), base_offset will
-  // incorrectly remain 0. A complete fix requires summing offsets along the
-  // full inheritance path using CXXBasePaths::isDerivedFrom or a recursive
-  // walk — to be addressed as a follow-up.
-  uint64_t base_offset = 0;
-  const clang::CXXRecordDecl *base_rd = md.getParent();
-  const clang::ASTRecordLayout &layout =
-    ASTContext->getASTRecordLayout(&derived_rd);
-  for (const auto &base_spec : derived_rd.bases())
-  {
-    const clang::CXXRecordDecl *spec_rd =
-      base_spec.getType()->getAsCXXRecordDecl();
-    if (spec_rd == base_rd && !base_spec.isVirtual())
-    {
-      base_offset = layout.getBaseClassOffset(base_rd).getQuantity();
-      break;
-    }
-  }
-
   // Create the thunk method symbol
   symbolt thunk_func_symb;
   thunk_func_symb.id =
@@ -342,7 +315,7 @@ void clang_cpp_convertert::add_thunk_method(
   add_thunk_method_arguments(thunk_func_symb);
 
   // add thunk function body
-  add_thunk_method_body(thunk_func_symb, component, base_offset);
+  add_thunk_method_body(thunk_func_symb, component);
 
   // add thunk function symbol to the symbol table
   symbolt &added_thunk_symbol =
@@ -433,45 +406,31 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
 
 void clang_cpp_convertert::add_thunk_method_body(
   symbolt &thunk_func_symb,
-  const struct_typet::componentt &component,
-  uint64_t base_offset)
+  const struct_typet::componentt &component)
 {
   code_typet &code_type = to_code_type(thunk_func_symb.type);
   code_typet::argumentst &args = code_type.arguments();
 
-  // Build the adjusted 'this' to pass to the overriding method.
-  // The thunk receives a Base*, but the overriding method expects Derived*.
-  // For non-first base classes, subtract the byte offset of the Base
-  // sub-object within Derived so that the overriding method's 'this' points
-  // to the start of the Derived object, not the Base sub-object.
-  typet derived_ptr_type = to_code_type(component.type()).arguments()[0].type();
-  exprt base_this =
+  /*
+   * late cast of `this` pointer to (Derived*)this
+   */
+  typecast_exprt late_cast_this(
+    to_code_type(component.type()).arguments()[0].type());
+  late_cast_this.op0() =
     symbol_expr(*namespacet(context).lookup(args[0].cmt_identifier()));
-
-  exprt adjusted_this;
-  if (base_offset > 0)
-  {
-    typet char_ptr = pointer_typet(char_type());
-    typecast_exprt to_char(base_this, char_ptr);
-    minus_exprt sub(to_char, from_integer(base_offset, index_type()));
-    sub.type() = char_ptr;
-    adjusted_this = typecast_exprt(sub, derived_ptr_type);
-  }
-  else
-    adjusted_this = typecast_exprt(base_this, derived_ptr_type);
 
   if (
     code_type.return_type().id() != "empty" &&
     code_type.return_type().id() != "destructor")
-    add_thunk_method_body_return(thunk_func_symb, component, adjusted_this);
+    add_thunk_method_body_return(thunk_func_symb, component, late_cast_this);
   else
-    add_thunk_method_body_no_return(thunk_func_symb, component, adjusted_this);
+    add_thunk_method_body_no_return(thunk_func_symb, component, late_cast_this);
 }
 
 void clang_cpp_convertert::add_thunk_method_body_return(
   symbolt &thunk_func_symb,
   const struct_typet::componentt &component,
-  const exprt &late_cast_this)
+  const typecast_exprt &late_cast_this)
 {
   /*
    * Add thunk function with return value, something like:
@@ -505,7 +464,7 @@ void clang_cpp_convertert::add_thunk_method_body_return(
 void clang_cpp_convertert::add_thunk_method_body_no_return(
   symbolt &thunk_func_symb,
   const struct_typet::componentt &component,
-  const exprt &late_cast_this)
+  const typecast_exprt &late_cast_this)
 {
   /*
    * Add thunk function without return value, something like:
