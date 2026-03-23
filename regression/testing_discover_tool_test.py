@@ -36,18 +36,35 @@ class DiscoveryTest(unittest.TestCase):
             self._write_test(root_dir, "excluded/skip_me")
 
             tests = discover_tests(
-                str(root_dir),
+                root_dir,
                 include_prefixes=["suite_b", "suite_a"],
                 ignore_prefixes=["suite_a/ignored", "excluded"],
             )
 
             self.assertEqual(
                 [test.relative_dir for test in tests],
-                ["suite_b/keep_b", "suite_a/keep_a"],
+                [Path("suite_b/keep_b"), Path("suite_a/keep_a")],
             )
             self.assertEqual(
                 [test.labels for test in tests],
-                [["regression", "suite_b/"], ["regression", "suite_a/"]],
+                [(), ()],
+            )
+
+    def test_recursive_discovery_normalizes_backslash_prefixes(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            self._write_test(root_dir, "suite_a/subsuite/keep_me")
+            self._write_test(root_dir, "suite_a/ignored/skip_me")
+
+            tests = discover_tests(
+                root_dir,
+                include_prefixes=["suite_a\\subsuite"],
+                ignore_prefixes=["suite_a\\ignored"],
+            )
+
+            self.assertEqual(
+                [test.relative_dir for test in tests],
+                [Path("suite_a/subsuite/keep_me")],
             )
 
     def test_generate_ctest_discovery_emits_ctest_runtime_format(self):

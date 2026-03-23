@@ -2,32 +2,45 @@
 
 import argparse
 from collections.abc import Sequence
-from dataclasses import dataclass
 import os
+from pathlib import Path, PurePosixPath
 import sys
+from testing_model import TestDescription
 
-SUPPORTED_TEST_MODES: list[str] = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
+RelativePath = PurePosixPath
+
 _TIMEOUT_ENVVAR: str = "ESBMC_REGRESS_TIMEOUT"
 _MEMORY_LIMIT_ENVVAR: str = "ESBMC_REGRESS_MEMORY_LIMIT"
 
 
-def _normalize_relative_path(path: str) -> str:
-    normalized = path.replace("\\", "/").strip("/")
-    return "" if normalized == "." else normalized
+def _relative_path(path: str | Path) -> RelativePath:
+    normalized = os.fspath(path).replace("\\", "/").strip("/")
+    if normalized in {"", "."}:
+        return RelativePath()
+    return RelativePath(normalized)
 
 
-def _relative_dir(root_dir: str, path: str) -> str:
-    return _normalize_relative_path(os.path.relpath(path, root_dir))
+def _relative_path_text(path: RelativePath | Path) -> str:
+    relative_path: RelativePath = (
+        _relative_path(path) if isinstance(path, Path) else path
+    )
+    return "" if relative_path == RelativePath() else relative_path.as_posix()
 
 
-def _is_same_or_child(path: str, prefix: str) -> bool:
-    if not prefix:
+def _relative_to_root(root_dir: Path, path: Path) -> RelativePath:
+    return _relative_path(path.relative_to(root_dir))
+
+
+def _is_same_or_child(path: RelativePath, prefix: RelativePath) -> bool:
+    if prefix == RelativePath():
         return True
-    return path == prefix or path.startswith(prefix + "/")
+    return path == prefix or prefix in path.parents
 
 
 def _should_include_path(
-    path: str, include_prefixes: Sequence[str], ignore_prefixes: Sequence[str]
+    path: RelativePath,
+    include_prefixes: Sequence[RelativePath],
+    ignore_prefixes: Sequence[RelativePath],
 ) -> bool:
     if any(_is_same_or_child(path, prefix) for prefix in ignore_prefixes):
         return False
@@ -37,7 +50,9 @@ def _should_include_path(
 
 
 def _should_descend_into(
-    path: str, include_prefixes: Sequence[str], ignore_prefixes: Sequence[str]
+    path: RelativePath,
+    include_prefixes: Sequence[RelativePath],
+    ignore_prefixes: Sequence[RelativePath],
 ) -> bool:
     if any(_is_same_or_child(path, prefix) for prefix in ignore_prefixes):
         return False
@@ -49,11 +64,20 @@ def _should_descend_into(
     )
 
 
-def _suite_order_for_path(path: str, include_prefixes: Sequence[str]) -> int:
+def _suite_order_for_path(
+    path: RelativePath, include_prefixes: Sequence[RelativePath]
+) -> int:
     for index, prefix in enumerate(include_prefixes):
         if _is_same_or_child(path, prefix):
             return index
     return len(include_prefixes)
+
+
+def _default_labels(relative_dir: RelativePath) -> tuple[str, str]:
+    assert (
+        relative_dir.parent != RelativePath()
+    ), f"test directly under root has no suite directory: {relative_dir}"
+    return ("regression", f"{_relative_path_text(relative_dir.parent)}/")
 
 
 def _cmake_quote(value: str) -> str:
@@ -65,69 +89,31 @@ def _cmake_join(arguments: Sequence[str]) -> str:
     return " ".join(_cmake_quote(argument) for argument in arguments)
 
 
-@dataclass(frozen=True)
-class TestDescription:
-    """Immutable subset of test.desc fields needed during CTest discovery."""
-
-    test_dir: str
-    relative_dir: str
-    test_mode: str
-    test_file: str
-    labels: list[str]
-
-    @staticmethod
-    def parse_test_description(test_dir: str, relative_dir: str) -> "TestDescription":
-        """Read the minimal test.desc header needed to register the test."""
-        test_desc_path = os.path.join(test_dir, "test.desc")
-        with open(test_desc_path, encoding="utf-8") as fp:
-            test_mode = fp.readline().rstrip("\r\n")
-            # assert (
-            #     test_mode.strip() == test_mode
-            # ), f"{test_dir}: test mode line must not have leading/trailing whitespace: '{test_mode}'"
-            test_mode = test_mode.strip()
-            assert (
-                test_mode in SUPPORTED_TEST_MODES
-            ), f"{test_dir}: {test_mode} is not supported"
-            test_file = fp.readline().strip()
-            assert os.path.exists(os.path.join(test_dir, test_file))
-            fp.readline()
-        test_lables = TestDescription.getDefaultLabels(relative_dir)
-        return TestDescription(
-            test_dir, relative_dir, test_mode, test_file, test_lables
-        )
-
-    @staticmethod
-    def getDefaultLabels(relative_dir: str) -> list[str]:
-        """Return the built-in ctest labels for a discovered regression test."""
-        return ["regression", os.path.dirname(relative_dir) + "/"]
-
-
 def discover_tests(
-    root_dir: str,
+    root_dir: str | Path,
     include_prefixes: Sequence[str],
     ignore_prefixes: Sequence[str],
 ) -> list[TestDescription]:
     """Recursively discover test.desc files below root_dir."""
-    normalized_include_prefixes: list[str] = [
-        _normalize_relative_path(prefix)
-        for prefix in (include_prefixes or [])
-        if prefix
+    root_dir = Path(root_dir).resolve()
+    normalized_include_prefixes: list[RelativePath] = [
+        _relative_path(prefix) for prefix in (include_prefixes or []) if prefix
     ]
-    normalized_ignore_prefixes: list[str] = [
-        _normalize_relative_path(prefix) for prefix in (ignore_prefixes or []) if prefix
+    normalized_ignore_prefixes: list[RelativePath] = [
+        _relative_path(prefix) for prefix in (ignore_prefixes or []) if prefix
     ]
 
-    root_dir = os.path.abspath(root_dir)
     discovered: list[TestDescription] = []
 
-    for current_dir, dirnames, filenames in os.walk(root_dir, topdown=True):
+    for current_dir_str, dirnames, filenames in os.walk(root_dir, topdown=True):
+        current_dir = Path(current_dir_str)
         dirnames.sort()
-        rel_dir = _relative_dir(root_dir, current_dir)
+        relative_dir = _relative_to_root(root_dir, current_dir)
         dirnames[:] = [
             dirname
             for dirname in dirnames
             if _should_descend_into(
-                _normalize_relative_path(os.path.join(rel_dir, dirname)),
+                relative_dir / dirname,
                 normalized_include_prefixes,
                 normalized_ignore_prefixes,
             )
@@ -136,25 +122,27 @@ def discover_tests(
         if "test.desc" not in filenames:
             continue
         if not _should_include_path(
-            rel_dir, normalized_include_prefixes, normalized_ignore_prefixes
+            relative_dir, normalized_include_prefixes, normalized_ignore_prefixes
         ):
             continue
 
-        test = TestDescription.parse_test_description(current_dir, rel_dir)
+        test = TestDescription.parse_test_description(current_dir, root_dir)
         discovered.append(test)
 
     discovered.sort(
         key=lambda test: (
-            _suite_order_for_path(test.relative_dir, normalized_include_prefixes),
-            test.relative_dir,
+            _suite_order_for_path(
+                _relative_path(test.relative_dir), normalized_include_prefixes
+            ),
+            _relative_path_text(test.relative_dir),
         )
     )
     return discovered
 
 
 def generate_ctest_discovery(
-    root_dir: str,
-    runner: str,
+    root_dir: str | Path,
+    runner: str | Path,
     python_executable: str,
     tool: str,
     modes: Sequence[str],
@@ -165,24 +153,26 @@ def generate_ctest_discovery(
     benchbringup: bool = False,
 ) -> str:
     """Render discovered tests as the add_test script consumed by CTest."""
-    root_dir = os.path.abspath(root_dir)
-    runner = os.path.abspath(runner)
+    root_dir = Path(root_dir).resolve()
+    runner = Path(runner).resolve()
     tests: list[TestDescription] = discover_tests(
         root_dir, include_prefixes, ignore_prefixes
     )
 
     lines: list[str] = []
     for test in tests:
-        test_name = f"regression/{test.relative_dir}"
+        relative_dir = _relative_path(test.relative_dir)
+        relative_dir_text = _relative_path_text(relative_dir)
+        test_name = f"regression/{relative_dir_text}"
 
         command: list[str] = [
             python_executable,
-            runner,
+            os.fspath(runner),
             f"--tool={tool}",
-            f"--regression={root_dir}",
+            f"--regression={test.test_dir.parent.absolute()}",
             "--modes",
             *modes,
-            f"--file={test.relative_dir}",
+            f"--file={test.test_dir.name}",
         ]
         if benchbringup:
             command.append("--benchbringup")
@@ -201,7 +191,7 @@ def generate_ctest_discovery(
         if environment:
             properties.extend(["ENVIRONMENT", ";".join(environment)])
 
-        labels = ";".join(test.labels)
+        labels = ";".join(test.labels + _default_labels(relative_dir))
         if labels:
             properties.extend(["LABELS", labels])
 
