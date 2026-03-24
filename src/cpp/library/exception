@@ -4,7 +4,8 @@
 // Prevent system libc++ <exception> from redefining std::exception after us.
 #define _LIBCPP_EXCEPTION
 
-#include "definitions.h"
+// ESBMC intrinsic — no header needed.
+bool nondet_bool();
 
 namespace std
 {
