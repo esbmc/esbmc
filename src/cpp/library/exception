@@ -4,6 +4,13 @@
 // Prevent system libc++ <exception> from redefining std::exception after us.
 #define _LIBCPP_EXCEPTION
 
+// noexcept is C++11; use a compat macro so this header parses in C++03 mode.
+#if __cplusplus >= 201103L
+#define _ESBMC_NOEXCEPT noexcept
+#else
+#define _ESBMC_NOEXCEPT
+#endif
+
 // ESBMC intrinsic — no header needed.
 bool nondet_bool();
 
@@ -13,13 +20,13 @@ namespace std
 class exception
 {
 public:
-  exception() noexcept
+  exception() _ESBMC_NOEXCEPT
   {
   }
-  virtual ~exception() noexcept
+  virtual ~exception() _ESBMC_NOEXCEPT
   {
   }
-  virtual const char *what() const noexcept
+  virtual const char *what() const _ESBMC_NOEXCEPT
   {
     return "std::exception";
   }
@@ -28,13 +35,13 @@ public:
 class bad_exception : public exception
 {
 public:
-  bad_exception() noexcept
+  bad_exception() _ESBMC_NOEXCEPT
   {
   }
-  virtual ~bad_exception() noexcept
+  virtual ~bad_exception() _ESBMC_NOEXCEPT
   {
   }
-  virtual const char *what() const noexcept
+  virtual const char *what() const _ESBMC_NOEXCEPT
   {
     return "std::bad_exception";
   }
@@ -42,7 +49,7 @@ public:
 
 // Returns true if stack unwinding is in progress due to an uncaught exception.
 // Modelled as nondeterministic for BMC purposes.
-inline bool uncaught_exception() noexcept
+inline bool uncaught_exception() _ESBMC_NOEXCEPT
 {
   return nondet_bool();
 }
