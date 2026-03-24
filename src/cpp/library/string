@@ -1799,9 +1799,10 @@ __ESBMC_HIDE:
   basic_string<CharT, Traits, Alloc> temp(totalLen);
   int i, j, k;
   for (i = 0; i < this->_size; i++)
-    temp[i] = this->str[i];
-  for (j = i, k = 0; j < temp._size; j++, k++)
+    temp.str[i] = this->str[i];
+  for (j = i, k = 0; j < totalLen; j++, k++)
     temp.str[j] = s[k];
+  temp.str[totalLen] = '\0';
   *this = temp;
   return *this;
 }
@@ -1849,9 +1850,10 @@ __ESBMC_HIDE:
   basic_string<CharT, Traits, Alloc> temp(totalLen);
   int i, j, k;
   for (i = 0; i < this->_size; i++)
-    temp[i] = this->str[i];
-  for (j = i, k = 0; j < temp._size; j++, k++)
+    temp.str[i] = this->str[i];
+  for (j = i, k = 0; j < totalLen; j++, k++)
     temp.str[j] = s[k];
+  temp.str[totalLen] = '\0';
   *this = temp;
   return *this;
 }
