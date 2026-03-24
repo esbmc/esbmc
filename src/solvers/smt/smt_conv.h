@@ -442,6 +442,12 @@ public:
   // Returns SMT AST for the single precision relative error bound under
   // round-to-nearest: half machine epsilon = 2^-24 ~ 5.96e-08
   smt_astt get_single_eps_rel();
+  // Returns SMT AST for the double precision directional error bound under
+  // round-toward-+inf: full machine epsilon = 2^-52 ~ 2.22e-16
+  smt_astt get_double_eps_up();
+  // Returns SMT AST for the single precision directional error bound under
+  // round-toward-+inf: full machine epsilon = 2^-23 ~ 1.19e-07
+  smt_astt get_single_eps_up();
 
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
