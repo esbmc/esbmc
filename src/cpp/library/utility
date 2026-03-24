@@ -113,6 +113,10 @@ struct pair
   constexpr pair(const pair<U1, U2> &p) : first(p.first), second(p.second)
   {
   }
+  constexpr pair(const pair &p) : first(p.first), second(p.second)
+  {
+  }
+
   template <class U1, class U2>
   constexpr pair(pair<U1, U2> &&p)
     : first(forward<U1>(p.first)), second(forward<U2>(p.second))
