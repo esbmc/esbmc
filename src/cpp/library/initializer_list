@@ -1,0 +1,66 @@
+#ifndef ESBMC_INITIALIZER_LIST
+#define ESBMC_INITIALIZER_LIST
+
+#include "cstddef"
+
+namespace std
+{
+
+// Clang's codegen directly constructs initializer_list<E> as an aggregate
+// with two members in this order: (const E*, size_t).  The member names are
+// not significant — Clang initialises the struct with {ptr, count}.
+template <class E>
+class initializer_list
+{
+  const E *__begin_;
+  size_t __size_;
+
+public:
+  typedef E value_type;
+  typedef const E &reference;
+  typedef const E &const_reference;
+  typedef size_t size_type;
+  typedef const E *iterator;
+  typedef const E *const_iterator;
+
+  // Default constructor: empty list.
+  constexpr initializer_list() noexcept : __begin_(nullptr), __size_(0)
+  {
+  }
+
+  // Compiler-constructed from a braced-init-list; provided here for the
+  // purpose of letting Clang pick up the struct layout.
+  constexpr initializer_list(const E *b, size_t s) noexcept
+    : __begin_(b), __size_(s)
+  {
+  }
+
+  constexpr size_t size() const noexcept
+  {
+    return __size_;
+  }
+  constexpr const E *begin() const noexcept
+  {
+    return __begin_;
+  }
+  constexpr const E *end() const noexcept
+  {
+    return __begin_ + __size_;
+  }
+};
+
+template <class E>
+constexpr const E *begin(initializer_list<E> il) noexcept
+{
+  return il.begin();
+}
+
+template <class E>
+constexpr const E *end(initializer_list<E> il) noexcept
+{
+  return il.end();
+}
+
+} // namespace std
+
+#endif // ESBMC_INITIALIZER_LIST

@@ -47,19 +47,18 @@ void clang_cpp_languaget::build_include_args(
   {
     cppinc = esbmct::abstract_cpp_includes();
     log_debug("c++", "Adding CPP includes: {}", cppinc);
-    // On macOS, the system libc++ <typeinfo> stores the type name as a
-    // uintptr_t (ARM RTTI bit trick) instead of const char*, which causes
-    // an SMT sort mismatch in ESBMC.  The macos/ sub-directory provides a
-    // replacement <typeinfo> model; add it before the main library dir so
-    // it takes precedence over the system header on macOS only.
-    if (config.ansi_c.target.is_macos())
-    {
-      compiler_args.push_back("-isystem");
-      compiler_args.push_back(cppinc + "/macos");
-    }
     // Let the cpp include "overtake" others.
     compiler_args.push_back("-isystem");
     compiler_args.push_back(cppinc);
+    // Suppress system C++ standard library headers on all platforms so that
+    // ESBMC's bundled OMs are the sole source of C++ standard-library
+    // definitions.  Mixing the OMs with host libc++/libstdc++ headers
+    // causes ambiguous-name errors (e.g. char_traits, istream) because the
+    // OMs define names in namespace std while the host headers put them in
+    // an inline namespace (std::__1 on libc++, std:: on libstdc++ but with
+    // different ODR identity).
+    // Users who need the host headers can pass --no-abstracted-cpp-includes.
+    compiler_args.push_back("-nostdinc++");
   }
 
   clang_c_languaget::build_include_args(compiler_args);
