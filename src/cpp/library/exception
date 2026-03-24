@@ -67,6 +67,18 @@ inline void terminate() _ESBMC_NOEXCEPT
   __ESBMC_assert(0, "std::terminate called");
 }
 
+typedef void (*unexpected_handler)();
+
+inline unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
+{
+  return f;
+}
+
+inline void unexpected()
+{
+  terminate();
+}
+
 } // namespace std
 
 #endif // ESBMC_EXCEPTION
