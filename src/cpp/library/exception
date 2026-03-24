@@ -54,6 +54,19 @@ inline bool uncaught_exception() _ESBMC_NOEXCEPT
   return nondet_bool();
 }
 
+typedef void (*terminate_handler)();
+
+// Stubbed: ESBMC does not model the terminate handler call chain.
+inline terminate_handler set_terminate(terminate_handler f) _ESBMC_NOEXCEPT
+{
+  return f;
+}
+
+inline void terminate() _ESBMC_NOEXCEPT
+{
+  __ESBMC_assert(0, "std::terminate called");
+}
+
 } // namespace std
 
 #endif // ESBMC_EXCEPTION
