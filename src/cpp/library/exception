@@ -4,6 +4,8 @@
 // Prevent system libc++ <exception> from redefining std::exception after us.
 #define _LIBCPP_EXCEPTION
 
+#include "definitions.h"
+
 namespace std
 {
 
@@ -36,6 +38,13 @@ public:
     return "std::bad_exception";
   }
 };
+
+// Returns true if stack unwinding is in progress due to an uncaught exception.
+// Modelled as nondeterministic for BMC purposes.
+inline bool uncaught_exception() noexcept
+{
+  return nondet_bool();
+}
 
 } // namespace std
 
