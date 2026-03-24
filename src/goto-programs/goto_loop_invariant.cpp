@@ -549,7 +549,7 @@ void goto_loop_invariant_combinedt::copy_loop_body(
       target_map[t] = count;
   }
 
-  // First pass: copy instructions and store in vector
+  // copy instructions and store in vector
   std::vector<goto_programt::targett> target_vector;
   target_vector.reserve(target_map.size());
 
@@ -559,7 +559,7 @@ void goto_loop_invariant_combinedt::copy_loop_body(
     target_vector.push_back(copied_t);
   }
 
-  // Second pass: rewrite targets using index-based mapping
+  // rewrite targets using index-based mapping
   for (unsigned i = 0; i < target_vector.size(); i++)
   {
     goto_programt::targett t = target_vector[i];
