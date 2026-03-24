@@ -2064,6 +2064,26 @@ exprt python_list::handle_index_access(
     return extract_pyobject_value(list_at_call, elem_type);
   }
 
+  auto char_to_python_str = [&](exprt char_expr, const locationt &location) {
+    if (char_expr.type() != unsigned_char_type())
+      char_expr = typecast_exprt(char_expr, unsigned_char_type());
+    if (char_expr.type() != int_type())
+      char_expr = typecast_exprt(char_expr, int_type());
+
+    symbolt *chr_symbol =
+      converter_.symbol_table().find_symbol("c:@F@__python_chr");
+    if (!chr_symbol)
+      throw std::runtime_error(
+        "__python_chr function not found in symbol table");
+
+    side_effect_expr_function_callt chr_call;
+    chr_call.function() = symbol_expr(*chr_symbol);
+    chr_call.arguments().push_back(char_expr);
+    chr_call.location() = location;
+    chr_call.type() = pointer_typet(char_type());
+    return static_cast<exprt>(chr_call);
+  };
+
   // Handle static string indexing with IndexError on out-of-bounds
   if (array.type().is_array() && array.type().subtype() == char_type())
   {
@@ -2093,8 +2113,14 @@ exprt python_list::handle_index_access(
     guard.then_case() = throw_code;
     converter_.add_instruction(guard);
 
-    return index_exprt(array, idx, char_type());
+    return char_to_python_str(
+      index_exprt(array, idx, char_type()), guard.location());
   }
+
+  if (array.type().is_pointer() && array.type().subtype() == char_type())
+    return char_to_python_str(
+      index_exprt(array, pos_expr, char_type()),
+      converter_.get_location_from_decl(list_value_));
 
   // Handle static arrays
   return index_exprt(array, pos_expr, array.type().subtype());
