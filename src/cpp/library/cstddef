@@ -5,9 +5,12 @@
 
 // nullptr_t is defined by Clang as decltype(nullptr) — not in the global
 // namespace on macOS, so define it directly here.
+// decltype is C++11; skip nullptr_t in C++03 mode.
+#if __cplusplus >= 201103L
 #ifndef _NULLPTR_T_DEFINED
 typedef decltype(nullptr) nullptr_t;
 #define _NULLPTR_T_DEFINED
+#endif
 #endif
 
 namespace std
@@ -15,7 +18,9 @@ namespace std
 using ::max_align_t;
 using ::ptrdiff_t;
 using ::size_t;
+#if __cplusplus >= 201103L
 typedef ::nullptr_t nullptr_t;
+#endif
 
 #if __cplusplus >= 201703L
 enum class byte : unsigned char
