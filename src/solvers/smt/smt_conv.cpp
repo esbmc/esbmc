@@ -550,16 +550,16 @@ smt_astt smt_convt::apply_ieee754_semantics(
       auto single_spec = ieee_float_spect::single_precision();
 
       smt_sortt rs = mk_real_sort();
-      smt_astt eps_dn, eps_abs;
+      smt_astt eps_rel_dir, eps_abs;
 
       if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
       {
-        eps_dn = get_double_eps_up(); // eps_rel_dir = 2^-52, same as RUP
+        eps_rel_dir = get_double_eps_up(); // 2^-52, same value as RUP
         eps_abs = get_double_min_subnormal();
       }
       else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
       {
-        eps_dn = get_single_eps_up(); // eps_rel_dir = 2^-23, same as RUP
+        eps_rel_dir = get_single_eps_up(); // 2^-23, same value as RUP
         eps_abs = get_single_min_subnormal();
       }
       else
@@ -578,7 +578,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
         mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
 
       // B_dir(r) = eps_rel_dir * |r| + eps_abs
-      smt_astt b_dir = mk_add(mk_mul(eps_dn, abs_r), eps_abs);
+      smt_astt b_dir = mk_add(mk_mul(eps_rel_dir, abs_r), eps_abs);
       smt_astt ra_lo_expr = mk_sub(real_result, b_dir); // r - B_dir(r)
 
       // Introduce named enclosure variables. Use bidirectional inequalities to
