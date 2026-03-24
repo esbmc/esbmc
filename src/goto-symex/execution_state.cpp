@@ -672,41 +672,21 @@ void execution_statet::execute_guard()
   expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
 
-  // Check if the `pre_goto_guard` condition is false.
-  if (pre_goto_guard.is_false())
-  {
-    // If `pre_goto_guard` is false, create a temporary guard (`tmp`)
-    // that combines `pre_goto_guard` with the guard of the last active thread.
-    guardt tmp = pre_goto_guard;
-
-    // Use the OR operator to merge `pre_goto_guard` with the guard of the
-    // last active thread, stored in `threads_state[last_active_thread].guard`.
-    tmp |= threads_state[last_active_thread].guard;
-
-    // Assign the resulting combined expression to `parent_guard`.
-    parent_guard = tmp.as_expr();
-  }
+  // Parent guard of this context switch - if a assign/claim/assume, just use
+  // the current thread guard. However if we just executed a goto, use the
+  // pre-goto thread guard that we stored at that time. This is so that the
+  // thread we context switch to gets the guard of that context switch happening
+  // rather than the guard of either branch of the GOTO.
+  if(!pre_goto_guard.is_true())
+    parent_guard = pre_goto_guard.as_expr();
   else
-  {
-    // If `pre_goto_guard` is not false, assign the guard of the last active thread
-    // directly to `parent_guard` without any modifications.
     parent_guard = threads_state[last_active_thread].guard.as_expr();
-  }
 
   // If we simplified the global guard expr to false, write that to thread
   // guards, not the symbolic guard name. This is the only way to bail out of
   // evaluating a particular interleaving early right now.
-  if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
+  if(is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
   {
-    // A context switch happens, add last thread state guard to assumption.
-    if (active_thread != last_active_thread)
-    {
-      target->assumption(
-        guardt().as_expr(),
-        parent_guard,
-        get_active_state().source,
-        first_loop);
-    }
     cur_state->guard.make_false();
     return;
   }
@@ -717,10 +697,20 @@ void execution_statet::execute_guard()
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
+  implies2tc assumpt(guard_expr, parent_guard);
 
-  if (active_thread != last_active_thread)
-    target->assumption(
-      guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
+  target->assumption(
+    guardt().as_expr(), assumpt, get_active_state().source, first_loop);
+
+  // Check to see whether or not the state guard is false, indicating we've
+  // found an unviable interleaving. However don't do this if we didn't
+  // /actually/ switch between threads, because it's acceptable to have a
+  // context switch point in a branch where the guard is false (it just isn't
+  // acceptable to permit switching).
+  if(
+    last_active_thread != active_thread &&
+    is_cur_state_guard_false(threads_state[active_thread].guard.as_expr()))
+    interleaving_unviable = true;
 }
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)
