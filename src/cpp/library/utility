@@ -119,8 +119,18 @@ struct pair
   {
   }
 
-  pair &operator=(const pair &) = default;
-  pair &operator=(pair &&) = default;
+  pair &operator=(const pair &p)
+  {
+    first = p.first;
+    second = p.second;
+    return *this;
+  }
+  pair &operator=(pair &&p)
+  {
+    first = std::move(p.first);
+    second = std::move(p.second);
+    return *this;
+  }
 
   void swap(pair &p) noexcept
   {
