@@ -362,6 +362,16 @@ static bool is_round_to_plus_inf(const expr2tc &rounding_mode)
          BigInt(ieee_floatt::ROUND_TO_PLUS_INF);
 }
 
+static bool is_round_to_minus_inf(const expr2tc &rounding_mode)
+{
+  if (is_nil_expr(rounding_mode))
+    return false;
+  if (!is_constant_int2t(rounding_mode))
+    return false;
+  return to_constant_int2t(rounding_mode).value ==
+         BigInt(ieee_floatt::ROUND_TO_MINUS_INF);
+}
+
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
   const floatbv_type2t &fbv_type,
@@ -515,6 +525,74 @@ smt_astt smt_convt::apply_ieee754_semantics(
       // Pin ra_hi = r + B_dir(r)
       assert_ast(mk_le(ra_hi, ra_hi_expr)); // ra_hi <= r + B_dir(r)
       assert_ast(mk_le(ra_hi_expr, ra_hi)); // r + B_dir(r) <= ra_hi
+
+      // Containment: ra_lo <= result <= ra_hi
+      assert_ast(mk_le(ra_lo, real_result));
+      assert_ast(mk_le(real_result, ra_hi));
+      assert_ast(mk_le(ra_lo, ra_hi));
+
+      return real_result;
+    }
+    else if (is_round_to_minus_inf(rounding_mode))
+    {
+      // Asymmetric tight enclosure for ROUND_TO_MINUS_INF:
+      //   fl_RDN(r) <= r  (exact upper bound; round-down never overshoots)
+      //   fl_RDN(r) >= r - B_dir(r)
+      // where B_dir(r) = eps_rel_dir * |r| + eps_abs
+      //   eps_rel_dir = 2^-52 (double) or 2^-23 (single)
+      //   This is the directed-mode error constant, the same value used for
+      //   ROUND_TO_PLUS_INF; the bound shape is the mirror image.
+
+      unsigned int fraction_bits = fbv_type.fraction;
+      unsigned int exponent_bits = fbv_type.exponent;
+
+      auto double_spec = ieee_float_spect::double_precision();
+      auto single_spec = ieee_float_spect::single_precision();
+
+      smt_sortt rs = mk_real_sort();
+      smt_astt eps_dn, eps_abs;
+
+      if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+      {
+        eps_dn = get_double_eps_up(); // eps_rel_dir = 2^-52, same as RUP
+        eps_abs = get_double_min_subnormal();
+      }
+      else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
+      {
+        eps_dn = get_single_eps_up(); // eps_rel_dir = 2^-23, same as RUP
+        eps_abs = get_single_min_subnormal();
+      }
+      else
+      {
+        // Unsupported format: fall back to unconstrained weak enclosure.
+        smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
+        smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
+        assert_ast(mk_le(ra_lo, real_result));
+        assert_ast(mk_le(real_result, ra_hi));
+        assert_ast(mk_le(ra_lo, ra_hi));
+        return real_result;
+      }
+
+      smt_astt zero = mk_smt_real("0.0");
+      smt_astt abs_r = mk_ite(
+        mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+
+      // B_dir(r) = eps_rel_dir * |r| + eps_abs
+      smt_astt b_dir = mk_add(mk_mul(eps_dn, abs_r), eps_abs);
+      smt_astt ra_lo_expr = mk_sub(real_result, b_dir); // r - B_dir(r)
+
+      // Introduce named enclosure variables. Use bidirectional inequalities to
+      // survive Z3's solve-eqs tactic (same technique as the other tight paths).
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_dn::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_dn::", nullptr);
+
+      // Pin ra_lo = r - B_dir(r)  (the computed lower bound)
+      assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= r - B_dir(r)
+      assert_ast(mk_le(ra_lo_expr, ra_lo)); // r - B_dir(r) <= ra_lo
+
+      // Pin ra_hi = r  (exact upper bound for round-down)
+      assert_ast(mk_le(ra_hi, real_result)); // ra_hi <= r
+      assert_ast(mk_le(real_result, ra_hi)); // r <= ra_hi  =>  ra_hi == r
 
       // Containment: ra_lo <= result <= ra_hi
       assert_ast(mk_le(ra_lo, real_result));
