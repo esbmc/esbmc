@@ -55,6 +55,7 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
+#include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
 #include <util/yaml_parser.h>
 
@@ -2369,6 +2370,58 @@ bool esbmc_parseoptionst::output_goto_program(
       goto_cfg cfg(goto_functions);
       cfg.dump_graph();
       return true;
+    }
+
+    // Print a flat list of every function call site with its arguments.
+    // Output format: caller -> callee(arg1, arg2, ...) [file:line]
+    // Nested calls appear as separate lines with compiler-generated
+    // temporaries (e.g. return_value$_add$5) showing data flow.
+    if (cmdline.isset("show-call-sites"))
+    {
+      for (const auto &f : goto_functions.function_map)
+      {
+        if (!f.second.body_available)
+          continue;
+        const std::string caller = f.first.as_string();
+        forall_goto_program_instructions (i_it, f.second.body)
+        {
+          if (i_it->is_function_call())
+          {
+            const auto &fc = to_code_function_call2t(i_it->code);
+
+            // Direct calls have a symbol; indirect calls (function
+            // pointers) fall back to pretty-printing the expression.
+            std::string callee;
+            if (is_symbol2t(fc.function))
+              callee = to_symbol2t(fc.function).get_symbol_name();
+            else
+              callee = from_expr(ns, "", fc.function);
+
+            // Pretty-print each actual argument as a comma-separated list
+            std::string args;
+            for (size_t i = 0; i < fc.operands.size(); i++)
+            {
+              if (i > 0)
+                args += ", ";
+              args += from_expr(ns, "", fc.operands[i]);
+            }
+
+            std::string loc;
+            if (!i_it->location.get_file().empty())
+            {
+              const auto &file = i_it->location.get_file();
+              const auto &line = i_it->location.get_line();
+
+              if (!line.empty())
+                loc = " [" + file.as_string() + ":" + line.as_string() + "]";
+              else
+                loc = " [" + file.as_string() + "]";
+            }
+            log_status("{} -> {}({}){}", caller, callee, args, loc);
+          }
+        }
+      }
+      std::exit(0);
     }
 
     // Translate the GOTO program to C and output it into the log or
