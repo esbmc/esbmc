@@ -7,7 +7,7 @@
  *
  * PROOF SHAPE (B_dir)
  * -------------------
- * For round-toward--inf, fl_RDN(r) <= r always. The enclosure is asymmetric:
+ * For round-toward-minus-inf, fl_RDN(r) <= r always. The enclosure is asymmetric:
  *   fl_RDN(r) in [r - B_dir(r),  r]
  * where B_dir(r) = eps_rel_dir * |r| + eps_abs
  * and eps_rel_dir = 2^-52 (full machine epsilon for double, DBL_EPSILON).
