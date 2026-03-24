@@ -1,4 +1,5 @@
 CORE
 main.cpp
 --unwind 10 --no-unwinding-assertions --timeout 900 --std c++03
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
+^Trying to throw an exception but it's not allowed by declaration
