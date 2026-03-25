@@ -5,6 +5,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
 #include <util/expr.h>
+#include <unordered_map>
 
 enum class FunctionType
 {
@@ -78,7 +79,8 @@ private:
 
   exprt generate_attribute_error(
     const std::string &method_name,
-    const std::vector<std::string> &possible_classes) const;
+    const std::vector<std::string> &possible_classes,
+    const typet &expected_type = typet()) const;
 
   /**
    * Determines whether a non-deterministic function is being invoked.
@@ -131,6 +133,7 @@ private:
    * for error messages (e.g. "mylist" or "nested[0]").
    */
   const symbolt *get_object_list_symbol(std::string &display_name) const;
+  void materialize_list_symbol(const symbolt *sym) const;
 
   /*
    * Handles int-to-str conversions (e.g., str(65)) by generating
@@ -340,12 +343,16 @@ private:
   // General function call handler
   exprt handle_general_function_call();
 
+  const symbolt *cached_find_symbol(const std::string &id) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
   python_converter &converter_;
   const type_handler &type_handler_;
   FunctionType function_type_;
+
+  mutable std::unordered_map<std::string, const symbolt *> sym_cache_;
 };
 
 /// Convert a code_function_callt to a side_effect_expr_function_callt so it

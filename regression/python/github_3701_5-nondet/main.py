@@ -33,7 +33,6 @@ l2 = []
 
 j = 0
 
-# 🔒 critical invariant before loop
 assert len(l2) == j
 
 while j < n:
@@ -55,7 +54,6 @@ while j < n:
     l2.append(y)
     j = j + 1
 
-    # 🔒 maintain relational invariant
     assert len(l2) == j
 
 # postconditions

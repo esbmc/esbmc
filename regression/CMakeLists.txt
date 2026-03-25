@@ -11,22 +11,15 @@ else()
     # TODO: Use add dependency
 endif()
 
-if(ENABLE_PYTHON_FRONTEND)
-# Install Jira package with pip before running tests (needed by regression/python/try-fail)
-# Use --break-system-packages for externally-managed Python environments (PEP 668)
-execute_process(
-    COMMAND ${Python_EXECUTABLE} -m pip install --break-system-packages jira
-    RESULT_VARIABLE pip_result
-)
-if(pip_result)
-    # Fallback: try without --break-system-packages (for older Python or non-externally-managed)
-    execute_process(
-        COMMAND ${Python_EXECUTABLE} -m pip install jira
-    )
-endif()
-endif()
-
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
+
+# Per-test timeout, injected into the runner via
+# the ESBMC_REGRESS_TIMEOUT environment variable
+#so the Python side never needs its own default.
+set(ESBMC_REGRESS_TIMEOUT 1200 CACHE STRING
+    "Per-test timeout in seconds for regression tests")
+set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
+    "Per-test virtual memory limit")
 
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
@@ -39,8 +32,10 @@ if(BENCHBRINGUP)
    message( FATAL_ERROR "Please make sure ENV vars `BENCHMARK_TO_RUN`, `LOG_DIR` and `TEST_TIMEOUT` are defined" )
   endif()
 
-  message(STATUS "Benchmark to run: $ENV{BENCHMARK_TO_RUN} with timeout $ENV{TEST_TIMEOUT}")
-  set(BENCHBRINGUP_ARGS --timeout=$ENV{TEST_TIMEOUT} --benchbringup)
+  # Override the cache value with the CI-supplied one.
+  set(ESBMC_REGRESS_TIMEOUT $ENV{TEST_TIMEOUT})
+  message(STATUS "Benchmark to run: $ENV{BENCHMARK_TO_RUN} with timeout ${ESBMC_REGRESS_TIMEOUT}")
+  set(BENCHBRINGUP_ARGS --benchbringup)
 endif()
 
 function(add_esbmc_regression_test folder modes test)
@@ -52,10 +47,12 @@ function(add_esbmc_regression_test folder modes test)
                      --modes ${modes}
                      --file=${test}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
-    # TODO: Testing Tool should have a command to dump the TAG of a test		   
+    # Timeout and memory limit are passed via environment
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
-      LABELS "regression;${folder}")
+      TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
+      ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+      LABELS "regression;${folder}/")
 endfunction()
 
 function(add_esbmc_regression folder modes)
@@ -119,6 +116,7 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/destructors
                       esbmc-cpp/polymorphism_bringup
                       esbmc-cpp/polymorphism_bringup_overload
+                      esbmc-cpp/inheritance
                       esbmc-cpp/inheritance_bringup
                       esbmc-cpp/bug_fixes
                       esbmc-cpp/OM_sanity_checks
@@ -196,8 +194,10 @@ if(APPLE)
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_Z3}
                     incremental-smt
-                    esbmc-cpp11/cpp
-                    esbmc-cpp11/cbmc-constructors
+                    ${REGRESSIONS_CPP03}
+                    ${REGRESSIONS_CPP11}
+                    ${REGRESSIONS_CPP14}
+                    ${REGRESSIONS_CPP17}
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
@@ -283,6 +283,7 @@ else()
                     parallel-solving
                     loop-invariants
                     function_contract
+                    witnesses_validate
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

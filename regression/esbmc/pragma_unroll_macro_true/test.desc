@@ -1,5 +1,5 @@
 CORE
 main.c
---no-unwinding-assertions
-^Applying #pragma unroll 6 to loop
+--verbosity 9 --no-unwinding-assertions
+Applying #pragma unroll 6 to loop
 ^VERIFICATION SUCCESSFUL$

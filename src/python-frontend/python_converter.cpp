@@ -2052,15 +2052,31 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (!type_mismatch_result.is_nil())
     return type_mismatch_result;
 
-  // Handle Any-typed (void*) operands in comparisons: cast the concrete side
-  // to void* make sure like `y == False` work when y is Any-typed.
+  // Detect any_type (void*) operands — unannotated Python parameters.
+  auto is_any_ptr = [](const exprt &e) {
+    return e.type().is_pointer() && e.type().subtype().id() == "empty";
+  };
+  auto is_integer = [](const exprt &e) {
+    return e.type().is_signedbv() || e.type().is_unsignedbv();
+  };
+
+  // For arithmetic operations (Sub, Add, Mult, etc.) on an any_type (void*)
+  // operand combined with an integer operand, cast the void* to the integer type.
   if (
-    type_utils::is_relational_op(op) || op == "Is" || op == "IsNot" ||
-    op == "In" || op == "NotIn")
+    !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
+    op != "In" && op != "NotIn")
   {
-    auto is_any_ptr = [](const exprt &e) {
-      return e.type().is_pointer() && e.type().subtype().id() == "empty";
-    };
+    if (is_any_ptr(lhs) && is_integer(rhs))
+      lhs = typecast_exprt(lhs, rhs.type());
+    else if (is_any_ptr(rhs) && is_integer(lhs))
+      rhs = typecast_exprt(rhs, lhs.type());
+  }
+
+  // Handle Any-typed (void*) operands in comparisons.
+  if (
+    type_utils::is_ordered_comparison(op) || op == "Eq" || op == "NotEq" ||
+    op == "Is" || op == "IsNot" || op == "In" || op == "NotIn")
+  {
     auto cast_to_void_ptr = [](exprt &e, const typet &ptr_type) {
       if (e.type().is_floatbv())
       {
@@ -2072,9 +2088,19 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       e = typecast_exprt(e, ptr_type);
     };
     if (is_any_ptr(lhs) && !is_any_ptr(rhs) && !rhs.type().is_pointer())
-      cast_to_void_ptr(rhs, lhs.type());
+    {
+      if (type_utils::is_ordered_comparison(op) && is_integer(rhs))
+        lhs = typecast_exprt(lhs, rhs.type()); // cast void* to integer
+      else
+        cast_to_void_ptr(rhs, lhs.type()); // cast integer to void*
+    }
     else if (is_any_ptr(rhs) && !is_any_ptr(lhs) && !lhs.type().is_pointer())
-      cast_to_void_ptr(lhs, rhs.type());
+    {
+      if (type_utils::is_ordered_comparison(op) && is_integer(lhs))
+        rhs = typecast_exprt(rhs, lhs.type()); // cast void* to integer
+      else
+        cast_to_void_ptr(lhs, rhs.type()); // cast integer to void*
+    }
   }
 
   // Handle special mathematical operations
@@ -2234,7 +2260,8 @@ exprt python_converter::handle_list_operations(
   // List comparison
   if (
     lhs.type() == list_type && rhs.type() == list_type &&
-    (op == "Eq" || op == "NotEq"))
+    (op == "Eq" || op == "NotEq" || op == "Lt" || op == "LtE" || op == "Gt" ||
+     op == "GtE"))
   {
     python_list list(*this, element);
     return list.compare(lhs, rhs, op);
@@ -2750,8 +2777,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       : (parsed.get_function().empty() ? parsed.get_object()
                                        : parsed.get_function());
 
-  for (const auto &obj : (*ast_json)["body"])
-  {
+  auto find_in_import = [&](const nlohmann::json &obj) -> symbolt * {
     if (
       (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
       obj.contains("full_path") && !obj["full_path"].is_null())
@@ -2780,7 +2806,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
           }
         }
         if (!name_imported)
-          continue;
+          return nullptr;
       }
 
       std::regex pattern("py:(.*?)@");
@@ -2792,7 +2818,31 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
           symbol_table_.find_symbol(imported_symbol.c_str()))
         return func_symbol;
     }
+
+    return nullptr;
+  };
+
+  for (const auto &obj : (*ast_json)["body"])
+  {
+    if (symbolt *func_symbol = find_in_import(obj))
+      return func_symbol;
   }
+
+  // Also check imports inside function bodies.
+  for (const auto &obj : (*ast_json)["body"])
+  {
+    if (
+      obj["_type"] == "FunctionDef" && obj.contains("body") &&
+      obj["body"].is_array())
+    {
+      for (const auto &stmt : obj["body"])
+      {
+        if (symbolt *func_symbol = find_in_import(stmt))
+          return func_symbol;
+      }
+    }
+  }
+
   return nullptr;
 }
 
@@ -2922,14 +2972,30 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return set_handler.get_from_iterable(iterable_expr, element);
   }
 
-  // Handle list(range(...))
+  // Handle list(...) calls
   if (
     element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
-    element["args"].size() == 1 && element["args"][0]["_type"] == "Call" &&
-    element["args"][0]["func"]["id"] == "range")
+    element.contains("args") && element["args"].size() == 1)
   {
-    const auto &range_args = element["args"][0]["args"];
-    return python_list::build_list_from_range(*this, range_args, element);
+    const auto &list_arg = element["args"][0];
+
+    // Handle list(range(...))
+    if (
+      list_arg["_type"] == "Call" && list_arg["func"]["_type"] == "Name" &&
+      list_arg["func"]["id"] == "range")
+    {
+      return python_list::build_list_from_range(
+        *this, list_arg["args"], element);
+    }
+
+    // Handle list(iterable) where iterable evaluates to a list — e.g.
+    // list(d.items()), list(d.keys()), list(d.values()), list(some_list).
+    // d.items() returns the keys member as a placeholder list (correct size).
+    exprt arg_expr = get_expr(list_arg);
+    if (arg_expr.type() == type_handler_.get_list_type())
+      return arg_expr;
+    // Fall through to the generic function-call builder below for non-list
+    // iterables (e.g. list("abc") or list(42)).
   }
 
   // Handle dict.keys(), dict.values(), and dict.items() methods
@@ -2976,9 +3042,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // For-loop uses of items() are rewritten by the preprocessor into
           // separate keys()/values() accesses and never reach here.
           // For standalone/discarded calls (e.g. bare `d.items()` statement),
-          // return the keys member as a harmless placeholder — the result is
-          // not consumed so soundness is unaffected.
-          // Storing and consuming d.items() outside a for-loop is not supported.
+          // return the keys member as a placeholder — same size as the dict,
+          // so size/emptiness comparisons (e.g. list(d.items()) == []) work.
+          // Full (key, value) tuple semantics are not modelled.
           member_exprt member(obj_expr, "keys", list_type);
           return member;
         }
@@ -3644,6 +3710,21 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             param_type.is_pointer() && arg_actual_type.is_struct() &&
             !arg.is_address_of() && !arg_actual_type.is_pointer())
             arg = gen_address_of(arg);
+
+          // Propagate instance attributes set on this parameter back to the
+          // caller's argument. This models Python's pass-by-object-reference:
+          // if o.x = 5 is set inside f(a) via parameter o, then a.x should
+          // reflect the instance attribute rather than the class attribute.
+          // Note: this relies on the callee body being processed before the
+          // call site (true for top-level sequential Python), so that
+          // instance_attr_map[param] is already populated here.
+          const exprt *arg_sym = &args[i];
+          if (arg_sym->is_address_of())
+            arg_sym = &arg_sym->op0();
+          if (arg_sym->is_symbol())
+            copy_instance_attributes(
+              params[i].identifier().as_string(),
+              arg_sym->identifier().as_string());
         }
       }
     }
@@ -3864,6 +3945,55 @@ bool python_converter::has_dunder_method(
     return false;
 
   return find_dunder_method(class_name, dunder_name) != nullptr;
+}
+
+nlohmann::json python_converter::build_dunder_call(
+  const nlohmann::json &object,
+  const std::string &dunder_name,
+  const nlohmann::json &args,
+  const nlohmann::json &source_node) const
+{
+  nlohmann::json call_node;
+  call_node["_type"] = "Call";
+  call_node["func"] = {
+    {"_type", "Attribute"}, {"value", object}, {"attr", dunder_name}};
+  call_node["args"] = args;
+  call_node["keywords"] = nlohmann::json::array();
+  if (source_node.contains("lineno"))
+    call_node["lineno"] = source_node["lineno"];
+  if (source_node.contains("col_offset"))
+    call_node["col_offset"] = source_node["col_offset"];
+  if (source_node.contains("end_lineno"))
+    call_node["end_lineno"] = source_node["end_lineno"];
+  if (source_node.contains("end_col_offset"))
+    call_node["end_col_offset"] = source_node["end_col_offset"];
+  return call_node;
+}
+
+exprt python_converter::store_call_result(
+  exprt call_expr,
+  const locationt &location,
+  const std::string &temp_prefix)
+{
+  if (!call_expr.is_function_call())
+    return call_expr;
+
+  symbolt temp_symbol =
+    create_return_temp_variable(call_expr.type(), location, temp_prefix);
+  symbol_table_.add(temp_symbol);
+  exprt temp_var_expr = symbol_expr(temp_symbol);
+
+  code_declt temp_decl(temp_var_expr);
+  temp_decl.location() = location;
+  if (!call_expr.type().is_empty())
+    call_expr.op0() = temp_var_expr;
+  if (current_block)
+  {
+    current_block->copy_to_operands(temp_decl);
+    current_block->copy_to_operands(call_expr);
+  }
+
+  return temp_var_expr;
 }
 
 exprt python_converter::dispatch_dunder_operator(
@@ -4362,12 +4492,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     symbolt *symbol = nullptr;
     if (!(symbol = find_symbol(sid_str)))
     {
-      // Fallback for global variables accessed inside functions
+      // Fallback for global variables accessed inside functions or class methods
       if (!is_class_attr && element["_type"] == "Name")
       {
         sid.set_function(""); // remove function scope
         sid_str = sid.to_string();
         symbol = find_symbol(sid_str);
+        if (!symbol)
+        {
+          // also try module-level global (strips class scope too)
+          symbol = find_symbol(sid.global_to_string());
+        }
       }
       if (!symbol)
       {
@@ -4668,24 +4803,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     //   obj[key] -> obj.__getitem__(key)
     if (has_dunder_method(element["value"], "__getitem__"))
     {
-      nlohmann::json call_node;
-      call_node["_type"] = "Call";
-      call_node["func"] = {
-        {"_type", "Attribute"},
-        {"value", element["value"]},
-        {"attr", "__getitem__"}};
-      call_node["args"] = nlohmann::json::array();
-      call_node["args"].push_back(slice);
-      call_node["keywords"] = nlohmann::json::array();
-      if (element.contains("lineno"))
-        call_node["lineno"] = element["lineno"];
-      if (element.contains("col_offset"))
-        call_node["col_offset"] = element["col_offset"];
-      if (element.contains("end_lineno"))
-        call_node["end_lineno"] = element["end_lineno"];
-      if (element.contains("end_col_offset"))
-        call_node["end_col_offset"] = element["end_col_offset"];
-
+      nlohmann::json args = nlohmann::json::array();
+      args.push_back(slice);
+      nlohmann::json call_node =
+        build_dunder_call(element["value"], "__getitem__", args, element);
       expr = get_function_call(call_node);
       break;
     }
@@ -5500,10 +5621,28 @@ bool python_converter::handle_unpacking_assignment(
   }
   else if (rhs.type().is_pointer())
   {
+    typet pointed_type = ns.follow(rhs.type().subtype());
+    if (
+      pointed_type.id() == "struct" &&
+      tuple_handler_->is_tuple_type(pointed_type))
+    {
+      exprt tuple_value = dereference_exprt(rhs, pointed_type);
+      tuple_value.location() = rhs.location();
+      tuple_handler_->handle_tuple_unpacking(
+        ast_node, target, tuple_value, target_block);
+      return true;
+    }
+
     const auto &value_node = ast_node["value"];
     if (value_node["_type"] == "List")
     {
       handle_list_literal_unpacking(ast_node, target, target_block);
+      return true;
+    }
+    if (rhs.type() == get_type_handler().get_list_type())
+    {
+      python_list list(*this, ast_node["value"]);
+      list.handle_list_var_unpacking(ast_node, target, rhs, target_block);
       return true;
     }
   }
@@ -5540,6 +5679,64 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   if (value_type == "Lambda")
   {
     inferred_type = any_type();
+  }
+  else if (
+    value_type == "Call" &&
+    ast_node["value"]["func"].value("_type", "") == "Attribute" &&
+    ast_node["value"]["func"]["value"].value("_type", "") == "Name")
+  {
+    // For dict method calls that emit instructions via converter_.add_instruction()
+    // (pop, get, setdefault), calling get_expr() here for type inference would
+    // execute the side effects a second time when the actual assignment is
+    // processed.  Pop is especially harmful: the first evaluation removes the
+    // key, so the second evaluation can't find it and throws KeyError.
+    // Instead, infer the return type directly from the dict's value annotation.
+    const std::string &method =
+      ast_node["value"]["func"]["attr"].get<std::string>();
+    const std::string &obj_name =
+      ast_node["value"]["func"]["value"]["id"].get<std::string>();
+
+    // Disambiguate by checking the actual symbol type, not just the annotation,
+    // so that unannotated dict variables are also handled correctly.
+    symbol_id obj_sid = create_symbol_id();
+    obj_sid.set_object(obj_name);
+    const symbolt *obj_sym = symbol_table_.find_symbol(obj_sid.to_string());
+
+    // Value-returning dict methods emit IR instructions as a side-effect and
+    // must not be called via get_expr() during type inference (double-eval).
+    bool is_dict_method =
+      python_dict_handler::is_value_returning_method(method) &&
+      obj_sym != nullptr &&
+      dict_handler_->is_dict_type(ns.follow(obj_sym->type));
+
+    if (is_dict_method)
+    {
+      // obj_sym != nullptr is guaranteed by the is_dict_method check above
+      if (method == "popitem")
+      {
+        // popitem() returns (key, value) tuple — infer the full tuple type
+        inferred_type =
+          dict_handler_->get_popitem_tuple_type(symbol_expr(*obj_sym));
+      }
+      else
+      {
+        inferred_type = dict_handler_->resolve_expected_type_for_dict_subscript(
+          symbol_expr(*obj_sym));
+        if (inferred_type.is_nil() || inferred_type.is_empty())
+          inferred_type = long_int_type();
+      }
+    }
+    else
+    {
+      is_converting_rhs = true;
+      exprt rhs_expr = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+      inferred_type = rhs_expr.type();
+      if (inferred_type.is_empty())
+        inferred_type = any_type();
+      else if (inferred_type.is_code())
+        inferred_type = gen_pointer_type(inferred_type);
+    }
   }
   else
   {
@@ -5850,25 +6047,11 @@ void python_converter::get_var_assign(
       ast_node.contains("value") && !ast_node["value"].is_null() &&
       has_dunder_method(target["value"], "__setitem__"))
     {
-      nlohmann::json call_node;
-      call_node["_type"] = "Call";
-      call_node["func"] = {
-        {"_type", "Attribute"},
-        {"value", target["value"]},
-        {"attr", "__setitem__"}};
-      call_node["args"] = nlohmann::json::array();
-      call_node["args"].push_back(target["slice"]);
-      call_node["args"].push_back(ast_node["value"]);
-      call_node["keywords"] = nlohmann::json::array();
-      if (ast_node.contains("lineno"))
-        call_node["lineno"] = ast_node["lineno"];
-      if (ast_node.contains("col_offset"))
-        call_node["col_offset"] = ast_node["col_offset"];
-      if (ast_node.contains("end_lineno"))
-        call_node["end_lineno"] = ast_node["end_lineno"];
-      if (ast_node.contains("end_col_offset"))
-        call_node["end_col_offset"] = ast_node["end_col_offset"];
-
+      nlohmann::json args = nlohmann::json::array();
+      args.push_back(target["slice"]);
+      args.push_back(ast_node["value"]);
+      nlohmann::json call_node =
+        build_dunder_call(target["value"], "__setitem__", args, ast_node);
       exprt setitem_call = get_function_call(call_node);
       target_block.copy_to_operands(convert_expression_to_code(setitem_call));
       return;
@@ -6181,6 +6364,38 @@ void python_converter::get_var_assign(
 
       target_block.copy_to_operands(code_expr);
       target_block.copy_to_operands(decl);
+      current_lhs = nullptr;
+      return;
+    }
+
+    // Python dynamic typing: if a variable already has a numeric type (e.g.
+    // double from float()) and is being reassigned to a pointer/string type
+    // (e.g. char* from chr()), the GOTO IR cannot represent this type change
+    // safely — the old SSA constant and the new pointer type mismatch in both
+    // the symex renamer and the SMT encoder. Skip the assignment so the prior
+    // type and value are preserved. This is sound for verification as long as
+    // the new value is not used in a subsequent assertion.
+    if (
+      lhs_symbol && !lhs.type().is_pointer() && rhs.type().is_pointer() &&
+      rhs.type().subtype() ==
+        char_type() && // only skip string (char*) reassignment, not None (void*/bool*)
+      (lhs.type().is_floatbv() || lhs.type().is_signedbv() ||
+       lhs.type().is_unsignedbv() || lhs.type().is_bool()))
+    {
+      // Still emit the RHS as a void call so exceptions/side-effects are
+      // preserved (e.g. chr() out-of-range ValueError).
+      if (
+        rhs.id() == "sideeffect" &&
+        rhs.statement() == irep_idt("function_call"))
+      {
+        const side_effect_expr_function_callt &se =
+          to_side_effect_expr_function_call(rhs);
+        code_function_callt void_call;
+        void_call.function() = se.function();
+        void_call.arguments() = se.arguments();
+        void_call.location() = rhs.location();
+        add_instruction(void_call);
+      }
       current_lhs = nullptr;
       return;
     }
@@ -6657,7 +6872,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
     code_blockt *saved_block = current_block;
     current_block = &loop_body;
+    exprt *saved_lhs = current_lhs;
+    current_lhs = nullptr;
     exprt func_call = get_expr(call_node);
+    current_lhs = saved_lhs;
     current_block = saved_block;
 
     if (func_call.is_function_call())
@@ -6712,14 +6930,99 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Extract condition from AST
   exprt cond;
 
-  // Materialize function call if needed
-  if (has_nested_call)
+  // Keep `and` and `or` in conditions short-circuited.
+  const bool coverage_mode = is_coverage_mode();
+  const bool pytest_generation_mode = is_pytest_generation_mode();
+  const bool model_mode = is_model_file(ast_node["test"]);
+
+  if (
+    test_type == "BoolOp" && current_block && type != "While" &&
+    !coverage_mode && !pytest_generation_mode && !model_mode)
+  {
+    const auto &test_node = ast_node["test"];
+    const auto &operands = test_node["values"];
+    if (!operands.empty())
+    {
+      exprt *saved_lhs = current_lhs;
+      current_lhs = nullptr;
+      // Start from the leftmost operand and carry the running result forward.
+      cond = get_expr(operands[0]);
+      current_lhs = saved_lhs;
+
+      symbolt result_symbol = create_return_temp_variable(
+        bool_type(), get_location_from_decl(test_node), "boolop_cond");
+      symbol_table_.add(result_symbol);
+      exprt result_expr = symbol_expr(result_symbol);
+
+      code_declt result_decl(result_expr);
+      result_decl.location() = get_location_from_decl(test_node);
+      current_block->copy_to_operands(result_decl);
+
+      code_assignt result_init(result_expr, cond);
+      result_init.location() = get_location_from_decl(test_node);
+      current_block->copy_to_operands(result_init);
+
+      const bool is_and = test_node["op"]["_type"] == "And";
+      for (size_t i = 1; i < operands.size(); ++i)
+      {
+        code_blockt next_operand_block;
+        code_blockt *saved_block = current_block;
+        current_block = &next_operand_block;
+        saved_lhs = current_lhs;
+        current_lhs = nullptr;
+        // Build the next operand only in the branch where it is still needed.
+        exprt next_operand = get_expr(operands[i]);
+        current_lhs = saved_lhs;
+        current_block = saved_block;
+
+        code_assignt result_update(result_expr, next_operand);
+        result_update.location() = get_location_from_decl(operands[i]);
+        next_operand_block.copy_to_operands(result_update);
+
+        code_ifthenelset short_circuit_if;
+        short_circuit_if.location() = get_location_from_decl(operands[i]);
+        short_circuit_if.location().property("skipped");
+        // `and` keeps going while the running result is true; `or` keeps
+        // going while it is false.
+        if (is_and)
+          short_circuit_if.cond() = result_expr;
+        else
+        {
+          exprt not_result("not", bool_type());
+          not_result.copy_to_operands(result_expr);
+          short_circuit_if.cond() = not_result;
+        }
+        short_circuit_if.then_case() = next_operand_block;
+        current_block->copy_to_operands(short_circuit_if);
+      }
+
+      cond = result_expr;
+    }
+  }
+  else if (has_nested_call)
   {
     locationt location = get_location_from_decl(call_node);
 
+    auto apply_wrapped_unary = [&](const exprt &base_expr) -> exprt {
+      if (!is_wrapped_in_unary)
+        return base_expr;
+
+      auto op = ast_node["test"]["op"]["_type"].get<std::string>();
+      if (op == "Not")
+      {
+        exprt unary_expr("not", bool_type());
+        unary_expr.copy_to_operands(base_expr);
+        return unary_expr;
+      }
+      return base_expr;
+    };
+
     // Get the function call expression with special handling
     // Temporarily disable the conditional processing to avoid recursion
+    exprt *saved_lhs = current_lhs;
+    current_lhs = nullptr;
     exprt func_call = get_expr(call_node);
+    current_lhs = saved_lhs;
 
     if (func_call.is_function_call())
     {
@@ -6744,33 +7047,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         current_block->copy_to_operands(func_call);
       }
 
-      // Build the final condition expression
-      if (is_wrapped_in_unary)
-      {
-        // Rebuild the UnaryOp with our temp var
-        auto op = ast_node["test"]["op"]["_type"].get<std::string>();
-        if (op == "Not")
-        {
-          cond = exprt("not", bool_type());
-          cond.copy_to_operands(temp_var_expr);
-        }
-        else
-        {
-          // For other unary operators, try to build them manually
-          // This avoids calling get_expr which might cause recursion
-          cond = temp_var_expr;
-        }
-      }
-      else
-      {
-        // Direct call: use the temp var
-        cond = temp_var_expr;
-      }
+      cond = apply_wrapped_unary(temp_var_expr);
     }
     else
     {
-      // If it's not actually a function call, fall back to normal processing
-      cond = get_expr(ast_node["test"]);
+      cond = apply_wrapped_unary(func_call);
     }
   }
   else
@@ -6779,7 +7060,82 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     cond = get_expr(ast_node["test"]);
   }
 
-  cond.location() = get_location_from_decl(ast_node["test"]);
+  if (!(test_type == "BoolOp" && current_block && type != "While" &&
+        !coverage_mode && !pytest_generation_mode && !model_mode))
+  {
+    cond.location() = get_location_from_decl(ast_node["test"]);
+
+    if (!cond.type().is_bool())
+    {
+      const locationt location = get_location_from_decl(ast_node["test"]);
+      typet value_type = ns.follow(cond.type());
+      if (value_type.is_pointer())
+        value_type = ns.follow(value_type.subtype());
+
+      // Objects in conditions are converted with __bool__() when available.
+      if (value_type.is_struct())
+      {
+        if (const std::string class_name = extract_class_name_from_tag(
+              to_struct_type(value_type).tag().as_string());
+            !class_name.empty())
+        {
+          if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
+          {
+            exprt bool_object = cond;
+            // __bool__ expects self by address, so the condition must be an object.
+            if (!bool_object.is_symbol())
+              bool_object =
+                store_call_result(bool_object, location, "cond_obj");
+            const code_typet &method_type = to_code_type(bool_method->type);
+            side_effect_expr_function_callt bool_call;
+            bool_call.function() = symbol_expr(*bool_method);
+            bool_call.type() = method_type.return_type();
+            bool_call.location() = location;
+            bool_call.arguments().push_back(gen_address_of(bool_object));
+            cond = store_call_result(bool_call, location, "cond_bool");
+            cond.location() = location;
+          }
+        }
+      }
+
+      typet list_type = type_handler_.get_list_type();
+      // Python treats lists in conditions by their size, for example:
+      // `1 if xs else 0`.
+      if (
+        current_block &&
+        (cond.type() == list_type ||
+         (cond.type().is_pointer() && cond.type().subtype() == list_type)))
+      {
+        const symbolt *size_func =
+          symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+        if (!size_func)
+          throw std::runtime_error(
+            "__ESBMC_list_size not found for list condition check");
+
+        symbolt &size_result = create_tmp_symbol(
+          ast_node["test"], "$list_size$", size_type(), gen_zero(size_type()));
+        code_declt size_decl(symbol_expr(size_result));
+        size_decl.location() = location;
+        current_block->copy_to_operands(size_decl);
+
+        // Use `__ESBMC_list_size(cond) != 0` to evaluate the list condition.
+        code_function_callt size_call;
+        size_call.function() = symbol_expr(*size_func);
+        size_call.lhs() = symbol_expr(size_result);
+        if (cond.type().is_pointer())
+          size_call.arguments().push_back(cond);
+        else
+          size_call.arguments().push_back(address_of_exprt(cond));
+        size_call.type() = size_type();
+        size_call.location() = location;
+        current_block->copy_to_operands(size_call);
+
+        cond = exprt("notequal", bool_type());
+        cond.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+        cond.location() = location;
+      }
+    }
+  }
 
   // Python truthiness for complex in conditional contexts:
   // bool(z) == (z.real != 0.0 or z.imag != 0.0).
@@ -6835,19 +7191,34 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
 
-    // Resolve result type based on branch types
-    typet result_type =
-      resolve_ternary_type(then.type(), else_expr.type(), current_element_type);
+    bool then_is_none = (then.type() == none_type());
+    bool else_is_none = (else_expr.type() == none_type());
 
-    // Handle array-to-pointer conversion for ternary expressions
-    // When assigning to a pointer (e.g., str field), convert array branches to pointers
-    if (
-      then.type().is_array() && else_expr.type().is_array() && current_lhs &&
-      current_lhs->type().is_pointer())
+    typet result_type;
+    if (then_is_none != else_is_none)
     {
-      then = string_handler_.get_array_base_address(then);
-      else_expr = string_handler_.get_array_base_address(else_expr);
-      result_type = then.type(); // Use pointer type as result
+      // One branch is None, the other is T → Optional[T] models Python's T | None
+      typet concrete_type = then_is_none ? else_expr.type() : then.type();
+      result_type = type_handler_.build_optional_type(concrete_type);
+      then = wrap_in_optional(then, result_type);
+      else_expr = wrap_in_optional(else_expr, result_type);
+    }
+    else
+    {
+      // Resolve result type based on branch types
+      result_type = resolve_ternary_type(
+        then.type(), else_expr.type(), current_element_type);
+
+      // Handle array-to-pointer conversion for ternary expressions
+      // When assigning to a pointer (e.g., str field), convert array branches to pointers
+      if (
+        then.type().is_array() && else_expr.type().is_array() && current_lhs &&
+        current_lhs->type().is_pointer())
+      {
+        then = string_handler_.get_array_base_address(then);
+        else_expr = string_handler_.get_array_base_address(else_expr);
+        result_type = then.type(); // Use pointer type as result
+      }
     }
 
     // Create fully symbolic if expression
@@ -7031,6 +7402,9 @@ typet python_converter::get_type_from_annotation(
 
     if (value_id == "dict" || value_id == "Dict")
       return dict_handler_->get_dict_struct_type();
+
+    if (value_id == "tuple" || value_id == "Tuple")
+      return tuple_handler_->get_tuple_type_from_annotation(annotation_node);
 
     // Handle Literal[T]: extract the type from the literal value
     if (value_id == "Literal")
@@ -8330,7 +8704,12 @@ void python_converter::get_attributes_from_self(
   for (const auto &stmt : method_body)
   {
     if (
-      stmt["_type"] == "AnnAssign" && stmt["target"]["_type"] == "Attribute" &&
+      stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+      stmt.contains("target") && stmt["target"].is_object() &&
+      stmt["target"].contains("_type") &&
+      stmt["target"]["_type"] == "Attribute" &&
+      stmt["target"].contains("value") && stmt["target"]["value"].is_object() &&
+      stmt["target"]["value"].contains("id") &&
       stmt["target"]["value"]["id"] == "self")
     {
       const std::string &attr_name = stmt["target"]["attr"];
@@ -8438,7 +8817,14 @@ void python_converter::get_attributes_from_self(
         class_components.push_back(comp);
     }
     else if (
-      stmt["_type"] == "Assign" && stmt["targets"][0]["_type"] == "Attribute" &&
+      stmt.contains("_type") && stmt["_type"] == "Assign" &&
+      stmt.contains("targets") && stmt["targets"].is_array() &&
+      !stmt["targets"].empty() && stmt["targets"][0].is_object() &&
+      stmt["targets"][0].contains("_type") &&
+      stmt["targets"][0]["_type"] == "Attribute" &&
+      stmt["targets"][0].contains("value") &&
+      stmt["targets"][0]["value"].is_object() &&
+      stmt["targets"][0]["value"].contains("id") &&
       stmt["targets"][0]["value"]["id"] == "self")
     {
       // A member is initialized with something that might be not annotated
@@ -9063,6 +9449,49 @@ bool python_converter::type_assertions_enabled() const
   return config.options.get_bool_option("is-instance-check");
 }
 
+bool python_converter::is_coverage_mode() const
+{
+  return config.options.get_bool_option("condition-coverage") ||
+         config.options.get_bool_option("condition-coverage-claims") ||
+         config.options.get_bool_option("condition-coverage-rm") ||
+         config.options.get_bool_option("condition-coverage-claims-rm") ||
+         config.options.get_bool_option("branch-coverage") ||
+         config.options.get_bool_option("branch-coverage-claims") ||
+         config.options.get_bool_option("branch-function-coverage") ||
+         config.options.get_bool_option("branch-function-coverage-claims");
+}
+
+bool python_converter::is_pytest_generation_mode() const
+{
+  return config.options.get_bool_option("generate-pytest-testcase");
+}
+
+bool python_converter::is_model_file(const nlohmann::json &node) const
+{
+  const std::string file = get_location_from_decl(node).file().as_string();
+  if (file.find("/models/") != std::string::npos)
+    return true;
+
+  if (file.find('/') == std::string::npos)
+  {
+    if (file.size() >= 3 && file.compare(file.size() - 3, 3, ".py") == 0)
+      return true;
+    return false;
+  }
+
+  const std::string suffix = "/models/" + file;
+  for (const auto &entry : imported_modules)
+  {
+    const std::string &path = entry.second;
+    if (
+      path.size() >= suffix.size() &&
+      path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0)
+      return true;
+  }
+
+  return false;
+}
+
 string_builder &python_converter::get_string_builder()
 {
   if (!string_builder_)
@@ -9210,51 +9639,60 @@ void python_converter::create_builtin_symbols()
   symbol_table_.add(name_symbol);
 }
 
+bool python_converter::import_module_into_block(
+  const nlohmann::json &import_node,
+  module_locator &locator,
+  code_blockt &block)
+{
+  const std::string &module_name = (import_node["_type"] == "ImportFrom")
+                                     ? import_node["module"]
+                                     : import_node["names"][0]["name"];
+
+  if (imported_modules.find(module_name) != imported_modules.end())
+    return true;
+
+  std::ifstream imported_file = locator.open_module_file(module_name);
+  if (!imported_file.is_open())
+    return false;
+
+  nlohmann::json nested_module_json;
+  imported_file >> nested_module_json;
+
+  current_python_file = nested_module_json["filename"].get<std::string>();
+  imported_modules.emplace(module_name, current_python_file);
+
+  // Process nested imports first.
+  process_module_imports(nested_module_json, locator, block);
+
+  // Then process this module's definitions.
+  create_builtin_symbols();
+  python_annotation<nlohmann::json> imported_annotator(
+    nested_module_json, const_cast<global_scope &>(global_scope_));
+  imported_annotator.add_type_annotation();
+
+  exprt imported_code = with_ast(&nested_module_json, [&]() {
+    return get_block(nested_module_json["body"]);
+  });
+
+  convert_expression_to_code(imported_code);
+
+  // Add imported module code.
+  block.copy_to_operands(imported_code);
+  return true;
+}
+
 void python_converter::process_module_imports(
   const nlohmann::json &module_ast,
   module_locator &locator,
-  code_blockt &accumulated_code)
+  code_blockt &block)
 {
   // Process imports in this module first (depth-first)
   for (const auto &elem : module_ast["body"])
   {
     if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
     {
-      const std::string &module_name = (elem["_type"] == "ImportFrom")
-                                         ? elem["module"]
-                                         : elem["names"][0]["name"];
-
-      // Skip if already imported
-      if (imported_modules.find(module_name) != imported_modules.end())
-        continue;
-
-      std::ifstream imported_file = locator.open_module_file(module_name);
-      if (!imported_file.is_open())
-        continue; // Skip missing modules
-
-      nlohmann::json nested_module_json;
-      imported_file >> nested_module_json;
-
-      std::string nested_python_file =
-        nested_module_json["filename"].get<std::string>();
-      imported_modules.emplace(module_name, nested_python_file);
-
-      // Recursively process nested imports first
-      process_module_imports(nested_module_json, locator, accumulated_code);
-
-      // Then process this module's definitions
       std::string saved_file = current_python_file;
-      current_python_file = nested_python_file;
-
-      create_builtin_symbols();
-      exprt imported_code = with_ast(&nested_module_json, [&]() {
-        return get_block(nested_module_json["body"]);
-      });
-      convert_expression_to_code(imported_code);
-
-      // Accumulate this module's code
-      accumulated_code.copy_to_operands(imported_code);
-
+      import_module_into_block(elem, locator, block);
       current_python_file = saved_file;
     }
   }
@@ -9441,49 +9879,39 @@ void python_converter::convert()
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
       {
         is_importing_module = true;
-        const std::string &module_name = (elem["_type"] == "ImportFrom")
-                                           ? elem["module"]
-                                           : elem["names"][0]["name"];
-
-        // Skip if already processed by recursive import
-        if (imported_modules.find(module_name) != imported_modules.end())
-          continue;
-
-        std::ifstream imported_file = locator.open_module_file(module_name);
-        if (!imported_file.is_open())
+        if (!import_module_into_block(elem, locator, all_imports_block))
         {
+          const std::string &module_name = (elem["_type"] == "ImportFrom")
+                                             ? elem["module"]
+                                             : elem["names"][0]["name"];
           throw std::runtime_error(
             "Cannot open file: " + locator.module_path(module_name));
         }
+      }
+    }
 
-        imported_file >> imported_module_json;
+    // Do the same for imports that appear directly inside functions.
+    for (const auto &elem : (*ast_json)["body"])
+    {
+      if (
+        elem["_type"] != "FunctionDef" || !elem.contains("body") ||
+        !elem["body"].is_array())
+        continue;
 
-        current_python_file =
-          imported_module_json["filename"].get<std::string>();
-        imported_modules.emplace(module_name, current_python_file);
+      for (const auto &stmt : elem["body"])
+      {
+        if (stmt["_type"] != "ImportFrom" && stmt["_type"] != "Import")
+          continue;
 
-        // Process nested imports recursively first
-        process_module_imports(
-          imported_module_json, locator, all_imports_block);
-
-        // Create built-in symbols for imported module
-        create_builtin_symbols();
-
-        // Annotate types in imported module before conversion
-        python_annotation<nlohmann::json> imported_annotator(
-          imported_module_json, const_cast<global_scope &>(global_scope_));
-        imported_annotator.add_type_annotation();
-
-        exprt imported_code = with_ast(&imported_module_json, [&]() {
-          return get_block(imported_module_json["body"]);
-        });
-
-        convert_expression_to_code(imported_code);
-
-        // Accumulate imported code instead of overwriting
-        all_imports_block.copy_to_operands(imported_code);
-
-        imported_module_json.clear();
+        is_importing_module = true;
+        if (!import_module_into_block(stmt, locator, all_imports_block))
+        {
+          const std::string &module_name = (stmt["_type"] == "ImportFrom")
+                                             ? stmt["module"]
+                                             : stmt["names"][0]["name"];
+          throw std::runtime_error(
+            "Cannot open file: " + locator.module_path(module_name));
+        }
       }
     }
 

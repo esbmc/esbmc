@@ -38,6 +38,61 @@
 #include <util/std_expr.h>
 #include <util/options.h>
 #include <irep2/irep2_utils.h>
+#include <map>
+
+// ---------------------------------------------------------------------------
+// Shared helper: extract the loop invariant near a loop head
+// ---------------------------------------------------------------------------
+
+/// Maximum number of instructions to search backwards from the loop head
+/// when locating the LOOP_INVARIANT instruction.
+static constexpr size_t kMaxInvariantSearchBack = 10;
+
+/// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
+/// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
+/// Multiple conjuncts are folded into a single and2tc.  Returns an empty
+/// vector when no annotated LOOP_INVARIANT is in range.
+static std::vector<expr2tc> extract_invariants_near(
+  goto_programt::targett loop_head,
+  goto_programt::targett begin)
+{
+  std::vector<expr2tc> invariants;
+
+  if (loop_head == begin)
+    return invariants;
+
+  goto_programt::targett it = loop_head;
+  size_t dist = 0;
+
+  while (it != begin && dist < kMaxInvariantSearchBack)
+  {
+    --it;
+    ++dist;
+
+    if (!it->is_loop_invariant())
+      continue;
+
+    const std::list<expr2tc> &inv_list = it->get_loop_invariants();
+    if (inv_list.empty())
+      continue;
+
+    if (inv_list.size() == 1)
+    {
+      invariants.push_back(inv_list.front());
+    }
+    else
+    {
+      auto jt = inv_list.begin();
+      expr2tc combined = *jt;
+      for (++jt; jt != inv_list.end(); ++jt)
+        combined = and2tc(combined, *jt);
+      invariants.push_back(combined);
+    }
+    break;
+  }
+
+  return invariants;
+}
 
 void goto_loop_invariant(
   goto_functionst &goto_functions,
@@ -102,51 +157,8 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
-  std::vector<expr2tc> invariants;
-
-  goto_programt::targett loop_head = loop.get_original_loop_head();
-
-  // Cannot search backwards past the very first instruction.
-  if (loop_head == goto_function.body.instructions.begin())
-    return invariants;
-
-  // Search backwards from loop head to find the LOOP_INVARIANT instruction.
-  // We stop at the first one found (the invariant for THIS loop), since the
-  // user must place __ESBMC_loop_invariant immediately before its loop.
-  goto_programt::targett search_it = loop_head;
-
-  size_t search_distance = 0;
-
-  while (search_it != goto_function.body.instructions.begin() &&
-         search_distance < kMaxInvariantSearchBack)
-  {
-    --search_it;
-    ++search_distance;
-
-    if (search_it->is_loop_invariant())
-    {
-      auto const &current_invariants = search_it->get_loop_invariants();
-
-      if (current_invariants.size() == 1)
-      {
-        invariants.push_back(current_invariants.front());
-        break;
-      }
-      else if (current_invariants.size() > 1)
-      {
-        // Multiple sub-expressions: fold them into a single && conjunction.
-        auto it = current_invariants.begin();
-        auto combined = *it;
-        for (++it; it != current_invariants.end(); ++it)
-          combined = and2tc(combined, *it);
-        invariants.push_back(combined);
-        break;
-      }
-      // current_invariants.empty(): skip and keep searching backwards.
-    }
-  }
-
-  return invariants;
+  return extract_invariants_near(
+    loop.get_original_loop_head(), goto_function.body.instructions.begin());
 }
 
 std::vector<expr2tc>
@@ -253,7 +265,34 @@ static bool symbol_name_matches(
          s.compare(suffix_pos, d.size(), d) == 0;
 }
 
-void goto_loop_invariantt::extract_and_remove_side_effects(
+/// Shared implementation used by both the legacy loop-invariant pass and the
+/// combined loop-invariant + k-induction pass.  See the declaration of
+/// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
+/// description; this helper just takes an explicit goto_function parameter so
+/// it can be reused from both passes.
+/// Local helper: collect all symbol names reachable from an expression tree.
+static void
+collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
+{
+  if (!expr)
+    return;
+
+  if (is_symbol2t(expr))
+  {
+    symbols.insert(to_symbol2t(expr).get_symbol_name());
+    return;
+  }
+
+  for (unsigned i = 0; i < expr->get_num_sub_exprs(); ++i)
+  {
+    const expr2tc *sub = expr->get_sub_expr(i);
+    if (sub && *sub)
+      collect_symbols_local(*sub, symbols);
+  }
+}
+
+static void extract_and_remove_side_effects_impl(
+  goto_functiont &goto_function,
   goto_programt::targett loop_head,
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
@@ -262,7 +301,7 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
   // Collect symbol names referenced in the invariants.
   std::set<irep_idt> inv_symbols;
   for (const auto &inv : invariants)
-    collect_symbols(inv, inv_symbols);
+    collect_symbols_local(inv, inv_symbols);
 
   if (inv_symbols.empty())
     return;
@@ -325,7 +364,7 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
       if (is_trivial_rhs(assign.source))
         continue;
       to_remove.push_back(search);
-      collect_symbols(assign.source, dep_symbols);
+      collect_symbols_local(assign.source, dep_symbols);
       continue;
     }
 
@@ -400,6 +439,16 @@ void goto_loop_invariantt::extract_and_remove_side_effects(
     side_effects_out.instructions.push_back(**rit);
     goto_function.body.instructions.erase(*rit);
   }
+}
+
+void goto_loop_invariantt::extract_and_remove_side_effects(
+  goto_programt::targett loop_head,
+  const loopst &loop,
+  const std::vector<expr2tc> &invariants,
+  goto_programt &side_effects_out)
+{
+  extract_and_remove_side_effects_impl(
+    goto_function, loop_head, loop, invariants, side_effects_out);
 }
 
 void goto_loop_invariantt::insert_assert_before_loop(
@@ -558,4 +607,207 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
 
   // Insert at the insert point
   goto_function.body.insert_swap(insert_point, dest);
+}
+
+// ---------------------------------------------------------------------------
+// Combined mode implementation
+// ---------------------------------------------------------------------------
+
+void goto_loop_invariant_combined(goto_functionst &goto_functions)
+{
+  Forall_goto_functions (it, goto_functions)
+    if (it->second.body_available)
+      goto_loop_invariant_combinedt(it->first, goto_functions, it->second);
+
+  goto_functions.update();
+}
+
+void goto_loop_invariant_combinedt::process_loops_combined()
+{
+  for (auto &loop : function_loops)
+    insert_invariant_verification_branch(loop);
+}
+
+bool goto_loop_invariant_combinedt::copy_loop_body(
+  goto_programt::targett loop_head,
+  goto_programt::targett loop_exit,
+  goto_programt &out) const
+{
+  using const_targett = goto_programt::const_targett;
+  using targett = goto_programt::targett;
+
+  std::map<const_targett, targett> target_map;
+
+  // First pass: copy instructions in (loop_head, loop_exit) and record a
+  // mapping from original iterators to their copies in @p out.
+  for (auto it = std::next(loop_head); it != loop_exit; ++it)
+  {
+    targett new_it = out.add_instruction();
+    *new_it = *it;
+    const_targett orig_it = it;
+    target_map[orig_it] = new_it;
+  }
+
+  // Second pass: rewrite GOTO targets to point inside the copied body.  If any
+  // target cannot be resolved within the copied slice (including jumps to the
+  // original loop head/exit or outside the loop), we conservatively bail out
+  // and skip Branch 1 for this loop.
+  for (auto &instr : out.instructions)
+  {
+    for (auto &tgt : instr.targets)
+    {
+      auto m_it = target_map.find(tgt);
+      if (m_it == target_map.end())
+        return false; // complex control flow — skip Branch 1
+
+      tgt = m_it->second;
+    }
+  }
+
+  out.compute_target_numbers();
+  return true;
+}
+
+void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
+  loopst &loop)
+{
+  goto_programt::targett loop_head = loop.get_original_loop_head();
+  goto_programt::targett loop_exit = loop.get_original_loop_exit();
+
+  // ── 1. Collect invariant expressions ──────────────────────────────────────
+  std::vector<expr2tc> invariants =
+    extract_invariants_near(loop_head, goto_function.body.instructions.begin());
+
+  if (invariants.empty())
+    return;
+
+  // Reuse the legacy side-effect extraction so that any temporaries or
+  // function calls used in the invariant are re-evaluated in Branch 1 and
+  // when inserting ASSUME(INV) for Branch 2.
+  goto_programt side_effects;
+  extract_and_remove_side_effects_impl(
+    goto_function, loop_head, loop, invariants, side_effects);
+
+  // ── 2. Copy loop body (fail gracefully for complex loops) ─────────────────
+  goto_programt body_copy;
+  if (!copy_loop_body(loop_head, loop_exit, body_copy))
+    return; // Fall back to ASSUME-only mode in goto_k_induction
+
+  // ── 3. Extract the loop entry condition ───────────────────────────────────
+  // loop_head is "IF !(cond) GOTO exit", so the entry condition is "cond"
+  // i.e. the negation of the GOTO guard.
+  expr2tc entry_cond;
+  if (loop_head->is_goto() && !loop_head->is_backwards_goto())
+    entry_cond = not2tc(loop_head->guard);
+  // If loop_head is not a conditional GOTO (e.g. do-while), entry_cond
+  // stays nil and we omit the ASSUME(entry_cond) — always enters.
+
+  // ── 4. Build Branch 1 ─────────────────────────────────────────────────────
+  const auto &loop_vars = loop.get_modified_loop_vars();
+  goto_programt branch1;
+
+  // [4a] Base-case ASSERT(INV)
+  for (const auto &instr : side_effects.instructions)
+    branch1.instructions.push_back(instr);
+  for (const auto &inv : invariants)
+  {
+    auto t = branch1.add_instruction(ASSERT);
+    t->guard = inv;
+    t->location = loop_head->location;
+    t->location.comment("loop invariant base case");
+    t->location.property("invariant-base-case");
+  }
+
+  // [4b] HAVOC(loop_vars)
+  for (const auto &var : loop_vars)
+  {
+    if (
+      config.options.get_bool_option("add-symex-value-sets") &&
+      is_pointer_type(var))
+      continue;
+
+    auto t = branch1.add_instruction(ASSIGN);
+    t->code = code_assign2tc(var, gen_nondet(var->type));
+    t->location = loop_head->location;
+    t->location.comment("loop invariant havoc (verification branch)");
+  }
+
+  // [4c] ASSUME(INV)  — constrain the havoc'd state
+  for (const auto &instr : side_effects.instructions)
+    branch1.instructions.push_back(instr);
+  for (const auto &inv : invariants)
+  {
+    auto t = branch1.add_instruction(ASSUME);
+    t->guard = inv;
+    t->location = loop_head->location;
+    t->location.comment("loop invariant assume (verification branch)");
+  }
+
+  // [4d] ASSUME(entry_cond)  — model being inside the loop
+  if (!is_nil_expr(entry_cond) && !is_true(entry_cond))
+  {
+    auto t = branch1.add_instruction(ASSUME);
+    t->guard = entry_cond;
+    t->location = loop_head->location;
+    t->location.comment("loop entry condition (verification branch)");
+  }
+
+  // [4e] One iteration of the loop body
+  branch1.instructions.splice(
+    branch1.instructions.end(), body_copy.instructions);
+
+  // [4f] Inductive-step ASSERT(INV)
+  for (const auto &instr : side_effects.instructions)
+    branch1.instructions.push_back(instr);
+  for (const auto &inv : invariants)
+  {
+    auto t = branch1.add_instruction(ASSERT);
+    t->guard = inv;
+    t->location = loop_exit->location;
+    t->location.comment("loop invariant inductive step");
+    t->location.property("invariant-inductive-step");
+  }
+
+  // [4g] ASSUME(false) — terminate Branch 1; never falls through
+  {
+    auto t = branch1.add_instruction(ASSUME);
+    t->guard = gen_false_expr();
+    t->location = loop_exit->location;
+    t->location.comment("end invariant verification branch");
+  }
+
+  // ── 5. Prepend the nondet gate ────────────────────────────────────────────
+  // "IF !nondet_bool() GOTO loop_head"  →  skip Branch 1 on false branch
+  {
+    goto_programt gate;
+    auto t = gate.add_instruction(GOTO);
+    t->guard = not2tc(gen_nondet(get_bool_type()));
+    t->targets.push_back(loop_head); // jump to original loop head
+    t->location = loop_head->location;
+
+    // Splice the gate at the front of branch1
+    branch1.instructions.splice(
+      branch1.instructions.begin(), gate.instructions);
+  }
+
+  // ── 6. Insert before loop_head using splice (NOT insert_swap) ─────────────
+  // splice() inserts before loop_head without moving it, so any existing
+  // backward-GOTO target that points to loop_head continues to do so.
+  goto_function.body.instructions.splice(loop_head, branch1.instructions);
+
+  // ── 7. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
+  // Inserting ASSUME(INV) just before loop_exit (the backward GOTO) means
+  // k-induction will see the assumption at the end of every iteration without
+  // any modification to goto_k_induction itself.
+  for (const auto &inv : invariants)
+  {
+    goto_programt assume_inv;
+    for (const auto &instr : side_effects.instructions)
+      assume_inv.instructions.push_back(instr);
+    auto t = assume_inv.add_instruction(ASSUME);
+    t->guard = inv;
+    t->location = loop_exit->location;
+    t->location.comment("loop invariant assume (k-induction hint)");
+    goto_function.body.instructions.splice(loop_exit, assume_inv.instructions);
+  }
 }

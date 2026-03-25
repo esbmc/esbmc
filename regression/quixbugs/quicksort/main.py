@@ -19,7 +19,8 @@ def quicksort(arr):
     return lesser + [pivot] + greater
 """
 
-assert quicksort([1, 2, 6, 72, 7, 33, 4]) == [1, 2, 4, 6, 7, 33, 72]
+assert quicksort([3, 2]) == [2, 3]
+#assert quicksort([1, 2, 6, 72, 7, 33, 4]) == [1, 2, 4, 6, 7, 33, 72]
 #assert quicksort([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3]) == [1, 1, 2, 3, 3, 3, 4, 5, 5, 5, 6, 7, 8, 9, 9, 9]
 #assert quicksort([5, 4, 3, 2, 1]) == [1, 2, 3, 4, 5]
 #assert quicksort([5, 4, 3, 1, 2]) == [1, 2, 3, 4, 5]

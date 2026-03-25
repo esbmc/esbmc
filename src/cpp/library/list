@@ -2,6 +2,7 @@
 #define __STL_LIST
 
 #include "definitions.h"
+#include "type_traits"
 #include "vector"
 
 #define LIST_MAX_SIZE 20

@@ -1,4 +1,5 @@
 import ast
+import copy
 
 class Preprocessor(ast.NodeTransformer):
     def __init__(self, module_name):
@@ -23,6 +24,10 @@ class Preprocessor(ast.NodeTransformer):
         self.decimal_module_imported = False
         self.decimal_class_alias = None
         self.decimal_module_alias = None
+        self.defaultdict_imported = False
+        self.defaultdict_alias = None       # alias for the name (from collections import defaultdict as dd)
+        self.collections_module_imported = False
+        self.collections_module_alias = None  # alias for the module (import collections as col)
         self._subscript_inferred_vars = set()  # vars whose annotations came from subscript inference
         self.generator_funcs = set()  # all generator functions (contain yield)
         self.early_return_generator_funcs = set()  # generators with early return before first yield
@@ -31,6 +36,7 @@ class Preprocessor(ast.NodeTransformer):
         self.generator_next_index = {}  # gen_var -> next yield index for next() calls
         self.generator_emitted_init = set()  # gen_vars whose outer_init has been emitted
         self.dict_items_vars = {}  # {var_name: dict_expr} for X = d.items() assignments
+        self._defaultdict_factory = {}  # {var_name: factory AST node} for defaultdict vars
         self.het_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous key types
         self.het_value_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous value types
         self.bound_method_vars = {}  # {var_name: ast.Attribute} for g = obj.method assignments
@@ -129,7 +135,103 @@ class Preprocessor(ast.NodeTransformer):
             col_offset=0
         )
 
-        return [range_next_func, range_has_next_func]
+        # ESBMC_reversed_range_start_ function
+        #
+        # Returns the first element of reversed(range(start, stop, step)), i.e.
+        # the last element of the original range.  When the original range is
+        # empty the function returns (start - step) so that the caller's
+        # range(result, start-step, -step) is trivially empty as well.
+        #
+        # Python:
+        #   def ESBMC_reversed_range_start_(start, stop, step):
+        #       if step > 0:
+        #           if stop <= start:
+        #               return start - step
+        #           n = (stop - start - 1) // step
+        #           return start + n * step
+        #       else:
+        #           if stop >= start:
+        #               return start - step
+        #           n = (start - stop - 1) // (-step)
+        #           return start + n * step
+        #
+        # All divisions involve same-sign operands (positive numerator and
+        # positive denominator), so Python // and C / agree — no floor-mod
+        # correction is needed.
+        def _make_int_arg(name):
+            return ast.arg(arg=name, annotation=ast.Name(id='int', ctx=ast.Load()))
+
+        def _name(n):
+            return ast.Name(id=n, ctx=ast.Load())
+
+        def _binop(l, op, r):
+            return ast.BinOp(left=l, op=op, right=r)
+
+        def _cmp(l, op, r):
+            return ast.Compare(left=l, ops=[op], comparators=[r])
+
+        # Shared tail: n = ...; return start + n * step
+        def _last_element_block(n_expr):
+            n_assign = ast.AnnAssign(
+                target=ast.Name(id='n', ctx=ast.Store()),
+                annotation=ast.Name(id='int', ctx=ast.Load()),
+                value=n_expr,
+                simple=1,
+            )
+            ret = ast.Return(value=_binop(
+                _name('start'), ast.Add(),
+                _binop(_name('n'), ast.Mult(), _name('step'))
+            ))
+            return [n_assign, ret]
+
+        reversed_range_start_func = ast.FunctionDef(
+            name='ESBMC_reversed_range_start_',
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[_make_int_arg('start'), _make_int_arg('stop'), _make_int_arg('step')],
+                vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[],
+            ),
+            body=[
+                ast.If(
+                    # if step > 0:
+                    test=_cmp(_name('step'), ast.Gt(), ast.Constant(value=0)),
+                    body=[
+                        ast.If(
+                            # if stop <= start: return start - step
+                            test=_cmp(_name('stop'), ast.LtE(), _name('start')),
+                            body=[ast.Return(value=_binop(_name('start'), ast.Sub(), _name('step')))],
+                            orelse=[],
+                        ),
+                        # n = (stop - start - 1) // step; return start + n * step
+                        *_last_element_block(_binop(
+                            _binop(_binop(_name('stop'), ast.Sub(), _name('start')), ast.Sub(), ast.Constant(value=1)),
+                            ast.FloorDiv(),
+                            _name('step'),
+                        )),
+                    ],
+                    orelse=[
+                        ast.If(
+                            # if stop >= start: return start - step
+                            test=_cmp(_name('stop'), ast.GtE(), _name('start')),
+                            body=[ast.Return(value=_binop(_name('start'), ast.Sub(), _name('step')))],
+                            orelse=[],
+                        ),
+                        # n = (start - stop - 1) // (-step); return start + n * step
+                        *_last_element_block(_binop(
+                            _binop(_binop(_name('start'), ast.Sub(), _name('stop')), ast.Sub(), ast.Constant(value=1)),
+                            ast.FloorDiv(),
+                            ast.UnaryOp(op=ast.USub(), operand=_name('step')),
+                        )),
+                    ],
+                )
+            ],
+            decorator_list=[],
+            returns=ast.Name(id='int', ctx=ast.Load()),
+            lineno=1,
+            col_offset=0,
+        )
+
+        return [range_next_func, range_has_next_func, reversed_range_start_func]
 
     def visit_Module(self, node):
         """Visit the module and inject helper functions if needed"""
@@ -411,7 +513,113 @@ class Preprocessor(ast.NodeTransformer):
                 ast.fix_missing_locations(listcomp)
                 return self.visit(listcomp)
 
+            # Lower list(gen_func(args...)) to an inline list construction
+            if (isinstance(node.func, ast.Name) and node.func.id == 'list'
+                    and len(node.args) == 1 and not node.keywords
+                    and isinstance(node.args[0], ast.Call)
+                    and isinstance(node.args[0].func, ast.Name)
+                    and node.args[0].func.id in self.preprocessor.generator_funcs):
+                prefix, result = self.preprocessor._lower_list_gen_call(node.args[0], node)
+                if prefix is not None:
+                    self.statements.extend(prefix)
+                    return result
+
             return self.generic_visit(node)
+
+    @staticmethod
+    def _body_has_node_shallow(body_stmts, node_type):
+        """Return True if node_type appears in body_stmts without descending
+        into nested function definitions or lambdas."""
+        def _walk(node):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                return
+            if isinstance(node, node_type):
+                yield node
+            for child in ast.iter_child_nodes(node):
+                yield from _walk(child)
+        module = ast.Module(body=list(body_stmts), type_ignores=[])
+        return any(True for _ in _walk(module))
+
+    def _lower_list_gen_call(self, gen_call_node, parent_node):
+        """Lower list(gen_func(args...)) to an inline list construction.
+
+        Transforms list(gen_func(a, b)) into:
+            param_0 = a
+            param_1 = b
+            ESBMC_list_gen_N: list = []
+            # generator body with yield val -> ESBMC_list_gen_N.append(val)
+
+        Returns (prefix_stmts, result_name_expr), or (None, gen_call_node) if
+        inlining is not possible (body has return/yield-from, keyword args, or
+        positional-arg count mismatch).
+        """
+        func_name = gen_call_node.func.id
+        # Defensive: generator_funcs and generator_func_defs are kept in sync
+        # by visit_FunctionDef, so this guard should never fire in practice.
+        body_stmts = self.generator_func_defs.get(func_name)
+        if body_stmts is None:
+            return None, gen_call_node
+
+        # Keyword arguments on the generator call are not handled.
+        if gen_call_node.keywords:
+            return None, gen_call_node
+
+        # Generators with return or yield-from cannot be safely inlined at the
+        # call site: 'return' would exit the enclosing scope, and 'yield from'
+        # is not transformed by _YieldToAppend.
+        if (self._body_has_node_shallow(body_stmts, ast.Return) or
+                self._body_has_node_shallow(body_stmts, ast.YieldFrom)):
+            return None, gen_call_node
+
+        # Emit parameter assignments so inlined body can reference them.
+        param_names = self.functionParams.get(func_name, [])
+        call_args = gen_call_node.args
+        if len(param_names) != len(call_args):
+            return None, gen_call_node
+
+        result_var = f'ESBMC_list_gen_{self.listcomp_counter}'
+        self.listcomp_counter += 1
+
+        stmts = []
+        for param, arg in zip(param_names, call_args):
+            assign = ast.Assign(
+                targets=[ast.Name(id=param, ctx=ast.Store())],
+                value=copy.deepcopy(arg),
+                type_comment=None)
+            self.ensure_all_locations(assign, parent_node)
+            ast.fix_missing_locations(assign)
+            stmts.append(assign)
+
+        # result_var: list = []
+        init = ast.AnnAssign(
+            target=ast.Name(id=result_var, ctx=ast.Store()),
+            annotation=ast.Name(id='list', ctx=ast.Load()),
+            value=ast.List(elts=[], ctx=ast.Load()),
+            simple=1)
+        self.ensure_all_locations(init, parent_node)
+        ast.fix_missing_locations(init)
+        stmts.append(init)
+
+        # Replace every `yield val` in the body with `result_var.append(val)`.
+        transformer = self._YieldToAppend(result_var, parent_node)
+        for stmt in body_stmts:
+            transformed = transformer.visit(copy.deepcopy(stmt))
+            if isinstance(transformed, list):
+                stmts.extend(transformed)
+            else:
+                stmts.append(transformed)
+
+        for stmt in stmts:
+            self.ensure_all_locations(stmt, parent_node)
+            ast.fix_missing_locations(stmt)
+
+        self.known_variable_types[result_var] = 'list'
+
+        result_expr = ast.Name(id=result_var, ctx=ast.Load())
+        self.ensure_all_locations(result_expr, parent_node)
+        ast.fix_missing_locations(result_expr)
+
+        return stmts, result_expr
 
     def _has_early_return_before_yield(self, body):
         """Return True if body has a Return statement before any Yield (linear top-level scan)."""
@@ -421,6 +629,103 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, (ast.Yield, ast.YieldFrom)):
                 return False
         return False
+
+    @staticmethod
+    def _is_recursive_call(func_name, body):
+        """Return True if any Call node in body has func.id == func_name."""
+        for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+            if (isinstance(node, ast.Call) and
+                    isinstance(node.func, ast.Name) and
+                    node.func.id == func_name):
+                return True
+        return False
+
+    class _YieldToAppend(ast.NodeTransformer):
+        """Replace `yield expr` statements with `ESBMC_gen_result.append(expr)`."""
+        def __init__(self, result_var, template):
+            self.result_var = result_var
+            self.template = template
+
+        def visit_Expr(self, node):
+            if not isinstance(node.value, ast.Yield):
+                return self.generic_visit(node)
+            yield_val = node.value.value
+            if yield_val is None:
+                yield_val = ast.Constant(value=None)
+            append_call = ast.Expr(value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=self.result_var, ctx=ast.Load()),
+                    attr='append',
+                    ctx=ast.Load()),
+                args=[yield_val],
+                keywords=[]))
+            ast.copy_location(append_call, node)
+            ast.fix_missing_locations(append_call)
+            return append_call
+
+        # Do not descend into nested function definitions
+        def visit_FunctionDef(self, node):
+            return node
+
+    def _transform_recursive_generator(self, node):
+        """Transform a recursive generator function to accumulate-and-return.
+
+        Converts:
+            def f(args):
+                ...
+                yield val
+                ...
+
+        Into:
+            def f(args) -> list:
+                ESBMC_gen_result: list = []
+                ...
+                ESBMC_gen_result.append(val)
+                ...
+                return ESBMC_gen_result
+        """
+        result_var = 'ESBMC_gen_result'
+        template = node.body[0] if node.body else node
+
+        # Annotate unannotated parameters as list[Any].  Without this the C++
+        # annotator infers Any from the recursive call site (flatten(x) where
+        # x: Any), which types the parameter as void*.  Subscripting void*
+        # then crashes the index2t IR constructor.  Recursive generators always
+        # recurse on a list-like iterable, so list[Any] is the right type.
+        for arg in node.args.args:
+            if arg.annotation is None:
+                ann = ast.Subscript(
+                    value=ast.Name(id='list', ctx=ast.Load()),
+                    slice=ast.Name(id='Any', ctx=ast.Load()),
+                    ctx=ast.Load()
+                )
+                ast.copy_location(ann, template)
+                ast.fix_missing_locations(ann)
+                arg.annotation = ann
+
+        # Add result list initialisation at the start of the body
+        init = ast.AnnAssign(
+            target=ast.Name(id=result_var, ctx=ast.Store()),
+            annotation=ast.Name(id='list', ctx=ast.Load()),
+            value=ast.List(elts=[], ctx=ast.Load()),
+            simple=1)
+        ast.copy_location(init, template)
+        ast.fix_missing_locations(init)
+
+        # Replace all yield statements with append calls
+        new_body = [self._YieldToAppend(result_var, template).visit(s)
+                    for s in node.body]
+
+        # Append return statement
+        ret = ast.Return(value=ast.Name(id=result_var, ctx=ast.Load()))
+        ast.copy_location(ret, template)
+        ast.fix_missing_locations(ret)
+
+        node.body = [init] + new_body + [ret]
+        node.returns = ast.Name(id='list', ctx=ast.Load())
+        ast.copy_location(node.returns, template)
+        ast.fix_missing_locations(node.returns)
+        return node
 
     class _YieldReplacer(ast.NodeTransformer):
         """Replace `yield val` expressions with `target = val; for_body`."""
@@ -500,6 +805,81 @@ class Preprocessor(ast.NodeTransformer):
             ast.fix_missing_locations(stmt)
 
         return result
+
+    def _inline_generator_call_for(self, node):
+        """Inline a for loop over a direct generator function call.
+
+        Transforms:
+            for x in gen_func(a, b):
+                body
+
+        Into the generator body with each `yield val` replaced by:
+            param_0 = a
+            param_1 = b
+            x = val
+            body
+
+        Returns the list of inlined statements, or None if inlining is not
+        possible (unknown generator, keyword args, arg count mismatch,
+        non-simple loop target, or generator body contains return/yield-from).
+        """
+        import copy
+
+        gen_call = node.iter
+        func_name = gen_call.func.id
+
+        body_stmts = self.generator_func_defs.get(func_name)
+        if body_stmts is None:
+            return None
+
+        if gen_call.keywords:
+            return None
+
+        # Generators with early return or yield-from cannot be safely inlined:
+        # a bare `return` inlined into the enclosing scope would prematurely
+        # exit it instead of just stopping the inner generator's iteration.
+        if (self._body_has_node_shallow(body_stmts, ast.Return) or
+                self._body_has_node_shallow(body_stmts, ast.YieldFrom)):
+            return None
+
+        param_names = self.functionParams.get(func_name, [])
+        call_args = gen_call.args
+        if len(param_names) != len(call_args):
+            return None
+
+        if not hasattr(node.target, 'id'):
+            return None
+
+        target_name = node.target.id
+
+        stmts = []
+        for param, arg in zip(param_names, call_args):
+            assign = ast.Assign(
+                targets=[ast.Name(id=param, ctx=ast.Store())],
+                value=copy.deepcopy(arg),
+                type_comment=None)
+            stmts.append(assign)
+
+        inlined = copy.deepcopy(body_stmts)
+        replacer = self._YieldReplacer(target_name, node.body, node)
+        try:
+            for stmt in inlined:
+                out = replacer.visit(stmt)
+                if isinstance(out, list):
+                    stmts.extend(out)
+                elif out is not None:
+                    stmts.append(out)
+        except NotImplementedError as e:
+            import sys
+            print(f"warning: cannot inline generator '{func_name}': {e}",
+                  file=sys.stderr)
+            return None
+
+        for stmt in stmts:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        return stmts
 
     @staticmethod
     def _has_yield(node):
@@ -714,6 +1094,9 @@ class Preprocessor(ast.NodeTransformer):
         node = self.generic_visit(node)
         prefix, new_value = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
+        if node.value is not None:
+            dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
+            prefix = dd_inits + prefix
         if prefix:
             return prefix + [node]
         return node
@@ -734,6 +1117,8 @@ class Preprocessor(ast.NodeTransformer):
 
         prefix, new_value = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
+        dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
+        prefix = dd_inits + prefix
         if prefix:
             return prefix + [node]
         return node
@@ -820,6 +1205,8 @@ class Preprocessor(ast.NodeTransformer):
         node.test = self._simplify_isinstance(node.test)
         prefix, new_test = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
+        dd_inits, node.test = self._lower_defaultdict_reads_in_expr(node.test, node)
+        prefix = dd_inits + prefix
         if node.msg:
             msg_prefix, new_msg = self._lower_listcomp_in_expr(node.msg)
             node.msg = new_msg
@@ -1006,13 +1393,101 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(v_var, ast.Name):
                 self.variable_annotations[v_var.id] = val_ann
         elif hasattr(target, 'id'):
-            self.variable_annotations[target.id] = key_ann
+            # d.items() yields (key, value) tuples regardless of unpacking
+            self.variable_annotations[target.id] = ast.Name(id='tuple', ctx=ast.Load())
+
+    def _is_reversed_range_call(self, iter_node):
+        """Return True if iter_node is reversed(range(...))."""
+        return (
+            isinstance(iter_node, ast.Call) and
+            isinstance(iter_node.func, ast.Name) and
+            iter_node.func.id == "reversed" and
+            len(iter_node.args) == 1 and
+            not iter_node.keywords and
+            isinstance(iter_node.args[0], ast.Call) and
+            isinstance(iter_node.args[0].func, ast.Name) and
+            iter_node.args[0].func.id == "range"
+        )
+
+    def _transform_reversed_range(self, reversed_call):
+        """
+        Transform reversed(range(args)) into an equivalent range(new_args) call.
+
+        Python semantics:
+          reversed(range(n))             → range(n-1, -1, -1)
+          reversed(range(start, stop))   → range(stop-1, start-1, -1)
+          reversed(range(start, stop, step))
+            → range(ESBMC_reversed_range_start_(start, stop, step),
+                    start-step, -step)
+
+        The helper function computes the last element of the original range
+        (or start-step for an empty range, keeping the reversed range empty).
+        All divisions inside the helper use same-sign operands, so C and
+        Python floor-division agree without any adjustment.
+        """
+        range_call = reversed_call.args[0]
+        args = range_call.args
+
+        if len(args) == 1:
+            n = args[0]
+            new_args = [
+                ast.BinOp(left=n, op=ast.Sub(), right=ast.Constant(value=1)),
+                ast.Constant(value=-1),
+                ast.Constant(value=-1),
+            ]
+        elif len(args) == 2:
+            start, stop = args
+            new_args = [
+                ast.BinOp(left=stop, op=ast.Sub(), right=ast.Constant(value=1)),
+                ast.BinOp(left=start, op=ast.Sub(), right=ast.Constant(value=1)),
+                ast.Constant(value=-1),
+            ]
+        elif len(args) == 3:
+            start, stop, step = args
+            # new_start = ESBMC_reversed_range_start_(start, stop, step)
+            # new_stop  = start - step
+            # new_step  = -step
+            #
+            # The helper function correctly computes the last element of
+            # range(start, stop, step) (or start-step for an empty range,
+            # which makes the caller's reversed range trivially empty too).
+            # It avoids mixed-sign floor-division so C and Python agree.
+            new_start = ast.Call(
+                func=ast.Name(id='ESBMC_reversed_range_start_', ctx=ast.Load()),
+                args=[copy.deepcopy(start), copy.deepcopy(stop), copy.deepcopy(step)],
+                keywords=[],
+            )
+            new_stop = ast.BinOp(left=copy.deepcopy(start), op=ast.Sub(), right=copy.deepcopy(step))
+            # Constant-fold -step so that step==0 remains an ast.Constant and
+            # _transform_range_for's compile-time ValueError check still fires.
+            if isinstance(step, ast.Constant):
+                new_step = ast.Constant(value=-step.value)
+            else:
+                new_step = ast.UnaryOp(op=ast.USub(), operand=copy.deepcopy(step))
+            new_args = [new_start, new_stop, new_step]
+        else:
+            # Invalid number of range args — let the existing validator raise.
+            return reversed_call
+
+        new_range = ast.Call(
+            func=ast.Name(id='range', ctx=ast.Load()),
+            args=new_args,
+            keywords=[],
+        )
+        ast.copy_location(new_range, reversed_call)
+        ast.fix_missing_locations(new_range)
+        return new_range
 
     def visit_For(self, node):
         """
         Transform for loops into while loops.
         Handles range() calls, enumerate() calls, dict.items(), and general iterables.
         """
+        # Rewrite reversed(range(...)) to an equivalent range(...) call so that
+        # the normal range-loop path can handle it without any extra machinery.
+        if self._is_reversed_range_call(node.iter):
+            node.iter = self._transform_reversed_range(node.iter)
+
         # Detect range call before generic_visit so we can hoist generator
         # outer_init (e.g. `i = 0`) before the loop.  Without hoisting, the
         # init ends up inside the while body and re-runs every iteration.
@@ -1064,6 +1539,16 @@ class Preprocessor(ast.NodeTransformer):
             # Check if iterating over a generator variable
             if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
                 inlined = self._inline_generator_for(node)
+                if inlined is not None:
+                    return inlined
+            # Check if iterating directly over a generator function call, e.g.
+            # `for y in gen1(arr): body`.  Without this, _transform_iterable_for
+            # would emit `ESBMC_iter: list = gen1(arr)` which assigns a generator
+            # object to a list variable — ESBMC cannot model generator objects.
+            if (isinstance(node.iter, ast.Call) and
+                    isinstance(node.iter.func, ast.Name) and
+                    node.iter.func.id in self.generator_funcs):
+                inlined = self._inline_generator_call_for(node)
                 if inlined is not None:
                     return inlined
             # Unwrap explicit d.keys() into d so the heterogeneous-key handler
@@ -1544,11 +2029,7 @@ class Preprocessor(ast.NodeTransformer):
         """
         Transform dict.items() for loops to while loops.
 
-        Transforms:
-            for k, v in d.items():
-                # body
-
-        Into:
+        Tuple-unpacking form (for k, v in d.items()):
             ESBMC_keys_N: list[key_type] = d.keys()
             ESBMC_vals_N: list[val_type] = d.values()
             ESBMC_index_N: int = 0
@@ -1556,6 +2037,16 @@ class Preprocessor(ast.NodeTransformer):
             while ESBMC_index_N < ESBMC_length_N:
                 k: key_type = ESBMC_keys_N[ESBMC_index_N]
                 v: val_type = ESBMC_vals_N[ESBMC_index_N]
+                ESBMC_index_N: int = ESBMC_index_N + 1
+                # body
+
+        Single-variable form (for item in d.items()):
+            ESBMC_keys_N: list[key_type] = d.keys()
+            ESBMC_vals_N: list[val_type] = d.values()
+            ESBMC_index_N: int = 0
+            ESBMC_length_N: int = len(ESBMC_keys_N)
+            while ESBMC_index_N < ESBMC_length_N:
+                item: tuple = (ESBMC_keys_N[ESBMC_index_N], ESBMC_vals_N[ESBMC_index_N])
                 ESBMC_index_N: int = ESBMC_index_N + 1
                 # body
 
@@ -1665,10 +2156,33 @@ class Preprocessor(ast.NodeTransformer):
             body.append(self._create_var_subscript_assign(
                 node, val_var_name, vals_var, index_var, val_ann))
         else:
-            # Single variable: assign the key (matches Python's dict iteration semantics)
+            # Single variable: d.items() yields (key, value) tuples per Python semantics.
             single_var = target.id if hasattr(target, 'id') else 'ESBMC_loop_var'
-            body.append(self._create_var_subscript_assign(
-                node, single_var, keys_var, index_var, key_ann))
+            key_subscript = ast.Subscript(
+                value=ast.Name(id=keys_var, ctx=ast.Load()),
+                slice=ast.Name(id=index_var, ctx=ast.Load()),
+                ctx=ast.Load()
+            )
+            self.ensure_all_locations(key_subscript, node)
+            val_subscript = ast.Subscript(
+                value=ast.Name(id=vals_var, ctx=ast.Load()),
+                slice=ast.Name(id=index_var, ctx=ast.Load()),
+                ctx=ast.Load()
+            )
+            self.ensure_all_locations(val_subscript, node)
+            tuple_value = ast.Tuple(
+                elts=[key_subscript, val_subscript],
+                ctx=ast.Load()
+            )
+            self.ensure_all_locations(tuple_value, node)
+            tuple_assign = ast.AnnAssign(
+                target=ast.Name(id=single_var, ctx=ast.Store()),
+                annotation=ast.Name(id='tuple', ctx=ast.Load()),
+                value=tuple_value,
+                simple=1
+            )
+            self.ensure_all_locations(tuple_assign, node)
+            body.append(tuple_assign)
 
         body.append(self._create_index_increment(node, index_var))
         body.extend(node.body)
@@ -1955,6 +2469,18 @@ class Preprocessor(ast.NodeTransformer):
             iter_annotation = ast.Subscript(
                 value=ast.Name(id='list', ctx=ast.Load()),
                 slice=ast.Name(id=element_type, ctx=ast.Load()),
+                ctx=ast.Load()
+            )
+        elif annotation_id in ('list', 'List', 'tuple', 'Tuple'):
+            # Use list[Any] rather than bare Any so the C++ converter treats
+            # ESBMC_iter as an indexable list (avoiding the index2t assertion
+            # that fires when subscripting a void* variable).  Bare 'list'
+            # must be avoided because get_elem_type_from_annotation would then
+            # return list_type itself as the element type, causing ptr+ptr
+            # arithmetic crashes in arith_2ops.
+            iter_annotation = ast.Subscript(
+                value=ast.Name(id='list', ctx=ast.Load()),
+                slice=ast.Name(id='Any', ctx=ast.Load()),
                 ctx=ast.Load()
             )
         else:
@@ -2425,6 +2951,154 @@ class Preprocessor(ast.NodeTransformer):
 
         return None
 
+    def _is_defaultdict_call(self, call_node):
+        """Return True if call_node is a collections.defaultdict(...) call.
+
+        Matches only when defaultdict was actually imported from collections.
+        Handles both:
+          from collections import defaultdict        → defaultdict(...)
+          from collections import defaultdict as dd  → dd(...)
+          import collections                         → collections.defaultdict(...)
+          import collections as col                  → col.defaultdict(...)
+        """
+        if not isinstance(call_node, ast.Call):
+            return False
+
+        func = call_node.func
+        # from collections import defaultdict [as alias]
+        if self.defaultdict_imported and isinstance(func, ast.Name):
+            expected = self.defaultdict_alias or 'defaultdict'
+            return func.id == expected
+        # import collections [as alias]
+        if self.collections_module_imported and isinstance(func, ast.Attribute):
+            module_name = self.collections_module_alias or 'collections'
+            return (isinstance(func.value, ast.Name) and
+                    func.value.id == module_name and
+                    func.attr == 'defaultdict')
+        return False
+
+    def _get_defaultdict_factory(self, call_node):
+        """Return the factory node for a collections.defaultdict call, or None.
+
+        Returns None when:
+          - call_node is not a defaultdict call (_is_defaultdict_call is False)
+          - defaultdict() called with no args (no auto-insertion)
+          - defaultdict(None) called with explicit None (no auto-insertion)
+
+        Callers that need to distinguish "not a defaultdict" from "defaultdict
+        without a factory" should call _is_defaultdict_call() separately and
+        always rewrite the construction to {}, only recording a factory when
+        this method returns non-None.
+        """
+        if not self._is_defaultdict_call(call_node):
+            return None
+
+        if call_node.args:
+            factory = call_node.args[0]
+            # defaultdict(None) means no auto-insertion; treat like no factory.
+            if isinstance(factory, ast.Constant) and factory.value is None:
+                return None
+            return factory
+        return None
+
+    def _make_defaultdict_missing_check(self, dict_name, key_node, factory_node, template):
+        """Generate: if key not in dict: dict[key] = factory()
+
+        Returns (stmts, key_expr) where:
+          - stmts  is the list of AST statements to insert before the original node
+          - key_expr is the safe key expression to use in the original subscript
+
+        When key_node is a complex expression (not a bare Name), a temp variable
+        is introduced so the expression is evaluated exactly once. The caller must
+        replace the original subscript's slice with the returned key_expr to avoid
+        a second evaluation.
+        """
+        # If the key is a complex expression, store it in a temporary variable first
+        pre_stmts = []
+        if isinstance(key_node, ast.Name) or isinstance(key_node, ast.Constant):
+            key_load = ast.copy_location(
+                ast.Name(id=key_node.id, ctx=ast.Load())
+                if isinstance(key_node, ast.Name)
+                else key_node,
+                template
+            )
+        else:
+            # Create a temporary variable to hold the key expression so that
+            # complex expressions (e.g. f()) are evaluated only once.
+            tmp_name = '__defaultdict_key_tmp_{}'.format(id(key_node))
+            tmp_assign = ast.Assign(
+                targets=[ast.Name(id=tmp_name, ctx=ast.Store())],
+                value=key_node,
+                type_comment=None
+            )
+            ast.copy_location(tmp_assign, template)
+            ast.fix_missing_locations(tmp_assign)
+            pre_stmts.append(tmp_assign)
+            key_load = ast.Name(id=tmp_name, ctx=ast.Load())
+            ast.copy_location(key_load, template)
+
+        # if key not in dict_name:
+        not_in = ast.Compare(
+            left=key_load,
+            ops=[ast.NotIn()],
+            comparators=[ast.Name(id=dict_name, ctx=ast.Load())]
+        )
+        ast.copy_location(not_in, template)
+        ast.fix_missing_locations(not_in)
+
+        # dict_name[key] = factory()
+        subscript = ast.Subscript(
+            value=ast.Name(id=dict_name, ctx=ast.Load()),
+            slice=key_load,
+            ctx=ast.Store()
+        )
+        ast.copy_location(subscript, template)
+        factory_call = ast.Call(func=factory_node, args=[], keywords=[])
+        ast.copy_location(factory_call, template)
+        assign = ast.Assign(targets=[subscript], value=factory_call, type_comment=None)
+        ast.copy_location(assign, template)
+        ast.fix_missing_locations(assign)
+
+        if_stmt = ast.If(test=not_in, body=[assign], orelse=[])
+        ast.copy_location(if_stmt, template)
+        ast.fix_missing_locations(if_stmt)
+
+        return pre_stmts + [if_stmt], key_load
+
+    def _lower_defaultdict_reads_in_expr(self, expr, template):
+        """Walk expr, find all Load-context d[k] where d is a known defaultdict,
+        generate missing-key init stmts, and rewrite each subscript slice to use
+        the (possibly temp) key expression.
+
+        Returns (init_stmts, new_expr). init_stmts is a (possibly empty) list of
+        AST statements that must be prepended before the containing statement.
+
+        This enables correct auto-insertion semantics for defaultdict reads that
+        appear inside arbitrary expressions (assert, return, function args, etc.)
+        rather than only as the direct RHS of an assignment.
+        """
+        outer = self
+        all_inits = []
+
+        class _Lowerer(ast.NodeTransformer):
+            def visit_Subscript(self, node):
+                # Recurse into children first (handles nested subscripts).
+                self.generic_visit(node)
+                if not (isinstance(node.ctx, ast.Load) and
+                        isinstance(node.value, ast.Name) and
+                        node.value.id in outer._defaultdict_factory):
+                    return node
+                dict_name = node.value.id
+                factory = outer._defaultdict_factory[dict_name]
+                stmts, key_expr = outer._make_defaultdict_missing_check(
+                    dict_name, node.slice, factory, template)
+                all_inits.extend(stmts)
+                node.slice = key_expr
+                return node
+
+        new_expr = _Lowerer().visit(expr)
+        return all_inits, new_expr
+
     def _get_dict_expr_from_items_call(self, call_node):
         """If call_node is d.items() on a known dict, return the dict expression. Else None."""
         if not (isinstance(call_node, ast.Call) and
@@ -2538,15 +3212,20 @@ class Preprocessor(ast.NodeTransformer):
 
         prefix, lowered_value = self._lower_listcomp_in_expr(node.value)
         if prefix:
-            if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
-                raise NotImplementedError("List comprehension assignment requires a simple target name")
-            node.value = lowered_value
-            lowered_assign = ast.Assign(targets=node.targets, value=node.value)
-            self._copy_location_info(node, lowered_assign)
-            self.ensure_all_locations(lowered_assign, node)
-            ast.fix_missing_locations(lowered_assign)
-            self.known_variable_types[node.targets[0].id] = 'list'
-            return prefix + [lowered_assign]
+            if not all(isinstance(t, ast.Name) for t in node.targets):
+                raise NotImplementedError("List comprehension assignment requires simple target names")
+            # lowered_value is a Name node referencing the same temp variable;
+            # sharing it across assignments correctly models Python's single-evaluation
+            # semantics for chained assignments (a = b = expr evaluates expr once).
+            assigns = []
+            for target in node.targets:
+                assign = ast.Assign(targets=[target], value=lowered_value)
+                self._copy_location_info(node, assign)
+                self.ensure_all_locations(assign, node)
+                ast.fix_missing_locations(assign)
+                self.known_variable_types[target.id] = 'list'
+                assigns.append(assign)
+            return prefix + assigns
 
         # Handle single target (most common case)
         if len(node.targets) == 1:
@@ -2582,41 +3261,86 @@ class Preprocessor(ast.NodeTransformer):
                             self.het_dict_literals[target.id] = node.value
                         if self._has_heterogeneous_values(node.value):
                             self.het_value_dict_literals[target.id] = node.value
-                    # Track class instantiations: c = C()
-                    if (isinstance(node.value, ast.Call) and
-                            isinstance(node.value.func, ast.Name)):
-                        self.instance_class_map[target.id] = node.value.func.id
-                        # Track generator variables: g = gen() where gen is a generator.
-                        # Replace the call with a non-None sentinel (True) so that
-                        # 'g is not None' holds: generator objects are always non-None.
-                        if node.value.func.id in self.generator_funcs:
-                            self.generator_vars[target.id] = node.value.func.id
-                            sentinel = ast.Constant(value=True)
-                            ast.copy_location(sentinel, node.value)
-                            node.value = sentinel
-                    # Track dict.items() assignments: items = d.items()
+                    # Track call-expression RHS patterns
                     if isinstance(node.value, ast.Call):
+                        # Track class instantiations: c = C()
+                        if isinstance(node.value.func, ast.Name):
+                            self.instance_class_map[target.id] = node.value.func.id
+                            # Track generator variables: g = gen() where gen is a generator.
+                            # Replace the call with a non-None sentinel (True) so that
+                            # 'g is not None' holds: generator objects are always non-None.
+                            if node.value.func.id in self.generator_funcs:
+                                self.generator_vars[target.id] = node.value.func.id
+                                sentinel = ast.Constant(value=True)
+                                ast.copy_location(sentinel, node.value)
+                                node.value = sentinel
+                        # Track dict.items() assignments: items = d.items()
                         dict_expr = self._get_dict_expr_from_items_call(node.value)
                         if dict_expr is not None:
                             self.dict_items_vars[target.id] = dict_expr
+                        # Track defaultdict construction: d = defaultdict(factory)
+                        # Always rewrite any collections.defaultdict(...) call to {}
+                        # so the C++ backend never sees the call. Only record a
+                        # factory when one is present (defaultdict() / defaultdict(None)
+                        # behave like plain dicts with no auto-insertion).
+                        if self._is_defaultdict_call(node.value):
+                            factory = self._get_defaultdict_factory(node.value)
+                            if factory is not None:
+                                self._defaultdict_factory[target.id] = factory
+                            empty_dict = ast.Dict(keys=[], values=[])
+                            ast.copy_location(empty_dict, node.value)
+                            ast.fix_missing_locations(empty_dict)
+                            node.value = empty_dict
+
+                # Handle: val = x[key] where x is a defaultdict (subscript read)
+                if (isinstance(node.value, ast.Subscript) and
+                        isinstance(node.value.value, ast.Name) and
+                        node.value.value.id in self._defaultdict_factory):
+                    dict_name = node.value.value.id
+                    key_node = node.value.slice
+                    factory = self._defaultdict_factory[dict_name]
+                    init_stmts, key_expr = self._make_defaultdict_missing_check(
+                        dict_name, key_node, factory, node)
+                    # Patch the original subscript to use the (possibly temp) key
+                    # expression so a complex key like f() is evaluated only once.
+                    node.value.slice = key_expr
+                    return init_stmts + [node]
+
                 return node
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
         else:
-            assignments = []
-            for target in node.targets:
-                if isinstance(target, (ast.Tuple, ast.List)):
-                    # This is tuple unpacking in a chain assignment - handle specially
-                    unpacked_assignments = self._handle_tuple_unpacking(target, node.value, node)
-                    assignments.extend(unpacked_assignments)
-                else:
+            has_tuple_target = any(isinstance(t, (ast.Tuple, ast.List)) for t in node.targets)
+            if has_tuple_target:
+                # Chained assignment with at least one tuple target: evaluate RHS exactly once.
+                # E.g., (x, y) = (u, v) = f()  →  _tmp = f(); (x, y) = _tmp; (u, v) = _tmp
+                tmp_name = f"ESBMC_chain_{self.listcomp_counter}"
+                self.listcomp_counter += 1
+                tmp_store = ast.Name(id=tmp_name, ctx=ast.Store())
+                self._copy_location_info(node, tmp_store)
+                tmp_assign = self._create_individual_assignment(tmp_store, node.value, node)
+                ast.fix_missing_locations(tmp_assign)
+                tmp_load = ast.Name(id=tmp_name, ctx=ast.Load())
+                self._copy_location_info(node, tmp_load)
+                assignments = [tmp_assign]
+                for target in node.targets:
+                    sub_assign = self._create_individual_assignment(target, tmp_load, node)
+                    ast.fix_missing_locations(sub_assign)
+                    if isinstance(target, ast.Name):
+                        self._update_variable_types_simple(target, node.value)
+                    assignments.append(sub_assign)
+                return assignments
+            else:
+                assignments = []
+                for target in node.targets:
                     individual_assign = self._create_individual_assignment(target, node.value, node)
                     self._update_variable_types_simple(target, node.value)
                     assignments.append(individual_assign)
-            return assignments
+                return assignments
 
     def visit_AnnAssign(self, node):
-        """Track type annotations from annotated assignments like x: int = 5"""
+        """Track type annotations from annotated assignments like x: int = 5.
+        Also handles defaultdict rewriting and list comprehension lowering."""
         # First visit child nodes
         node = self.generic_visit(node)
 
@@ -2646,6 +3370,33 @@ class Preprocessor(ast.NodeTransformer):
             # Store full annotation for generic type extraction
             self.variable_annotations[var_name] = node.annotation
 
+            # Handle: d: dict = defaultdict(factory)  →  track factory, rewrite to d: dict = {}
+            # Always rewrite any collections.defaultdict(...) call to {} so the
+            # C++ backend never sees the call. Only record a factory when present.
+            if (node.value is not None and
+                    isinstance(node.value, ast.Call) and
+                    self._is_defaultdict_call(node.value)):
+                factory = self._get_defaultdict_factory(node.value)
+                if factory is not None:
+                    self._defaultdict_factory[var_name] = factory
+                empty_dict = ast.Dict(keys=[], values=[])
+                ast.copy_location(empty_dict, node.value)
+                ast.fix_missing_locations(empty_dict)
+                node.value = empty_dict
+
+        # Handle: v: T = d[key] where d is a defaultdict (subscript read)
+        if (node.value is not None and
+                isinstance(node.value, ast.Subscript) and
+                isinstance(node.value.value, ast.Name) and
+                node.value.value.id in self._defaultdict_factory):
+            dict_name = node.value.value.id
+            key_node = node.value.slice
+            factory = self._defaultdict_factory[dict_name]
+            init_stmts, key_expr = self._make_defaultdict_missing_check(
+                dict_name, key_node, factory, node)
+            node.value.slice = key_expr
+            return init_stmts + [node]
+
         return node
 
     def _as_load_target(self, target, source_node):
@@ -2672,6 +3423,20 @@ class Preprocessor(ast.NodeTransformer):
         if not isinstance(node.target, ast.Subscript):
             return node
 
+        # Handle: x[key] op= val where x is a defaultdict
+        # Insert missing-key check before the augmented assignment
+        pre_stmts = []
+        if (isinstance(node.target.value, ast.Name) and
+                node.target.value.id in self._defaultdict_factory):
+            dict_name = node.target.value.id
+            key_node = node.target.slice
+            factory = self._defaultdict_factory[dict_name]
+            pre_stmts, key_expr = self._make_defaultdict_missing_check(
+                dict_name, key_node, factory, node)
+            # Patch the augmented-assignment target to use the (possibly temp)
+            # key expression so a complex key like f() is evaluated only once.
+            node.target.slice = key_expr
+
         # Convert "target op= value" into "target = target op value".
         load_target = self._as_load_target(node.target, node)
         # Build the RHS binary operation using the original operator.
@@ -2682,6 +3447,9 @@ class Preprocessor(ast.NodeTransformer):
         self._copy_location_info(node, assign)
         self.ensure_all_locations(assign, node)
         ast.fix_missing_locations(assign)
+
+        if pre_stmts:
+            return pre_stmts + [assign]
         return assign
 
 
@@ -2921,9 +3689,16 @@ class Preprocessor(ast.NodeTransformer):
         # Detect generator functions: any function that contains yield
         is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
         if is_generator:
-            self.generator_funcs.add(node.name)
-            if self._has_early_return_before_yield(node.body):
-                self.early_return_generator_funcs.add(node.name)
+            # Recursive generators cannot be inlined: transform them to an
+            # accumulate-and-return function so ESBMC can verify them via
+            # bounded recursion without needing generator protocol support.
+            if self._is_recursive_call(node.name, node.body):
+                node = self._transform_recursive_generator(node)
+                is_generator = False
+            else:
+                self.generator_funcs.add(node.name)
+                if self._has_early_return_before_yield(node.body):
+                    self.early_return_generator_funcs.add(node.name)
 
         # Store return type annotation so call-expression iterables can resolve types
         if node.returns is not None:
@@ -3019,6 +3794,12 @@ class Preprocessor(ast.NodeTransformer):
                     self.decimal_imported = True
                     if alias.asname:
                         self.decimal_class_alias = alias.asname
+        if node.module == "collections":
+            for alias in node.names:
+                if alias.name == "defaultdict" or alias.name == "*":
+                    self.defaultdict_imported = True
+                    if alias.asname:
+                        self.defaultdict_alias = alias.asname
         self.generic_visit(node)
         return node
 
@@ -3028,6 +3809,10 @@ class Preprocessor(ast.NodeTransformer):
                 self.decimal_module_imported = True
                 if alias.asname:
                     self.decimal_module_alias = alias.asname
+            if alias.name == "collections":
+                self.collections_module_imported = True
+                if alias.asname:
+                    self.collections_module_alias = alias.asname
         self.generic_visit(node)
         return node
 

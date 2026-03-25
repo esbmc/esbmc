@@ -164,21 +164,11 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   else if (is_math_expr(rhs))
     resolved_rhs = compute_expr(rhs);
 
-  // If rhs is still not constant, we need to handle this case
-  if (!resolved_rhs.is_constant())
-  {
-    log_warning(
-      "ESBMC-Python does not support power expressions with non-constant "
-      "exponents");
-    return from_integer(1, lhs.type());
-  }
-
-  // Check if the exponent is a floating-point number
-  if (resolved_rhs.type().is_floatbv())
-  {
-    log_warning("ESBMC-Python does not support floating-point exponents yet");
-    return from_integer(1, lhs.type());
-  }
+  // If rhs is still not constant or is a float, delegate to pow() for
+  // soundness. This correctly handles symbolic exponents and negative exponents
+  // (which Python's ** returns as float).
+  if (!resolved_rhs.is_constant() || resolved_rhs.type().is_floatbv())
+    return handle_power_symbolic(lhs, rhs);
 
   // Convert rhs to integer exponent
   BigInt exponent;
@@ -189,18 +179,12 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   }
   catch (...)
   {
-    log_warning("Failed to convert exponent to integer");
-    return from_integer(1, lhs.type());
-  }
-
-  // Handle negative exponents via pow() to preserve semantics
-  if (exponent < 0)
-  {
-    log_warning(
-      "Handling negative exponents via pow() and returning a floating-point "
-      "value");
     return handle_power_symbolic(lhs, rhs);
   }
+
+  // Negative exponents: Python returns a float (e.g. 2**-1 == 0.5)
+  if (exponent < 0)
+    return handle_power_symbolic(lhs, rhs);
 
   // Handle special cases first
   if (exponent == 0)
