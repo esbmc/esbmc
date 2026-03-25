@@ -255,6 +255,14 @@ template <class T, size_t I>
 struct extent<T[I], 0> : integral_constant<size_t, I>
 {
 };
+template <class T, size_t N>
+struct extent<T[], N> : extent<T, N - 1>
+{
+};
+template <class T, size_t I, size_t N>
+struct extent<T[I], N> : extent<T, N - 1>
+{
+};
 template <class T>
 inline constexpr size_t extent_v = extent<T>::value;
 
