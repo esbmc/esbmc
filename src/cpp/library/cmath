@@ -1,10 +1,6 @@
 
 #pragma once
 
-/* while we don't have our own <math.h> work around the fact that libstdc++'s
- * <math.h> does #include <cmath> and expects all the std::* functions to be
- * there. But we don't want theirs... */
-#define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
 #if __has_include(<sys/_types.h>) /* FreeBSD nonsense about __char{16,32}_t */
 #  include <sys/_types.h>
 #endif
