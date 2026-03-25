@@ -118,34 +118,20 @@ goto_symext::goto_symext(
         // pragma_unroll_count: 0 = not specified, UINT_MAX = unlimited, else = specific count
         if (instruction.pragma_unroll_count > 0)
         {
-          if (instruction.pragma_unroll_count == UINT_MAX)
-          {
-            // #pragma unroll (no N) - unlimited unrolling (0 means no limit in ESBMC)
-            unwind_set[instruction.loop_number] = 0;
-            log_status(
-              "Applying #pragma unroll (unlimited) to loop {} in file {} line "
-              "{} column {} function {}",
-              instruction.loop_number,
-              instruction.location.get_file(),
-              instruction.location.get_line(),
-              instruction.location.get_column(),
-              instruction.location.get_function());
-          }
-          else
-          {
-            // #pragma unroll N - use specified count
-            unwind_set[instruction.loop_number] =
-              BigInt(instruction.pragma_unroll_count);
-            log_status(
-              "Applying #pragma unroll {} to loop {} in file {} line {} column "
-              "{} function {}",
-              instruction.pragma_unroll_count,
-              instruction.loop_number,
-              instruction.location.get_file(),
-              instruction.location.get_line(),
-              instruction.location.get_column(),
-              instruction.location.get_function());
-          }
+          unwind_set[instruction.loop_number] =
+            instruction.pragma_unroll_count == UINT_MAX
+              ? 0
+              : BigInt(instruction.pragma_unroll_count);
+          log_debug(
+            "[symex]",
+            "Applying #pragma unroll {} to loop {} in file {} line "
+            "{} column {} function {}",
+            unwind_set[instruction.loop_number],
+            instruction.loop_number,
+            instruction.location.get_file(),
+            instruction.location.get_line(),
+            instruction.location.get_column(),
+            instruction.location.get_function());
         }
       }
     }
