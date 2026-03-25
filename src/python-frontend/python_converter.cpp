@@ -2447,9 +2447,8 @@ exprt python_converter::build_binary_expression(
   exprt &lhs,
   exprt &rhs)
 {
-  const bool is_bitwise_op =
-    op == "BitAnd" || op == "BitOr" || op == "BitXor" || op == "LShift" ||
-    op == "RShift";
+  const bool is_bitwise_op = op == "BitAnd" || op == "BitOr" ||
+                             op == "BitXor" || op == "LShift" || op == "RShift";
 
   if (is_bitwise_op)
   {
