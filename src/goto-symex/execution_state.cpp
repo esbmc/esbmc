@@ -445,7 +445,7 @@ void execution_statet::end_thread()
 
 void execution_statet::update_after_switch_point()
 {
-  execute_guard();
+  ();
   resetDFS_traversed();
 
   // MPOR records the variables accessed in last transition taken; we're
@@ -697,7 +697,7 @@ void execution_statet::execute_guard()
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
-  implies2tc assumpt(guard_expr, parent_guard);
+  expr2tc assumpt = implies2tc(guard_expr, parent_guard);
 
   target->assumption(
     guardt().as_expr(), assumpt, get_active_state().source, first_loop);
