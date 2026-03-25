@@ -1164,8 +1164,9 @@ basic_string<CharT, Traits, Alloc>::basic_string(char c, size_t n)
 {
   __ESBMC_assert(n > 0, "the second parameter must be different than zero");
   str = new char[n + 1];
-  for (int i = 0; i <= n; i++)
+  for (int i = 0; i < n; i++)
     str[i] = c;
+  str[n] = '\0';
   _size = n;
 }
 
@@ -1486,15 +1487,10 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator=(
   const basic_string<CharT, Traits, Alloc> &str)
 {
-  int i, len;
+__ESBMC_HIDE:
   this->_size = str.length();
   this->str = new char[this->_size + 1];
-  len = str.length();
-  for (i = 0; i < len; i++)
-  {
-    this->str[i] = str.str[i];
-  }
-  this->str[i] = '\0';
+  strcpy(this->str, str.str);
   return *this;
 }
 
@@ -1503,32 +1499,12 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator=(
   basic_string<CharT, Traits, Alloc> &str)
 {
+__ESBMC_HIDE:
   if (this == &str)
     return *this;
-
-  // Store old pointer for cleanup
-  CharT *old_str = this->str;
-
-  // Calculate new size
-  size_t new_size = str.size();
-
-  // Allocate new memory
-  CharT *new_str = nullptr;
-  if (new_size > 0)
-  {
-    new_str = new CharT[new_size + 1];
-    for (size_t i = 0; i < new_size; ++i)
-      new_str[i] = str.str[i];
-    new_str[new_size] = CharT{}; // Null terminator
-  }
-
-  // Update object state only after successful allocation
-  this->str = new_str;
-  this->_size = new_size;
-
-  // Clean up old memory
-  delete[] old_str;
-
+  this->_size = str.length();
+  this->str = new char[this->_size + 1];
+  strcpy(this->str, str.str);
   return *this;
 }
 
@@ -1823,9 +1799,10 @@ __ESBMC_HIDE:
   basic_string<CharT, Traits, Alloc> temp(totalLen);
   int i, j, k;
   for (i = 0; i < this->_size; i++)
-    temp[i] = this->str[i];
-  for (j = i, k = 0; j < temp._size; j++, k++)
+    temp.str[i] = this->str[i];
+  for (j = i, k = 0; j < totalLen; j++, k++)
     temp.str[j] = s[k];
+  temp.str[totalLen] = '\0';
   *this = temp;
   return *this;
 }
@@ -1854,9 +1831,10 @@ __ESBMC_HIDE:
   basic_string<CharT, Traits, Alloc> temp(totalLen);
   int i, j, k;
   for (i = 0; i < this->_size; i++)
-    temp[i] = this->str[i];
-  for (j = i, k = pos; j < temp._size; j++, k++)
+    temp.str[i] = this->str[i];
+  for (j = i, k = pos; j < totalLen; j++, k++)
     temp.str[j] = s.str[k];
+  temp.str[totalLen] = '\0';
   *this = temp;
   return *this;
 }
@@ -1872,9 +1850,10 @@ __ESBMC_HIDE:
   basic_string<CharT, Traits, Alloc> temp(totalLen);
   int i, j, k;
   for (i = 0; i < this->_size; i++)
-    temp[i] = this->str[i];
-  for (j = i, k = 0; j < temp._size; j++, k++)
+    temp.str[i] = this->str[i];
+  for (j = i, k = 0; j < totalLen; j++, k++)
     temp.str[j] = s[k];
+  temp.str[totalLen] = '\0';
   *this = temp;
   return *this;
 }
@@ -3357,8 +3336,8 @@ operator+(char lhc, basic_string<CharT, Traits, Alloc> rhs)
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator==(
-  const basic_string<CharT, Traits, Alloc> a,
-  const basic_string<CharT, Traits, Alloc> b)
+  const basic_string<CharT, Traits, Alloc> &a,
+  const basic_string<CharT, Traits, Alloc> &b)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(
@@ -3424,8 +3403,8 @@ __ESBMC_HIDE:
 }
 template <typename CharT, typename Traits, typename Alloc>
 bool operator!=(
-  basic_string<CharT, Traits, Alloc> a,
-  basic_string<CharT, Traits, Alloc> b)
+  const basic_string<CharT, Traits, Alloc> &a,
+  const basic_string<CharT, Traits, Alloc> &b)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
