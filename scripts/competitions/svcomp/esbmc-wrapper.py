@@ -97,7 +97,7 @@ def parse_result(the_output, prop):
   if "Out of memory" in the_output:
     return Result.err_memout
 
-  if "Chosen solver doesn\'t support floating-point numbers" in the_output:
+  if "Chosen solver doesn\'t supt floating-point numbers" in the_output:
     return Result.force_fp_mode
 
   # Error messages:
@@ -257,7 +257,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:
-    command_line += " --no-por --context-bound 3 "
+    command_line += " --no-por --context-bound 3 --smt-symex-guard --z3 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
