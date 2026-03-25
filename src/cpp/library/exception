@@ -11,9 +11,6 @@
 #define _ESBMC_NOEXCEPT
 #endif
 
-// ESBMC intrinsic — no header needed.
-bool nondet_bool();
-
 namespace std
 {
 
