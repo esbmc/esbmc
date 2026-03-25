@@ -663,8 +663,7 @@ exprt function_call_expr::handle_type_call() const
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
 
-  typet str_type =
-    type_handler_.build_array(char_type(), type_name.size() + 1);
+  typet str_type = type_handler_.build_array(char_type(), type_name.size() + 1);
   return constant_exprt(type_name, type_name, str_type);
 }
 

@@ -525,8 +525,7 @@ std::string string_handler::extract_string_from_array_operands(
   // but store chars as individual operands with an empty value attribute.
   if (
     array_expr.is_constant() && array_expr.operands().empty() &&
-    array_expr.type().is_array() &&
-    array_expr.type().subtype() == char_type())
+    array_expr.type().is_array() && array_expr.type().subtype() == char_type())
     return to_constant_expr(array_expr).get_value().as_string();
 
   std::string result;
