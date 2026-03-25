@@ -9,6 +9,7 @@
 #include <util/message.h>
 
 #include <cmath>
+#include <limits>
 #include <ostream>
 
 const char *kConstant = "Constant";
@@ -878,16 +879,24 @@ exprt numpy_call_expr::get()
 
           if (dtype.find("int") != std::string::npos)
           {
-            int64_t mask = (1LL << dtype_size) - 1;
-            int64_t masked_value =
-              static_cast<int64_t>(std::llround(final_value)) & mask;
+            const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
+            const int64_t rounded_value =
+              static_cast<int64_t>(std::llround(final_value));
+            const uint64_t mask =
+              dtype_size >= 64 ? std::numeric_limits<uint64_t>::max()
+                               : ((uint64_t{1} << dtype_size) - 1);
+            const uint64_t wrapped_bits =
+              static_cast<uint64_t>(rounded_value) & mask;
 
-            if (dtype[0] != 'u' && (masked_value >> (dtype_size - 1)) & 1)
+            int64_t wrapped_signed = static_cast<int64_t>(wrapped_bits);
+            if (
+              !is_unsigned && dtype_size < 64 &&
+              ((wrapped_bits >> (dtype_size - 1)) & 1ULL) != 0)
             {
-              masked_value -= (1LL << dtype_size);
+              wrapped_signed -= static_cast<int64_t>(uint64_t{1} << dtype_size);
             }
 
-            if (static_cast<int64_t>(std::llround(final_value)) != masked_value)
+            if (rounded_value != wrapped_signed)
             {
               log_warning(
                 "{}:{}: Integer overflow detected in {}() call. Consider using "
@@ -897,11 +906,24 @@ exprt numpy_call_expr::get()
                 function_id_.get_function());
             }
 
-            expr.set("#cformat", std::to_string(masked_value));
+            if (is_unsigned)
+            {
+              exprt folded = from_integer(BigInt(wrapped_bits), t);
+              folded.set("#cformat", std::to_string(wrapped_bits));
+              return folded;
+            }
+            else
+            {
+              exprt folded = from_integer(BigInt(wrapped_signed), t);
+              folded.set("#cformat", std::to_string(wrapped_signed));
+              return folded;
+            }
           }
           else
           {
-            expr.set("#cformat", std::to_string(final_value));
+            exprt folded = from_double(final_value, t);
+            folded.set("#cformat", std::to_string(final_value));
+            return folded;
           }
         }
       }

@@ -10,6 +10,7 @@
 #include <util/message.h>
 
 #include <cmath>
+#include <limits>
 
 namespace
 {
@@ -122,7 +123,12 @@ exprt python_math::resolve_symbol(const exprt &operand) const
 std::optional<double>
 python_math::try_resolve_constant_double(const exprt &operand) const
 {
-  exprt resolved = resolve_symbol(operand);
+  // Do not fold mutable symbols: symbol table values may be stale between
+  // assignments (e.g. in chained compound assignments).
+  if (operand.is_symbol())
+    return std::nullopt;
+
+  exprt resolved = operand;
   if (!resolved.is_constant())
     return std::nullopt;
 
@@ -139,7 +145,13 @@ python_math::try_resolve_constant_double(const exprt &operand) const
     const BigInt int_val = binary2integer(
       resolved.value().as_string(), resolved.type().is_signedbv());
     if (resolved.type().is_unsignedbv())
+    {
+      if (!int_val.is_uint64())
+        return std::nullopt;
       return static_cast<double>(int_val.to_uint64());
+    }
+    if (!int_val.is_int64())
+      return std::nullopt;
     return static_cast<double>(int_val.to_int64());
   }
 
@@ -295,13 +307,7 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   // Resolve exponent first. If it is non-constant, we can return early without
   // spending time resolving the base.
   exprt resolved_rhs = rhs;
-  if (rhs.is_symbol())
-  {
-    const symbolt *s = symbol_table.find_symbol(rhs.identifier());
-    if (s && !s->value.value().empty())
-      resolved_rhs = s->value;
-  }
-  else if (is_basic_math_expr(rhs))
+  if (is_basic_math_expr(rhs))
     resolved_rhs = compute_expr(rhs);
 
   // If rhs is still not constant or is a float, delegate to pow() for
@@ -333,13 +339,7 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     return lhs;
 
   exprt resolved_lhs = lhs;
-  if (lhs.is_symbol())
-  {
-    const symbolt *s = symbol_table.find_symbol(lhs.identifier());
-    if (s && !s->value.value().empty())
-      resolved_lhs = s->value;
-  }
-  else if (is_basic_math_expr(lhs))
+  if (is_basic_math_expr(lhs))
     resolved_lhs = compute_expr(lhs);
 
   std::optional<BigInt> resolved_base_value;
@@ -431,19 +431,40 @@ exprt python_math::handle_floor_division(
   const exprt &rhs,
   const exprt &bin_expr)
 {
+  if (
+    lhs.type().is_floatbv() || rhs.type().is_floatbv() ||
+    bin_expr.type().is_floatbv())
+  {
+    if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+        rhs_const = try_resolve_constant_double(rhs);
+        lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+      return from_double(std::floor(*lhs_const / *rhs_const), double_type());
+
+    exprt div_expr("ieee_div", double_type());
+    div_expr.copy_to_operands(
+      promote_to_double_if_needed(lhs), promote_to_double_if_needed(rhs));
+
+    side_effect_expr_function_callt floor_call;
+    floor_call.function() =
+      symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
+    floor_call.arguments() = {div_expr};
+    floor_call.type() = double_type();
+    floor_call.location() = bin_expr.location();
+    return floor_call;
+  }
+
   if (lhs.type().is_signedbv() || lhs.type().is_unsignedbv())
   {
-    exprt resolved_lhs = resolve_symbol(lhs);
-    exprt resolved_rhs = resolve_symbol(rhs);
+    // Only fold direct constants; folding symbols can become unsound when
+    // symbol-table values are not kept in sync after reassignment.
     if (
-      resolved_lhs.is_constant() && resolved_rhs.is_constant() &&
-      (resolved_rhs.type().is_signedbv() ||
-       resolved_rhs.type().is_unsignedbv()))
+      lhs.is_constant() && rhs.is_constant() &&
+      (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
     {
       const BigInt lhs_val = binary2integer(
-        resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
+        lhs.value().as_string(), lhs.type().is_signedbv());
       const BigInt rhs_val = binary2integer(
-        resolved_rhs.value().as_string(), resolved_rhs.type().is_signedbv());
+        rhs.value().as_string(), rhs.type().is_signedbv());
 
       if (rhs_val != 0)
       {
@@ -511,7 +532,19 @@ void python_math::handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr)
       {
         const bool is_signed = t.is_signedbv();
         const BigInt val = binary2integer(e.value().as_string(), is_signed);
-        const double float_val = static_cast<double>(val.to_int64());
+        double float_val;
+        if (is_signed)
+        {
+          if (!val.is_int64())
+            throw std::runtime_error("integer constant out of int64 range");
+          float_val = static_cast<double>(val.to_int64());
+        }
+        else
+        {
+          if (!val.is_uint64())
+            throw std::runtime_error("integer constant out of uint64 range");
+          float_val = static_cast<double>(val.to_uint64());
+        }
         e = from_double(float_val, float_type);
       }
       catch (const std::exception &ex)
@@ -552,7 +585,20 @@ void python_math::promote_int_to_float(exprt &op, const typet &target_type)
     {
       const BigInt int_val =
         binary2integer(op.value().as_string(), op_type.is_signedbv());
-      op = from_double(static_cast<double>(int_val.to_int64()), target_type);
+      double as_double;
+      if (op_type.is_signedbv())
+      {
+        if (!int_val.is_int64())
+          throw std::runtime_error("integer constant out of int64 range");
+        as_double = static_cast<double>(int_val.to_int64());
+      }
+      else
+      {
+        if (!int_val.is_uint64())
+          throw std::runtime_error("integer constant out of uint64 range");
+        as_double = static_cast<double>(int_val.to_uint64());
+      }
+      op = from_double(as_double, target_type);
     }
     catch (const std::exception &e)
     {
@@ -873,8 +919,11 @@ exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
   if (std::optional<double> val = try_resolve_constant_double(operand);
       val.has_value() && std::isfinite(*val))
   {
-    const long long truncated = static_cast<long long>(std::trunc(*val));
-    return from_integer(truncated, int_type());
+    const double truncated = std::trunc(*val);
+    const double ll_min = static_cast<double>(std::numeric_limits<long long>::min());
+    const double ll_max = static_cast<double>(std::numeric_limits<long long>::max());
+    if (truncated >= ll_min && truncated <= ll_max)
+      return from_integer(static_cast<long long>(truncated), int_type());
   }
 
   exprt trunc_call =

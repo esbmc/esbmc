@@ -206,7 +206,8 @@ get_object_alias(const JsonType &ast, const std::string &obj_name)
         continue;
 
       if (
-        name.value("_type", "") == "alias" && name.contains("asname") &&
+        name.contains("_type") && name["_type"].is_string() &&
+        name["_type"] == "alias" && name.contains("asname") &&
         name["asname"].is_string() && name["asname"] == obj_name &&
         name.contains("name") && name["name"].is_string())
       {
