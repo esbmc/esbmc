@@ -178,14 +178,39 @@ template <typename JsonType>
 const std::string
 get_object_alias(const JsonType &ast, const std::string &obj_name)
 {
-  for (auto &node : ast["body"])
+  if (obj_name.empty())
+    return obj_name;
+
+  if (!ast.contains("body") || !ast["body"].is_array())
+    return obj_name;
+
+  for (const auto &node : ast["body"])
   {
-    if (node["_type"] == "ImportFrom" || node["_type"] == "Import")
+    if (!node.is_object())
+      continue;
+
+    const std::string node_type =
+      (node.contains("_type") && node["_type"].is_string())
+        ? node["_type"].template get<std::string>()
+        : "";
+
+    if (node_type != "ImportFrom" && node_type != "Import")
+      continue;
+
+    if (!node.contains("names") || !node["names"].is_array())
+      continue;
+
+    for (const auto &name : node["names"])
     {
-      for (const auto &name : node["names"])
+      if (!name.is_object())
+        continue;
+
+      if (
+        name.value("_type", "") == "alias" && name.contains("asname") &&
+        name["asname"].is_string() && name["asname"] == obj_name &&
+        name.contains("name") && name["name"].is_string())
       {
-        if (name["_type"] == "alias" && name["asname"] == obj_name)
-          return name["name"];
+        return name["name"].template get<std::string>();
       }
     }
   }
