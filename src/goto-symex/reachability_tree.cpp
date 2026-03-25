@@ -573,7 +573,8 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     switch_to_next_execution_state();
   }
 
-  (*cur_state_it)->add_memory_leak_checks();
+  if (get_cur_state().threads_state[0].thread_ended)
+    (*cur_state_it)->add_memory_leak_checks();
 
   has_complete_formula = false;
 

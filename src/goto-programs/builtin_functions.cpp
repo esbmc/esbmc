@@ -174,6 +174,7 @@ void goto_convertt::do_atomic_begin(
   if (
     function.location().function() != "pthread_create" &&
     function.location().function() != "pthread_join_noswitch" &&
+    function.location().function() != "pthread_exec_key_destructors" &&
     function.location().function() != "pthread_trampoline" &&
     !config.options.get_bool_option("data-races-check-only"))
   {
