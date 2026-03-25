@@ -1,6 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include <python-frontend/function_call_cache.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_math.h>
@@ -162,6 +163,16 @@ public:
   const namespacet &name_space() const
   {
     return ns;
+  }
+
+  function_call_cache &get_function_call_cache()
+  {
+    return function_call_cache_;
+  }
+
+  const function_call_cache &get_function_call_cache() const
+  {
+    return function_call_cache_;
   }
 
   void add_symbol(const symbolt s)
@@ -338,6 +349,12 @@ private:
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
+
+  bool is_coverage_mode() const;
+
+  bool is_pytest_generation_mode() const;
+
+  bool is_model_file(const nlohmann::json &node) const;
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
@@ -897,6 +914,8 @@ private:
   /// Maps any symbol currently known to refer to an input() string
   /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
   std::unordered_map<std::string, std::string> input_str_to_len_sym_;
+
+  function_call_cache function_call_cache_;
 
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;

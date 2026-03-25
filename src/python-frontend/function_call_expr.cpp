@@ -20,9 +20,11 @@
 #include <util/string_constant.h>
 
 #include <regex>
+#include <algorithm>
 #include <cmath>
 #include <cctype>
 #include <stdexcept>
+#include <unordered_set>
 
 using namespace json_utils;
 namespace
@@ -4404,14 +4406,38 @@ exprt function_call_expr::handle_general_function_call()
           if (possible_classes.empty())
             possible_classes.push_back(class_name);
 
-          // Check if method exists in any of the possible classes
+          // When there are multiple possible classes (polymorphic object),
+          // the method must exist in ALL of them; otherwise it is an
+          // AttributeError (the object could be any of those types at
+          // runtime and at least one path would fail).
+          // For a single class, it suffices that the method exists.
           bool method_exists = false;
-          for (const auto &check_class : possible_classes)
+          if (possible_classes.size() > 1)
           {
-            if (method_exists_in_class_hierarchy(check_class, method_name))
+            bool all_have_method = true;
+            for (const auto &check_class : possible_classes)
             {
-              method_exists = true;
-              break;
+              if (check_class.empty())
+                continue;
+              if (!method_exists_in_class_hierarchy(check_class, method_name))
+              {
+                all_have_method = false;
+                break;
+              }
+            }
+            method_exists = all_have_method;
+          }
+          else
+          {
+            for (const auto &check_class : possible_classes)
+            {
+              if (check_class.empty())
+                continue;
+              if (method_exists_in_class_hierarchy(check_class, method_name))
+              {
+                method_exists = true;
+                break;
+              }
             }
           }
 
@@ -5256,89 +5282,185 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
   if (!obj_symbol)
     return possible_classes;
 
-  typet obj_type = obj_symbol->type;
-  if (obj_type.is_pointer())
-    obj_type = obj_type.subtype();
-  if (obj_type.id() == "symbol")
-    obj_type = converter_.ns.follow(obj_type);
+  // Build cache key from symbol id; fallback to function + symbol name.
+  std::string cache_key = obj_symbol->id.as_string();
+  if (cache_key.empty())
+    cache_key =
+      converter_.current_function_name() + "::" + obj_symbol->name.as_string();
 
-  // If type is a struct, extract the class name from the struct tag
-  if (obj_type.is_struct())
+  // Check cache first.
+  auto cached =
+    converter_.get_function_call_cache().get_possible_class_types(cache_key);
+  if (cached.has_value())
+    return cached.value();
+
+  try
   {
-    const struct_typet &struct_type = to_struct_type(obj_type);
-    std::string tag = struct_type.tag().as_string();
-    std::string actual_class = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
-    possible_classes.push_back(actual_class);
-    return possible_classes;
-  }
+    typet obj_type = obj_symbol->type;
+    if (obj_type.is_pointer())
+      obj_type = obj_type.subtype();
+    if (obj_type.id() == "symbol")
+      obj_type = converter_.ns.follow(obj_type);
 
-  // Type is a primitive (e.g., floatbv) - trace through AST to find actual types
-  std::string var_name = obj_symbol->name.as_string();
-  nlohmann::json var_decl = json_utils::find_var_decl(
-    var_name, converter_.current_function_name(), converter_.ast());
+    // If type is a struct, extract the class name from the struct tag
+    if (obj_type.is_struct())
+    {
+      const struct_typet &struct_type = to_struct_type(obj_type);
+      std::string tag = struct_type.tag().as_string();
+      std::string actual_class = (tag.find("tag-") == 0) ? tag.substr(4) : tag;
+      possible_classes.push_back(actual_class);
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  if (var_decl.empty() || !var_decl.contains("value"))
-    return possible_classes;
+    // Type is a primitive (e.g., floatbv) - trace through AST to find actual types
+    std::string var_name = obj_symbol->name.as_string();
+    nlohmann::json var_decl = json_utils::find_var_decl(
+      var_name, converter_.current_function_name(), converter_.ast());
 
-  const auto &value = var_decl["value"];
+    if (
+      var_decl.empty() || !var_decl.is_object() || !var_decl.contains("value"))
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  // Check if assigned from a function call
-  if (value["_type"] != "Call" || value["func"]["_type"] != "Name")
-    return possible_classes;
+    const auto &value = var_decl["value"];
 
-  std::string func_name = value["func"]["id"].get<std::string>();
+    // Validate JSON shape before accessing nested fields.
+    if (
+      !value.is_object() || !value.contains("_type") ||
+      !value["_type"].is_string())
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  // Look up the function definition
-  const auto &func_node =
-    json_utils::find_function(converter_.ast()["body"], func_name);
+    // Check if assigned from a function call
+    if (value["_type"] != "Call")
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  if (
-    func_node.empty() || !func_node.contains("returns") ||
-    func_node["returns"].is_null())
-    return possible_classes;
+    if (
+      !value.contains("func") || !value["func"].is_object() ||
+      !value["func"].contains("_type") || !value["func"]["_type"].is_string() ||
+      value["func"]["_type"] != "Name" || !value["func"].contains("id") ||
+      !value["func"]["id"].is_string())
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-  const auto &returns = func_node["returns"];
-  if (returns["_type"] != "Name" || !returns.contains("id"))
-    return possible_classes;
+    std::string func_name = value["func"]["id"].get<std::string>();
 
-  std::string return_type = returns["id"].get<std::string>();
+    // Look up the function definition
+    const auto &func_node =
+      json_utils::find_function(converter_.ast()["body"], func_name);
 
-  // If return type is 'Any', analyze the function body to find actual return classes
-  if (return_type == "Any" && func_node.contains("body"))
-  {
-    std::function<void(const nlohmann::json &)> find_returns;
-    find_returns = [&](const nlohmann::json &node) {
-      if (!node.is_object())
-        return;
+    if (
+      func_node.empty() || !func_node.is_object() ||
+      !func_node.contains("returns") || func_node["returns"].is_null())
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-      std::string node_type = node["_type"].get<std::string>();
+    const auto &returns = func_node["returns"];
+    if (
+      !returns.is_object() || !returns.contains("_type") ||
+      !returns["_type"].is_string() || returns["_type"] != "Name" ||
+      !returns.contains("id") || !returns["id"].is_string())
+    {
+      converter_.get_function_call_cache().set_possible_class_types(
+        cache_key, possible_classes);
+      return possible_classes;
+    }
 
-      if (node_type == "Return" && node.contains("value"))
-      {
-        const auto &ret_val = node["value"];
-        if (ret_val["_type"] == "Call" && ret_val["func"]["_type"] == "Name")
+    std::string return_type = returns["id"].get<std::string>();
+
+    // If return type is 'Any', analyze the function body to find actual return classes
+    if (
+      return_type == "Any" && func_node.contains("body") &&
+      func_node["body"].is_array())
+    {
+      std::function<void(const nlohmann::json &)> find_returns;
+      find_returns = [&](const nlohmann::json &node) {
+        if (
+          !node.is_object() || !node.contains("_type") ||
+          !node["_type"].is_string())
+          return;
+
+        std::string node_type = node["_type"].get<std::string>();
+
+        if (
+          node_type == "Return" && node.contains("value") &&
+          node["value"].is_object())
         {
-          std::string class_name = ret_val["func"]["id"].get<std::string>();
-          if (json_utils::is_class(class_name, converter_.ast()))
-            possible_classes.push_back(class_name);
+          const auto &ret_val = node["value"];
+          if (
+            ret_val.contains("_type") && ret_val["_type"].is_string() &&
+            ret_val["_type"] == "Call" && ret_val.contains("func") &&
+            ret_val["func"].is_object() && ret_val["func"].contains("_type") &&
+            ret_val["func"]["_type"].is_string() &&
+            ret_val["func"]["_type"] == "Name" &&
+            ret_val["func"].contains("id") && ret_val["func"]["id"].is_string())
+          {
+            std::string class_name = ret_val["func"]["id"].get<std::string>();
+            if (json_utils::is_class(class_name, converter_.ast()))
+              possible_classes.push_back(class_name);
+          }
         }
-      }
-      else if (node_type == "If")
-      {
-        // Check both branches
-        if (node.contains("body"))
-          for (const auto &stmt : node["body"])
-            find_returns(stmt);
-        if (node.contains("orelse"))
-          for (const auto &stmt : node["orelse"])
-            find_returns(stmt);
-      }
-    };
+        else if (node_type == "If")
+        {
+          // Check both branches
+          if (node.contains("body") && node["body"].is_array())
+            for (const auto &stmt : node["body"])
+              find_returns(stmt);
+          if (node.contains("orelse") && node["orelse"].is_array())
+            for (const auto &stmt : node["orelse"])
+              find_returns(stmt);
+        }
+      };
 
-    for (const auto &stmt : func_node["body"])
-      find_returns(stmt);
+      for (const auto &stmt : func_node["body"])
+        find_returns(stmt);
+    }
+  }
+  catch (...)
+  {
+    // Malformed AST — return whatever we gathered so far.
   }
 
+  // Remove empty class names before caching.
+  possible_classes.erase(
+    std::remove_if(
+      possible_classes.begin(),
+      possible_classes.end(),
+      [](const std::string &s) { return s.empty(); }),
+    possible_classes.end());
+
+  // Deduplicate while preserving order of appearance in the AST.
+  {
+    std::vector<std::string> unique;
+    std::unordered_set<std::string> seen;
+    for (const auto &cls : possible_classes)
+    {
+      if (seen.insert(cls).second)
+        unique.push_back(cls);
+    }
+    possible_classes = std::move(unique);
+  }
+
+  converter_.get_function_call_cache().set_possible_class_types(
+    cache_key, possible_classes);
   return possible_classes;
 }
 
@@ -5346,26 +5468,73 @@ bool function_call_expr::method_exists_in_class_hierarchy(
   const std::string &class_name,
   const std::string &method_name) const
 {
-  const auto &class_node =
-    json_utils::find_class(converter_.ast()["body"], class_name);
-
-  if (class_node.empty())
+  // Reject empty inputs early.
+  if (class_name.empty() || method_name.empty())
     return false;
 
-  // Check if method exists in this class
-  if (json_utils::search_function_in_ast(class_node["body"], method_name))
-    return true;
+  std::string cache_key = class_name + "::" + method_name;
 
-  // Check base classes
-  if (class_node.contains("bases"))
+  // Cache lookup first.
+  auto cached =
+    converter_.get_function_call_cache().get_method_exists(cache_key);
+  if (cached.has_value())
+    return cached.value();
+
+  // Provisional negative cache write to break recursive cycles (A->B->A).
+  converter_.get_function_call_cache().set_method_exists(cache_key, false);
+
+  const auto &ast = converter_.ast();
+  if (!ast.is_object() || !ast.contains("body") || !ast["body"].is_array())
+    return false;
+
+  const auto &class_node = json_utils::find_class(ast["body"], class_name);
+
+  if (class_node.empty() || !class_node.is_object())
+  {
+    // Already cached as false.
+    return false;
+  }
+
+  // Check only top-level class methods (FunctionDef / AsyncFunctionDef).
+  if (class_node.contains("body") && class_node["body"].is_array())
+  {
+    for (const auto &member : class_node["body"])
+    {
+      if (
+        !member.is_object() || !member.contains("_type") ||
+        !member["_type"].is_string())
+        continue;
+
+      const std::string &member_type = member["_type"].get<std::string>();
+      if (
+        (member_type == "FunctionDef" || member_type == "AsyncFunctionDef") &&
+        member.contains("name") && member["name"].is_string() &&
+        member["name"].get<std::string>() == method_name)
+      {
+        // Method found — upgrade cache to true.
+        converter_.get_function_call_cache().set_method_exists(cache_key, true);
+        return true;
+      }
+    }
+  }
+
+  // Traverse bases — only if base node is valid and base id is non-empty.
+  if (class_node.contains("bases") && class_node["bases"].is_array())
   {
     for (const auto &base : class_node["bases"])
     {
-      if (base.contains("id"))
+      if (!base.is_object() || !base.contains("id") || !base["id"].is_string())
+        continue;
+
+      std::string base_name = base["id"].get<std::string>();
+      if (base_name.empty())
+        continue;
+
+      if (method_exists_in_class_hierarchy(base_name, method_name))
       {
-        std::string base_name = base["id"].get<std::string>();
-        if (method_exists_in_class_hierarchy(base_name, method_name))
-          return true;
+        // Found in ancestor — upgrade cache to true.
+        converter_.get_function_call_cache().set_method_exists(cache_key, true);
+        return true;
       }
     }
   }
@@ -5375,7 +5544,8 @@ bool function_call_expr::method_exists_in_class_hierarchy(
 
 exprt function_call_expr::generate_attribute_error(
   const std::string &method_name,
-  const std::vector<std::string> &possible_classes) const
+  const std::vector<std::string> &possible_classes,
+  const typet &expected_type) const
 {
   locationt location = converter_.get_location_from_decl(call_);
   std::ostringstream error_msg;
@@ -5411,7 +5581,22 @@ exprt function_call_expr::generate_attribute_error(
   assert_code.location().user_provided(true);
   assert_code.location().comment(error_msg.str());
 
-  return assert_code;
+  converter_.add_instruction(assert_code);
+
+  // Compute fallback type: use expected_type if valid, otherwise Any
+  typet fallback_type = expected_type;
+  if (
+    fallback_type.is_nil() || fallback_type == empty_typet() ||
+    fallback_type == typet())
+    fallback_type = any_type();
+
+  exprt nondet_fallback("sideeffect", fallback_type);
+  nondet_fallback.statement("nondet");
+  nondet_fallback.location() = location;
+  nondet_fallback.location().user_provided(true);
+  nondet_fallback.location().comment(error_msg.str());
+
+  return nondet_fallback;
 }
 
 exprt function_call_expr::check_argument_types(
