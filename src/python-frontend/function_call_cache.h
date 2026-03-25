@@ -46,8 +46,8 @@ public:
 
   // ---- math/cmath dispatch classification cache ----
 
-  std::optional<bool> get_math_dispatch_classification(
-    const std::string &key) const
+  std::optional<bool>
+  get_math_dispatch_classification(const std::string &key) const
   {
     auto it = math_dispatch_cache_.find(key);
     if (it != math_dispatch_cache_.end())

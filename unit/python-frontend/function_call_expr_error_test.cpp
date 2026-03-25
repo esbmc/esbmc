@@ -46,8 +46,9 @@ public:
     return fce.method_exists_in_class_hierarchy(class_name, method_name);
   }
 
-  static std::vector<std::string>
-  find_possible_class_types(const function_call_expr &fce, const symbolt *symbol)
+  static std::vector<std::string> find_possible_class_types(
+    const function_call_expr &fce,
+    const symbolt *symbol)
   {
     return fce.find_possible_class_types(symbol);
   }
@@ -155,9 +156,8 @@ TEST_CASE(
   {
     block.operands().clear();
 
-    exprt result =
-      function_call_expr_test_access::generate_attribute_error(
-        fce, "baz", {}, typet());
+    exprt result = function_call_expr_test_access::generate_attribute_error(
+      fce, "baz", {}, typet());
 
     REQUIRE(result.id() == "sideeffect");
     REQUIRE(result.statement() == "nondet");
@@ -256,9 +256,13 @@ TEST_CASE(
     function_call_expr fce(sid, call, converter);
 
     // "foo" is in A directly
-    REQUIRE(function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "A", "foo") == true);
+    REQUIRE(
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "A", "foo") == true);
     // "foo" in B should find it through A (and not loop forever)
-    REQUIRE(function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "B", "foo") == true);
+    REQUIRE(
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "B", "foo") == true);
   }
 
   SECTION("provisional false is upgraded to true when method found")
@@ -275,7 +279,9 @@ TEST_CASE(
     symbol_id sid("test.py", "", "test_func");
     function_call_expr fce(sid, call, converter);
 
-    REQUIRE(function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "Child", "greet") == true);
+    REQUIRE(
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "Child", "greet") == true);
 
     // Cache should now hold true.
     auto cached =
@@ -301,10 +307,13 @@ TEST_CASE(
     function_call_expr fce(sid, call, converter);
 
     // "outer" should be found (top-level)
-    REQUIRE(function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "MyClass", "outer") == true);
+    REQUIRE(
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "MyClass", "outer") == true);
     // "inner_helper" should NOT be found (nested, not top-level)
     REQUIRE(
-      function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "MyClass", "inner_helper") == false);
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "MyClass", "inner_helper") == false);
   }
 
   SECTION("malformed class members are skipped without crash")
@@ -322,7 +331,8 @@ TEST_CASE(
     function_call_expr fce(sid, call, converter);
 
     REQUIRE(
-      function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "BadClass", "anything") == false);
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "BadClass", "anything") == false);
   }
 
   SECTION("malformed bases are skipped without crash")
@@ -339,7 +349,9 @@ TEST_CASE(
     symbol_id sid("test.py", "", "test_func");
     function_call_expr fce(sid, call, converter);
 
-    REQUIRE(function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "Child", "foo") == false);
+    REQUIRE(
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "Child", "foo") == false);
   }
 
   SECTION("async method detection")
@@ -356,8 +368,8 @@ TEST_CASE(
     function_call_expr fce(sid, call, converter);
 
     REQUIRE(
-      function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "AsyncClass", "async_method") ==
-      true);
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "AsyncClass", "async_method") == true);
   }
 
   SECTION("empty class/method names return false")
@@ -373,9 +385,15 @@ TEST_CASE(
     symbol_id sid("test.py", "", "test_func");
     function_call_expr fce(sid, call, converter);
 
-    REQUIRE(function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "", "m") == false);
-    REQUIRE(function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "X", "") == false);
-    REQUIRE(function_call_expr_test_access::method_exists_in_class_hierarchy(fce, "", "") == false);
+    REQUIRE(
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "", "m") == false);
+    REQUIRE(
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "X", "") == false);
+    REQUIRE(
+      function_call_expr_test_access::method_exists_in_class_hierarchy(
+        fce, "", "") == false);
   }
 }
 
@@ -399,7 +417,8 @@ TEST_CASE(
     symbol_id sid("test.py", "", "test_func");
     function_call_expr fce(sid, call, converter);
 
-    auto result = function_call_expr_test_access::find_possible_class_types(fce, nullptr);
+    auto result =
+      function_call_expr_test_access::find_possible_class_types(fce, nullptr);
     REQUIRE(result.empty());
   }
 }
@@ -441,7 +460,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "python_math dispatch cache keys do not collide between global and attribute calls",
+  "python_math dispatch cache keys do not collide between global and attribute "
+  "calls",
   "[python-frontend][math-dispatch-cache]")
 {
   ensure_config_initialized();
@@ -472,10 +492,9 @@ TEST_CASE(
 
   // Empty function names are ignored and must not pollute cache.
   REQUIRE_FALSE(math.is_math_dispatch_target_cached("math", ""));
-  REQUIRE_FALSE(
-    converter.get_function_call_cache().get_math_dispatch_classification(
-      "attr::math::")
-      .has_value());
+  REQUIRE_FALSE(converter.get_function_call_cache()
+                  .get_math_dispatch_classification("attr::math::")
+                  .has_value());
 }
 
 TEST_CASE(
@@ -502,7 +521,8 @@ TEST_CASE(
   function_call_expr fce(sid, bad_call, converter);
 
   std::string obj_name;
-  REQUIRE_NOTHROW(obj_name = function_call_expr_test_access::get_object_name(fce));
+  REQUIRE_NOTHROW(
+    obj_name = function_call_expr_test_access::get_object_name(fce));
   REQUIRE(obj_name.empty());
 }
 
@@ -539,6 +559,7 @@ TEST_CASE(
   function_call_expr fce(sid, bad_call, converter);
 
   std::string obj_name;
-  REQUIRE_NOTHROW(obj_name = function_call_expr_test_access::get_object_name(fce));
+  REQUIRE_NOTHROW(
+    obj_name = function_call_expr_test_access::get_object_name(fce));
   REQUIRE(obj_name.empty());
 }

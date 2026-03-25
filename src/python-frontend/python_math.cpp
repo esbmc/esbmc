@@ -73,8 +73,10 @@ bool python_math::is_math_dispatch_target(
   if (func_name.empty())
     return false;
 
-  const auto &math_module_names = math_guard_utils::math_module_function_names();
-  const auto &math_wrapper_names = math_guard_utils::math_wrapper_function_names();
+  const auto &math_module_names =
+    math_guard_utils::math_module_function_names();
+  const auto &math_wrapper_names =
+    math_guard_utils::math_wrapper_function_names();
   if (caller != "math")
     return math_wrapper_names.count(func_name) != 0;
 
@@ -169,7 +171,8 @@ exprt python_math::build_unary_c_math_call(
   const nlohmann::json &element)
 {
   side_effect_expr_function_callt call;
-  call.function() = symbol_expr(get_c_math_symbol_cached(symbol_id, display_name));
+  call.function() =
+    symbol_expr(get_c_math_symbol_cached(symbol_id, display_name));
   call.arguments() = {promote_to_double_if_needed(std::move(operand))};
   call.type() = double_type();
   call.location() = converter.get_location_from_decl(element);
@@ -233,7 +236,8 @@ exprt python_math::handle_power_symbolic(exprt base, exprt exp)
 
   // Create the function call
   side_effect_expr_function_callt pow_call;
-  pow_call.function() = symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
+  pow_call.function() =
+    symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
   pow_call.arguments() = {double_base, double_exp};
   pow_call.type() = double_type();
 
@@ -385,10 +389,9 @@ exprt python_math::handle_modulo(
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (
-    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
-    rhs_const = try_resolve_constant_double(rhs);
-    lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+  if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+      rhs_const = try_resolve_constant_double(rhs);
+      lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
   {
     const double q = std::floor(*lhs_const / *rhs_const);
     const double r = *lhs_const - (q * *rhs_const);
@@ -434,7 +437,8 @@ exprt python_math::handle_floor_division(
     exprt resolved_rhs = resolve_symbol(rhs);
     if (
       resolved_lhs.is_constant() && resolved_rhs.is_constant() &&
-      (resolved_rhs.type().is_signedbv() || resolved_rhs.type().is_unsignedbv()))
+      (resolved_rhs.type().is_signedbv() ||
+       resolved_rhs.type().is_unsignedbv()))
     {
       const BigInt lhs_val = binary2integer(
         resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
@@ -579,7 +583,8 @@ exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
     if (*val >= 0.0 || std::isnan(*val) || std::isinf(*val))
       return from_double(std::sqrt(*val), double_type());
   }
-  return build_unary_c_math_call("c:@F@sqrt", "sqrt", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@sqrt", "sqrt", std::move(operand), element);
 }
 
 exprt python_math::handle_divmod(
@@ -592,10 +597,9 @@ exprt python_math::handle_divmod(
   if (dividend.type().is_floatbv() || divisor.type().is_floatbv())
   {
     result_type = double_type();
-    if (
-      std::optional<double> lhs_const = try_resolve_constant_double(dividend),
-      rhs_const = try_resolve_constant_double(divisor);
-      lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+    if (std::optional<double> lhs_const = try_resolve_constant_double(dividend),
+        rhs_const = try_resolve_constant_double(divisor);
+        lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
     {
       const double q = std::floor(*lhs_const / *rhs_const);
       const double r = *lhs_const - (q * *rhs_const);
@@ -635,7 +639,8 @@ exprt python_math::handle_divmod(
         resolved_dividend.value().as_string(),
         resolved_dividend.type().is_signedbv());
       const BigInt rhs_val = binary2integer(
-        resolved_divisor.value().as_string(), resolved_divisor.type().is_signedbv());
+        resolved_divisor.value().as_string(),
+        resolved_divisor.type().is_signedbv());
       if (rhs_val != 0)
       {
         BigInt q = lhs_val / rhs_val;
@@ -737,7 +742,8 @@ exprt python_math::handle_sin(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::sin(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@sin", "sin", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@sin", "sin", std::move(operand), element);
 }
 
 exprt python_math::handle_cos(exprt operand, const nlohmann::json &element)
@@ -746,7 +752,8 @@ exprt python_math::handle_cos(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::cos(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@cos", "cos", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@cos", "cos", std::move(operand), element);
 }
 
 exprt python_math::handle_exp(exprt operand, const nlohmann::json &element)
@@ -755,7 +762,8 @@ exprt python_math::handle_exp(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::exp(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@exp", "exp", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@exp", "exp", std::move(operand), element);
 }
 
 exprt python_math::handle_log(exprt operand, const nlohmann::json &element)
@@ -764,7 +772,8 @@ exprt python_math::handle_log(exprt operand, const nlohmann::json &element)
       val.has_value() && *val > 0.0)
     return from_double(std::log(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@log", "log", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@log", "log", std::move(operand), element);
 }
 
 exprt python_math::handle_acos(exprt operand, const nlohmann::json &element)
@@ -773,7 +782,8 @@ exprt python_math::handle_acos(exprt operand, const nlohmann::json &element)
       val.has_value() && *val >= -1.0 && *val <= 1.0)
     return from_double(std::acos(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@acos", "acos", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@acos", "acos", std::move(operand), element);
 }
 
 exprt python_math::handle_atan(exprt operand, const nlohmann::json &element)
@@ -782,7 +792,8 @@ exprt python_math::handle_atan(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::atan(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@atan", "atan", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@atan", "atan", std::move(operand), element);
 }
 
 exprt python_math::handle_atan2(
@@ -790,10 +801,9 @@ exprt python_math::handle_atan2(
   exprt x_operand,
   const nlohmann::json &element)
 {
-  if (
-    std::optional<double> y_const = try_resolve_constant_double(y_operand),
-    x_const = try_resolve_constant_double(x_operand);
-    y_const.has_value() && x_const.has_value())
+  if (std::optional<double> y_const = try_resolve_constant_double(y_operand),
+      x_const = try_resolve_constant_double(x_operand);
+      y_const.has_value() && x_const.has_value())
   {
     return from_double(std::atan2(*y_const, *x_const), double_type());
   }
@@ -818,7 +828,8 @@ exprt python_math::handle_log2(exprt operand, const nlohmann::json &element)
       val.has_value() && *val > 0.0)
     return from_double(std::log2(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@log2", "log2", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@log2", "log2", std::move(operand), element);
 }
 
 exprt python_math::handle_pow(
@@ -826,10 +837,9 @@ exprt python_math::handle_pow(
   exprt exp,
   const nlohmann::json &element)
 {
-  if (
-    std::optional<double> base_const = try_resolve_constant_double(base),
-    exp_const = try_resolve_constant_double(exp);
-    base_const.has_value() && exp_const.has_value())
+  if (std::optional<double> base_const = try_resolve_constant_double(base),
+      exp_const = try_resolve_constant_double(exp);
+      base_const.has_value() && exp_const.has_value())
   {
     return from_double(std::pow(*base_const, *exp_const), double_type());
   }
@@ -839,7 +849,8 @@ exprt python_math::handle_pow(
 
   // Create the function call expression
   side_effect_expr_function_callt pow_call;
-  pow_call.function() = symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
+  pow_call.function() =
+    symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
   pow_call.arguments() = {base, exp};
   pow_call.type() = double_type();
   pow_call.location() = converter.get_location_from_decl(element);
@@ -853,7 +864,8 @@ exprt python_math::handle_fabs(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::fabs(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@fabs", "fabs", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@fabs", "fabs", std::move(operand), element);
 }
 
 exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
@@ -877,10 +889,9 @@ exprt python_math::handle_fmod(
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (
-    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
-    rhs_const = try_resolve_constant_double(rhs);
-    lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+  if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+      rhs_const = try_resolve_constant_double(rhs);
+      lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
   {
     return from_double(std::fmod(*lhs_const, *rhs_const), double_type());
   }
@@ -904,10 +915,9 @@ exprt python_math::handle_copysign(
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (
-    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
-    rhs_const = try_resolve_constant_double(rhs);
-    lhs_const.has_value() && rhs_const.has_value())
+  if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+      rhs_const = try_resolve_constant_double(rhs);
+      lhs_const.has_value() && rhs_const.has_value())
   {
     return from_double(std::copysign(*lhs_const, *rhs_const), double_type());
   }
@@ -932,7 +942,8 @@ exprt python_math::handle_tan(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::tan(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@tan", "tan", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@tan", "tan", std::move(operand), element);
 }
 
 exprt python_math::handle_asin(exprt operand, const nlohmann::json &element)
@@ -941,7 +952,8 @@ exprt python_math::handle_asin(exprt operand, const nlohmann::json &element)
       val.has_value() && *val >= -1.0 && *val <= 1.0)
     return from_double(std::asin(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@asin", "asin", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@asin", "asin", std::move(operand), element);
 }
 
 exprt python_math::handle_sinh(exprt operand, const nlohmann::json &element)
@@ -950,7 +962,8 @@ exprt python_math::handle_sinh(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::sinh(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@sinh", "sinh", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@sinh", "sinh", std::move(operand), element);
 }
 
 exprt python_math::handle_cosh(exprt operand, const nlohmann::json &element)
@@ -959,7 +972,8 @@ exprt python_math::handle_cosh(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::cosh(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@cosh", "cosh", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@cosh", "cosh", std::move(operand), element);
 }
 
 exprt python_math::handle_tanh(exprt operand, const nlohmann::json &element)
@@ -968,7 +982,8 @@ exprt python_math::handle_tanh(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::tanh(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@tanh", "tanh", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@tanh", "tanh", std::move(operand), element);
 }
 
 exprt python_math::handle_log10(exprt operand, const nlohmann::json &element)
@@ -977,7 +992,8 @@ exprt python_math::handle_log10(exprt operand, const nlohmann::json &element)
       val.has_value() && *val > 0.0)
     return from_double(std::log10(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@log10", "log10", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@log10", "log10", std::move(operand), element);
 }
 
 exprt python_math::handle_expm1(exprt operand, const nlohmann::json &element)
@@ -986,7 +1002,8 @@ exprt python_math::handle_expm1(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::expm1(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@expm1", "expm1", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@expm1", "expm1", std::move(operand), element);
 }
 
 exprt python_math::handle_log1p(exprt operand, const nlohmann::json &element)
@@ -995,7 +1012,8 @@ exprt python_math::handle_log1p(exprt operand, const nlohmann::json &element)
       val.has_value() && *val > -1.0)
     return from_double(std::log1p(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@log1p", "log1p", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@log1p", "log1p", std::move(operand), element);
 }
 
 exprt python_math::handle_exp2(exprt operand, const nlohmann::json &element)
@@ -1004,7 +1022,8 @@ exprt python_math::handle_exp2(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::exp2(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@exp2", "exp2", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@exp2", "exp2", std::move(operand), element);
 }
 
 exprt python_math::handle_asinh(exprt operand, const nlohmann::json &element)
@@ -1013,7 +1032,8 @@ exprt python_math::handle_asinh(exprt operand, const nlohmann::json &element)
       val.has_value())
     return from_double(std::asinh(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@asinh", "asinh", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@asinh", "asinh", std::move(operand), element);
 }
 
 exprt python_math::handle_acosh(exprt operand, const nlohmann::json &element)
@@ -1022,7 +1042,8 @@ exprt python_math::handle_acosh(exprt operand, const nlohmann::json &element)
       val.has_value() && *val >= 1.0)
     return from_double(std::acosh(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@acosh", "acosh", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@acosh", "acosh", std::move(operand), element);
 }
 
 exprt python_math::handle_atanh(exprt operand, const nlohmann::json &element)
@@ -1031,7 +1052,8 @@ exprt python_math::handle_atanh(exprt operand, const nlohmann::json &element)
       val.has_value() && std::fabs(*val) < 1.0)
     return from_double(std::atanh(*val), double_type());
 
-  return build_unary_c_math_call("c:@F@atanh", "atanh", std::move(operand), element);
+  return build_unary_c_math_call(
+    "c:@F@atanh", "atanh", std::move(operand), element);
 }
 
 exprt python_math::handle_hypot(
@@ -1039,10 +1061,9 @@ exprt python_math::handle_hypot(
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (
-    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
-    rhs_const = try_resolve_constant_double(rhs);
-    lhs_const.has_value() && rhs_const.has_value())
+  if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+      rhs_const = try_resolve_constant_double(rhs);
+      lhs_const.has_value() && rhs_const.has_value())
   {
     return from_double(std::hypot(*lhs_const, *rhs_const), double_type());
   }

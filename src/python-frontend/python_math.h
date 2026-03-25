@@ -55,9 +55,8 @@ private:
 
   /// Resolve C-math symbol through a tiny local cache to avoid repeated
   /// symbol-table lookups in hot math call paths.
-  const symbolt &get_c_math_symbol_cached(
-    const char *symbol_id,
-    const char *display_name);
+  const symbolt &
+  get_c_math_symbol_cached(const char *symbol_id, const char *display_name);
 
 public:
   /**

@@ -2462,8 +2462,7 @@ std::string function_call_expr::get_object_name() const
       return node["_type"].get<std::string>();
     return "";
   };
-  const std::string node_type =
-    node_type_of(subelement);
+  const std::string node_type = node_type_of(subelement);
 
   std::string obj_name;
   if (node_type == "Attribute")
@@ -2494,8 +2493,7 @@ std::string function_call_expr::get_object_name() const
       subelement.contains("func") && subelement["func"].is_object() &&
       node_type_of(subelement["func"]) == "Name" &&
       subelement["func"].contains("id") && subelement["func"]["id"].is_string();
-    if (
-      has_name_callee)
+    if (has_name_callee)
     {
       obj_name = subelement["func"]["id"].get<std::string>();
     }
@@ -3823,10 +3821,9 @@ function_call_expr::get_dispatch_table()
      },
      [this]() -> exprt {
        const std::string &raw_func_name = function_id_.get_function();
-       const std::string func_name =
-         raw_func_name.rfind("__ESBMC_", 0) == 0
-           ? raw_func_name.substr(8)
-           : raw_func_name;
+       const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
+                                       ? raw_func_name.substr(8)
+                                       : raw_func_name;
        const auto &args = call_["args"];
        const auto keywords = call_.contains("keywords")
                                ? call_["keywords"]
@@ -3912,7 +3909,8 @@ function_call_expr::get_dispatch_table()
        std::string caller;
        if (
          call_.contains("func") && call_["func"].is_object() &&
-         call_["func"].contains("_type") && call_["func"]["_type"] == "Attribute")
+         call_["func"].contains("_type") &&
+         call_["func"]["_type"] == "Attribute")
        {
          caller = get_object_name();
        }
@@ -3921,10 +3919,9 @@ function_call_expr::get_dispatch_table()
      },
      [this]() -> exprt {
        const std::string &raw_func_name = function_id_.get_function();
-       const std::string func_name =
-         raw_func_name.rfind("__ESBMC_", 0) == 0
-           ? raw_func_name.substr(8)
-           : raw_func_name;
+       const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
+                                       ? raw_func_name.substr(8)
+                                       : raw_func_name;
        const auto &args = call_["args"];
        auto raise_math_real_type_error = [this]() -> exprt {
          return raise_math_real_type_error_expr(converter_);
@@ -3978,10 +3975,9 @@ function_call_expr::get_dispatch_table()
 
        // Fast dispatch path for math functions that do not need extra
        // domain guards in this layer (e.g., sqrt/log/acos stay in slow path).
-       if (
-         math_unary_dispatch_kindt unary_kind =
-           classify_math_unary_dispatch(func_name);
-         unary_kind != math_unary_dispatch_kindt::none)
+       if (math_unary_dispatch_kindt unary_kind =
+             classify_math_unary_dispatch(func_name);
+           unary_kind != math_unary_dispatch_kindt::none)
        {
          exprt arg_expr = require_one_arg();
          if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
@@ -4033,13 +4029,13 @@ function_call_expr::get_dispatch_table()
          }
        }
 
-       if (
-         math_binary_dispatch_kindt binary_kind =
-           classify_math_binary_dispatch(func_name);
-         binary_kind != math_binary_dispatch_kindt::none)
+       if (math_binary_dispatch_kindt binary_kind =
+             classify_math_binary_dispatch(func_name);
+           binary_kind != math_binary_dispatch_kindt::none)
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded = guard_two_real_args(lhs_expr, rhs_expr);
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
              guarded.has_value())
            return *guarded;
 

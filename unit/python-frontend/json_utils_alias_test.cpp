@@ -4,7 +4,9 @@
 
 #include <python-frontend/json_utils.h>
 
-TEST_CASE("json_utils get_object_alias resolves import aliases", "[python-frontend][json-utils]")
+TEST_CASE(
+  "json_utils get_object_alias resolves import aliases",
+  "[python-frontend][json-utils]")
 {
   nlohmann::json ast = {
     {"body",
@@ -19,7 +21,9 @@ TEST_CASE("json_utils get_object_alias resolves import aliases", "[python-fronte
   REQUIRE(json_utils::get_object_alias(ast, "sqrt") == "sqrt");
 }
 
-TEST_CASE("json_utils get_object_alias falls back when no alias exists", "[python-frontend][json-utils]")
+TEST_CASE(
+  "json_utils get_object_alias falls back when no alias exists",
+  "[python-frontend][json-utils]")
 {
   nlohmann::json ast = {{"body", nlohmann::json::array()}};
 
