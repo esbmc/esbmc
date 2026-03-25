@@ -3,18 +3,19 @@
  * PURPOSE
  * -------
  * Verifies that a floating-point addition performed under a directed rounding
- * mode (FE_DOWNWARD) takes the weak unconstrained enclosure path, not the
- * theorem-driven tight path that is valid only for round-to-nearest or
- * round-toward-+inf.
+ * mode (FE_TOWARDZERO) takes the weak unconstrained enclosure path, not the
+ * theorem-driven tight path that is valid only for round-to-nearest,
+ * round-toward-+inf, or round-toward--inf.
  *
  * MECHANISM
  * ---------
- * fesetround(FE_DOWNWARD) writes 3 (ROUND_TO_MINUS_INF) to __ESBMC_rounding_mode.
+ * fesetround(FE_TOWARDZERO) writes 4 (ROUND_TO_ZERO) to __ESBMC_rounding_mode.
  * ESBMC symex propagates this concrete value into the rounding_mode operand of
- * the ieee_add2t IR node.  In smt_conv::apply_ieee754_semantics, neither the
- * is_nearest_rounding_mode nor the is_round_to_plus_inf guard fires
- * (value 3 != ROUND_TO_EVEN == 0 and value 3 != ROUND_TO_PLUS_INF == 2), so
- * only the three weak containment assertions are emitted:
+ * the ieee_add2t IR node.  In smt_conv::apply_ieee754_semantics, none of the
+ * is_nearest_rounding_mode, is_round_to_plus_inf, or is_round_to_minus_inf
+ * guards fire (value 4 != ROUND_TO_EVEN == 0, value 4 != ROUND_TO_PLUS_INF == 2,
+ * and value 4 != ROUND_TO_MINUS_INF == 3), so only the three weak containment
+ * assertions are emitted:
  *   (assert (<= |ra_lo| result))
  *   (assert (<= result  |ra_hi|))
  *   (assert (<= |ra_lo| |ra_hi|))
@@ -36,10 +37,10 @@ extern double __VERIFIER_nondet_double(void);
 
 int main(void)
 {
-  fesetround(FE_DOWNWARD);
+  fesetround(FE_TOWARDZERO);
   double x = __VERIFIER_nondet_double();
   double y = __VERIFIER_nondet_double();
-  double z = x + y; /* rounding_mode == ROUND_TO_MINUS_INF -> weak fallback */
+  double z = x + y; /* rounding_mode == ROUND_TO_ZERO -> weak fallback */
 
   /* Always false in real/integer encoding: z == x+y exactly.
    * Gives a deterministic VERIFICATION FAILED to confirm the run completed. */
