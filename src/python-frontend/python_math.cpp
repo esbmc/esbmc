@@ -109,6 +109,92 @@ bool python_math::is_math_dispatch_target_cached(
   return matches;
 }
 
+bool python_math::is_unary_dispatch_function(std::string_view func_name) const
+{
+  return func_name == "sin" || func_name == "cos" || func_name == "exp" ||
+         func_name == "atan" || func_name == "log2" || func_name == "tan" ||
+         func_name == "asin" || func_name == "sinh" || func_name == "cosh" ||
+         func_name == "tanh" || func_name == "log10" ||
+         func_name == "expm1" || func_name == "log1p" ||
+         func_name == "exp2" || func_name == "asinh" ||
+         func_name == "acosh" || func_name == "atanh" ||
+         func_name == "fabs" || func_name == "trunc";
+}
+
+bool python_math::is_binary_dispatch_function(std::string_view func_name) const
+{
+  return func_name == "atan2" || func_name == "pow" ||
+         func_name == "fmod" || func_name == "copysign" ||
+         func_name == "hypot";
+}
+
+exprt python_math::handle(
+  std::string_view func_name,
+  exprt operand,
+  const nlohmann::json &element)
+{
+  if (func_name == "sin")
+    return handle_sin(std::move(operand), element);
+  if (func_name == "cos")
+    return handle_cos(std::move(operand), element);
+  if (func_name == "exp")
+    return handle_exp(std::move(operand), element);
+  if (func_name == "atan")
+    return handle_atan(std::move(operand), element);
+  if (func_name == "log2")
+    return handle_log2(std::move(operand), element);
+  if (func_name == "tan")
+    return handle_tan(std::move(operand), element);
+  if (func_name == "asin")
+    return handle_asin(std::move(operand), element);
+  if (func_name == "sinh")
+    return handle_sinh(std::move(operand), element);
+  if (func_name == "cosh")
+    return handle_cosh(std::move(operand), element);
+  if (func_name == "tanh")
+    return handle_tanh(std::move(operand), element);
+  if (func_name == "log10")
+    return handle_log10(std::move(operand), element);
+  if (func_name == "expm1")
+    return handle_expm1(std::move(operand), element);
+  if (func_name == "log1p")
+    return handle_log1p(std::move(operand), element);
+  if (func_name == "exp2")
+    return handle_exp2(std::move(operand), element);
+  if (func_name == "asinh")
+    return handle_asinh(std::move(operand), element);
+  if (func_name == "acosh")
+    return handle_acosh(std::move(operand), element);
+  if (func_name == "atanh")
+    return handle_atanh(std::move(operand), element);
+  if (func_name == "fabs")
+    return handle_fabs(std::move(operand), element);
+  if (func_name == "trunc")
+    return handle_trunc(std::move(operand), element);
+
+  return nil_exprt();
+}
+
+exprt python_math::handle(
+  std::string_view func_name,
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
+  if (func_name == "atan2")
+    return handle_atan2(std::move(lhs), std::move(rhs), element);
+  if (func_name == "pow")
+    return handle_pow(std::move(lhs), std::move(rhs), element);
+  if (func_name == "fmod")
+    return handle_fmod(std::move(lhs), std::move(rhs), element);
+  if (func_name == "copysign")
+    return handle_copysign(std::move(lhs), std::move(rhs), element);
+  if (func_name == "hypot")
+    return handle_hypot(std::move(lhs), std::move(rhs), element);
+
+  return nil_exprt();
+}
+
 exprt python_math::resolve_symbol(const exprt &operand) const
 {
   if (operand.is_symbol())
@@ -872,7 +958,15 @@ exprt python_math::handle_log2(exprt operand, const nlohmann::json &element)
 {
   if (std::optional<double> val = try_resolve_constant_double(operand);
       val.has_value() && *val > 0.0)
+  {
+    // Avoid platform/libm rounding noise for exact powers of two.
+    int exponent = 0;
+    const double mantissa = std::frexp(*val, &exponent);
+    if (mantissa == 0.5)
+      return from_double(static_cast<double>(exponent - 1), double_type());
+
     return from_double(std::log2(*val), double_type());
+  }
 
   return build_unary_c_math_call(
     "c:@F@log2", "log2", std::move(operand), element);

@@ -96,6 +96,35 @@ public:
     const std::string &caller,
     const std::string &func_name);
 
+  /// Return true when @p func_name is handled by unary math dispatch.
+  bool is_unary_dispatch_function(std::string_view func_name) const;
+
+  /// Return true when @p func_name is handled by binary math dispatch.
+  bool is_binary_dispatch_function(std::string_view func_name) const;
+
+  /**
+   * @brief Dispatch supported unary math functions through a single entrypoint.
+   *
+   * Returns nil_exprt() when @p func_name is not a supported unary-dispatch
+   * target.
+   */
+  exprt handle(
+    std::string_view func_name,
+    exprt operand,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Dispatch supported binary math functions through a single entrypoint.
+   *
+   * Returns nil_exprt() when @p func_name is not a supported binary-dispatch
+   * target.
+   */
+  exprt handle(
+    std::string_view func_name,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &element);
+
   /**
    * @brief Compute a mathematical expression with constant operands
    * 

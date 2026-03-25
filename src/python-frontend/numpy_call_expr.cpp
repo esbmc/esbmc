@@ -4,9 +4,11 @@
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/expr.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/std_code.h>
 
 #include <cmath>
 #include <limits>
@@ -36,6 +38,27 @@ static double to_double(const numeric_value &value)
 {
   return value.is_int ? static_cast<double>(value.int_value)
                       : value.double_value;
+}
+
+static bool overflow_checks_enabled()
+{
+  return config.options.get_bool_option("overflow-check") ||
+         config.options.get_bool_option("unsigned-overflow-check");
+}
+
+static void emit_numpy_overflow_assertion(
+  python_converter &converter,
+  const nlohmann::json &call,
+  const symbol_id &function_id)
+{
+  if (!overflow_checks_enabled())
+    return;
+
+  code_assertt overflow_assert(gen_boolean(false));
+  overflow_assert.location() = converter.get_location_from_decl(call);
+  overflow_assert.location().comment(
+    "Integer overflow detected in " + function_id.get_function() + "() call");
+  converter.add_instruction(overflow_assert);
 }
 
 static numeric_value extract_value(const nlohmann::json &arg);
@@ -904,6 +927,7 @@ exprt numpy_call_expr::get()
                 converter_.current_python_file,
                 call_["end_lineno"].get<int>(),
                 function_id_.get_function());
+              emit_numpy_overflow_assertion(converter_, call_, function_id_);
             }
 
             if (is_unsigned)
@@ -963,6 +987,7 @@ exprt numpy_call_expr::get()
             converter_.current_python_file,
             call_["end_lineno"].get<int>(),
             function_id_.get_function());
+          emit_numpy_overflow_assertion(converter_, call_, function_id_);
         }
 
         if (!expr.value().empty())

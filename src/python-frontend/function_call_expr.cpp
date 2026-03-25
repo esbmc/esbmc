@@ -45,125 +45,6 @@ constexpr unsigned int SURROGATE_END = 0xDFFF;
 constexpr const char *CLASS_MARKER = "@C@";
 constexpr const char *FUNCTION_MARKER = "@F@";
 
-enum class math_unary_dispatch_kindt : uint8_t
-{
-  none,
-  sin,
-  cos,
-  exp,
-  atan,
-  log2,
-  tan,
-  asin,
-  sinh,
-  cosh,
-  tanh,
-  log10,
-  expm1,
-  log1p,
-  exp2,
-  asinh,
-  acosh,
-  atanh,
-  fabs,
-  trunc
-};
-
-enum class math_binary_dispatch_kindt : uint8_t
-{
-  none,
-  atan2,
-  pow,
-  fmod,
-  copysign,
-  hypot
-};
-
-math_unary_dispatch_kindt classify_math_unary_dispatch(std::string_view fn)
-{
-  switch (fn.size())
-  {
-  case 3:
-    if (fn == "sin")
-      return math_unary_dispatch_kindt::sin;
-    if (fn == "cos")
-      return math_unary_dispatch_kindt::cos;
-    if (fn == "exp")
-      return math_unary_dispatch_kindt::exp;
-    if (fn == "tan")
-      return math_unary_dispatch_kindt::tan;
-    break;
-  case 4:
-    if (fn[0] == 'a')
-    {
-      if (fn == "atan")
-        return math_unary_dispatch_kindt::atan;
-      if (fn == "asin")
-        return math_unary_dispatch_kindt::asin;
-    }
-    if (fn == "log2")
-      return math_unary_dispatch_kindt::log2;
-    if (fn == "fabs")
-      return math_unary_dispatch_kindt::fabs;
-    if (fn == "cosh")
-      return math_unary_dispatch_kindt::cosh;
-    if (fn == "sinh")
-      return math_unary_dispatch_kindt::sinh;
-    if (fn == "tanh")
-      return math_unary_dispatch_kindt::tanh;
-    if (fn == "exp2")
-      return math_unary_dispatch_kindt::exp2;
-    break;
-  case 5:
-    if (fn == "log10")
-      return math_unary_dispatch_kindt::log10;
-    if (fn == "expm1")
-      return math_unary_dispatch_kindt::expm1;
-    if (fn == "log1p")
-      return math_unary_dispatch_kindt::log1p;
-    if (fn == "asinh")
-      return math_unary_dispatch_kindt::asinh;
-    if (fn == "acosh")
-      return math_unary_dispatch_kindt::acosh;
-    if (fn == "atanh")
-      return math_unary_dispatch_kindt::atanh;
-    if (fn == "trunc")
-      return math_unary_dispatch_kindt::trunc;
-    break;
-  default:
-    break;
-  }
-  return math_unary_dispatch_kindt::none;
-}
-
-math_binary_dispatch_kindt classify_math_binary_dispatch(std::string_view fn)
-{
-  switch (fn.size())
-  {
-  case 3:
-    if (fn == "pow")
-      return math_binary_dispatch_kindt::pow;
-    break;
-  case 4:
-    if (fn == "fmod")
-      return math_binary_dispatch_kindt::fmod;
-    break;
-  case 5:
-    if (fn == "atan2")
-      return math_binary_dispatch_kindt::atan2;
-    if (fn == "hypot")
-      return math_binary_dispatch_kindt::hypot;
-    break;
-  case 8:
-    if (fn == "copysign")
-      return math_binary_dispatch_kindt::copysign;
-    break;
-  default:
-    break;
-  }
-  return math_binary_dispatch_kindt::none;
-}
-
 bool is_cpp_throw_expr(const exprt &e)
 {
   return e.statement() == "cpp-throw";
@@ -3975,63 +3856,20 @@ function_call_expr::get_dispatch_table()
 
        // Fast dispatch path for math functions that do not need extra
        // domain guards in this layer (e.g., sqrt/log/acos stay in slow path).
-       if (math_unary_dispatch_kindt unary_kind =
-             classify_math_unary_dispatch(func_name);
-           unary_kind != math_unary_dispatch_kindt::none)
+       if (args.size() == 1)
        {
          exprt arg_expr = require_one_arg();
          if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
              guarded.has_value())
            return *guarded;
 
-         switch (unary_kind)
-         {
-         case math_unary_dispatch_kindt::sin:
-           return converter_.get_math_handler().handle_sin(arg_expr, call_);
-         case math_unary_dispatch_kindt::cos:
-           return converter_.get_math_handler().handle_cos(arg_expr, call_);
-         case math_unary_dispatch_kindt::exp:
-           return converter_.get_math_handler().handle_exp(arg_expr, call_);
-         case math_unary_dispatch_kindt::atan:
-           return converter_.get_math_handler().handle_atan(arg_expr, call_);
-         case math_unary_dispatch_kindt::log2:
-           return converter_.get_math_handler().handle_log2(arg_expr, call_);
-         case math_unary_dispatch_kindt::tan:
-           return converter_.get_math_handler().handle_tan(arg_expr, call_);
-         case math_unary_dispatch_kindt::asin:
-           return converter_.get_math_handler().handle_asin(arg_expr, call_);
-         case math_unary_dispatch_kindt::sinh:
-           return converter_.get_math_handler().handle_sinh(arg_expr, call_);
-         case math_unary_dispatch_kindt::cosh:
-           return converter_.get_math_handler().handle_cosh(arg_expr, call_);
-         case math_unary_dispatch_kindt::tanh:
-           return converter_.get_math_handler().handle_tanh(arg_expr, call_);
-         case math_unary_dispatch_kindt::log10:
-           return converter_.get_math_handler().handle_log10(arg_expr, call_);
-         case math_unary_dispatch_kindt::expm1:
-           return converter_.get_math_handler().handle_expm1(arg_expr, call_);
-         case math_unary_dispatch_kindt::log1p:
-           return converter_.get_math_handler().handle_log1p(arg_expr, call_);
-         case math_unary_dispatch_kindt::exp2:
-           return converter_.get_math_handler().handle_exp2(arg_expr, call_);
-         case math_unary_dispatch_kindt::asinh:
-           return converter_.get_math_handler().handle_asinh(arg_expr, call_);
-         case math_unary_dispatch_kindt::acosh:
-           return converter_.get_math_handler().handle_acosh(arg_expr, call_);
-         case math_unary_dispatch_kindt::atanh:
-           return converter_.get_math_handler().handle_atanh(arg_expr, call_);
-         case math_unary_dispatch_kindt::fabs:
-           return converter_.get_math_handler().handle_fabs(arg_expr, call_);
-         case math_unary_dispatch_kindt::trunc:
-           return converter_.get_math_handler().handle_trunc(arg_expr, call_);
-         default:
-           break;
-         }
+         exprt dispatched =
+           converter_.get_math_handler().handle(func_name, arg_expr, call_);
+         if (!dispatched.is_nil())
+           return dispatched;
        }
 
-       if (math_binary_dispatch_kindt binary_kind =
-             classify_math_binary_dispatch(func_name);
-           binary_kind != math_binary_dispatch_kindt::none)
+       if (args.size() == 2)
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
          if (std::optional<exprt> guarded =
@@ -4039,26 +3877,31 @@ function_call_expr::get_dispatch_table()
              guarded.has_value())
            return *guarded;
 
-         switch (binary_kind)
-         {
-         case math_binary_dispatch_kindt::atan2:
-           return converter_.get_math_handler().handle_atan2(
-             lhs_expr, rhs_expr, call_);
-         case math_binary_dispatch_kindt::pow:
-           return converter_.get_math_handler().handle_pow(
-             lhs_expr, rhs_expr, call_);
-         case math_binary_dispatch_kindt::fmod:
-           return converter_.get_math_handler().handle_fmod(
-             lhs_expr, rhs_expr, call_);
-         case math_binary_dispatch_kindt::copysign:
-           return converter_.get_math_handler().handle_copysign(
-             lhs_expr, rhs_expr, call_);
-         case math_binary_dispatch_kindt::hypot:
-           return converter_.get_math_handler().handle_hypot(
-             lhs_expr, rhs_expr, call_);
-         default:
-           break;
-         }
+         exprt dispatched = converter_.get_math_handler().handle(
+           func_name, lhs_expr, rhs_expr, call_);
+         if (!dispatched.is_nil())
+           return dispatched;
+       }
+
+       // Enforce canonical arity/error behavior for handled names even when
+       // args count is wrong, without duplicating per-function dispatch here.
+       if (converter_.get_math_handler().is_unary_dispatch_function(func_name))
+       {
+         exprt arg_expr = require_one_arg();
+         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
+             guarded.has_value())
+           return *guarded;
+         return converter_.get_math_handler().handle(func_name, arg_expr, call_);
+       }
+       if (converter_.get_math_handler().is_binary_dispatch_function(func_name))
+       {
+         auto [lhs_expr, rhs_expr] = require_two_args();
+         if (std::optional<exprt> guarded =
+               guard_two_real_args(lhs_expr, rhs_expr);
+             guarded.has_value())
+           return *guarded;
+         return converter_.get_math_handler().handle(
+           func_name, lhs_expr, rhs_expr, call_);
        }
 
        if (func_name == "sin")
@@ -4209,183 +4052,6 @@ function_call_expr::get_dispatch_table()
          converter_.current_block->copy_to_operands(guard);
 
          return converter_.get_math_handler().handle_acos(arg_expr, call_);
-       }
-       else if (func_name == "atan")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_atan(arg_expr, call_);
-       }
-       else if (func_name == "log2")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_log2(arg_expr, call_);
-       }
-       else if (func_name == "tan")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_tan(arg_expr, call_);
-       }
-       else if (func_name == "asin")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_asin(arg_expr, call_);
-       }
-       else if (func_name == "sinh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_sinh(arg_expr, call_);
-       }
-       else if (func_name == "cosh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_cosh(arg_expr, call_);
-       }
-       else if (func_name == "tanh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_tanh(arg_expr, call_);
-       }
-       else if (func_name == "log10")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_log10(arg_expr, call_);
-       }
-       else if (func_name == "expm1")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_expm1(arg_expr, call_);
-       }
-       else if (func_name == "log1p")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_log1p(arg_expr, call_);
-       }
-       else if (func_name == "exp2")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_exp2(arg_expr, call_);
-       }
-       else if (func_name == "asinh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_asinh(arg_expr, call_);
-       }
-       else if (func_name == "acosh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_acosh(arg_expr, call_);
-       }
-       else if (func_name == "atanh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_atanh(arg_expr, call_);
-       }
-       else if (func_name == "fabs")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_fabs(arg_expr, call_);
-       }
-       else if (func_name == "trunc")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_trunc(arg_expr, call_);
-       }
-       else if (func_name == "atan2")
-       {
-         auto [y_expr, x_expr] = require_two_args();
-         if (std::optional<exprt> guarded = guard_two_real_args(y_expr, x_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_atan2(
-           y_expr, x_expr, call_);
-       }
-       else if (func_name == "pow")
-       {
-         auto [base_expr, exp_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(base_expr, exp_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_pow(
-           base_expr, exp_expr, call_);
-       }
-       else if (func_name == "fmod")
-       {
-         auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_fmod(
-           lhs_expr, rhs_expr, call_);
-       }
-       else if (func_name == "copysign")
-       {
-         auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_copysign(
-           lhs_expr, rhs_expr, call_);
-       }
-       else if (func_name == "hypot")
-       {
-         auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_hypot(
-           lhs_expr, rhs_expr, call_);
        }
        else if (
          math_guard_utils::math_guard_real_general_functions().count(
