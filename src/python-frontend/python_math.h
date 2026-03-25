@@ -5,10 +5,15 @@
 #include <util/expr.h>
 #include <util/std_code.h>
 #include <nlohmann/json.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 
 class python_converter;
 class type_handler;
 class contextt;
+class symbolt;
 
 /**
  * @brief Handles mathematical operations for Python-to-C conversion
@@ -23,6 +28,8 @@ private:
   python_converter &converter;
   contextt &symbol_table;
   type_handler &type_handler_;
+  mutable std::unordered_map<std::string_view, const symbolt *>
+    c_math_symbol_cache_;
 
   /**
    * @brief Resolve a symbol to its constant value if possible
@@ -30,6 +37,27 @@ private:
    * @return The resolved constant expression
    */
   exprt resolve_symbol(const exprt &operand) const;
+
+  /// Resolve a constant-like expression (constant or constant-valued symbol)
+  /// to a host double when possible.
+  std::optional<double> try_resolve_constant_double(const exprt &operand) const;
+
+  /// Promote operand to double if needed, preserving the original expression
+  /// when already floating-point.
+  exprt promote_to_double_if_needed(exprt operand) const;
+
+  /// Build a unary C-math call expression (e.g. sin, cos, exp, log).
+  exprt build_unary_c_math_call(
+    const char *symbol_id,
+    const char *display_name,
+    exprt operand,
+    const nlohmann::json &element);
+
+  /// Resolve C-math symbol through a tiny local cache to avoid repeated
+  /// symbol-table lookups in hot math call paths.
+  const symbolt &get_c_math_symbol_cached(
+    const char *symbol_id,
+    const char *display_name);
 
 public:
   /**
@@ -39,6 +67,35 @@ public:
    * @param th Reference to the type handler
    */
   python_math(python_converter &conv, contextt &ctx, type_handler &th);
+
+  /**
+   * @brief Classify whether a call should be handled by math dispatch.
+   *
+   * Returns true for:
+   * - direct `math.<func>` calls supported by the frontend, and
+   * - internal math wrappers such as `__ESBMC_*`.
+   *
+   * @param caller Module/object name for attribute calls (e.g., "math")
+   * @param func_name Called function name
+   * @return true when the call belongs to math dispatch
+   */
+  bool is_math_dispatch_target(
+    const std::string &caller,
+    const std::string &func_name) const;
+
+  /**
+   * @brief Cached variant of is_math_dispatch_target.
+   *
+   * Uses function_call_cache to memoize math-dispatch classification,
+   * reducing repeated set lookups during large regression batches.
+   *
+   * @param caller Module/object name for attribute calls (e.g., "math")
+   * @param func_name Called function name
+   * @return true when the call belongs to math dispatch
+   */
+  bool is_math_dispatch_target_cached(
+    const std::string &caller,
+    const std::string &func_name);
 
   /**
    * @brief Compute a mathematical expression with constant operands

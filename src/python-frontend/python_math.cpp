@@ -1,7 +1,7 @@
 #include <python-frontend/python_math.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type_utils.h>
-#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/math_guard_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/ieee_float.h>
@@ -11,12 +11,99 @@
 
 #include <cmath>
 
+namespace
+{
+const BigInt kMaxConstantFoldExponent = 1024;
+
+std::string make_math_dispatch_cache_key(
+  const std::string &caller,
+  const std::string &func_name)
+{
+  if (caller.empty())
+  {
+    std::string key;
+    key.reserve(8 + func_name.size()); // "global::"
+    key += "global::";
+    key += func_name;
+    return key;
+  }
+
+  std::string key;
+  key.reserve(6 + caller.size() + 2 + func_name.size()); // "attr::" + "::"
+  key += "attr::";
+  key += caller;
+  key += "::";
+  key += func_name;
+  return key;
+}
+
+BigInt pow_bigint_non_negative(BigInt base, BigInt exp)
+{
+  BigInt result = 1;
+  while (exp > 0)
+  {
+    if ((exp % 2) != 0)
+      result *= base;
+    exp /= 2;
+    if (exp > 0)
+      base *= base;
+  }
+  return result;
+}
+
+bool is_basic_math_expr(const exprt &expr)
+{
+  const irep_idt &id = expr.id();
+  return id == "+" || id == "-" || id == "*" || id == "/";
+}
+} // namespace
+
 python_math::python_math(
   python_converter &conv,
   contextt &ctx,
   type_handler &th)
   : converter(conv), symbol_table(ctx), type_handler_(th)
 {
+}
+
+bool python_math::is_math_dispatch_target(
+  const std::string &caller,
+  const std::string &func_name) const
+{
+  if (func_name.empty())
+    return false;
+
+  const auto &math_module_names = math_guard_utils::math_module_function_names();
+  const auto &math_wrapper_names = math_guard_utils::math_wrapper_function_names();
+  if (caller != "math")
+    return math_wrapper_names.count(func_name) != 0;
+
+  if (math_module_names.count(func_name) != 0)
+  {
+    return true;
+  }
+
+  return math_wrapper_names.count(func_name) != 0;
+}
+
+bool python_math::is_math_dispatch_target_cached(
+  const std::string &caller,
+  const std::string &func_name)
+{
+  if (func_name.empty())
+    return false;
+
+  function_call_cache &cache = converter.get_function_call_cache();
+  const std::string key = make_math_dispatch_cache_key(caller, func_name);
+  if (std::optional<bool> cached = cache.get_math_dispatch_classification(key);
+      cached.has_value())
+  {
+    return cached.value();
+  }
+
+  const bool matches = is_math_dispatch_target(caller, func_name);
+  cache.set_math_dispatch_classification(key, matches);
+  return matches;
 }
 
 exprt python_math::resolve_symbol(const exprt &operand) const
@@ -28,6 +115,85 @@ exprt python_math::resolve_symbol(const exprt &operand) const
     return s->value;
   }
   return operand;
+}
+
+std::optional<double>
+python_math::try_resolve_constant_double(const exprt &operand) const
+{
+  exprt resolved = resolve_symbol(operand);
+  if (!resolved.is_constant())
+    return std::nullopt;
+
+  if (resolved.type().is_floatbv())
+  {
+    ieee_floatt f;
+    f.spec = to_floatbv_type(resolved.type());
+    f.unpack(binary2integer(resolved.value().as_string(), false));
+    return f.to_double();
+  }
+
+  if (resolved.type().is_signedbv() || resolved.type().is_unsignedbv())
+  {
+    const BigInt int_val = binary2integer(
+      resolved.value().as_string(), resolved.type().is_signedbv());
+    if (resolved.type().is_unsignedbv())
+      return static_cast<double>(int_val.to_uint64());
+    return static_cast<double>(int_val.to_int64());
+  }
+
+  return std::nullopt;
+}
+
+exprt python_math::promote_to_double_if_needed(exprt operand) const
+{
+  if (operand.type().is_floatbv())
+    return operand;
+
+  // Fast path: fold numeric constants directly to double literal to avoid
+  // generating extra typecast IR in hot math call paths.
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+  {
+    return from_double(*val, double_type());
+  }
+
+  exprt double_operand = exprt("typecast", double_type());
+  double_operand.copy_to_operands(operand);
+  return double_operand;
+}
+
+exprt python_math::build_unary_c_math_call(
+  const char *symbol_id,
+  const char *display_name,
+  exprt operand,
+  const nlohmann::json &element)
+{
+  side_effect_expr_function_callt call;
+  call.function() = symbol_expr(get_c_math_symbol_cached(symbol_id, display_name));
+  call.arguments() = {promote_to_double_if_needed(std::move(operand))};
+  call.type() = double_type();
+  call.location() = converter.get_location_from_decl(element);
+  return call;
+}
+
+const symbolt &python_math::get_c_math_symbol_cached(
+  const char *symbol_id,
+  const char *display_name)
+{
+  const std::string_view symbol_key{symbol_id};
+  if (auto it = c_math_symbol_cache_.find(symbol_key);
+      it != c_math_symbol_cache_.end() && it->second != nullptr)
+  {
+    return *it->second;
+  }
+
+  symbolt *symbol = symbol_table.find_symbol(symbol_id);
+  if (!symbol)
+    throw std::runtime_error(
+      std::string(display_name) + " function not found in symbol table");
+
+  c_math_symbol_cache_[symbol_key] = symbol;
+  return *symbol;
 }
 
 exprt python_math::compute_expr(const exprt &expr) const
@@ -61,30 +227,13 @@ exprt python_math::compute_expr(const exprt &expr) const
 
 exprt python_math::handle_power_symbolic(exprt base, exprt exp)
 {
-  // Find the pow function symbol
-  symbolt *pow_symbol = symbol_table.find_symbol("c:@F@pow");
-  if (!pow_symbol)
-    throw std::runtime_error("pow function not found in symbol table");
-
   // Convert arguments to double type if needed
-  exprt double_base = base;
-  exprt double_exp = exp;
-
-  if (!base.type().is_floatbv())
-  {
-    double_base = exprt("typecast", double_type());
-    double_base.copy_to_operands(base);
-  }
-
-  if (!exp.type().is_floatbv())
-  {
-    double_exp = exprt("typecast", double_type());
-    double_exp.copy_to_operands(exp);
-  }
+  exprt double_base = promote_to_double_if_needed(std::move(base));
+  exprt double_exp = promote_to_double_if_needed(std::move(exp));
 
   // Create the function call
   side_effect_expr_function_callt pow_call;
-  pow_call.function() = symbol_expr(*pow_symbol);
+  pow_call.function() = symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
   pow_call.arguments() = {double_base, double_exp};
   pow_call.type() = double_type();
 
@@ -99,36 +248,38 @@ exprt python_math::build_power_expression(const exprt &base, const BigInt &exp)
   if (exp == 1)
     return base;
 
-  // For small exponents, use simple multiplication chain
-  if (exp <= 10)
+  // For larger exponents, use an iterative exponentiation-by-squaring loop.
+  // This keeps O(log n) multiplications without recursive call overhead.
+  std::optional<exprt> result;
+  exprt factor = base;
+  BigInt remaining = exp;
+
+  while (remaining > 0)
   {
-    exprt result = base;
-    for (BigInt i = 1; i < exp; ++i)
+    if (remaining % 2 != 0)
     {
-      exprt mul_expr("*", base.type());
-      mul_expr.copy_to_operands(result, base);
-      result = mul_expr;
+      if (!result.has_value())
+      {
+        result = factor;
+      }
+      else
+      {
+        exprt mul_expr("*", base.type());
+        mul_expr.copy_to_operands(*result, factor);
+        result = mul_expr;
+      }
     }
-    return result;
+
+    remaining /= 2;
+    if (remaining > 0)
+    {
+      exprt square("*", base.type());
+      square.copy_to_operands(factor, factor);
+      factor = square;
+    }
   }
 
-  // For larger exponents, use exponentiation by squaring
-  // This reduces the number of operations from O(n) to O(log n)
-  if (exp % 2 == 0)
-  {
-    // Even exponent: (base^2)^(exp/2)
-    exprt square("*", base.type());
-    square.copy_to_operands(base, base);
-    return build_power_expression(square, exp / 2);
-  }
-  else
-  {
-    // Odd exponent: base * base^(exp-1)
-    exprt mul_expr("*", base.type());
-    exprt sub_power = build_power_expression(base, exp - 1);
-    mul_expr.copy_to_operands(base, sub_power);
-    return mul_expr;
-  }
+  return result.has_value() ? *result : from_integer(1, base.type());
 }
 
 exprt python_math::handle_power(exprt lhs, exprt rhs)
@@ -137,23 +288,8 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   if (lhs.type().is_floatbv() || rhs.type().is_floatbv())
     return handle_power_symbolic(lhs, rhs);
 
-  // Helper lambda to check if expression is a math expression
-  auto is_math_expr = [](const exprt &expr) {
-    const std::string &id = expr.id().as_string();
-    return id == "+" || id == "-" || id == "*" || id == "/";
-  };
-
-  // Try to resolve constant values of both lhs and rhs
-  exprt resolved_lhs = lhs;
-  if (lhs.is_symbol())
-  {
-    const symbolt *s = symbol_table.find_symbol(lhs.identifier());
-    if (s && !s->value.value().empty())
-      resolved_lhs = s->value;
-  }
-  else if (is_math_expr(lhs))
-    resolved_lhs = compute_expr(lhs);
-
+  // Resolve exponent first. If it is non-constant, we can return early without
+  // spending time resolving the base.
   exprt resolved_rhs = rhs;
   if (rhs.is_symbol())
   {
@@ -161,7 +297,7 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     if (s && !s->value.value().empty())
       resolved_rhs = s->value;
   }
-  else if (is_math_expr(rhs))
+  else if (is_basic_math_expr(rhs))
     resolved_rhs = compute_expr(rhs);
 
   // If rhs is still not constant or is a float, delegate to pow() for
@@ -186,17 +322,50 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   if (exponent < 0)
     return handle_power_symbolic(lhs, rhs);
 
-  // Handle special cases first
+  // Fast-path exponents before attempting any base constant resolution.
   if (exponent == 0)
     return from_integer(1, lhs.type());
   if (exponent == 1)
     return lhs;
 
-  // Check resolved base for special cases
-  if (resolved_lhs.is_constant())
+  exprt resolved_lhs = lhs;
+  if (lhs.is_symbol())
   {
-    BigInt base = binary2integer(
-      resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
+    const symbolt *s = symbol_table.find_symbol(lhs.identifier());
+    if (s && !s->value.value().empty())
+      resolved_lhs = s->value;
+  }
+  else if (is_basic_math_expr(lhs))
+    resolved_lhs = compute_expr(lhs);
+
+  std::optional<BigInt> resolved_base_value;
+  if (
+    resolved_lhs.is_constant() &&
+    (resolved_lhs.type().is_signedbv() || resolved_lhs.type().is_unsignedbv()))
+  {
+    try
+    {
+      resolved_base_value = binary2integer(
+        resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
+      // Constant folding very large integer powers can be more expensive than
+      // keeping a logarithmic symbolic tree; cap it to keep conversion fast.
+      if (exponent <= kMaxConstantFoldExponent)
+      {
+        const BigInt power_value =
+          pow_bigint_non_negative(*resolved_base_value, exponent);
+        return from_integer(power_value, lhs.type());
+      }
+    }
+    catch (...)
+    {
+      // Fall back to symbolic encoding if constant conversion overflows/ fails.
+    }
+  }
+
+  // Check resolved base for special cases
+  if (resolved_base_value.has_value())
+  {
+    const BigInt &base = *resolved_base_value;
 
     // Special cases for constant base
     if (base == 0 && exponent > 0)
@@ -216,26 +385,19 @@ exprt python_math::handle_modulo(
   exprt rhs,
   const nlohmann::json &element)
 {
-  // Find required function symbols
-  symbolt *floor_symbol = symbol_table.find_symbol("c:@F@floor");
-  if (!floor_symbol)
-    throw std::runtime_error("floor function not found in symbol table");
+  if (
+    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+    rhs_const = try_resolve_constant_double(rhs);
+    lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+  {
+    const double q = std::floor(*lhs_const / *rhs_const);
+    const double r = *lhs_const - (q * *rhs_const);
+    return from_double(r, double_type());
+  }
 
   // Promote both operands to double if needed
-  exprt double_lhs = lhs;
-  exprt double_rhs = rhs;
-
-  if (!lhs.type().is_floatbv())
-  {
-    double_lhs = exprt("typecast", double_type());
-    double_lhs.copy_to_operands(lhs);
-  }
-
-  if (!rhs.type().is_floatbv())
-  {
-    double_rhs = exprt("typecast", double_type());
-    double_rhs.copy_to_operands(rhs);
-  }
+  exprt double_lhs = promote_to_double_if_needed(std::move(lhs));
+  exprt double_rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create division: x / y
   exprt div_expr("ieee_div", double_type());
@@ -243,7 +405,8 @@ exprt python_math::handle_modulo(
 
   // Create floor(x / y)
   side_effect_expr_function_callt floor_call;
-  floor_call.function() = symbol_expr(*floor_symbol);
+  floor_call.function() =
+    symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
   floor_call.arguments() = {div_expr};
   floor_call.type() = double_type();
   floor_call.location() = converter.get_location_from_decl(element);
@@ -265,6 +428,31 @@ exprt python_math::handle_floor_division(
   const exprt &rhs,
   const exprt &bin_expr)
 {
+  if (lhs.type().is_signedbv() || lhs.type().is_unsignedbv())
+  {
+    exprt resolved_lhs = resolve_symbol(lhs);
+    exprt resolved_rhs = resolve_symbol(rhs);
+    if (
+      resolved_lhs.is_constant() && resolved_rhs.is_constant() &&
+      (resolved_rhs.type().is_signedbv() || resolved_rhs.type().is_unsignedbv()))
+    {
+      const BigInt lhs_val = binary2integer(
+        resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
+      const BigInt rhs_val = binary2integer(
+        resolved_rhs.value().as_string(), resolved_rhs.type().is_signedbv());
+
+      if (rhs_val != 0)
+      {
+        BigInt q = lhs_val / rhs_val;
+        const BigInt rem = lhs_val % rhs_val;
+        const bool sign_diff = (lhs_val < 0) != (rhs_val < 0);
+        if (rem != 0 && sign_diff)
+          q -= 1;
+        return from_integer(q, bin_expr.type());
+      }
+    }
+  }
+
   typet div_type = bin_expr.type();
 
   // remainder = num % den;
@@ -320,7 +508,7 @@ void python_math::handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr)
         const bool is_signed = t.is_signedbv();
         const BigInt val = binary2integer(e.value().as_string(), is_signed);
         const double float_val = static_cast<double>(val.to_int64());
-        convert_float_literal(std::to_string(float_val), e);
+        e = from_double(float_val, float_type);
       }
       catch (const std::exception &ex)
       {
@@ -360,13 +548,7 @@ void python_math::promote_int_to_float(exprt &op, const typet &target_type)
     {
       const BigInt int_val =
         binary2integer(op.value().as_string(), op_type.is_signedbv());
-
-      // Generate a string like "3.0" for float parsing
-      const std::string float_literal =
-        std::to_string(int_val.to_int64()) + ".0";
-
-      // Convert string literal to float expression
-      convert_float_literal(float_literal, op);
+      op = from_double(static_cast<double>(int_val.to_int64()), target_type);
     }
     catch (const std::exception &e)
     {
@@ -388,67 +570,16 @@ void python_math::promote_int_to_float(exprt &op, const typet &target_type)
 
 exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
 {
-  // Constant folding: when operand is a compile-time constant, compute at compile time
-  exprt resolved = operand;
-  if (operand.is_symbol())
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
   {
-    const symbolt *s = symbol_table.find_symbol(operand.identifier());
-    if (s && !s->value.value().empty())
-      resolved = s->value;
-  }
-
-  if (resolved.is_constant())
-  {
-    double val = 0.0;
-    bool got_val = false;
-
-    if (resolved.type().is_floatbv())
-    {
-      ieee_floatt f;
-      f.spec = to_floatbv_type(resolved.type());
-      f.unpack(binary2integer(resolved.value().as_string(), false));
-      val = f.to_double();
-      got_val = true;
-    }
-    else if (resolved.type().is_signedbv() || resolved.type().is_unsignedbv())
-    {
-      BigInt int_val = binary2integer(
-        resolved.value().as_string(), resolved.type().is_signedbv());
-      if (resolved.type().is_unsignedbv())
-        val = static_cast<double>(int_val.to_uint64());
-      else
-        val = static_cast<double>(int_val.to_int64());
-      got_val = true;
-    }
-
     // Constant-fold when we have a concrete value that is either:
     //  - non-negative finite, or
     //  - NaN or +/-infinity (IEEE-754 defines std::sqrt for these)
-    if (got_val && (val >= 0.0 || std::isnan(val) || std::isinf(val)))
-      return from_double(std::sqrt(val), double_type());
+    if (*val >= 0.0 || std::isnan(*val) || std::isinf(*val))
+      return from_double(std::sqrt(*val), double_type());
   }
-
-  // Find the sqrt function symbol from C math library (for symbolic operands)
-  symbolt *sqrt_symbol = symbol_table.find_symbol("c:@F@sqrt");
-  if (!sqrt_symbol)
-    throw std::runtime_error("sqrt function not found in symbol table");
-
-  // Promote operand to double if needed (sqrt always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt sqrt_call;
-  sqrt_call.function() = symbol_expr(*sqrt_symbol);
-  sqrt_call.arguments() = {double_operand};
-  sqrt_call.type() = double_type();
-  sqrt_call.location() = converter.get_location_from_decl(element);
-
-  return sqrt_call;
+  return build_unary_c_math_call("c:@F@sqrt", "sqrt", std::move(operand), element);
 }
 
 exprt python_math::handle_divmod(
@@ -461,19 +592,78 @@ exprt python_math::handle_divmod(
   if (dividend.type().is_floatbv() || divisor.type().is_floatbv())
   {
     result_type = double_type();
+    if (
+      std::optional<double> lhs_const = try_resolve_constant_double(dividend),
+      rhs_const = try_resolve_constant_double(divisor);
+      lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+    {
+      const double q = std::floor(*lhs_const / *rhs_const);
+      const double r = *lhs_const - (q * *rhs_const);
 
-    // Promote operands to float if needed
-    if (!dividend.type().is_floatbv())
-    {
-      exprt promoted = exprt("typecast", result_type);
-      promoted.copy_to_operands(dividend);
-      dividend = promoted;
+      struct_typet tuple_type;
+      tuple_type.tag("tag-tuple_divmod");
+
+      struct_typet::componentt comp0;
+      comp0.name("element_0");
+      comp0.type() = result_type;
+      tuple_type.components().push_back(comp0);
+
+      struct_typet::componentt comp1;
+      comp1.name("element_1");
+      comp1.type() = result_type;
+      tuple_type.components().push_back(comp1);
+
+      exprt tuple_expr("struct", tuple_type);
+      tuple_expr.copy_to_operands(
+        from_double(q, result_type), from_double(r, result_type));
+      return tuple_expr;
     }
-    if (!divisor.type().is_floatbv())
+
+    dividend = promote_to_double_if_needed(std::move(dividend));
+    divisor = promote_to_double_if_needed(std::move(divisor));
+  }
+  else
+  {
+    exprt resolved_dividend = resolve_symbol(dividend);
+    exprt resolved_divisor = resolve_symbol(divisor);
+    if (
+      resolved_dividend.is_constant() && resolved_divisor.is_constant() &&
+      (resolved_divisor.type().is_signedbv() ||
+       resolved_divisor.type().is_unsignedbv()))
     {
-      exprt promoted = exprt("typecast", result_type);
-      promoted.copy_to_operands(divisor);
-      divisor = promoted;
+      const BigInt lhs_val = binary2integer(
+        resolved_dividend.value().as_string(),
+        resolved_dividend.type().is_signedbv());
+      const BigInt rhs_val = binary2integer(
+        resolved_divisor.value().as_string(), resolved_divisor.type().is_signedbv());
+      if (rhs_val != 0)
+      {
+        BigInt q = lhs_val / rhs_val;
+        BigInt r = lhs_val % rhs_val;
+        if (r != 0 && ((lhs_val < 0) != (rhs_val < 0)))
+        {
+          q -= 1;
+          r += rhs_val;
+        }
+
+        struct_typet tuple_type;
+        tuple_type.tag("tag-tuple_divmod");
+
+        struct_typet::componentt comp0;
+        comp0.name("element_0");
+        comp0.type() = result_type;
+        tuple_type.components().push_back(comp0);
+
+        struct_typet::componentt comp1;
+        comp1.name("element_1");
+        comp1.type() = result_type;
+        tuple_type.components().push_back(comp1);
+
+        exprt tuple_expr("struct", tuple_type);
+        tuple_expr.copy_to_operands(
+          from_integer(q, result_type), from_integer(r, result_type));
+        return tuple_expr;
+      }
     }
   }
 
@@ -485,12 +675,9 @@ exprt python_math::handle_divmod(
     exprt div_expr("ieee_div", result_type);
     div_expr.copy_to_operands(dividend, divisor);
 
-    symbolt *floor_symbol = symbol_table.find_symbol("c:@F@floor");
-    if (!floor_symbol)
-      throw std::runtime_error("floor function not found in symbol table");
-
     side_effect_expr_function_callt floor_call;
-    floor_call.function() = symbol_expr(*floor_symbol);
+    floor_call.function() =
+      symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
     floor_call.arguments() = {div_expr};
     floor_call.type() = result_type;
     floor_call.location() = converter.get_location_from_decl(element);
@@ -546,152 +733,56 @@ exprt python_math::handle_divmod(
 
 exprt python_math::handle_sin(exprt operand, const nlohmann::json &element)
 {
-  // Find the sin function symbol from C math library
-  symbolt *sin_symbol = symbol_table.find_symbol("c:@F@sin");
-  if (!sin_symbol)
-    throw std::runtime_error("sin function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::sin(*val), double_type());
 
-  // Promote operand to double if needed (sin always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt sin_call;
-  sin_call.function() = symbol_expr(*sin_symbol);
-  sin_call.arguments() = {double_operand};
-  sin_call.type() = double_type();
-  sin_call.location() = converter.get_location_from_decl(element);
-
-  return sin_call;
+  return build_unary_c_math_call("c:@F@sin", "sin", std::move(operand), element);
 }
 
 exprt python_math::handle_cos(exprt operand, const nlohmann::json &element)
 {
-  // Find the cos function symbol from C math library
-  symbolt *cos_symbol = symbol_table.find_symbol("c:@F@cos");
-  if (!cos_symbol)
-    throw std::runtime_error("cos function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::cos(*val), double_type());
 
-  // Promote operand to double if needed (cos always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt cos_call;
-  cos_call.function() = symbol_expr(*cos_symbol);
-  cos_call.arguments() = {double_operand};
-  cos_call.type() = double_type();
-  cos_call.location() = converter.get_location_from_decl(element);
-
-  return cos_call;
+  return build_unary_c_math_call("c:@F@cos", "cos", std::move(operand), element);
 }
 
 exprt python_math::handle_exp(exprt operand, const nlohmann::json &element)
 {
-  // Find the exp function symbol from C math library
-  symbolt *exp_symbol = symbol_table.find_symbol("c:@F@exp");
-  if (!exp_symbol)
-    throw std::runtime_error("exp function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::exp(*val), double_type());
 
-  // Promote operand to double if needed (exp always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt exp_call;
-  exp_call.function() = symbol_expr(*exp_symbol);
-  exp_call.arguments() = {double_operand};
-  exp_call.type() = double_type();
-  exp_call.location() = converter.get_location_from_decl(element);
-
-  return exp_call;
+  return build_unary_c_math_call("c:@F@exp", "exp", std::move(operand), element);
 }
 
 exprt python_math::handle_log(exprt operand, const nlohmann::json &element)
 {
-  // Find the log function symbol from C math library
-  symbolt *log_symbol = symbol_table.find_symbol("c:@F@log");
-  if (!log_symbol)
-    throw std::runtime_error("log function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value() && *val > 0.0)
+    return from_double(std::log(*val), double_type());
 
-  // Promote operand to double if needed (log always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt log_call;
-  log_call.function() = symbol_expr(*log_symbol);
-  log_call.arguments() = {double_operand};
-  log_call.type() = double_type();
-  log_call.location() = converter.get_location_from_decl(element);
-
-  return log_call;
+  return build_unary_c_math_call("c:@F@log", "log", std::move(operand), element);
 }
 
 exprt python_math::handle_acos(exprt operand, const nlohmann::json &element)
 {
-  // Find the acos function symbol from C math library
-  symbolt *acos_symbol = symbol_table.find_symbol("c:@F@acos");
-  if (!acos_symbol)
-    throw std::runtime_error("acos function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value() && *val >= -1.0 && *val <= 1.0)
+    return from_double(std::acos(*val), double_type());
 
-  // Promote operand to double if needed (acos always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt acos_call;
-  acos_call.function() = symbol_expr(*acos_symbol);
-  acos_call.arguments() = {double_operand};
-  acos_call.type() = double_type();
-  acos_call.location() = converter.get_location_from_decl(element);
-
-  return acos_call;
+  return build_unary_c_math_call("c:@F@acos", "acos", std::move(operand), element);
 }
 
 exprt python_math::handle_atan(exprt operand, const nlohmann::json &element)
 {
-  // Find the atan function symbol from C math library
-  symbolt *atan_symbol = symbol_table.find_symbol("c:@F@atan");
-  if (!atan_symbol)
-    throw std::runtime_error("atan function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::atan(*val), double_type());
 
-  // Promote operand to double if needed (atan always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt atan_call;
-  atan_call.function() = symbol_expr(*atan_symbol);
-  atan_call.arguments() = {double_operand};
-  atan_call.type() = double_type();
-  atan_call.location() = converter.get_location_from_decl(element);
-
-  return atan_call;
+  return build_unary_c_math_call("c:@F@atan", "atan", std::move(operand), element);
 }
 
 exprt python_math::handle_atan2(
@@ -699,28 +790,21 @@ exprt python_math::handle_atan2(
   exprt x_operand,
   const nlohmann::json &element)
 {
-  // Find the atan2 function symbol from C math library
-  symbolt *atan2_symbol = symbol_table.find_symbol("c:@F@atan2");
-  if (!atan2_symbol)
-    throw std::runtime_error("atan2 function not found in symbol table");
+  if (
+    std::optional<double> y_const = try_resolve_constant_double(y_operand),
+    x_const = try_resolve_constant_double(x_operand);
+    y_const.has_value() && x_const.has_value())
+  {
+    return from_double(std::atan2(*y_const, *x_const), double_type());
+  }
 
-  // Promote operands to double if needed (atan2 always works with doubles)
-  if (!y_operand.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(y_operand);
-    y_operand = casted;
-  }
-  if (!x_operand.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(x_operand);
-    x_operand = casted;
-  }
+  y_operand = promote_to_double_if_needed(std::move(y_operand));
+  x_operand = promote_to_double_if_needed(std::move(x_operand));
 
   // Create the function call expression
   side_effect_expr_function_callt atan2_call;
-  atan2_call.function() = symbol_expr(*atan2_symbol);
+  atan2_call.function() =
+    symbol_expr(get_c_math_symbol_cached("c:@F@atan2", "atan2"));
   atan2_call.arguments() = {y_operand, x_operand};
   atan2_call.type() = double_type();
   atan2_call.location() = converter.get_location_from_decl(element);
@@ -730,27 +814,11 @@ exprt python_math::handle_atan2(
 
 exprt python_math::handle_log2(exprt operand, const nlohmann::json &element)
 {
-  // Find the log2 function symbol from C math library
-  symbolt *log2_symbol = symbol_table.find_symbol("c:@F@log2");
-  if (!log2_symbol)
-    throw std::runtime_error("log2 function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value() && *val > 0.0)
+    return from_double(std::log2(*val), double_type());
 
-  // Promote operand to double if needed (log2 always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt log2_call;
-  log2_call.function() = symbol_expr(*log2_symbol);
-  log2_call.arguments() = {double_operand};
-  log2_call.type() = double_type();
-  log2_call.location() = converter.get_location_from_decl(element);
-
-  return log2_call;
+  return build_unary_c_math_call("c:@F@log2", "log2", std::move(operand), element);
 }
 
 exprt python_math::handle_pow(
@@ -758,28 +826,20 @@ exprt python_math::handle_pow(
   exprt exp,
   const nlohmann::json &element)
 {
-  // Find the pow function symbol from C math library
-  symbolt *pow_symbol = symbol_table.find_symbol("c:@F@pow");
-  if (!pow_symbol)
-    throw std::runtime_error("pow function not found in symbol table");
+  if (
+    std::optional<double> base_const = try_resolve_constant_double(base),
+    exp_const = try_resolve_constant_double(exp);
+    base_const.has_value() && exp_const.has_value())
+  {
+    return from_double(std::pow(*base_const, *exp_const), double_type());
+  }
 
-  // Promote operands to double if needed (pow always works with doubles)
-  if (!base.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(base);
-    base = casted;
-  }
-  if (!exp.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(exp);
-    exp = casted;
-  }
+  base = promote_to_double_if_needed(std::move(base));
+  exp = promote_to_double_if_needed(std::move(exp));
 
   // Create the function call expression
   side_effect_expr_function_callt pow_call;
-  pow_call.function() = symbol_expr(*pow_symbol);
+  pow_call.function() = symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
   pow_call.arguments() = {base, exp};
   pow_call.type() = double_type();
   pow_call.location() = converter.get_location_from_decl(element);
@@ -789,51 +849,24 @@ exprt python_math::handle_pow(
 
 exprt python_math::handle_fabs(exprt operand, const nlohmann::json &element)
 {
-  // Find the fabs function symbol from C math library
-  symbolt *fabs_symbol = symbol_table.find_symbol("c:@F@fabs");
-  if (!fabs_symbol)
-    throw std::runtime_error("fabs function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::fabs(*val), double_type());
 
-  // Promote operand to double if needed (fabs always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt fabs_call;
-  fabs_call.function() = symbol_expr(*fabs_symbol);
-  fabs_call.arguments() = {double_operand};
-  fabs_call.type() = double_type();
-  fabs_call.location() = converter.get_location_from_decl(element);
-
-  return fabs_call;
+  return build_unary_c_math_call("c:@F@fabs", "fabs", std::move(operand), element);
 }
 
 exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
 {
-  // Find the trunc function symbol from C math library
-  symbolt *trunc_symbol = symbol_table.find_symbol("c:@F@trunc");
-  if (!trunc_symbol)
-    throw std::runtime_error("trunc function not found in symbol table");
-
-  // Promote operand to double if needed (trunc always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value() && std::isfinite(*val))
   {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
+    const long long truncated = static_cast<long long>(std::trunc(*val));
+    return from_integer(truncated, int_type());
   }
 
-  // Create the function call expression
-  side_effect_expr_function_callt trunc_call;
-  trunc_call.function() = symbol_expr(*trunc_symbol);
-  trunc_call.arguments() = {double_operand};
-  trunc_call.type() = double_type();
-  trunc_call.location() = converter.get_location_from_decl(element);
-
+  exprt trunc_call =
+    build_unary_c_math_call("c:@F@trunc", "trunc", std::move(operand), element);
   exprt to_int("typecast", int_type());
   to_int.copy_to_operands(trunc_call);
   return to_int;
@@ -844,28 +877,21 @@ exprt python_math::handle_fmod(
   exprt rhs,
   const nlohmann::json &element)
 {
-  // Find the fmod function symbol from C math library
-  symbolt *fmod_symbol = symbol_table.find_symbol("c:@F@fmod");
-  if (!fmod_symbol)
-    throw std::runtime_error("fmod function not found in symbol table");
+  if (
+    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+    rhs_const = try_resolve_constant_double(rhs);
+    lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+  {
+    return from_double(std::fmod(*lhs_const, *rhs_const), double_type());
+  }
 
-  // Promote operands to double if needed (fmod always works with doubles)
-  if (!lhs.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(lhs);
-    lhs = casted;
-  }
-  if (!rhs.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(rhs);
-    rhs = casted;
-  }
+  lhs = promote_to_double_if_needed(std::move(lhs));
+  rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
   side_effect_expr_function_callt fmod_call;
-  fmod_call.function() = symbol_expr(*fmod_symbol);
+  fmod_call.function() =
+    symbol_expr(get_c_math_symbol_cached("c:@F@fmod", "fmod"));
   fmod_call.arguments() = {lhs, rhs};
   fmod_call.type() = double_type();
   fmod_call.location() = converter.get_location_from_decl(element);
@@ -878,28 +904,21 @@ exprt python_math::handle_copysign(
   exprt rhs,
   const nlohmann::json &element)
 {
-  // Find the copysign function symbol from C math library
-  symbolt *copysign_symbol = symbol_table.find_symbol("c:@F@copysign");
-  if (!copysign_symbol)
-    throw std::runtime_error("copysign function not found in symbol table");
+  if (
+    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+    rhs_const = try_resolve_constant_double(rhs);
+    lhs_const.has_value() && rhs_const.has_value())
+  {
+    return from_double(std::copysign(*lhs_const, *rhs_const), double_type());
+  }
 
-  // Promote operands to double if needed (copysign always works with doubles)
-  if (!lhs.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(lhs);
-    lhs = casted;
-  }
-  if (!rhs.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(rhs);
-    rhs = casted;
-  }
+  lhs = promote_to_double_if_needed(std::move(lhs));
+  rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
   side_effect_expr_function_callt copysign_call;
-  copysign_call.function() = symbol_expr(*copysign_symbol);
+  copysign_call.function() =
+    symbol_expr(get_c_math_symbol_cached("c:@F@copysign", "copysign"));
   copysign_call.arguments() = {lhs, rhs};
   copysign_call.type() = double_type();
   copysign_call.location() = converter.get_location_from_decl(element);
@@ -909,302 +928,110 @@ exprt python_math::handle_copysign(
 
 exprt python_math::handle_tan(exprt operand, const nlohmann::json &element)
 {
-  // Find the tan function symbol from C math library
-  symbolt *tan_symbol = symbol_table.find_symbol("c:@F@tan");
-  if (!tan_symbol)
-    throw std::runtime_error("tan function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::tan(*val), double_type());
 
-  // Promote operand to double if needed (tan always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt tan_call;
-  tan_call.function() = symbol_expr(*tan_symbol);
-  tan_call.arguments() = {double_operand};
-  tan_call.type() = double_type();
-  tan_call.location() = converter.get_location_from_decl(element);
-
-  return tan_call;
+  return build_unary_c_math_call("c:@F@tan", "tan", std::move(operand), element);
 }
 
 exprt python_math::handle_asin(exprt operand, const nlohmann::json &element)
 {
-  // Find the asin function symbol from C math library
-  symbolt *asin_symbol = symbol_table.find_symbol("c:@F@asin");
-  if (!asin_symbol)
-    throw std::runtime_error("asin function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value() && *val >= -1.0 && *val <= 1.0)
+    return from_double(std::asin(*val), double_type());
 
-  // Promote operand to double if needed (asin always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt asin_call;
-  asin_call.function() = symbol_expr(*asin_symbol);
-  asin_call.arguments() = {double_operand};
-  asin_call.type() = double_type();
-  asin_call.location() = converter.get_location_from_decl(element);
-
-  return asin_call;
+  return build_unary_c_math_call("c:@F@asin", "asin", std::move(operand), element);
 }
 
 exprt python_math::handle_sinh(exprt operand, const nlohmann::json &element)
 {
-  // Find the sinh function symbol from C math library
-  symbolt *sinh_symbol = symbol_table.find_symbol("c:@F@sinh");
-  if (!sinh_symbol)
-    throw std::runtime_error("sinh function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::sinh(*val), double_type());
 
-  // Promote operand to double if needed (sinh always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt sinh_call;
-  sinh_call.function() = symbol_expr(*sinh_symbol);
-  sinh_call.arguments() = {double_operand};
-  sinh_call.type() = double_type();
-  sinh_call.location() = converter.get_location_from_decl(element);
-
-  return sinh_call;
+  return build_unary_c_math_call("c:@F@sinh", "sinh", std::move(operand), element);
 }
 
 exprt python_math::handle_cosh(exprt operand, const nlohmann::json &element)
 {
-  // Find the cosh function symbol from C math library
-  symbolt *cosh_symbol = symbol_table.find_symbol("c:@F@cosh");
-  if (!cosh_symbol)
-    throw std::runtime_error("cosh function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::cosh(*val), double_type());
 
-  // Promote operand to double if needed (cosh always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt cosh_call;
-  cosh_call.function() = symbol_expr(*cosh_symbol);
-  cosh_call.arguments() = {double_operand};
-  cosh_call.type() = double_type();
-  cosh_call.location() = converter.get_location_from_decl(element);
-
-  return cosh_call;
+  return build_unary_c_math_call("c:@F@cosh", "cosh", std::move(operand), element);
 }
 
 exprt python_math::handle_tanh(exprt operand, const nlohmann::json &element)
 {
-  // Find the tanh function symbol from C math library
-  symbolt *tanh_symbol = symbol_table.find_symbol("c:@F@tanh");
-  if (!tanh_symbol)
-    throw std::runtime_error("tanh function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::tanh(*val), double_type());
 
-  // Promote operand to double if needed (tanh always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt tanh_call;
-  tanh_call.function() = symbol_expr(*tanh_symbol);
-  tanh_call.arguments() = {double_operand};
-  tanh_call.type() = double_type();
-  tanh_call.location() = converter.get_location_from_decl(element);
-
-  return tanh_call;
+  return build_unary_c_math_call("c:@F@tanh", "tanh", std::move(operand), element);
 }
 
 exprt python_math::handle_log10(exprt operand, const nlohmann::json &element)
 {
-  // Find the log10 function symbol from C math library
-  symbolt *log10_symbol = symbol_table.find_symbol("c:@F@log10");
-  if (!log10_symbol)
-    throw std::runtime_error("log10 function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value() && *val > 0.0)
+    return from_double(std::log10(*val), double_type());
 
-  // Promote operand to double if needed (log10 always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt log10_call;
-  log10_call.function() = symbol_expr(*log10_symbol);
-  log10_call.arguments() = {double_operand};
-  log10_call.type() = double_type();
-  log10_call.location() = converter.get_location_from_decl(element);
-
-  return log10_call;
+  return build_unary_c_math_call("c:@F@log10", "log10", std::move(operand), element);
 }
 
 exprt python_math::handle_expm1(exprt operand, const nlohmann::json &element)
 {
-  // Find the expm1 function symbol from C math library
-  symbolt *expm1_symbol = symbol_table.find_symbol("c:@F@expm1");
-  if (!expm1_symbol)
-    throw std::runtime_error("expm1 function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::expm1(*val), double_type());
 
-  // Promote operand to double if needed (expm1 always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt expm1_call;
-  expm1_call.function() = symbol_expr(*expm1_symbol);
-  expm1_call.arguments() = {double_operand};
-  expm1_call.type() = double_type();
-  expm1_call.location() = converter.get_location_from_decl(element);
-
-  return expm1_call;
+  return build_unary_c_math_call("c:@F@expm1", "expm1", std::move(operand), element);
 }
 
 exprt python_math::handle_log1p(exprt operand, const nlohmann::json &element)
 {
-  // Find the log1p function symbol from C math library
-  symbolt *log1p_symbol = symbol_table.find_symbol("c:@F@log1p");
-  if (!log1p_symbol)
-    throw std::runtime_error("log1p function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value() && *val > -1.0)
+    return from_double(std::log1p(*val), double_type());
 
-  // Promote operand to double if needed (log1p always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt log1p_call;
-  log1p_call.function() = symbol_expr(*log1p_symbol);
-  log1p_call.arguments() = {double_operand};
-  log1p_call.type() = double_type();
-  log1p_call.location() = converter.get_location_from_decl(element);
-
-  return log1p_call;
+  return build_unary_c_math_call("c:@F@log1p", "log1p", std::move(operand), element);
 }
 
 exprt python_math::handle_exp2(exprt operand, const nlohmann::json &element)
 {
-  // Find the exp2 function symbol from C math library
-  symbolt *exp2_symbol = symbol_table.find_symbol("c:@F@exp2");
-  if (!exp2_symbol)
-    throw std::runtime_error("exp2 function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::exp2(*val), double_type());
 
-  // Promote operand to double if needed (exp2 always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt exp2_call;
-  exp2_call.function() = symbol_expr(*exp2_symbol);
-  exp2_call.arguments() = {double_operand};
-  exp2_call.type() = double_type();
-  exp2_call.location() = converter.get_location_from_decl(element);
-
-  return exp2_call;
+  return build_unary_c_math_call("c:@F@exp2", "exp2", std::move(operand), element);
 }
 
 exprt python_math::handle_asinh(exprt operand, const nlohmann::json &element)
 {
-  // Find the asinh function symbol from C math library
-  symbolt *asinh_symbol = symbol_table.find_symbol("c:@F@asinh");
-  if (!asinh_symbol)
-    throw std::runtime_error("asinh function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value())
+    return from_double(std::asinh(*val), double_type());
 
-  // Promote operand to double if needed (asinh always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt asinh_call;
-  asinh_call.function() = symbol_expr(*asinh_symbol);
-  asinh_call.arguments() = {double_operand};
-  asinh_call.type() = double_type();
-  asinh_call.location() = converter.get_location_from_decl(element);
-
-  return asinh_call;
+  return build_unary_c_math_call("c:@F@asinh", "asinh", std::move(operand), element);
 }
 
 exprt python_math::handle_acosh(exprt operand, const nlohmann::json &element)
 {
-  // Find the acosh function symbol from C math library
-  symbolt *acosh_symbol = symbol_table.find_symbol("c:@F@acosh");
-  if (!acosh_symbol)
-    throw std::runtime_error("acosh function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value() && *val >= 1.0)
+    return from_double(std::acosh(*val), double_type());
 
-  // Promote operand to double if needed (acosh always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt acosh_call;
-  acosh_call.function() = symbol_expr(*acosh_symbol);
-  acosh_call.arguments() = {double_operand};
-  acosh_call.type() = double_type();
-  acosh_call.location() = converter.get_location_from_decl(element);
-
-  return acosh_call;
+  return build_unary_c_math_call("c:@F@acosh", "acosh", std::move(operand), element);
 }
 
 exprt python_math::handle_atanh(exprt operand, const nlohmann::json &element)
 {
-  // Find the atanh function symbol from C math library
-  symbolt *atanh_symbol = symbol_table.find_symbol("c:@F@atanh");
-  if (!atanh_symbol)
-    throw std::runtime_error("atanh function not found in symbol table");
+  if (std::optional<double> val = try_resolve_constant_double(operand);
+      val.has_value() && std::fabs(*val) < 1.0)
+    return from_double(std::atanh(*val), double_type());
 
-  // Promote operand to double if needed (atanh always works with doubles)
-  exprt double_operand = operand;
-  if (!operand.type().is_floatbv())
-  {
-    double_operand = exprt("typecast", double_type());
-    double_operand.copy_to_operands(operand);
-  }
-
-  // Create the function call expression
-  side_effect_expr_function_callt atanh_call;
-  atanh_call.function() = symbol_expr(*atanh_symbol);
-  atanh_call.arguments() = {double_operand};
-  atanh_call.type() = double_type();
-  atanh_call.location() = converter.get_location_from_decl(element);
-
-  return atanh_call;
+  return build_unary_c_math_call("c:@F@atanh", "atanh", std::move(operand), element);
 }
 
 exprt python_math::handle_hypot(
@@ -1212,28 +1039,21 @@ exprt python_math::handle_hypot(
   exprt rhs,
   const nlohmann::json &element)
 {
-  // Find the hypot function symbol from C math library
-  symbolt *hypot_symbol = symbol_table.find_symbol("c:@F@hypot");
-  if (!hypot_symbol)
-    throw std::runtime_error("hypot function not found in symbol table");
+  if (
+    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+    rhs_const = try_resolve_constant_double(rhs);
+    lhs_const.has_value() && rhs_const.has_value())
+  {
+    return from_double(std::hypot(*lhs_const, *rhs_const), double_type());
+  }
 
-  // Promote operands to double if needed (hypot always works with doubles)
-  if (!lhs.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(lhs);
-    lhs = casted;
-  }
-  if (!rhs.type().is_floatbv())
-  {
-    exprt casted = exprt("typecast", double_type());
-    casted.copy_to_operands(rhs);
-    rhs = casted;
-  }
+  lhs = promote_to_double_if_needed(std::move(lhs));
+  rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
   side_effect_expr_function_callt hypot_call;
-  hypot_call.function() = symbol_expr(*hypot_symbol);
+  hypot_call.function() =
+    symbol_expr(get_c_math_symbol_cached("c:@F@hypot", "hypot"));
   hypot_call.arguments() = {lhs, rhs};
   hypot_call.type() = double_type();
   hypot_call.location() = converter.get_location_from_decl(element);
@@ -1264,6 +1084,36 @@ exprt python_math::handle_dist(exprt p, exprt q, const nlohmann::json &element)
 
   if (p_size == 0)
     throw std::runtime_error("math.dist() requires non-empty points");
+
+  // Fast path: if both points resolve to concrete tuple literals, fold the
+  // entire distance expression to a single constant.
+  exprt resolved_p = resolve_symbol(p);
+  exprt resolved_q = resolve_symbol(q);
+  if (
+    resolved_p.id() == "struct" && resolved_q.id() == "struct" &&
+    resolved_p.operands().size() == p_size &&
+    resolved_q.operands().size() == q_size)
+  {
+    double sum_sq = 0.0;
+    bool all_constant_numeric = true;
+    for (size_t i = 0; i < p_size; ++i)
+    {
+      std::optional<double> pi =
+        try_resolve_constant_double(resolved_p.operands()[i]);
+      std::optional<double> qi =
+        try_resolve_constant_double(resolved_q.operands()[i]);
+      if (!pi.has_value() || !qi.has_value())
+      {
+        all_constant_numeric = false;
+        break;
+      }
+      const double diff = *pi - *qi;
+      sum_sq += diff * diff;
+    }
+
+    if (all_constant_numeric)
+      return from_double(std::sqrt(sum_sq), double_type());
+  }
 
   // Build sum of squared differences: (p[0]-q[0])^2 + (p[1]-q[1])^2 + ...
   // Use ieee_* operations for floating-point arithmetic
