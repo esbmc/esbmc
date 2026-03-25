@@ -1,6 +1,5 @@
 from dataclasses import dataclass, replace
 import enum
-import os
 from pathlib import Path
 import shlex
 
@@ -34,6 +33,7 @@ class TestDescription:
     """Immutable test.desc fields."""
 
     test_dir: Path
+    # relative_dir is the path of the test directory relative to the regression root, used for generating arguments and labels
     relative_dir: Path
     test_mode: TestMode
     test_file: str
@@ -46,7 +46,8 @@ class TestDescription:
         test_dir: Path, regression_root: Path
     ) -> "TestDescription":
         """Parse a test description from the given directory."""
-        assert test_dir.exists(), f"Test directory does not exist: {test_dir}"
+        assert test_dir.is_absolute() and test_dir.exists(), f"Test directory does not exist or not absolute: {test_dir}"
+        assert regression_root.is_absolute() and regression_root.exists(), f"Regression root does not exist or not absolute: {regression_root}"
         test_desc_path = test_dir / "test.desc"
         assert (
             test_desc_path.exists()
@@ -75,7 +76,7 @@ class TestDescription:
         test_labels: tuple[
             str, ...
         ] = ()  # TODO: add support for test labels in test.desc
-        relative_dir = Path(os.path.relpath(test_dir, regression_root))
+        relative_dir = test_dir.relative_to(regression_root)
         return TestDescription(
             test_dir,
             relative_dir,

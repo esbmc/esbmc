@@ -2,79 +2,26 @@
 
 import argparse
 from collections.abc import Sequence
+from glob import iglob
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import sys
 from testing_model import TestDescription
 
-RelativePath = PurePosixPath
 
-
-def _relative_path(path: str | Path) -> RelativePath:
-    normalized = os.fspath(path).replace("\\", "/").strip("/")
-    if normalized in {"", "."}:
-        return RelativePath()
-    return RelativePath(normalized)
-
-
-def _relative_path_text(path: RelativePath | Path) -> str:
-    relative_path: RelativePath = (
-        _relative_path(path) if isinstance(path, Path) else path
-    )
-    return "" if relative_path == RelativePath() else relative_path.as_posix()
-
-
-def _relative_to_root(root_dir: Path, path: Path) -> RelativePath:
-    return _relative_path(path.relative_to(root_dir))
-
-
-def _is_same_or_child(path: RelativePath, prefix: RelativePath) -> bool:
-    if prefix == RelativePath():
-        return True
-    return path == prefix or prefix in path.parents
-
-
-def _should_include_path(
-    path: RelativePath,
-    include_prefixes: Sequence[RelativePath],
-    ignore_prefixes: Sequence[RelativePath],
+def _is_excluded(
+    path: Path,
+    ignore_paths: list[Path],
 ) -> bool:
-    if any(_is_same_or_child(path, prefix) for prefix in ignore_prefixes):
-        return False
-    if not include_prefixes:
-        return True
-    return any(_is_same_or_child(path, prefix) for prefix in include_prefixes)
+    for ignore_path in ignore_paths:
+        if path.is_relative_to(ignore_path):
+            return True
+    return False
 
 
-def _should_descend_into(
-    path: RelativePath,
-    include_prefixes: Sequence[RelativePath],
-    ignore_prefixes: Sequence[RelativePath],
-) -> bool:
-    if any(_is_same_or_child(path, prefix) for prefix in ignore_prefixes):
-        return False
-    if not include_prefixes:
-        return True
-    return any(
-        _is_same_or_child(path, prefix) or _is_same_or_child(prefix, path)
-        for prefix in include_prefixes
-    )
-
-
-def _suite_order_for_path(
-    path: RelativePath, include_prefixes: Sequence[RelativePath]
-) -> int:
-    for index, prefix in enumerate(include_prefixes):
-        if _is_same_or_child(path, prefix):
-            return index
-    return len(include_prefixes)
-
-
-def _default_labels(relative_dir: RelativePath) -> tuple[str, str]:
-    assert (
-        relative_dir.parent != RelativePath()
-    ), f"test directly under root has no suite directory: {relative_dir}"
-    return ("regression", f"{_relative_path_text(relative_dir.parent)}/")
+def _default_labels(relative_dir: Path) -> tuple[str, str]:
+    assert not relative_dir.is_absolute()
+    return ("regression", f"{relative_dir.parent.as_posix()}/")
 
 
 def _cmake_quote(value: str) -> str:
@@ -92,48 +39,36 @@ def discover_tests(
     ignore_prefixes: Sequence[str],
 ) -> list[TestDescription]:
     """Recursively discover test.desc files below root_dir."""
-    root_dir = Path(root_dir).resolve()
-    normalized_include_prefixes: list[RelativePath] = [
-        _relative_path(prefix) for prefix in (include_prefixes or []) if prefix
+    root_dir = Path(root_dir).absolute()
+    # this should have been a set, but we want to preserve order for better readability of the generated CTest files...
+    included_paths: list[Path] = [
+        root_dir.joinpath(prefix).absolute()
+        for prefix in (include_prefixes or [])
+        if prefix
     ]
-    normalized_ignore_prefixes: list[RelativePath] = [
-        _relative_path(prefix) for prefix in (ignore_prefixes or []) if prefix
+    ignored_paths: list[Path] = [
+        root_dir.joinpath(prefix).absolute()
+        for prefix in (ignore_prefixes or [])
+        if prefix
     ]
+    assert not set(included_paths).intersection(
+        set(ignored_paths)
+    ), f"Include and ignore prefixes must not overlap exactly: {included_paths} vs {ignored_paths}"
 
     discovered: list[TestDescription] = []
 
-    for current_dir_str, dirnames, filenames in os.walk(root_dir, topdown=True):
-        current_dir = Path(current_dir_str)
-        dirnames.sort()
-        relative_dir = _relative_to_root(root_dir, current_dir)
-        dirnames[:] = [
-            dirname
-            for dirname in dirnames
-            if _should_descend_into(
-                relative_dir / dirname,
-                normalized_include_prefixes,
-                normalized_ignore_prefixes,
-            )
-        ]
-
-        if "test.desc" not in filenames:
-            continue
-        if not _should_include_path(
-            relative_dir, normalized_include_prefixes, normalized_ignore_prefixes
+    for included_path in included_paths:
+        discovered_one_dir: list[TestDescription] = []
+        for test_desc_file in iglob(
+            str(included_path / "**" / "test.desc"), recursive=True
         ):
-            continue
-
-        test = TestDescription.parse_test_description(current_dir, root_dir)
-        discovered.append(test)
-
-    discovered.sort(
-        key=lambda test: (
-            _suite_order_for_path(
-                _relative_path(test.relative_dir), normalized_include_prefixes
-            ),
-            _relative_path_text(test.relative_dir),
-        )
-    )
+            current_dir: Path = Path(test_desc_file).parent
+            if _is_excluded(current_dir, ignored_paths):
+                continue
+            test = TestDescription.parse_test_description(current_dir, root_dir)
+            discovered_one_dir.append(test)
+        discovered_one_dir.sort(key=lambda test: test.relative_dir)
+        discovered.extend(discovered_one_dir)
     return discovered
 
 
@@ -158,8 +93,8 @@ def generate_ctest_discovery(
 
     lines: list[str] = []
     for test in tests:
-        relative_dir = _relative_path(test.relative_dir)
-        relative_dir_text = _relative_path_text(relative_dir)
+        relative_dir = test.relative_dir
+        relative_dir_text = relative_dir.as_posix()
         test_name = f"regression/{relative_dir_text}"
 
         command: list[str] = [

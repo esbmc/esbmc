@@ -204,11 +204,11 @@ def main():
         list_flags(verbosity)
 
     tcs = []
+    regression_root = Path(".").absolute()
     if args:
-        regression_root = Path(".")
         for arg in args:
             tcs.append(
-                TestDescription.parse_test_description(Path(arg), regression_root)
+                TestDescription.parse_test_description(Path(arg).absolute(), regression_root)
             )
     else:
         apply_transform_over_tests(tcs.append)

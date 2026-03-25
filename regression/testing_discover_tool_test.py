@@ -27,7 +27,7 @@ class DiscoveryTest(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def test_recursive_discovery_respects_prefix_filters(self):
+    def test_recursive_discovery_sorted(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
             self._write_test(root_dir, "suite_a/keep_a")
@@ -50,7 +50,7 @@ class DiscoveryTest(unittest.TestCase):
                 [(), ()],
             )
 
-    def test_recursive_discovery_normalizes_backslash_prefixes(self):
+    def test_recursive_discovery_does_not_normalize_backslash_prefixes(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
             self._write_test(root_dir, "suite_a/subsuite/keep_me")
@@ -64,7 +64,7 @@ class DiscoveryTest(unittest.TestCase):
 
             self.assertEqual(
                 [test.relative_dir for test in tests],
-                [Path("suite_a/subsuite/keep_me")],
+                [],
             )
 
     def test_generate_ctest_discovery_emits_ctest_runtime_format(self):
@@ -88,8 +88,8 @@ class DiscoveryTest(unittest.TestCase):
             self.assertIn('add_test("regression/suite_a/subsuite/case_one"', output)
             self.assertNotIn("add_test(NAME", output)
             self.assertIn('"/path/to/testing_tool.py"', output)
-            self.assertIn('"--file=suite_a/subsuite/case_one"', output)
-            self.assertIn(f'"--regression={root_dir}"', output)
+            self.assertIn('"--file=case_one"', output)
+            self.assertIn(f'"--regression={root_dir}/suite_a/subsuite"', output)
             self.assertIn('"--timeout=17"', output)
             self.assertIn('"--memory-limit=64"', output)
             self.assertIn('"TIMEOUT" "17"', output)

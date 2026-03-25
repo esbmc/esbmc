@@ -6,7 +6,7 @@ from unittest.mock import patch
 from testing_tool import RegressionBase, _arg_parsing, get_test_objects
 from testing_model import TestDescription, TestMode
 
-REGRESSION_ROOT = Path(".")
+REGRESSION_ROOT = Path(".").absolute()
 
 
 class CTestGeneration(unittest.TestCase):
@@ -43,7 +43,7 @@ class CTest1(ParseTest):
     """This testcase have an argument list"""
 
     def setUp(self):
-        test_dir = Path("./esbmc-unix/00_bbuf_02")
+        test_dir = Path("./esbmc-unix/00_bbuf_02").absolute()
         self.test_case = TestDescription.parse_test_description(test_dir, REGRESSION_ROOT)
         self.test_parsed = TestDescription.parse_test_description(test_dir, REGRESSION_ROOT)
 
@@ -57,7 +57,7 @@ class CTest1(ParseTest):
     def _argument_list_checks(self, test_obj: TestDescription):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         self.assertEqual(argument_list[0], "__test__")
-        self.assertEqual(argument_list[-1], str(Path("esbmc-unix/00_bbuf_02/main.c")))
+        self.assertEqual(argument_list[-1], str(Path("esbmc-unix/00_bbuf_02/main.c").absolute()))
         self.assertEqual(argument_list[1], "--unwind")
 
 
@@ -65,7 +65,7 @@ class CTest2(ParseTest):
     """This testcase doesn't have an argument list"""
 
     def setUp(self):
-        test_dir = Path("./llvm/arr")
+        test_dir = Path("./llvm/arr").absolute()
         self.test_case = TestDescription.parse_test_description(test_dir, REGRESSION_ROOT)
         self.test_parsed = TestDescription.parse_test_description(test_dir, REGRESSION_ROOT)
 
@@ -85,7 +85,7 @@ class CTest3(ParseTest):
     """Added testcase with testfile different of main file"""
 
     def setUp(self):
-        test_dir = Path("./esbmc-unix/00_account_02")
+        test_dir = Path("./esbmc-unix/00_account_02").absolute()
         self.test_case = TestDescription.parse_test_description(test_dir, REGRESSION_ROOT)
         self.test_parsed = TestDescription.parse_test_description(test_dir, REGRESSION_ROOT)
 
@@ -99,8 +99,8 @@ class CTest3(ParseTest):
     def _argument_list_checks(self, test_obj: TestDescription):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         expected = ['__test__',
-                    str(Path("esbmc-unix/00_account_02/account.c")),
-                    '--no-slice', '--context-bound', '1', '--depth', '150', str(Path("esbmc-unix/00_account_02/test.c"))]
+                    str(Path("esbmc-unix/00_account_02/account.c").absolute()),
+                    '--no-slice', '--context-bound', '1', '--depth', '150', str(Path("esbmc-unix/00_account_02/test.c").absolute())]
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -108,7 +108,7 @@ class CTest4(ParseTest):
     """Added testcase with multiple white spaces in description"""
 
     def setUp(self):
-        test_dir = Path("./nonz3/29_exStbHwAcc")
+        test_dir = Path("./nonz3/29_exStbHwAcc").absolute()
         self.test_case = TestDescription.parse_test_description(test_dir, REGRESSION_ROOT)
         self.test_parsed = TestDescription.parse_test_description(test_dir, REGRESSION_ROOT)
 
@@ -122,7 +122,7 @@ class CTest4(ParseTest):
     def _argument_list_checks(self, test_obj: TestDescription):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         expected = ['__test__',
-                    '--overflow-check', '--unwind', '3', '--32', str(Path("nonz3/29_exStbHwAcc/main.c"))]
+                    '--overflow-check', '--unwind', '3', '--32', str(Path("nonz3/29_exStbHwAcc/main.c").absolute())]
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -134,7 +134,7 @@ class ToolTest1(CTest4):
             "__tool_contains_spaces__ --param 1 __test__")
         expected = ['__tool_contains_spaces__ --param 1 __test__',
                     '--overflow-check',
-                    '--unwind', '3', '--32', str(Path("nonz3/29_exStbHwAcc/main.c")),]
+                    '--unwind', '3', '--32', str(Path("nonz3/29_exStbHwAcc/main.c").absolute()),]
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -146,7 +146,7 @@ class ToolTest2(CTest4):
             '__tool_contains_no_spaces__', '--param', '1', '__test__')
         expected = ['__tool_contains_no_spaces__', '--param', '1', '__test__',
                     '--overflow-check',
-                    '--unwind', '3', '--32', str(Path("nonz3/29_exStbHwAcc/main.c"))]
+                    '--unwind', '3', '--32', str(Path("nonz3/29_exStbHwAcc/main.c").absolute()),]
         self.assertEqual(argument_list, expected, str(argument_list))
 
 

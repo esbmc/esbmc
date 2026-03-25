@@ -109,10 +109,10 @@ class Executor:
 
 def get_test_objects(base_dir: str) -> list[TestDescription]:
     """Generates a test description from a list of files"""
-    assert os.path.exists(base_dir)
-    base_path = Path(base_dir)
-    listdir = os.listdir(base_dir)
-    directories = [x for x in listdir if os.path.isdir(os.path.join(base_dir, x))]
+    assert os.path.exists(base_dir), f"Base directory does not exist: {base_dir}"
+    base_path = Path(base_dir).absolute()
+    listdir = os.listdir(base_path)
+    directories = [x for x in listdir if (base_path / x).is_dir()]
     tests = [
         TestDescription.parse_test_description(base_path / x, base_path.parent)
         for x in directories
@@ -210,7 +210,7 @@ def _add_test(test_case : TestDescription, executor: Executor):
 
 def gen_one_test(base_dir: str, test: str, executor_path: str, modes: list[TestMode]):
     executor = Executor(executor_path)
-    base_path = Path(base_dir)
+    base_path = Path(base_dir).absolute()
     test_case = TestDescription.parse_test_description(base_path / test, base_path)
     if test_case.test_mode not in modes:
         exit(10)
