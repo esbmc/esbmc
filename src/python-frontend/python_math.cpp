@@ -461,10 +461,10 @@ exprt python_math::handle_floor_division(
       lhs.is_constant() && rhs.is_constant() &&
       (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
     {
-      const BigInt lhs_val = binary2integer(
-        lhs.value().as_string(), lhs.type().is_signedbv());
-      const BigInt rhs_val = binary2integer(
-        rhs.value().as_string(), rhs.type().is_signedbv());
+      const BigInt lhs_val =
+        binary2integer(lhs.value().as_string(), lhs.type().is_signedbv());
+      const BigInt rhs_val =
+        binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
 
       if (rhs_val != 0)
       {
@@ -920,8 +920,10 @@ exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
       val.has_value() && std::isfinite(*val))
   {
     const double truncated = std::trunc(*val);
-    const double ll_min = static_cast<double>(std::numeric_limits<long long>::min());
-    const double ll_max = static_cast<double>(std::numeric_limits<long long>::max());
+    const double ll_min =
+      static_cast<double>(std::numeric_limits<long long>::min());
+    const double ll_max =
+      static_cast<double>(std::numeric_limits<long long>::max());
     if (truncated >= ll_min && truncated <= ll_max)
       return from_integer(static_cast<long long>(truncated), int_type());
   }

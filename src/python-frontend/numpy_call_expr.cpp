@@ -882,9 +882,9 @@ exprt numpy_call_expr::get()
             const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
             const int64_t rounded_value =
               static_cast<int64_t>(std::llround(final_value));
-            const uint64_t mask =
-              dtype_size >= 64 ? std::numeric_limits<uint64_t>::max()
-                               : ((uint64_t{1} << dtype_size) - 1);
+            const uint64_t mask = dtype_size >= 64
+                                    ? std::numeric_limits<uint64_t>::max()
+                                    : ((uint64_t{1} << dtype_size) - 1);
             const uint64_t wrapped_bits =
               static_cast<uint64_t>(rounded_value) & mask;
 
