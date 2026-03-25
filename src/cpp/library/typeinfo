@@ -18,10 +18,6 @@
 #ifndef ESBMC_TYPEINFO
 #define ESBMC_TYPEINFO
 
-// Prevent the system <typeinfo> from redefining std::type_info after us.
-// The guard name matches the libc++ system header include guard.
-#define _LIBCPP_TYPEINFO
-
 #include <cstddef>
 
 namespace std

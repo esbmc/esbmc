@@ -1,9 +1,6 @@
 #ifndef ESBMC_EXCEPTION
 #define ESBMC_EXCEPTION
 
-// Prevent system libc++ <exception> from redefining std::exception after us.
-#define _LIBCPP_EXCEPTION
-
 // noexcept is C++11; use a compat macro so this header parses in C++03 mode.
 #if __cplusplus >= 201103L
 #define _ESBMC_NOEXCEPT noexcept
