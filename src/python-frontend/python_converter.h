@@ -242,6 +242,7 @@ private:
   friend class python_dict_handler;
   friend class python_set;
   friend class python_exception_handler;
+  friend class python_converter_test_access;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
