@@ -443,7 +443,7 @@ void execution_statet::end_thread()
   atomic_numbers[active_thread] = 0;
 }
 
-void execution_statet::_after_switch_point()
+void execution_statet::update_after_switch_point()
 {
   execute_guard();
   resetDFS_traversed();
