@@ -1,0 +1,5 @@
+c = complex(1, 2)
+assert(type(c) == complex)
+assert(type(c) != int)
+assert(type(c) != float)
+assert(type(c) != str)
