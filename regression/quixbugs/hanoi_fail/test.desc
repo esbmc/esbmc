@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 1 --no-standard-checks --bitwuzla --smt-during-symex --smt-symex-guard
+^VERIFICATION FAILED$
