@@ -187,7 +187,6 @@ void smt_convt::push_ctx()
   ctx_level++;
 }
 
-
 /** Replace all occurrences of the named symbol @p lhs with @p replacement
  *  throughout @p body (in-place). */
 static void replace_name_in_body(
@@ -225,9 +224,8 @@ static void expand_quantifier_defs_in(
     }
     return;
   }
-  e->Foreach_operand([&defs](expr2tc &sub) {
-    expand_quantifier_defs_in(sub, defs);
-  });
+  e->Foreach_operand(
+    [&defs](expr2tc &sub) { expand_quantifier_defs_in(sub, defs); });
 }
 
 void smt_convt::pop_ctx()
@@ -1974,8 +1972,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     // concrete value in the smt_cache (e.g. a loop counter reused as a
     // quantifier variable); a fresh name is always unassigned.
     const expr2tc bound_symbol = symbol2tc(
-      symbol->type,
-      fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
+      symbol->type, fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
 
     // Inline any nested forall/exists definition so that
     // replace_name_in_body can substitute `bound_symbol` for the outer
@@ -1988,9 +1985,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     replace_name_in_body(symbol, bound_symbol, expanded);
 
     a = mk_quantifier(
-      is_forall2t(expr),
-      {convert_ast(bound_symbol)},
-      convert_ast(expanded));
+      is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(expanded));
     break;
   }
   default:
