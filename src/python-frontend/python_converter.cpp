@@ -6313,21 +6313,10 @@ void python_converter::get_var_assign(
   {
     is_converting_rhs = true;
 
-    // For plain, unannotated reassignments (Assign), do not force RHS typing
-    // through the current LHS type hint. Python semantics are dynamic and
-    // expressions like `x = 2` after `x = 1.0` must retag `x` as integer.
-    const bool plain_assign = ast_node["_type"] == "Assign";
-    exprt *saved_lhs = current_lhs;
-    if (plain_assign)
-      current_lhs = nullptr;
-
     if (lhs_symbol)
       rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->type);
     else
       rhs = get_expr(ast_node["value"]);
-
-    if (plain_assign)
-      current_lhs = saved_lhs;
 
     has_value = true;
     is_converting_rhs = false;

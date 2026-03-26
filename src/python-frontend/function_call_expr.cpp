@@ -45,6 +45,16 @@ constexpr unsigned int SURROGATE_END = 0xDFFF;
 constexpr const char *CLASS_MARKER = "@C@";
 constexpr const char *FUNCTION_MARKER = "@F@";
 
+/// Extract the mandatory "_type" field from a Python AST JSON node.
+/// Throws if the node is not an object or lacks a valid "_type" string.
+std::string node_type_of(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || !node.contains("_type") || !node["_type"].is_string())
+    return "";
+  return node["_type"].get<std::string>();
+}
+
 bool is_cpp_throw_expr(const exprt &e)
 {
   return e.statement() == "cpp-throw";
@@ -228,15 +238,6 @@ int function_call_expr::decode_utf8_codepoint(const std::string &utf8_str) const
 
 void function_call_expr::get_function_type()
 {
-  const auto node_type_of = [](const nlohmann::json &node) -> std::string {
-    if (node.is_object() && node.contains("_type") && node["_type"].is_string())
-      return node["_type"].get<std::string>();
-    return "";
-  };
-
-  if (!call_.contains("func") || !call_["func"].is_object())
-    return;
-
   if (type_handler_.is_constructor_call(call_))
   {
     function_type_ = FunctionType::Constructor;
@@ -2330,19 +2331,7 @@ exprt function_call_expr::build_constant_from_arg() const
 
 std::string function_call_expr::get_object_name() const
 {
-  if (
-    !call_.contains("func") || !call_["func"].is_object() ||
-    !call_["func"].contains("value") || !call_["func"]["value"].is_object())
-  {
-    return "";
-  }
-
   const auto &subelement = call_["func"]["value"];
-  const auto node_type_of = [](const nlohmann::json &node) -> std::string {
-    if (node.is_object() && node.contains("_type") && node["_type"].is_string())
-      return node["_type"].get<std::string>();
-    return "";
-  };
   const std::string node_type = node_type_of(subelement);
 
   std::string obj_name;
@@ -3833,18 +3822,19 @@ function_call_expr::get_dispatch_table()
              func_name + "() expects exactly 2 arguments");
          return {converter_.get_expr(args[0]), converter_.get_expr(args[1])};
        };
-       auto guard_one_real_arg =
-         [&](const exprt &arg_expr) -> std::optional<exprt> {
+       auto validate_real_arg =
+         [&](const exprt &arg_expr) -> std::optional<exprt>
+       {
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (has_complex_arg(arg_expr))
            return raise_math_real_type_error();
          return std::nullopt;
        };
-       auto guard_two_real_args =
+       auto validate_real_args =
          [&](
-           const exprt &lhs_expr,
-           const exprt &rhs_expr) -> std::optional<exprt> {
+           const exprt &lhs_expr, const exprt &rhs_expr) -> std::optional<exprt>
+       {
          if (is_cpp_throw_expr(lhs_expr))
            return lhs_expr;
          if (is_cpp_throw_expr(rhs_expr))
@@ -3859,9 +3849,10 @@ function_call_expr::get_dispatch_table()
        if (args.size() == 1)
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error = validate_real_arg(arg_expr);
+           type_error.has_value())
+           return *type_error;
 
          exprt dispatched =
            converter_.get_math_handler().handle(func_name, arg_expr, call_);
@@ -3872,10 +3863,11 @@ function_call_expr::get_dispatch_table()
        if (args.size() == 2)
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error =
+             validate_real_args(lhs_expr, rhs_expr);
+           type_error.has_value())
+           return *type_error;
 
          exprt dispatched = converter_.get_math_handler().handle(
            func_name, lhs_expr, rhs_expr, call_);
@@ -3888,19 +3880,21 @@ function_call_expr::get_dispatch_table()
        if (converter_.get_math_handler().is_unary_dispatch_function(func_name))
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error = validate_real_arg(arg_expr);
+           type_error.has_value())
+           return *type_error;
          return converter_.get_math_handler().handle(
            func_name, arg_expr, call_);
        }
        if (converter_.get_math_handler().is_binary_dispatch_function(func_name))
        {
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error =
+             validate_real_args(lhs_expr, rhs_expr);
+           type_error.has_value())
+           return *type_error;
          return converter_.get_math_handler().handle(
            func_name, lhs_expr, rhs_expr, call_);
        }
@@ -3908,33 +3902,37 @@ function_call_expr::get_dispatch_table()
        if (func_name == "sin")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error = validate_real_arg(arg_expr);
+           type_error.has_value())
+           return *type_error;
          return converter_.get_math_handler().handle_sin(arg_expr, call_);
        }
        else if (func_name == "cos")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error = validate_real_arg(arg_expr);
+           type_error.has_value())
+           return *type_error;
          return converter_.get_math_handler().handle_cos(arg_expr, call_);
        }
        else if (func_name == "exp")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error = validate_real_arg(arg_expr);
+           type_error.has_value())
+           return *type_error;
          return converter_.get_math_handler().handle_exp(arg_expr, call_);
        }
        else if (func_name == "sqrt")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error = validate_real_arg(arg_expr);
+           type_error.has_value())
+           return *type_error;
          // Domain check for sqrt: operand must be >= 0
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3978,9 +3976,10 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "log")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error = validate_real_arg(arg_expr);
+           type_error.has_value())
+           return *type_error;
          // Domain check for log: operand must be > 0
          exprt fp_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -4009,9 +4008,10 @@ function_call_expr::get_dispatch_table()
        else if (func_name == "acos")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error = validate_real_arg(arg_expr);
+           type_error.has_value())
+           return *type_error;
          // Domain check for acos: operand must be in [-1.0, 1.0]
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -4059,9 +4059,10 @@ function_call_expr::get_dispatch_table()
            func_name) != 0)
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error = validate_real_arg(arg_expr);
+           type_error.has_value())
+           return *type_error;
          return handle_general_function_call();
        }
        else if (
@@ -4097,10 +4098,11 @@ function_call_expr::get_dispatch_table()
          if (call_has_complex())
            return raise_math_real_type_error();
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
+         if (
+           std::optional<exprt> type_error =
+             validate_real_args(lhs_expr, rhs_expr);
+           type_error.has_value())
+           return *type_error;
          // Native handler for tuple arguments; lists use the model
          if (lhs_expr.type().is_struct() && rhs_expr.type().is_struct())
          {
@@ -5239,7 +5241,7 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
 
   // Check cache first.
   if (
-    const auto *cached =
+    auto cached =
       converter_.get_function_call_cache().get_possible_class_types(cache_key))
     return *cached;
 

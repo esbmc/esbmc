@@ -13,13 +13,13 @@ class function_call_cache
 public:
   // ---- possible class types cache ----
 
-  const std::vector<std::string> *
+  std::optional<std::vector<std::string>>
   get_possible_class_types(const std::string &key) const
   {
     auto it = possible_class_types_cache_.find(key);
     if (it == possible_class_types_cache_.end())
-      return nullptr;
-    return &it->second;
+      return std::nullopt;
+    return it->second;
   }
 
   void set_possible_class_types(
