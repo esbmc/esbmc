@@ -11,14 +11,14 @@ TEST_CASE("function_call_cache API correctness", "[python-frontend][cache]")
     std::vector<std::string> types = {"Dog", "Cat"};
     cache.set_possible_class_types("sym::obj", types);
 
-    const auto *result = cache.get_possible_class_types("sym::obj");
-    REQUIRE(result != nullptr);
+    auto result = cache.get_possible_class_types("sym::obj");
+    REQUIRE(result.has_value());
     REQUIRE(*result == types);
   }
 
   SECTION("miss on unknown key returns nullptr")
   {
-    REQUIRE(cache.get_possible_class_types("no_such_key") == nullptr);
+    REQUIRE_FALSE(cache.get_possible_class_types("no_such_key").has_value());
   }
 
   SECTION("store and retrieve method exists")
@@ -49,7 +49,7 @@ TEST_CASE("function_call_cache API correctness", "[python-frontend][cache]")
 
     cache.clear();
 
-    REQUIRE(cache.get_possible_class_types("k1") == nullptr);
+    REQUIRE_FALSE(cache.get_possible_class_types("k1").has_value());
     REQUIRE_FALSE(cache.get_method_exists("A::foo").has_value());
     REQUIRE_FALSE(
       cache.get_math_dispatch_classification("math::sin").has_value());
@@ -60,8 +60,8 @@ TEST_CASE("function_call_cache API correctness", "[python-frontend][cache]")
     cache.set_possible_class_types("key", {"Old"});
     cache.set_possible_class_types("key", {"New"});
 
-    const auto *result = cache.get_possible_class_types("key");
-    REQUIRE(result != nullptr);
+    auto result = cache.get_possible_class_types("key");
+    REQUIRE(result.has_value());
     REQUIRE(*result == std::vector<std::string>{"New"});
 
     cache.set_method_exists("C::m", false);
