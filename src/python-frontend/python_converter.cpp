@@ -685,6 +685,15 @@ exprt python_converter::compare_constants_internal(
       lhs.type().subtype() == char_type() &&
       rhs.type().subtype() == char_type())
     {
+      // Type-identifier constants (e.g. from `x = int`) have no operands and
+      // store the name in get_value(). String literals have individual char
+      // operands and an empty get_value(). These represent different Python
+      // objects (int != "int"), so comparing across formats is always unequal.
+      bool lhs_is_type_id = lhs.operands().empty();
+      bool rhs_is_type_id = rhs.operands().empty();
+      if (lhs_is_type_id != rhs_is_type_id)
+        return gen_boolean(op == "NotEq");
+
       // Extract string values
       std::string lhs_str =
         string_handler_.extract_string_from_array_operands(lhs);

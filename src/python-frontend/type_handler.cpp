@@ -106,6 +106,26 @@ std::string type_handler::type_to_string(const typet &t) const
   return "";
 }
 
+std::string type_handler::get_python_type_name(const typet &t) const
+{
+  if (is_complex_type(t))
+    return "complex";
+  if (t.is_bool())
+    return "bool";
+  if (t.is_floatbv())
+    return "float";
+  if (t.is_signedbv() || t.is_unsignedbv())
+    return "int";
+  if ((t.is_array() || t.is_pointer()) && t.subtype() == char_type())
+    return "str";
+  if (t.id() == "symbol")
+  {
+    std::string tag = t.get_string("identifier");
+    return (tag.rfind("tag-", 0) == 0) ? tag.substr(4) : tag;
+  }
+  return type_to_string(t);
+}
+
 std::string type_handler::get_var_type(const std::string &var_name) const
 {
   nlohmann::json ref = json_utils::find_var_decl(

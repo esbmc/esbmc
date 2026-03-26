@@ -519,6 +519,15 @@ bool string_handler::is_zero_length_array(const exprt &expr)
 std::string string_handler::extract_string_from_array_operands(
   const exprt &array_expr) const
 {
+  // constant_exprt char arrays with no operands store their string content
+  // in the value attribute (e.g. type identifiers like `int`, `str`).
+  // String literals built with build_string_literal() are also constant_exprt
+  // but store chars as individual operands with an empty value attribute.
+  if (
+    array_expr.is_constant() && array_expr.operands().empty() &&
+    array_expr.type().is_array() && array_expr.type().subtype() == char_type())
+    return to_constant_expr(array_expr).get_value().as_string();
+
   std::string result;
   for (const auto &op : array_expr.operands())
   {

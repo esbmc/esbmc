@@ -652,6 +652,21 @@ exprt function_call_expr::handle_hasattr() const
   return hasattr;
 }
 
+exprt function_call_expr::handle_type_call() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error("type() requires exactly 1 argument");
+
+  exprt arg_expr = converter_.get_expr(args[0]);
+  std::string type_name = type_handler_.get_python_type_name(arg_expr.type());
+  if (type_name.empty())
+    type_name = arg_expr.type().id_string();
+
+  typet str_type = type_handler_.build_array(char_type(), type_name.size() + 1);
+  return constant_exprt(type_name, type_name, str_type);
+}
+
 exprt function_call_expr::handle_divmod() const
 {
   const auto &args = call_["args"];
@@ -4226,6 +4241,11 @@ function_call_expr::get_dispatch_table()
        return handle_round(arg);
      },
      "round() builtin"},
+
+    // type() built-in
+    {[this]() { return function_id_.get_function() == "type"; },
+     [this]() { return handle_type_call(); },
+     "type()"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
