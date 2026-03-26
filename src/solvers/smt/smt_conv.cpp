@@ -187,25 +187,45 @@ void smt_convt::push_ctx()
   ctx_level++;
 }
 
-/* Iterate over "body" expression looking for symbols with the same name
-   as lhs. Then, replaces it. */
-void replace_name_in_body(
+/** Replace all occurrences of the named symbol @p lhs with @p replacement
+ *  throughout @p body (in-place). */
+static void replace_name_in_body(
   const expr2tc &lhs,
   const expr2tc &replacement,
   expr2tc &body)
 {
-  // TODO: lhs and replacement should be a list of pairs to deal with multiple symbols
   assert(is_symbol2t(lhs));
   if (is_symbol2t(body))
   {
     if (to_symbol2t(body).thename == to_symbol2t(lhs).thename)
       body = replacement;
-
     return;
   }
-  body->Foreach_operand([lhs, replacement](expr2tc &e) {
+  body->Foreach_operand([&lhs, &replacement](expr2tc &e) {
     replace_name_in_body(lhs, replacement, e);
   });
+}
+
+/** Recursively expand any symbol in @p e that is a key in @p defs, replacing
+ *  it with (a clone of) its associated forall/exists expression.  This
+ *  inlines nested quantifier bodies so that replace_name_in_body can
+ *  substitute the outer bound variable into their predicates. */
+static void expand_quantifier_defs_in(
+  expr2tc &e,
+  const std::unordered_map<irep_idt, expr2tc, irep_id_hash> &defs)
+{
+  if (is_symbol2t(e))
+  {
+    auto it = defs.find(to_symbol2t(e).thename);
+    if (it != defs.end())
+    {
+      e = it->second->clone();
+      expand_quantifier_defs_in(e, defs);
+    }
+    return;
+  }
+  e->Foreach_operand(
+    [&defs](expr2tc &sub) { expand_quantifier_defs_in(sub, defs); });
 }
 
 void smt_convt::pop_ctx()
@@ -301,6 +321,14 @@ smt_astt smt_convt::convert_concat_int_mode(
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
+
+  // Record forall/exists assignments so nested quantifier handlers can
+  // inline the inner body before substituting the outer bound variable.
+  if (
+    is_symbol2t(eq.side_1) &&
+    (is_forall2t(eq.side_2) || is_exists2t(eq.side_2)))
+    forall_defs_[to_symbol2t(eq.side_1).thename] = eq.side_2;
+
   smt_astt side1 = convert_ast(eq.side_1); // LHS
   smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
@@ -1905,7 +1933,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::forall_id:
   case expr2t::exists_id:
   {
-    // TODO: We should detect (and forbid) recursive calls to any quantifier (eg., forall i . forall j. i < j).
     // TODO: technically the forall could be a list of symbols
     // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
     expr2tc symbol;
@@ -1940,25 +1967,25 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       }
     }
 
-    /* A bit of spaghetti here: the RHS might have different names due to SSA magic.
-     * int i = 0;
-     * i = 1;
-     * forall(&i . i + 1 > i)
-     *
-     * We are mixing references and values so "i" has different meanings:
-     * i0 = 0
-     * i1 = 1
-     * forall(address-of(i), i1 + 1 > i1)
-     *
-     * Even worse though, we need to create a new function (smt) for all bounded symbols
-     * Some solvers have direct support (Z3) but we may do ourselfes
-     */
-
+    // Create a fresh symbol to use as the bound variable.  Using the
+    // original SSA symbol would be wrong whenever it already has a
+    // concrete value in the smt_cache (e.g. a loop counter reused as a
+    // quantifier variable); a fresh name is always unassigned.
     const expr2tc bound_symbol = symbol2tc(
       symbol->type, fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
-    replace_name_in_body(symbol, bound_symbol, predicate);
+
+    // Inline any nested forall/exists definition so that
+    // replace_name_in_body can substitute `bound_symbol` for the outer
+    // variable throughout the entire (possibly nested) predicate.  Without
+    // this step the original SSA symbol would remain free inside the
+    // cached inner-forall formula and the outer quantifier would be vacuous.
+    expr2tc expanded = predicate->clone();
+    expand_quantifier_defs_in(expanded, forall_defs_);
+
+    replace_name_in_body(symbol, bound_symbol, expanded);
+
     a = mk_quantifier(
-      is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(predicate));
+      is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(expanded));
     break;
   }
   default:

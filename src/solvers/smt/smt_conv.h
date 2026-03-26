@@ -908,13 +908,19 @@ public:
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;
 
-  size_t quantifier_counter =
-    0; /// Value used to track how many quantifier symbols were created
-
   bool ptr_foo_inited;
 
   smt_astt null_ptr_ast;
   smt_astt invalid_ptr_ast;
+
+  /** Counter for generating unique bound-variable names in quantifiers. */
+  size_t quantifier_counter = 0;
+
+  /** Map from SSA symbol name to its forall/exists irep2 expression.
+   *  Populated in convert_assign when a symbol is assigned a quantifier
+   *  expression; used in convert_ast to inline nested quantifier bodies
+   *  before substituting the outer bound variable. */
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> forall_defs_;
 
   /** Mapping of name prefixes to use counts: when we want a fresh new name
    *  with a particular prefix, this map stores how many times that prefix has
