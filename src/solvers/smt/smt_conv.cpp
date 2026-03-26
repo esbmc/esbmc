@@ -372,6 +372,16 @@ static bool is_round_to_minus_inf(const expr2tc &rounding_mode)
          BigInt(ieee_floatt::ROUND_TO_MINUS_INF);
 }
 
+static bool is_round_to_zero(const expr2tc &rounding_mode)
+{
+  if (is_nil_expr(rounding_mode))
+    return false;
+  if (!is_constant_int2t(rounding_mode))
+    return false;
+  return to_constant_int2t(rounding_mode).value ==
+         BigInt(ieee_floatt::ROUND_TO_ZERO);
+}
+
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
   const floatbv_type2t &fbv_type,
@@ -593,6 +603,87 @@ smt_astt smt_convt::apply_ieee754_semantics(
       // Pin ra_hi = r  (exact upper bound for round-down)
       assert_ast(mk_le(ra_hi, real_result)); // ra_hi <= r
       assert_ast(mk_le(real_result, ra_hi)); // r <= ra_hi  =>  ra_hi == r
+
+      // Containment: ra_lo <= result <= ra_hi
+      assert_ast(mk_le(ra_lo, real_result));
+      assert_ast(mk_le(real_result, ra_hi));
+      assert_ast(mk_le(ra_lo, ra_hi));
+
+      return real_result;
+    }
+    else if (is_round_to_zero(rounding_mode))
+    {
+      // Asymmetric tight enclosure for ROUND_TO_ZERO (truncation toward zero).
+      //
+      // RTZ is sign-dependent: it rounds down for r >= 0 and rounds up for r < 0.
+      //   r >= 0:  fl_RTZ(r) in [r - B_dir(r),  r]   (same shape as RDN)
+      //   r <  0:  fl_RTZ(r) in [r,  r + B_dir(r)]   (same shape as RUP)
+      //
+      // Unified via ITE on sign:
+      //   ra_lo = ite(r >= 0,  r - B_dir(r),  r)
+      //   ra_hi = ite(r >= 0,  r,              r + B_dir(r))
+      //
+      // where B_dir(r) = eps_rel_dir * |r| + eps_abs
+      //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon
+
+      unsigned int fraction_bits = fbv_type.fraction;
+      unsigned int exponent_bits = fbv_type.exponent;
+
+      auto double_spec = ieee_float_spect::double_precision();
+      auto single_spec = ieee_float_spect::single_precision();
+
+      smt_sortt rs = mk_real_sort();
+      smt_astt eps_rel_dir, eps_abs;
+
+      if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+      {
+        eps_rel_dir = get_double_eps_up(); // 2^-52, same value as RUP/RDN
+        eps_abs = get_double_min_subnormal();
+      }
+      else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
+      {
+        eps_rel_dir = get_single_eps_up(); // 2^-23, same value as RUP/RDN
+        eps_abs = get_single_min_subnormal();
+      }
+      else
+      {
+        // Unsupported format: fall back to unconstrained weak enclosure.
+        smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
+        smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
+        assert_ast(mk_le(ra_lo, real_result));
+        assert_ast(mk_le(real_result, ra_hi));
+        assert_ast(mk_le(ra_lo, ra_hi));
+        return real_result;
+      }
+
+      smt_astt zero = mk_smt_real("0.0");
+      smt_astt abs_r = mk_ite(
+        mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+
+      // B_dir(r) = eps_rel_dir * |r| + eps_abs
+      smt_astt b_dir = mk_add(mk_mul(eps_rel_dir, abs_r), eps_abs);
+
+      // Sign-dependent enclosure bounds via ITE:
+      //   r >= 0: lower is computed, upper is exact (truncate-down shape)
+      //   r <  0: lower is exact,    upper is computed (truncate-up shape)
+      smt_astt r_nonneg = mk_le(zero, real_result); // r >= 0
+      smt_astt ra_lo_expr =
+        mk_ite(r_nonneg, mk_sub(real_result, b_dir), real_result);
+      smt_astt ra_hi_expr =
+        mk_ite(r_nonneg, real_result, mk_add(real_result, b_dir));
+
+      // Introduce named enclosure variables. Use bidirectional inequalities to
+      // survive Z3's solve-eqs tactic (same technique as the other tight paths).
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_tz::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_tz::", nullptr);
+
+      // Pin ra_lo = ite(r >= 0, r - B_dir(r), r)
+      assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= ra_lo_expr
+      assert_ast(mk_le(ra_lo_expr, ra_lo)); // ra_lo_expr <= ra_lo
+
+      // Pin ra_hi = ite(r >= 0, r, r + B_dir(r))
+      assert_ast(mk_le(ra_hi, ra_hi_expr)); // ra_hi <= ra_hi_expr
+      assert_ast(mk_le(ra_hi_expr, ra_hi)); // ra_hi_expr <= ra_hi
 
       // Containment: ra_lo <= result <= ra_hi
       assert_ast(mk_le(ra_lo, real_result));
