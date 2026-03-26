@@ -114,18 +114,16 @@ bool python_math::is_unary_dispatch_function(std::string_view func_name) const
   return func_name == "sin" || func_name == "cos" || func_name == "exp" ||
          func_name == "atan" || func_name == "log2" || func_name == "tan" ||
          func_name == "asin" || func_name == "sinh" || func_name == "cosh" ||
-         func_name == "tanh" || func_name == "log10" ||
-         func_name == "expm1" || func_name == "log1p" ||
-         func_name == "exp2" || func_name == "asinh" ||
-         func_name == "acosh" || func_name == "atanh" ||
-         func_name == "fabs" || func_name == "trunc";
+         func_name == "tanh" || func_name == "log10" || func_name == "expm1" ||
+         func_name == "log1p" || func_name == "exp2" || func_name == "asinh" ||
+         func_name == "acosh" || func_name == "atanh" || func_name == "fabs" ||
+         func_name == "trunc";
 }
 
 bool python_math::is_binary_dispatch_function(std::string_view func_name) const
 {
-  return func_name == "atan2" || func_name == "pow" ||
-         func_name == "fmod" || func_name == "copysign" ||
-         func_name == "hypot";
+  return func_name == "atan2" || func_name == "pow" || func_name == "fmod" ||
+         func_name == "copysign" || func_name == "hypot";
 }
 
 exprt python_math::handle(

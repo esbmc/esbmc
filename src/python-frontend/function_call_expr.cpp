@@ -3891,7 +3891,8 @@ function_call_expr::get_dispatch_table()
          if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
              guarded.has_value())
            return *guarded;
-         return converter_.get_math_handler().handle(func_name, arg_expr, call_);
+         return converter_.get_math_handler().handle(
+           func_name, arg_expr, call_);
        }
        if (converter_.get_math_handler().is_binary_dispatch_function(func_name))
        {
