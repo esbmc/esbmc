@@ -6,6 +6,5 @@ def process_number(x: int) -> int:
     # Missing return for positive numbers
     x * 2
 
-
 result = process_number(5)
 assert result == 10

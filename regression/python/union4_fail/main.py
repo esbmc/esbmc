@@ -4,5 +4,4 @@ def returns_union(b: bool) -> int | bool:
     else:
         return False
 
-
 assert returns_union(True) == 0

@@ -4,3 +4,4 @@
 l: list[str] = ["foo", "bar", "baz"]
 s = " ".join(l)
 assert s == "foo bar baz"
+

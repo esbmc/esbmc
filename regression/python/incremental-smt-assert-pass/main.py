@@ -16,5 +16,4 @@ def main() -> None:
         w = x * x + y * y
         assert w >= 0
 
-
 main()

@@ -3,9 +3,7 @@ def is_valid(s: str) -> bool:
         return False
     return True
 
-
 class Foo:
-
     def __init__(self) -> None:
         pass
 

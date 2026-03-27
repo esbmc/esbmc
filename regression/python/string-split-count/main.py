@@ -12,5 +12,4 @@ def main() -> None:
     except IndexError:
         pass
 
-
 main()

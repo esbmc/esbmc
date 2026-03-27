@@ -4,5 +4,4 @@ def test_no_arguments():
     assert x == 0.0
     assert isinstance(x, float)
 
-
 test_no_arguments()

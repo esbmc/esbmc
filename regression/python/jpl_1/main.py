@@ -1,6 +1,4 @@
 import random
-
-
 def list_comp(actions, condition):
     result = []
     index = 0
@@ -13,7 +11,6 @@ def list_comp(actions, condition):
 
 
 class Action:
-
     def pre(self) -> bool:
         raise NotImplementedError
 
@@ -22,7 +19,6 @@ class Action:
 
 
 class Down(Action):
-
     def pre(self) -> bool:
         return counter > 0
 
@@ -34,7 +30,6 @@ class Down(Action):
 
 
 class Up(Action):
-
     def pre(self) -> bool:
         return counter < 1
 
@@ -63,3 +58,4 @@ def main() -> None:
 counter: int = 1
 
 main()
+

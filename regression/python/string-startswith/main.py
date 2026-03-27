@@ -15,3 +15,4 @@ assert not empty.startswith("a")
 
 prefix = "f"
 assert s.startswith(prefix)
+

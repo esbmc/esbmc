@@ -1,5 +1,4 @@
 class Agents:
-
     def use_inline_agent(self, outputSchema: dict) -> dict:
         response = {}
         if "properties" in outputSchema:
@@ -8,16 +7,15 @@ class Agents:
                     response[prop] = True
         return response
 
-
 agents = Agents()
 
-result = agents.use_inline_agent(outputSchema={
-    "type": "object",
-    "properties": {
-        "has_price_text": {
-            "type": "boolean"
+result = agents.use_inline_agent(
+    outputSchema={
+        "type": "object",
+        "properties": {
+            "has_price_text": {"type": "boolean"}
         }
     }
-})
+)
 
 assert result["has_price_text"] == True

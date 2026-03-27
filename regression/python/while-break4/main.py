@@ -8,3 +8,4 @@ while x < 4:
     y = y + 1
 
 assert y == 2  # x=1 and x=3
+

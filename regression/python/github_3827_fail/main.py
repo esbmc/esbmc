@@ -1,11 +1,8 @@
 from typing import List
 
-
 class JIRA:
-
     def __init__(self):
         self.issues: List[str] = []
-
 
 jira = JIRA()
 jira.issues.append("bug1")

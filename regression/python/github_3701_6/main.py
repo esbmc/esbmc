@@ -2,7 +2,6 @@ def gen():
     yield 1
     yield 2
 
-
 g = gen()
 
 x1 = next(g)

@@ -7,5 +7,4 @@ def test_range_two_args():
     assert l[3] == 6
     assert l[4] == 7
 
-
 test_range_two_args()

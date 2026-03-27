@@ -8,5 +8,5 @@ def test_reverse_preserves_values():
     assert l[1] == y
     assert l[2] == x
 
-
 test_reverse_preserves_values()
+

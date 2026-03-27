@@ -3,5 +3,4 @@ def main() -> None:
     parts = s.split(None, 2)
     assert parts[2] == "d"
 
-
 main()

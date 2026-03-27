@@ -13,6 +13,4 @@ def main() -> None:
     assert "  onlyleading".rstrip() == "  onlyleading"
     assert "mix\t \nend".rstrip() == "mix\t \nend"
     assert "   ".rstrip() == ""
-
-
 main()

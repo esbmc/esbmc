@@ -4,5 +4,4 @@ def test_nested(x: int, y: int):
             assert x + y < 10
     return x + y
 
-
 test_nested(6, 5)

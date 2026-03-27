@@ -96,6 +96,7 @@ except TypeError:
     raised = True
 assert raised
 
+
 # Multiple kwargs unpacking with key overwrite; the final merged "b" is complex.
 kw_a = {"a": 1.0}
 kw_b = {"b": 2.0}
@@ -107,6 +108,7 @@ except TypeError:
     raised = True
 assert raised
 
+
 # Mixed positional and **kwargs path should still reject complex.
 kw_with_complex = {"b": complex(1.0, 2.0)}
 raised = False
@@ -116,10 +118,12 @@ except TypeError:
     raised = True
 assert raised
 
+
 # prod/sumprod compatibility: Python accepts complex for these.
 math.prod([1.0, complex(2.0, 3.0)])  # type: ignore
 
 math.sumprod([1.0], [complex(2.0, 3.0)])  # type: ignore
+
 
 # If argument conversion throws first, propagate that exception instead of
 # replacing it with a complex-guard TypeError.
@@ -137,6 +141,7 @@ except ValueError:
     raised_value_error = True
 assert raised_value_error
 
+
 # comb path (separate dispatch) should reject complex from aliased values.
 comb_n = complex(5.0, 0.0)  # type: ignore
 comb_alias = comb_n
@@ -147,6 +152,7 @@ except TypeError:
     raised = True
 assert raised
 
+
 # Category parity: integer-like vs real-like guards must both raise TypeError.
 raised = False
 try:
@@ -154,6 +160,7 @@ try:
 except TypeError:
     raised = True
 assert raised
+
 
 # Direct math.isnan/isinf must reject complex too.
 raised = False
@@ -169,6 +176,7 @@ try:
 except TypeError:
     raised = True
 assert raised
+
 
 # Extreme nested iterable path: complex hidden deeply must still be rejected.
 deep_vals = [1.0, [2.0, [3.0, [4.0, [5.0, [complex(1.0, 0.0)]]]]]]

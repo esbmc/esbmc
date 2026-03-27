@@ -4,16 +4,14 @@ rand2 = [-1000, 1000]
 
 assert n == 10
 
-
 def rand_range():
-    i = 0
-    while i < n:
-        k = rand1[0]
-        assert 0 <= k < n  # k always valid index
-        yield k
-        i = i + 1
-    assert i == n  # loop runs exactly n times
-
+  i = 0
+  while i < n:
+    k = rand1[0]
+    assert 0 <= k < n          # k always valid index
+    yield k
+    i = i + 1
+  assert i == n                # loop runs exactly n times
 
 l1 = [rand2[0]] * n
 
@@ -26,11 +24,11 @@ g = rand_range()
 l2 = []
 
 for x in g:
-    assert 0 <= x < n  # safe indexing
-    y = l1[x]
-    assert y == l1[0]  # all elements identical
-    assert -1000 <= y <= 1000  # value stays in range
-    l2.append(y)
+  assert 0 <= x < n            # safe indexing
+  y = l1[x]
+  assert y == l1[0]            # all elements identical
+  assert -1000 <= y <= 1000    # value stays in range
+  l2.append(y)
 
 # Postconditions
 assert len(l2) == n

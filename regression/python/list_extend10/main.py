@@ -3,5 +3,4 @@ def test_extend_symbolic_string(s: str):
     a.extend(s)
     assert len(a) >= 1
 
-
 test_extend_symbolic_string("ab")

@@ -1,6 +1,5 @@
 import math
 
-
 def minimumCoins_v6(prices: list[int]) -> int:
     n = len(prices)
     dp = [math.inf] * (n + 1)

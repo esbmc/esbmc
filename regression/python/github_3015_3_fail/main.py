@@ -2,7 +2,6 @@
 # Issue #3015: Passing unexpected keyword argument
 def foo(y: int, x: str) -> None:
     pass
-
-
 z: int = 42
-foo(z)
+foo(z )
+

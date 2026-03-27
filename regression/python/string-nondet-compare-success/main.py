@@ -1,3 +1,4 @@
+
 s = nondet_string(4)
 assume(s != "test")
 assert s != "test"

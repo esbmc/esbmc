@@ -5,5 +5,4 @@ def main() -> None:
 
     assert s.index("a") == 1
 
-
 main()

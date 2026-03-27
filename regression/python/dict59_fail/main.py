@@ -7,5 +7,4 @@ def test_dict_iteration_items():
 
     assert sum_vals == 2.9
 
-
 test_dict_iteration_items()

@@ -24,3 +24,4 @@ assert d6[2] == 2.71
 d: dict[int, float] = {1: 3.14}
 x = d[1]
 assert isinstance(x, float)
+

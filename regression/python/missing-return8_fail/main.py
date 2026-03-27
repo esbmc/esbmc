@@ -5,5 +5,4 @@ def f(x: int) -> int:
         return -1
     # No return for x == 0
 
-
 f(0)

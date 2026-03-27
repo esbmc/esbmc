@@ -1,7 +1,6 @@
 def baz() -> bool:
     return True
 
-
 def bar() -> int:
     if baz():
         return 42
@@ -11,7 +10,6 @@ def bar() -> int:
 
 def foo(i: int) -> None:
     pass
-
 
 i = bar()
 assert i == 0

@@ -1,8 +1,7 @@
 class MyClass:
-    x: int
+  x:int
 
-    def foo():
-        pass
+  def foo():
+    pass
 
-
-y: int
+y:int

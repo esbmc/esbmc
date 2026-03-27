@@ -4,5 +4,4 @@ def test_nested_dict_access():
 
     assert d is e
 
-
 test_nested_dict_access()

@@ -1,7 +1,6 @@
 def foo(a: bytes | str | None = None) -> None:
     if a is None:
-        assert False
-
+        assert False 
 
 a = "a"
 foo(a=a)

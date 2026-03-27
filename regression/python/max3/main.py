@@ -6,3 +6,4 @@ assert min([2.5]) == 2.5
 
 assert max(['x']) == 'x'
 assert min(['x']) == 'x'
+

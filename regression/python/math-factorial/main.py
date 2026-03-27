@@ -1,6 +1,5 @@
 import math
 
-
 def test_factorial_and_combinatorics():
     assert math.factorial(0) == 1
     assert math.factorial(5) == 120
@@ -13,6 +12,5 @@ def test_factorial_and_combinatorics():
         assert False, "Expected ValueError"
     except ValueError:
         pass
-
 
 test_factorial_and_combinatorics()

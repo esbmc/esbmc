@@ -2,12 +2,10 @@
 # ESBMC reports false positive "invalid pointer dereference" when converting
 # a non-recursive generator to a list via list(gen()).
 
-
 def gen():
     yield 1
     yield 2
     yield 3
-
 
 result = list(gen())
 assert result == [1, 2, 3]

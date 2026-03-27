@@ -3,5 +3,4 @@ def foo(l: list[str]) -> None:
     for s in l:
         assert s in ll
 
-
 foo(["foo", "bar"])

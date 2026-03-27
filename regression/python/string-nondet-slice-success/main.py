@@ -1,3 +1,4 @@
+
 s = nondet_string(6)
 assume(s == "Python")
 sub1 = s[0:3]

@@ -3,5 +3,4 @@ def test_concat():
     result = s + "suffix"
     assert len(result) >= 6  # At least the suffix length
 
-
 test_concat()

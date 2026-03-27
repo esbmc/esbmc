@@ -3,5 +3,4 @@ def test_branch(x: int):
         assert x < 20
     return x
 
-
 test_branch(25)

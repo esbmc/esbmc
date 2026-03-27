@@ -1,3 +1,4 @@
+
 def main() -> None:
     text = nondet_str()
     # Assuming text is "aaa"
@@ -7,6 +8,5 @@ def main() -> None:
     # Test replace with count on nondet_string
     result = text.replace("a", "b", 2)
     assert result == "bba"
-
 
 main()

@@ -7,5 +7,4 @@ def test_dict_iteration_over_keys():
 
     assert keys == ["a", "b"]
 
-
 test_dict_iteration_over_keys()

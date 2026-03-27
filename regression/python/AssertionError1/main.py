@@ -7,3 +7,4 @@ except AssertionError as e:
     print("Caught an AssertionError:", e)
 
 print("Program continues running after handling the error.")
+

@@ -5,3 +5,4 @@ import mod2
 c = mod2.Derived("test")
 # Verify constructor call succeeds (type inference works correctly)
 assert True
+

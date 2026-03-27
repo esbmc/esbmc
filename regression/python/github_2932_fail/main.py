@@ -3,5 +3,4 @@ def foo(s: str) -> None:
     for ss in l:
         assert ss in s
 
-
 foo("foo")

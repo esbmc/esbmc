@@ -8,5 +8,4 @@ def test_dict_delete_key():
     e = {"b": 2}
     assert d is e
 
-
 test_dict_delete_key()

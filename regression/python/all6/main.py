@@ -5,7 +5,6 @@ def sieve(max: int) -> list[int]:
             primes.append(n)
     return primes
 
-
 assert sieve(1) == []
 assert sieve(2) == [2]
 assert sieve(3) == [2, 3]
