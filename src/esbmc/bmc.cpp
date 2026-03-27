@@ -257,6 +257,7 @@ smt_convt::resultt bmct::run_decision_procedure(
       {
         // Print to stdout
         fprintf(stdout, "%s", smt_formula.c_str());
+        fflush(stdout);
       }
       else
       {

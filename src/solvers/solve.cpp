@@ -70,6 +70,7 @@ static std::string pick_default_solver()
     log_status("No solver specified; defaulting to {}", name);
     return name;
   }
+
   log_error(
     "No solver backends built into ESBMC; please either build "
     "some in, or explicitly configure the smtlib backend");

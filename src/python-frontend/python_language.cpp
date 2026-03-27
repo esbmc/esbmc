@@ -16,7 +16,8 @@
 // Use boost::process v1 on macOS or when Boost >= 1.87
 // We use Boost.Process to run the Python interpreter in a separate process.
 #if defined(__APPLE__) || (BOOST_VERSION >= 108700)
-#  include <boost/process/v1.hpp>
+#  include <boost/process/v1/child.hpp>
+#  include <boost/process/v1/search_path.hpp>
 namespace bp = boost::process::v1;
 #else
 #  include <boost/process.hpp>
