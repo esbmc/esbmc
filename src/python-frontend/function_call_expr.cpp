@@ -51,7 +51,9 @@ std::string node_type_of(const nlohmann::json &node)
 {
   if (
     !node.is_object() || !node.contains("_type") || !node["_type"].is_string())
-    return "";
+  {
+    throw std::runtime_error("Missing or invalid _type field in AST node");
+  }
   return node["_type"].get<std::string>();
 }
 
