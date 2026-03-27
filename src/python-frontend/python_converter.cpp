@@ -2620,6 +2620,26 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     return is_empty;
   }
 
+  // Handle 'not' operator on string types: convert to strlen(a) == 0.
+  // In Python, a non-empty string is truthy; only "" is falsy.
+  if (op == "Not" && type_utils::is_string_type(unary_sub.type()))
+  {
+    locationt location = get_location_from_decl(element);
+    const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
+    if (!strlen_sym)
+      throw std::runtime_error(
+        "strlen not found for string truthiness check");
+
+    side_effect_expr_function_callt strlen_call;
+    strlen_call.function() = symbol_expr(*strlen_sym);
+    strlen_call.arguments().push_back(
+      string_handler_.get_array_base_address(unary_sub));
+    strlen_call.type() = size_type();
+    strlen_call.location() = location;
+
+    return equality_exprt(strlen_call, gen_zero(size_type()));
+  }
+
   // Handle 'not' operator on list types: convert to emptiness check
   typet list_type = type_handler_.get_list_type();
   if (
@@ -7141,6 +7161,26 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
         cond = exprt("notequal", bool_type());
         cond.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+        cond.location() = location;
+      }
+
+      // Python treats strings in conditions by their length: "" is falsy.
+      if (type_utils::is_string_type(cond.type()))
+      {
+        const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
+        if (!strlen_sym)
+          throw std::runtime_error(
+            "strlen not found for string truthiness check");
+
+        side_effect_expr_function_callt strlen_call;
+        strlen_call.function() = symbol_expr(*strlen_sym);
+        strlen_call.arguments().push_back(
+          string_handler_.get_array_base_address(cond));
+        strlen_call.type() = size_type();
+        strlen_call.location() = location;
+
+        cond = exprt("notequal", bool_type());
+        cond.copy_to_operands(strlen_call, gen_zero(size_type()));
         cond.location() = location;
       }
     }

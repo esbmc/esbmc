@@ -2096,6 +2096,56 @@ exprt python_list::handle_index_access(
     return index_exprt(array, idx, char_type());
   }
 
+  // For char* (string function parameter), Python semantics for a[i] require
+  // returning a new single-char null-terminated string. Use __python_str_slice
+  // with (pos, pos+1, 1) — the same alloca-based helper used for range slices —
+  // so the result is not a dangling pointer after the function returns.
+  if (array.type().is_pointer() && array.type().subtype() == char_type())
+  {
+    std::string slice_func_id = "c:@F@__python_str_slice";
+    symbolt *slice_func = converter_.symbol_table().find_symbol(slice_func_id);
+    if (!slice_func)
+    {
+      symbolt new_symbol;
+      new_symbol.name = "__python_str_slice";
+      new_symbol.id = slice_func_id;
+      new_symbol.mode = "C";
+      new_symbol.is_extern = true;
+      code_typet slice_type;
+      typet char_ptr = gen_pointer_type(char_type());
+      typet ll_type = signedbv_typet(64);
+      slice_type.return_type() = char_ptr;
+      slice_type.arguments().push_back(code_typet::argumentt(char_ptr));
+      slice_type.arguments().push_back(code_typet::argumentt(ll_type));
+      slice_type.arguments().push_back(code_typet::argumentt(ll_type));
+      slice_type.arguments().push_back(code_typet::argumentt(ll_type));
+      new_symbol.type = slice_type;
+      converter_.symbol_table().add(new_symbol);
+      slice_func = converter_.symbol_table().find_symbol(slice_func_id);
+    }
+
+    typet ll_type = signedbv_typet(64);
+    exprt start_expr = typecast_exprt(pos_expr, ll_type);
+    // end = pos + 1; use a fresh cast of pos_expr to avoid sharing
+    // the start_expr subtree, which would cause double evaluation if pos_expr
+    // were a side-effecting expression.
+    exprt end_expr("+", ll_type);
+    end_expr.copy_to_operands(
+      typecast_exprt(pos_expr, ll_type), from_integer(1, ll_type));
+    exprt step_expr = from_integer(1, ll_type);
+
+    locationt loc = converter_.get_location_from_decl(list_value_);
+    side_effect_expr_function_callt slice_call;
+    slice_call.function() = symbol_expr(*slice_func);
+    slice_call.arguments().push_back(array);
+    slice_call.arguments().push_back(start_expr);
+    slice_call.arguments().push_back(end_expr);
+    slice_call.arguments().push_back(step_expr);
+    slice_call.type() = gen_pointer_type(char_type());
+    slice_call.location() = loc;
+    return slice_call;
+  }
+
   // Handle static arrays
   return index_exprt(array, pos_expr, array.type().subtype());
 }
