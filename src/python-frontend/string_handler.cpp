@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_handler.h>
+#include <python-frontend/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/type_utils.h>
@@ -17,13 +18,20 @@
 #include <util/symbol.h>
 #include <util/type.h>
 
+#include <boost/algorithm/string/predicate.hpp>
+#include <array>
 #include <cmath>
 #include <cctype>
+#include <climits>
 #include <cstring>
 #include <iomanip>
 #include <limits>
+#include <optional>
+#include <functional>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
+#include <vector>
 
 string_handler::string_handler(
   python_converter &converter,
@@ -88,6 +96,899 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 
   throw std::runtime_error("format() requires constant arguments");
 }
+
+static size_t utf8_codepoint_count(const std::string &text)
+{
+  size_t count = 0;
+  for (unsigned char c : text)
+  {
+    if ((c & 0xC0) != 0x80)
+      ++count;
+  }
+  return count;
+}
+
+static std::optional<std::vector<BigInt>>
+extract_constant_char_values(const exprt *array_expr)
+{
+  if (array_expr == nullptr || !array_expr->type().is_array())
+    return std::nullopt;
+
+  const exprt::operandst &ops = array_expr->operands();
+  if (ops.empty())
+    return std::vector<BigInt>{};
+
+  std::vector<BigInt> values;
+  values.reserve(ops.size() - 1);
+  for (size_t i = 0; i + 1 < ops.size(); ++i)
+  {
+    if (!ops[i].is_constant())
+      return std::nullopt;
+
+    values.push_back(
+      binary2integer(ops[i].value().as_string(), ops[i].type().is_signedbv()));
+  }
+
+  return values;
+}
+
+static constexpr long long kMembershipMaxHaystackContentLen = 256;
+static constexpr long long kMembershipMaxNeedleLen = 64;
+
+static bool contains_subsequence(
+  const std::vector<BigInt> &haystack,
+  const std::vector<BigInt> &needle)
+{
+  if (needle.empty())
+    return true;
+  if (needle.size() > haystack.size())
+    return false;
+
+  for (size_t start = 0; start + needle.size() <= haystack.size(); ++start)
+  {
+    bool match = true;
+    for (size_t i = 0; i < needle.size(); ++i)
+    {
+      if (haystack[start + i] != needle[i])
+      {
+        match = false;
+        break;
+      }
+    }
+
+    if (match)
+      return true;
+  }
+
+  return false;
+}
+
+static std::optional<BigInt> get_constant_array_extent(const exprt &array_expr)
+{
+  if (!array_expr.type().is_array())
+    return std::nullopt;
+
+  const auto &array_type = to_array_type(array_expr.type());
+  if (!array_type.size().is_constant())
+    return std::nullopt;
+
+  BigInt sz;
+  if (to_integer(array_type.size(), sz))
+    return std::nullopt;
+  return sz;
+}
+
+static exprt
+make_binary_bool_expr(const irep_idt &id, const exprt &lhs, const exprt &rhs)
+{
+  exprt out(id, bool_type());
+  out.copy_to_operands(lhs, rhs);
+  return out;
+}
+
+static std::optional<exprt> build_symbolic_membership_from_array(
+  const exprt &haystack_array_expr,
+  const std::vector<BigInt> &needle_values)
+{
+  if (!haystack_array_expr.type().is_array())
+    return std::nullopt;
+
+  const std::optional<BigInt> extent_opt =
+    get_constant_array_extent(haystack_array_expr);
+  if (!extent_opt.has_value())
+    return std::nullopt;
+
+  const BigInt extent = *extent_opt;
+  if (extent <= 0)
+    return gen_boolean(needle_values.empty());
+
+  const BigInt haystack_content_len = extent - 1;
+  const BigInt needle_len = static_cast<unsigned long>(needle_values.size());
+  if (needle_len == 0)
+    return gen_boolean(true);
+  if (needle_len > haystack_content_len)
+    return gen_boolean(false);
+
+  // Keep this bounded to avoid path explosion in symbolic membership.
+  if (
+    haystack_content_len > kMembershipMaxHaystackContentLen ||
+    needle_len > kMembershipMaxNeedleLen)
+    return std::nullopt;
+
+  const long long max_start = (haystack_content_len - needle_len).to_int64();
+  exprt disjunction = gen_boolean(false);
+
+  for (long long start = 0; start <= max_start; ++start)
+  {
+    // Prefix guard first; only build the full window match if prefix matches.
+    exprt prefix_index("index", char_type());
+    prefix_index.copy_to_operands(haystack_array_expr);
+    prefix_index.copy_to_operands(from_integer(start, int_type()));
+    exprt prefix_expected = from_integer(needle_values.front(), char_type());
+    exprt conjunction =
+      make_binary_bool_expr("=", prefix_index, prefix_expected);
+
+    for (std::size_t i = 1; i < needle_values.size(); ++i)
+    {
+      exprt index_expr("index", char_type());
+      index_expr.copy_to_operands(haystack_array_expr);
+      index_expr.copy_to_operands(
+        from_integer(static_cast<long long>(start + i), int_type()));
+
+      exprt expected = from_integer(needle_values[i], char_type());
+      exprt equal_expr = make_binary_bool_expr("=", index_expr, expected);
+      conjunction = make_binary_bool_expr("and", conjunction, equal_expr);
+    }
+    disjunction = make_binary_bool_expr("or", disjunction, conjunction);
+  }
+
+  return disjunction;
+}
+
+using keyword_valuest = string_call_utils::keyword_valuest;
+using string_call_utils::collect_keyword_values;
+using string_call_utils::ensure_allowed_keywords;
+using string_call_utils::find_keyword_value;
+using string_call_utils::required_arg_node_or_throw;
+using string_call_utils::required_constant_int_arg;
+using string_call_utils::resolve_positional_or_keyword_arg;
+
+static std::optional<exprt> dispatch_replace_method(
+  string_handler &self,
+  const std::string &method_name,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  const std::function<exprt()> &get_receiver_expr,
+  const std::function<locationt()> &get_location,
+  python_converter &converter)
+{
+  if (method_name != "replace")
+    return std::nullopt;
+
+  ensure_allowed_keywords(method_name, keyword_values, {"old", "new", "count"});
+  if (args.size() > 3)
+  {
+    throw std::runtime_error(
+      "replace() requires two or three arguments in minimal support");
+  }
+
+  const nlohmann::json *old_node = required_arg_node_or_throw(
+    method_name,
+    args,
+    keyword_values,
+    "old",
+    0,
+    "replace() requires two or three arguments in minimal support");
+  const nlohmann::json *new_node = required_arg_node_or_throw(
+    method_name,
+    args,
+    keyword_values,
+    "new",
+    1,
+    "replace() requires two or three arguments in minimal support");
+  const nlohmann::json *count_node = resolve_positional_or_keyword_arg(
+    method_name, args, keyword_values, "count", 2, false);
+
+  exprt count_expr = from_integer(-1, int_type());
+  if (count_node != nullptr)
+  {
+    const long long count_value = required_constant_int_arg(
+      *count_node,
+      "replace() only supports constant count in minimal support",
+      converter);
+    count_expr = from_integer(count_value, int_type());
+  }
+
+  return self.handle_string_replace(
+    get_receiver_expr(),
+    converter.get_expr(*old_node),
+    converter.get_expr(*new_node),
+    count_expr,
+    get_location());
+}
+
+static std::optional<exprt> dispatch_count_method(
+  string_handler &self,
+  const std::string &method_name,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  const std::function<exprt()> &get_receiver_expr,
+  const std::function<locationt()> &get_location,
+  python_converter &converter)
+{
+  if (method_name != "count")
+    return std::nullopt;
+
+  ensure_allowed_keywords(method_name, keyword_values, {"sub", "start", "end"});
+  if (args.size() > 3)
+    throw std::runtime_error("count() requires one to three arguments");
+
+  const nlohmann::json *sub_node = required_arg_node_or_throw(
+    method_name,
+    args,
+    keyword_values,
+    "sub",
+    0,
+    "count() requires one to three arguments");
+  const nlohmann::json *start_node = resolve_positional_or_keyword_arg(
+    method_name, args, keyword_values, "start", 1, false);
+  const nlohmann::json *end_node = resolve_positional_or_keyword_arg(
+    method_name, args, keyword_values, "end", 2, false);
+
+  exprt start_arg =
+    start_node != nullptr ? converter.get_expr(*start_node) : nil_exprt();
+  exprt end_arg =
+    end_node != nullptr ? converter.get_expr(*end_node) : nil_exprt();
+
+  return self.handle_string_count(
+    get_receiver_expr(),
+    converter.get_expr(*sub_node),
+    start_arg,
+    end_arg,
+    get_location());
+}
+
+static bool is_falsey_constant(const nlohmann::json &node)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value"))
+  {
+    const auto &value = node["value"];
+    if (value.is_boolean())
+      return !value.get<bool>();
+    if (value.is_number_integer())
+      return value.get<long long>() == 0;
+  }
+  return false;
+}
+
+static std::optional<exprt> dispatch_splitlines_method(
+  string_handler &self,
+  const std::string &method_name,
+  const nlohmann::json &call_json,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  const std::function<exprt()> &get_receiver_expr,
+  const std::function<locationt()> &get_location)
+{
+  if (method_name != "splitlines")
+    return std::nullopt;
+
+  ensure_allowed_keywords(method_name, keyword_values, {"keepends"});
+  if (args.size() > 1)
+    throw std::runtime_error("splitlines() takes zero or one argument");
+
+  const nlohmann::json *keepends_node = resolve_positional_or_keyword_arg(
+    method_name, args, keyword_values, "keepends", 0, false);
+  if (keepends_node != nullptr && !is_falsey_constant(*keepends_node))
+  {
+    throw std::runtime_error(
+      "splitlines() with keepends=True is not supported");
+  }
+
+  return self.handle_string_splitlines(
+    call_json, get_receiver_expr(), get_location());
+}
+
+struct split_method_argst
+{
+  std::string separator;
+  long long maxsplit = -1;
+};
+
+static std::optional<exprt> dispatch_split_method(
+  const std::string &method_name,
+  const nlohmann::json &receiver_json,
+  const nlohmann::json &call_json,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  const std::function<bool(const nlohmann::json &)> &is_none_literal,
+  const std::function<exprt()> &get_receiver_expr,
+  python_converter &converter)
+{
+  if (method_name != "split")
+    return std::nullopt;
+
+  ensure_allowed_keywords(method_name, keyword_values, {"sep", "maxsplit"});
+  if (args.size() > 2)
+  {
+    throw std::runtime_error(
+      "split() requires zero, one, or two arguments in minimal support");
+  }
+
+  split_method_argst parsed;
+  const nlohmann::json *sep_node = resolve_positional_or_keyword_arg(
+    "split", args, keyword_values, "sep", 0, false);
+  const nlohmann::json *maxsplit_node = resolve_positional_or_keyword_arg(
+    "split", args, keyword_values, "maxsplit", 1, false);
+
+  if (sep_node == nullptr || is_none_literal(*sep_node))
+  {
+    parsed.separator = "";
+  }
+  else if (!string_handler::extract_constant_string(
+             *sep_node, converter, parsed.separator))
+  {
+    throw std::runtime_error(
+      "split() only supports constant sep in minimal support");
+  }
+
+  if (maxsplit_node != nullptr)
+  {
+    parsed.maxsplit = required_constant_int_arg(
+      *maxsplit_node,
+      "split() only supports constant maxsplit in minimal support",
+      converter);
+  }
+
+  if (
+    !parsed.separator.empty() && parsed.maxsplit == 1 &&
+    receiver_json.contains("_type") && receiver_json["_type"] == "BinOp" &&
+    receiver_json.contains("op") && receiver_json["op"].contains("_type") &&
+    receiver_json["op"]["_type"] == "Add")
+  {
+    const auto &binop = receiver_json;
+    std::string right_operand_str;
+    if (
+      string_handler::extract_constant_string(
+        binop["right"], converter, right_operand_str) &&
+      right_operand_str.rfind(parsed.separator, 0) == 0)
+    {
+      bool safe_boundary = true;
+      std::string left_const;
+      if (
+        string_handler::extract_constant_string(
+          binop["left"], converter, left_const))
+        safe_boundary = left_const.find(parsed.separator) == std::string::npos;
+
+      if (safe_boundary)
+      {
+        std::string right_suffix =
+          right_operand_str.substr(parsed.separator.size());
+        nlohmann::json list_node;
+        list_node["_type"] = "List";
+        list_node["elts"] = nlohmann::json::array();
+        converter.copy_location_fields_from_decl(call_json, list_node);
+
+        nlohmann::json left_node = binop["left"];
+        converter.copy_location_fields_from_decl(call_json, left_node);
+        nlohmann::json right_node;
+        right_node["_type"] = "Constant";
+        right_node["value"] = right_suffix;
+        converter.copy_location_fields_from_decl(call_json, right_node);
+
+        list_node["elts"].push_back(left_node);
+        list_node["elts"].push_back(right_node);
+
+        python_list list(converter, list_node);
+        return list.get();
+      }
+    }
+  }
+
+  std::string input;
+  if (!string_handler::extract_constant_string(receiver_json, converter, input))
+  {
+    exprt obj_expr = get_receiver_expr();
+    return python_list::build_split_list(
+      converter, call_json, obj_expr, parsed.separator, parsed.maxsplit);
+  }
+
+  return python_list::build_split_list(
+    converter, call_json, input, parsed.separator, parsed.maxsplit);
+}
+
+static std::optional<exprt> dispatch_no_arg_string_methods(
+  string_handler &self,
+  const std::string &method_name,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  const std::function<exprt()> &get_receiver_expr,
+  const std::function<locationt()> &get_location)
+{
+  using no_arg_handler_t =
+    exprt (string_handler::*)(const exprt &, const locationt &);
+  static constexpr std::array<std::pair<const char *, no_arg_handler_t>, 13>
+    no_arg_handlers = {{
+      {"capitalize", &string_handler::handle_string_capitalize},
+      {"title", &string_handler::handle_string_title},
+      {"swapcase", &string_handler::handle_string_swapcase},
+      {"casefold", &string_handler::handle_string_casefold},
+      {"isdigit", &string_handler::handle_string_isdigit},
+      {"isalnum", &string_handler::handle_string_isalnum},
+      {"isupper", &string_handler::handle_string_isupper},
+      {"isnumeric", &string_handler::handle_string_isnumeric},
+      {"isidentifier", &string_handler::handle_string_isidentifier},
+      {"islower", &string_handler::handle_string_islower},
+      {"lower", &string_handler::handle_string_lower},
+      {"upper", &string_handler::handle_string_upper},
+      {"isalpha", &string_handler::handle_string_isalpha},
+    }};
+
+  for (const auto &[name, handler] : no_arg_handlers)
+  {
+    if (method_name != name)
+      continue;
+
+    ensure_allowed_keywords(method_name, keyword_values, {});
+    if (!args.empty())
+      throw std::runtime_error(method_name + "() takes no arguments");
+    return (self.*handler)(get_receiver_expr(), get_location());
+  }
+
+  return std::nullopt;
+}
+
+static std::optional<exprt> dispatch_one_arg_string_methods(
+  string_handler &self,
+  const std::string &method_name,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  const std::function<exprt()> &get_receiver_expr,
+  const std::function<locationt()> &get_location,
+  python_converter &converter)
+{
+  using one_arg_handler_t =
+    exprt (string_handler::*)(const exprt &, const exprt &, const locationt &);
+  struct one_arg_handler_entryt
+  {
+    const char *name;
+    const char *arg_name;
+    one_arg_handler_t handler;
+  };
+  static constexpr std::array<one_arg_handler_entryt, 5> one_arg_handlers = {{
+    {"startswith", "prefix", &string_handler::handle_string_startswith},
+    {"endswith", "suffix", &string_handler::handle_string_endswith},
+    {"removeprefix", "prefix", &string_handler::handle_string_removeprefix},
+    {"removesuffix", "suffix", &string_handler::handle_string_removesuffix},
+    {"partition", "sep", &string_handler::handle_string_partition},
+  }};
+
+  for (const auto &[name, arg_name, handler] : one_arg_handlers)
+  {
+    if (method_name != name)
+      continue;
+
+    ensure_allowed_keywords(method_name, keyword_values, {arg_name});
+    if (args.size() > 1)
+      throw std::runtime_error(method_name + "() requires one argument");
+
+    const nlohmann::json *arg_node = required_arg_node_or_throw(
+      method_name,
+      args,
+      keyword_values,
+      arg_name,
+      0,
+      method_name + "() requires one argument");
+    return (self.*handler)(
+      get_receiver_expr(), converter.get_expr(*arg_node), get_location());
+  }
+
+  return std::nullopt;
+}
+
+struct search_args_parsedt
+{
+  exprt needle;
+  exprt start;
+  exprt end;
+  bool has_range;
+};
+
+static search_args_parsedt parse_string_search_args(
+  const std::string &method_name,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  python_converter &converter)
+{
+  ensure_allowed_keywords(method_name, keyword_values, {"sub", "start", "end"});
+  if (args.size() > 3)
+    throw std::runtime_error(
+      method_name + "() requires one to three arguments");
+
+  const nlohmann::json *sub_node = required_arg_node_or_throw(
+    method_name,
+    args,
+    keyword_values,
+    "sub",
+    0,
+    method_name + "() requires one to three arguments");
+  const nlohmann::json *start_node = resolve_positional_or_keyword_arg(
+    method_name, args, keyword_values, "start", 1, false);
+  const nlohmann::json *end_node = resolve_positional_or_keyword_arg(
+    method_name, args, keyword_values, "end", 2, false);
+
+  search_args_parsedt parsed{
+    converter.get_expr(*sub_node),
+    from_integer(0, int_type()),
+    from_integer(INT_MIN, int_type()),
+    false};
+
+  const bool has_start = start_node != nullptr;
+  const bool has_end = end_node != nullptr;
+  parsed.has_range = has_start || has_end;
+
+  if (has_start)
+    parsed.start = converter.get_expr(*start_node);
+  if (has_end)
+    parsed.end = converter.get_expr(*end_node);
+
+  return parsed;
+}
+
+static std::optional<exprt> dispatch_search_string_methods(
+  string_handler &self,
+  const std::string &method_name,
+  const nlohmann::json &call_json,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  const std::function<exprt()> &get_receiver_expr,
+  const std::function<locationt()> &get_location,
+  python_converter &converter)
+{
+  if (method_name != "find" && method_name != "index" && method_name != "rfind")
+    return std::nullopt;
+
+  exprt obj_expr = get_receiver_expr();
+  search_args_parsedt parsed =
+    parse_string_search_args(method_name, args, keyword_values, converter);
+
+  if (method_name == "find")
+  {
+    if (!parsed.has_range)
+      return self.handle_string_find(obj_expr, parsed.needle, get_location());
+    return self.handle_string_find_range(
+      obj_expr, parsed.needle, parsed.start, parsed.end, get_location());
+  }
+
+  if (method_name == "index")
+  {
+    if (!parsed.has_range)
+      return self.handle_string_index(
+        call_json, obj_expr, parsed.needle, get_location());
+    return self.handle_string_index_range(
+      call_json,
+      obj_expr,
+      parsed.needle,
+      parsed.start,
+      parsed.end,
+      get_location());
+  }
+
+  if (!parsed.has_range)
+    return self.handle_string_rfind(obj_expr, parsed.needle, get_location());
+  return self.handle_string_rfind_range(
+    obj_expr, parsed.needle, parsed.start, parsed.end, get_location());
+}
+
+static int count_name_assignments_in_node(
+  const nlohmann::json &node,
+  const std::string &var_name,
+  bool &has_augassign)
+{
+  int count = 0;
+  if (!node.is_object() && !node.is_array())
+    return 0;
+
+  if (node.is_object() && node.contains("_type"))
+  {
+    const std::string type = node["_type"].get<std::string>();
+    if (type == "Assign" && node.contains("targets"))
+    {
+      for (const auto &tgt : node["targets"])
+      {
+        if (
+          tgt.contains("_type") && tgt["_type"] == "Name" &&
+          tgt.contains("id") && tgt["id"] == var_name)
+          ++count;
+      }
+    }
+    else if (type == "AnnAssign" && node.contains("target"))
+    {
+      const auto &tgt = node["target"];
+      if (
+        tgt.contains("_type") && tgt["_type"] == "Name" && tgt.contains("id") &&
+        tgt["id"] == var_name)
+      {
+        ++count;
+      }
+    }
+    else if (type == "AugAssign" && node.contains("target"))
+    {
+      const auto &tgt = node["target"];
+      if (
+        tgt.contains("_type") && tgt["_type"] == "Name" && tgt.contains("id") &&
+        tgt["id"] == var_name)
+      {
+        has_augassign = true;
+        ++count;
+      }
+    }
+
+    // Keep counting scoped to the current body: nested function/class/lambda
+    // assignments must not affect fast-path eligibility of outer variables.
+    if (
+      type == "FunctionDef" || type == "AsyncFunctionDef" ||
+      type == "ClassDef" || type == "Lambda")
+    {
+      return count;
+    }
+  }
+
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      count += count_name_assignments_in_node(elem, var_name, has_augassign);
+  }
+  else if (node.is_object())
+  {
+    for (const auto &item : node.items())
+      count +=
+        count_name_assignments_in_node(item.value(), var_name, has_augassign);
+  }
+
+  return count;
+}
+
+static bool is_none_literal_json(const nlohmann::json &node)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_null())
+  {
+    return true;
+  }
+  return (
+    node.contains("_type") && node["_type"] == "Name" && node.contains("id") &&
+    node["id"].is_string() && node["id"] == "None");
+}
+
+static bool is_utf8_literal_json(const nlohmann::json &node)
+{
+  if (!(node.contains("_type") && node["_type"] == "Constant" &&
+        node.contains("value") && node["value"].is_string()))
+  {
+    return false;
+  }
+
+  const std::string encoding = node["value"].get<std::string>();
+  return boost::iequals(encoding, "utf-8") || boost::iequals(encoding, "utf8");
+}
+
+static std::optional<exprt> dispatch_decode_join_method(
+  string_handler &self,
+  const std::string &method_name,
+  const nlohmann::json &call_json,
+  const nlohmann::json &receiver_json,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  python_converter &converter)
+{
+  if (method_name == "decode")
+  {
+    ensure_allowed_keywords(method_name, keyword_values, {"encoding"});
+
+    if (args.size() > 1)
+      throw std::runtime_error("decode() takes at most one argument");
+
+    bool decode_utf8 = args.empty();
+    if (args.size() == 1)
+      decode_utf8 = is_utf8_literal_json(args[0]);
+
+    if (
+      const nlohmann::json *encoding_kw =
+        find_keyword_value(keyword_values, "encoding"))
+      decode_utf8 = is_utf8_literal_json(*encoding_kw);
+
+    if (
+      decode_utf8 && receiver_json.contains("_type") &&
+      receiver_json["_type"] == "Call" && receiver_json.contains("func") &&
+      receiver_json["func"].contains("_type") &&
+      receiver_json["func"]["_type"] == "Attribute" &&
+      receiver_json["func"].contains("attr") &&
+      receiver_json["func"]["attr"] == "encode")
+    {
+      bool encode_utf8 =
+        !receiver_json.contains("args") || receiver_json["args"].empty();
+      if (
+        receiver_json.contains("args") && receiver_json["args"].is_array() &&
+        receiver_json["args"].size() == 1)
+      {
+        encode_utf8 = is_utf8_literal_json(receiver_json["args"][0]);
+      }
+
+      if (
+        receiver_json.contains("keywords") &&
+        receiver_json["keywords"].is_array())
+      {
+        for (const auto &kw : receiver_json["keywords"])
+        {
+          if (
+            kw.contains("arg") && kw["arg"].is_string() &&
+            kw["arg"] == "encoding" && kw.contains("value"))
+          {
+            encode_utf8 = is_utf8_literal_json(kw["value"]);
+            break;
+          }
+        }
+      }
+
+      if (
+        encode_utf8 && receiver_json["func"].contains("value") &&
+        !receiver_json["func"]["value"].is_null())
+      {
+        return converter.get_expr(receiver_json["func"]["value"]);
+      }
+    }
+    return nil_exprt();
+  }
+
+  if (method_name == "join")
+  {
+    ensure_allowed_keywords(method_name, keyword_values, {});
+    return self.handle_str_join(call_json);
+  }
+
+  return std::nullopt;
+}
+
+static std::optional<exprt> dispatch_spacing_and_padding_methods(
+  string_handler &self,
+  const std::string &method_name,
+  const nlohmann::json &args,
+  const keyword_valuest &keyword_values,
+  const std::function<exprt()> &get_receiver_expr,
+  const std::function<locationt()> &get_location,
+  python_converter &converter)
+{
+  if (method_name == "isspace")
+  {
+    ensure_allowed_keywords(method_name, keyword_values, {});
+    if (!args.empty())
+      throw std::runtime_error("isspace() takes no arguments");
+
+    exprt obj_expr = get_receiver_expr();
+    locationt loc = get_location();
+    if (obj_expr.type().is_unsignedbv() || obj_expr.type().is_signedbv())
+      return self.handle_char_isspace(obj_expr, loc);
+    return self.handle_string_isspace(obj_expr, loc);
+  }
+
+  using optional_char_arg_handler_t =
+    exprt (string_handler::*)(const exprt &, const exprt &, const locationt &);
+  static constexpr std::
+    array<std::pair<const char *, optional_char_arg_handler_t>, 3>
+      optional_char_arg_handlers = {{
+        {"lstrip", &string_handler::handle_string_lstrip},
+        {"rstrip", &string_handler::handle_string_rstrip},
+        {"strip", &string_handler::handle_string_strip},
+      }};
+
+  for (const auto &[name, handler] : optional_char_arg_handlers)
+  {
+    if (method_name != name)
+      continue;
+    ensure_allowed_keywords(method_name, keyword_values, {"chars"});
+    if (args.size() > 1)
+      throw std::runtime_error(method_name + "() takes at most one argument");
+
+    const nlohmann::json *chars_node = resolve_positional_or_keyword_arg(
+      method_name, args, keyword_values, "chars", 0, false);
+    exprt chars_arg =
+      chars_node ? converter.get_expr(*chars_node) : nil_exprt();
+    return (self.*handler)(get_receiver_expr(), chars_arg, get_location());
+  }
+
+  using width_fill_handler_t = exprt (string_handler::*)(
+    const exprt &, const exprt &, const exprt &, const locationt &);
+  static constexpr std::array<std::pair<const char *, width_fill_handler_t>, 3>
+    width_fill_handlers = {{
+      {"center", &string_handler::handle_string_center},
+      {"ljust", &string_handler::handle_string_ljust},
+      {"rjust", &string_handler::handle_string_rjust},
+    }};
+
+  for (const auto &[name, handler] : width_fill_handlers)
+  {
+    if (method_name != name)
+      continue;
+    ensure_allowed_keywords(method_name, keyword_values, {"width", "fillchar"});
+    if (args.size() > 2)
+      throw std::runtime_error(
+        method_name + "() requires one or two arguments");
+
+    const nlohmann::json *width_node = required_arg_node_or_throw(
+      method_name,
+      args,
+      keyword_values,
+      "width",
+      0,
+      method_name + "() requires one or two arguments");
+    const nlohmann::json *fill_node = resolve_positional_or_keyword_arg(
+      method_name, args, keyword_values, "fillchar", 1, false);
+
+    exprt width_arg = converter.get_expr(*width_node);
+    exprt fill_arg = fill_node ? converter.get_expr(*fill_node) : nil_exprt();
+    return (self.*handler)(
+      get_receiver_expr(), width_arg, fill_arg, get_location());
+  }
+
+  if (method_name == "zfill")
+  {
+    ensure_allowed_keywords(method_name, keyword_values, {"width"});
+    if (args.size() > 1)
+      throw std::runtime_error("zfill() requires one argument");
+
+    const nlohmann::json *width_node = required_arg_node_or_throw(
+      method_name,
+      args,
+      keyword_values,
+      "width",
+      0,
+      "zfill() requires one argument");
+    return self.handle_string_zfill(
+      get_receiver_expr(), converter.get_expr(*width_node), get_location());
+  }
+
+  if (method_name == "expandtabs")
+  {
+    ensure_allowed_keywords(method_name, keyword_values, {"tabsize"});
+    if (args.size() > 1)
+      throw std::runtime_error("expandtabs() takes zero or one argument");
+
+    const nlohmann::json *tabsize_node = resolve_positional_or_keyword_arg(
+      method_name, args, keyword_values, "tabsize", 0, false);
+    exprt tabsize_arg =
+      tabsize_node ? converter.get_expr(*tabsize_node) : nil_exprt();
+    return self.handle_string_expandtabs(
+      get_receiver_expr(), tabsize_arg, get_location());
+  }
+
+  return std::nullopt;
+}
+
+static std::optional<exprt> dispatch_format_methods(
+  string_handler &self,
+  const std::string &method_name,
+  const nlohmann::json &call_json,
+  const keyword_valuest &keyword_values,
+  const std::function<exprt()> &get_receiver_expr,
+  const std::function<locationt()> &get_location)
+{
+  if (method_name == "format")
+    return self.handle_string_format(
+      call_json, get_receiver_expr(), get_location());
+
+  if (method_name == "format_map")
+  {
+    ensure_allowed_keywords(method_name, keyword_values, {});
+    return self.handle_string_format_map(
+      call_json, get_receiver_expr(), get_location());
+  }
+
+  return std::nullopt;
+}
 } // namespace
 
 bool string_handler::try_extract_const_string_expr(
@@ -101,7 +1002,7 @@ bool string_handler::try_extract_const_string_expr(
   {
     const auto &sym_expr = to_symbol_expr(str_expr);
     const symbolt *symbol =
-      symbol_table_.find_symbol(sym_expr.get_identifier());
+      find_cached_symbol(sym_expr.get_identifier().as_string());
     if (!symbol || symbol->value.is_nil() || !symbol->value.type().is_array())
       return false;
 
@@ -134,7 +1035,7 @@ BigInt string_handler::get_string_size(const exprt &expr)
 
     if (expr.is_symbol())
     {
-      const symbolt *symbol = symbol_table_.find_symbol(expr.identifier());
+      const symbolt *symbol = find_cached_symbol(expr.identifier().as_string());
       if (symbol && symbol->type.is_array())
       {
         const auto &arr_type = to_array_type(symbol->type);
@@ -281,7 +1182,7 @@ exprt string_handler::apply_format_specification(
           {
             const symbol_exprt &sym_expr = to_symbol_expr(expr);
             const symbolt *symbol =
-              symbol_table_.find_symbol(sym_expr.get_identifier());
+              find_cached_symbol(sym_expr.get_identifier().as_string());
 
             if (symbol && symbol->value.is_constant())
               float_bits = &symbol->value.value().as_string();
@@ -332,7 +1233,7 @@ exprt string_handler::convert_to_string(const exprt &expr)
   // Handle symbol references
   if (expr.is_symbol())
   {
-    const symbolt *symbol = symbol_table_.find_symbol(expr.identifier());
+    const symbolt *symbol = find_cached_symbol(expr.identifier().as_string());
     if (symbol)
     {
       // If symbol has string type, return it
@@ -663,7 +1564,7 @@ std::string string_handler::ensure_string_function_symbol(
 
   std::string func_symbol_id = func_id.to_string();
 
-  if (symbol_table_.find_symbol(func_symbol_id.c_str()) == nullptr)
+  if (find_cached_symbol(func_symbol_id) == nullptr)
   {
     code_typet code_type;
     code_type.return_type() = return_type;
@@ -679,9 +1580,29 @@ std::string string_handler::ensure_string_function_symbol(
       "", function_name, func_symbol_id, location, code_type);
 
     converter_.add_symbol(symbol);
+    symbol_cache_[func_symbol_id] = find_cached_symbol(func_symbol_id);
   }
 
   return func_symbol_id;
+}
+
+symbolt *string_handler::find_cached_symbol(const std::string &symbol_id)
+{
+  auto cache_it = symbol_cache_.find(symbol_id);
+  if (cache_it != symbol_cache_.end())
+    return cache_it->second;
+
+  symbolt *symbol = symbol_table_.find_symbol(symbol_id);
+  if (symbol != nullptr)
+    symbol_cache_.emplace(symbol_id, symbol);
+
+  return symbol;
+}
+
+symbolt *
+string_handler::find_cached_c_function_symbol(const std::string &symbol_id)
+{
+  return find_cached_symbol(symbol_id);
 }
 
 exprt string_handler::handle_string_startswith(
@@ -709,7 +1630,7 @@ exprt string_handler::handle_string_startswith(
   actual_len.copy_to_operands(prefix_len, one);
 
   // Find strncmp symbol
-  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+  symbolt *strncmp_symbol = find_cached_c_function_symbol("c:@F@strncmp");
   if (!strncmp_symbol)
     throw std::runtime_error("strncmp function not found for startswith()");
 
@@ -756,7 +1677,7 @@ exprt string_handler::handle_string_endswith(
 
   // For length calculation, we need to use strlen for pointer types
   // Find strlen symbol
-  symbolt *strlen_symbol = symbol_table_.find_symbol("c:@F@strlen");
+  symbolt *strlen_symbol = find_cached_c_function_symbol("c:@F@strlen");
   if (!strlen_symbol)
     throw std::runtime_error("strlen function not found for endswith()");
 
@@ -787,7 +1708,7 @@ exprt string_handler::handle_string_endswith(
   offset_ptr.copy_to_operands(str_addr, offset);
 
   // Find strncmp symbol
-  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+  symbolt *strncmp_symbol = find_cached_c_function_symbol("c:@F@strncmp");
   if (!strncmp_symbol)
     throw std::runtime_error("strncmp function not found for endswith()");
 
@@ -822,7 +1743,7 @@ exprt string_handler::handle_string_isdigit(
   {
     // Call Python's single-character version
     symbolt *isdigit_symbol =
-      symbol_table_.find_symbol("c:@F@__python_char_isdigit");
+      find_cached_c_function_symbol("c:@F@__python_char_isdigit");
     if (!isdigit_symbol)
       throw std::runtime_error(
         "__python_char_isdigit function not found in symbol table");
@@ -845,7 +1766,7 @@ exprt string_handler::handle_string_isdigit(
 
   // Find the helper function symbol
   symbolt *isdigit_str_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_isdigit");
+    find_cached_c_function_symbol("c:@F@__python_str_isdigit");
   if (!isdigit_str_symbol)
     throw std::runtime_error("str_isdigit function not found in symbol table");
 
@@ -868,7 +1789,7 @@ exprt string_handler::handle_string_isalpha(
   {
     // Call Python's single-character version (not C's isalpha)
     symbolt *isalpha_symbol =
-      symbol_table_.find_symbol("c:@F@__python_char_isalpha");
+      find_cached_c_function_symbol("c:@F@__python_char_isalpha");
     if (!isalpha_symbol)
       throw std::runtime_error(
         "__python_char_isalpha function not found in symbol table");
@@ -888,7 +1809,7 @@ exprt string_handler::handle_string_isalpha(
   exprt str_addr = get_array_base_address(str_expr);
 
   symbolt *isalpha_str_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_isalpha");
+    find_cached_c_function_symbol("c:@F@__python_str_isalpha");
   if (!isalpha_str_symbol)
     throw std::runtime_error("str_isalpha function not found in symbol table");
 
@@ -911,7 +1832,7 @@ exprt string_handler::handle_string_isspace(
 
   const char *isspace_str_symbol_id = "c:@F@__python_str_isspace";
   symbolt *isspace_str_symbol =
-    symbol_table_.find_symbol(isspace_str_symbol_id);
+    find_cached_c_function_symbol(isspace_str_symbol_id);
   if (!isspace_str_symbol)
     throw std::runtime_error(
       std::string(isspace_str_symbol_id) +
@@ -968,7 +1889,8 @@ exprt string_handler::handle_string_lstrip(
       can_fold_constant = true;
     else if (str_expr.is_symbol())
     {
-      const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
+      const symbolt *symbol =
+        find_cached_symbol(str_expr.identifier().as_string());
       if (
         symbol && symbol->value.is_constant() &&
         symbol->value.type().is_array())
@@ -1013,7 +1935,8 @@ exprt string_handler::handle_string_lstrip(
         (chars_arg.is_constant() && chars_arg.type().is_array());
       if (!chars_foldable && chars_arg.is_symbol())
       {
-        const symbolt *sym = symbol_table_.find_symbol(chars_arg.identifier());
+        const symbolt *sym =
+          find_cached_symbol(chars_arg.identifier().as_string());
         chars_foldable =
           sym && sym->value.is_constant() && sym->value.type().is_array();
       }
@@ -1158,7 +2081,8 @@ exprt string_handler::handle_string_strip(
       can_fold_constant = true;
     else if (str_expr.is_symbol())
     {
-      const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
+      const symbolt *symbol =
+        find_cached_symbol(str_expr.identifier().as_string());
       if (
         symbol && symbol->value.is_constant() &&
         symbol->value.type().is_array())
@@ -1206,7 +2130,8 @@ exprt string_handler::handle_string_strip(
         (chars_arg.is_constant() && chars_arg.type().is_array());
       if (!chars_foldable && chars_arg.is_symbol())
       {
-        const symbolt *sym = symbol_table_.find_symbol(chars_arg.identifier());
+        const symbolt *sym =
+          find_cached_symbol(chars_arg.identifier().as_string());
         chars_foldable =
           sym && sym->value.is_constant() && sym->value.type().is_array();
       }
@@ -1325,7 +2250,8 @@ exprt string_handler::handle_string_rstrip(
   bool can_fold_constant = str_expr.type().is_array();
   if (!can_fold_constant && str_expr.is_symbol())
   {
-    const symbolt *symbol = symbol_table_.find_symbol(str_expr.identifier());
+    const symbolt *symbol =
+      find_cached_symbol(str_expr.identifier().as_string());
     if (
       symbol && symbol->value.is_constant() && symbol->value.type().is_array())
       can_fold_constant = true;
@@ -1368,7 +2294,8 @@ exprt string_handler::handle_string_rstrip(
         (chars_arg.is_constant() && chars_arg.type().is_array());
       if (!chars_foldable && chars_arg.is_symbol())
       {
-        const symbolt *sym = symbol_table_.find_symbol(chars_arg.identifier());
+        const symbolt *sym =
+          find_cached_symbol(chars_arg.identifier().as_string());
         chars_foldable =
           sym && sym->value.is_constant() && sym->value.type().is_array();
       }
@@ -1488,8 +2415,7 @@ exprt string_handler::handle_string_membership(
   // Check if lhs is a symbol holding a character value
   if (lhs.is_symbol())
   {
-    const symbolt *sym =
-      symbol_table_.find_symbol(lhs.get_string("identifier"));
+    const symbolt *sym = find_cached_symbol(lhs.get_string("identifier"));
     if (sym)
     {
       const typet &value_type = sym->value.type();
@@ -1505,7 +2431,7 @@ exprt string_handler::handle_string_membership(
   // Use strchr for single character membership testing
   if (lhs_is_char_value)
   {
-    symbolt *strchr_symbol = symbol_table_.find_symbol("c:@F@strchr");
+    symbolt *strchr_symbol = find_cached_c_function_symbol("c:@F@strchr");
     if (!strchr_symbol)
     {
       // Create strchr symbol if it doesn't exist
@@ -1523,7 +2449,7 @@ exprt string_handler::handle_string_membership(
       new_symbol.type = strchr_type;
 
       symbol_table_.add(new_symbol);
-      strchr_symbol = symbol_table_.find_symbol("c:@F@strchr");
+      strchr_symbol = find_cached_c_function_symbol("c:@F@strchr");
     }
 
     exprt rhs_str = ensure_null_terminated_string(rhs);
@@ -1559,7 +2485,7 @@ exprt string_handler::handle_string_membership(
       return &e;
     if (e.is_symbol())
     {
-      const symbolt *sym = symbol_table_.find_symbol(e.identifier());
+      const symbolt *sym = find_cached_symbol(e.identifier().as_string());
       if (sym && sym->value.is_constant() && sym->value.type().is_array())
         return &sym->value;
     }
@@ -1568,115 +2494,109 @@ exprt string_handler::handle_string_membership(
 
   const exprt *needle_array = get_array_expr(lhs_str);
   const exprt *haystack_array = get_array_expr(rhs_str);
-
-  // Special case: empty needle is always found in any haystack (Python semantics)
-  if (needle_array && !needle_array->operands().empty())
+  auto try_extract_constant_chars_from_ast =
+    [this](const nlohmann::json *node) -> std::optional<std::vector<BigInt>>
   {
-    const exprt::operandst &needle_ops = needle_array->operands();
+    if (node == nullptr)
+      return std::nullopt;
+    std::string text;
+    if (!extract_constant_string(*node, converter_, text))
+      return std::nullopt;
 
-    // Check if needle is empty (just the null terminator)
-    if (needle_ops.size() == 1 && needle_ops[0].is_constant())
-    {
-      BigInt first_val = binary2integer(
-        needle_ops[0].value().as_string(), needle_ops[0].type().is_signedbv());
+    std::vector<BigInt> values;
+    values.reserve(text.size());
+    for (unsigned char ch : text)
+      values.emplace_back(ch);
+    return values;
+  };
 
-      if (first_val == 0)
-      {
-        // Empty string is always "in" any string in Python
-        return gen_boolean(true);
-      }
-    }
+  const nlohmann::json *lhs_node = nullptr;
+  const nlohmann::json *rhs_node = nullptr;
+  if (
+    element.contains("_type") && element["_type"] == "Compare" &&
+    element.contains("left") && element.contains("comparators") &&
+    element["comparators"].is_array() && !element["comparators"].empty())
+  {
+    lhs_node = &element["left"];
+    rhs_node = &element["comparators"][0];
   }
 
-  // Special case: Check if needle starts with '\0' (but is not empty)
-  // Python strings with null characters are valid, but we need to handle
-  // the C null-terminator semantics vs Python string semantics
-  if (needle_array && haystack_array)
+  const auto contains_embedded_null =
+    [](const exprt *array_expr) -> std::optional<bool>
   {
-    const exprt::operandst &needle_ops = needle_array->operands();
-    const exprt::operandst &haystack_ops = haystack_array->operands();
+    if (array_expr == nullptr || !array_expr->type().is_array())
+      return std::nullopt;
 
-    // Check if needle starts with '\0' and has more than just the terminator
+    const exprt::operandst &ops = array_expr->operands();
+    if (ops.empty())
+      return false;
+
+    for (size_t i = 0; i + 1 < ops.size(); ++i)
+    {
+      if (!ops[i].is_constant())
+        return std::nullopt;
+
+      BigInt val =
+        binary2integer(ops[i].value().as_string(), ops[i].type().is_signedbv());
+      if (val == 0)
+        return true;
+    }
+    return false;
+  };
+
+  // Fully precise constant path (Python semantics, including embedded '\0').
+  std::optional<std::vector<BigInt>> needle_values =
+    extract_constant_char_values(needle_array);
+  if (!needle_values.has_value())
+    needle_values = try_extract_constant_chars_from_ast(lhs_node);
+
+  std::optional<std::vector<BigInt>> haystack_values =
+    extract_constant_char_values(haystack_array);
+  if (!haystack_values.has_value())
+    haystack_values = try_extract_constant_chars_from_ast(rhs_node);
+
+  if (needle_values.has_value() && haystack_values.has_value())
+  {
+    return gen_boolean(contains_subsequence(*haystack_values, *needle_values));
+  }
+
+  // C strstr() is not null-aware for embedded '\0'. When one operand is
+  // symbolic and the other is known to include embedded nulls, avoid an
+  // unsound deterministic result.
+  const std::optional<bool> needle_has_embedded_null =
+    contains_embedded_null(needle_array);
+  const std::optional<bool> haystack_has_embedded_null =
+    contains_embedded_null(haystack_array);
+
+  // If the needle is known and haystack is symbolic-but-bounded array,
+  // try an explicit bounded membership formula before falling back to nondet.
+  if (haystack_array == nullptr && needle_values.has_value())
+  {
     if (
-      needle_ops.size() > 1 && !needle_ops.empty() &&
-      needle_ops[0].is_constant())
+      std::optional<exprt> symbolic_membership =
+        build_symbolic_membership_from_array(rhs_str, *needle_values))
     {
-      BigInt first_val = binary2integer(
-        needle_ops[0].value().as_string(), needle_ops[0].type().is_signedbv());
-
-      if (first_val == 0)
-      {
-        // Needle starts with '\0' but has more characters
-        // Check if haystack has any embedded nulls (before the final terminator)
-        bool has_embedded_null = false;
-        for (size_t i = 0; i + 1 < haystack_ops.size(); ++i)
-        {
-          if (haystack_ops[i].is_constant())
-          {
-            BigInt val = binary2integer(
-              haystack_ops[i].value().as_string(),
-              haystack_ops[i].type().is_signedbv());
-            if (val == 0)
-            {
-              has_embedded_null = true;
-              break;
-            }
-          }
-        }
-
-        // If haystack has no embedded nulls, needle starting with '\0' won't be found
-        if (!has_embedded_null)
-          return gen_boolean(false);
-
-        // Needle is like '\0x' or '\0abc' - need to search for this pattern
-        // in haystack that may contain embedded nulls
-        bool found = false;
-        for (size_t h = 0; h + needle_ops.size() <= haystack_ops.size(); ++h)
-        {
-          bool match = true;
-          for (size_t n = 0; n + 1 < needle_ops.size(); ++n)
-          {
-            if (
-              !haystack_ops[h + n].is_constant() ||
-              !needle_ops[n].is_constant())
-            {
-              match = false;
-              break;
-            }
-            BigInt h_val = binary2integer(
-              haystack_ops[h + n].value().as_string(),
-              haystack_ops[h + n].type().is_signedbv());
-            BigInt n_val = binary2integer(
-              needle_ops[n].value().as_string(),
-              needle_ops[n].type().is_signedbv());
-            if (h_val != n_val)
-            {
-              match = false;
-              break;
-            }
-          }
-          if (match)
-          {
-            found = true;
-            break;
-          }
-        }
-        return gen_boolean(found);
-      }
+      symbolic_membership->location() =
+        converter_.get_location_from_decl(element);
+      return *symbolic_membership;
     }
   }
 
-  // TODO: This falls back to C's strstr for non-constant strings,
-  // which is unsound if 'lhs' or 'rhs' contain embedded nulls ('\0').
-  // For full Python semantics, a null-aware 'strstr' for
-  // symbolic/non-constant strings is required.
+  if (
+    (needle_array == nullptr && haystack_has_embedded_null == true) ||
+    (haystack_array == nullptr && needle_has_embedded_null == true))
+  {
+    side_effect_expr_nondett nondet_contains(bool_type());
+    nondet_contains.location() = converter_.get_location_from_decl(element);
+    return nondet_contains;
+  }
 
   // Get base addresses for C string functions
   exprt lhs_addr = get_array_base_address(lhs_str);
   exprt rhs_addr = get_array_base_address(rhs_str);
 
   // Find strstr symbol - returns pointer to first occurrence or NULL
-  symbolt *strstr_symbol = symbol_table_.find_symbol("c:@F@strstr");
+  symbolt *strstr_symbol = find_cached_c_function_symbol("c:@F@strstr");
   if (!strstr_symbol)
     throw std::runtime_error("strstr function not found for 'in' operator");
 
@@ -1707,7 +2627,7 @@ exprt string_handler::handle_string_islower(
   {
     // Call Python's single-character version
     symbolt *islower_symbol =
-      symbol_table_.find_symbol("c:@F@__python_char_islower");
+      find_cached_c_function_symbol("c:@F@__python_char_islower");
     if (!islower_symbol)
       throw std::runtime_error(
         "__python_char_islower function not found in symbol table");
@@ -1727,7 +2647,7 @@ exprt string_handler::handle_string_islower(
   exprt str_addr = get_array_base_address(str_expr);
 
   symbolt *islower_str_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_islower");
+    find_cached_c_function_symbol("c:@F@__python_str_islower");
   if (!islower_str_symbol)
     throw std::runtime_error("str_islower function not found in symbol table");
 
@@ -1748,7 +2668,7 @@ exprt string_handler::handle_string_lower(
   if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
   {
     symbolt *lower_symbol =
-      symbol_table_.find_symbol("c:@F@__python_char_lower");
+      find_cached_c_function_symbol("c:@F@__python_char_lower");
     if (!lower_symbol)
       throw std::runtime_error(
         "__python_char_lower function not found in symbol table");
@@ -1768,7 +2688,7 @@ exprt string_handler::handle_string_lower(
   exprt str_addr = get_array_base_address(str_expr);
 
   symbolt *lower_str_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_lower");
+    find_cached_c_function_symbol("c:@F@__python_str_lower");
   if (!lower_str_symbol)
     throw std::runtime_error("str_lower function not found in symbol table");
 
@@ -1789,7 +2709,7 @@ exprt string_handler::handle_string_upper(
   if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
   {
     symbolt *upper_symbol =
-      symbol_table_.find_symbol("c:@F@__python_char_upper");
+      find_cached_c_function_symbol("c:@F@__python_char_upper");
     if (!upper_symbol)
       throw std::runtime_error(
         "__python_char_upper function not found in symbol table");
@@ -1809,7 +2729,7 @@ exprt string_handler::handle_string_upper(
   exprt str_addr = get_array_base_address(str_expr);
 
   symbolt *upper_str_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_upper");
+    find_cached_c_function_symbol("c:@F@__python_str_upper");
   if (!upper_str_symbol)
     throw std::runtime_error("str_upper function not found in symbol table");
 
@@ -1836,7 +2756,7 @@ exprt string_handler::handle_string_find(
   exprt arg_addr = get_array_base_address(arg_expr);
 
   symbolt *find_str_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_find");
+    find_cached_c_function_symbol("c:@F@__python_str_find");
   if (!find_str_symbol)
     throw std::runtime_error("str_find function not found in symbol table");
 
@@ -1874,7 +2794,7 @@ exprt string_handler::handle_string_find_range(
     end_expr = typecast_exprt(end_expr, int_type());
 
   symbolt *find_range_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_find_range");
+    find_cached_c_function_symbol("c:@F@__python_str_find_range");
   if (!find_range_symbol)
     throw std::runtime_error(
       "str_find_range function not found in symbol table");
@@ -1960,7 +2880,7 @@ exprt string_handler::handle_string_rfind(
   exprt arg_addr = get_array_base_address(arg_expr);
 
   symbolt *rfind_str_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_rfind");
+    find_cached_c_function_symbol("c:@F@__python_str_rfind");
   if (!rfind_str_symbol)
     throw std::runtime_error("str_rfind function not found in symbol table");
 
@@ -1998,7 +2918,7 @@ exprt string_handler::handle_string_rfind_range(
     end_expr = typecast_exprt(end_expr, int_type());
 
   symbolt *rfind_range_symbol =
-    symbol_table_.find_symbol("c:@F@__python_str_rfind_range");
+    find_cached_c_function_symbol("c:@F@__python_str_rfind_range");
   if (!rfind_range_symbol)
     throw std::runtime_error(
       "str_rfind_range function not found in symbol table");
@@ -2986,7 +3906,7 @@ exprt string_handler::handle_string_to_int(
   }
 
   // Find the __python_int function symbol
-  symbolt *int_symbol = symbol_table_.find_symbol("c:@F@__python_int");
+  symbolt *int_symbol = find_cached_c_function_symbol("c:@F@__python_int");
   if (!int_symbol)
   {
     throw std::runtime_error("__python_int function not found in symbol table");
@@ -3109,7 +4029,7 @@ exprt string_handler::handle_chr_conversion(
     codepoint_expr = typecast_exprt(codepoint_expr, int_type());
 
   // Find the __python_chr function symbol
-  symbolt *chr_symbol = symbol_table_.find_symbol("c:@F@__python_chr");
+  symbolt *chr_symbol = find_cached_c_function_symbol("c:@F@__python_chr");
   if (!chr_symbol)
     throw std::runtime_error("__python_chr function not found in symbol table");
 
@@ -3121,6 +4041,436 @@ exprt string_handler::handle_chr_conversion(
   chr_call.type() = pointer_typet(char_type());
 
   return chr_call;
+}
+
+exprt string_handler::try_handle_len_string_fast_path(
+  const nlohmann::json &call_json,
+  const exprt &arg_expr)
+{
+  if (
+    !call_json.contains("args") || !call_json["args"].is_array() ||
+    call_json["args"].empty())
+  {
+    return nil_exprt();
+  }
+
+  const nlohmann::json &arg_json = call_json["args"][0];
+  const std::string current_scope_id = converter_.get_current_func_name();
+  if (len_cache_scope_id_ != current_scope_id)
+  {
+    // Explicit invalidation when scope changes.
+    assignment_count_cache_.clear();
+    assignment_has_augassign_cache_.clear();
+    var_value_cache_.clear();
+    len_cache_scope_id_ = current_scope_id;
+  }
+
+  if (
+    exprt fast = try_len_fast_path_from_constant_arg(arg_json); !fast.is_nil())
+    return fast;
+
+  if (exprt fast = try_len_fast_path_from_name_arg(arg_json); !fast.is_nil())
+    return fast;
+
+  if (arg_expr.is_symbol())
+  {
+    symbolt *arg_symbol = converter_.find_symbol(
+      to_symbol_expr(arg_expr).get_identifier().as_string());
+    if (
+      arg_symbol && arg_symbol->value.is_not_nil() &&
+      arg_symbol->value.type().is_array() && arg_symbol->value.is_constant())
+    {
+      const array_typet &arr_type = to_array_type(arg_symbol->value.type());
+      if (
+        type_utils::is_char_type(arr_type.subtype()) &&
+        arr_type.size().is_constant())
+      {
+        BigInt sz;
+        if (!to_integer(arr_type.size(), sz) && sz > 0)
+          return from_integer(sz - 1, size_type());
+      }
+    }
+  }
+
+  if (arg_expr.is_symbol())
+  {
+    const std::string sym_id =
+      to_symbol_expr(arg_expr).get_identifier().as_string();
+    const auto &len_map = converter_.input_str_to_len_sym_;
+    auto it = len_map.find(sym_id);
+    if (it != len_map.end())
+    {
+      const symbolt *len_sym = converter_.find_symbol(it->second);
+      if (len_sym)
+        return typecast_exprt(symbol_expr(*len_sym), size_type());
+    }
+  }
+
+  typet actual_type = arg_expr.type();
+  if (actual_type.is_pointer())
+    actual_type = actual_type.subtype();
+  if (actual_type.id() == "symbol")
+    actual_type = converter_.ns.follow(actual_type);
+
+  if (actual_type.id() == "array")
+  {
+    const array_typet &arr_type = to_array_type(actual_type);
+    if (
+      type_utils::is_char_type(arr_type.subtype()) &&
+      arr_type.size().is_constant())
+    {
+      BigInt sz;
+      if (!to_integer(arr_type.size(), sz) && sz > 0)
+        return from_integer(sz - 1, size_type());
+    }
+  }
+
+  return nil_exprt();
+}
+
+exprt string_handler::try_len_fast_path_from_constant_arg(
+  const nlohmann::json &arg_json)
+{
+  const std::string arg_type =
+    (arg_json.contains("_type") && arg_json["_type"].is_string())
+      ? arg_json["_type"].get<std::string>()
+      : "";
+  if (
+    arg_type == "Constant" && arg_json.contains("value") &&
+    arg_json["value"].is_string())
+  {
+    const std::string text = arg_json["value"].get<std::string>();
+    return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
+  }
+  return nil_exprt();
+}
+
+exprt string_handler::try_len_fast_path_from_name_arg(
+  const nlohmann::json &arg_json)
+{
+  const std::string arg_type =
+    (arg_json.contains("_type") && arg_json["_type"].is_string())
+      ? arg_json["_type"].get<std::string>()
+      : "";
+  if (!(arg_type == "Name" && arg_json.contains("id")))
+    return nil_exprt();
+
+  const std::string var_name = arg_json["id"].get<std::string>();
+  const std::string current_scope_id = converter_.get_current_func_name();
+  const std::string cache_key = current_scope_id + "::" + var_name;
+  int assign_count = 0;
+  bool has_augassign = false;
+
+  auto assign_count_it = assignment_count_cache_.find(cache_key);
+  auto has_augassign_it = assignment_has_augassign_cache_.find(cache_key);
+  if (
+    assign_count_it != assignment_count_cache_.end() &&
+    has_augassign_it != assignment_has_augassign_cache_.end())
+  {
+    assign_count = assign_count_it->second;
+    has_augassign = has_augassign_it->second;
+  }
+  else
+  {
+    const nlohmann::json &ast = converter_.get_ast_json();
+    if (current_scope_id.empty())
+    {
+      assign_count =
+        count_name_assignments_in_node(ast["body"], var_name, has_augassign);
+    }
+    else
+    {
+      std::vector<std::string> function_path =
+        json_utils::split_function_path(current_scope_id);
+      nlohmann::json func_node =
+        json_utils::find_function_by_path(ast, function_path);
+      if (!func_node.empty() && func_node.contains("body"))
+      {
+        assign_count = count_name_assignments_in_node(
+          func_node["body"], var_name, has_augassign);
+      }
+    }
+
+    assignment_count_cache_[cache_key] = assign_count;
+    assignment_has_augassign_cache_[cache_key] = has_augassign;
+  }
+
+  if (!(assign_count == 1 && !has_augassign))
+  {
+    var_value_cache_.erase(cache_key);
+    return nil_exprt();
+  }
+
+  auto const_string_len_from_symbol =
+    [this](const std::string &name) -> std::optional<BigInt>
+  {
+    if (name != "__name__")
+      return std::nullopt;
+
+    std::string name_value;
+    if (converter_.python_file() == converter_.main_python_filename())
+      name_value = "__main__";
+    else
+    {
+      const std::string &file = converter_.python_file();
+      size_t last_slash = file.find_last_of("/\\");
+      size_t last_dot = file.find_last_of(".");
+      if (
+        last_slash != std::string::npos && last_dot != std::string::npos &&
+        last_dot > last_slash)
+      {
+        name_value = file.substr(last_slash + 1, last_dot - last_slash - 1);
+      }
+      else if (last_dot != std::string::npos)
+        name_value = file.substr(0, last_dot);
+      else
+        name_value = file;
+    }
+    return BigInt(utf8_codepoint_count(name_value));
+  };
+
+  auto joinedstr_len = [&const_string_len_from_symbol](
+                         const nlohmann::json &joined) -> std::optional<BigInt>
+  {
+    if (!joined.contains("values") || !joined["values"].is_array())
+      return std::nullopt;
+
+    BigInt total = BigInt(0);
+    for (const auto &part : joined["values"])
+    {
+      if (
+        part["_type"] == "Constant" && part.contains("value") &&
+        part["value"].is_string())
+      {
+        const std::string text = part["value"].get<std::string>();
+        total += BigInt(utf8_codepoint_count(text));
+        continue;
+      }
+      if (part["_type"] == "FormattedValue" && part.contains("value"))
+      {
+        const auto &value = part["value"];
+        if (value["_type"] == "Name" && value.contains("id"))
+        {
+          if (
+            auto len =
+              const_string_len_from_symbol(value["id"].get<std::string>()))
+          {
+            total += *len;
+            continue;
+          }
+        }
+      }
+      return std::nullopt;
+    }
+    return total;
+  };
+
+  nlohmann::json var_value;
+  auto var_value_it = var_value_cache_.find(cache_key);
+  if (var_value_it != var_value_cache_.end())
+  {
+    var_value = var_value_it->second;
+  }
+  else
+  {
+    var_value = json_utils::get_var_value(
+      var_name, current_scope_id, converter_.get_ast_json());
+    var_value_cache_[cache_key] = var_value;
+  }
+
+  if (!var_value.empty() && var_value.contains("value"))
+  {
+    const auto &value = var_value["value"];
+    if (value.contains("_type") && value["_type"] == "JoinedStr")
+    {
+      if (auto len = joinedstr_len(value))
+        return from_integer(*len, size_type());
+    }
+    if (
+      value.contains("_type") && value["_type"] == "Constant" &&
+      value.contains("value") && value["value"].is_string())
+    {
+      const std::string text = value["value"].get<std::string>();
+      return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
+    }
+  }
+
+  return nil_exprt();
+}
+
+exprt string_handler::handle_string_attribute_call(
+  const nlohmann::json &call_json)
+{
+  if (
+    !call_json.contains("func") || !call_json["func"].contains("_type") ||
+    call_json["func"]["_type"] != "Attribute" ||
+    !call_json["func"].contains("attr"))
+  {
+    return nil_exprt();
+  }
+
+  const auto &func_json = call_json["func"];
+  const auto &receiver_json = func_json["value"];
+  const std::string method_name = func_json["attr"].get<std::string>();
+  const nlohmann::json empty_json_array = nlohmann::json::array();
+  const nlohmann::json &args =
+    (call_json.contains("args") && call_json["args"].is_array())
+      ? call_json["args"]
+      : empty_json_array;
+  const nlohmann::json &keywords =
+    (call_json.contains("keywords") && call_json["keywords"].is_array())
+      ? call_json["keywords"]
+      : empty_json_array;
+
+  std::optional<exprt> cached_receiver_expr;
+  auto get_receiver_expr = [&]() -> exprt
+  {
+    if (!cached_receiver_expr.has_value())
+      cached_receiver_expr = converter_.get_expr(receiver_json);
+    return *cached_receiver_expr;
+  };
+
+  std::optional<locationt> cached_location;
+  auto get_location = [&]() -> locationt
+  {
+    if (!cached_location.has_value())
+      cached_location = converter_.get_location_from_decl(call_json);
+    return *cached_location;
+  };
+
+  keyword_valuest keyword_values =
+    collect_keyword_values(method_name, keywords);
+  if (
+    std::optional<exprt> dispatched = dispatch_decode_join_method(
+      *this,
+      method_name,
+      call_json,
+      receiver_json,
+      args,
+      keyword_values,
+      converter_))
+  {
+    return *dispatched;
+  }
+
+  if (
+    std::optional<exprt> dispatched = dispatch_no_arg_string_methods(
+      *this,
+      method_name,
+      args,
+      keyword_values,
+      get_receiver_expr,
+      get_location))
+  {
+    return *dispatched;
+  }
+
+  if (
+    std::optional<exprt> dispatched = dispatch_one_arg_string_methods(
+      *this,
+      method_name,
+      args,
+      keyword_values,
+      get_receiver_expr,
+      get_location,
+      converter_))
+  {
+    return *dispatched;
+  }
+
+  if (
+    std::optional<exprt> dispatched = dispatch_search_string_methods(
+      *this,
+      method_name,
+      call_json,
+      args,
+      keyword_values,
+      get_receiver_expr,
+      get_location,
+      converter_))
+  {
+    return *dispatched;
+  }
+
+  if (
+    std::optional<exprt> dispatched = dispatch_spacing_and_padding_methods(
+      *this,
+      method_name,
+      args,
+      keyword_values,
+      get_receiver_expr,
+      get_location,
+      converter_))
+  {
+    return *dispatched;
+  }
+
+  if (
+    std::optional<exprt> dispatched = dispatch_replace_method(
+      *this,
+      method_name,
+      args,
+      keyword_values,
+      get_receiver_expr,
+      get_location,
+      converter_))
+  {
+    return *dispatched;
+  }
+
+  if (
+    std::optional<exprt> dispatched = dispatch_count_method(
+      *this,
+      method_name,
+      args,
+      keyword_values,
+      get_receiver_expr,
+      get_location,
+      converter_))
+  {
+    return *dispatched;
+  }
+
+  if (
+    std::optional<exprt> dispatched = dispatch_splitlines_method(
+      *this,
+      method_name,
+      call_json,
+      args,
+      keyword_values,
+      get_receiver_expr,
+      get_location))
+  {
+    return *dispatched;
+  }
+
+  if (
+    std::optional<exprt> dispatched = dispatch_format_methods(
+      *this,
+      method_name,
+      call_json,
+      keyword_values,
+      get_receiver_expr,
+      get_location))
+  {
+    return *dispatched;
+  }
+
+  if (
+    std::optional<exprt> dispatched = dispatch_split_method(
+      method_name,
+      receiver_json,
+      call_json,
+      args,
+      keyword_values,
+      is_none_literal_json,
+      get_receiver_expr,
+      converter_))
+  {
+    return *dispatched;
+  }
+
+  return nil_exprt();
 }
 
 exprt string_handler::handle_str_join(const nlohmann::json &call_json)
