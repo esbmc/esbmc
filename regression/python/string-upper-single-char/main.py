@@ -4,4 +4,5 @@ def main() -> None:
 
     assert u == "A"
 
+
 main()

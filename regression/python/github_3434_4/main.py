@@ -1,2 +1,5 @@
-def f(x: str): pass
+def f(x: str):
+    pass
+
+
 f(True)

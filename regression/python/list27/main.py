@@ -4,4 +4,5 @@ def f() -> float:
     a = xs.pop()
     return a + b
 
+
 assert f() == 8.0

@@ -6,4 +6,5 @@ def test_nondet_dict_popitem_key_removed() -> None:
     k, v = x.popitem()
     assert len(x) == original_size - 1
 
+
 test_nondet_dict_popitem_key_removed()

@@ -21,7 +21,7 @@ assert len(t3) == 0
 assert t3 == ()
 
 # Single element
-t4: tuple = (5,)
+t4: tuple = (5, )
 assert isinstance(t4, tuple)
 assert len(t4) == 1
 assert t4[0] == 5
@@ -34,4 +34,3 @@ assert isinstance(t5[0], tuple) and isinstance(t5[1], tuple)
 assert t5[0] == (1, 2)
 assert t5[1] == (3, 4)
 assert t5 == ((1, 2), (3, 4))
-

@@ -1,7 +1,9 @@
 from typing import List, Any
 
+
 # Mock JIRA client (ESBMC can't resolve real external modules)
 class JIRA:
+
     def __init__(self, server: str, user: str, password: str):
         self.server = server
         self.user = user

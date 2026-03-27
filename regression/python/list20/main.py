@@ -1,11 +1,12 @@
 from typing import List
 
-x:List[int] = [1,2,3]
+x: List[int] = [1, 2, 3]
 assert x[0] == 1
 assert x[1] == 2
 assert x[2] == 3
 
 assert len(x) == 3
+
 
 def sum_while(n: List[int]) -> int:
     l = len(n)
@@ -15,5 +16,6 @@ def sum_while(n: List[int]) -> int:
         s += n[i]
         i += 1
     return s
+
 
 assert sum_while([1, 2, 3, 4]) == 10

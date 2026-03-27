@@ -1,3 +1,5 @@
-def f(x: str): pass
-f({"a": True}["a"])
+def f(x: str):
+    pass
 
+
+f({"a": True}["a"])

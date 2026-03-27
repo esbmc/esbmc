@@ -7,4 +7,5 @@ def sum_while(n: list[int]) -> int:
         i += 1
     return s
 
+
 assert sum_while([1, 2]) == 2

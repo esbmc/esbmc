@@ -2,8 +2,10 @@
 class Box:
     size = 0
 
+
 def resize(b, v: int):
     b.size = v
+
 
 b = Box()
 n: int = nondet_int()

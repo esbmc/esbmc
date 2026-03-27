@@ -5,6 +5,7 @@ def flatten(arr):
             yield y
         yield x
 
+
 x = nondet_int()
 y = nondet_int()
 z = nondet_int()

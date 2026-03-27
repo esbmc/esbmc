@@ -3,4 +3,5 @@ def test_nondet_dict_basic():
     x = nondet_dict(2)
     assert len(x) >= 0
 
+
 test_nondet_dict_basic()

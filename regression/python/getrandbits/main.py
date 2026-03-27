@@ -1,15 +1,16 @@
 import random
 
+
 def main():
     result: int = random.getrandbits(8)
     assert result >= 0 and result <= 255
-    
+
     result2: int = random.getrandbits(4)
     assert result2 >= 0 and result2 <= 15
-    
+
     result3: int = random.getrandbits(1)
     assert result3 >= 0 and result3 <= 1
-    
+
     result4: int = random.getrandbits(16)
     assert result4 >= 0 and result4 <= 65535
 
@@ -28,12 +29,13 @@ def main():
         assert False  # should not reach here
     except ValueError:
         assert True
-    
+
     try:
         result6: int = random.getrandbits(-10)
         assert False  # should not reach here
     except ValueError:
         assert True
+
 
 if __name__ == "__main__":
     main()

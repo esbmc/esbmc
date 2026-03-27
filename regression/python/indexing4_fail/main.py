@@ -6,4 +6,5 @@ def main():
         assert value >= 0
         i += 1
 
+
 main()

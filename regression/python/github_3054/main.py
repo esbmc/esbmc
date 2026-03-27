@@ -1,3 +1,3 @@
-LL = { "foo", "bar" }
+LL = {"foo", "bar"}
 
 assert "foo" in LL

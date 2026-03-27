@@ -4,6 +4,7 @@ def gen():
         yield i
         i += 1
 
+
 g = gen()
 
 a = next(g)

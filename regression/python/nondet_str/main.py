@@ -1,12 +1,14 @@
 # defined by --nondet-str-length (default = 16). The last character is always
 # the null terminator. The visible string length is therefore <= max_len - 1.
 
+
 def test_length_is_non_negative():
     s = nondet_str()
     assert len(s) >= 0  # Always true
 
 
 test_length_is_non_negative()
+
 
 def test_length_respects_upper_bound():
     s = nondet_str()
@@ -16,7 +18,9 @@ def test_length_respects_upper_bound():
 
 test_length_respects_upper_bound()
 
+
 def test_function_argument_pass_through():
+
     def check_string(x: str) -> bool:
         return len(x) >= 0
 
@@ -26,6 +30,7 @@ def test_function_argument_pass_through():
 
 test_function_argument_pass_through()
 
+
 def test_non_empty_string_comparison():
     s = nondet_str()
     if len(s) > 0:
@@ -34,9 +39,11 @@ def test_non_empty_string_comparison():
 
 test_non_empty_string_comparison()
 
+
 def test_assume_empty_string():
     s = nondet_str()
     __ESBMC_assume(len(s) == 0)
     assert s == ""  # Empty string should be represented as ""
+
 
 test_assume_empty_string()

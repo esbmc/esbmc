@@ -1,8 +1,4 @@
-d = {
-    "properties": {
-        "x": {"type": "boolean"}
-    }
-}
+d = {"properties": {"x": {"type": "boolean"}}}
 
 for k, v in d["properties"].items():
     if v["type"] == "boolean":

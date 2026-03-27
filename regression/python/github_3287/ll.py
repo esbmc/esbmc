@@ -7,4 +7,3 @@ class Foo:
     def foo(self, a: str, b: str = "xyz") -> None:
 
         assert b in ["xyz", "abc"]
-

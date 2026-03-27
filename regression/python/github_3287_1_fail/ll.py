@@ -7,4 +7,3 @@ class Foo:
         # This assertion should fail because default values don't match
         assert y == "wrong"
         assert z == 100
-

@@ -10,4 +10,5 @@ def test_missing_key_raises_keyerror():
     except KeyError:
         assert True
 
+
 test_missing_key_raises_keyerror()

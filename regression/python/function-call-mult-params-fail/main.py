@@ -1,4 +1,5 @@
-def func(a : int, b: int) -> None:
-    result:float = a/b
+def func(a: int, b: int) -> None:
+    result: float = a / b
 
-func(1,0)
+
+func(1, 0)

@@ -4,4 +4,5 @@ def main():
     value = lst[idx]
     assert value == 0
 
+
 main()

@@ -3,4 +3,5 @@ def test_het_dict_values():
     for v in d.values():
         assert v == 1 or v == 2.0
 
+
 test_het_dict_values()

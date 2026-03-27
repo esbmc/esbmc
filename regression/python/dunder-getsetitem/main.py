@@ -1,4 +1,5 @@
 class MyClass:
+
     def __init__(self) -> None:
         self.value = 0
 
@@ -14,5 +15,5 @@ class MyClass:
 
 obj = MyClass()
 obj[2] = 11
-v:int = obj[2]
+v: int = obj[2]
 assert v == 11

@@ -14,4 +14,3 @@ if y is int:
     print("This will never print")
 else:
     print("y is int -> False (wrong way to check)")
-

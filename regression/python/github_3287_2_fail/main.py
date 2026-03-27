@@ -7,4 +7,3 @@ f = ll.Foo()
 # 2. Keyword argument overriding default value
 # 3. Partial keyword arguments (some use defaults, some provided)
 f.test(5, z="provided", w=100)
-

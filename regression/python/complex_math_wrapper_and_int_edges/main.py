@@ -1,6 +1,5 @@
 import math
 
-
 # Dedicated wrapper behavior through math.isnan/isinf path.
 z0 = complex(1.0, 0.0)
 z1 = z0

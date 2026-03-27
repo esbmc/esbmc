@@ -6,7 +6,7 @@ assert l[2] == 3
 assert l[3] == 4
 assert l[4] == 5
 assert l[5] == 6
-assert l[6] == 6 # should fail
+assert l[6] == 6  # should fail
 assert l[7] == 8
 assert l[8] == 9
 assert l[9] == 10

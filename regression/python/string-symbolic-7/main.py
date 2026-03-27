@@ -1,4 +1,3 @@
-
 s = nondet_string(5)
 assume(s == "hello")
 first_char = s[0]

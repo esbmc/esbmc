@@ -1,5 +1,6 @@
 from md import Foo, Bar
 
+
 def create(s: str) -> Foo | Bar:
     if s == "Foo":
         return Foo(s)

@@ -4,4 +4,5 @@ def test_range_result_properties():
     assert l[5] == 5
     assert l[9] == 9
 
+
 test_range_result_properties()

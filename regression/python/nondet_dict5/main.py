@@ -4,4 +4,5 @@ def test_nondet_dict_basic() -> None:
     assert len(x) >= 0
     assert len(x) <= 2
 
+
 test_nondet_dict_basic()

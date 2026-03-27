@@ -5,4 +5,5 @@ def test_nondet_dict_popitem_empties_dict() -> None:
     k, v = x.popitem()
     assert len(x) == 0
 
+
 test_nondet_dict_popitem_empties_dict()
