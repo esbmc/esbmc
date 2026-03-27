@@ -4,4 +4,5 @@ def foo() -> None:
     assert (None is None)
     assert not (None is not None)
 
+
 foo()

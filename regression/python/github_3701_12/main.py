@@ -7,6 +7,7 @@ def gen():
             yield i + 10
         i = i + 1
 
+
 g = gen()
 
 a = next(g)

@@ -1,4 +1,4 @@
-count : int = 0
+count: int = 0
 
 while True:
     count = count + 1

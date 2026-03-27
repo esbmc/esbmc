@@ -5,4 +5,5 @@ def test_delete_string_key():
     assert "y" not in d
     assert "z" in d
 
+
 test_delete_string_key()

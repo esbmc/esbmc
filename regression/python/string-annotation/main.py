@@ -1,12 +1,15 @@
 # example_3_dataclasses.py
 
+
 class CoordinateInit:
+
     def __init__(self, x: int, y: int) -> None:
         self.x = x
         self.y = y
 
 
 class CoordinateData:
+
     def __init__(self, x: int, y: int) -> None:
         self.x = x
         self.y = y
@@ -14,12 +17,13 @@ class CoordinateData:
     def equals(self, other: "CoordinateData | None") -> bool:
         if other is None:
             return False
-        x_equal:bool = (self.x == other.x)
-        y_equal:bool = (self.y == other.y)
+        x_equal: bool = (self.x == other.x)
+        y_equal: bool = (self.y == other.y)
         return x_equal and y_equal
 
 
 class CoordinateFrost:
+
     def __init__(self, x: int, y: int) -> None:
         self.x = x
         self.y = y
@@ -63,5 +67,3 @@ def demonstrate_classes(dummy: object) -> None:
 
 if __name__ == "__main__":
     demonstrate_classes(None)
-
-

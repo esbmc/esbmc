@@ -5,4 +5,3 @@ import mod3
 c = mod3.MyClass()
 result = c.get_value()
 assert result == 42
-

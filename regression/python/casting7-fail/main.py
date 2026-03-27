@@ -11,4 +11,3 @@ assert not (f <= 'A')
 
 f = float(65)
 assert not (f >= 'A')
-

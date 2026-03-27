@@ -3,4 +3,5 @@ def main():
     for k, v in d.items():
         assert isinstance(k, bool)
 
+
 main()

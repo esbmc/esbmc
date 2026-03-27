@@ -3,4 +3,5 @@ def main() -> None:
     assert "xyz".rfind("z") == 1
     assert "hi".rfind("hello") == 0
 
+
 main()

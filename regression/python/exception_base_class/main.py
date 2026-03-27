@@ -3,6 +3,7 @@ def parse_number(x: int) -> int:
         raise ValueError("Negative number!")
     return x
 
+
 result = 0
 try:
     result = parse_number(-1)

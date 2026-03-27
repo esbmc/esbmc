@@ -10,6 +10,7 @@ def my_split(s: str, sep: str) -> list[str]:
     result.append(word)
     return result
 
+
 s: str = "a,b"
 l = my_split(s, ",")
 assert len(l) == 2

@@ -3,6 +3,7 @@ def gen():
         return
     yield 1
 
+
 g = gen()
 
 try:

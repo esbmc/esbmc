@@ -3,9 +3,11 @@ class Point:
     x = 0
     y = 0
 
+
 def move(p):
     p.x = 10
     p.y = 20
+
 
 p1 = Point()
 p2 = Point()

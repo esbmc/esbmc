@@ -20,4 +20,5 @@ def test_chained_comparisons():
     x = 2
     assert 0 <= x < 2 < 3 == False, "Failed: x = 2 should not satisfy x < 2"
 
+
 test_chained_comparisons()

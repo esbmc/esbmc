@@ -14,7 +14,7 @@ def test_float_format_spec():
     """Test float formatting with precision"""
     val: float = 3.14159
     formatted: str = f"{val:.2f}"
-    
+
     # Python rounds to 2 decimals
     assert formatted != "3.14"
     assert len(formatted) < 0
@@ -39,4 +39,3 @@ def run_all_tests():
 if __name__ == "__main__":
     run_all_tests()
     print("All f-string format specification tests passed!")
-

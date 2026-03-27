@@ -5,4 +5,5 @@ def test_sqrt_conditional_input():
     result = math.sqrt(x)
     assert result == 3.0
 
+
 test_sqrt_conditional_input()

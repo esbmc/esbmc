@@ -6,5 +6,6 @@ def main():
         # This should never happen in the main module
         assert False
 
+
 if __name__ == "__main__":
     main()

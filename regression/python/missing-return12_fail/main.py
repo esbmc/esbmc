@@ -15,5 +15,6 @@ def complex_control_flow(x: int, y: int, z: int) -> int:
     except Exception:
         return -2
 
+
 # Test with values that should hit missing return paths
 result = complex_control_flow(1, 0, 5)  # y == 0 case

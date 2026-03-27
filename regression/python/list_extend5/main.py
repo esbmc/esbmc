@@ -3,4 +3,5 @@ def test_extend_string():
     a.extend("bc")
     assert a == ['a', 'b', 'c']
 
+
 test_extend_string()

@@ -6,4 +6,5 @@ def test_inside_loop_and_condition():
             total *= 2
     assert total == 4
 
+
 test_inside_loop_and_condition()

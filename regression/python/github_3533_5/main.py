@@ -1,5 +1,6 @@
 from typing import Any
 
+
 def test(flag: bool) -> None:
     if flag:
         x: Any = 1
@@ -7,5 +8,6 @@ def test(flag: bool) -> None:
         x: Any = 1.876
     y: Any = x
     assert y == 1.876
+
 
 test(False)

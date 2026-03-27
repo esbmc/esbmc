@@ -4,4 +4,5 @@ def test_pop_from_dict():
     del my_dict["b"]
     assert "b" not in my_dict
 
+
 test_pop_from_dict()

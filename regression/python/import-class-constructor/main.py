@@ -5,4 +5,3 @@ import mod1
 c = mod1.MyClass("test")
 # Verify constructor call succeeds (type inference works correctly)
 assert True
-

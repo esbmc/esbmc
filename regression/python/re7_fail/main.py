@@ -13,4 +13,3 @@ try:
     re.fullmatch("abc", invalid_string)  # invalid at runtime, not static
 except AssertionError:
     assert False
-

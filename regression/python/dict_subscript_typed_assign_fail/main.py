@@ -7,4 +7,4 @@ d[2] = "wrong-type"
 x = d[2]
 
 # ESBMC should detect mismatch and fail
-assert isinstance(x, float)   # This must fail
+assert isinstance(x, float)  # This must fail

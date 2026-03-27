@@ -6,4 +6,5 @@ def test_nondet_list_float_modification():
     x.append(10.5)
     assert x[len(x) - 1] >= 10.5
 
+
 test_nondet_list_float_modification()

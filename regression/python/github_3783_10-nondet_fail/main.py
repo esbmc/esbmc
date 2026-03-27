@@ -4,4 +4,5 @@ def test_nondet_dict_popitem_empty_keyerror() -> None:
     # No assumption on len(x): empty dict is reachable -> KeyError
     k, v = x.popitem()
 
+
 test_nondet_dict_popitem_empty_keyerror()

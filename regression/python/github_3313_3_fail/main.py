@@ -1,5 +1,6 @@
 from datetime import datetime
 
+
 def foo(datetime_str: str | datetime) -> tuple[int, int, int]:
     if isinstance(datetime_str, datetime):
         return (
@@ -10,16 +11,17 @@ def foo(datetime_str: str | datetime) -> tuple[int, int, int]:
     else:
         return (0, 0, 0)
 
+
 b = nondet_bool()
 
 if b:
-    dt1:datetime = datetime(2, 3, 4)
+    dt1: datetime = datetime(2, 3, 4)
     rv = (2, 3, 4)
     assert foo(dt1) == rv
 else:
-    dt2:str = "foo"
+    dt2: str = "foo"
     rv = (0, 0, 0)
     assert foo(dt2) == rv
 
-assert b or isinstance(dt2, datetime) # should fail
+assert b or isinstance(dt2, datetime)  # should fail
 assert not b or isinstance(dt1, datetime)

@@ -1,2 +1,2 @@
-text:str = "test"
+text: str = "test"
 assert text[-1] == "t"

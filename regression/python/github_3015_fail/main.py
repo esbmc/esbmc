@@ -3,5 +3,5 @@
 def foo(x: int, y: str) -> None:
     pass
 
-foo(42, x=1, y="foo")
 
+foo(42, x=1, y="foo")

@@ -6,4 +6,5 @@ def test_nondet_list_bool_modification():
     x.append(True)
     assert x[len(x) - 1] == True
 
+
 test_nondet_list_bool_modification()

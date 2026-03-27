@@ -1,16 +1,21 @@
 # Test case 2: Three-level nested attribute access
 class Level3:
+
     def get_value(self) -> int:
         return 999
 
+
 class Level2:
+
     def __init__(self) -> None:
         self.level3: Level3 = Level3()
 
     def get_level3(self) -> Level3:
         return self.level3
 
+
 class Level1:
+
     def __init__(self) -> None:
         self.level2: Level2 = Level2()
 
@@ -20,7 +25,7 @@ class Level1:
         result = self.level2.level3.get_value()
         return result
 
+
 level1 = Level1()
 result: int = level1.test_three_levels()
 assert result == 999
-

@@ -3,4 +3,5 @@ def test_replace_and_find():
     assert s.replace("a", "o") == "bonono"
     assert s.count("na") == 2
 
+
 test_replace_and_find()

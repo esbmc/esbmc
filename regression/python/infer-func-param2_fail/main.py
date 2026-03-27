@@ -4,4 +4,5 @@ def search(x, seq):
             return i
     return len(seq)
 
+
 assert search(42, [-5, 1, 3, 5, 7, 42]) == 6

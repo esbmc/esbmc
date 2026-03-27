@@ -6,4 +6,5 @@ def f(a, k):
         return f(b, k - n)
     return p
 
-assert f([1,2,3], 1) == 2
+
+assert f([1, 2, 3], 1) == 2

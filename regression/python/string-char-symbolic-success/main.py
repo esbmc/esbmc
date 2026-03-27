@@ -1,4 +1,3 @@
-
 s = nondet_string(3)
 assume(s == "abc")
 c1 = s[0]

@@ -3,9 +3,7 @@ def validate_no_empty_parts(price: str) -> None:
     i = 0
     while i < len(partes):
         if partes[i] == "":
-            raise AssertionError(
-                "Error: Empty part detected before or after the dot."
-            )
+            raise AssertionError("Error: Empty part detected before or after the dot.")
         i += 1
 
 
