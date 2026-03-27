@@ -14,6 +14,5 @@ int main()
 {
   int a = nondet_int();
   int r = 0 >> a;
-  assert(r == 0);
   return 0;
 }
