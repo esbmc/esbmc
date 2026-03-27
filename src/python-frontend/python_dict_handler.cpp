@@ -673,14 +673,13 @@ exprt python_dict_handler::handle_dict_subscript(
 
 void python_dict_handler::handle_dict_subscript_assign(
   const exprt &dict_expr,
-  const nlohmann::json &slice_node,
+  const exprt &key_expr,
   const exprt &value,
+  const locationt &location,
+  const nlohmann::json &node,
   codet &target_block)
 {
-  locationt location = converter_.get_location_from_decl(slice_node);
   typet list_type = type_handler_.get_list_type();
-
-  exprt key_expr = get_key_expr(slice_node);
 
   member_exprt keys_member(dict_expr, "keys", list_type);
   member_exprt values_member(dict_expr, "values", list_type);
@@ -707,19 +706,17 @@ void python_dict_handler::handle_dict_subscript_assign(
     throw std::runtime_error(
       "__ESBMC_list_set_at not found - add it to list.c model");
 
-  python_list list_handler(converter_, slice_node);
+  python_list list_handler(converter_, node);
 
-  // Create temp for index result
   symbolt &index_var = converter_.create_tmp_symbol(
-    slice_node, "$dict_update_idx$", size_type(), gen_zero(size_type()));
+    node, "$dict_update_idx$", size_type(), gen_zero(size_type()));
 
   code_declt index_decl(symbol_expr(index_var));
   index_decl.location() = location;
   update_block.copy_to_operands(index_decl);
 
   // Get element info for the key
-  list_elem_info key_info =
-    list_handler.get_list_element_info(slice_node, key_expr);
+  list_elem_info key_info = list_handler.get_list_element_info(node, key_expr);
 
   // Call find_index(keys, key, type_hash, size) to get the index
   code_function_callt find_call;
@@ -743,8 +740,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   update_block.copy_to_operands(find_call);
 
   // Update value at index using list_set_at
-  list_elem_info value_info =
-    list_handler.get_list_element_info(slice_node, value);
+  list_elem_info value_info = list_handler.get_list_element_info(node, value);
 
   code_function_callt set_value_call;
   set_value_call.function() = symbol_expr(*set_func);
@@ -1204,7 +1200,12 @@ bool python_dict_handler::handle_subscript_assignment_check(
   converter.set_converting_rhs(false);
 
   handle_dict_subscript_assign(
-    container_expr, target["slice"], rhs, target_block);
+    container_expr,
+    get_key_expr(target["slice"]),
+    rhs,
+    converter.get_location_from_decl(target["slice"]),
+    target["slice"],
+    target_block);
   return true;
 }
 
@@ -2012,9 +2013,14 @@ typet python_dict_handler::get_popitem_tuple_type(const exprt &dict_expr)
         converter_.get_ast_json());
       if (!var_decl.empty() && var_decl.contains("annotation"))
       {
+        // For update(other_dict), try dict[K, V] first before using the
+        // default dict fallback.
+        key_type = get_dict_key_type_from_annotation(var_decl["annotation"]);
+
         // If annotation is a bare "dict" with a function-call initializer,
         // look up the key type from the function's return annotation.
         if (
+          (key_type.is_nil() || key_type.is_empty()) &&
           var_decl["annotation"]["_type"] == "Name" &&
           var_decl["annotation"]["id"] == "dict" &&
           var_decl.contains("value") && var_decl["value"]["_type"] == "Call" &&
@@ -2256,23 +2262,109 @@ exprt python_dict_handler::handle_dict_update(
 
   const nlohmann::json &arg = args[0];
 
-  if (!is_dict_literal(arg))
-    throw std::runtime_error(
-      "update() argument must be a dict literal in ESBMC model");
-
-  const auto &keys = arg["keys"];
-  const auto &values = arg["values"];
-
-  // For each key-value pair in the argument dict, update the target dict.
-  // handle_dict_subscript_assign implements:
-  //   if key exists → update value; else → insert new key-value pair.
-  for (size_t i = 0; i < keys.size(); ++i)
+  if (is_dict_literal(arg))
   {
-    exprt value_expr = converter_.get_expr(values[i]);
-    code_blockt pair_block;
-    handle_dict_subscript_assign(dict_expr, keys[i], value_expr, pair_block);
-    converter_.add_instruction(pair_block);
+    // Keep the literal fast path unchanged.
+    const auto &keys = arg["keys"];
+    const auto &values = arg["values"];
+
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+      exprt value_expr = converter_.get_expr(values[i]);
+      code_blockt pair_block;
+      handle_dict_subscript_assign(
+        dict_expr,
+        get_key_expr(keys[i]),
+        value_expr,
+        converter_.get_location_from_decl(keys[i]),
+        keys[i],
+        pair_block);
+      converter_.add_instruction(pair_block);
+    }
+
+    return nil_exprt();
   }
+
+  // For update(other_dict), iterate over the source keys/values lists and
+  // reinsert each pair into the destination dict.
+  exprt other_dict = converter_.get_expr(arg);
+  if (!is_dict_type(other_dict.type()))
+    throw std::runtime_error("update() argument must be a dict in ESBMC model");
+
+  // Read entries from the source dict through its internal keys/values lists.
+  locationt location = converter_.get_location_from_decl(call_node);
+  typet list_type = type_handler_.get_list_type();
+  member_exprt keys_member(other_dict, "keys", list_type);
+  member_exprt values_member(other_dict, "values", list_type);
+
+  // Get the helper used to determine how many entries need to be copied.
+  const symbolt *size_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+  if (!size_func)
+    throw std::runtime_error("__ESBMC_list_size not found");
+
+  // Recover the key and value types so each entry can be reconstructed.
+  python_list list_handler(converter_, call_node);
+  typet tuple_type = get_popitem_tuple_type(other_dict);
+  const struct_typet &tuple_struct = to_struct_type(tuple_type);
+  typet key_type = tuple_struct.components()[0].type();
+  typet val_type = tuple_struct.components()[1].type();
+
+  // Compute the number of entries in the source dict
+  symbolt &size_var = converter_.create_tmp_symbol(
+    call_node, "$dict_update_size$", size_type(), exprt());
+  code_declt size_decl(symbol_expr(size_var));
+  size_decl.location() = location;
+  converter_.add_instruction(size_decl);
+
+  code_function_callt size_call;
+  size_call.function() = symbol_expr(*size_func);
+  size_call.lhs() = symbol_expr(size_var);
+  size_call.arguments().push_back(keys_member);
+  size_call.type() = size_type();
+  size_call.location() = location;
+  converter_.add_instruction(size_call);
+
+  // Create the loop index used to walk over the source entries.
+  symbolt &index_var = converter_.create_tmp_symbol(
+    call_node, "$dict_update_iter$", size_type(), gen_zero(size_type()));
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  code_assignt index_init(symbol_expr(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
+  exprt loop_cond("<", bool_type());
+  loop_cond.copy_to_operands(symbol_expr(index_var), symbol_expr(size_var));
+
+  // Rebuild the current key/value pair from the source lists.
+  code_blockt loop_body;
+  exprt key_obj = list_handler.build_list_at_call(
+    keys_member, symbol_expr(index_var), call_node);
+  exprt key_expr = list_handler.extract_pyobject_value(key_obj, key_type);
+  exprt value_obj = list_handler.build_list_at_call(
+    values_member, symbol_expr(index_var), call_node);
+  exprt value_expr = list_handler.extract_pyobject_value(value_obj, val_type);
+
+  // Reuse dict[key] = value handling for each copied entry.
+  code_blockt pair_block;
+  handle_dict_subscript_assign(
+    dict_expr, key_expr, value_expr, location, call_node, pair_block);
+  loop_body.copy_to_operands(pair_block);
+
+  // Advance to the next source entry.
+  exprt next_index = plus_exprt(symbol_expr(index_var), gen_one(size_type()));
+  code_assignt index_update(symbol_expr(index_var), next_index);
+  index_update.location() = location;
+  loop_body.copy_to_operands(index_update);
+
+  // Copy all entries from the source dict into the destination dict.
+  codet while_loop("while");
+  while_loop.copy_to_operands(loop_cond, loop_body);
+  while_loop.location() = location;
+  converter_.add_instruction(while_loop);
 
   return nil_exprt();
 }
