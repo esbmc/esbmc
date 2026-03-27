@@ -1,3 +1,4 @@
+
 username = input()
 
 quarter = ['January', username, 'March']

@@ -1,6 +1,4 @@
-def nondet_int() -> int:
-    ...
-
+def nondet_int() -> int: ...
 
 # Chained assignment with list comprehension using nondet values
 n = nondet_int()

@@ -10,5 +10,4 @@ def test_string_concatenation():
     assert "answer: " + str(42) == "answer: 42"
     assert "α" + "β" == "αβ"
 
-
 test_string_concatenation()

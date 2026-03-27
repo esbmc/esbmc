@@ -1,9 +1,7 @@
 from typing import List
 
-
 # Test multiple typed list instance attributes with various methods
 class Container:
-
     def __init__(self):
         self.items: List[int] = []
         self.names: List[str] = []
@@ -17,7 +15,6 @@ class Container:
     def remove_item(self, item: int):
         if item in self.items:
             self.items.remove(item)
-
 
 c = Container()
 c.add_item(1)

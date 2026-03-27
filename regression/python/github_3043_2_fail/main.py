@@ -3,5 +3,4 @@ def foo(s: str) -> None:
     ss: str = s[1:l]
     assert ss == "b"
 
-
 foo("bar")

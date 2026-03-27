@@ -13,3 +13,4 @@ assert d[1] == 1.0
 
 # Ensure the dict did not accidentally change type
 assert not isinstance(d[2], int)
+

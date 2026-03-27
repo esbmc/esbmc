@@ -7,5 +7,4 @@ def test_dict_empty_iteration():
 
     assert counter == 1
 
-
 test_dict_empty_iteration()

@@ -14,3 +14,4 @@ assert "k" in d2
 
 # explicit-None defaults must be stored and returned consistently
 assert d2["k"] == r2
+

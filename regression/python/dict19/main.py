@@ -1,6 +1,8 @@
 def foo() -> dict[str, list[str]]:
-    return {"foo": ["bar", "baz"], "qux": ["quux", "quuz"]}
-
+    return {
+        "foo": ["bar", "baz"],
+        "qux": ["quux", "quuz"]
+    }
 
 f = foo()
 l = f["foo"]

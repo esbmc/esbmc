@@ -7,5 +7,4 @@ def main() -> None:
     if len(s) == 0:
         assert u == ""
 
-
 main()

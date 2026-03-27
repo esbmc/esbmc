@@ -1,5 +1,4 @@
 class A:
-
     def f(self, d: dict[str, dict[str, int]]) -> dict:
         r = {}
         if "prop" in d:

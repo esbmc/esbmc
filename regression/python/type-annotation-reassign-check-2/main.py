@@ -3,5 +3,4 @@ def main() -> None:
     count = 20
     assert count == 20
 
-
 main()

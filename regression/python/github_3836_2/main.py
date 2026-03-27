@@ -4,5 +4,4 @@ def count_down(n):
         return 0
     return count_down(n - 1) + 1
 
-
 assert count_down(5) == 5

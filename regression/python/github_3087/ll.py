@@ -1,15 +1,12 @@
 class Foo:
-
     def __init__(self, t: str) -> None:
         self.t = t
-
+    
 
 class Bar:
-
     def __init__(self, t: str) -> None:
         self.t = t
-
-
+    
 def create(
     s: str,
     t: str,

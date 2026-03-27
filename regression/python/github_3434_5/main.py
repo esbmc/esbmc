@@ -1,5 +1,3 @@
-def f(x):
-    pass
+def f(x): pass
+f({0:0}[0])
 
-
-f({0: 0}[0])

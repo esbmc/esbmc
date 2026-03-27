@@ -1,10 +1,9 @@
-count: int = 0
+count : int = 0
 
 while count < 5:
     count = count + 1
 
-div: float = 1 / count
-
+div:float = 1/count
 
 def foo() -> None:
     x = 2

@@ -14,5 +14,4 @@ def main() -> None:
     result3 = text3.lstrip("x")
     assert result3 == "hello"
 
-
 main()

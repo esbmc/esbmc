@@ -7,6 +7,5 @@ def f(a, k):
         return f(b, k - n)
     return p
 
-
 # f([3], 1) must fail: b is empty, k=1 >= n=1, then f([], 1) has a[0] OOB
 assert f([3], 1) == 3

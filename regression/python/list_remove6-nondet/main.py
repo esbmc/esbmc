@@ -1,7 +1,5 @@
 # Verify that after remove, the element count decreases by exactly 1
-def nondet_int() -> int:
-    ...
-
+def nondet_int() -> int: ...
 
 x: int = nondet_int()
 l = [1, 2, 3]

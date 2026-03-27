@@ -1,3 +1,4 @@
+
 s = nondet_string(3)
 assume(s == "abc")
 result = s + "def"

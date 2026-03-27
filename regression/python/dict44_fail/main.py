@@ -3,5 +3,4 @@ def test_empty_dict():
 
     assert d
 
-
 test_empty_dict()

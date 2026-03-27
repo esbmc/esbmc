@@ -32,3 +32,4 @@ assert data_arr_3[5] == 110
 # Additional assertions for scenario 3
 assert len(data_arr_3) == 6
 assert data_arr_3[-1] == 110
+

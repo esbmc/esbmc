@@ -5,5 +5,4 @@ def main():
         assert k == "a"
     assert k == 100  # outer scope unchanged
 
-
 main()

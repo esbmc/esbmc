@@ -5,6 +5,6 @@ def foo(arr: list[int]) -> None:
 
 
 # Valid calls
-foo([])  # empty list
-foo([1])  # single element
-foo([1, 2])  # more than one element (if-block won't execute)
+foo([])        # empty list
+foo([1])       # single element
+foo([1, 2])    # more than one element (if-block won't execute)

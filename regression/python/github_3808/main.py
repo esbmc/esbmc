@@ -8,7 +8,6 @@
 # assertion.  Fix: _transform_recursive_generator annotates the iterable
 # parameter as list[Any] and emits `ESBMC_iter: list[Any] = flatten(x)`.
 
-
 def flatten(arr):
     for x in arr:
         if isinstance(x, list):

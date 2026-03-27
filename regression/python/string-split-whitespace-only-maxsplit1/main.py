@@ -3,5 +3,4 @@ def main() -> None:
     parts = s.split(None, 1)
     assert len(parts) == 0
 
-
 main()

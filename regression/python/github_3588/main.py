@@ -3,5 +3,4 @@ def test_unpacking():
     head, *tail = [1]
     assert head == 1 and tail == []
 
-
 test_unpacking()

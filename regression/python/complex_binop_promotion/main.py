@@ -79,8 +79,13 @@ except ZeroDivisionError:
     zero_div_raised = True
 
 if not zero_div_raised:
-    assert (z_div0 != z_div0 or z_div0.real == float("inf") or z_div0.real == float("-inf")
-            or z_div0.imag == float("inf") or z_div0.imag == float("-inf"))
+    assert (
+        z_div0 != z_div0
+        or z_div0.real == float("inf")
+        or z_div0.real == float("-inf")
+        or z_div0.imag == float("inf")
+        or z_div0.imag == float("-inf")
+    )
 
 # Edge: sign of zero in components.
 z_neg_zero = complex(-0.0, 0.0)
@@ -116,8 +121,13 @@ assert math.copysign(1.0, z_s0_div.imag) == 1.0
 
 # Edge: overflow/underflow behavior in mixed arithmetic.
 z_over = complex(1e308, 1e308) * complex(2.0, 0.0)
-assert (z_over != z_over or z_over.real == float("inf") or z_over.real == float("-inf")
-        or z_over.imag == float("inf") or z_over.imag == float("-inf"))
+assert (
+    z_over != z_over
+    or z_over.real == float("inf")
+    or z_over.real == float("-inf")
+    or z_over.imag == float("inf")
+    or z_over.imag == float("-inf")
+)
 
 z_under = complex(1e-308, -1e-308) / complex(2.0, 0.0)
 assert z_under.real != 0.0 or z_under.imag != 0.0
@@ -136,10 +146,16 @@ assert math.isinf(z_inf_mix_mul.real)
 assert math.isnan(z_inf_mix_mul.imag)
 
 z_small_div_inf = complex(1.0, -1.0) / complex(float("inf"), 0.0)
-assert (z_small_div_inf.real == 0.0 or math.isnan(z_small_div_inf.real)
-        or math.isinf(z_small_div_inf.real))
-assert (z_small_div_inf.imag == 0.0 or math.isnan(z_small_div_inf.imag)
-        or math.isinf(z_small_div_inf.imag))
+assert (
+    z_small_div_inf.real == 0.0
+    or math.isnan(z_small_div_inf.real)
+    or math.isinf(z_small_div_inf.real)
+)
+assert (
+    z_small_div_inf.imag == 0.0
+    or math.isnan(z_small_div_inf.imag)
+    or math.isinf(z_small_div_inf.imag)
+)
 
 # Edge: comparison-oriented checks for special values.
 z_cmp_nan = complex(float("nan"), 1.0)

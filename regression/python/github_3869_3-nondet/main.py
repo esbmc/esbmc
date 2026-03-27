@@ -7,7 +7,6 @@ def f(arr):
             yield y
         yield x
 
-
 a = nondet_float()
 b = nondet_float()
 assert list(f([a, b])) == [a, b]

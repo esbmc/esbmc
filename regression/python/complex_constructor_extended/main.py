@@ -214,19 +214,16 @@ assert raised_type
 
 
 class HasComplex:
-
     def __complex__(self) -> complex:
         return complex(1, 2)
 
 
 class HasFloat:
-
     def __float__(self) -> float:
         return 3.5
 
 
 class HasIndex:
-
     def __index__(self) -> int:
         return 4
 
@@ -245,7 +242,6 @@ assert z15.imag == 0.0
 
 
 class BadComplex:
-
     def __complex__(self) -> float:
         return 1.0
 
@@ -259,7 +255,6 @@ assert raised_type
 
 
 class BadFloat:
-
     def __float__(self) -> str:
         return "3.0"
 
@@ -273,7 +268,6 @@ assert raised_type
 
 
 class BadIndex:
-
     def __index__(self) -> str:
         return "2"
 
@@ -287,7 +281,6 @@ assert raised_type
 
 
 class RaiseFloat:
-
     def __float__(self) -> float:
         raise TypeError("boom")
 
@@ -301,7 +294,6 @@ assert raised_type
 
 
 class HasComplexAndFloat:
-
     def __complex__(self) -> complex:
         return complex(2, 3)
 

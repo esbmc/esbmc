@@ -4,18 +4,16 @@ rand = [0, n - 1]
 assert n == 10
 assert 0 <= rand[0] < n
 
-
 def rand_range():
-    i = 0
-    assert i == 0
-    while i < n:
-        assert 0 <= i <= n
-        k = rand[0]
-        assert 0 <= k < n
-        yield k
-        i += 1
-    assert i == n
-
+  i = 0
+  assert i == 0
+  while i < n:
+    assert 0 <= i <= n
+    k = rand[0]
+    assert 0 <= k < n
+    yield k
+    i += 1
+  assert i == n
 
 l1 = [0] * n
 

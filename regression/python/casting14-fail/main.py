@@ -3,3 +3,4 @@ assert val == "A"
 val = "hello"[0]
 assert val == "h"
 assert val == "A"
+

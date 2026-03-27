@@ -3,5 +3,4 @@ def test_extend_empty_string():
     a.extend("")
     assert a == ['y']
 
-
 test_extend_empty_string()

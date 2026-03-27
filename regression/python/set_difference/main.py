@@ -4,5 +4,4 @@ def test_set_difference():
     result = a - b  # set difference: elements in a but not in b
     assert result == {1, 2}
 
-
 test_set_difference()

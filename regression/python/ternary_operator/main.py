@@ -4,6 +4,5 @@ def saturating_sub(a: int, b: int) -> int:
     """
     return a - b if a > b else 0
 
-
 x: int = saturating_sub(3, 1)
-assert (x == 2)
+assert(x == 2)

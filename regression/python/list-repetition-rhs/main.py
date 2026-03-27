@@ -3,5 +3,4 @@ def foo():
     zeros = (len(digits) - 1) * [0]
     assert zeros[0] == 0
 
-
 foo()

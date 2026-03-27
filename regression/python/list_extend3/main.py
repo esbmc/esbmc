@@ -3,5 +3,4 @@ def test_extend_non_empty():
     a.extend([2])
     assert a == [1, 2]
 
-
 test_extend_non_empty()

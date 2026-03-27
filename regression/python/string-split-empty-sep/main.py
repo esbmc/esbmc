@@ -4,5 +4,4 @@ def main() -> None:
     assert len(parts) == 1
     assert parts[0] == ""
 
-
 main()
