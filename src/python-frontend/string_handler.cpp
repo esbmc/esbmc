@@ -457,9 +457,8 @@ static std::optional<exprt> dispatch_split_method(
     {
       bool safe_boundary = true;
       std::string left_const;
-      if (
-        string_handler::extract_constant_string(
-          binop["left"], converter, left_const))
+      if (string_handler::extract_constant_string(
+            binop["left"], converter, left_const))
         safe_boundary = left_const.find(parsed.separator) == std::string::npos;
 
       if (safe_boundary)
@@ -2495,8 +2494,7 @@ exprt string_handler::handle_string_membership(
   const exprt *needle_array = get_array_expr(lhs_str);
   const exprt *haystack_array = get_array_expr(rhs_str);
   auto try_extract_constant_chars_from_ast =
-    [this](const nlohmann::json *node) -> std::optional<std::vector<BigInt>>
-  {
+    [this](const nlohmann::json *node) -> std::optional<std::vector<BigInt>> {
     if (node == nullptr)
       return std::nullopt;
     std::string text;
@@ -2522,8 +2520,7 @@ exprt string_handler::handle_string_membership(
   }
 
   const auto contains_embedded_null =
-    [](const exprt *array_expr) -> std::optional<bool>
-  {
+    [](const exprt *array_expr) -> std::optional<bool> {
     if (array_expr == nullptr || !array_expr->type().is_array())
       return std::nullopt;
 
@@ -4065,8 +4062,8 @@ exprt string_handler::try_handle_len_string_fast_path(
     len_cache_scope_id_ = current_scope_id;
   }
 
-  if (
-    exprt fast = try_len_fast_path_from_constant_arg(arg_json); !fast.is_nil())
+  if (exprt fast = try_len_fast_path_from_constant_arg(arg_json);
+      !fast.is_nil())
     return fast;
 
   if (exprt fast = try_len_fast_path_from_name_arg(arg_json); !fast.is_nil())
@@ -4202,8 +4199,7 @@ exprt string_handler::try_len_fast_path_from_name_arg(
   }
 
   auto const_string_len_from_symbol =
-    [this](const std::string &name) -> std::optional<BigInt>
-  {
+    [this](const std::string &name) -> std::optional<BigInt> {
     if (name != "__name__")
       return std::nullopt;
 
@@ -4229,9 +4225,9 @@ exprt string_handler::try_len_fast_path_from_name_arg(
     return BigInt(utf8_codepoint_count(name_value));
   };
 
-  auto joinedstr_len = [&const_string_len_from_symbol](
-                         const nlohmann::json &joined) -> std::optional<BigInt>
-  {
+  auto joinedstr_len =
+    [&const_string_len_from_symbol](
+      const nlohmann::json &joined) -> std::optional<BigInt> {
     if (!joined.contains("values") || !joined["values"].is_array())
       return std::nullopt;
 
@@ -4323,16 +4319,14 @@ exprt string_handler::handle_string_attribute_call(
       : empty_json_array;
 
   std::optional<exprt> cached_receiver_expr;
-  auto get_receiver_expr = [&]() -> exprt
-  {
+  auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
       cached_receiver_expr = converter_.get_expr(receiver_json);
     return *cached_receiver_expr;
   };
 
   std::optional<locationt> cached_location;
-  auto get_location = [&]() -> locationt
-  {
+  auto get_location = [&]() -> locationt {
     if (!cached_location.has_value())
       cached_location = converter_.get_location_from_decl(call_json);
     return *cached_location;
