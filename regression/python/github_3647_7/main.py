@@ -1,8 +1,6 @@
 class C:
-
     def __init__(self):
         self.d: dict[str, int] = {"a": 1}
-
 
 c = C()
 

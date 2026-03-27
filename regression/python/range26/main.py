@@ -5,5 +5,4 @@ def test_range_three_args_positive_step():
     assert l[2] == 4
     assert l[4] == 8
 
-
 test_range_three_args_positive_step()

@@ -3,5 +3,4 @@ def test_reverse_two_elements():
     l.reverse()
     assert l == [20, 10]
 
-
 test_reverse_two_elements()

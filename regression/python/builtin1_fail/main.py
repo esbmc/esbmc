@@ -3,5 +3,4 @@ def test_abs(x: int) -> int:
     length = len([1, 2, 3, 10])
     return result + length
 
-
 assert test_abs(-5) == 8  # should fail

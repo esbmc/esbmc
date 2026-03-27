@@ -4,5 +4,4 @@ def test_div_zero():
     x -= 1
     x /= x  # division by zero
 
-
 test_div_zero()

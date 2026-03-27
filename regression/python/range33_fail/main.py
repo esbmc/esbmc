@@ -4,5 +4,4 @@ def test_range_step_minus_one():
     assert l[0] == 5
     assert l[4] == 0
 
-
 test_range_step_minus_one()

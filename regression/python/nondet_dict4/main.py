@@ -4,5 +4,4 @@ def test_nondet_dict_basic():
     __ESBMC_assume(len(x) > 0)
     assert len(x) > 0
 
-
 test_nondet_dict_basic()

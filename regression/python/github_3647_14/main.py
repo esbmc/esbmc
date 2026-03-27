@@ -5,5 +5,4 @@ def main():
         v = 10
     assert True
 
-
 main()

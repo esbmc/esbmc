@@ -12,5 +12,4 @@ def main() -> None:
     result3 = text1.strip("aabbcc")
     assert result3 == "hello"
 
-
 main()

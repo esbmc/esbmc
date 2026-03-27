@@ -7,5 +7,4 @@ def test_sqrt_negative_float():
     except ValueError:
         pass
 
-
 test_sqrt_negative_float()

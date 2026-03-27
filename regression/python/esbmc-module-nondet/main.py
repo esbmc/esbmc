@@ -1,6 +1,5 @@
 from esbmc import nondet_int, __ESBMC_assume
 
-
 def absolute_value(x: int) -> int:
     """Compute absolute value."""
     if x < 0:
@@ -20,6 +19,5 @@ def test_absolute_value() -> None:
 
     # Property: result equals x or -x
     assert result == x or result == -x, "Result is x or -x"
-
 
 test_absolute_value()

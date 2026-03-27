@@ -7,5 +7,4 @@ def f(k):
         ret.extend([1] + r)
     return ret
 
-
 f(1)

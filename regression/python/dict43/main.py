@@ -4,5 +4,4 @@ def test_empty_dict():
     assert not d
     assert len(d) == 0
 
-
 test_empty_dict()

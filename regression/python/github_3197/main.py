@@ -3,5 +3,4 @@ def f(x):
         return 0
     return f(x - 1)
 
-
 assert f(3) == 0

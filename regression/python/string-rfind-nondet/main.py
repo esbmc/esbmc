@@ -4,5 +4,4 @@ def main() -> None:
 
     assert idx == len(s)
 
-
 main()

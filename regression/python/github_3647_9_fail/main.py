@@ -3,5 +3,4 @@ def f(d: dict[str, int]) -> None:
         d["x"] = 3
         assert True
 
-
 f({"a": 1})

@@ -5,5 +5,4 @@ def main() -> None:
     assert "aaaa".rfind("aa") == 2
     assert "edge".rfind("") == 4
 
-
 main()

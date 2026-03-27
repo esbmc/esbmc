@@ -7,3 +7,4 @@ class Foo:
         # Test that default values are correctly filled
         assert y == "default"
         assert z == 42
+

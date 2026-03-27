@@ -1,5 +1,4 @@
 class MyClass:
-
     def __init__(self) -> None:
         pass
 
@@ -8,7 +7,6 @@ class MyClass:
 
 
 class OtherClass:
-
     def __init__(self) -> None:
         pass
 

@@ -1,4 +1,4 @@
-def pascal(n: int):
+def pascal(n:int):
     rows = [[1]]
     for r in range(1, n):
         row = []
@@ -9,6 +9,5 @@ def pascal(n: int):
         rows.append(row)
 
     return rows
-
 
 assert pascal(1) == [[1]]

@@ -3,5 +3,4 @@ def test_split_and_join():
     parts = s.split(",")
     assert ".".join(parts) == s
 
-
 test_split_and_join()

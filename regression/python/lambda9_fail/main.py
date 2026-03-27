@@ -5,5 +5,4 @@ def test_lambda_expressions():
     result1 = add_ten(5)
     assert result1 == 16
 
-
 test_lambda_expressions()

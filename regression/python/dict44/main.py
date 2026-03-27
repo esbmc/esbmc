@@ -9,5 +9,4 @@ def test_dict_mutation():
     assert e["a"] == 2
     assert d == e
 
-
 test_dict_mutation()

@@ -4,5 +4,4 @@ def test_set_difference():
     result = a & b  # set difference: elements common to both sets
     assert result == {3, 4}
 
-
 test_set_difference()

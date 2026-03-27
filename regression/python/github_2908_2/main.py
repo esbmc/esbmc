@@ -1,3 +1,4 @@
+
 def validate_title(title: str) -> None:
     ESBMC_index: int = 0
     ESBMC_length: int = len(title)

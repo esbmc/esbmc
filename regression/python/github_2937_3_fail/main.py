@@ -2,7 +2,6 @@ from typing import Optional
 
 
 class EchoMessageInput:
-
     def __init__(self, message: Optional[str]):
         self.message = message
 
@@ -13,7 +12,6 @@ class EchoMessageInput:
 
 
 class EchoService:
-
     def echo_message(self, input: EchoMessageInput) -> None:
         input._verify()
 

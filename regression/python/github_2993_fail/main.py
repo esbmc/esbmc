@@ -2,10 +2,8 @@ def not_called(s: str) -> None:
     b: bytes = s.encode("utf-8")
     assert len(b) > 0
 
-
 def foo(i: int) -> bool:
     not_called("test")
     return i > 5
-
 
 assert not foo(0)

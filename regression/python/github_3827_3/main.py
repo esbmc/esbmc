@@ -1,15 +1,12 @@
 from typing import List
 
-
 # Test typed list as class attribute with external method calls
 class TaskQueue:
-
     def __init__(self):
         self.tasks: List[str] = []
 
     def size(self) -> int:
         return len(self.tasks)
-
 
 queue = TaskQueue()
 queue.tasks.append("task1")

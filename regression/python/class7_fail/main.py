@@ -1,5 +1,4 @@
 class Car:
-
     def __init__(self, id_number: int, mileage: int):
         assert mileage >= 0, "mileage cannot be negative"
         self.id_number = id_number
@@ -19,7 +18,6 @@ class Car:
     def needs_service(self) -> bool:
         return self.mileage >= 10000
 
-
 # Create instances
 car1 = Car(101, 9500)
 car2 = Car(202, 10000)
@@ -38,5 +36,5 @@ assert car2.get_mileage() == 10200
 assert car2.needs_service()
 
 assert car3.drive(1000) == 1000
-assert car3.get_mileage() == 1001  # should fail
+assert car3.get_mileage() == 1001 # should fail
 assert not car3.needs_service()

@@ -3,5 +3,4 @@ def main() -> None:
     if x > 0:
         assert x < 0
 
-
 main()

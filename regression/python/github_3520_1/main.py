@@ -4,3 +4,4 @@ if y is int:
     assert False
 else:
     assert True
+

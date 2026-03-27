@@ -3,5 +3,4 @@ def test_dict_values():
 
     assert set(d.values()) == {1, 2}
 
-
 test_dict_values()

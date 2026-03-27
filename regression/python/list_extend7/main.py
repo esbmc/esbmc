@@ -3,5 +3,4 @@ def test_extend_repeated_chars():
     a.extend("aaa")
     assert a == ['a', 'a', 'a']
 
-
 test_extend_repeated_chars()

@@ -4,7 +4,6 @@ def f():
     for i in reversed(range(4)):
         x = a[i]
 
-
 a: int = 0
 for i in reversed(range(5)):
     a = i

@@ -5,5 +5,4 @@ def main() -> None:
     __ESBMC_assume(len(s) > 0)
     assert len(r) > 0
 
-
 main()

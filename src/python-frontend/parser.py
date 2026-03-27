@@ -4,10 +4,10 @@ import sys
 PY3 = sys.version_info[0] == 3
 
 if not PY3:
-    print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor,
-                                            sys.version_info.micro))
+    print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro))
     print("ERROR: Please ensure Python 3 is available in your environment.")
     sys.exit(1)
+
 
 import ast
 import importlib.util
@@ -16,7 +16,6 @@ import os
 import glob
 import base64
 from preprocessor import Preprocessor
-
 
 def run_mypy_strict(filename):
     """Run mypy in-process when available; skip otherwise."""
@@ -37,16 +36,13 @@ def check_usage():
         print("Usage: python astgen.py <file path> <output directory>")
         sys.exit(2)
 
-
 def is_imported_model(module_name):
     models = ["math", "os", "numpy", "esbmc", "decimal", "collections"]
     return module_name in models
 
-
 def is_unsupported_module(module_name):
     unsuported_modules = ["blah"]
     return module_name in unsuported_modules
-
 
 def is_testing_framework(module_name):
     # Check if module is a testing framework that should be skipped.
@@ -100,7 +96,6 @@ def import_module_by_name(module_name, output_dir):
 def encode_bytes(value):
     return base64.b64encode(value).decode('ascii')
 
-
 def annotate_constant_node(value_node):
     # Python 3.8+ uses ast.Constant instead of ast.Str, ast.Num, ast.Bytes, etc.
     if not isinstance(value_node, ast.Constant):
@@ -127,8 +122,8 @@ def is_standard_library_file(filename):
         '/usr/local/lib/python',
         '/Library/Frameworks/Python.framework',
         '/opt/homebrew/Cellar/python',  # Homebrew Python on macOS (Apple Silicon)
-        '/usr/local/Cellar/python',  # Homebrew Python on macOS (Intel)
-        '/opt/conda/lib/python',  # Conda standard installation path
+        '/usr/local/Cellar/python',     # Homebrew Python on macOS (Intel)
+        '/opt/conda/lib/python',       # Conda standard installation path
     ]
     # Check fixed paths first (no expanduser needed)
     if any(filename.startswith(path) for path in stdlib_paths):
@@ -183,11 +178,9 @@ def get_referenced_names(node):
 
     return referenced
 
-
 import_aliases = {}
 # Track all imports per module to combine them
 module_imports = {}
-
 
 def process_imports(node, output_dir):
     """
@@ -197,6 +190,7 @@ def process_imports(node, output_dir):
         - node: The import node to process.
         - output_dir: The directory to save the generated JSON files.
     """
+
 
     if isinstance(node, (ast.Import)):
         module_names = []
@@ -304,7 +298,6 @@ def filter_imports(tree: ast.AST) -> ast.AST:
     tree.body = filtered_body
     return tree
 
-
 def parse_file(filename: str) -> ast.AST:
     """Open, parse, and run Preprocessor on a Python source file."""
     with open(filename, "r", encoding="utf-8") as src:
@@ -375,11 +368,7 @@ def process_collected_imports(output_dir):
                     rewrite_relative_import(subnode, module_name)
                     process_imports(subnode, output_dir)
 
-            generate_ast_json(tree,
-                              filename,
-                              imported_elements,
-                              output_dir,
-                              module_qualname=module_name)
+            generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
 
 
 def rewrite_relative_import(node, parent_module: str | None):
@@ -472,7 +461,7 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
 
-    # Build JSON path
+     # Build JSON path
     if module_qualname:
         parts = module_qualname.split(".")
         json_dir = os.path.join(output_dir, *parts[:-1])  # package subdirs
@@ -482,8 +471,9 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
             dir_name = os.path.basename(os.path.dirname(python_filename))
             json_filename = os.path.join(output_dir, f"{dir_name}.json")
         else:
-            json_filename = os.path.join(output_dir,
-                                         f"{os.path.basename(python_filename[:-3])}.json")
+            json_filename = os.path.join(
+                output_dir, f"{os.path.basename(python_filename[:-3])}.json"
+            )
 
     os.makedirs(os.path.dirname(json_filename), exist_ok=True)
 
@@ -546,11 +536,9 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
                         try:
                             with open(full_path, "r", encoding="utf-8") as f:
                                 tree = ast.parse(f.read())
-                                generate_ast_json(tree, full_path, None,
-                                                  output_dir + "/" + base_module)
+                                generate_ast_json(tree, full_path, None, output_dir + "/" + base_module)
                         except UnicodeDecodeError:
                             continue
-
 
 def main():
     check_usage()
@@ -611,7 +599,7 @@ def main():
         module_name = filename[:-3]
 
         if is_imported_model(module_name):
-            continue
+            continue;
 
         with open(python_file) as model:
             model_tree = ast.parse(model.read())

@@ -4,5 +4,4 @@ def main() -> None:
     result = text.rstrip(".")
     assert result == "...hello..."  # Wrong! Should be "...hello"
 
-
 main()

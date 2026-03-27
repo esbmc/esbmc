@@ -6,11 +6,9 @@ def fib(n: int) -> int:
     else:
         return fib(n - 1) + fib(n - 2)
 
-
 def main() -> None:
     n: int = 6
     result: int = fib(n)
     assert result == 8
-
 
 main()
