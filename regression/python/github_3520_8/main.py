@@ -1,3 +1,3 @@
 x = int
 y = int
-assert x is y   # must succeed
+assert x is y  # must succeed

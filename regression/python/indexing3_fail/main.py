@@ -4,4 +4,5 @@ def main():
         value = lst[i]
         assert value >= 0
 
+
 main()

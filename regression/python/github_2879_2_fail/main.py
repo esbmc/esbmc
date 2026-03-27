@@ -1,2 +1,2 @@
-text:str = "test1"
+text: str = "test1"
 assert text.isalpha()

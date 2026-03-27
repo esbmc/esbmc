@@ -1,13 +1,18 @@
 # Test case 3: Nested attribute with different return types
 class StringWrapper:
+
     def get_str(self) -> str:
         return "hello"
 
+
 class IntWrapper:
+
     def get_int(self) -> int:
         return 100
 
+
 class Container:
+
     def __init__(self) -> None:
         self.str_wrapper: StringWrapper = StringWrapper()
         self.int_wrapper: IntWrapper = IntWrapper()
@@ -22,9 +27,9 @@ class Container:
         result = self.int_wrapper.get_int()
         return result
 
+
 container = Container()
 s: str = container.get_string()
 i: int = container.get_integer()
 assert s == "hello"
 assert i == 100
-

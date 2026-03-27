@@ -1,4 +1,5 @@
 class Box:
+
     def __init__(self, value: bool):
         self.value = value
 

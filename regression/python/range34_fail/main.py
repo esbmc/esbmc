@@ -6,4 +6,5 @@ def test_range_comparison():
     assert l1[4] == l2[4]
     assert len(l1) != len(l3)
 
+
 test_range_comparison()

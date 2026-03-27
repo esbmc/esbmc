@@ -7,6 +7,7 @@ def f(arr):
             yield y
         yield x
 
+
 a: int
 b: int
 __ESBMC_assume(a != b)

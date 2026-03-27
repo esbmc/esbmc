@@ -1,4 +1,5 @@
 def minimumCoins_v3(prices: list[int]) -> int:
+
     def dfs(i: int, free_until: int) -> int:
         if i >= len(prices):
             return 0
@@ -11,5 +12,6 @@ def minimumCoins_v3(prices: list[int]) -> int:
         return res
 
     return dfs(0, -1)
+
 
 assert minimumCoins_v3([1, 2, 3]) == 2

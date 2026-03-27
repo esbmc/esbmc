@@ -1,10 +1,11 @@
 def duplicate(x: str) -> str:
     return x
-    
+
+
 # Direct call
 assert duplicate("direct") == "direct"
 
-# Stored call  
+# Stored call
 stored = duplicate("stored")
 assert stored == "stored"
 

@@ -12,12 +12,12 @@ def test_islower():
 
     # Strings with non-alphabetic characters
     assert "hello123".islower() == False  # digits are ignored
-    assert "hello!".islower() == False    # punctuation is ignored
+    assert "hello!".islower() == False  # punctuation is ignored
     assert "hello World!".islower() == True  # contains uppercase 'W'
 
     # Empty string
     assert "".islower() == True  # no cased characters
 
+
 if __name__ == "__main__":
     test_islower()
-

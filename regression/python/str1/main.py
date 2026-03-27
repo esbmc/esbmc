@@ -7,4 +7,3 @@ def test_no_arguments() -> None:
 
 if __name__ == "__main__":
     test_no_arguments()
-

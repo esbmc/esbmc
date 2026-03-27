@@ -1,4 +1,4 @@
-def foo(value:int) -> int:
+def foo(value: int) -> int:
     if value < 0:
         raise ValueError("Negative value!")
 
@@ -8,8 +8,8 @@ def foo(value:int) -> int:
 result = 1
 
 try:
-  result = foo(-1)
+    result = foo(-1)
 except ValueError as e:
-  print(e)
+    print(e)
 
 assert result == 1

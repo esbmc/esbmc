@@ -3,6 +3,7 @@ def read_file(path: str) -> str:
         raise FileNotFoundError("No path provided")
     return "content"
 
+
 try:
     read_file("")
 except Exception as e:

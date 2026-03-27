@@ -1,4 +1,5 @@
 class Counter:
+
     def __init__(self) -> None:
         self.data: dict[int, int]
         self.data = {}

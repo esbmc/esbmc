@@ -3,4 +3,5 @@ def test_het_dict_iteration():
     for k in d:
         assert k == 2 or k == "b"
 
+
 test_het_dict_iteration()

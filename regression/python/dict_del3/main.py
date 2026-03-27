@@ -49,4 +49,3 @@ my_dict9 = {"key": 123}
 assert "key" in my_dict9
 del my_dict9["key"]
 assert not ("key" in my_dict9)
-

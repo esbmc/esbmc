@@ -16,7 +16,7 @@ def test_nondet_list_in_conditional():
     x.append(y)
     result.append(y)
 
-    assert result[len(x)-1] == y
+    assert result[len(x) - 1] == y
+
 
 test_nondet_list_in_conditional()
-

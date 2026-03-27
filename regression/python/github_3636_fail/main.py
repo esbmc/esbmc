@@ -3,4 +3,5 @@ def test_isspace_fail() -> None:
     # asserting True should fail verification
     assert "hello".isspace()
 
+
 test_isspace_fail()

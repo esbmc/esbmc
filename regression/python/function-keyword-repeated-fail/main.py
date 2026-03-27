@@ -1,4 +1,5 @@
-def return_num(x:int) -> int:
+def return_num(x: int) -> int:
     return x
 
-y:int = return_num(x=1,x=2)
+
+y: int = return_num(x=1, x=2)

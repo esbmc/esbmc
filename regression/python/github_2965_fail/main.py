@@ -1,2 +1,2 @@
-s: set[str] = { 'foo', 'bar' }
+s: set[str] = {'foo', 'bar'}
 assert 'test' in s

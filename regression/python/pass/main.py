@@ -1,12 +1,14 @@
 class MyClass:
-  x:int
+    x: int
 
-  def foo():
-    pass
+    def foo():
+        pass
+
 
 class EmptyClass:
-    pass;
+    pass
 
-y:int
+
+y: int
 
 obj = EmptyClass()

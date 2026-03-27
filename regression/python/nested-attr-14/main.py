@@ -1,17 +1,24 @@
 # Test case 14: Deep nested attribute access at Module Level
 # Testing the limits of global scope resolution without 'self'
 
+
 class Level3:
+
     def get_val(self) -> int:
         return 999
 
+
 class Level2:
+
     def __init__(self) -> None:
         self.l3: Level3 = Level3()
 
+
 class Level1:
+
     def __init__(self) -> None:
         self.l2: Level2 = Level2()
+
 
 # Global instantiation
 l1 = Level1()

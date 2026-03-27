@@ -2,4 +2,3 @@
 l: list[str] = ["hello", "world"]
 s = "-".join(l)
 assert s == "hello-world"
-

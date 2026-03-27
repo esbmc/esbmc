@@ -6,4 +6,3 @@ def run() -> None:
 
 
 run()
-

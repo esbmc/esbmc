@@ -9,8 +9,10 @@ def sum_even_numbers(n: int) -> int:
         i = i + 1
     return total
 
+
 def main() -> None:
     result: int = sum_even_numbers(10)
     assert result == 30
+
 
 main()

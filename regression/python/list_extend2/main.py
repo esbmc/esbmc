@@ -3,4 +3,5 @@ def test_extend_with_empty():
     a.extend([])
     assert a == [1, 2, 3]
 
+
 test_extend_with_empty()

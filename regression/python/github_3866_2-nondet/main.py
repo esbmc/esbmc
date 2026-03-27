@@ -1,9 +1,11 @@
 # nondet_bool conditional inside the outer generator while iterating over gen1.
 # Exercises the branch inside the inlined body after yield replacement.
 
+
 def gen1(arr):
     for x in arr:
         yield x
+
 
 def gen2(arr):
     for y in gen1(arr):
@@ -11,6 +13,7 @@ def gen2(arr):
             yield y
         else:
             yield y + 1
+
 
 v = nondet_int()
 __ESBMC_assume(v >= 0)

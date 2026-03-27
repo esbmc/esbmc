@@ -4,5 +4,5 @@ def foo(x: int, y: str) -> None:
     assert x == 42
     assert y == "foo"
 
-foo(x=42, y="foo")
 
+foo(x=42, y="foo")

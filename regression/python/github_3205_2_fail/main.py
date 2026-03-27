@@ -4,4 +4,5 @@ def hanoi(height, start=1, end=3):
         pass
     return steps
 
+
 assert hanoi(0, 1, 3)

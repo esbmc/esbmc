@@ -9,6 +9,7 @@ def my_split(s: str, sep: str) -> list[str]:
     result == ["ab"]
     return result
 
+
 s: str = "ab"
 l = my_split(s, ",")
 assert l == ["ba"]

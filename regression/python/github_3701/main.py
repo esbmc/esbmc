@@ -1,9 +1,10 @@
 def gen():
     i = 1
-    assert i == 1          # local fact
-    return                 # generator exits immediately
-    yield 1                # unreachable
-    return                 # unreachable
+    assert i == 1  # local fact
+    return  # generator exits immediately
+    yield 1  # unreachable
+    return  # unreachable
+
 
 g = gen()
 
@@ -12,7 +13,7 @@ assert s == 1
 
 try:
     s = s + next(g)
-    assert False           # unreachable: next(g) always raises StopIteration
+    assert False  # unreachable: next(g) always raises StopIteration
 except:
     # we must enter here
     s = 5
