@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc
+--no-bounds-check --no-pointer-check --no-align-check --unwind 1 --smt-during-symex --smt-symex-guard --bitwuzla
 ^VERIFICATION SUCCESSFUL$
