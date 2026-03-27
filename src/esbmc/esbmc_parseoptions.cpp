@@ -443,6 +443,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("ub-shift-check"))
     options.set_option("ub-shift-check", true);
 
+  if (cmdline.isset("no-ub-shift-check"))
+    options.set_option("no-ub-shift-check", true);
+
   if (cmdline.isset("timeout"))
   {
 #ifdef _WIN32
@@ -1998,6 +2001,10 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("no-vla-size-check", true);
       options.set_option("no-align-check", true);
       options.set_option("no-bounds-check", true);
+      options.set_option("no-ub-shift-check", true);
+      //?
+      // options.set_option("no-abnormal-memory-leak", true);
+      // options.set_option("no-reachable-memory-leak", true);
     }
 
     // Start by removing all no-op instructions and unreachable code
