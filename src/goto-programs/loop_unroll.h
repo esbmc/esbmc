@@ -84,6 +84,7 @@ protected:
 
 private:
   unsigned number_of_bounded_loops = 0;
+  int get_pointer_loop_bounds(loopst &loop);
 };
 
 /**

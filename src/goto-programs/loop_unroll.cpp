@@ -1,4 +1,5 @@
 #include <goto-programs/loop_unroll.h>
+#include <util/std_types.h>
 
 bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
 {
@@ -94,7 +95,7 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
   {
     auto &cond = to_not2t(t->guard).value;
     if (!is_lessthan2t(cond) && !is_lessthanequal2t(cond))
-      return -1;
+      return get_pointer_loop_bounds(loop);
 
     if (
       !is_symbol2t(*cond->get_sub_expr(0)) ||
@@ -161,6 +162,135 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
   int bound = k - k0;
   if (bound <= 0 || (size_t)bound > unroll_limit)
     return 0;
+
+  number_of_bounded_loops++;
+  return bound;
+}
+
+/// Attempt to extract a constant offset from a pointer expression.
+/// Returns true and sets \p base and \p offset if the expression is either
+/// a plain symbol (offset 0) or symbol + constant.
+static bool
+extract_pointer_base_offset(const expr2tc &expr, expr2tc &base, int64_t &offset)
+{
+  if (is_symbol2t(expr))
+  {
+    base = expr;
+    offset = 0;
+    return true;
+  }
+  if (is_add2t(expr))
+  {
+    auto &add = to_add2t(expr);
+    if (is_symbol2t(add.side_1) && is_constant_int2t(add.side_2))
+    {
+      base = add.side_1;
+      offset = to_constant_int2t(add.side_2).value.to_int64();
+      return true;
+    }
+    if (is_constant_int2t(add.side_1) && is_symbol2t(add.side_2))
+    {
+      base = add.side_2;
+      offset = to_constant_int2t(add.side_1).value.to_int64();
+      return true;
+    }
+  }
+  return false;
+}
+
+int bounded_loop_unroller::get_pointer_loop_bounds(loopst &loop)
+{
+  /**
+   * Match pointer-based iteration (e.g. from C++ range-for over arrays/vectors):
+   *
+   * z: ptr = base_expr
+   *
+   * a: IF !(ptr != end_expr) GOTO [...]
+   * b: ... // code that only reads ptr
+   * b: ptr = ptr + 1
+   *
+   * Compute bound = offset(end_expr) - offset(base_expr) when both
+   * share the same base symbol.
+   */
+  goto_programt::targett t = loop.get_original_loop_head();
+
+  if (!t->is_goto() || !is_not2t(t->guard))
+    return -1;
+
+  auto &cond = to_not2t(t->guard).value;
+  if (!is_notequal2t(cond))
+    return -1;
+
+  auto *lhs = cond->get_sub_expr(0);
+  auto *rhs = cond->get_sub_expr(1);
+  if (!lhs || !rhs)
+    return -1;
+
+  if (!is_symbol2t(*lhs) || !is_pointer_type((*lhs)->type))
+    return -1;
+
+  expr2tc symbol = *lhs;
+  expr2tc end_expr = *rhs;
+
+  goto_programt::targett te = loop.get_original_loop_exit();
+
+  // Check for ptr = ptr + 1
+  te--;
+  if (!te->is_assign())
+    return -1;
+  {
+    auto &x = to_code_assign2t(te->code);
+    if (x.target != symbol || !is_add2t(x.source))
+      return -1;
+
+    auto &add = to_add2t(x.source);
+    if (add.side_1 != symbol || !is_constant_int2t(add.side_2))
+      return -1;
+
+    if (to_constant_int2t(add.side_2).value.to_int64() != 1)
+      return -1;
+  }
+
+  // Find init: ptr = base_expr before the loop head
+  t--;
+  if (!t->is_assign())
+    return -1;
+
+  expr2tc init_expr;
+  {
+    auto &x = to_code_assign2t(t->code);
+    if (x.target != symbol)
+      return -1;
+    init_expr = x.source;
+  }
+
+  // Try to compute end - init as a constant
+  expr2tc init_base, end_base;
+  int64_t init_offset = 0, end_offset = 0;
+
+  if (
+    !extract_pointer_base_offset(init_expr, init_base, init_offset) ||
+    !extract_pointer_base_offset(end_expr, end_base, end_offset))
+    return -1;
+
+  if (init_base != end_base)
+    return -1;
+
+  int bound = static_cast<int>(end_offset - init_offset);
+  if (bound <= 0 || static_cast<size_t>(bound) > unroll_limit)
+    return 0;
+
+  // Verify no assignment to ptr inside the loop body
+  auto body_start = loop.get_original_loop_head();
+  body_start++;
+  body_start++;
+  for (auto it = body_start; it != te; it++)
+    if (it->is_assign())
+    {
+      auto &x = to_code_assign2t(it->code);
+      if (x.target == symbol)
+        return -1;
+    }
 
   number_of_bounded_loops++;
   return bound;
