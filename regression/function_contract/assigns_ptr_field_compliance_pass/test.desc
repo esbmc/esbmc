@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract update_count --enforce-assigns-check
+^VERIFICATION SUCCESSFUL$
+

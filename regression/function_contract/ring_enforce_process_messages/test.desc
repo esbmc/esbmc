@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract process_messages_at_time --replace-call-with-contract "source_reaction_in,node_reaction" --no-align-check
+^VERIFICATION SUCCESSFUL$

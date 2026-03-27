@@ -34,7 +34,10 @@ code_contractst::code_contractst(
   goto_functionst &_goto_functions,
   contextt &_context,
   const namespacet &_ns)
-  : goto_functions(_goto_functions), context(_context), ns(_ns)
+  : goto_functions(_goto_functions),
+    context(_context),
+    ns(_ns),
+    frame_enforcer(_context)
 {
 }
 
@@ -395,7 +398,7 @@ expr2tc code_contractst::extract_ensures_clause(const symbolt &contract_symbol)
 }
 
 // Helper function to check if function has an explicit empty assigns clause
-// This distinguishes __ESBMC_assigns() from no assigns clause at all
+// This distinguishes __ESBMC_assigns(0) from no assigns clause at all
 static bool has_empty_assigns_marker(const goto_programt &function_body)
 {
   forall_goto_program_instructions (it, function_body)
@@ -600,7 +603,8 @@ void code_contractst::havoc_static_globals(
 void code_contractst::enforce_contracts(
   const std::set<std::string> &to_enforce,
   bool assume_nonnull_valid,
-  const std::string &entry_function)
+  const std::string &entry_function,
+  bool check_assigns_compliance)
 {
   for (const auto &function_name : to_enforce)
   {
@@ -659,9 +663,17 @@ void code_contractst::enforce_contracts(
                        (is_constant_bool2t(ensures_clause) &&
                         !to_constant_bool2t(ensures_clause).value);
 
+    // Extract assigns targets here so we can check them in the skip condition.
+    // Functions with only __ESBMC_assigns (and no requires/ensures) still
+    // deserve enforcement: the assigns compliance check is the contract.
+    std::vector<expr2tc> assigns_targets_early =
+      extract_assigns_from_body(original_body_copy);
+    bool has_assigns = !assigns_targets_early.empty();
+
     // For annotated functions without explicit contracts, use default true/true
-    // This allows the function to be processed with default contract semantics
-    if (!has_requires && !has_ensures && !has_annotation)
+    // This allows the function to be processed with default contract semantics.
+    // Also proceed if only an assigns clause is present (assigns-only contract).
+    if (!has_requires && !has_ensures && !has_assigns && !has_annotation)
     {
       continue;
     }
@@ -748,6 +760,10 @@ void code_contractst::enforce_contracts(
     std::vector<code_contractst::is_fresh_mapping_t> is_fresh_mappings =
       extract_is_fresh_mappings_from_body(original_body_copy);
 
+    // assigns_targets already extracted above (assigns_targets_early)
+    // Reuse to avoid double scan.
+    std::vector<expr2tc> assigns_targets = std::move(assigns_targets_early);
+
     // Determine if this function needs pointer validity assumptions.
     // When --function is used, the harness passes nil for pointer parameters,
     // so the wrapper must assume they point to valid memory for correct
@@ -765,7 +781,9 @@ void code_contractst::enforce_contracts(
       original_name_id,
       original_body_copy,
       is_fresh_mappings,
-      needs_ptr_validity);
+      needs_ptr_validity,
+      assigns_targets,
+      check_assigns_compliance);
 
     // Create new function entry
     goto_functiont new_func;
@@ -790,7 +808,9 @@ goto_programt code_contractst::generate_checking_wrapper(
   const irep_idt &original_func_id,
   const goto_programt &original_body,
   const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
-  bool assume_nonnull_valid)
+  bool assume_nonnull_valid,
+  const std::vector<expr2tc> &assigns_targets,
+  bool check_assigns_compliance)
 {
   goto_programt wrapper;
   locationt location = original_func.location;
@@ -917,6 +937,43 @@ goto_programt code_contractst::generate_checking_wrapper(
 
   // 3. Assume requires clause (after memory allocation for is_fresh)
   add_contract_clause(requires_clause, ASSUME, "contract requires");
+
+  // 3b. Snapshot globals and ptr->field targets for assigns compliance
+  //     (before function call)
+  std::vector<ptr_field_snapshot_t> ptr_field_snaps;
+  frame_enforcert::classified_assignst classified_assigns;
+  if (check_assigns_compliance)
+  {
+    std::string func_name = id2string(original_func.name);
+
+    // 3b-i. Snapshot global variables
+    auto globals = frame_enforcert::collect_global_variables(context);
+    if (!globals.empty())
+    {
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: snapshotting {} globals for assigns "
+        "compliance of {}",
+        globals.size(),
+        func_name);
+      frame_enforcer.materialize_snapshots(
+        globals, wrapper, location, "contract_" + func_name);
+    }
+
+    // 3b-ii. Snapshot ptr->field targets (for local pointer parameter fields)
+    classified_assigns =
+      frame_enforcert::classify_assigns_targets(assigns_targets);
+    if (!classified_assigns.ptr_field_targets.empty())
+    {
+      ptr_field_snaps = materialize_ptr_field_snapshots(
+        classified_assigns, original_func, wrapper, location, func_name);
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: created {} ptr-field snapshots for {}",
+        ptr_field_snaps.size(),
+        func_name);
+    }
+  }
 
   // 2. Declare return value variable (if function has return type)
   expr2tc ret_val;
@@ -1054,6 +1111,21 @@ goto_programt code_contractst::generate_checking_wrapper(
     call_inst->code = call_expr;
     call_inst->location = location;
     call_inst->location.comment("contract call original function");
+  }
+
+  // 3c. Assert assigns compliance (after function call, before ensures)
+  if (check_assigns_compliance)
+  {
+    log_debug(
+      "contracts",
+      "generate_checking_wrapper: checking assigns compliance for {}",
+      id2string(original_func.name));
+    // 3c-i. Assert global assigns compliance
+    frame_enforcer.enforce_frame_rule(
+      assigns_targets, wrapper, location, frame_modet::ASSERT);
+    // 3c-ii. Assert ptr->field assigns compliance
+    if (!ptr_field_snaps.empty())
+      emit_ptr_field_assertions(ptr_field_snaps, wrapper, location);
   }
 
   // 4. Assert ensures clause (replace __ESBMC_return_value and __ESBMC_old)
@@ -1700,6 +1772,124 @@ code_contractst::collect_old_snapshots_from_body(
   return old_snapshots;
 }
 
+// ---------------------------------------------------------------------------
+// Pointer-struct-field assigns compliance helpers
+// ---------------------------------------------------------------------------
+
+std::vector<code_contractst::ptr_field_snapshot_t>
+code_contractst::materialize_ptr_field_snapshots(
+  const frame_enforcert::classified_assignst &classified,
+  const symbolt &original_func,
+  goto_programt &wrapper,
+  const locationt &location,
+  const std::string &func_name)
+{
+  std::vector<ptr_field_snapshot_t> result;
+
+  if (classified.ptr_field_targets.empty())
+    return result;
+  if (!original_func.type.is_code())
+    return result;
+
+  const code_typet &code_type = to_code_type(original_func.type);
+  const code_typet::argumentst &params = code_type.arguments();
+
+  for (const auto &[ptr_name, assigned_fields] : classified.ptr_field_targets)
+  {
+    // Find the parameter whose identifier matches ptr_name
+    for (const auto &param : params)
+    {
+      if (param.get_identifier() != ptr_name)
+        continue;
+
+      type2tc param_type = migrate_type(param.type());
+      if (!is_pointer_type(param_type))
+        break;
+
+      // Resolve the pointed-to struct type
+      type2tc pointee_type = to_pointer_type(param_type).subtype;
+      if (is_symbol_type(pointee_type))
+        pointee_type = ns.follow(pointee_type);
+      if (!is_struct_type(pointee_type))
+        break;
+
+      const struct_type2t &stype = to_struct_type(pointee_type);
+      expr2tc ptr_sym = symbol2tc(param_type, ptr_name);
+      expr2tc deref_expr = dereference2tc(pointee_type, ptr_sym);
+
+      for (size_t i = 0; i < stype.member_names.size(); ++i)
+      {
+        const irep_idt &field = stype.member_names[i];
+        if (assigned_fields.count(field))
+          continue; // This field is explicitly assigned — skip
+
+        const type2tc &ftype = stype.members[i];
+
+        // Create a uniquely-named snapshot symbol
+        std::string snap_name = "__ESBMC_frame_snap_ptrf_" + func_name + "_" +
+                                id2string(ptr_name) + "_" + id2string(field) +
+                                "_" + std::to_string(ptr_field_snap_counter++);
+
+        symbolt snap_sym_obj;
+        snap_sym_obj.name = snap_name;
+        snap_sym_obj.id = snap_name;
+        snap_sym_obj.type = migrate_type_back(ftype);
+        snap_sym_obj.lvalue = true;
+        snap_sym_obj.static_lifetime = false;
+        snap_sym_obj.file_local = false;
+        symbolt *added = context.move_symbol_to_context(snap_sym_obj);
+        expr2tc snap_expr = symbol2tc(ftype, added->id);
+
+        // DECL snapshot variable
+        goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
+        decl_inst->code = code_decl2tc(ftype, added->id);
+        decl_inst->location = location;
+        decl_inst->location.comment("frame: ptr-field snapshot declaration");
+
+        // ASSIGN snapshot = ptr->field (pre-call value)
+        expr2tc field_expr = member2tc(ftype, deref_expr, field);
+        goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
+        assign_inst->code = code_assign2tc(snap_expr, field_expr);
+        assign_inst->location = location;
+        assign_inst->location.comment("frame: capture ptr-field pre-state");
+
+        ptr_field_snapshot_t entry;
+        entry.ptr_sym = ptr_sym;
+        entry.pointee_type = pointee_type;
+        entry.field_name = field;
+        entry.field_type = ftype;
+        entry.snapshot_sym = snap_expr;
+        result.push_back(entry);
+      }
+      break; // matched the parameter
+    }
+  }
+  return result;
+}
+
+void code_contractst::emit_ptr_field_assertions(
+  const std::vector<ptr_field_snapshot_t> &snapshots,
+  goto_programt &wrapper,
+  const locationt &location)
+{
+  for (const auto &entry : snapshots)
+  {
+    expr2tc deref_expr = dereference2tc(entry.pointee_type, entry.ptr_sym);
+    expr2tc field_expr =
+      member2tc(entry.field_type, deref_expr, entry.field_name);
+    expr2tc guard = equality2tc(field_expr, entry.snapshot_sym);
+
+    goto_programt::targett t = wrapper.add_instruction(ASSERT);
+    t->guard = guard;
+    t->location = location;
+    std::string label = id2string(to_symbol2t(entry.ptr_sym).thename) + "->" +
+                        id2string(entry.field_name);
+    t->location.comment(
+      "assigns compliance: " + label + " not in assigns clause");
+    t->location.property("assigns compliance");
+  }
+}
+
 void code_contractst::materialize_old_snapshots_at_wrapper(
   std::vector<code_contractst::old_snapshot_t> &old_snapshots,
   goto_programt &wrapper,
@@ -1865,39 +2055,38 @@ expr2tc code_contractst::remove_incorrect_casts(
   if (is_nil_expr(expr) || is_nil_expr(ret_val))
     return expr;
 
-  // NON-RECURSIVE: Only process direct typecast on return_value symbol
-  // This avoids infinite recursion and circular references
+  // Strip a chain of typecasts wrapping a return_value symbol.
+  //
+  // When __ESBMC_return_value is undeclared in C source, Clang assigns it the
+  // implicit-int type.  An expression like (size_t)__ESBMC_return_value then
+  // compiles to (size_t)(int)rv — two nested casts.  After the symbol is
+  // replaced by the actual ret_val (e.g. void*), we need to remove ALL
+  // intermediate casts whose type disagrees with ret_val's type, not just the
+  // outermost one.
   if (is_typecast2t(expr))
   {
-    const typecast2t &cast = to_typecast2t(expr);
+    // Peel off typecasts until we reach a non-cast expression.
+    expr2tc inner = expr;
+    while (is_typecast2t(inner))
+      inner = to_typecast2t(inner).from;
 
-    // Check if we're casting a return_value symbol (directly, not nested)
-    if (is_symbol2t(cast.from))
+    // If the innermost expression is a return_value symbol, discard all casts.
+    if (is_symbol2t(inner) && is_return_value_symbol(to_symbol2t(inner)))
     {
-      const symbol2t &sym = to_symbol2t(cast.from);
-
-      if (is_return_value_symbol(sym))
+      const typecast2t &outermost = to_typecast2t(expr);
+      if (!base_type_eq(outermost.type, ret_val->type, ns))
       {
-        // Compare the cast target type with ret_val's type
-        // If they don't match, the cast is incorrect and should be removed
-        if (!base_type_eq(cast.type, ret_val->type, ns))
-        {
-          log_debug(
-            "contracts",
-            "Removing incorrect cast from {} to {} (ret_val type is {})",
-            get_type_id(*cast.from->type),
-            get_type_id(*cast.type),
-            get_type_id(*ret_val->type));
-
-          // Return the original symbol without the cast
-          return cast.from;
-        }
+        log_debug(
+          "contracts",
+          "Removing cast chain down to return_value symbol "
+          "(outer cast type={}, ret_val type={})",
+          get_type_id(*outermost.type),
+          get_type_id(*ret_val->type));
+        return inner;
       }
     }
   }
 
-  // No recursion: return original expression unchanged
-  // The caller (fix_comparison_types) will handle nested structures explicitly
   return expr;
 }
 
@@ -2100,23 +2289,20 @@ expr2tc code_contractst::fix_comparison_types(
     return new_expr;
   }
 
-  // Step 2: Handle logical operators (AND, OR) that may contain comparisons
-  // Only process one level: if this is AND/OR, process its direct operands
+  // Step 2: Handle logical operators (AND, OR) that may contain comparisons.
+  // Recurse into every operand so that nested logical sub-expressions (e.g.
+  // and(or(equality(rv, 0), ...), equality(...))) are fully processed.
   if (is_and2t(expr) || is_or2t(expr))
   {
     expr2tc new_expr = expr->clone();
     bool changed = false;
 
-    // Process each operand (but only one level deep)
     new_expr->Foreach_operand([this, &ret_val, &changed](expr2tc &op) {
-      if (is_comp_expr(op))
+      expr2tc fixed = fix_comparison_types(op, ret_val);
+      if (fixed != op)
       {
-        expr2tc fixed = fix_comparison_types(op, ret_val);
-        if (fixed != op)
-        {
-          op = fixed;
-          changed = true;
-        }
+        op = fixed;
+        changed = true;
       }
     });
 
@@ -2256,6 +2442,19 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
       if (
         comment == "contract::requires" || comment == "contract::ensures" ||
         comment == "contract::assigns")
+      {
+        return true;
+      }
+    }
+    // Also detect assigns-only contracts: __ESBMC_assigns() generates an ASSIGN
+    // instruction with a sideeffect of kind assigns_target. A function with
+    // only __ESBMC_assigns (no requires/ensures) still has a contract.
+    if (it->is_assign())
+    {
+      const code_assign2t &assign = to_code_assign2t(it->code);
+      if (
+        is_sideeffect2t(assign.source) &&
+        to_sideeffect2t(assign.source).kind == sideeffect2t::assigns_target)
       {
         return true;
       }

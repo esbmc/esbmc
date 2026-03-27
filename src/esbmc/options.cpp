@@ -337,6 +337,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"loop-invariant-check",
      NULL,
      "verify using loop invariant inductive check (standalone mode)"},
+    {"loop-frame-rule",
+     NULL,
+     "enable frame rule for loop invariant checking "
+     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"},
+    {"enforce-assigns-check",
+     NULL,
+     "check assigns clause compliance in enforce-contract mode"},
     {"no-cache-asserts",
      NULL,
      "do not cache asserts that were already proven correct"}}},
