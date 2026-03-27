@@ -1,5 +1,5 @@
 CORE
 main.cpp
 --branch-coverage --generate-ctest-testcase
-^Generated [0-9]+ CTest test case\(s\) with CMakeLists\.txt
+^Generated 4 CTest test case\(s\) with CMakeLists\.txt
 ^VERIFICATION FAILED$

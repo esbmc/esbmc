@@ -50,6 +50,15 @@ void clang_cpp_languaget::build_include_args(
     // Let the cpp include "overtake" others.
     compiler_args.push_back("-isystem");
     compiler_args.push_back(cppinc);
+    // Suppress system C++ standard library headers on all platforms so that
+    // ESBMC's bundled OMs are the sole source of C++ standard-library
+    // definitions.  Mixing the OMs with host libc++/libstdc++ headers
+    // causes ambiguous-name errors (e.g. char_traits, istream) because the
+    // OMs define names in namespace std while the host headers put them in
+    // an inline namespace (std::__1 on libc++, std:: on libstdc++ but with
+    // different ODR identity).
+    // Users who need the host headers can pass --no-abstracted-cpp-includes.
+    compiler_args.push_back("-nostdinc++");
   }
 
   clang_c_languaget::build_include_args(compiler_args);

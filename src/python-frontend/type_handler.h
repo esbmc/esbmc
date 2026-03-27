@@ -82,6 +82,13 @@ public:
    */
   std::string type_to_string(const typet &t) const;
 
+  /**
+   * Returns the Python type name for an ESBMC type, as produced by type().
+   * Maps: bool→"bool", floatbv→"float", signedbv/unsignedbv→"int",
+   * char array/pointer→"str", complex→"complex", struct→class name.
+   */
+  std::string get_python_type_name(const typet &t) const;
+
   /*
    * Returns the detected type for a variable.
    * @param var_name The name of the variable.

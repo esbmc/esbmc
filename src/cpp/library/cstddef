@@ -1,0 +1,76 @@
+#ifndef ESBMC_CSTDDEF
+#define ESBMC_CSTDDEF
+
+#include <stddef.h>
+
+// nullptr_t is defined by Clang as decltype(nullptr) — not in the global
+// namespace on macOS, so define it directly here.
+// decltype is C++11; skip nullptr_t in C++03 mode.
+#if __cplusplus >= 201103L
+#ifndef _NULLPTR_T_DEFINED
+typedef decltype(nullptr) nullptr_t;
+#define _NULLPTR_T_DEFINED
+#endif
+#endif
+
+namespace std
+{
+using ::max_align_t;
+using ::ptrdiff_t;
+using ::size_t;
+#if __cplusplus >= 201103L
+typedef ::nullptr_t nullptr_t;
+#endif
+
+#if __cplusplus >= 201703L
+enum class byte : unsigned char
+{
+};
+
+template <class IntType>
+constexpr byte operator<<(byte b, IntType shift) noexcept
+{
+  return static_cast<byte>(
+    static_cast<unsigned char>(b) << static_cast<unsigned int>(shift));
+}
+
+template <class IntType>
+constexpr byte operator>>(byte b, IntType shift) noexcept
+{
+  return static_cast<byte>(
+    static_cast<unsigned char>(b) >> static_cast<unsigned int>(shift));
+}
+
+constexpr byte operator|(byte l, byte r) noexcept
+{
+  return static_cast<byte>(
+    static_cast<unsigned char>(l) | static_cast<unsigned char>(r));
+}
+
+constexpr byte operator&(byte l, byte r) noexcept
+{
+  return static_cast<byte>(
+    static_cast<unsigned char>(l) & static_cast<unsigned char>(r));
+}
+
+constexpr byte operator^(byte l, byte r) noexcept
+{
+  return static_cast<byte>(
+    static_cast<unsigned char>(l) ^ static_cast<unsigned char>(r));
+}
+
+constexpr byte operator~(byte b) noexcept
+{
+  return static_cast<byte>(~static_cast<unsigned char>(b));
+}
+
+template <class IntType>
+constexpr IntType to_integer(byte b) noexcept
+{
+  return static_cast<IntType>(b);
+}
+#endif
+
+} // namespace std
+
+#endif // ESBMC_CSTDDEF

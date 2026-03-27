@@ -442,6 +442,12 @@ public:
   // Returns SMT AST for the single precision relative error bound under
   // round-to-nearest: half machine epsilon = 2^-24 ~ 5.96e-08
   smt_astt get_single_eps_rel();
+  // Returns SMT AST for the double precision directional error bound under
+  // round-toward-+inf: full machine epsilon = 2^-52 ~ 2.22e-16
+  smt_astt get_double_eps_up();
+  // Returns SMT AST for the single precision directional error bound under
+  // round-toward-+inf: full machine epsilon = 2^-23 ~ 1.19e-07
+  smt_astt get_single_eps_up();
 
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
@@ -566,16 +572,24 @@ public:
    *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
    *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
    *  Other formats return the original result unchanged.
+   *  Under --ir-ra, when rounding_mode is a concrete round-to-nearest constant
+   *  (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is asserted.
+   *  For symbolic or directed rounding modes the function falls back to a weak
+   *  unconstrained enclosure (sound but imprecise); tight directed bounds are
+   *  deferred to a future PR.
    *  @param real_result The result of exact real arithmetic operation
    *  @param fbv_type The floating-point type information (exponent/fraction bits)
    *  @param operand_zero_check Optional boolean AST for special zero handling
    *         (e.g., multiplication where either operand is zero should yield zero
    *         regardless of the other operand, even if it would cause underflow)
+   *  @param rounding_mode The rounding mode expr2tc from the IR operation node;
+   *         typically a constant_int2t or the __ESBMC_rounding_mode symbol.
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
   virtual smt_astt apply_ieee754_semantics(
     smt_astt real_result,
     const floatbv_type2t &fbv_type,
-    smt_astt operand_zero_check = nullptr);
+    smt_astt operand_zero_check = nullptr,
+    const expr2tc &rounding_mode = expr2tc());
 
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();
@@ -894,13 +908,19 @@ public:
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;
 
-  size_t quantifier_counter =
-    0; /// Value used to track how many quantifier symbols were created
-
   bool ptr_foo_inited;
 
   smt_astt null_ptr_ast;
   smt_astt invalid_ptr_ast;
+
+  /** Counter for generating unique bound-variable names in quantifiers. */
+  size_t quantifier_counter = 0;
+
+  /** Map from SSA symbol name to its forall/exists irep2 expression.
+   *  Populated in convert_assign when a symbol is assigned a quantifier
+   *  expression; used in convert_ast to inline nested quantifier bodies
+   *  before substituting the outer bound variable. */
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> forall_defs_;
 
   /** Mapping of name prefixes to use counts: when we want a fresh new name
    *  with a particular prefix, this map stores how many times that prefix has

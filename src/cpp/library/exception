@@ -1,0 +1,78 @@
+#ifndef ESBMC_EXCEPTION
+#define ESBMC_EXCEPTION
+
+// noexcept is C++11; use a compat macro so this header parses in C++03 mode.
+#if __cplusplus >= 201103L
+#define _ESBMC_NOEXCEPT noexcept
+#else
+#define _ESBMC_NOEXCEPT
+#endif
+
+namespace std
+{
+
+class exception
+{
+public:
+  exception() _ESBMC_NOEXCEPT
+  {
+  }
+  virtual ~exception() _ESBMC_NOEXCEPT
+  {
+  }
+  virtual const char *what() const _ESBMC_NOEXCEPT
+  {
+    return "std::exception";
+  }
+};
+
+class bad_exception : public exception
+{
+public:
+  bad_exception() _ESBMC_NOEXCEPT
+  {
+  }
+  virtual ~bad_exception() _ESBMC_NOEXCEPT
+  {
+  }
+  virtual const char *what() const _ESBMC_NOEXCEPT
+  {
+    return "std::bad_exception";
+  }
+};
+
+// Returns true if stack unwinding is in progress due to an uncaught exception.
+// Modelled as nondeterministic for BMC purposes.
+inline bool uncaught_exception() _ESBMC_NOEXCEPT
+{
+  return nondet_bool();
+}
+
+typedef void (*terminate_handler)();
+
+// Stubbed: ESBMC does not model the terminate handler call chain.
+inline terminate_handler set_terminate(terminate_handler f) _ESBMC_NOEXCEPT
+{
+  return f;
+}
+
+inline void terminate() _ESBMC_NOEXCEPT
+{
+  __ESBMC_assert(0, "std::terminate called");
+}
+
+typedef void (*unexpected_handler)();
+
+inline unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
+{
+  return f;
+}
+
+inline void unexpected()
+{
+  terminate();
+}
+
+} // namespace std
+
+#endif // ESBMC_EXCEPTION

@@ -140,7 +140,7 @@ private:
    * forward GOTO whose target is outside the loop body – such loops are too
    * complex to inline safely and Branch 1 is skipped for them.
    */
-  bool copy_loop_body(
+  void copy_loop_body(
     goto_programt::targett loop_head,
     goto_programt::targett loop_exit,
     goto_programt &out) const;

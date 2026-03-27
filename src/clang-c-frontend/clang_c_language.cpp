@@ -506,6 +506,9 @@ void __ESBMC_loop_invariant(_Bool);
 #define __builtin_object_size(ptr, type) \
     __ESBMC_builtin_object_size(ptr, type)
 
+// __ESBMC_unroll(N): sets the number of iterations for the next loop in the code.
+void __ESBMC_unroll(int);
+
 #define __ESBMC_contract __attribute__((annotate("__ESBMC_contract")))
     )";
 
@@ -608,6 +611,8 @@ void __ESBMC_assigns_impl(const void *, ...);
 #define __ESBMC_assigns_5(a,b,c,d,e) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d),&(e))
 #define __ESBMC_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_assigns_##N
 #define __ESBMC_assigns(...) __ESBMC_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
+
+
     )";
   }
 

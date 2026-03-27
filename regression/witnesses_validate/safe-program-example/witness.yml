@@ -1,0 +1,27 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+    uuid: "c66c3ee7-e0de-4bae-87f0-fd48fc7b961d"
+    creation_time: "2023-11-21T10:29:38+01:00"
+    producer:
+      name: "CPAchecker"
+      version: "2.2.1-svn"
+      configuration: "svcomp24"
+    task:
+      input_files:
+        - "./safe-program-example.c"
+      input_file_hashes:
+        "./safe-program-example.c": "e4df7cba34fe4fa16d918ca55a18e2cd11e6621f7a6cba9ad071ea9670c26365"
+      specification: "G ! call(reach_error())"
+      data_model: "ILP32"
+      language: "C"
+  content:
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: "./safe-program-example.c"
+        line: 11
+        column: 9
+        function: main
+      value: "s <= i*255 && 0 <= i && i <= 255 && n <= 255"
+      format: c_expression

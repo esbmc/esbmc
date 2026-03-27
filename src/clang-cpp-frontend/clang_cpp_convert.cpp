@@ -1332,6 +1332,19 @@ bool clang_cpp_convertert::get_function_body(
   exprt &new_expr,
   const code_typet &ftype)
 {
+  // For trivial implicit or explicitly-defaulted destructors, Clang does not
+  // synthesise a body (hasBody() returns false), leaving symbol.value as nil.
+  // This causes a "no body for function ~T#" warning when destructor calls are
+  // emitted at scope exit. A trivial destructor is a no-op: generate an empty body.
+  if (const auto *dd = llvm::dyn_cast<clang::CXXDestructorDecl>(&fd))
+  {
+    if (!fd.hasBody() && (dd->isImplicit() || dd->isExplicitlyDefaulted()))
+    {
+      new_expr = code_blockt();
+      return false;
+    }
+  }
+
   // do nothing if function body doesn't exist
   if (!fd.hasBody())
     return false;

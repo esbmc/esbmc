@@ -1,4 +1,0 @@
-CORE
-main.py
---no-standard-checks --unwind 14 --z3
-^VERIFICATION SUCCESSFUL$

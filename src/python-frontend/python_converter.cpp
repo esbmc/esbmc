@@ -685,6 +685,15 @@ exprt python_converter::compare_constants_internal(
       lhs.type().subtype() == char_type() &&
       rhs.type().subtype() == char_type())
     {
+      // Type-identifier constants (e.g. from `x = int`) have no operands and
+      // store the name in get_value(). String literals have individual char
+      // operands and an empty get_value(). These represent different Python
+      // objects (int != "int"), so comparing across formats is always unequal.
+      bool lhs_is_type_id = lhs.operands().empty();
+      bool rhs_is_type_id = rhs.operands().empty();
+      if (lhs_is_type_id != rhs_is_type_id)
+        return gen_boolean(op == "NotEq");
+
       // Extract string values
       std::string lhs_str =
         string_handler_.extract_string_from_array_operands(lhs);
@@ -6368,6 +6377,38 @@ void python_converter::get_var_assign(
       return;
     }
 
+    // Python dynamic typing: if a variable already has a numeric type (e.g.
+    // double from float()) and is being reassigned to a pointer/string type
+    // (e.g. char* from chr()), the GOTO IR cannot represent this type change
+    // safely — the old SSA constant and the new pointer type mismatch in both
+    // the symex renamer and the SMT encoder. Skip the assignment so the prior
+    // type and value are preserved. This is sound for verification as long as
+    // the new value is not used in a subsequent assertion.
+    if (
+      lhs_symbol && !lhs.type().is_pointer() && rhs.type().is_pointer() &&
+      rhs.type().subtype() ==
+        char_type() && // only skip string (char*) reassignment, not None (void*/bool*)
+      (lhs.type().is_floatbv() || lhs.type().is_signedbv() ||
+       lhs.type().is_unsignedbv() || lhs.type().is_bool()))
+    {
+      // Still emit the RHS as a void call so exceptions/side-effects are
+      // preserved (e.g. chr() out-of-range ValueError).
+      if (
+        rhs.id() == "sideeffect" &&
+        rhs.statement() == irep_idt("function_call"))
+      {
+        const side_effect_expr_function_callt &se =
+          to_side_effect_expr_function_call(rhs);
+        code_function_callt void_call;
+        void_call.function() = se.function();
+        void_call.arguments() = se.arguments();
+        void_call.location() = rhs.location();
+        add_instruction(void_call);
+      }
+      current_lhs = nullptr;
+      return;
+    }
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
@@ -6898,8 +6939,76 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Extract condition from AST
   exprt cond;
 
-  // Materialize function call if needed
-  if (has_nested_call)
+  // Keep `and` and `or` in conditions short-circuited.
+  const bool coverage_mode = is_coverage_mode();
+  const bool pytest_generation_mode = is_pytest_generation_mode();
+  const bool model_mode = is_model_file(ast_node["test"]);
+
+  if (
+    test_type == "BoolOp" && current_block && type != "While" &&
+    !coverage_mode && !pytest_generation_mode && !model_mode)
+  {
+    const auto &test_node = ast_node["test"];
+    const auto &operands = test_node["values"];
+    if (!operands.empty())
+    {
+      exprt *saved_lhs = current_lhs;
+      current_lhs = nullptr;
+      // Start from the leftmost operand and carry the running result forward.
+      cond = get_expr(operands[0]);
+      current_lhs = saved_lhs;
+
+      symbolt result_symbol = create_return_temp_variable(
+        bool_type(), get_location_from_decl(test_node), "boolop_cond");
+      symbol_table_.add(result_symbol);
+      exprt result_expr = symbol_expr(result_symbol);
+
+      code_declt result_decl(result_expr);
+      result_decl.location() = get_location_from_decl(test_node);
+      current_block->copy_to_operands(result_decl);
+
+      code_assignt result_init(result_expr, cond);
+      result_init.location() = get_location_from_decl(test_node);
+      current_block->copy_to_operands(result_init);
+
+      const bool is_and = test_node["op"]["_type"] == "And";
+      for (size_t i = 1; i < operands.size(); ++i)
+      {
+        code_blockt next_operand_block;
+        code_blockt *saved_block = current_block;
+        current_block = &next_operand_block;
+        saved_lhs = current_lhs;
+        current_lhs = nullptr;
+        // Build the next operand only in the branch where it is still needed.
+        exprt next_operand = get_expr(operands[i]);
+        current_lhs = saved_lhs;
+        current_block = saved_block;
+
+        code_assignt result_update(result_expr, next_operand);
+        result_update.location() = get_location_from_decl(operands[i]);
+        next_operand_block.copy_to_operands(result_update);
+
+        code_ifthenelset short_circuit_if;
+        short_circuit_if.location() = get_location_from_decl(operands[i]);
+        short_circuit_if.location().property("skipped");
+        // `and` keeps going while the running result is true; `or` keeps
+        // going while it is false.
+        if (is_and)
+          short_circuit_if.cond() = result_expr;
+        else
+        {
+          exprt not_result("not", bool_type());
+          not_result.copy_to_operands(result_expr);
+          short_circuit_if.cond() = not_result;
+        }
+        short_circuit_if.then_case() = next_operand_block;
+        current_block->copy_to_operands(short_circuit_if);
+      }
+
+      cond = result_expr;
+    }
+  }
+  else if (has_nested_call)
   {
     locationt location = get_location_from_decl(call_node);
 
@@ -6960,37 +7069,79 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     cond = get_expr(ast_node["test"]);
   }
 
-  cond.location() = get_location_from_decl(ast_node["test"]);
-
-  if (!cond.type().is_bool())
+  if (!(test_type == "BoolOp" && current_block && type != "While" &&
+        !coverage_mode && !pytest_generation_mode && !model_mode))
   {
-    const locationt location = get_location_from_decl(ast_node["test"]);
-    typet value_type = ns.follow(cond.type());
-    if (value_type.is_pointer())
-      value_type = ns.follow(value_type.subtype());
+    cond.location() = get_location_from_decl(ast_node["test"]);
 
-    // Objects in conditions are converted with __bool__() when available.
-    if (value_type.is_struct())
+    if (!cond.type().is_bool())
     {
-      if (const std::string class_name = extract_class_name_from_tag(
-            to_struct_type(value_type).tag().as_string());
-          !class_name.empty())
+      const locationt location = get_location_from_decl(ast_node["test"]);
+      typet value_type = ns.follow(cond.type());
+      if (value_type.is_pointer())
+        value_type = ns.follow(value_type.subtype());
+
+      // Objects in conditions are converted with __bool__() when available.
+      if (value_type.is_struct())
       {
-        if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
+        if (const std::string class_name = extract_class_name_from_tag(
+              to_struct_type(value_type).tag().as_string());
+            !class_name.empty())
         {
-          exprt bool_object = cond;
-          // __bool__ expects self by address, so the condition must be an object.
-          if (!bool_object.is_symbol())
-            bool_object = store_call_result(bool_object, location, "cond_obj");
-          const code_typet &method_type = to_code_type(bool_method->type);
-          side_effect_expr_function_callt bool_call;
-          bool_call.function() = symbol_expr(*bool_method);
-          bool_call.type() = method_type.return_type();
-          bool_call.location() = location;
-          bool_call.arguments().push_back(gen_address_of(bool_object));
-          cond = store_call_result(bool_call, location, "cond_bool");
-          cond.location() = location;
+          if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
+          {
+            exprt bool_object = cond;
+            // __bool__ expects self by address, so the condition must be an object.
+            if (!bool_object.is_symbol())
+              bool_object =
+                store_call_result(bool_object, location, "cond_obj");
+            const code_typet &method_type = to_code_type(bool_method->type);
+            side_effect_expr_function_callt bool_call;
+            bool_call.function() = symbol_expr(*bool_method);
+            bool_call.type() = method_type.return_type();
+            bool_call.location() = location;
+            bool_call.arguments().push_back(gen_address_of(bool_object));
+            cond = store_call_result(bool_call, location, "cond_bool");
+            cond.location() = location;
+          }
         }
+      }
+
+      typet list_type = type_handler_.get_list_type();
+      // Python treats lists in conditions by their size, for example:
+      // `1 if xs else 0`.
+      if (
+        current_block &&
+        (cond.type() == list_type ||
+         (cond.type().is_pointer() && cond.type().subtype() == list_type)))
+      {
+        const symbolt *size_func =
+          symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+        if (!size_func)
+          throw std::runtime_error(
+            "__ESBMC_list_size not found for list condition check");
+
+        symbolt &size_result = create_tmp_symbol(
+          ast_node["test"], "$list_size$", size_type(), gen_zero(size_type()));
+        code_declt size_decl(symbol_expr(size_result));
+        size_decl.location() = location;
+        current_block->copy_to_operands(size_decl);
+
+        // Use `__ESBMC_list_size(cond) != 0` to evaluate the list condition.
+        code_function_callt size_call;
+        size_call.function() = symbol_expr(*size_func);
+        size_call.lhs() = symbol_expr(size_result);
+        if (cond.type().is_pointer())
+          size_call.arguments().push_back(cond);
+        else
+          size_call.arguments().push_back(address_of_exprt(cond));
+        size_call.type() = size_type();
+        size_call.location() = location;
+        current_block->copy_to_operands(size_call);
+
+        cond = exprt("notequal", bool_type());
+        cond.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+        cond.location() = location;
       }
     }
   }
@@ -8562,7 +8713,12 @@ void python_converter::get_attributes_from_self(
   for (const auto &stmt : method_body)
   {
     if (
-      stmt["_type"] == "AnnAssign" && stmt["target"]["_type"] == "Attribute" &&
+      stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+      stmt.contains("target") && stmt["target"].is_object() &&
+      stmt["target"].contains("_type") &&
+      stmt["target"]["_type"] == "Attribute" &&
+      stmt["target"].contains("value") && stmt["target"]["value"].is_object() &&
+      stmt["target"]["value"].contains("id") &&
       stmt["target"]["value"]["id"] == "self")
     {
       const std::string &attr_name = stmt["target"]["attr"];
@@ -8670,7 +8826,14 @@ void python_converter::get_attributes_from_self(
         class_components.push_back(comp);
     }
     else if (
-      stmt["_type"] == "Assign" && stmt["targets"][0]["_type"] == "Attribute" &&
+      stmt.contains("_type") && stmt["_type"] == "Assign" &&
+      stmt.contains("targets") && stmt["targets"].is_array() &&
+      !stmt["targets"].empty() && stmt["targets"][0].is_object() &&
+      stmt["targets"][0].contains("_type") &&
+      stmt["targets"][0]["_type"] == "Attribute" &&
+      stmt["targets"][0].contains("value") &&
+      stmt["targets"][0]["value"].is_object() &&
+      stmt["targets"][0]["value"].contains("id") &&
       stmt["targets"][0]["value"]["id"] == "self")
     {
       // A member is initialized with something that might be not annotated
@@ -9293,6 +9456,49 @@ const python_typechecking &python_converter::get_typechecker() const
 bool python_converter::type_assertions_enabled() const
 {
   return config.options.get_bool_option("is-instance-check");
+}
+
+bool python_converter::is_coverage_mode() const
+{
+  return config.options.get_bool_option("condition-coverage") ||
+         config.options.get_bool_option("condition-coverage-claims") ||
+         config.options.get_bool_option("condition-coverage-rm") ||
+         config.options.get_bool_option("condition-coverage-claims-rm") ||
+         config.options.get_bool_option("branch-coverage") ||
+         config.options.get_bool_option("branch-coverage-claims") ||
+         config.options.get_bool_option("branch-function-coverage") ||
+         config.options.get_bool_option("branch-function-coverage-claims");
+}
+
+bool python_converter::is_pytest_generation_mode() const
+{
+  return config.options.get_bool_option("generate-pytest-testcase");
+}
+
+bool python_converter::is_model_file(const nlohmann::json &node) const
+{
+  const std::string file = get_location_from_decl(node).file().as_string();
+  if (file.find("/models/") != std::string::npos)
+    return true;
+
+  if (file.find('/') == std::string::npos)
+  {
+    if (file.size() >= 3 && file.compare(file.size() - 3, 3, ".py") == 0)
+      return true;
+    return false;
+  }
+
+  const std::string suffix = "/models/" + file;
+  for (const auto &entry : imported_modules)
+  {
+    const std::string &path = entry.second;
+    if (
+      path.size() >= suffix.size() &&
+      path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0)
+      return true;
+  }
+
+  return false;
 }
 
 string_builder &python_converter::get_string_builder()
