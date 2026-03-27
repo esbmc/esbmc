@@ -955,9 +955,6 @@ Generating GOTO Program
 GOTO program creation time: 1.433s
 GOTO program processing time: 0.029s
 Starting Bounded Model Checking
-ERROR: Exception thrown of type TypeError at file main.py line 13
-ERROR: Exception thrown of type TypeError at file main.py line 15
-ERROR: Exception thrown of type TypeError at file main.py line 17
 Symex completed in: 0.002s (10 assignments)
 Caching time: 0.000s (removed 2 assertions)
 Slicing time: 0.000s (removed 7 assignments)
