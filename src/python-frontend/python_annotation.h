@@ -1538,8 +1538,25 @@ private:
                 return "NoneType";
               else if (
                 returns.contains("value") && returns["value"].is_string())
+              {
                 // Forward reference annotation: -> "float", -> "MyClass", etc.
-                return returns["value"].template get<std::string>();
+                // Validate that the string looks like a Python identifier (or
+                // dotted name) before returning it, to guard against arbitrary
+                // string constants used as non-type annotations.
+                std::string type_name =
+                  returns["value"].template get<std::string>();
+                bool valid = !type_name.empty() &&
+                             (std::isalpha((unsigned char)type_name[0]) ||
+                              type_name[0] == '_');
+                for (size_t i = 1; valid && i < type_name.size(); ++i)
+                  valid =
+                    std::isalnum((unsigned char)type_name[i]) ||
+                    type_name[i] == '_' || type_name[i] == '.';
+                if (valid)
+                  return type_name;
+                // Not a valid identifier — treat as opaque
+                return "Any";
+              }
               else if (returns.contains("value"))
                 return "Any"; // Other constant types
             }

@@ -171,12 +171,24 @@ symbol_id function_call_builder::build_function_id() const
        * symbol table, until we reach the final object whose class we need.
        */
 
+      // Tracks the dotted module path being built during type resolution.
+      // Set as a side-effect in the Name base case and extended in Attribute
+      // nodes when type resolution fails, so that pkg.mod4.MyClass() can be
+      // recognised as module "pkg.mod4" without a separate traversal pass.
+      std::string module_path_candidate;
+
       std::function<typet(const nlohmann::json &)> resolve_attr_type =
         [&](const nlohmann::json &node) -> typet {
         if (node["_type"] == "Name")
         {
           // Base case: resolve variable to its type
-          std::string name = node["id"].get<std::string>();
+          std::string name = node.value("id", "");
+          if (name.empty())
+            return typet();
+
+          // Track the name for dotted-path reconstruction (used when type
+          // resolution fails and we need to check for a module path).
+          module_path_candidate = name;
 
           // Skip module names - let the module handling logic deal with them
           if (converter_.is_imported_module(name))
@@ -192,8 +204,18 @@ symbol_id function_call_builder::build_function_id() const
         {
           // Recursive case: resolve base, then look up member
           typet base_type = resolve_attr_type(node["value"]);
-          if (base_type.id().empty())
+          std::string attr = node.value("attr", "");
+          if (attr.empty())
             return typet();
+          if (base_type.id().empty())
+          {
+            // Type resolution failed for the base — extend the dotted path
+            // candidate so the caller can check is_imported_module on the
+            // full path (e.g., "pkg" + "mod4" -> "pkg.mod4").
+            if (!module_path_candidate.empty())
+              module_path_candidate += "." + attr;
+            return typet();
+          }
 
           // Normalize type (dereference pointers, follow symbol types)
           if (base_type.is_pointer())
@@ -205,7 +227,6 @@ symbol_id function_call_builder::build_function_id() const
           if (base_type.is_struct())
           {
             const struct_typet &struct_type = to_struct_type(base_type);
-            std::string attr = node["attr"].get<std::string>();
             if (struct_type.has_component(attr))
               return struct_type.get_component(attr).type();
             // Not an instance member — check for class-level symbol
@@ -255,24 +276,22 @@ symbol_id function_call_builder::build_function_id() const
       }
       else
       {
-        // Fallback: try to reconstruct the full dotted module path.
-        // For pkg.mod4.MyClass(), func_json["value"] is the "pkg.mod4" Attribute
-        // node, and we need obj_name = "pkg.mod4" (not just "mod4") so that
-        // is_imported_module() can find the module registered under its full name.
-        std::function<std::string(const nlohmann::json &)> build_module_path =
-          [&](const nlohmann::json &n) -> std::string {
-          if (n["_type"] == "Name")
-            return n["id"].get<std::string>();
-          if (n["_type"] == "Attribute")
-            return build_module_path(n["value"]) + "." +
-                   n["attr"].get<std::string>();
-          return "";
-        };
-        std::string full_module = build_module_path(func_json["value"]);
-        if (!full_module.empty() && converter_.is_imported_module(full_module))
-          obj_name = full_module;
+        // Type resolution failed. module_path_candidate was built as a
+        // side-effect of resolve_attr_type; check whether it names a module
+        // that is directly registered (e.g., "pkg.mod4" for pkg.mod4.MyClass()).
+        // We require get_imported_module_path() to be non-empty rather than
+        // just is_imported_module(), because is_imported_module() can return
+        // true based solely on a JSON file existing (is_module fallback), even
+        // for submodules like "os.path" that are registered under their stem
+        // ("path") rather than their dotted name. If the dotted name has no
+        // direct path mapping, fall back to the last attribute component
+        // (e.g., "path" for os.path.exists()) which IS in imported_modules.
+        if (
+          !module_path_candidate.empty() &&
+          !converter_.get_imported_module_path(module_path_candidate).empty())
+          obj_name = module_path_candidate;
         else
-          obj_name = func_json["value"]["attr"].get<std::string>();
+          obj_name = func_json["value"].value("attr", "");
       }
     }
     else if (

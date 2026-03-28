@@ -3747,7 +3747,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
                 arg_actual_type = ns.follow(arg_actual_type);
             }
           }
-          // Handle union types: if param is pointer and arg is struct (or symbol to struct), take address
+          // Handle union types: if param is pointer and arg is struct (or symbol
+          // to struct), take address. This is the post-processing pass for
+          // general pointer-to-struct coercion.
+          // NOTE: function_call_expr.cpp also has an earlier coercion pass that
+          // specifically handles char[0]* union parameters (str | T pattern).
+          // These two mechanisms are complementary: the pass here handles the
+          // general case; the earlier pass handles the specific char[0]* union
+          // representation and also materialises non-symbol struct temporaries.
           if (
             param_type.is_pointer() && arg_actual_type.is_struct() &&
             !arg.is_address_of() && !arg_actual_type.is_pointer())
@@ -6071,11 +6078,15 @@ void python_converter::preregister_global_variables(
     {
       var_type = extract_type_info(element).second;
     }
-    catch (const std::exception &)
+    catch (const std::exception &e)
     {
       // Type not yet resolvable (e.g., from an unprocessed import). Skip for
       // now; the variable will be registered when the assignment is processed
       // after imports are loaded.
+      log_warning(
+        "preregister_global_variables: skipping '{}' ({})",
+        element["target"].value("id", "<unknown>"),
+        e.what());
       continue;
     }
     if (var_type.is_nil() || var_type.is_empty())

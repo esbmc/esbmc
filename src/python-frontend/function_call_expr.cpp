@@ -4847,6 +4847,10 @@ exprt function_call_expr::handle_general_function_call()
       // is a struct (class instance), take its address and cast to the pointer type
       // so that the attribute access handler can safely cast back and dereference.
       // Follow symbol types because class symbols use symbol_typet, not struct_typet.
+      // NOTE: python_converter.cpp has a complementary post-processing pass that
+      // handles the general pointer-to-struct coercion case. This earlier pass is
+      // specific to the char[0]* union representation and materialises non-symbol
+      // struct temporaries before taking their address.
       typet arg_followed_type = converter_.ns.follow(arg.type());
       if (
         param_type.is_pointer() &&
