@@ -2627,8 +2627,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     locationt location = get_location_from_decl(element);
     const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
     if (!strlen_sym)
-      throw std::runtime_error(
-        "strlen not found for string truthiness check");
+      throw std::runtime_error("strlen not found for string truthiness check");
 
     side_effect_expr_function_callt strlen_call;
     strlen_call.function() = symbol_expr(*strlen_sym);
