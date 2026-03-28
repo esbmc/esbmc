@@ -81,7 +81,10 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   // Use continue after a negative result
   // so that all Import&ImportFrom nodes are scanned
   auto load_and_check = [&](const std::string &module_name) -> bool {
-    const std::string path = output_dir + "/" + module_name + ".json";
+    // Convert dotted module name to directory path (e.g., "l.ks.foo" -> "l/ks/foo")
+    std::string module_path_str = module_name;
+    std::replace(module_path_str.begin(), module_path_str.end(), '.', '/');
+    const std::string path = output_dir + "/" + module_path_str + ".json";
     auto it = module_cache.find(path);
     if (it == module_cache.end())
     {
@@ -123,8 +126,11 @@ bool is_module(const std::string &module_name, const JsonType &ast)
   if (!ast.contains("ast_output_dir"))
     return false;
 
+  // Convert dotted module name to directory path (e.g., "pkg.mod4" -> "pkg/mod4")
+  std::string module_path_str = module_name;
+  std::replace(module_path_str.begin(), module_path_str.end(), '.', '/');
   const std::string path = ast["ast_output_dir"].template get<std::string>() +
-                           "/" + module_name + ".json";
+                           "/" + module_path_str + ".json";
 
   auto it = is_module_cache.find(path);
   if (it != is_module_cache.end())

@@ -6034,6 +6034,23 @@ void python_converter::preregister_global_variables(
     if (element.value("_type", "") != "AnnAssign")
       continue;
 
+    // Skip implicitly inferred annotations (plain Assign converted by the
+    // annotator). Only preregister variables that the user explicitly annotated
+    // (e.g., `x: SomeClass = ...`). Inferred globals like `l = [1, 2, 3]`
+    // should not be visible inside functions that don't declare `global l`.
+    if (element.value("_inferred_annotation", false))
+      continue;
+
+    // Skip union-type forward declarations (e.g., `x: str | datetime`).
+    // These are bare declarations with no value and the union type cannot be
+    // reliably resolved at this stage. The variable will be registered when
+    // the actual assignment is processed (after imports are loaded).
+    if (
+      element.contains("annotation") && !element["annotation"].is_null() &&
+      element["annotation"].value("_type", "") == "BinOp" &&
+      element.contains("value") && element["value"].is_null())
+      continue;
+
     if (!element.contains("target"))
       continue;
 
@@ -6049,7 +6066,18 @@ void python_converter::preregister_global_variables(
     if (symbol_table_.find_symbol(sid.to_string()))
       continue;
 
-    typet var_type = extract_type_info(element).second;
+    typet var_type;
+    try
+    {
+      var_type = extract_type_info(element).second;
+    }
+    catch (const std::exception &)
+    {
+      // Type not yet resolvable (e.g., from an unprocessed import). Skip for
+      // now; the variable will be registered when the assignment is processed
+      // after imports are loaded.
+      continue;
+    }
     if (var_type.is_nil() || var_type.is_empty())
       continue;
 

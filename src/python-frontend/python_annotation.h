@@ -1536,6 +1536,10 @@ private:
               functions_in_analysis_.erase(func_name);
               if (returns.contains("value") && returns["value"].is_null())
                 return "NoneType";
+              else if (
+                returns.contains("value") && returns["value"].is_string())
+                // Forward reference annotation: -> "float", -> "MyClass", etc.
+                return returns["value"].template get<std::string>();
               else if (returns.contains("value"))
                 return "Any"; // Other constant types
             }

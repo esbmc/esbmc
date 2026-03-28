@@ -255,9 +255,24 @@ symbol_id function_call_builder::build_function_id() const
       }
       else
       {
-        // Fallback: use the direct attribute name
-        // For module.Class.method(), we want "Class" as the object name
-        obj_name = func_json["value"]["attr"].get<std::string>();
+        // Fallback: try to reconstruct the full dotted module path.
+        // For pkg.mod4.MyClass(), func_json["value"] is the "pkg.mod4" Attribute
+        // node, and we need obj_name = "pkg.mod4" (not just "mod4") so that
+        // is_imported_module() can find the module registered under its full name.
+        std::function<std::string(const nlohmann::json &)> build_module_path =
+          [&](const nlohmann::json &n) -> std::string {
+          if (n["_type"] == "Name")
+            return n["id"].get<std::string>();
+          if (n["_type"] == "Attribute")
+            return build_module_path(n["value"]) + "." +
+                   n["attr"].get<std::string>();
+          return "";
+        };
+        std::string full_module = build_module_path(func_json["value"]);
+        if (!full_module.empty() && converter_.is_imported_module(full_module))
+          obj_name = full_module;
+        else
+          obj_name = func_json["value"]["attr"].get<std::string>();
       }
     }
     else if (
