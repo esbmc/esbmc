@@ -282,6 +282,210 @@ exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
   return symbol_expr(dict_sym);
 }
 
+exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
+{
+  if (!element.contains("generators") || element["generators"].empty())
+    throw std::runtime_error("DictComp missing generators clause");
+
+  if (element["generators"].size() != 1)
+    throw std::runtime_error("Only single-generator DictComp is supported");
+
+  const auto &generator = element["generators"][0];
+  const auto &target = generator["target"];
+  const auto &iter = generator["iter"];
+
+  locationt location = converter_.get_location_from_decl(element);
+  std::string dict_name = generate_unique_dict_name(element, location);
+  struct_typet dict_type = get_dict_struct_type();
+  typet list_type = type_handler_.get_list_type();
+
+  symbolt &dict_sym =
+    converter_.create_tmp_symbol(element, dict_name, dict_type, exprt());
+  code_declt dict_decl(symbol_expr(dict_sym));
+  dict_decl.location() = location;
+  converter_.add_instruction(dict_decl);
+
+  // Start with an empty dict and fill it inside the comprehension loop
+  nlohmann::json empty_dict = element;
+  empty_dict["_type"] = "Dict";
+  empty_dict["keys"] = nlohmann::json::array();
+  empty_dict["values"] = nlohmann::json::array();
+  create_dict_from_literal(empty_dict, symbol_expr(dict_sym));
+
+  exprt iterable_expr = converter_.get_expr(iter);
+  // If the iterable comes from a call such as range(...), store it first so
+  // the loop can reuse the same list on each iteration
+  if (
+    iterable_expr.is_code() &&
+    iterable_expr.get("statement") == "function_call" &&
+    to_code_function_call(to_code(iterable_expr)).type() == list_type)
+  {
+    const code_function_callt &call =
+      to_code_function_call(to_code(iterable_expr));
+    symbolt &tmp_var_symbol = converter_.create_tmp_symbol(
+      element, "$dictcomp_iter$", list_type, gen_zero(list_type));
+
+    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+    tmp_var_decl.location() = location;
+    converter_.add_instruction(tmp_var_decl);
+
+    code_function_callt new_call;
+    new_call.function() = call.function();
+    new_call.arguments() = call.arguments();
+    new_call.lhs() = symbol_expr(tmp_var_symbol);
+    new_call.type() = list_type;
+    new_call.location() = location;
+    converter_.add_instruction(new_call);
+
+    iterable_expr = symbol_expr(tmp_var_symbol);
+  }
+
+  if (target["_type"] != "Name")
+    throw std::runtime_error("Only simple targets are supported in DictComp");
+
+  std::string loop_var_name = target["id"].get<std::string>();
+  symbol_id loop_var_sid = converter_.create_symbol_id();
+  loop_var_sid.set_object(loop_var_name);
+
+  typet loop_var_type = any_type();
+  // range(...) produces integers, so keep the loop variable in the
+  // same type used later by dict lookups
+  if (
+    iter.contains("_type") && iter["_type"] == "Call" &&
+    iter.contains("func") && iter["func"].contains("_type") &&
+    iter["func"]["_type"] == "Name" && iter["func"].contains("id") &&
+    iter["func"]["id"] == "range")
+  {
+    loop_var_type = long_long_int_type();
+  }
+
+  symbolt loop_var_symbol = converter_.create_symbol(
+    location.get_file().as_string(),
+    loop_var_name,
+    loop_var_sid.to_string(),
+    location,
+    loop_var_type);
+  loop_var_symbol.lvalue = true;
+  loop_var_symbol.file_local = true;
+  loop_var_symbol.is_extern = false;
+  symbolt *loop_var =
+    converter_.symbol_table().move_symbol_to_context(loop_var_symbol);
+
+  symbolt &index_var = converter_.create_tmp_symbol(
+    element, "$dictcomp_i$", size_type(), gen_zero(size_type()));
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  code_assignt index_init(symbol_expr(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
+  exprt length_expr;
+  if (iterable_expr.type() == list_type)
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error("__ESBMC_list_size not found in symbol table");
+
+    symbolt &length_var = converter_.create_tmp_symbol(
+      element, "$dictcomp_len$", size_type(), gen_zero(size_type()));
+    code_declt length_decl(symbol_expr(length_var));
+    length_decl.location() = location;
+    converter_.add_instruction(length_decl);
+
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.arguments().push_back(
+      iterable_expr.type().is_pointer() ? iterable_expr
+                                        : address_of_exprt(iterable_expr));
+    size_call.lhs() = symbol_expr(length_var);
+    size_call.type() = size_type();
+    size_call.location() = location;
+    converter_.add_instruction(size_call);
+
+    length_expr = symbol_expr(length_var);
+  }
+  else
+  {
+    throw std::runtime_error(
+      "Unsupported iterable type in DictComp: " +
+      iterable_expr.type().id_string());
+  }
+
+  python_list list_handler(converter_, element);
+  code_blockt loop_body;
+
+  // Read the current element from the list and assign it to the
+  // comprehension target before evaluating key and value
+  exprt current_element = list_handler.build_list_at_call(
+    iterable_expr, symbol_expr(index_var), element);
+  current_element =
+    list_handler.extract_pyobject_value(current_element, loop_var_type);
+
+  code_assignt loop_var_assign(symbol_expr(*loop_var), current_element);
+  loop_var_assign.location() = location;
+  loop_body.copy_to_operands(loop_var_assign);
+
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+  exprt key_expr = converter_.get_expr(element["key"]);
+  exprt value_expr = converter_.get_expr(element["value"]);
+  converter_.current_block = saved_block;
+
+  // Reuse the normal dict assignment path for each generated pair
+  code_blockt pair_block;
+  handle_dict_subscript_assign(
+    symbol_expr(dict_sym), key_expr, value_expr, location, element, pair_block);
+
+  if (generator.contains("ifs") && !generator["ifs"].empty())
+  {
+    // Dict comprehensions may include filters such as
+    // {k: v for x in xs if cond1 if cond2}
+    exprt combined_condition = gen_boolean(true);
+    for (const auto &if_clause : generator["ifs"])
+    {
+      exprt if_expr = converter_.get_expr(if_clause);
+      if (combined_condition.is_true())
+        combined_condition = if_expr;
+      else
+      {
+        exprt and_expr("and", bool_type());
+        and_expr.copy_to_operands(combined_condition, if_expr);
+        combined_condition = and_expr;
+      }
+    }
+
+    codet if_stmt;
+    if_stmt.set_statement("ifthenelse");
+    if_stmt.copy_to_operands(combined_condition, pair_block);
+    if_stmt.location() = location;
+    loop_body.copy_to_operands(if_stmt);
+  }
+  else
+  {
+    loop_body.copy_to_operands(pair_block);
+  }
+
+  exprt increment("+", size_type());
+  increment.copy_to_operands(symbol_expr(index_var), gen_one(size_type()));
+  code_assignt index_increment(symbol_expr(index_var), increment);
+  index_increment.location() = location;
+  loop_body.copy_to_operands(index_increment);
+
+  exprt loop_condition("<", bool_type());
+  loop_condition.copy_to_operands(symbol_expr(index_var), length_expr);
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_condition, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  return symbol_expr(dict_sym);
+}
+
 exprt python_dict_handler::create_dict_from_literal(
   const nlohmann::json &element,
   const exprt &target_symbol)
