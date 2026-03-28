@@ -62,5 +62,5 @@ jobs:
           # We use systemd-run such that OOM kills don't trigger GitHub Actions' "monitoring" and cause the entire job to be killed. Instead, only the ctest process
           # will be affected by the memory limits.
           # 32GiB Max and 28GiB High
-          sudo systemd-run --scope -p MemoryMax=$((4*8))G -p MemoryHigh=$((4*7))G --quiet ctest -j4 --output-on-failure --progress .
+          systemd-run --user --scope -p MemoryMax=$((4*8))G -p MemoryHigh=$((4*7))G --quiet ctest -j4 --output-on-failure --progress .
         fi
