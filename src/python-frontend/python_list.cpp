@@ -1581,7 +1581,12 @@ exprt python_list::handle_index_access(
   // Handle negative indices
   if (slice_node.contains("op") && slice_node["op"]["_type"] == "USub")
   {
-    if (list_node.is_null() || list_node["value"]["_type"] != "List")
+    // For char* (string parameters), skip compile-time normalization: the size
+    // is not known statically, so normalization happens at runtime in the
+    // char* indexing block below.
+    if (
+      !array.type().is_pointer() &&
+      (list_node.is_null() || list_node["value"]["_type"] != "List"))
     {
       BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
       v *= -1;
@@ -2096,12 +2101,87 @@ exprt python_list::handle_index_access(
     return index_exprt(array, idx, char_type());
   }
 
-  // For char* (string function parameter), Python semantics for a[i] require
-  // returning a new single-char null-terminated string. Use __python_str_slice
-  // with (pos, pos+1, 1) — the same alloca-based helper used for range slices —
-  // so the result is not a dangling pointer after the function returns.
+  // For char* (string function parameter), implement Python single-index
+  // semantics: normalize negative indices, raise IndexError on out-of-bounds,
+  // then return a fresh single-char null-terminated string via
+  // __python_str_slice so the result is never a dangling pointer.
   if (array.type().is_pointer() && array.type().subtype() == char_type())
   {
+    typet ll_type = signedbv_typet(64);
+    locationt loc = converter_.get_location_from_decl(list_value_);
+
+    // --- 1. strlen(array) → len_sym ---
+    const symbolt *strlen_sym =
+      converter_.symbol_table().find_symbol("c:@F@strlen");
+    if (!strlen_sym)
+      throw std::runtime_error("strlen not found in symbol table");
+
+    symbolt &len_sym = converter_.create_tmp_symbol(
+      list_value_, "$str_len$", size_type(), gen_zero(size_type()));
+    code_declt len_decl(symbol_expr(len_sym));
+    len_decl.location() = loc;
+    converter_.add_instruction(len_decl);
+
+    code_function_callt strlen_call;
+    strlen_call.function() = symbol_expr(*strlen_sym);
+    strlen_call.lhs() = symbol_expr(len_sym);
+    strlen_call.arguments().push_back(array);
+    strlen_call.type() = size_type();
+    strlen_call.location() = loc;
+    converter_.add_instruction(strlen_call);
+
+    // --- 2. idx_sym = (long long)pos_expr ---
+    symbolt &idx_sym = converter_.create_tmp_symbol(
+      list_value_, "$str_idx$", ll_type, gen_zero(ll_type));
+    code_declt idx_decl(symbol_expr(idx_sym));
+    idx_decl.location() = loc;
+    converter_.add_instruction(idx_decl);
+
+    code_assignt idx_init(
+      symbol_expr(idx_sym), typecast_exprt(pos_expr, ll_type));
+    idx_init.location() = loc;
+    converter_.add_instruction(idx_init);
+
+    // --- 3. Normalize negative index: if (idx < 0) idx += (ll)len ---
+    exprt idx_lt_zero("<", bool_type());
+    idx_lt_zero.copy_to_operands(
+      symbol_expr(idx_sym), from_integer(0, ll_type));
+
+    exprt idx_plus_len("+", ll_type);
+    idx_plus_len.copy_to_operands(
+      symbol_expr(idx_sym), typecast_exprt(symbol_expr(len_sym), ll_type));
+
+    code_assignt normalize(symbol_expr(idx_sym), idx_plus_len);
+    normalize.location() = loc;
+
+    code_ifthenelset norm_guard;
+    norm_guard.cond() = idx_lt_zero;
+    norm_guard.then_case() = normalize;
+    norm_guard.location() = loc;
+    converter_.add_instruction(norm_guard);
+
+    // --- 4. OOB check: if (idx < 0 || idx >= (ll)len) raise IndexError ---
+    exprt still_neg("<", bool_type());
+    still_neg.copy_to_operands(symbol_expr(idx_sym), from_integer(0, ll_type));
+
+    exprt idx_ge_len(">=", bool_type());
+    idx_ge_len.copy_to_operands(
+      symbol_expr(idx_sym), typecast_exprt(symbol_expr(len_sym), ll_type));
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "string index out of range");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset oob_guard;
+    oob_guard.cond() = or_exprt(still_neg, idx_ge_len);
+    oob_guard.then_case() = throw_code;
+    oob_guard.location() = loc;
+    converter_.add_instruction(oob_guard);
+
+    // --- 5. __python_str_slice(array, idx, idx+1, 1) ---
+    // idx is now a normalized, in-bounds positive index; the slice helper
+    // produces a fresh alloca'd single-char null-terminated string.
     std::string slice_func_id = "c:@F@__python_str_slice";
     symbolt *slice_func = converter_.symbol_table().find_symbol(slice_func_id);
     if (!slice_func)
@@ -2113,7 +2193,6 @@ exprt python_list::handle_index_access(
       new_symbol.is_extern = true;
       code_typet slice_type;
       typet char_ptr = gen_pointer_type(char_type());
-      typet ll_type = signedbv_typet(64);
       slice_type.return_type() = char_ptr;
       slice_type.arguments().push_back(code_typet::argumentt(char_ptr));
       slice_type.arguments().push_back(code_typet::argumentt(ll_type));
@@ -2124,23 +2203,15 @@ exprt python_list::handle_index_access(
       slice_func = converter_.symbol_table().find_symbol(slice_func_id);
     }
 
-    typet ll_type = signedbv_typet(64);
-    exprt start_expr = typecast_exprt(pos_expr, ll_type);
-    // end = pos + 1; use a fresh cast of pos_expr to avoid sharing
-    // the start_expr subtree, which would cause double evaluation if pos_expr
-    // were a side-effecting expression.
     exprt end_expr("+", ll_type);
-    end_expr.copy_to_operands(
-      typecast_exprt(pos_expr, ll_type), from_integer(1, ll_type));
-    exprt step_expr = from_integer(1, ll_type);
+    end_expr.copy_to_operands(symbol_expr(idx_sym), from_integer(1, ll_type));
 
-    locationt loc = converter_.get_location_from_decl(list_value_);
     side_effect_expr_function_callt slice_call;
     slice_call.function() = symbol_expr(*slice_func);
     slice_call.arguments().push_back(array);
-    slice_call.arguments().push_back(start_expr);
+    slice_call.arguments().push_back(symbol_expr(idx_sym));
     slice_call.arguments().push_back(end_expr);
-    slice_call.arguments().push_back(step_expr);
+    slice_call.arguments().push_back(from_integer(1, ll_type));
     slice_call.type() = gen_pointer_type(char_type());
     slice_call.location() = loc;
     return slice_call;
