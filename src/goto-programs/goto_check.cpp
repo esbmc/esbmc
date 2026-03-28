@@ -581,21 +581,31 @@ void goto_checkt::shift_check(
 
   expr2tc right_op_size_check = lessthan2tc(right_op, left_op_type_size);
 
-  expr2tc ub_check = and2tc(right_op_non_negative, right_op_size_check);
+  add_guarded_claim(
+    right_op_non_negative,
+    "shift distance is negative",
+    "undef-behavior",
+    loc,
+    guard);
+
+  add_guarded_claim(
+    right_op_size_check,
+    "shift distance too large",
+    "undef-behavior",
+    loc,
+    guard);
 
   if (is_shl2t(expr) && is_signedbv_type(left_op))
   {
     zero = gen_zero(left_op->type);
     expr2tc left_op_non_negative = greaterthanequal2tc(left_op, zero);
-    ub_check = and2tc(ub_check, left_op_non_negative);
+    add_guarded_claim(
+      left_op_non_negative,
+      "shift operand is negative",
+      "undef-behavior",
+      loc,
+      guard);
   }
-
-  add_guarded_claim(
-    ub_check,
-    "undefined behavior on shift operation " + get_expr_id(expr),
-    "undef-behavior",
-    loc,
-    guard);
 }
 
 void goto_checkt::nan_check(
