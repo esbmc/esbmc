@@ -4853,8 +4853,7 @@ exprt function_call_expr::handle_general_function_call()
       // struct temporaries before taking their address.
       typet arg_followed_type = converter_.ns.follow(arg.type());
       if (
-        param_type.is_pointer() &&
-        param_type.subtype().is_array() &&
+        param_type.is_pointer() && param_type.subtype().is_array() &&
         param_type.subtype().subtype() == char_type() &&
         arg_followed_type.is_struct())
       {

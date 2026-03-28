@@ -1549,9 +1549,8 @@ private:
                              (std::isalpha((unsigned char)type_name[0]) ||
                               type_name[0] == '_');
                 for (size_t i = 1; valid && i < type_name.size(); ++i)
-                  valid =
-                    std::isalnum((unsigned char)type_name[i]) ||
-                    type_name[i] == '_' || type_name[i] == '.';
+                  valid = std::isalnum((unsigned char)type_name[i]) ||
+                          type_name[i] == '_' || type_name[i] == '.';
                 if (valid)
                   return type_name;
                 // Not a valid identifier — treat as opaque

@@ -90,7 +90,8 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   // Use continue after a negative result
   // so that all Import&ImportFrom nodes are scanned
   auto load_and_check = [&](const std::string &module_name) -> bool {
-    const std::string path = output_dir + "/" + dotted_to_path(module_name) + ".json";
+    const std::string path =
+      output_dir + "/" + dotted_to_path(module_name) + ".json";
     auto it = module_cache.find(path);
     if (it == module_cache.end())
     {
