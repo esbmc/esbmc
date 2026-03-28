@@ -322,6 +322,10 @@ private:
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
+  // Returns (registering if absent) the __python_str_slice symbol:
+  //   char* __python_str_slice(const char*, long long, long long, long long)
+  const symbolt &get_str_slice_sym();
+
   exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
 
   void copy_type_map_entries(
