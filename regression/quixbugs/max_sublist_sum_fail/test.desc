@@ -1,4 +1,5 @@
 CORE
 main.py
---unwind 9
-^VERIFICATION FAILED$
+--unwind 15
+^TypeError:\s+\w+\(\)\s+takes\s+\d+\s+positional argument(?:s)?\s+but\s+\d+\s+were given$
+
