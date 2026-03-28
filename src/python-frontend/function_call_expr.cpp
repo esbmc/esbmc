@@ -4841,6 +4841,37 @@ exprt function_call_expr::handle_general_function_call()
           arg = converter_.wrap_in_optional(arg, param_type);
         }
       }
+
+      // Handle struct argument passed to a union-typed parameter (e.g. str | T).
+      // Union parameters are stored as pointer(char[0]). When the actual argument
+      // is a struct (class instance), take its address and cast to the pointer type
+      // so that the attribute access handler can safely cast back and dereference.
+      // Follow symbol types because class symbols use symbol_typet, not struct_typet.
+      // NOTE: python_converter.cpp has a complementary post-processing pass that
+      // handles the general pointer-to-struct coercion case. This earlier pass is
+      // specific to the char[0]* union representation and materialises non-symbol
+      // struct temporaries before taking their address.
+      typet arg_followed_type = converter_.ns.follow(arg.type());
+      if (
+        param_type.is_pointer() && param_type.subtype().is_array() &&
+        param_type.subtype().subtype() == char_type() &&
+        arg_followed_type.is_struct())
+      {
+        if (!arg.is_symbol())
+        {
+          // Materialize the struct in a temp variable first
+          symbolt &tmp = converter_.create_tmp_symbol(
+            call_, "$union_arg$", arg.type(), gen_zero(arg.type()));
+          code_declt tmp_decl(symbol_expr(tmp));
+          tmp_decl.location() = location;
+          converter_.current_block->copy_to_operands(tmp_decl);
+          code_assignt tmp_assign(symbol_expr(tmp), arg);
+          tmp_assign.location() = location;
+          converter_.current_block->copy_to_operands(tmp_assign);
+          arg = symbol_expr(tmp);
+        }
+        arg = typecast_exprt(address_of_exprt(arg), param_type);
+      }
     }
 
     // Handle string literal constants

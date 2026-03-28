@@ -1536,6 +1536,26 @@ private:
               functions_in_analysis_.erase(func_name);
               if (returns.contains("value") && returns["value"].is_null())
                 return "NoneType";
+              else if (
+                returns.contains("value") && returns["value"].is_string())
+              {
+                // Forward reference annotation: -> "float", -> "MyClass", etc.
+                // Validate that the string looks like a Python identifier (or
+                // dotted name) before returning it, to guard against arbitrary
+                // string constants used as non-type annotations.
+                std::string type_name =
+                  returns["value"].template get<std::string>();
+                bool valid = !type_name.empty() &&
+                             (std::isalpha((unsigned char)type_name[0]) ||
+                              type_name[0] == '_');
+                for (size_t i = 1; valid && i < type_name.size(); ++i)
+                  valid = std::isalnum((unsigned char)type_name[i]) ||
+                          type_name[i] == '_' || type_name[i] == '.';
+                if (valid)
+                  return type_name;
+                // Not a valid identifier — treat as opaque
+                return "Any";
+              }
               else if (returns.contains("value"))
                 return "Any"; // Other constant types
             }
@@ -3508,12 +3528,6 @@ private:
 
   void update_assignment_node(Json &element, const std::string &inferred_type)
   {
-    // Update type field
-    element["_type"] = "AnnAssign";
-    // Mark as inferred to distinguish from explicit
-    // annotations like `x: Any = ...` during assignment type handling.
-    element["_inferred_annotation"] = true;
-
     auto target = element["targets"][0];
     std::string id;
 
@@ -3527,7 +3541,13 @@ private:
            target["attr"].template get<std::string>();
     }
     else if (target.contains("slice"))
-      return; // No need to annotate assignments to array elements.
+      return; // No need to annotate subscript assignments (e.g. d["k"] = v).
+
+    // Update type field only after confirming this is an annotatable target.
+    element["_type"] = "AnnAssign";
+    // Mark as inferred to distinguish from explicit
+    // annotations like `x: Any = ...` during assignment type handling.
+    element["_inferred_annotation"] = true;
 
     assert(!id.empty());
 
