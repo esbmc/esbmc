@@ -1,8 +1,8 @@
 CORE
 main.py
 --unwind 30 --branch-function-coverage
-^Function Entry Points & Branches : 3
-^Reached : 3
+^Function Entry Points & Branches : 7
+^Reached : 7
 ^Branch Coverage: 100%
 ^.*function entry:.*validate_start_with_letter.*$
 ^VERIFICATION FAILED$
