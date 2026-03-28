@@ -989,6 +989,33 @@ exprt python_list::remove_function_calls_recursive(
   return res;
 }
 
+const symbolt &python_list::get_str_slice_sym()
+{
+  const std::string id = "c:@F@__python_str_slice";
+  symbolt *sym = converter_.symbol_table().find_symbol(id);
+  if (!sym)
+  {
+    symbolt new_symbol;
+    new_symbol.name = "__python_str_slice";
+    new_symbol.id = id;
+    new_symbol.mode = "C";
+    new_symbol.is_extern = true;
+    // char* __python_str_slice(const char*, long long, long long, long long)
+    code_typet slice_type;
+    typet char_ptr = gen_pointer_type(char_type());
+    typet ll_type = signedbv_typet(64);
+    slice_type.return_type() = char_ptr;
+    slice_type.arguments().push_back(code_typet::argumentt(char_ptr));
+    slice_type.arguments().push_back(code_typet::argumentt(ll_type));
+    slice_type.arguments().push_back(code_typet::argumentt(ll_type));
+    slice_type.arguments().push_back(code_typet::argumentt(ll_type));
+    new_symbol.type = slice_type;
+    converter_.symbol_table().add(new_symbol);
+    sym = converter_.symbol_table().find_symbol(id);
+  }
+  return *sym;
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -1028,32 +1055,7 @@ exprt python_list::handle_range_slice(
     // which uses __ESBMC_alloca and survives function returns.
     if (array.type().is_pointer() && array.type().subtype() == char_type())
     {
-      std::string slice_func_id = "c:@F@__python_str_slice";
-      symbolt *slice_func =
-        converter_.symbol_table().find_symbol(slice_func_id);
-      if (!slice_func)
-      {
-        // Create the function symbol if it doesn't exist
-        symbolt new_symbol;
-        new_symbol.name = "__python_str_slice";
-        new_symbol.id = slice_func_id;
-        new_symbol.mode = "C";
-        new_symbol.is_extern = true;
-
-        // char* __python_str_slice(const char*, long long, long long, long long)
-        code_typet slice_type;
-        typet char_ptr = gen_pointer_type(char_type());
-        typet ll_type = signedbv_typet(64);
-        slice_type.return_type() = char_ptr;
-        slice_type.arguments().push_back(code_typet::argumentt(char_ptr));
-        slice_type.arguments().push_back(code_typet::argumentt(ll_type));
-        slice_type.arguments().push_back(code_typet::argumentt(ll_type));
-        slice_type.arguments().push_back(code_typet::argumentt(ll_type));
-        new_symbol.type = slice_type;
-
-        converter_.symbol_table().add(new_symbol);
-        slice_func = converter_.symbol_table().find_symbol(slice_func_id);
-      }
+      const symbolt &slice_func_ref = get_str_slice_sym();
 
       // Extract start/end bounds from slice node
       auto get_bound_expr =
@@ -1087,7 +1089,7 @@ exprt python_list::handle_range_slice(
 
       // Call __python_str_slice(s, start, end, step) as side-effect expression
       side_effect_expr_function_callt slice_call;
-      slice_call.function() = symbol_expr(*slice_func);
+      slice_call.function() = symbol_expr(slice_func_ref);
       slice_call.arguments().push_back(array);
       slice_call.arguments().push_back(start_expr);
       slice_call.arguments().push_back(end_expr);
@@ -1581,7 +1583,12 @@ exprt python_list::handle_index_access(
   // Handle negative indices
   if (slice_node.contains("op") && slice_node["op"]["_type"] == "USub")
   {
-    if (list_node.is_null() || list_node["value"]["_type"] != "List")
+    // For char* (string parameters), skip compile-time normalization: the size
+    // is not known statically, so normalization happens at runtime in the
+    // char* indexing block below.
+    if (
+      !array.type().is_pointer() &&
+      (list_node.is_null() || list_node["value"]["_type"] != "List"))
     {
       BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
       v *= -1;
@@ -2094,6 +2101,101 @@ exprt python_list::handle_index_access(
     converter_.add_instruction(guard);
 
     return index_exprt(array, idx, char_type());
+  }
+
+  // For char* (string function parameter), implement Python single-index
+  // semantics: normalize negative indices, raise IndexError on out-of-bounds,
+  // then return a fresh single-char null-terminated string via
+  // __python_str_slice so the result is never a dangling pointer.
+  if (array.type().is_pointer() && array.type().subtype() == char_type())
+  {
+    typet ll_type = signedbv_typet(64);
+    locationt loc = converter_.get_location_from_decl(list_value_);
+
+    // --- 1. strlen(array) → len_sym ---
+    const symbolt *strlen_sym =
+      converter_.symbol_table().find_symbol("c:@F@strlen");
+    if (!strlen_sym)
+      throw std::runtime_error("strlen not found in symbol table");
+
+    symbolt &len_sym = converter_.create_tmp_symbol(
+      list_value_, "$str_len$", size_type(), gen_zero(size_type()));
+    code_declt len_decl(symbol_expr(len_sym));
+    len_decl.location() = loc;
+    converter_.add_instruction(len_decl);
+
+    code_function_callt strlen_call;
+    strlen_call.function() = symbol_expr(*strlen_sym);
+    strlen_call.lhs() = symbol_expr(len_sym);
+    strlen_call.arguments().push_back(array);
+    strlen_call.type() = size_type();
+    strlen_call.location() = loc;
+    converter_.add_instruction(strlen_call);
+
+    // --- 2. idx_sym = (long long)pos_expr ---
+    symbolt &idx_sym = converter_.create_tmp_symbol(
+      list_value_, "$str_idx$", ll_type, gen_zero(ll_type));
+    code_declt idx_decl(symbol_expr(idx_sym));
+    idx_decl.location() = loc;
+    converter_.add_instruction(idx_decl);
+
+    code_assignt idx_init(
+      symbol_expr(idx_sym), typecast_exprt(pos_expr, ll_type));
+    idx_init.location() = loc;
+    converter_.add_instruction(idx_init);
+
+    // --- 3. Normalize negative index: if (idx < 0) idx += (ll)len ---
+    exprt idx_lt_zero("<", bool_type());
+    idx_lt_zero.copy_to_operands(
+      symbol_expr(idx_sym), from_integer(0, ll_type));
+
+    exprt idx_plus_len("+", ll_type);
+    idx_plus_len.copy_to_operands(
+      symbol_expr(idx_sym), typecast_exprt(symbol_expr(len_sym), ll_type));
+
+    code_assignt normalize(symbol_expr(idx_sym), idx_plus_len);
+    normalize.location() = loc;
+
+    code_ifthenelset norm_guard;
+    norm_guard.cond() = idx_lt_zero;
+    norm_guard.then_case() = normalize;
+    norm_guard.location() = loc;
+    converter_.add_instruction(norm_guard);
+
+    // --- 4. OOB check: if (idx < 0 || idx >= (ll)len) raise IndexError ---
+    exprt still_neg("<", bool_type());
+    still_neg.copy_to_operands(symbol_expr(idx_sym), from_integer(0, ll_type));
+
+    exprt idx_ge_len(">=", bool_type());
+    idx_ge_len.copy_to_operands(
+      symbol_expr(idx_sym), typecast_exprt(symbol_expr(len_sym), ll_type));
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "string index out of range");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset oob_guard;
+    oob_guard.cond() = or_exprt(still_neg, idx_ge_len);
+    oob_guard.then_case() = throw_code;
+    oob_guard.location() = loc;
+    converter_.add_instruction(oob_guard);
+
+    // --- 5. __python_str_slice(array, idx, idx+1, 1) ---
+    // idx is now a normalized, in-bounds positive index; the slice helper
+    // produces a fresh alloca'd single-char null-terminated string.
+    exprt end_expr("+", ll_type);
+    end_expr.copy_to_operands(symbol_expr(idx_sym), from_integer(1, ll_type));
+
+    side_effect_expr_function_callt slice_call;
+    slice_call.function() = symbol_expr(get_str_slice_sym());
+    slice_call.arguments().push_back(array);
+    slice_call.arguments().push_back(symbol_expr(idx_sym));
+    slice_call.arguments().push_back(end_expr);
+    slice_call.arguments().push_back(from_integer(1, ll_type));
+    slice_call.type() = gen_pointer_type(char_type());
+    slice_call.location() = loc;
+    return slice_call;
   }
 
   // Handle static arrays
