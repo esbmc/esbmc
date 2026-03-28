@@ -2447,6 +2447,18 @@ exprt python_converter::build_binary_expression(
   exprt &lhs,
   exprt &rhs)
 {
+  const bool is_bitwise_op = op == "BitAnd" || op == "BitOr" ||
+                             op == "BitXor" || op == "LShift" || op == "RShift";
+
+  if (is_bitwise_op)
+  {
+    const typet target_int = int_type();
+    if (lhs.type().is_floatbv() || lhs.type().is_bool())
+      lhs = typecast_exprt(lhs, target_int);
+    if (rhs.type().is_floatbv() || rhs.type().is_bool())
+      rhs = typecast_exprt(rhs, target_int);
+  }
+
   auto is_bv_or_bool = [](const typet &t) {
     return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
   };
@@ -2501,6 +2513,8 @@ exprt python_converter::build_binary_expression(
     type = bool_type();
   else if (op == "Div" || op == "div")
     type = double_type();
+  else if (is_bitwise_op)
+    type = lhs.type();
   else if (lhs.type().is_floatbv() || rhs.type().is_floatbv())
     type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
   else

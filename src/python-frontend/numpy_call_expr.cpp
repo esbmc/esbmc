@@ -4,11 +4,14 @@
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/expr.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/std_code.h>
 
 #include <cmath>
+#include <limits>
 #include <ostream>
 
 const char *kConstant = "Constant";
@@ -35,6 +38,27 @@ static double to_double(const numeric_value &value)
 {
   return value.is_int ? static_cast<double>(value.int_value)
                       : value.double_value;
+}
+
+static bool overflow_checks_enabled()
+{
+  return config.options.get_bool_option("overflow-check") ||
+         config.options.get_bool_option("unsigned-overflow-check");
+}
+
+static void emit_numpy_overflow_assertion(
+  python_converter &converter,
+  const nlohmann::json &call,
+  const symbol_id &function_id)
+{
+  if (!overflow_checks_enabled())
+    return;
+
+  code_assertt overflow_assert(gen_boolean(false));
+  overflow_assert.location() = converter.get_location_from_decl(call);
+  overflow_assert.location().comment(
+    "Integer overflow detected in " + function_id.get_function() + "() call");
+  converter.add_instruction(overflow_assert);
 }
 
 static numeric_value extract_value(const nlohmann::json &arg);
@@ -878,16 +902,24 @@ exprt numpy_call_expr::get()
 
           if (dtype.find("int") != std::string::npos)
           {
-            int64_t mask = (1LL << dtype_size) - 1;
-            int64_t masked_value =
-              static_cast<int64_t>(std::llround(final_value)) & mask;
+            const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
+            const int64_t rounded_value =
+              static_cast<int64_t>(std::llround(final_value));
+            const uint64_t mask = dtype_size >= 64
+                                    ? std::numeric_limits<uint64_t>::max()
+                                    : ((uint64_t{1} << dtype_size) - 1);
+            const uint64_t wrapped_bits =
+              static_cast<uint64_t>(rounded_value) & mask;
 
-            if (dtype[0] != 'u' && (masked_value >> (dtype_size - 1)) & 1)
+            int64_t wrapped_signed = static_cast<int64_t>(wrapped_bits);
+            if (
+              !is_unsigned && dtype_size < 64 &&
+              ((wrapped_bits >> (dtype_size - 1)) & 1ULL) != 0)
             {
-              masked_value -= (1LL << dtype_size);
+              wrapped_signed -= static_cast<int64_t>(uint64_t{1} << dtype_size);
             }
 
-            if (static_cast<int64_t>(std::llround(final_value)) != masked_value)
+            if (rounded_value != wrapped_signed)
             {
               log_warning(
                 "{}:{}: Integer overflow detected in {}() call. Consider using "
@@ -895,13 +927,27 @@ exprt numpy_call_expr::get()
                 converter_.current_python_file,
                 call_["end_lineno"].get<int>(),
                 function_id_.get_function());
+              emit_numpy_overflow_assertion(converter_, call_, function_id_);
             }
 
-            expr.set("#cformat", std::to_string(masked_value));
+            if (is_unsigned)
+            {
+              exprt folded = from_integer(BigInt(wrapped_bits), t);
+              folded.set("#cformat", std::to_string(wrapped_bits));
+              return folded;
+            }
+            else
+            {
+              exprt folded = from_integer(BigInt(wrapped_signed), t);
+              folded.set("#cformat", std::to_string(wrapped_signed));
+              return folded;
+            }
           }
           else
           {
-            expr.set("#cformat", std::to_string(final_value));
+            exprt folded = from_double(final_value, t);
+            folded.set("#cformat", std::to_string(final_value));
+            return folded;
           }
         }
       }
@@ -941,6 +987,7 @@ exprt numpy_call_expr::get()
             converter_.current_python_file,
             call_["end_lineno"].get<int>(),
             function_id_.get_function());
+          emit_numpy_overflow_assertion(converter_, call_, function_id_);
         }
 
         if (!expr.value().empty())

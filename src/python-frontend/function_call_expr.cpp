@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cctype>
 #include <stdexcept>
+#include <string_view>
 #include <unordered_set>
 
 using namespace json_utils;
@@ -43,6 +44,18 @@ constexpr unsigned int SURROGATE_END = 0xDFFF;
 // Constants for symbol parsing
 constexpr const char *CLASS_MARKER = "@C@";
 constexpr const char *FUNCTION_MARKER = "@F@";
+
+/// Extract the mandatory "_type" field from a Python AST JSON node.
+/// Throws if the node is not an object or lacks a valid "_type" string.
+std::string node_type_of(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || !node.contains("_type") || !node["_type"].is_string())
+  {
+    throw std::runtime_error("Missing or invalid _type field in AST node");
+  }
+  return node["_type"].get<std::string>();
+}
 
 bool is_cpp_throw_expr(const exprt &e)
 {
@@ -233,56 +246,74 @@ void function_call_expr::get_function_type()
     return;
   }
 
-  if (call_["func"]["_type"] == "Attribute")
+  const auto &func_node = call_["func"];
+  if (
+    !func_node.contains("_type") || !func_node["_type"].is_string() ||
+    func_node["_type"] != "Attribute")
   {
-    std::string caller = get_object_name();
+    return;
+  }
 
-    // Check for nested instance attribute (e.g., self.b.a.method())
-    // Exclude module.Class.method() pattern
-    // Walk the full attribute chain to find the root Name node, regardless of depth.
-    bool is_nested_instance_attr = false;
-    if (call_["func"]["value"]["_type"] == "Attribute")
+  if (!func_node.contains("value") || !func_node["value"].is_object())
+    return;
+
+  std::string caller = get_object_name();
+  const auto &func_value = func_node["value"];
+
+  // Check for nested instance attribute (e.g., self.b.a.method())
+  // Exclude module.Class.method() pattern
+  // Walk the full attribute chain to find the root Name node, regardless of depth.
+  bool is_nested_instance_attr = false;
+  if (node_type_of(func_value) == "Attribute")
+  {
+    const nlohmann::json *cur = &func_value;
+    while (node_type_of(*cur) == "Attribute")
     {
-      const nlohmann::json *cur = &call_["func"]["value"];
-      while ((*cur)["_type"] == "Attribute")
-        cur = &(*cur)["value"];
-      if ((*cur)["_type"] == "Name")
-      {
-        std::string root_name = (*cur)["id"].get<std::string>();
-        if (!converter_.is_imported_module(root_name))
-          is_nested_instance_attr = true;
-      }
+      if (!cur->contains("value") || !(*cur)["value"].is_object())
+        break;
+      cur = &(*cur)["value"];
     }
-
-    // Detect A().f(...): method call on a temporary instance.
-    // This covers both direct construction (A().f()) and chained method calls
-    // (B().g().f()) — any Call node in the value position means the receiver
-    // is a temporary, so we must treat it as an InstanceMethod regardless of
-    // whether the inferred receiver class name matches a class in the AST.
-    bool obj_is_temp_instance =
-      call_["func"]["value"]["_type"] == "Call" &&
-      call_["func"]["value"].contains("func") &&
-      (call_["func"]["value"]["func"]["_type"] == "Name" ||
-       call_["func"]["value"]["func"]["_type"] == "Attribute");
-
-    // Handling a function call as a class method call when:
-    // (1) The caller corresponds to a class name, for example: MyClass.foo().
-    // (2) Calling methods of built-in types, such as int.from_bytes()
-    //     All the calls to built-in methods are handled by class methods in operational models.
-    // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
-    // If the caller is a class or a built-in type, the following condition detects a class method call.
     if (
-      !is_nested_instance_attr && !obj_is_temp_instance &&
-      (is_class(caller, converter_.ast()) ||
-       type_utils::is_builtin_type(caller) ||
-       type_utils::is_builtin_type(type_handler_.get_var_type(caller))))
+      node_type_of(*cur) == "Name" && cur->contains("id") &&
+      (*cur)["id"].is_string())
     {
-      function_type_ = FunctionType::ClassMethod;
+      std::string root_name = (*cur)["id"].get<std::string>();
+      if (!converter_.is_imported_module(root_name))
+        is_nested_instance_attr = true;
     }
-    else if (!converter_.is_imported_module(caller))
-    {
-      function_type_ = FunctionType::InstanceMethod;
-    }
+  }
+
+  // Detect A().f(...): method call on a temporary instance.
+  // This covers both direct construction (A().f()) and chained method calls
+  // (B().g().f()) — any Call node in the value position means the receiver
+  // is a temporary, so we must treat it as an InstanceMethod regardless of
+  // whether the inferred receiver class name matches a class in the AST.
+  bool obj_is_temp_instance = false;
+  if (
+    node_type_of(func_value) == "Call" && func_value.contains("func") &&
+    func_value["func"].is_object())
+  {
+    const std::string callee_type = node_type_of(func_value["func"]);
+    obj_is_temp_instance = callee_type == "Name" || callee_type == "Attribute";
+  }
+
+  // Handling a function call as a class method call when:
+  // (1) The caller corresponds to a class name, for example: MyClass.foo().
+  // (2) Calling methods of built-in types, such as int.from_bytes()
+  //     All the calls to built-in methods are handled by class methods in operational models.
+  // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
+  // If the caller is a class or a built-in type, the following condition detects a class method call.
+  if (
+    !is_nested_instance_attr && !obj_is_temp_instance &&
+    (is_class(caller, converter_.ast()) ||
+     type_utils::is_builtin_type(caller) ||
+     type_utils::is_builtin_type(type_handler_.get_var_type(caller))))
+  {
+    function_type_ = FunctionType::ClassMethod;
+  }
+  else if (!converter_.is_imported_module(caller))
+  {
+    function_type_ = FunctionType::InstanceMethod;
   }
 }
 
@@ -2302,10 +2333,17 @@ exprt function_call_expr::build_constant_from_arg() const
 
 std::string function_call_expr::get_object_name() const
 {
-  const auto &subelement = call_["func"]["value"];
+  const nlohmann::json &func_json =
+    (call_.contains("func") && call_["func"].is_object())
+      ? call_["func"]
+      : nlohmann::json::object();
+  if (!func_json.contains("value") || !func_json["value"].is_object())
+    return std::string();
+  const auto &subelement = func_json["value"];
+  const std::string node_type = node_type_of(subelement);
 
   std::string obj_name;
-  if (subelement["_type"] == "Attribute")
+  if (node_type == "Attribute")
   {
     /* For attribute chains, use the class name resolved by build_function_id()
      *
@@ -2321,17 +2359,19 @@ std::string function_call_expr::get_object_name() const
     }
     else
     {
-      obj_name = subelement["attr"].get<std::string>();
+      if (subelement.contains("attr") && subelement["attr"].is_string())
+        obj_name = subelement["attr"].get<std::string>();
     }
   }
-  else if (subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
+  else if (node_type == "Constant" || node_type == "BinOp")
     obj_name = function_id_.get_class();
-  else if (subelement["_type"] == "Call")
+  else if (node_type == "Call")
   {
-    if (
-      subelement.contains("func") && subelement["func"].contains("_type") &&
-      subelement["func"]["_type"] == "Name" &&
-      subelement["func"].contains("id") && subelement["func"]["id"].is_string())
+    const bool has_name_callee =
+      subelement.contains("func") && subelement["func"].is_object() &&
+      node_type_of(subelement["func"]) == "Name" &&
+      subelement["func"].contains("id") && subelement["func"]["id"].is_string();
+    if (has_name_callee)
     {
       obj_name = subelement["func"]["id"].get<std::string>();
     }
@@ -2348,7 +2388,7 @@ std::string function_call_expr::get_object_name() const
     if (obj_name == "super")
       obj_name = "self";
   }
-  else if (subelement["_type"] == "Subscript")
+  else if (node_type == "Subscript")
   {
     // Method call on a subscript result, e.g. d["key"].method().
     // We intentionally leave obj_name empty: the subscript result is a
@@ -2362,9 +2402,12 @@ std::string function_call_expr::get_object_name() const
   {
     // Expect a plain Name node with an "id" field. Guard against
     // missing "id" to avoid nlohmann::json::type_error on unexpected node shapes.
-    if (subelement.contains("id") && !subelement["id"].is_null())
+    if (subelement.contains("id") && subelement["id"].is_string())
       obj_name = subelement["id"].get<std::string>();
   }
+
+  if (obj_name.empty())
+    return obj_name;
 
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
@@ -3494,7 +3537,14 @@ function_call_expr::get_dispatch_table()
        return func_name == "log" || func_name == "log10";
      },
      [this]() -> exprt {
-       const std::string &func_name = function_id_.get_function();
+       const std::string &raw_func_name = function_id_.get_function();
+       std::string func_name = raw_func_name;
+       if (
+         raw_func_name.size() > 8 &&
+         raw_func_name.compare(0, 8, "__ESBMC_") == 0)
+       {
+         func_name = raw_func_name.substr(8);
+       }
        const auto &args = call_["args"];
        const auto &keywords = call_.contains("keywords")
                                 ? call_["keywords"]
@@ -3648,7 +3698,10 @@ function_call_expr::get_dispatch_table()
          func_name == "atanh");
      },
      [this]() -> exprt {
-       const std::string &func_name = function_id_.get_function();
+       const std::string &raw_func_name = function_id_.get_function();
+       const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
+                                       ? raw_func_name.substr(8)
+                                       : raw_func_name;
        const auto &args = call_["args"];
        const auto keywords = call_.contains("keywords")
                                ? call_["keywords"]
@@ -3731,23 +3784,22 @@ function_call_expr::get_dispatch_table()
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
     {[this]() {
        const std::string &func_name = function_id_.get_function();
-       bool is_math_module = false;
-       if (call_["func"]["_type"] == "Attribute")
+       std::string caller;
+       if (
+         call_.contains("func") && call_["func"].is_object() &&
+         call_["func"].contains("_type") &&
+         call_["func"]["_type"] == "Attribute")
        {
-         std::string caller = get_object_name();
-         is_math_module = (caller == "math");
+         caller = get_object_name();
        }
-
-       const bool is_math_wrapper =
-         math_guard_utils::math_wrapper_function_names().count(func_name) != 0;
-
-       return (is_math_module &&
-               math_guard_utils::math_module_function_names().count(
-                 func_name) != 0) ||
-              is_math_wrapper;
+       return converter_.get_math_handler().is_math_dispatch_target_cached(
+         caller, func_name);
      },
      [this]() -> exprt {
-       const std::string &func_name = function_id_.get_function();
+       const std::string &raw_func_name = function_id_.get_function();
+       const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
+                                       ? raw_func_name.substr(8)
+                                       : raw_func_name;
        const auto &args = call_["args"];
        auto raise_math_real_type_error = [this]() -> exprt {
          return raise_math_real_type_error_expr(converter_);
@@ -3778,7 +3830,7 @@ function_call_expr::get_dispatch_table()
              func_name + "() expects exactly 2 arguments");
          return {converter_.get_expr(args[0]), converter_.get_expr(args[1])};
        };
-       auto guard_one_real_arg =
+       auto validate_real_arg =
          [&](const exprt &arg_expr) -> std::optional<exprt> {
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
@@ -3786,7 +3838,7 @@ function_call_expr::get_dispatch_table()
            return raise_math_real_type_error();
          return std::nullopt;
        };
-       auto guard_two_real_args =
+       auto validate_real_args =
          [&](
            const exprt &lhs_expr,
            const exprt &rhs_expr) -> std::optional<exprt> {
@@ -3799,36 +3851,95 @@ function_call_expr::get_dispatch_table()
          return std::nullopt;
        };
 
-       if (func_name == "sin" || func_name == "__ESBMC_sin")
+       // Fast dispatch path for math functions that do not need extra
+       // domain guards in this layer (e.g., sqrt/log/acos stay in slow path).
+       if (args.size() == 1)
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
+             type_error.has_value())
+
+           return *type_error;
+
+         exprt dispatched =
+           converter_.get_math_handler().handle(func_name, arg_expr, call_);
+         if (!dispatched.is_nil())
+           return dispatched;
+       }
+
+       if (args.size() == 2)
+       {
+         auto [lhs_expr, rhs_expr] = require_two_args();
+         if (std::optional<exprt> type_error =
+               validate_real_args(lhs_expr, rhs_expr);
+             type_error.has_value())
+
+           return *type_error;
+
+         exprt dispatched = converter_.get_math_handler().handle(
+           func_name, lhs_expr, rhs_expr, call_);
+         if (!dispatched.is_nil())
+           return dispatched;
+       }
+
+       // Enforce canonical arity/error behavior for handled names even when
+       // args count is wrong, without duplicating per-function dispatch here.
+       if (converter_.get_math_handler().is_unary_dispatch_function(func_name))
+       {
+         exprt arg_expr = require_one_arg();
+         if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
+             type_error.has_value())
+
+           return *type_error;
+         return converter_.get_math_handler().handle(
+           func_name, arg_expr, call_);
+       }
+       if (converter_.get_math_handler().is_binary_dispatch_function(func_name))
+       {
+         auto [lhs_expr, rhs_expr] = require_two_args();
+         if (std::optional<exprt> type_error =
+               validate_real_args(lhs_expr, rhs_expr);
+             type_error.has_value())
+
+           return *type_error;
+         return converter_.get_math_handler().handle(
+           func_name, lhs_expr, rhs_expr, call_);
+       }
+
+       if (func_name == "sin")
+       {
+         exprt arg_expr = require_one_arg();
+         if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
+             type_error.has_value())
+
+           return *type_error;
          return converter_.get_math_handler().handle_sin(arg_expr, call_);
        }
-       else if (func_name == "cos" || func_name == "__ESBMC_cos")
+       else if (func_name == "cos")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
+             type_error.has_value())
+
+           return *type_error;
          return converter_.get_math_handler().handle_cos(arg_expr, call_);
        }
-       else if (func_name == "exp" || func_name == "__ESBMC_exp")
+       else if (func_name == "exp")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
+             type_error.has_value())
+
+           return *type_error;
          return converter_.get_math_handler().handle_exp(arg_expr, call_);
        }
-       else if (func_name == "sqrt" || func_name == "__ESBMC_sqrt")
+       else if (func_name == "sqrt")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
+             type_error.has_value())
+
+           return *type_error;
          // Domain check for sqrt: operand must be >= 0
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3869,12 +3980,13 @@ function_call_expr::get_dispatch_table()
 
          return sqrt_result;
        }
-       else if (func_name == "log" || func_name == "__ESBMC_log")
+       else if (func_name == "log")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
+             type_error.has_value())
+
+           return *type_error;
          // Domain check for log: operand must be > 0
          exprt fp_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3900,12 +4012,13 @@ function_call_expr::get_dispatch_table()
          converter_.current_block->copy_to_operands(guard);
          return converter_.get_math_handler().handle_log(arg_expr, call_);
        }
-       else if (func_name == "acos" || func_name == "__ESBMC_acos")
+       else if (func_name == "acos")
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
+             type_error.has_value())
+
+           return *type_error;
          // Domain check for acos: operand must be in [-1.0, 1.0]
          exprt double_operand = arg_expr;
          if (!arg_expr.type().is_floatbv())
@@ -3948,191 +4061,15 @@ function_call_expr::get_dispatch_table()
 
          return converter_.get_math_handler().handle_acos(arg_expr, call_);
        }
-       else if (func_name == "atan" || func_name == "__ESBMC_atan")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_atan(arg_expr, call_);
-       }
-       else if (func_name == "log2" || func_name == "__ESBMC_log2")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_log2(arg_expr, call_);
-       }
-       else if (func_name == "tan" || func_name == "__ESBMC_tan")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_tan(arg_expr, call_);
-       }
-       else if (func_name == "asin" || func_name == "__ESBMC_asin")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_asin(arg_expr, call_);
-       }
-       else if (func_name == "sinh" || func_name == "__ESBMC_sinh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_sinh(arg_expr, call_);
-       }
-       else if (func_name == "cosh" || func_name == "__ESBMC_cosh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_cosh(arg_expr, call_);
-       }
-       else if (func_name == "tanh" || func_name == "__ESBMC_tanh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_tanh(arg_expr, call_);
-       }
-       else if (func_name == "log10" || func_name == "__ESBMC_log10")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_log10(arg_expr, call_);
-       }
-       else if (func_name == "expm1" || func_name == "__ESBMC_expm1")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_expm1(arg_expr, call_);
-       }
-       else if (func_name == "log1p" || func_name == "__ESBMC_log1p")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_log1p(arg_expr, call_);
-       }
-       else if (func_name == "exp2" || func_name == "__ESBMC_exp2")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_exp2(arg_expr, call_);
-       }
-       else if (func_name == "asinh" || func_name == "__ESBMC_asinh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_asinh(arg_expr, call_);
-       }
-       else if (func_name == "acosh" || func_name == "__ESBMC_acosh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_acosh(arg_expr, call_);
-       }
-       else if (func_name == "atanh" || func_name == "__ESBMC_atanh")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_atanh(arg_expr, call_);
-       }
-       else if (func_name == "fabs" || func_name == "__ESBMC_fabs")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_fabs(arg_expr, call_);
-       }
-       else if (func_name == "trunc" || func_name == "__ESBMC_trunc")
-       {
-         exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_trunc(arg_expr, call_);
-       }
-       else if (func_name == "atan2" || func_name == "__ESBMC_atan2")
-       {
-         auto [y_expr, x_expr] = require_two_args();
-         if (std::optional<exprt> guarded = guard_two_real_args(y_expr, x_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_atan2(
-           y_expr, x_expr, call_);
-       }
-       else if (func_name == "pow" || func_name == "__ESBMC_pow")
-       {
-         auto [base_expr, exp_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(base_expr, exp_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_pow(
-           base_expr, exp_expr, call_);
-       }
-       else if (func_name == "fmod" || func_name == "__ESBMC_fmod")
-       {
-         auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_fmod(
-           lhs_expr, rhs_expr, call_);
-       }
-       else if (func_name == "copysign" || func_name == "__ESBMC_copysign")
-       {
-         auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_copysign(
-           lhs_expr, rhs_expr, call_);
-       }
-       else if (func_name == "hypot" || func_name == "__ESBMC_hypot")
-       {
-         auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
-         return converter_.get_math_handler().handle_hypot(
-           lhs_expr, rhs_expr, call_);
-       }
        else if (
          math_guard_utils::math_guard_real_general_functions().count(
            func_name) != 0)
        {
          exprt arg_expr = require_one_arg();
-         if (std::optional<exprt> guarded = guard_one_real_arg(arg_expr);
-             guarded.has_value())
-           return *guarded;
+         if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
+             type_error.has_value())
+
+           return *type_error;
          return handle_general_function_call();
        }
        else if (
@@ -4168,10 +4105,11 @@ function_call_expr::get_dispatch_table()
          if (call_has_complex())
            return raise_math_real_type_error();
          auto [lhs_expr, rhs_expr] = require_two_args();
-         if (std::optional<exprt> guarded =
-               guard_two_real_args(lhs_expr, rhs_expr);
-             guarded.has_value())
-           return *guarded;
+         if (std::optional<exprt> type_error =
+               validate_real_args(lhs_expr, rhs_expr);
+             type_error.has_value())
+
+           return *type_error;
          // Native handler for tuple arguments; lists use the model
          if (lhs_expr.type().is_struct() && rhs_expr.type().is_struct())
          {
@@ -5309,10 +5247,10 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
       converter_.current_function_name() + "::" + obj_symbol->name.as_string();
 
   // Check cache first.
-  auto cached =
-    converter_.get_function_call_cache().get_possible_class_types(cache_key);
-  if (cached.has_value())
-    return cached.value();
+  if (
+    auto cached =
+      converter_.get_function_call_cache().get_possible_class_types(cache_key))
+    return *cached;
 
   try
   {
