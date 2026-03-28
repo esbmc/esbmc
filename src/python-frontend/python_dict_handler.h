@@ -221,8 +221,10 @@ public:
    */
   void handle_dict_subscript_assign(
     const exprt &dict_expr,
-    const nlohmann::json &slice_node,
+    const exprt &key_expr,
     const exprt &value,
+    const locationt &location,
+    const nlohmann::json &node,
     codet &target_block);
 
   /**
