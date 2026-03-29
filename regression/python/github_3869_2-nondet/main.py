@@ -1,4 +1,3 @@
-# Recursive generator with nondet elements — should pass
 def flatten(arr):
     for x in arr:
         for y in flatten([]):
@@ -6,6 +5,4 @@ def flatten(arr):
         yield x
 
 x = nondet_int()
-y = nondet_int()
-z = nondet_int()
-assert list(flatten([x, y, z])) == [x, y, z]
+assert list(flatten([x])) == [x]

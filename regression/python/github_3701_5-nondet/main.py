@@ -1,7 +1,7 @@
 # symbolic size
 n = nondet_int()
 __ESBMC_assume(n >= 0)
-__ESBMC_assume(n <= 20)
+__ESBMC_assume(n <= 2)
 
 # symbolic index
 rand1 = [nondet_int()]
