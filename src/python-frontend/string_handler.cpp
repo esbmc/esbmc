@@ -4334,8 +4334,18 @@ exprt string_handler::handle_string_attribute_call(
     return *cached_location;
   };
 
+  auto has_keyword_unpacking = [&]() -> bool
+  {
+    for (const auto &kw : keywords)
+    {
+      if (kw.contains("arg") && kw["arg"].is_null())
+        return true;
+    }
+    return false;
+  };
+
   keyword_valuest keyword_values =
-    collect_keyword_values(method_name, keywords);
+    collect_keyword_values(method_name, keywords, false);
   if (
     std::optional<exprt> dispatched = dispatch_decode_join_method(
       *this,
@@ -4346,6 +4356,12 @@ exprt string_handler::handle_string_attribute_call(
       keyword_values,
       converter_))
   {
+    if (has_keyword_unpacking())
+    {
+      throw std::runtime_error(
+        method_name +
+        "() does not support keyword argument unpacking (**kwargs)");
+    }
     return *dispatched;
   }
 
@@ -4358,6 +4374,12 @@ exprt string_handler::handle_string_attribute_call(
       get_receiver_expr,
       get_location))
   {
+    if (has_keyword_unpacking())
+    {
+      throw std::runtime_error(
+        method_name +
+        "() does not support keyword argument unpacking (**kwargs)");
+    }
     return *dispatched;
   }
 
@@ -4371,6 +4393,12 @@ exprt string_handler::handle_string_attribute_call(
       get_location,
       converter_))
   {
+    if (has_keyword_unpacking())
+    {
+      throw std::runtime_error(
+        method_name +
+        "() does not support keyword argument unpacking (**kwargs)");
+    }
     return *dispatched;
   }
 
@@ -4385,6 +4413,12 @@ exprt string_handler::handle_string_attribute_call(
       get_location,
       converter_))
   {
+    if (has_keyword_unpacking())
+    {
+      throw std::runtime_error(
+        method_name +
+        "() does not support keyword argument unpacking (**kwargs)");
+    }
     return *dispatched;
   }
 
@@ -4398,6 +4432,12 @@ exprt string_handler::handle_string_attribute_call(
       get_location,
       converter_))
   {
+    if (has_keyword_unpacking())
+    {
+      throw std::runtime_error(
+        method_name +
+        "() does not support keyword argument unpacking (**kwargs)");
+    }
     return *dispatched;
   }
 
@@ -4411,6 +4451,12 @@ exprt string_handler::handle_string_attribute_call(
       get_location,
       converter_))
   {
+    if (has_keyword_unpacking())
+    {
+      throw std::runtime_error(
+        method_name +
+        "() does not support keyword argument unpacking (**kwargs)");
+    }
     return *dispatched;
   }
 
