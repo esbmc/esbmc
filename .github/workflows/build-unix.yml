@@ -61,7 +61,7 @@ jobs:
         else
           # We use systemd-run such that OOM kills don't trigger GitHub Actions' "monitoring" and cause the entire job to be killed. Instead, only the ctest process
           # will be affected by the memory limits.
-          # 32GiB Max and 12GiB High
-          # If processes take more than 12 GiB of physical memory, _only they_ should start to swap, so that the GitHub runner's monitoring isn't impacted by the swapping.
-          systemd-run --user --scope -p MemoryMax=$((4*8))G -p MemoryHigh=12G --quiet ctest -j4 --output-on-failure --progress .
+          # 32GiB Max and 15GiB High
+          # If processes take more than 15 GiB of physical memory, _only they_ should start to swap, so that the GitHub runner's monitoring isn't impacted by the swapping.
+          systemd-run --user --scope -p MemoryMax=$((4*8))G -p MemoryHigh=15G --quiet ctest -j4 --output-on-failure --progress .
         fi
