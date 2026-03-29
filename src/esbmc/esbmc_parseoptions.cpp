@@ -1955,6 +1955,12 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("branch-function-coverage") ||
                   cmdline.isset("branch-function-coverage-claims");
 
+    // For coverage mode, treat extra input files (cmdline.args[1:]) as include
+    // files so that the coverage location_pool covers all input sources.
+    if (is_coverage && cmdline.args.size() > 1)
+      for (size_t i = 1; i < cmdline.args.size(); i++)
+        config.ansi_c.include_files.push_back(cmdline.args[i]);
+
     // this should be before goto_check()
     if (
       cmdline.isset("no-standard-checks") ||
