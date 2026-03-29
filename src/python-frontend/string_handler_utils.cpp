@@ -15,10 +15,36 @@ keyword_valuest collect_keyword_values(
 
   for (const auto &kw : keywords)
   {
-    if (!kw.contains("arg") || !kw["arg"].is_string() || !kw.contains("value"))
-      continue;
+    if (!kw.contains("arg"))
+    {
+      throw std::runtime_error(
+        method_name + "() encountered a malformed keyword entry without 'arg'");
+    }
 
-    const std::string keyword_name = kw["arg"].get<std::string>();
+    if (!kw.contains("value"))
+    {
+      throw std::runtime_error(
+        method_name +
+        "() encountered a malformed keyword entry without 'value'");
+    }
+
+    const auto &arg_field = kw["arg"];
+    if (arg_field.is_null())
+    {
+      throw std::runtime_error(
+        method_name +
+        "() does not support keyword argument unpacking (**kwargs)");
+    }
+
+    if (!arg_field.is_string())
+    {
+      throw std::runtime_error(
+        method_name +
+        "() encountered a malformed keyword entry: 'arg' field must be a "
+        "string");
+    }
+
+    const std::string keyword_name = arg_field.get<std::string>();
     if (!keyword_values.emplace(keyword_name, &kw["value"]).second)
     {
       throw std::runtime_error(
