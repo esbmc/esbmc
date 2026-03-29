@@ -2220,7 +2220,13 @@ bool esbmc_parseoptionst::process_goto_program(
 
       // if we do not want to count the guard in the assertions
       if (cmdline.isset("no-cov-asserts"))
-        tmp.replace_all_asserts_to_guard(gen_true_expr());
+      {
+        if (cmdline.isset("cov-assume-asserts"))
+          tmp.replace_all_asserts_to_assume();
+        else
+          tmp.replace_all_asserts_to_guard(gen_true_expr());
+      }
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.condition_coverage();
 
       // redo conversion to remove_sideeffect
@@ -2249,7 +2255,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
-
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.branch_coverage();
     }
     if (
@@ -2268,7 +2274,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.branch_function_coverage();
     }
 

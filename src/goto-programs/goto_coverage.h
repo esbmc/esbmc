@@ -46,6 +46,10 @@ public:
     goto_programt::instructiont::targett &it,
     bool is_instrumentation);
 
+  // convert assert(cond) to assume(cond) to preserve path constraints
+  void replace_assert_to_assume(goto_programt::instructiont::targett &it);
+  void replace_all_asserts_to_assume();
+
   // convert assert(cond) to assert(!cond)
   void negating_asserts(const std::string &tgt_fname);
 
@@ -73,6 +77,7 @@ public:
   static size_t total_func_branch;
 
   std::string target_function = "";
+  bool cov_assume_asserts = false;
 
 protected:
   // turn a OP b OP c into a list a, b, c

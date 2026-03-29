@@ -649,6 +649,10 @@ const struct group_opt_templ all_cmd_options[] = {
       "use '--condition-coverage-claims' while disable "
       "'--no-remove-unreachable'"},
      {"no-cov-asserts", NULL, "does not count the guard in the assertions"},
+     {"cov-assume-asserts",
+      NULL,
+      "convert assertions to assumptions in coverage mode "
+      "to preserve path constraints"},
      {"branch-coverage", NULL, "shows the coverage of branch"},
      {"branch-coverage-claims",
       NULL,
