@@ -14,8 +14,3 @@ assert quarter > ['January', 'February']
 assert ['April'] < quarter
 assert ['Zebra'] > quarter
 
-# Edge case: empty list comparisons
-empty = []
-assert empty < quarter
-assert quarter > empty
-

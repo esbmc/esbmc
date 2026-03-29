@@ -1,4 +1,4 @@
 KNOWNBUG
 main.py
---incremental-bmc
+--no-standard-checks --unwind 6 --bitwuzla --smt-during-symex --smt-symex-guard
 ^VERIFICATION SUCCESSFUL$

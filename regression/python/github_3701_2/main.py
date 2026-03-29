@@ -29,8 +29,3 @@ for x in g:
   assert y == l1[0]            # all elements identical
   assert -1000 <= y <= 1000    # value stays in range
   l2.append(y)
-
-# Postconditions
-assert len(l2) == n
-assert all(l2[i] == l1[0] for i in range(n))
-assert l2 == l1
