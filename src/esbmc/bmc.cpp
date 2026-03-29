@@ -1543,10 +1543,15 @@ smt_convt::resultt bmct::multi_property_check(
     std::call_once(summary.solver_name_flag, [&]() {
       summary.solver_name = solver_ptr->solver_text();
     });
-    log_status(
-      "Solving claim '{}' with solver {}",
-      claim.claim_cstr,
-      solver_ptr->solver_text());
+    // In coverage mode, only report instrumented coverage claims
+    bool is_cov_silent =
+      is_goto_cov && claim.claim_property != "instrumented assertion";
+
+    if (!is_cov_silent)
+      log_status(
+        "Solving claim '{}' with solver {}",
+        claim.claim_cstr,
+        solver_ptr->solver_text());
 
     // Save current instance with timing
     fine_timet solve_start = current_time();
@@ -1559,15 +1564,18 @@ smt_convt::resultt bmct::multi_property_check(
     const std::string RED = is_color ? "\033[31m" : "";
     const std::string RESET = is_color ? "\033[0m" : "";
 
-    if (solver_result == smt_convt::P_UNSATISFIABLE)
+    if (!is_cov_silent)
     {
-      // Claim passed - show in green
-      log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
-    }
-    else if (solver_result == smt_convt::P_SATISFIABLE)
-    {
-      // Claim failed - show in red
-      log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
+      if (solver_result == smt_convt::P_UNSATISFIABLE)
+      {
+        // Claim passed - show in green
+        log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
+      }
+      else if (solver_result == smt_convt::P_SATISFIABLE)
+      {
+        // Claim failed - show in red
+        log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
+      }
     }
 
     double solve_time_s = (solve_stop - solve_start);
@@ -1636,7 +1644,7 @@ smt_convt::resultt bmct::multi_property_check(
           is_branch_func_cov,
           reached_claims,
           reached_mul_claims);
-      else
+      else if (!is_cov_silent)
       {
         report_multi_property_trace(
           solver_result,
