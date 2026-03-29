@@ -846,6 +846,8 @@ static std::optional<exprt> dispatch_decode_join_method(
   if (method_name == "join")
   {
     ensure_allowed_keywords(method_name, keyword_values, {});
+    if (args.size() != 1)
+      throw std::runtime_error("join() takes exactly one argument");
     return self.handle_str_join(call_json);
   }
 
@@ -4472,6 +4474,8 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Validate JSON structure: ensure we have the required keys
   if (!call_json.contains("args") || call_json["args"].empty())
     throw std::runtime_error("join() missing required argument: 'iterable'");
+  if (call_json["args"].size() != 1)
+    throw std::runtime_error("join() takes exactly one argument");
 
   if (!call_json.contains("func"))
     throw std::runtime_error("invalid join() call");
