@@ -1,4 +1,4 @@
 CORE
 main.py
---z3 --no-standard-checks --unwind 4 --smt-during-symex --smt-symex-guard
+--bitwuzla --no-standard-checks --unwind 4 --smt-during-symex --smt-symex-guard
 ^VERIFICATION SUCCESSFUL$
