@@ -399,6 +399,14 @@ bool expression_parser::next_token()
       ++position_;
     }
 
+    // type: [0-9]U
+    while (position_ < input_.size() &&
+           (input_[position_] == 'u' || input_[position_] == 'U' ||
+            input_[position_] == 'l' || input_[position_] == 'L'))
+    {
+      ++position_;
+    }
+
     current_.type = token_type::integer;
     current_.begin = start;
     current_.length = position_ - start;
@@ -661,6 +669,73 @@ bool expression_converter::convert(const expression_node *root, exprt &expr)
   return get_expr(*root, expr);
 }
 
+static std::string to_lower_string(std::string_view text)
+{
+  std::string result;
+  result.reserve(text.size());
+
+  for (char ch : text)
+  {
+    result += static_cast<char>(
+      std::tolower(static_cast<unsigned char>(ch)));
+  }
+
+  return result;
+}
+
+static bool build_integer_constant(std::string_view text, exprt &expr)
+{
+  std::size_t pos = 0;
+
+  while (
+    pos < text.size() &&
+    std::isdigit(static_cast<unsigned char>(text[pos])) != 0)
+  {
+    ++pos;
+  }
+
+  if (pos == 0)
+    return true;
+
+  const std::string number_part(text.substr(0, pos));
+  const std::string suffix = to_lower_string(text.substr(pos));
+
+  typet type;
+
+  if (suffix.empty())
+  {
+    type = int_type();
+  }
+  else if (suffix == "u")
+  {
+    type = uint_type();
+  }
+  else if (suffix == "l")
+  {
+    type = long_int_type();
+  }
+  else if (suffix == "ul" || suffix == "lu")
+  {
+    type = long_uint_type();
+  }
+  else if (suffix == "ll")
+  {
+    type = long_long_int_type();
+  }
+  else if (suffix == "ull" || suffix == "llu")
+  {
+    type = long_long_uint_type();
+  }
+  else
+  {
+    log_error("unsupport integer suffix: {}", suffix);
+    return true;
+  }
+
+  expr = constant_exprt(string2integer(number_part), type);
+  return false;
+}
+
 bool expression_converter::get_expr(const expression_node &node, exprt &expr)
 {
   switch (node.kind)
@@ -704,28 +779,32 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
 
   case expression_node::node_kind::integer_literal:
   {
-    expr = constant_exprt(string2integer(std::string(node.value)), uint_type());
+    if (build_integer_constant(node.value, expr))
+      return true;
+
     break;
   }
 
   case expression_node::node_kind::unary_plus:
   {
-    expr = exprt("unary+", uint_type());
+    expr = exprt("unary+");
     exprt left;
     if (get_expr(*node.left, left))
       return true;
 
+    expr.type() = left.type();
     expr.move_to_operands(left);
     break;
   }
 
   case expression_node::node_kind::unary_minus:
   {
-    expr = exprt("unary-", uint_type());
+    expr = exprt("unary-");
     exprt left;
     if (get_expr(*node.left, left))
       return true;
 
+    expr.type() = left.type();
     expr.move_to_operands(left);
     break;
   }
@@ -743,7 +822,7 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
 
   case expression_node::node_kind::add:
   {
-    expr = exprt("+", uint_type());
+    expr = exprt("+");
     exprt left;
     if (get_expr(*node.left, left))
       return true;
@@ -752,13 +831,14 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
       return true;
 
     gen_typecast_arithmetic(context_, left, right);
+    expr.type() = left.type();
     expr.move_to_operands(left, right);
     break;
   }
 
   case expression_node::node_kind::subtract:
   {
-    expr = exprt("-", uint_type());
+    expr = exprt("-");
     exprt left;
     if (get_expr(*node.left, left))
       return true;
@@ -767,13 +847,14 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
       return true;
 
     gen_typecast_arithmetic(context_, left, right);
+    expr.type() = left.type();
     expr.move_to_operands(left, right);
     break;
   }
 
   case expression_node::node_kind::multiply:
   {
-    expr = exprt("*", uint_type());
+    expr = exprt("*");
     exprt left;
     if (get_expr(*node.left, left))
       return true;
@@ -782,13 +863,14 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
       return true;
 
     gen_typecast_arithmetic(context_, left, right);
+    expr.type() = left.type();
     expr.move_to_operands(left, right);
     break;
   }
 
   case expression_node::node_kind::divide:
   {
-    expr = exprt("/", uint_type());
+    expr = exprt("/");
     exprt left;
     if (get_expr(*node.left, left))
       return true;
@@ -797,6 +879,7 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
       return true;
 
     gen_typecast_arithmetic(context_, left, right);
+    expr.type() = left.type();
     expr.move_to_operands(left, right);
     break;
   }
@@ -812,6 +895,7 @@ bool expression_converter::get_expr(const expression_node &node, exprt &expr)
       return true;
 
     gen_typecast_arithmetic(context_, left, right);
+    expr.type() = left.type();
     expr.move_to_operands(left, right);
     break;
   }
