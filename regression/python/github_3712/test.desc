@@ -1,6 +1,6 @@
 CORE
 main.py
---unwind 30 --branch-function-coverage
+--unwind 30 --branch-function-coverage --no-standard-checks --bitwuzla
 ^Function Entry Points & Branches : 7
 ^Reached : 7
 ^Branch Coverage: 100%
