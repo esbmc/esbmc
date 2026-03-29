@@ -286,7 +286,8 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"Lambda", ExpressionType::FUNC_CALL},
     {"JoinedStr", ExpressionType::FSTRING},
     {"Tuple", ExpressionType::TUPLE},
-    {"Dict", ExpressionType::LITERAL}};
+    {"Dict", ExpressionType::LITERAL},
+    {"DictComp", ExpressionType::LITERAL}};
 
   const auto &type = element["_type"];
   auto it = type_map.find(type);
@@ -4301,6 +4302,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (dict_handler_->is_dict_literal(element))
     {
       expr = dict_handler_->get_dict_literal(element);
+      break;
+    }
+
+    if (element["_type"] == "DictComp")
+    {
+      expr = dict_handler_->get_dict_comprehension(element);
       break;
     }
 
