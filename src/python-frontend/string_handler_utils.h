@@ -15,7 +15,8 @@ using keyword_valuest = std::unordered_map<std::string, const nlohmann::json *>;
 
 keyword_valuest collect_keyword_values(
   const std::string &method_name,
-  const nlohmann::json &keywords);
+  const nlohmann::json &keywords,
+  bool reject_kwargs_unpacking = true);
 
 const nlohmann::json *find_keyword_value(
   const keyword_valuest &keyword_values,

@@ -8,7 +8,8 @@ namespace string_call_utils
 {
 keyword_valuest collect_keyword_values(
   const std::string &method_name,
-  const nlohmann::json &keywords)
+  const nlohmann::json &keywords,
+  bool reject_kwargs_unpacking)
 {
   keyword_valuest keyword_values;
   keyword_values.reserve(keywords.size());
@@ -31,9 +32,18 @@ keyword_valuest collect_keyword_values(
     const auto &arg_field = kw["arg"];
     if (arg_field.is_null())
     {
-      throw std::runtime_error(
-        method_name +
-        "() does not support keyword argument unpacking (**kwargs)");
+      // In the Python AST, arg == null represents **kwargs (keyword argument unpacking).
+      // If the caller (e.g., string methods) does not support **kwargs, reject it.
+      // Otherwise (e.g., generic/math functions), silently skip it and let the value
+      // be validated at runtime based on the presence of the actual named keyword.
+      if (reject_kwargs_unpacking)
+      {
+        throw std::runtime_error(
+          method_name +
+          "() does not support keyword argument unpacking (**kwargs)");
+      }
+      // Skip this entry (do not add to keyword_values) for functions that allow **kwargs
+      continue;
     }
 
     if (!arg_field.is_string())
