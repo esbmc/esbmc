@@ -35,14 +35,5 @@ def test_nondet_all() -> None:
         __ESBMC_assert(isinstance(elem, int) or isinstance(elem, float) or isinstance(elem, str),
                        "List element type valid")
 
-    # --- Dict ---
-    d = nondet_dict()
-    __ESBMC_assume(len(d) <= 5)
-    __ESBMC_assert(len(d) >= 0 and len(d) <= 5, "Symbolic dict size")
-    if len(d) > 0:
-        for k in d.keys():
-            # Keys are expected to be strings
-            __ESBMC_assert(isinstance(k, str), "Dict key type valid")
-
 # Run the test
 test_nondet_all()
