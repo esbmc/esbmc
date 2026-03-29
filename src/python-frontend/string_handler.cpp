@@ -4334,8 +4334,7 @@ exprt string_handler::handle_string_attribute_call(
     return *cached_location;
   };
 
-  auto has_keyword_unpacking = [&]() -> bool
-  {
+  auto has_keyword_unpacking = [&]() -> bool {
     for (const auto &kw : keywords)
     {
       if (kw.contains("arg") && kw["arg"].is_null())
