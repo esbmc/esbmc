@@ -904,12 +904,12 @@ enum target_flags
  *    U  |  s  |  c  | <ad-hoc>                                       | rec
  *    A  |  s  |  c  | construct_from_array                           | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
- *    s  |  S  |  c  | <bad>: "Structure pointer pointed at scalar"   |
+ *    s  |  S  |  c  | <bitcast if off==0 and sizes match, else bad>  |
  *    S  |  S  |  c  | construct_struct_ref_from_const_offset         | rec'
  *    U  |  S  |  c  | <ad-hoc>                                       | rec
  *    A  |  S  |  c  | construct_struct_ref_from_const_offset_array   | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
- *    s  |  U  |  c  | <bad>: "Union pointer pointed at scalar"       |
+ *    s  |  U  |  c  | <bitcast if off==0 and sizes match, else bad>  |
  *    S  |  U  |  c  | construct_struct_ref_from_const_offset         | rec'
  *    U  |  U  |  c  | construct_struct_ref_from_const_offset         | rec'
  *    A  |  U  |  c  | construct_struct_ref_from_const_offset_array   | rec, st
@@ -996,11 +996,20 @@ void dereferencet::build_reference_rec(
     break;
 
   case flag_src_scalar | flag_dst_struct | flag_is_const_offs:
-    // Attempt to extract a structure from within a scalar. This is not
-    // permitted as the base data objects have incompatible types
+  {
+    // A scalar can be reinterpreted as a struct if the access starts at
+    // offset 0 and the sizes match (C type-punning via pointer cast).
+    const constant_int2t &offs_int = to_constant_int2t(offset);
+    if (offs_int.value == 0 && value->type->get_width() == type->get_width())
+    {
+      if (!base_type_eq(value->type, type, ns))
+        value = bitcast2tc(type, value);
+      break;
+    }
     dereference_failure(
       "Bad dereference", "Structure pointer pointed at scalar", guard);
     break;
+  }
   case flag_src_struct | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside another struct.
     construct_struct_ref_from_const_offset(value, offset, type, guard, mode);
@@ -1012,11 +1021,20 @@ void dereferencet::build_reference_rec(
     break;
 
   case flag_src_scalar | flag_dst_union | flag_is_const_offs:
-    // Attempt to extract a union from within a scalar. This is not
-    // permitted as the base data objects have incompatible types
+  {
+    // A scalar can be reinterpreted as a union if the access starts at
+    // offset 0 and the sizes match (C type-punning via pointer cast).
+    const constant_int2t &offs_int = to_constant_int2t(offset);
+    if (offs_int.value == 0 && value->type->get_width() == type->get_width())
+    {
+      if (!base_type_eq(value->type, type, ns))
+        value = bitcast2tc(type, value);
+      break;
+    }
     dereference_failure(
       "Bad dereference", "Union pointer pointed at scalar", guard);
     break;
+  }
   case flag_src_struct | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside a structure.
     construct_struct_ref_from_const_offset(value, offset, type, guard, mode);
