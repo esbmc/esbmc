@@ -3211,9 +3211,9 @@ bool clang_c_convertert::get_cast_expr(
 #endif
 
   case clang::CK_NonAtomicToAtomic:
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-      break;
-    [[fallthrough]];
+  case clang::CK_AtomicToNonAtomic:
+    gen_typecast(ns, expr, type);
+    break;
 
   default:
   {
