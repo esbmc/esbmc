@@ -2028,7 +2028,6 @@ bool clang_cpp_convertert::annotate_class_method(
   if (!cxxmdd.isStatic())
     if (to_code(new_expr).statement() == "skip")
       to_code(new_expr).remove("statement");
-#endif
   return false;
 }
 
