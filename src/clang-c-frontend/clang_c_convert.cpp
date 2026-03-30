@@ -1136,7 +1136,15 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     break;
   }
-
+#if CLANG_VERSION_MAJOR >= 22
+  case clang::Type::PredefinedSugar:
+  {
+    if (get_type(
+          *the_type.getLocallyUnqualifiedSingleStepDesugaredType(), new_type))
+      return true;
+    break;
+  }
+#else
   case clang::Type::Elaborated:
   {
     const clang::ElaboratedType &et =
@@ -1146,7 +1154,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       return true;
     break;
   }
-
+#endif
   case clang::Type::TypeOfExpr:
   {
     const clang::TypeOfExprType &tofe =
@@ -1604,9 +1612,15 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if (const auto nns = decl.getQualifier())
     {
+#if CLANG_VERSION_MAJOR >= 22
+      if (const auto type = nns.getAsType())
+      {
+        assert(!nns.isDependent());
+#else
       if (const auto type = nns->getAsType())
       {
         assert(!nns->isDependent());
+#endif
         typet ignored;
         if (get_type(*type, ignored))
           return true;
@@ -3884,15 +3898,27 @@ void clang_c_convertert::get_decl_name(
                                        "_" +
                                        location_begin.column().as_string();
       std::string kind_name = rd.getKindName().str();
+#if CLANG_VERSION_MAJOR >= 22
+      std::string tag_name = getFullyQualifiedName(
+        ASTContext->getTypeDeclType(llvm::cast<clang::TypeDecl>(&rd)),
+        *ASTContext);
+#else
       std::string tag_name =
         getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
+#endif
       name =
         kind_name + " __anon_typedef_" + tag_name + "_at_" + location_begin_str;
       std::replace(name.begin(), name.end(), '.', '_');
     }
     else
+#if CLANG_VERSION_MAJOR >= 22
+      name = getFullyQualifiedName(
+        ASTContext->getTypeDeclType(llvm::cast<clang::TypeDecl>(&rd)),
+        *ASTContext);
+#else
       name =
         getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
+#endif
 
     id = "tag-" + name;
     return;
