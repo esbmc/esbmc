@@ -1026,7 +1026,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     break;
   }
-#if 0
   case clang::Stmt::LambdaExprClass:
   {
     const clang::LambdaExpr &lambda_expr =
@@ -1036,8 +1035,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // Construct a new object of the lambda class
     typet lambda_class_type;
-    if (get_type(
-          *lambda_expr.getLambdaClass()->getTypeForDecl(), lambda_class_type))
+
+    clang::CXXRecordDecl *lambda_class = lambda_expr.getLambdaClass();
+#if CLANG_VERSION_MAJOR >= 22
+    clang::QualType lambda_qual_type =
+      lambda_class->getASTContext().getCanonicalTagType(lambda_class);
+    if (get_type(*lambda_qual_type.getTypePtr(), lambda_class_type))
+#else
+    if (get_type(*lambda_class->getTypeForDecl(), lambda_class_type))
+#endif
       return true;
 
     exprt sym("struct", lambda_class_type);
@@ -1063,7 +1069,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     break;
   }
-#endif
   case clang::Stmt::CXXStdInitializerListExprClass:
   {
     const clang::CXXStdInitializerListExpr &cxxstdinit =
@@ -1950,13 +1955,19 @@ bool clang_cpp_convertert::annotate_class_method(
   exprt &new_expr)
 {
   code_typet &component_type = to_code_type(new_expr.type());
-#if 0
-  /*
+#if 1
+/*
    * The order of annotations matters.
    */
-  // annotate parent
+// annotate parent
+#  if CLANG_VERSION_MAJOR >= 22
+  std::string parent_class_name = getFullyQualifiedName(
+    ASTContext->getCanonicalTagType(cxxmdd.getParent()), *ASTContext);
+#  else
   std::string parent_class_name = getFullyQualifiedName(
     ASTContext->getTagDeclType(cxxmdd.getParent()), *ASTContext);
+#  endif
+
   std::string parent_class_id = tag_prefix + parent_class_name;
   component_type.set("#member_name", parent_class_id);
 
@@ -2254,7 +2265,7 @@ bool clang_cpp_convertert::is_aggregate_type(const clang::QualType &q_type)
 
     return aryType.isAggregateType();
   }
-#if 0
+#if CLANG_VERSION_MAJOR < 22 // Elaborated types are now transparent
   case clang::Type::Elaborated:
   {
     const clang::ElaboratedType &et =
