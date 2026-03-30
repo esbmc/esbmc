@@ -1,0 +1,6 @@
+CORE
+main.c
+--branch-coverage --cov-assume-asserts
+^Branches : 2
+^Reached : 0
+^VERIFICATION SUCCESSFUL$
