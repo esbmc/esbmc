@@ -8,7 +8,6 @@ jobs:
   coverage:
     name: Build and upload coverage to Codecov
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
     env:
       CC: gcc
       CXX: g++
@@ -17,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies and build with coverage
-        run: ./scripts/build.sh -b Debug -k ON deps build
+        run: ./scripts/build.sh -b Debug -k ON
 
       - name: Run tests
         run: cd build/ && ctest -j4 --output-on-failure --progress .
