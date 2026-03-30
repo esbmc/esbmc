@@ -1,4 +1,3 @@
 CORE
-main.c
---incremental-bmc
+main.py
 ^VERIFICATION FAILED$

@@ -303,6 +303,36 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(map_operator(op, bool_type()), bool_type());
   bool contains_non_boolean = false;
+  auto get_truthy_condition = [&](const exprt &value_expr) -> exprt {
+    typet list_type = type_handler_.get_list_type();
+    if (
+      value_expr.type() == list_type ||
+      (value_expr.type().is_pointer() &&
+       value_expr.type().subtype() == list_type))
+    {
+      const symbolt *size_func =
+        symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+      if (!size_func)
+        throw std::runtime_error(
+          "__ESBMC_list_size not found for list condition check");
+
+      side_effect_expr_function_callt size_call;
+      size_call.function() = symbol_expr(*size_func);
+      size_call.type() = size_type();
+      size_call.location() = get_location_from_decl(element);
+      if (value_expr.type().is_pointer())
+        size_call.arguments().push_back(value_expr);
+      else
+        size_call.arguments().push_back(address_of_exprt(value_expr));
+
+      exprt cond("notequal", bool_type());
+      cond.copy_to_operands(size_call, gen_zero(size_type()));
+      cond.location() = get_location_from_decl(element);
+      return cond;
+    }
+
+    return value_expr;
+  };
 
   // Mark that we're processing operands in an expression context
   // This ensures boolean-returning function calls are converted to side-effect expressions
@@ -346,11 +376,12 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
     {
       const exprt &current = logical_expr.operands()[i];
+      exprt current_cond = get_truthy_condition(current);
       exprt if_expr("if", t);
       if (logical_expr.is_and())
-        if_expr.copy_to_operands(current, result_expr, current);
+        if_expr.copy_to_operands(current_cond, result_expr, current);
       else
-        if_expr.copy_to_operands(current, current, result_expr);
+        if_expr.copy_to_operands(current_cond, current, result_expr);
 
       result_expr = if_expr;
     }
@@ -7068,6 +7099,42 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   const bool coverage_mode = is_coverage_mode();
   const bool pytest_generation_mode = is_pytest_generation_mode();
   const bool model_mode = is_model_file(ast_node["test"]);
+  auto to_bool_condition =
+    [&](const exprt &value_expr, const nlohmann::json &value_node) -> exprt {
+    if (value_expr.type().is_bool())
+      return value_expr;
+
+    typet list_type = type_handler_.get_list_type();
+    if (
+      value_expr.type() == list_type ||
+      (value_expr.type().is_pointer() &&
+       value_expr.type().subtype() == list_type))
+    {
+      const symbolt *size_func =
+        symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+      if (!size_func)
+        throw std::runtime_error(
+          "__ESBMC_list_size not found for list condition check");
+
+      side_effect_expr_function_callt size_call;
+      size_call.function() = symbol_expr(*size_func);
+      size_call.type() = size_type();
+      size_call.location() = get_location_from_decl(value_node);
+      if (value_expr.type().is_pointer())
+        size_call.arguments().push_back(value_expr);
+      else
+        size_call.arguments().push_back(address_of_exprt(value_expr));
+
+      exprt cond("notequal", bool_type());
+      cond.copy_to_operands(size_call, gen_zero(size_type()));
+      cond.location() = get_location_from_decl(value_node);
+      return cond;
+    }
+
+    exprt bool_expr = typecast_exprt(value_expr, bool_type());
+    bool_expr.location() = get_location_from_decl(value_node);
+    return bool_expr;
+  };
 
   if (
     test_type == "BoolOp" && current_block && type != "While" &&
@@ -7080,7 +7147,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       exprt *saved_lhs = current_lhs;
       current_lhs = nullptr;
       // Start from the leftmost operand and carry the running result forward.
-      cond = get_expr(operands[0]);
+      cond = to_bool_condition(get_expr(operands[0]), operands[0]);
       current_lhs = saved_lhs;
 
       symbolt result_symbol = create_return_temp_variable(
@@ -7105,7 +7172,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         saved_lhs = current_lhs;
         current_lhs = nullptr;
         // Build the next operand only in the branch where it is still needed.
-        exprt next_operand = get_expr(operands[i]);
+        exprt next_operand =
+          to_bool_condition(get_expr(operands[i]), operands[i]);
         current_lhs = saved_lhs;
         current_block = saved_block;
 
@@ -7132,6 +7200,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
       cond = result_expr;
     }
+  }
+  else if (test_type == "BoolOp" && !model_mode)
+  {
+    exprt boolop_expr(
+      map_operator(ast_node["test"]["op"]["_type"], bool_type()), bool_type());
+    for (const auto &operand : ast_node["test"]["values"])
+      boolop_expr.copy_to_operands(
+        to_bool_condition(get_expr(operand), operand));
+    cond = boolop_expr;
   }
   else if (has_nested_call)
   {
@@ -10237,25 +10314,24 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
     if (!e.is_constant() && !e.is_symbol())
       e = extract_type_from_boolean_op(e);
 
-    assert(e.is_constant() || e.is_symbol());
+    typet operand_type = e.type();
+    if (operand_type.is_empty() || operand_type.is_bool())
+      continue;
 
-    if (!e.is_pointer() && e.is_constant())
+    // Arrays are special, they have a length property which we don't care about right now
+    if (operand_type.is_array())
+      return gen_zero(any_type());
+
+    if (found_type.is_empty())
+      found_type = operand_type;
+    else if (found_type != operand_type)
     {
-      if (found_type.is_empty())
-        found_type = e.type();
-      else if (found_type != e.type() && !e.type().is_array())
-      {
-        log_warning(
-          "Boolean expression with more than one constant type; "
-          "falling back to Any");
-        return gen_zero(any_type());
-      }
+      log_warning(
+        "Boolean expression with more than one constant type; "
+        "falling back to Any");
+      return gen_zero(any_type());
     }
   }
-
-  // Arrays are special, they have a length property which we don't care about right now
-  if (found_type.is_array())
-    return gen_zero(any_type());
 
   return found_type.is_empty() ? gen_zero(any_type()) : gen_zero(found_type);
 }
