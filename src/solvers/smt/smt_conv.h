@@ -976,6 +976,46 @@ private:
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);
+
+  /** Interval metadata for the RNE ieee_add interval-lifting path (--ir-ra).
+   *  After each RNE ieee_add (double/single, int encoding), the {ra_lo, ra_hi}
+   *  SMT symbols are stored here, keyed on the exact real_result AST pointer
+   *  (pointer equality == SSA identity via smt_cache).  Subsequent RNE
+   *  ieee_add calls look up each operand; missing entries fall back to a point
+   *  interval {side, side} which reproduces the single-step formula exactly.
+   *
+   *  Map lifetime: safe in standard BMC (no push_ctx during formula build).
+   *  In runtime_encoded_equationt (incremental), pop_ctx() deletes ASTs for
+   *  the popped level; stale entries may linger but are never looked up in
+   *  practice because SSA renaming gives distinct pointers per step.
+   *  TODO: clear entries for the popped ctx_level in a follow-up PR. */
+  struct ra_interval_t
+  {
+    smt_astt lo;
+    smt_astt hi;
+  };
+  std::unordered_map<const smt_ast *, ra_interval_t> ir_ra_interval_map;
+
+  /** Interval-lifted RNE enclosure helper for ieee_add (--ir-ra only).
+   *  Called from ieee_add_id after verifying RNE mode + known format.
+   *  Inputs:
+   *    real_result  exact symbolic real for this addition (mk_add(side1,side2))
+   *    lo_r         lower endpoint of the result interval (iv1.lo + iv2.lo)
+   *    hi_r         upper endpoint of the result interval (iv1.hi + iv2.hi)
+   *    fbv_type     FP type; caller guarantees double or single precision
+   *  Behavior:
+   *    Creates fresh ra_lo::N / ra_hi::N Real symbols.
+   *    Pins ra_lo to lo_r - B_near^-(lo_r) via bidirectional inequalities.
+   *    Pins ra_hi to hi_r + B_near^+(hi_r) via bidirectional inequalities.
+   *    Asserts containment: ra_lo <= real_result <= ra_hi, ra_lo <= ra_hi.
+   *    Point-interval fallback (lo_r == hi_r == real_result) produces a
+   *    formula structurally equivalent to the single-step RNE path.
+   *  Returns: {ra_lo, ra_hi} for storage in ir_ra_interval_map. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rne_interval_add(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
 };
 
 /** Given an array type, create a type2tc representing its domain. */
