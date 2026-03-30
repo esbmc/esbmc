@@ -45,6 +45,7 @@ SOLVER_FLAGS=(
 COMPILER_ENV=()
 
 STATIC=""
+COVERAGE=OFF
 CLANG_VERSION=16
 MIN_MACOS_CLANG_VERSION=17
 
@@ -260,6 +261,10 @@ collect_ubuntu_packages() {
     UBUNTU_PACKAGES+=(g++-multilib)
   else
     log "Skipping g++-multilib on aarch64"
+  fi
+
+  if [[ "$COVERAGE" == "ON" ]]; then
+    UBUNTU_PACKAGES+=(lcov)
   fi
 
   if [[ "$STATIC" == "OFF" ]]; then
@@ -541,6 +546,7 @@ Options [defaults]:
   -C         build an SV-COMP version [disabled]
   -B ON|OFF  enable/disable esbmc bundled libc [ON]
   -x ON|OFF  enable/disable esbmc cheri [OFF]
+  -k ON|OFF  enable/disable coverage instrumentation (GCC/Clang --coverage) [OFF]
 
 Commands:
   fetch-deps         fetch dependency metadata and source archives [internal]
@@ -558,7 +564,7 @@ USAGE
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
+while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
   case "$flag" in
     h)
       usage
@@ -606,6 +612,11 @@ while getopts "hb:s:e:r:dS:c:CB:x:" flag; do
     B)
       require_on_off "-B" "$OPTARG"
       BASE_ARGS+=("-DESBMC_BUNDLE_LIBC=$OPTARG")
+      ;;
+    k)
+      require_on_off "-k" "$OPTARG"
+      COVERAGE="$OPTARG"
+      BASE_ARGS+=("-DENABLE_COVERAGE=${OPTARG}")
       ;;
     x)
       require_on_off "-x" "$OPTARG"
