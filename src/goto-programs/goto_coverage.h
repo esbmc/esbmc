@@ -75,6 +75,8 @@ public:
   static std::set<std::pair<std::string, std::string>> total_cond;
   static size_t total_branch;
   static size_t total_func_branch;
+  // all instrumented claims (condition, location) for JSON report
+  static std::set<std::pair<std::string, std::string>> all_claims;
 
   std::string target_function = "";
   bool cov_assume_asserts = false;

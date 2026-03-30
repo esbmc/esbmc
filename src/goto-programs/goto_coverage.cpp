@@ -5,6 +5,7 @@ size_t goto_coveraget::total_assert_ins = 0;
 std::set<std::pair<std::string, std::string>> goto_coveraget::total_cond;
 size_t goto_coveraget::total_branch = 0;
 size_t goto_coveraget::total_func_branch = 0;
+std::set<std::pair<std::string, std::string>> goto_coveraget::all_claims;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
 {
@@ -118,6 +119,7 @@ void goto_coveraget::assertion_coverage()
   replace_all_asserts_to_guard(gen_false_expr(), true);
   total_assert = get_total_instrument();
   total_assert_ins = get_total_assert_instance();
+  all_claims = get_total_cond_assert();
 }
 
 /*
@@ -214,6 +216,7 @@ void goto_coveraget::branch_function_coverage()
   // fix for branch coverage with kind/incr
   // It seems in kind/incr, the goto_functions used during the BMC is simplified and incomplete
   total_func_branch = get_total_instrument();
+  all_claims = get_total_cond_assert();
 
   // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
   goto_functions.update();
@@ -278,6 +281,7 @@ void goto_coveraget::branch_coverage()
     }
 
   total_branch = get_total_instrument();
+  all_claims = get_total_cond_assert();
 
   // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
   goto_functions.update();
@@ -546,6 +550,7 @@ void goto_coveraget::condition_coverage()
     }
 
   total_cond = get_total_cond_assert();
+  all_claims = total_cond;
 
   // recalculate line number/ target number
   goto_functions.update();

@@ -667,6 +667,9 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "explicitly assign every function parameters to NONDET in function "
       "mode"},
+     {"cov-report-json",
+      NULL,
+      "output coverage report as JSON file (cov-report.json)"},
    }},
   {"DEBUG options",
    {

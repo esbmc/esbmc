@@ -38,6 +38,7 @@
 #include <util/time_stopping.h>
 #include <util/cache.h>
 #include <atomic>
+#include <nlohmann/json.hpp>
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
@@ -526,6 +527,47 @@ void bmct::report_multi_property_trace(
   }
 }
 
+// Parse location string "file X line Y column Z function F" into components
+static nlohmann::json parse_claim_location(const std::string &loc)
+{
+  nlohmann::json j;
+  j["file"] = "";
+  j["line"] = 0;
+  j["column"] = 0;
+  j["function"] = "";
+
+  std::istringstream iss(loc);
+  std::string token;
+  while (iss >> token)
+  {
+    if (token == "file")
+    {
+      std::string val;
+      iss >> val;
+      j["file"] = val;
+    }
+    else if (token == "line")
+    {
+      int val = 0;
+      iss >> val;
+      j["line"] = val;
+    }
+    else if (token == "column")
+    {
+      int val = 0;
+      iss >> val;
+      j["column"] = val;
+    }
+    else if (token == "function")
+    {
+      std::string val;
+      iss >> val;
+      j["function"] = val;
+    }
+  }
+  return j;
+}
+
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
@@ -754,6 +796,72 @@ void report_coverage(
       log_result("Branch Coverage: {}%", tracked_instance * 100.0 / total);
     else
       log_result("Branch Coverage: 0%");
+  }
+
+  // Generate JSON coverage report
+  if (options.get_bool_option("cov-report-json"))
+  {
+    using json = nlohmann::json;
+
+    std::string cov_type = "unknown";
+    if (is_branch_cov)
+      cov_type = "branch";
+    else if (is_branch_func_cov)
+      cov_type = "branch-function";
+    else if (is_cond_cov)
+      cov_type = "condition";
+    else if (is_assert_cov)
+      cov_type = "assertion";
+
+    const auto &all_claims = goto_coveraget::all_claims;
+    std::set<std::string> source_files;
+    json claims_json = json::array();
+
+    for (const auto &[claim_msg, claim_loc] : all_claims)
+    {
+      std::string claim_sig = claim_msg + "\t" + claim_loc;
+      bool covered = reached_claims.count(claim_sig) > 0;
+
+      // For assertion coverage, check reached_mul_claims instead
+      if (is_assert_cov)
+        covered = reached_mul_claims.count(claim_sig) > 0;
+
+      json loc = parse_claim_location(claim_loc);
+      std::string file = loc["file"];
+      if (!file.empty())
+        source_files.insert(file);
+
+      json claim_entry;
+      claim_entry["condition"] = claim_msg;
+      claim_entry["file"] = loc["file"];
+      claim_entry["line"] = loc["line"];
+      claim_entry["column"] = loc["column"];
+      claim_entry["function"] = loc["function"];
+      claim_entry["status"] = covered ? "covered" : "uncovered";
+      claims_json.push_back(claim_entry);
+    }
+
+    size_t total = all_claims.size();
+    size_t covered_count = 0;
+    for (const auto &c : claims_json)
+      if (c["status"] == "covered")
+        covered_count++;
+
+    json report;
+    report["coverage_type"] = cov_type;
+    report["source_files"] = json::array();
+    for (const auto &f : source_files)
+      report["source_files"].push_back(f);
+    report["claims"] = claims_json;
+    report["summary"]["total"] = total;
+    report["summary"]["covered"] = covered_count;
+    report["summary"]["uncovered"] = total - covered_count;
+    report["summary"]["percentage"] =
+      total > 0 ? covered_count * 100.0 / total : 0.0;
+
+    std::ofstream out("cov-report.json");
+    out << report.dump(2) << std::endl;
+    log_success("Coverage report written to cov-report.json");
   }
 
   // Generate pytest test case from collected data (for coverage mode)
