@@ -453,8 +453,9 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // Technically C doesn't allow for any variable to hold an invalid pointer,
   // except through initialization.
 
-  smt_sortt s = convert_sort(cast.type);
-  smt_astt output = mk_fresh(s, "smt_convt::int_to_ptr");
+  std::string newname = mk_fresh_name("smt_convt::int_to_ptr");
+  expr2tc output_sym = symbol2tc(cast.type, newname);
+  smt_astt output = convert_ast(output_sym);
   smt_astt output_obj = output->project(this, 0);
   smt_astt output_offs = output->project(this, 1);
   if (config.ansi_c.cheri)
@@ -505,44 +506,39 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt inv_obj = id;
   smt_astt inv_offs = offs;
 
-  if (is_byte_update2t(cast.from))
+  // Cast from a byte-updated pointer: either the direct BV-mode update
+  // byte_update<uint>(bitcast<uint>(ptr), ...) or a struct-field extraction
+  // extract<W>(byte_update<uint>(bitcast<uint>(struct), ...)).
+  // In both cases, constrain the output pointer's address to equal the target
+  // integer rather than pinning the fallback to the invalid object.
+  const bool from_byte_update =
+    is_byte_update2t(cast.from) ||
+    (is_extract2t(cast.from) && is_byte_update2t(to_extract2t(cast.from).from));
+
+  if (from_byte_update)
   {
-    // Handle byte_update(nondet_sym, offset, update) case
-    // The nondet pointer cannot match any address.
-    // Assign the object of int_to_ptr to the nondet pointer's object.
-    byte_update2t bu = to_byte_update2t(cast.from);
-    bitcast2t bc = to_bitcast2t(bu.source_value);
-    smt_astt sym = convert_ast(bc.from);
-
-    // Convert symbolic representation and project the object
-    smt_astt obj = sym->project(this, 0);
-    inv_obj = obj;
-
-    // Derive the numeric representation of the pointer object
-    // Access the current address space using obj_num as an index
-    expr2tc obj_num = pointer_object2tc(ptraddr_type2(), bc.from);
+    const struct_type2t &as = to_struct_type(addr_space_type);
+    expr2tc obj_num = pointer_object2tc(ptraddr_type2(), output_sym);
     expr2tc from_addr = index2tc(
       addr_space_type,
       symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
       obj_num);
-
-    // Compute the offset between target and the start address
-    const struct_type2t &addr_space = to_struct_type(addr_space_type);
     expr2tc from_start =
-      member2tc(addr_space.members[0], from_addr, addr_space.member_names[0]);
-
-    smt_astt addr_start = convert_ast(from_start);
-    inv_offs =
-      int_encoding ? mk_sub(target, addr_start) : mk_bvsub(target, addr_start);
+      member2tc(as.members[0], from_addr, as.member_names[0]);
+    expr2tc ptr_offs =
+      pointer_offset2tc(get_int_type(config.ansi_c.address_width), output_sym);
+    expr2tc address = add2tc(
+      ptraddr_type2(), from_start, typecast2tc(ptraddr_type2(), ptr_offs));
+    smt_astt addr = convert_ast(address);
+    assert_ast(mk_implies(not_matched, addr->eq(this, target)));
+    return output;
   }
 
   smt_astt obj_eq = inv_obj->eq(this, output_obj);
   smt_astt offs_eq = inv_offs->eq(this, output_offs);
   smt_astt is_inv = mk_and(obj_eq, offs_eq);
 
-  smt_astt imp = mk_implies(not_matched, is_inv);
-  assert_ast(imp);
-
+  assert_ast(mk_implies(not_matched, is_inv));
   return output;
 }
 
