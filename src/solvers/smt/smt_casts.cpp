@@ -513,8 +513,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // integer rather than pinning the fallback to the invalid object.
   const bool from_byte_update =
     is_byte_update2t(cast.from) ||
-    (is_extract2t(cast.from) &&
-     is_byte_update2t(to_extract2t(cast.from).from));
+    (is_extract2t(cast.from) && is_byte_update2t(to_extract2t(cast.from).from));
 
   if (from_byte_update)
   {
@@ -524,11 +523,12 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
       addr_space_type,
       symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
       obj_num);
-    expr2tc from_start = member2tc(as.members[0], from_addr, as.member_names[0]);
-    expr2tc ptr_offs = pointer_offset2tc(
-      get_int_type(config.ansi_c.address_width), output_sym);
-    expr2tc address =
-      add2tc(ptraddr_type2(), from_start, typecast2tc(ptraddr_type2(), ptr_offs));
+    expr2tc from_start =
+      member2tc(as.members[0], from_addr, as.member_names[0]);
+    expr2tc ptr_offs =
+      pointer_offset2tc(get_int_type(config.ansi_c.address_width), output_sym);
+    expr2tc address = add2tc(
+      ptraddr_type2(), from_start, typecast2tc(ptraddr_type2(), ptr_offs));
     smt_astt addr = convert_ast(address);
     assert_ast(mk_implies(not_matched, addr->eq(this, target)));
     return output;
