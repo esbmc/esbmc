@@ -1955,18 +1955,17 @@ bool clang_cpp_convertert::annotate_class_method(
   exprt &new_expr)
 {
   code_typet &component_type = to_code_type(new_expr.type());
-#if 1
 /*
    * The order of annotations matters.
    */
 // annotate parent
-#  if CLANG_VERSION_MAJOR >= 22
+#if CLANG_VERSION_MAJOR >= 22
   std::string parent_class_name = getFullyQualifiedName(
     ASTContext->getCanonicalTagType(cxxmdd.getParent()), *ASTContext);
-#  else
+#else
   std::string parent_class_name = getFullyQualifiedName(
     ASTContext->getTagDeclType(cxxmdd.getParent()), *ASTContext);
-#  endif
+#endif
 
   std::string parent_class_id = tag_prefix + parent_class_name;
   component_type.set("#member_name", parent_class_id);
