@@ -531,6 +531,11 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
       ptraddr_type2(), from_start, typecast2tc(ptraddr_type2(), ptr_offs));
     smt_astt addr = convert_ast(address);
     assert_ast(mk_implies(not_matched, addr->eq(this, target)));
+    // Prevent INVALID from being spuriously chosen as the fallback: INVALID has
+    // start_1 = 1, so "1 + offs = target" is trivially satisfiable for any
+    // target.  Excluding INVALID forces the solver to pick a real object via the
+    // unconstrained addr_space array entries when one matches target.
+    assert_ast(mk_implies(not_matched, mk_not(id->eq(this, output_obj))));
     return output;
   }
 
