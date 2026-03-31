@@ -572,7 +572,7 @@ public:
    *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
    *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
    *  Other formats return the original result unchanged.
-   *  Under --ir-ra, when rounding_mode is a concrete round-to-nearest constant
+   *  Under --ir-ieee, when rounding_mode is a concrete round-to-nearest constant
    *  (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is asserted.
    *  For symbolic or directed rounding modes the function falls back to a weak
    *  unconstrained enclosure (sound but imprecise); tight directed bounds are
@@ -977,7 +977,7 @@ private:
     const BigInt &numerator,
     const BigInt &denominator);
 
-  /** Interval metadata for the RNE ieee_add interval-lifting path (--ir-ra).
+  /** Interval metadata for the RNE ieee_add interval-lifting path (--ir-ieee).
    *  After each RNE ieee_add (double/single, int encoding), the {ra_lo, ra_hi}
    *  SMT symbols are stored here, keyed on the exact real_result AST pointer
    *  (pointer equality == SSA identity via smt_cache).  Subsequent RNE
@@ -996,7 +996,7 @@ private:
   };
   std::unordered_map<const smt_ast *, ra_interval_t> ir_ra_interval_map;
 
-  /** Interval-lifted RNE enclosure helper for ieee_add (--ir-ra only).
+  /** Interval-lifted RNE enclosure helper for ieee_add (--ir-ieee only).
    *  Called from ieee_add_id after verifying RNE mode + known format.
    *  Inputs:
    *    real_result  exact symbolic real for this addition (mk_add(side1,side2))

@@ -1,4 +1,4 @@
-/* Regression test: ROUND_TO_AWAY tight enclosure under --ir-ra, single precision.
+/* Regression test: ROUND_TO_AWAY tight enclosure under --ir-ieee, single precision.
  *
  * PURPOSE
  * -------

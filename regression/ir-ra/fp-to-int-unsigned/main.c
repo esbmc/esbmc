@@ -2,7 +2,7 @@
 
 extern double __VERIFIER_nondet_double(void);
 
-/* Under --ir-ra, a negative double cast to unsigned int is clamped to 0,
+/* Under --ir-ieee, a negative double cast to unsigned int is clamped to 0,
  * so the assertion must fail when x < 0. */
 int main(void)
 {
