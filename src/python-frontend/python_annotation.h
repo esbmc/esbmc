@@ -836,7 +836,6 @@ private:
         if (!inferred_type.empty())
           return inferred_type;
       }
-
     }
     else if (arg["_type"] == "BinOp")
     {
