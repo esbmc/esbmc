@@ -1,6 +1,6 @@
 CORE
 main.c
---ir-ra --z3 --smt-formula-too
+--ir-ieee --z3 --smt-formula-too
 \(declare-fun \|smt_conv::ra_lo_aw::[0-9]+\| \(\) Real\)
 \(declare-fun \|smt_conv::ra_hi_aw::[0-9]+\| \(\) Real\)
 ^VERIFICATION FAILED$

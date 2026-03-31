@@ -1,4 +1,4 @@
-/* Regression test: ROUND_TO_AWAY uses tight symmetric enclosure under --ir-ra.
+/* Regression test: ROUND_TO_AWAY uses tight symmetric enclosure under --ir-ieee.
  *
  * PURPOSE
  * -------

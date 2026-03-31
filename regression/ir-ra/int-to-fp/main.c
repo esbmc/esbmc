@@ -2,7 +2,7 @@
 
 extern int __VERIFIER_nondet_int(void);
 
-/* Under --ir-ra, a nondet int lifted to double can be <= 0.0,
+/* Under --ir-ieee, a nondet int lifted to double can be <= 0.0,
  * so the assertion must fail. */
 int main(void)
 {

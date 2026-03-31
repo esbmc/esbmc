@@ -49,9 +49,9 @@ Finally, there's some boilerplate in solvers/solve.cpp for creating
 solvers. The idea is to implement the factory pattern for solver
 creation, avoiding general-esbmc code having to touch solver-specific stuff.
 
-Interval/Real-Arithmetic (--ir-ra) mode
-----------------------------------------
-When the --ir-ra flag is enabled, floating-point operations are encoded
+Interval/Real-Arithmetic (--ir-ieee) mode
+------------------------------------------
+When the --ir-ieee flag is enabled, floating-point operations are encoded
 in real arithmetic rather than bit-precise FP. The key entry point is
 smt_convt::apply_ieee754_semantics (smt_conv.cpp), which wraps each
 real-valued FP result in a sound symmetric error enclosure.
