@@ -421,6 +421,60 @@ static bool is_round_to_away(const expr2tc &rounding_mode)
          BigInt(ieee_floatt::ROUND_TO_AWAY);
 }
 
+std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_interval_add(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  // Caller guarantees fbv_type is double or single precision.
+  const auto double_spec = ieee_float_spect::double_precision();
+  smt_astt eps_rel, eps_abs;
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel = get_double_eps_rel();       // 2^-53
+    eps_abs = get_double_min_subnormal(); // 2^-1074
+  }
+  else
+  {
+    // single precision (caller verified double-or-single)
+    eps_rel = get_single_eps_rel();       // 2^-24
+    eps_abs = get_single_min_subnormal(); // 2^-149
+  }
+
+  smt_sortt rs = mk_real_sort();
+  smt_astt zero = mk_smt_real("0.0");
+
+  // B_near^-(R) = eps_rel * |lo_r| + eps_abs  (bound using lower endpoint)
+  smt_astt abs_lo = mk_ite(mk_lt(lo_r, zero), mk_sub(zero, lo_r), lo_r);
+  smt_astt bound_lo = mk_add(mk_mul(eps_rel, abs_lo), eps_abs);
+
+  // B_near^+(R) = eps_rel * |hi_r| + eps_abs  (bound using upper endpoint)
+  smt_astt abs_hi = mk_ite(mk_lt(hi_r, zero), mk_sub(zero, hi_r), hi_r);
+  smt_astt bound_hi = mk_add(mk_mul(eps_rel, abs_hi), eps_abs);
+
+  // ra_lo = lo_r - B_near^-(R),  ra_hi = hi_r + B_near^+(R)
+  smt_astt ra_lo_expr = mk_sub(lo_r, bound_lo);
+  smt_astt ra_hi_expr = mk_add(hi_r, bound_hi);
+
+  // Named enclosure variables, pinned via bidirectional inequalities to
+  // survive Z3's solve-eqs tactic (same technique as the single-step path).
+  smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
+  smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
+
+  assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= lo_r - B_near^-(R)
+  assert_ast(mk_le(ra_lo_expr, ra_lo)); // lo_r - B_near^-(R) <= ra_lo
+  assert_ast(mk_le(ra_hi, ra_hi_expr)); // ra_hi <= hi_r + B_near^+(R)
+  assert_ast(mk_le(ra_hi_expr, ra_hi)); // hi_r + B_near^+(R) <= ra_hi
+
+  // Containment: ra_lo <= real_result <= ra_hi  and  ra_lo <= ra_hi
+  assert_ast(mk_le(ra_lo, real_result));
+  assert_ast(mk_le(real_result, ra_hi));
+  assert_ast(mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
   const floatbv_type2t &fbv_type,
@@ -1248,10 +1302,49 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt side1 = convert_ast(to_ieee_add2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_add2t(expr).side_2);
       smt_astt real_result = mk_add(side1, side2);
-
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(
-        real_result, fbv_type, nullptr, to_ieee_add2t(expr).rounding_mode);
+      const expr2tc &rounding_mode = to_ieee_add2t(expr).rounding_mode;
+
+      // Interval-lifted RNE enclosure for ieee_add (--ir-ra only).
+      // For RNE + known format (double/single): look up each operand's stored
+      // interval, falling back to a point interval {side, side} for fresh or
+      // untracked operands.  Compute L_R = lo1+lo2, U_R = hi1+hi2, call the
+      // interval helper, then store the resulting {ra_lo, ra_hi} pair.
+      // Non-RNE modes, non-standard formats, and --ir-ra disabled all fall
+      // through to apply_ieee754_semantics unchanged.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ra") &&
+        is_nearest_rounding_mode(rounding_mode))
+      {
+        const auto double_spec = ieee_float_spect::double_precision();
+        const auto single_spec = ieee_float_spect::single_precision();
+        if (
+          (fbv_type.exponent == double_spec.e &&
+           fbv_type.fraction == double_spec.f) ||
+          (fbv_type.exponent == single_spec.e &&
+           fbv_type.fraction == single_spec.f))
+        {
+          // Lookup with unconditional point-interval fallback.
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
+            auto it = ir_ra_interval_map.find(t);
+            return it != ir_ra_interval_map.end() ? it->second
+                                                  : ra_interval_t{t, t};
+          };
+          ra_interval_t iv1 = get_iv(side1);
+          ra_interval_t iv2 = get_iv(side2);
+          smt_astt lo_r = mk_add(iv1.lo, iv2.lo); // L_R = L_x + L_y
+          smt_astt hi_r = mk_add(iv1.hi, iv2.hi); // U_R = U_x + U_y
+          auto [ra_lo, ra_hi] =
+            apply_ieee754_rne_interval_add(real_result, lo_r, hi_r, fbv_type);
+          ir_ra_interval_map[real_result] = {ra_lo, ra_hi};
+          a = real_result;
+          interval_lifted = true;
+        }
+      }
+      if (!interval_lifted)
+        a = apply_ieee754_semantics(
+          real_result, fbv_type, nullptr, rounding_mode);
     }
     else
     {
