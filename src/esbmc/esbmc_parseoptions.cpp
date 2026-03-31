@@ -337,10 +337,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("ir"))
     options.set_option("int-encoding", true);
 
-  if (cmdline.isset("ir-ra"))
+  if (cmdline.isset("ir-ieee"))
   {
     options.set_option("int-encoding", true);
-    options.set_option("ir-ra", true);
+    options.set_option("ir-ieee", true);
   }
   if (cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);

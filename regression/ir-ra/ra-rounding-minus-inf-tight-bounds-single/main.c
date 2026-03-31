@@ -1,4 +1,4 @@
-/* Regression test: ROUND_TO_MINUS_INF tight enclosure under --ir-ra, single precision.
+/* Regression test: ROUND_TO_MINUS_INF tight enclosure under --ir-ieee, single precision.
  *
  * PURPOSE
  * -------

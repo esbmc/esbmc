@@ -481,7 +481,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt operand_zero_check,
   const expr2tc &rounding_mode)
 {
-  if (this->options.get_bool_option("ir-ra"))
+  if (this->options.get_bool_option("ir-ieee"))
   {
     if (is_nearest_rounding_mode(rounding_mode))
     {
@@ -1305,16 +1305,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       const expr2tc &rounding_mode = to_ieee_add2t(expr).rounding_mode;
 
-      // Interval-lifted RNE enclosure for ieee_add (--ir-ra only).
+      // Interval-lifted RNE enclosure for ieee_add (--ir-ieee only).
       // For RNE + known format (double/single): look up each operand's stored
       // interval, falling back to a point interval {side, side} for fresh or
       // untracked operands.  Compute L_R = lo1+lo2, U_R = hi1+hi2, call the
       // interval helper, then store the resulting {ra_lo, ra_hi} pair.
-      // Non-RNE modes, non-standard formats, and --ir-ra disabled all fall
+      // Non-RNE modes, non-standard formats, and --ir-ieee disabled all fall
       // through to apply_ieee754_semantics unchanged.
       bool interval_lifted = false;
       if (
-        options.get_bool_option("ir-ra") &&
+        options.get_bool_option("ir-ieee") &&
         is_nearest_rounding_mode(rounding_mode))
       {
         const auto double_spec = ieee_float_spect::double_precision();
