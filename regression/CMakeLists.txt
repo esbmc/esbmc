@@ -53,6 +53,12 @@ function(add_esbmc_regression_test folder modes test)
       TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
       LABELS "regression;${folder}/")
+
+  if(ENABLE_COVERAGE)
+    if(folder MATCHES "k-induction-parallel|python")
+      set_tests_properties(${test_name} PROPERTIES RESOURCE_LOCK "gcov_esbmc")
+    endif()
+  endif()
 endfunction()
 
 function(add_esbmc_regression folder modes)
