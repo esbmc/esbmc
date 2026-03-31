@@ -2981,10 +2981,12 @@ void esbmc_parseoptionst::help()
   auto const esbmc_string = std::format(" ESBMC {} ", ESBMC_VERSION);
   auto const title_start = std::string("* * * ");
   auto const title_end = std::string(" * * *");
-  auto const inner = 80 - title_start.length() - title_end.length() - esbmc_string.length();
+  auto const inner =
+    80 - title_start.length() - title_end.length() - esbmc_string.length();
   auto const left_pad = std::string(inner / 2, '=');
   auto const right_pad = std::string(inner - inner / 2, '=');
-  log_status("\n{}{}{}{}{}", title_start, left_pad, esbmc_string, right_pad, title_end);
+  log_status(
+    "\n{}{}{}{}{}", title_start, left_pad, esbmc_string, right_pad, title_end);
 
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
