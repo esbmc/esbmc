@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies and build with coverage
-        run: ./scripts/build.sh -b Debug -k ON
+        run: ./scripts/build.sh -b DebugOpt -k ON
 
       - name: Run tests
         run: cd build/ && ctest -j4 --output-on-failure --progress .
