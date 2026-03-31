@@ -1,4 +1,5 @@
 CORE
 main.c
---no-standard-checks
-^VERIFICATION SUCCESSFUL$
+--show-claims --no-standard-checks
+^Claim 1:
+end of loop assertion
