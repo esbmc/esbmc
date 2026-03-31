@@ -1,4 +1,4 @@
-/* Regression test: symbolic rounding mode uses weak enclosure fallback under --ir-ra.
+/* Regression test: symbolic rounding mode uses weak enclosure fallback under --ir-ieee.
  *
  * PURPOSE
  * -------
