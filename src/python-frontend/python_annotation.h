@@ -313,7 +313,11 @@ private:
     Json var_node =
       json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
 
-    if (!has_annotation(var_node) && var_node.empty() && parent_func != nullptr)
+    if (
+      !has_annotation(var_node) &&
+      (var_node.empty() ||
+       (var_node.contains("_type") && var_node["_type"] == "arg")) &&
+      parent_func != nullptr)
     {
       if (
         (*parent_func).contains("args") &&
@@ -325,6 +329,16 @@ private:
 
       if (!has_annotation(var_node) && (*parent_func).contains("body"))
         var_node = find_annotated_assign(var_name, (*parent_func)["body"]);
+    }
+
+    if (
+      !has_annotation(var_node) &&
+      (var_node.empty() ||
+       (var_node.contains("_type") && var_node["_type"] == "arg")))
+    {
+      Json global_var_node = json_utils::find_var_decl(var_name, "", ast_);
+      if (!global_var_node.empty())
+        var_node = global_var_node;
     }
 
     if (!has_annotation(var_node) && var_node.empty())
@@ -460,6 +474,20 @@ private:
     std::vector<Json> function_calls =
       find_function_calls(func_name, search_context);
 
+    // Determine the call-site context for resolving argument names.
+    // For top-level functions, use global scope (empty context).
+    // For nested functions, use the parent function context.
+    std::string call_site_context;
+    if (parent_func != nullptr)
+    {
+      std::string cur = current_func_name_context_;
+      size_t pos = cur.rfind("@F@");
+      if (pos != std::string::npos)
+        call_site_context = cur.substr(0, pos);
+      else if (parent_func->contains("name"))
+        call_site_context = (*parent_func)["name"].template get<std::string>();
+    }
+
     // For each parameter, try to infer its type from the function calls
     if (
       function_element.contains("args") &&
@@ -500,7 +528,10 @@ private:
         // Try to infer type from function calls if available
         if (needs_inference && !function_calls.empty())
         {
+          std::string saved_ctx = current_func_name_context_;
+          current_func_name_context_ = call_site_context;
           inferred_type = infer_parameter_type_from_calls(i, function_calls);
+          current_func_name_context_ = saved_ctx;
         }
 
         // If still no type, try to infer from the parameter's default value.
@@ -796,6 +827,16 @@ private:
           return base_type;
         }
       }
+
+      if (
+        !var_node.empty() && var_node.contains("value") &&
+        !var_node["value"].is_null())
+      {
+        std::string inferred_type = get_argument_type(var_node["value"]);
+        if (!inferred_type.empty())
+          return inferred_type;
+      }
+
     }
     else if (arg["_type"] == "BinOp")
     {
