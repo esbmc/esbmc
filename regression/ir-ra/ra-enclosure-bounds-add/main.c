@@ -1,4 +1,4 @@
-/* Regression: --ir-ra should process a double-precision addition through the
+/* Regression: --ir-ieee should process a double-precision addition through the
  * enclosure path. The assertion is intentionally false so ESBMC produces a
  * counterexample and exercises the encoding. */
 #include <assert.h>

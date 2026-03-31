@@ -1,4 +1,4 @@
 CORE
 main.c
---ir-ra --z3
+--ir-ieee --z3
 ^VERIFICATION FAILED$
