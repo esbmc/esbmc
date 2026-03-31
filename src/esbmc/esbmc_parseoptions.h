@@ -10,6 +10,15 @@
 #include <util/algorithms.h>
 #include <util/threeval.h>
 
+// Macro to determine if color output should be enabled
+#ifdef _WIN32
+#  define ENABLE_COLOR(val)                                                    \
+    ((val) == "always" || ((val) == "auto" && _isatty(_fileno(stderr))))
+#else
+#  define ENABLE_COLOR(val)                                                    \
+    ((val) == "always" || ((val) == "auto" && isatty(fileno(stderr))))
+#endif
+
 extern const struct group_opt_templ all_cmd_options[];
 
 class esbmc_parseoptionst : public parseoptions_baset, public language_uit
