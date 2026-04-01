@@ -1,0 +1,6 @@
+CORE
+main.c
+--context-bound 2 --data-races-check
+^VERIFICATION FAILED$
+--
+RACE_CHECK
