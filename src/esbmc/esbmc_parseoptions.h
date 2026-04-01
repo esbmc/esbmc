@@ -12,9 +12,11 @@
 
 // Macro to determine if color output should be enabled
 #ifdef _WIN32
+#  include <io.h>
 #  define ENABLE_COLOR(val)                                                    \
     ((val) == "always" || ((val) == "auto" && _isatty(_fileno(stderr))))
 #else
+#  include <unistd.h>
 #  define ENABLE_COLOR(val)                                                    \
     ((val) == "always" || ((val) == "auto" && isatty(fileno(stderr))))
 #endif
