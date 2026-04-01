@@ -996,6 +996,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   // 3b. Snapshot globals and ptr->field targets for assigns compliance
   //     (before function call)
   std::vector<ptr_field_snapshot_t> ptr_field_snaps;
+  std::vector<ptr_deref_snapshot_t> ptr_deref_snaps;
   frame_enforcert::classified_assignst classified_assigns;
   if (check_assigns_compliance)
   {
@@ -1015,9 +1016,11 @@ goto_programt code_contractst::generate_checking_wrapper(
         globals, wrapper, location, "contract_" + func_name);
     }
 
-    // 3b-ii. Snapshot ptr->field targets (for local pointer parameter fields)
+    // 3b-ii. Classify assigns targets (needed for both ptr-field and ptr-deref)
     classified_assigns =
       frame_enforcert::classify_assigns_targets(assigns_targets);
+
+    // 3b-iii. Snapshot ptr->field targets (for local pointer parameter fields)
     if (!classified_assigns.ptr_field_targets.empty())
     {
       ptr_field_snaps = materialize_ptr_field_snapshots(
@@ -1026,6 +1029,20 @@ goto_programt code_contractst::generate_checking_wrapper(
         "contracts",
         "generate_checking_wrapper: created {} ptr-field snapshots for {}",
         ptr_field_snaps.size(),
+        func_name);
+    }
+
+    // 3b-iv. Phase 2C: snapshot *p for pointer params NOT in assigns at all
+    ptr_deref_snaps = materialize_ptr_deref_snapshots(
+      classified_assigns, assigns_targets, original_func, wrapper, location,
+      func_name);
+    if (!ptr_deref_snaps.empty())
+    {
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: created {} ptr-deref snapshots for {} "
+        "(Phase 2C)",
+        ptr_deref_snaps.size(),
         func_name);
     }
   }
@@ -1181,6 +1198,9 @@ goto_programt code_contractst::generate_checking_wrapper(
     // 3c-ii. Assert ptr->field assigns compliance
     if (!ptr_field_snaps.empty())
       emit_ptr_field_assertions(ptr_field_snaps, wrapper, location);
+    // 3c-iii. Phase 2C: assert *p assigns compliance for uncovered pointer params
+    if (!ptr_deref_snaps.empty())
+      emit_ptr_deref_assertions(ptr_deref_snaps, wrapper, location);
   }
 
   // 4. Assert ensures clause (replace __ESBMC_return_value and __ESBMC_old)
@@ -2017,6 +2037,189 @@ void code_contractst::emit_ptr_field_assertions(
                         id2string(entry.field_name);
     t->location.comment(
       "assigns compliance: " + label + " not in assigns clause");
+    t->location.property("assigns compliance");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2C: pointer-parameter dereference assigns compliance
+// ---------------------------------------------------------------------------
+
+std::vector<code_contractst::ptr_deref_snapshot_t>
+code_contractst::materialize_ptr_deref_snapshots(
+  const frame_enforcert::classified_assignst &classified,
+  const std::vector<expr2tc> &assigns_targets,
+  const symbolt &original_func,
+  goto_programt &wrapper,
+  const locationt &location,
+  const std::string &func_name)
+{
+  std::vector<ptr_deref_snapshot_t> result;
+
+  // Only check when an assigns clause was explicitly declared.
+  // If assigns_targets is empty there is no clause → function may modify anything.
+  if (assigns_targets.empty())
+    return result;
+  if (!original_func.type.is_code())
+    return result;
+
+  const code_typet &code_type = to_code_type(original_func.type);
+  const code_typet::argumentst &params = code_type.arguments();
+
+  for (const auto &param : params)
+  {
+    type2tc param_type = migrate_type(param.type());
+    if (!is_pointer_type(param_type))
+      continue;
+
+    const pointer_type2t &ptr_type = to_pointer_type(param_type);
+    type2tc pointee = ptr_type.subtype;
+    if (is_symbol_type(pointee))
+      pointee = ns.follow(pointee);
+
+    // Skip void*, function pointers, pointer-to-pointer (for now)
+    if (
+      is_empty_type(pointee) || is_code_type(pointee) || is_nil_type(pointee) ||
+      is_pointer_type(pointee))
+      continue;
+
+    irep_idt param_id = param.get_identifier();
+    expr2tc ptr_sym = symbol2tc(param_type, param_id);
+
+    // If *p is fully covered by the assigns clause → skip
+    for (const auto &t : classified.pointer_targets)
+    {
+      if (is_symbol2t(t) && to_symbol2t(t).thename == param_id)
+        goto next_param;
+    }
+
+    // If specific fields of *p are declared → already handled by ptr_field_snaps
+    if (classified.ptr_field_targets.count(param_id))
+      continue;
+
+    // This pointer param is NOT in the assigns clause at all → snapshot *p.
+    if (is_struct_type(pointee) || is_union_type(pointee))
+    {
+      // Snapshot each scalar field of the struct.
+      const struct_type2t &stype = to_struct_type(pointee);
+      expr2tc deref_expr = dereference2tc(pointee, ptr_sym);
+
+      for (size_t fi = 0; fi < stype.member_names.size(); ++fi)
+      {
+        const irep_idt &field = stype.member_names[fi];
+        const type2tc &ftype = stype.members[fi];
+        // Skip pointer and function-type fields to avoid complications
+        if (is_pointer_type(ftype) || is_code_type(ftype))
+          continue;
+
+        std::string snap_name = "__ESBMC_frame_snap_pderef_" + func_name + "_" +
+                                id2string(param_id) + "_" + id2string(field) +
+                                "_" + std::to_string(ptr_deref_snap_counter++);
+
+        symbolt snap_obj;
+        snap_obj.name = snap_name;
+        snap_obj.id = snap_name;
+        snap_obj.type = migrate_type_back(ftype);
+        snap_obj.lvalue = true;
+        snap_obj.static_lifetime = false;
+        snap_obj.file_local = false;
+        symbolt *added = context.move_symbol_to_context(snap_obj);
+        expr2tc snap_expr = symbol2tc(ftype, added->id);
+
+        goto_programt::targett decl_t = wrapper.add_instruction(DECL);
+        decl_t->code = code_decl2tc(ftype, added->id);
+        decl_t->location = location;
+        decl_t->location.comment("frame: ptr-deref field snapshot (Phase 2C)");
+
+        expr2tc field_expr = member2tc(ftype, deref_expr, field);
+        goto_programt::targett assign_t = wrapper.add_instruction(ASSIGN);
+        assign_t->code = code_assign2tc(snap_expr, field_expr);
+        assign_t->location = location;
+        assign_t->location.comment("frame: capture ptr->field pre-state (Phase 2C)");
+
+        ptr_deref_snapshot_t entry;
+        entry.ptr_sym = ptr_sym;
+        entry.pointee_type = pointee;
+        entry.field_name = field;
+        entry.value_type = ftype;
+        entry.snapshot_sym = snap_expr;
+        result.push_back(entry);
+      }
+    }
+    else
+    {
+      // Scalar pointee: snapshot *p directly.
+      std::string snap_name = "__ESBMC_frame_snap_pderef_" + func_name + "_" +
+                              id2string(param_id) + "_" +
+                              std::to_string(ptr_deref_snap_counter++);
+
+      symbolt snap_obj;
+      snap_obj.name = snap_name;
+      snap_obj.id = snap_name;
+      snap_obj.type = migrate_type_back(pointee);
+      snap_obj.lvalue = true;
+      snap_obj.static_lifetime = false;
+      snap_obj.file_local = false;
+      symbolt *added = context.move_symbol_to_context(snap_obj);
+      expr2tc snap_expr = symbol2tc(pointee, added->id);
+
+      goto_programt::targett decl_t = wrapper.add_instruction(DECL);
+      decl_t->code = code_decl2tc(pointee, added->id);
+      decl_t->location = location;
+      decl_t->location.comment("frame: ptr-deref snapshot (Phase 2C)");
+
+      expr2tc deref_expr = dereference2tc(pointee, ptr_sym);
+      goto_programt::targett assign_t = wrapper.add_instruction(ASSIGN);
+      assign_t->code = code_assign2tc(snap_expr, deref_expr);
+      assign_t->location = location;
+      assign_t->location.comment("frame: capture *ptr pre-state (Phase 2C)");
+
+      ptr_deref_snapshot_t entry;
+      entry.ptr_sym = ptr_sym;
+      entry.pointee_type = pointee;
+      // field_name left empty → scalar dereference
+      entry.value_type = pointee;
+      entry.snapshot_sym = snap_expr;
+      result.push_back(entry);
+    }
+
+  next_param:;
+  }
+
+  return result;
+}
+
+void code_contractst::emit_ptr_deref_assertions(
+  const std::vector<ptr_deref_snapshot_t> &snapshots,
+  goto_programt &wrapper,
+  const locationt &location)
+{
+  for (const auto &snap : snapshots)
+  {
+    expr2tc current_val;
+    std::string var_label;
+
+    if (snap.field_name.empty())
+    {
+      // Scalar: assert *p == snapshot
+      current_val = dereference2tc(snap.value_type, snap.ptr_sym);
+      var_label = "*" + id2string(to_symbol2t(snap.ptr_sym).thename);
+    }
+    else
+    {
+      // Struct field: assert p->field == snapshot
+      expr2tc deref_expr = dereference2tc(snap.pointee_type, snap.ptr_sym);
+      current_val = member2tc(snap.value_type, deref_expr, snap.field_name);
+      var_label = id2string(to_symbol2t(snap.ptr_sym).thename) + "->" +
+                  id2string(snap.field_name);
+    }
+
+    expr2tc guard = equality2tc(current_val, snap.snapshot_sym);
+    goto_programt::targett t = wrapper.add_instruction(ASSERT);
+    t->guard = guard;
+    t->location = location;
+    t->location.comment(
+      "assigns compliance: " + var_label + " not in assigns clause");
     t->location.property("assigns compliance");
   }
 }

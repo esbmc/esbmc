@@ -124,12 +124,25 @@ public:
     expr2tc snapshot_sym; ///< Snapshot symbol holding pre-call field value
   };
 
+  /// \brief Snapshot for pointer-parameter dereference assigns compliance (Phase 2C).
+  /// When a pointer param p is NOT declared in the assigns clause at all, its
+  /// pointed-to value (*p or p->field for structs) must remain unchanged.
+  struct ptr_deref_snapshot_t
+  {
+    expr2tc ptr_sym;       ///< Pointer parameter symbol
+    type2tc pointee_type;  ///< Resolved type pointed to by ptr_sym
+    irep_idt field_name;   ///< Empty for scalars; field name for struct members
+    type2tc value_type;    ///< Type of the snapshotted value
+    expr2tc snapshot_sym;  ///< Snapshot symbol holding the pre-call value
+  };
+
 private:
   goto_functionst &goto_functions;
   contextt &context;
   const namespacet &ns;
   frame_enforcert frame_enforcer;
-  size_t ptr_field_snap_counter = 0; ///< Counter for unique snapshot names
+  size_t ptr_field_snap_counter = 0; ///< Counter for unique ptr-field snapshot names
+  size_t ptr_deref_snap_counter = 0; ///< Counter for unique ptr-deref snapshot names (Phase 2C)
 
   /// \brief Check if a function is compiler-generated and should be skipped
   /// \param function_name Function name or ID
@@ -304,6 +317,38 @@ private:
   /// \param location Source location for generated instructions
   void emit_ptr_field_assertions(
     const std::vector<ptr_field_snapshot_t> &snapshots,
+    goto_programt &wrapper,
+    const locationt &location);
+
+  // ========== Phase 2C: pointer-parameter dereference assigns compliance ==========
+
+  /// \brief Snapshot pointer params whose dereferenced value is NOT in the assigns clause.
+  /// For each pointer parameter p not covered by the assigns clause:
+  ///   - scalar pointee: snapshot *p
+  ///   - struct pointee: snapshot each field of *p
+  /// Called before the function call in the checking wrapper.
+  /// \param classified Classified assigns targets (provides pointer_targets, ptr_field_targets)
+  /// \param assigns_targets Full assigns target list (must be non-empty to enable check)
+  /// \param original_func Original function symbol (provides parameter types/names)
+  /// \param wrapper GOTO program to append snapshot instructions to
+  /// \param location Source location
+  /// \param func_name Function name for unique snapshot naming
+  /// \return Vector of snapshot records for use in emit_ptr_deref_assertions
+  std::vector<ptr_deref_snapshot_t> materialize_ptr_deref_snapshots(
+    const frame_enforcert::classified_assignst &classified,
+    const std::vector<expr2tc> &assigns_targets,
+    const symbolt &original_func,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name);
+
+  /// \brief Emit ASSERT instructions for pointer-parameter dereference compliance.
+  /// For each snapshot: asserts *p == snapshot (scalar) or p->field == snapshot (struct).
+  /// \param snapshots Snapshots produced by materialize_ptr_deref_snapshots
+  /// \param wrapper GOTO program to append assertions to
+  /// \param location Source location
+  void emit_ptr_deref_assertions(
+    const std::vector<ptr_deref_snapshot_t> &snapshots,
     goto_programt &wrapper,
     const locationt &location);
 
