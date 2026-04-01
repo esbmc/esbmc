@@ -103,7 +103,7 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
             value_node->as_string()->get(),
             key_name,
             key_name);
-          abort();
+          exit(1);
         }
 
         add_option(key_name, value_node->as_string()->get(), true);
@@ -122,6 +122,15 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       }
       case toml::node_type::boolean:
       {
+        if (!bool_flag_options.count(key_name))
+        {
+          log_error(
+            "config: key '{}' expects a value (e.g. {} = \"auto\") but got"
+            " boolean",
+            key_name,
+            key_name);
+          exit(1);
+        }
         const auto value = value_node->as_boolean()->get();
         log_status(
           "[CONFIG] loaded {} = {}", key_name, value ? "true" : "false");

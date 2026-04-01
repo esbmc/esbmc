@@ -300,19 +300,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   set_verbosity_msg();
 
   // Resolve --color option: validate and convert to boolean
-  if (cmdline.isset("color"))
-  {
-    std::string val = cmdline.getval("color");
-    if (val != "auto" && val != "always" && val != "never")
-    {
-      log_error(
-        "Invalid value for --color: '{}'. Must be auto, always, or never.",
-        val);
-      abort();
-    }
-    bool enable_color = ENABLE_COLOR(val);
-    options.set_option("color", enable_color);
-  }
+  options.set_option("color", resolve_color_option());
 
   if (cmdline.isset("git-hash"))
   {
@@ -2966,16 +2954,24 @@ void esbmc_parseoptionst::process_function_contracts(
   }
 }
 
+bool esbmc_parseoptionst::resolve_color_option() const
+{
+  const char *raw = cmdline.getval("color");
+  std::string val = (raw && *raw) ? raw : "auto";
+  if (val != "auto" && val != "always" && val != "never")
+  {
+    log_error(
+      "Invalid value for --color: '{}'. Must be auto, always, or never.", val);
+    exit(1);
+  }
+  return ENABLE_COLOR(val);
+}
+
 // This prints the ESBMC version and a list of CMD options
 // available in ESBMC.
 void esbmc_parseoptionst::help()
 {
-  bool use_color =
-#ifdef _WIN32
-    _isatty(_fileno(stderr));
-#else
-    isatty(fileno(stderr));
-#endif
+  bool use_color = resolve_color_option();
 
   // Print the "* * *     ESBMC x.y.z     * * *"
   auto const esbmc_string = std::format(" ESBMC {} ", ESBMC_VERSION);
@@ -3006,7 +3002,7 @@ void esbmc_parseoptionst::help()
       // Group header (e.g. "Printing options:")
       fmt::print(stderr, "\033[1;36m{}\033[0m\n", line);
     else if (
-      line.size() >= 2 && line[0] == ' ' && line[1] == ' ' && line[2] == '-')
+      line.size() >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] == '-')
     {
       // Option line: colorize the flag portion (up to the description)
       auto desc_pos = line.find("  ", 4);

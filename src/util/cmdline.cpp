@@ -272,18 +272,18 @@ bool cmdlinet::parse(
   p.add("input-file", -1);
   try
   {
-    // Load env
+    // Load commandline parameters (highest priority)
     boost::program_options::store(
-      boost::program_options::command_line_parser(
-        simple_shell_unescape(getenv("ESBMC_OPTS"), "ESBMC_OPTS"))
+      boost::program_options::command_line_parser(argc, argv)
         .options(all_cmdline_options)
+        .positional(p)
         .run(),
       vm);
 
     // Config file: Check if config file should be loaded, and get location.
     std::optional<std::string> config_path = this->get_config_file_location();
 
-    // Load config file
+    // Load config file (overridden by command line)
     if (config_path)
     {
       // Check if config path provided is invalid.
@@ -308,11 +308,11 @@ bool cmdlinet::parse(
         parse_toml_file(file, all_cmdline_options), vm);
     }
 
-    // Load commandline parameters
+    // Load env (lowest priority)
     boost::program_options::store(
-      boost::program_options::command_line_parser(argc, argv)
+      boost::program_options::command_line_parser(
+        simple_shell_unescape(getenv("ESBMC_OPTS"), "ESBMC_OPTS"))
         .options(all_cmdline_options)
-        .positional(p)
         .run(),
       vm);
   }

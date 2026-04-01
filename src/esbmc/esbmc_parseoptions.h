@@ -120,6 +120,7 @@ protected:
   bool is_coverage;
 
 private:
+  bool resolve_color_option() const;
   void close_file(FILE *f)
   {
     if (f != stdout && f != stderr)
