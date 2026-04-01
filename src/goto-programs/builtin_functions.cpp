@@ -869,7 +869,8 @@ void goto_convertt::do_function_call_symbol(
 
     if (lhs.is_nil())
     {
-      log_error("`__ESBMC_old_raw' must be used in an expression (requires LHS)");
+      log_error(
+        "`__ESBMC_old_raw' must be used in an expression (requires LHS)");
       abort();
     }
 
@@ -884,7 +885,6 @@ void goto_convertt::do_function_call_symbol(
       inner_expr = addr_arg.op0();
     else
       inner_expr = addr_arg; // Fallback: use addr_arg as-is
-
 
     // Create old_snapshot sideeffect with lhs type (void*) to avoid assignment
     // type mismatch. The operand retains the original expression type T so that

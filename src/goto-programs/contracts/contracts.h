@@ -129,11 +129,11 @@ public:
   /// pointed-to value (*p or p->field for structs) must remain unchanged.
   struct ptr_deref_snapshot_t
   {
-    expr2tc ptr_sym;       ///< Pointer parameter symbol
-    type2tc pointee_type;  ///< Resolved type pointed to by ptr_sym
-    irep_idt field_name;   ///< Empty for scalars; field name for struct members
-    type2tc value_type;    ///< Type of the snapshotted value
-    expr2tc snapshot_sym;  ///< Snapshot symbol holding the pre-call value
+    expr2tc ptr_sym;      ///< Pointer parameter symbol
+    type2tc pointee_type; ///< Resolved type pointed to by ptr_sym
+    irep_idt field_name;  ///< Empty for scalars; field name for struct members
+    type2tc value_type;   ///< Type of the snapshotted value
+    expr2tc snapshot_sym; ///< Snapshot symbol holding the pre-call value
   };
 
   /// \brief Snapshot for array element assigns compliance (Phase 2B).
@@ -141,12 +141,12 @@ public:
   /// to check that no other element arr[j] (j != declared_idx) was modified.
   struct arr_elem_snapshot_t
   {
-    expr2tc arr_ptr;       ///< Array pointer symbol (e.g. symbol2tc for "arr")
-    type2tc arr_add_type;  ///< Result type of (arr + j) pointer-arithmetic
-    type2tc elem_type;     ///< Element type (pointee of arr_ptr)
-    expr2tc declared_idx;  ///< Declared index expression (from assigns clause)
-    expr2tc witness_idx;   ///< Nondet witness index symbol j
-    expr2tc snapshot_sym;  ///< Snapshot symbol holding arr[j] pre-call value
+    expr2tc arr_ptr;      ///< Array pointer symbol (e.g. symbol2tc for "arr")
+    type2tc arr_add_type; ///< Result type of (arr + j) pointer-arithmetic
+    type2tc elem_type;    ///< Element type (pointee of arr_ptr)
+    expr2tc declared_idx; ///< Declared index expression (from assigns clause)
+    expr2tc witness_idx;  ///< Nondet witness index symbol j
+    expr2tc snapshot_sym; ///< Snapshot symbol holding arr[j] pre-call value
   };
 
 private:
@@ -154,9 +154,12 @@ private:
   contextt &context;
   const namespacet &ns;
   frame_enforcert frame_enforcer;
-  size_t ptr_field_snap_counter = 0; ///< Counter for unique ptr-field snapshot names
-  size_t ptr_deref_snap_counter = 0; ///< Counter for unique ptr-deref snapshot names (Phase 2C)
-  size_t arr_elem_snap_counter = 0;  ///< Counter for unique array-element snapshot names (Phase 2B)
+  size_t ptr_field_snap_counter =
+    0; ///< Counter for unique ptr-field snapshot names
+  size_t ptr_deref_snap_counter =
+    0; ///< Counter for unique ptr-deref snapshot names (Phase 2C)
+  size_t arr_elem_snap_counter =
+    0; ///< Counter for unique array-element snapshot names (Phase 2B)
 
   /// Number of elements to allocate for pointer params that serve as arrays
   /// (i.e., appear in array_elem_targets). Must match the ASSUME(j < N) bound.

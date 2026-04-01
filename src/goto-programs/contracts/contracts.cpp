@@ -841,7 +841,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   };
   std::vector<is_fresh_info> is_fresh_calls;
 
-  forall_goto_program_instructions(it, original_body)
+  forall_goto_program_instructions (it, original_body)
   {
     if (it->is_function_call() && is_code_function_call2t(it->code))
     {
@@ -1055,7 +1055,11 @@ goto_programt code_contractst::generate_checking_wrapper(
 
     // 3b-iv. Phase 2C: snapshot *p for pointer params NOT in assigns at all
     ptr_deref_snaps = materialize_ptr_deref_snapshots(
-      classified_assigns, assigns_targets, original_func, wrapper, location,
+      classified_assigns,
+      assigns_targets,
+      original_func,
+      wrapper,
+      location,
       func_name);
     if (!ptr_deref_snaps.empty())
     {
@@ -1480,9 +1484,7 @@ expr2tc code_contractst::replace_return_value_in_expr(
               if (is_struct_type(pointee) || is_union_type(pointee))
               {
                 return member2tc(
-                  member.type,
-                  dereference2tc(pointee, ret_val),
-                  member.member);
+                  member.type, dereference2tc(pointee, ret_val), member.member);
               }
             }
           }
@@ -2229,7 +2231,8 @@ code_contractst::materialize_ptr_deref_snapshots(
         goto_programt::targett assign_t = wrapper.add_instruction(ASSIGN);
         assign_t->code = code_assign2tc(snap_expr, field_expr);
         assign_t->location = location;
-        assign_t->location.comment("frame: capture ptr->field pre-state (Phase 2C)");
+        assign_t->location.comment(
+          "frame: capture ptr->field pre-state (Phase 2C)");
 
         ptr_deref_snapshot_t entry;
         entry.ptr_sym = ptr_sym;
@@ -2405,8 +2408,8 @@ code_contractst::materialize_arr_elem_snapshots(
     {
       expr2tc j_lo = gen_zero(j_type);
       expr2tc j_hi = constant_int2tc(j_type, BigInt(ARRAY_ALLOC_ELEMS));
-      expr2tc in_range =
-        and2tc(greaterthanequal2tc(witness_j, j_lo), lessthan2tc(witness_j, j_hi));
+      expr2tc in_range = and2tc(
+        greaterthanequal2tc(witness_j, j_lo), lessthan2tc(witness_j, j_hi));
       goto_programt::targett range_assume = wrapper.add_instruction(ASSUME);
       range_assume->guard = in_range;
       range_assume->location = location;
@@ -2466,7 +2469,8 @@ void code_contractst::emit_arr_elem_assertions(
   for (const auto &snap : snapshots)
   {
     // Re-read arr[j] after the call (same j, new SSA version of arr)
-    expr2tc arr_plus_j = add2tc(snap.arr_add_type, snap.arr_ptr, snap.witness_idx);
+    expr2tc arr_plus_j =
+      add2tc(snap.arr_add_type, snap.arr_ptr, snap.witness_idx);
     expr2tc arr_at_j_after = dereference2tc(snap.elem_type, arr_plus_j);
 
     // Guard: (j == declared_idx) || (arr[j] == snap)
@@ -2479,7 +2483,8 @@ void code_contractst::emit_arr_elem_assertions(
     t->location = location;
     std::string arr_name = id2string(to_symbol2t(snap.arr_ptr).thename);
     t->location.comment(
-      "assigns compliance: " + arr_name + "[j] not in assigns clause (Phase 2B)");
+      "assigns compliance: " + arr_name +
+      "[j] not in assigns clause (Phase 2B)");
     t->location.property("assigns compliance");
   }
 }
@@ -3628,9 +3633,10 @@ void code_contractst::add_pointer_validity_assumptions(
       assign_inst->code = code_assign2tc(p, malloc_expr);
       assign_inst->location = location;
       assign_inst->location.comment(
-        is_array_param
-          ? "assume-nonnull-valid: allocate array for pointer parameter (Phase 2B)"
-          : "assume-nonnull-valid: allocate fresh object for pointer parameter");
+        is_array_param ? "assume-nonnull-valid: allocate array for pointer "
+                         "parameter (Phase 2B)"
+                       : "assume-nonnull-valid: allocate fresh object for "
+                         "pointer parameter");
 
       expr2tc null_ptr = symbol2tc(param_type, "NULL");
       expr2tc not_null = notequal2tc(p, null_ptr);
@@ -3642,7 +3648,8 @@ void code_contractst::add_pointer_validity_assumptions(
 
       log_debug(
         "contracts",
-        "add_pointer_validity_assumptions: malloc for parameter {} (is_array={})",
+        "add_pointer_validity_assumptions: malloc for parameter {} "
+        "(is_array={})",
         id2string(param.get_identifier()),
         is_array_param);
     }
