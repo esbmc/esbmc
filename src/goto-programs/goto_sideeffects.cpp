@@ -31,7 +31,6 @@ static exprt rebuild_and_chain(const exprt::operandst &conjuncts, std::size_t i)
   return result;
 }
 
-
 void goto_convertt::remove_sideeffects_for_quantifier_body(
   exprt &body,
   goto_programt &dest)
@@ -420,7 +419,8 @@ void goto_convertt::remove_sideeffects(
         if (args.size() == 2 && has_sideeffect(args[1]))
         {
           exprt *body_expr = &args[1];
-          while (body_expr->id() == "typecast" && body_expr->operands().size() == 1)
+          while (body_expr->id() == "typecast" &&
+                 body_expr->operands().size() == 1)
             body_expr = &body_expr->op0();
 
           if (body_expr->is_or() || body_expr->is_and())

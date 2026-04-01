@@ -92,8 +92,7 @@ protected:
   // Recursively walks || and && sub-expressions without converting them to
   // short-circuit ITE chains, so that bound variables remain reachable by
   // replace_name_in_body() in smt_conv.cpp.
-  void
-  remove_sideeffects_for_quantifier_body(exprt &body, goto_programt &dest);
+  void remove_sideeffects_for_quantifier_body(exprt &body, goto_programt &dest);
 
   void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_post(exprt &expr, goto_programt &dest, bool result_is_used);
