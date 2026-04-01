@@ -6983,6 +6983,16 @@ void python_converter::get_compound_assign(
   // Reset RHS flag
   is_converting_rhs = false;
 
+  // P27: Promote real RHS to complex when LHS is complex (AugAssign path).
+  // adjust_statement_types() is NOT called on this path, so without this
+  // check, `z += 1.0` / `z *= 2` produce a struct/scalar type mismatch in IR.
+  if (
+    is_complex_type(lhs.type()) && !is_complex_type(rhs.type()) &&
+    (rhs.type().is_floatbv() || type_utils::is_integer_type(rhs.type())))
+  {
+    rhs = promote_to_complex(rhs);
+  }
+
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = loc;
   target_block.copy_to_operands(code_assign);
