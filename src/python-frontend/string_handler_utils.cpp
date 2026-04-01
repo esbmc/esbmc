@@ -178,20 +178,4 @@ long long required_constant_int_arg(
   return value;
 }
 
-std::string optional_constant_string_arg_or_default(
-  const nlohmann::json *arg_node,
-  const std::string &default_value,
-  python_converter &converter,
-  const std::function<bool(const nlohmann::json &, std::string &)>
-    &extract_constant_string_cb,
-  const std::function<bool(const nlohmann::json &)> &is_none_literal)
-{
-  if (arg_node == nullptr || is_none_literal(*arg_node))
-    return default_value;
-
-  std::string value;
-  if (!extract_constant_string_cb(*arg_node, value))
-    return default_value;
-  return value;
-}
 } // namespace string_call_utils
