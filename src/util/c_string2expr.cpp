@@ -676,8 +676,7 @@ static std::string to_lower_string(std::string_view text)
 
   for (char ch : text)
   {
-    result += static_cast<char>(
-      std::tolower(static_cast<unsigned char>(ch)));
+    result += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
   }
 
   return result;
@@ -687,9 +686,8 @@ static bool build_integer_constant(std::string_view text, exprt &expr)
 {
   std::size_t pos = 0;
 
-  while (
-    pos < text.size() &&
-    std::isdigit(static_cast<unsigned char>(text[pos])) != 0)
+  while (pos < text.size() &&
+         std::isdigit(static_cast<unsigned char>(text[pos])) != 0)
   {
     ++pos;
   }
