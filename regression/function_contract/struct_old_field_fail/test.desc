@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract increment --function increment --assume-nonnull-valid
+^VERIFICATION FAILED$

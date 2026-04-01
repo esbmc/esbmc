@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract process_buffer --function process_buffer --assume-nonnull-valid
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract zero_fill --function zero_fill --assume-nonnull-valid --unwind 4 --no-bounds-check --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

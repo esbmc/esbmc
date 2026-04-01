@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract make_vec3 --function make_vec3
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract init_buf --function init_buf --assume-nonnull-valid
+^VERIFICATION SUCCESSFUL$

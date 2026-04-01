@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract alloc_point --function alloc_point
+^VERIFICATION FAILED$

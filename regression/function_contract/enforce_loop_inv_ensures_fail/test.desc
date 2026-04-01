@@ -1,4 +1,4 @@
 CORE
 main.c
---enforce-contract weak_count --loop-invariant
+--enforce-contract weak_count --loop-invariant-check
 ^VERIFICATION FAILED$

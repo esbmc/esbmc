@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract vec3_init --function vec3_init --assume-nonnull-valid
+^VERIFICATION SUCCESSFUL$

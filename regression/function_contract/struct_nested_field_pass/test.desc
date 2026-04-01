@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract set_entity --function set_entity --assume-nonnull-valid
+^VERIFICATION SUCCESSFUL$
