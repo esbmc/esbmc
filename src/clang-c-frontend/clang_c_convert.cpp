@@ -2409,8 +2409,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       // Wrap accesses to _Atomic variables in atomic begin/end so that the
       // data-race checker does not flag sequentially-consistent atomic
       // operations as races (C11 §5.1.2.4p4: atomic accesses are not races).
-      // TODO: bare atomic accesses in unbraced if/for/while bodies are not
-      // covered here; they require similar wrapping in the respective handlers.
+      // NOTE: when a control-flow statement (if/while/for) appears as a direct
+      // child of this compound block and contains an atomic access anywhere
+      // inside it (condition or body), the whole control-flow node is wrapped.
+      // This is sound but over-conservative: non-atomic variables in the same
+      // node have their race checks suppressed too.  Fixing this properly
+      // requires extracting atomic sub-expressions in conditions into separate
+      // temp-variable assignments and is deferred to a follow-up.
       if (has_atomic_cast(*stmt))
       {
         side_effect_expr_function_callt atomic_begin;
