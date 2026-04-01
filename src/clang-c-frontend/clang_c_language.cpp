@@ -581,9 +581,9 @@ extern int __ESBMC_return_value;
  *   __ESBMC_ensures(x == __ESBMC_old(x) + 1);
  * declares that x after the function should equal x before plus 1.
  *
- * Note: Declared as returning int, but at IR level the actual return type
- * is automatically inherited from the argument type. C's type system will
- * perform implicit conversions as needed, similar to __ESBMC_return_value.
+ * Implementation: __ESBMC_old_raw receives a void* pointer to any lvalue,
+ * and the macro uses __typeof__ to restore the original type of the expression.
+ * This handles all C types correctly: int, float, double, pointers, structs.
  *
  * IMPORTANT: When using __ESBMC_old in complex boolean expressions with
  * && and ||, C's short-circuit evaluation may cause issues. Use bitwise
@@ -591,7 +591,12 @@ extern int __ESBMC_return_value;
  *   __ESBMC_ensures((a > 0) & (b == __ESBMC_old(b)));  // OK: no short-circuit
  *   __ESBMC_ensures(__ESBMC_and(a > 0, b == __ESBMC_old(b)));  // Also OK
  */
-int __ESBMC_old(int);
+void* __ESBMC_old_raw(void*);
+/* __ESBMC_old(x): captures the pre-state value of lvalue x in ensures clauses.
+ * x must be an lvalue (variable, array element, struct field, *ptr, etc.).
+ * The address-based approach preserves exact type information for all C types
+ * (integers, floats, pointers, structs) without any implicit conversion. */
+#define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw((void*)(&(x))))
 
 /* Helper macros for ensures clauses that avoid short-circuit evaluation.
  * Use these instead of && and || when __ESBMC_old is involved:

@@ -236,18 +236,23 @@ void goto_symext::handle_sideeffect(
     // Do nothing for printf
     break;
   case sideeffect2t::old_snapshot:
-    // __ESBMC_old() snapshots are handled during contract processing
+    // __ESBMC_old() snapshots are handled during contract processing.
     // If we encounter one here, it means we're in the original function body
-    // where the ensures clause is still present. We simply evaluate the
-    // inner expression (the current value) as a placeholder.
+    // (contracts_original_xxx) where the ensures/requires clause is still present.
+    // Store the ADDRESS of the inner expression in lhs (void*), so that
+    // *(T*)lhs correctly reads the value via pointer dereference.
+    // The ensures/requires in contracts_original evaluate BEFORE the function body
+    // modifies anything, so address_of(inner) gives the correct pre-state value.
     {
-      expr2tc result = effect.operand;
-      replace_nondet(result);
-      dereference(result, dereferencet::READ);
-
-      // Create a simple assignment from the evaluated expression to lhs
-      expr2tc assign_code = code_assign2tc(lhs, result);
-      symex_assign(assign_code, true, guard);
+      expr2tc inner = effect.operand;
+      // Build address_of(inner): type T* from inner of type T
+      type2tc ptr_type = pointer_type2tc(inner->type);
+      expr2tc addr = address_of2tc(ptr_type, inner);
+      // Cast to lhs type (void*)
+      expr2tc result = addr;
+      if (result->type != lhs->type)
+        result = typecast2tc(lhs->type, result);
+      symex_assign(code_assign2tc(lhs, result), true, guard);
     }
     break;
   case sideeffect2t::assigns_target:

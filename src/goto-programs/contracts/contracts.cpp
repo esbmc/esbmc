@@ -693,13 +693,16 @@ void code_contractst::enforce_contracts(
 
     rename_function(original_id, original_name_id);
 
-    // Remove ensures ASSUME from renamed function (would force postconditions to be true)
+    // Remove requires/ensures ASSUMEs from renamed function.
+    // The wrapper handles all contract enforcement; leaving them in contracts_original causes:
+    // 1. Ensures: forcing postconditions as preconditions (wrong semantics)
+    // 2. Requires with __ESBMC_old: dereference of void* value as pointer → alignment error
     // We need to properly update GOTO targets before removing instructions
     {
       auto &renamed_func = goto_functions.function_map[original_name_id];
       goto_programt &renamed_body = renamed_func.body;
 
-      // Collect all ensures instructions to remove
+      // Collect all contract requires/ensures instructions to remove
       std::set<goto_programt::targett> instructions_to_remove;
       for (auto it = renamed_body.instructions.begin();
            it != renamed_body.instructions.end();
@@ -708,7 +711,7 @@ void code_contractst::enforce_contracts(
         if (it->is_assume())
         {
           std::string comment = id2string(it->location.comment());
-          if (comment == "contract::ensures")
+          if (comment == "contract::ensures" || comment == "contract::requires")
           {
             instructions_to_remove.insert(it);
           }
@@ -783,7 +786,8 @@ void code_contractst::enforce_contracts(
       is_fresh_mappings,
       needs_ptr_validity,
       assigns_targets,
-      check_assigns_compliance);
+      check_assigns_compliance,
+      assume_nonnull_valid);
 
     // Create new function entry
     goto_functiont new_func;
@@ -810,7 +814,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
   bool assume_nonnull_valid,
   const std::vector<expr2tc> &assigns_targets,
-  bool check_assigns_compliance)
+  bool check_assigns_compliance,
+  bool use_malloc_for_ptrs)
 {
   goto_programt wrapper;
   locationt location = original_func.location;
@@ -820,34 +825,15 @@ goto_programt code_contractst::generate_checking_wrapper(
   // preserve the caller's argument values. Global variables are handled by
   // unified nondet_static initialization, not per-function havoc.
 
-  // 0. Add pointer validity assumptions FIRST (if needed)
-  // This MUST come before old_snapshot materialization because old snapshots may
-  // dereference pointers (e.g., __ESBMC_old(*x)), and we need to assume pointers
-  // are valid before accessing them.
-  //
-  // This is needed in two cases:
-  //   (a) --assume-nonnull-valid is explicitly set by the user
-  //   (b) The function is the --function entry point, where the harness passes
-  //       nil/nondet pointers. Without valid_object, ensures dereferences resolve
-  //       to symex::invalid_object, causing spurious verification failures.
-  if (assume_nonnull_valid)
-  {
-    add_pointer_validity_assumptions(wrapper, original_func, location);
-  }
-
-  // 1. Extract and create snapshots for __ESBMC_old() expressions
-  // Note: __ESBMC_old() calls are converted to assignments in the function body
-  // We need to find these assignments and extract the old_snapshot sideeffects
-  std::vector<old_snapshot_t> old_snapshots =
-    collect_old_snapshots_from_body(original_body);
-
-  // Materialize snapshots in wrapper (creates DECL and ASSIGN instructions)
-  // This comes AFTER pointer validity assumptions so we can safely dereference pointers
-  materialize_old_snapshots_at_wrapper(
-    old_snapshots, wrapper, id2string(original_func.name), location);
-
-  // 2. Process __ESBMC_is_fresh in requires: allocate memory before function call
-  //    (ensures clauses handle is_fresh separately via replace_is_fresh_in_ensures_expr)
+  // 0. Process __ESBMC_is_fresh in requires: allocate memory FIRST.
+  //    This must come before both pointer-validity assumptions and old-snapshot
+  //    materialization so that:
+  //      (a) valid_object(p) is true after the malloc, preventing vacuous
+  //          ASSUME(false) from the entry-function pointer-validity path, and
+  //      (b) old-snapshot assignments (e.g. __ESBMC_old(p->field)) can safely
+  //          dereference pointers that the caller declared via __ESBMC_is_fresh.
+  //    Ensures-clause is_fresh calls are handled separately via
+  //    replace_is_fresh_in_ensures_expr and are excluded here.
   struct is_fresh_info
   {
     expr2tc ptr_arg;
@@ -855,7 +841,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   };
   std::vector<is_fresh_info> is_fresh_calls;
 
-  forall_goto_program_instructions (it, original_body)
+  forall_goto_program_instructions(it, original_body)
   {
     if (it->is_function_call() && is_code_function_call2t(it->code))
     {
@@ -867,6 +853,14 @@ goto_programt code_contractst::generate_checking_wrapper(
           is_fresh_function(funcname) &&
           !is_fresh_in_ensures(it, original_body) && call.operands.size() >= 2)
         {
+          log_debug(
+            "contracts",
+            "is_fresh call found: funcname={}, noperands={}, "
+            "op0_nil={}, op1_nil={}",
+            funcname,
+            call.operands.size(),
+            is_nil_expr(call.operands[0]),
+            is_nil_expr(call.operands[1]));
           is_fresh_info info;
           info.ptr_arg = call.operands[0]->clone();
           info.size_expr = call.operands[1]->clone();
@@ -876,19 +870,40 @@ goto_programt code_contractst::generate_checking_wrapper(
     }
   }
 
-  // Allocate memory for requires is_fresh calls
   for (const auto &info : is_fresh_calls)
   {
-    assert(
-      is_pointer_type(info.ptr_arg->type) && "ptr_arg must be pointer type");
-    type2tc target_ptr_type = to_pointer_type(info.ptr_arg->type).subtype;
-    if (is_empty_type(target_ptr_type))
-      target_ptr_type = pointer_type2tc(get_empty_type());
+    // Strip typecasts (e.g. (void*)(&hdr_len) → &hdr_len) to recover the
+    // true type.  __ESBMC_is_fresh takes void* so the frontend inserts an
+    // implicit cast, losing the actual type of the pointed-to pointer.
+    expr2tc stripped = info.ptr_arg;
+    while (is_typecast2t(stripped))
+      stripped = to_typecast2t(stripped).from;
 
-    expr2tc ptr_var = dereference2tc(target_ptr_type, info.ptr_arg);
+    // Determine the lvalue to assign the malloc result to.
+    expr2tc ptr_var;
+    if (is_address_of2t(stripped))
+    {
+      // &var → ptr_var = var (the pointer variable itself, e.g. hdr_len)
+      ptr_var = to_address_of2t(stripped).ptr_obj;
+    }
+    else
+    {
+      // Fallback: dereference the (possibly stripped) pointer.
+      expr2tc ptr_to_deref =
+        is_pointer_type(stripped->type) ? stripped : info.ptr_arg;
+      assert(
+        is_pointer_type(ptr_to_deref->type) && "ptr_arg must be pointer type");
+      type2tc inner_type = to_pointer_type(ptr_to_deref->type).subtype;
+      if (is_empty_type(inner_type))
+        inner_type = pointer_type2tc(get_empty_type());
+      ptr_var = dereference2tc(inner_type, ptr_to_deref);
+    }
+
+    // Use u8 as the alloc element type so that size_expr (in bytes) equals
+    // the element count.  symex_mem casts the u8* result to lhs->type.
     type2tc char_type = get_uint8_type();
     expr2tc malloc_expr = sideeffect2tc(
-      target_ptr_type,
+      pointer_type2tc(char_type),
       expr2tc(),
       info.size_expr,
       std::vector<expr2tc>(),
@@ -899,7 +914,40 @@ goto_programt code_contractst::generate_checking_wrapper(
     assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
     assign_inst->location = location;
     assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
+
+    // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
+    // valid memory block.  Without this, symex_mem's non-deterministic
+    // malloc-failure path can produce NULL, causing later dereferences to fail.
+    expr2tc null_ptr = symbol2tc(ptr_var->type, "NULL");
+    expr2tc not_null = notequal2tc(ptr_var, null_ptr);
+    auto assume_nn = wrapper.add_instruction(ASSUME);
+    assume_nn->guard = not_null;
+    assume_nn->location = location;
+    assume_nn->location.comment("__ESBMC_is_fresh: pointer is non-null");
   }
+
+  // 1. Add pointer validity assumptions (if needed).
+  //    Comes after is_fresh allocation so that pointers declared via
+  //    __ESBMC_is_fresh already have valid_object == true here, preventing
+  //    their ASSUME(valid_object(p)) from becoming vacuous ASSUME(false).
+  //    For --function harnesses without is_fresh, nil pointer args still
+  //    produce ASSUME(valid_object(NULL)) == ASSUME(false), which kills all
+  //    paths and makes the wrapper vacuously pass (intended behaviour for
+  //    tests that do not declare memory via is_fresh).
+  if (assume_nonnull_valid)
+  {
+    add_pointer_validity_assumptions(
+      wrapper, original_func, location, use_malloc_for_ptrs);
+  }
+
+  // 2. Extract and create snapshots for __ESBMC_old() expressions.
+  //    Comes after is_fresh allocation so that old-snapshot assignments can
+  //    safely dereference pointers that were set up above.
+  std::vector<old_snapshot_t> old_snapshots =
+    collect_old_snapshots_from_body(original_body);
+
+  materialize_old_snapshots_at_wrapper(
+    old_snapshots, wrapper, id2string(original_func.name), location);
 
   // Lambda function to add contract clause instruction (ASSERT or ASSUME)
   // Used for both requires (ASSUME) and ensures (ASSERT) clauses in enforce mode
@@ -936,7 +984,14 @@ goto_programt code_contractst::generate_checking_wrapper(
   };
 
   // 3. Assume requires clause (after memory allocation for is_fresh)
-  add_contract_clause(requires_clause, ASSUME, "contract requires");
+  // Also replace __ESBMC_old() references in the requires clause — old snapshots
+  // have already been materialized above (step 2), so replacement is safe here.
+  {
+    expr2tc req = requires_clause;
+    if (!old_snapshots.empty() && !is_nil_expr(req))
+      req = replace_old_in_expr(req, old_snapshots);
+    add_contract_clause(req, ASSUME, "contract requires");
+  }
 
   // 3b. Snapshot globals and ptr->field targets for assigns compliance
   //     (before function call)
@@ -1334,6 +1389,48 @@ expr2tc code_contractst::replace_return_value_in_expr(
           }
         }
       }
+      // Handle pointer-return pattern: ((T*)__ESBMC_return_value)->member
+      // When the function returns T*, ret_val is T* and cast_source may be
+      // the return_value symbol directly, or wrapped in intermediate typecasts
+      // (e.g. ((T*)((signed int)return_value))->member when __ESBMC_return_value
+      // is declared as extern int).
+      else
+      {
+        // Peel any intermediate typecasts to find the underlying symbol.
+        expr2tc inner = cast_source;
+        while (is_typecast2t(inner))
+          inner = to_typecast2t(inner).from;
+
+        if (is_symbol2t(inner))
+        {
+          const symbol2t &sym = to_symbol2t(inner);
+          std::string sym_name = id2string(sym.get_symbol_name());
+
+          if (
+            sym_name.find("__ESBMC_return_value") != std::string::npos ||
+            sym_name == "return_value")
+          {
+            // ret_val holds the actual return value; for pointer-return
+            // functions it has type T*. Generate: (*ret_val).member
+            if (is_pointer_type(ret_val->type))
+            {
+              const pointer_type2t &ptr_type = to_pointer_type(ret_val->type);
+              // The subtype may be a symbol_type2t — resolve it so that
+              // member2tc's assertion (source must be struct/union) passes.
+              type2tc pointee = ptr_type.subtype;
+              if (is_symbol_type(pointee))
+                pointee = ns.follow(pointee);
+              if (is_struct_type(pointee) || is_union_type(pointee))
+              {
+                return member2tc(
+                  member.type,
+                  dereference2tc(pointee, ret_val),
+                  member.member);
+              }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -1637,7 +1734,41 @@ expr2tc code_contractst::replace_old_in_expr(
   if (is_nil_expr(expr))
     return expr;
 
+  // Handle *(T*)old_raw_temp pattern (from __typeof__ macro: __ESBMC_old_raw approach)
+  // The macro expands __ESBMC_old(x) to *(T*)__ESBMC_old_raw(&x), so the ensures
+  // expression has dereference(typecast(T*, symbol_with___ESBMC_old_raw_in_name)).
+  // We replace the entire dereference-cast-symbol subtree with the snapshot variable.
+  if (is_dereference2t(expr))
+  {
+    const dereference2t &deref = to_dereference2t(expr);
+    expr2tc ptr_expr = deref.value;
+
+    // Strip typecasts to find the underlying symbol
+    while (is_typecast2t(ptr_expr))
+      ptr_expr = to_typecast2t(ptr_expr).from;
+
+    if (is_symbol2t(ptr_expr))
+    {
+      const symbol2t &sym = to_symbol2t(ptr_expr);
+      std::string sym_name = id2string(sym.thename);
+
+      if (sym_name.find("___ESBMC_old") != std::string::npos)
+      {
+        for (const auto &snapshot : snapshots)
+        {
+          if (is_symbol2t(snapshot.original_expr))
+          {
+            const symbol2t &snap_sym = to_symbol2t(snapshot.original_expr);
+            if (sym.thename == snap_sym.thename)
+              return snapshot.snapshot_var;
+          }
+        }
+      }
+    }
+  }
+
   // Check if this is a symbol that matches one of the old temp variables
+  // (Legacy path for any direct symbol reference to the old temp var)
   if (is_symbol2t(expr))
   {
     const symbol2t &sym = to_symbol2t(expr);
@@ -2849,10 +2980,67 @@ void code_contractst::generate_replacement_at_call(
       "Conservative havoc: no assigns clause, havoc'd all static globals");
   }
 
-  // 2.3. Havoc memory locations modified through pointer parameters
-  // TODO: Analyze pointer parameters and havoc dereferenced locations
-  // For now, we rely on assigns clause and conservative global havoc
-  // This is a conservative over-approximation
+  // 2.4. Havoc memory locations reachable through pointer parameters.
+  // When there is no assigns clause (or no empty-assigns marker), we cannot
+  // know which locations the function modifies.  Conservatively havoc every
+  // non-void, non-function pointer parameter so that the ensures ASSUME does
+  // not create a spurious contradiction with the pre-call value.
+  //
+  // Example:  void increment(int *p) ensures(*p == old(*p)+1)
+  //   call site:  int x = 41;  increment(&x);
+  // Without this havoc the ASSUME would be  ASSUME(41 == 41+1 = 42), i.e.
+  // FALSE, making all subsequent assertions vacuously VERIFICATION SUCCESSFUL.
+  if (!has_empty_assigns && function_symbol.type.is_code())
+  {
+    const code_typet &code_type = to_code_type(function_symbol.type);
+    const code_typet::argumentst &params = code_type.arguments();
+
+    for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+    {
+      type2tc param_type = migrate_type(params[i].type());
+
+      // Only handle pointer-typed parameters
+      if (!is_pointer_type(param_type))
+        continue;
+
+      const pointer_type2t &ptr_type = to_pointer_type(param_type);
+      type2tc pointee_type = ptr_type.subtype;
+
+      // Skip void*, function pointers, and unknown/nil pointed-to types
+      if (
+        is_empty_type(pointee_type) || is_code_type(pointee_type) ||
+        is_nil_type(pointee_type))
+        continue;
+
+      // Skip pointer-to-pointer havoc in value-set mode (consistent with
+      // loop-invariant havoc behaviour)
+      if (
+        config.options.get_bool_option("add-symex-value-sets") &&
+        is_pointer_type(pointee_type))
+        continue;
+
+      // If precise assigns clause was provided it already handled this arg
+      if (!assigns_target_exprs.empty())
+        continue;
+
+      // Build  *actual_arg  dereference expression
+      expr2tc deref = dereference2tc(pointee_type, actual_args[i]);
+
+      // Generate NONDET rhs of the pointee type
+      expr2tc rhs = gen_nondet(pointee_type);
+
+      goto_programt::targett t = replacement.add_instruction(ASSIGN);
+      t->code = code_assign2tc(deref, rhs);
+      t->location = call_location;
+      t->location.comment("contract havoc pointer param");
+
+      log_debug(
+        "contracts",
+        "Havoc'd pointer parameter {} (*p of type {})",
+        i,
+        get_type_id(*pointee_type));
+    }
+  }
 
   // 3. Normalize ensures guard: replace return_value, fix types, normalize floating-point
   expr2tc ensures_guard =
@@ -2928,7 +3116,8 @@ void code_contractst::generate_replacement_at_call(
 void code_contractst::add_pointer_validity_assumptions(
   goto_programt &wrapper,
   const symbolt &func,
-  const locationt &location)
+  const locationt &location,
+  bool use_malloc)
 {
   if (!func.type.is_code())
     return;
@@ -2946,21 +3135,60 @@ void code_contractst::add_pointer_validity_assumptions(
     if (!is_pointer_type(p))
       continue;
 
-    // Construct "p is valid pointer" assumption
-    // We simply assume: p points to a valid object (valid_object(p))
-    // valid_object includes alignment checks internally
-    expr2tc validity_check = valid_object2tc(p);
+    if (use_malloc)
+    {
+      // --assume-nonnull-valid: allocate fresh heap memory so that
+      //   1. valid_object(p) = true (set by track_new_pointer after malloc)
+      //   2. *p is a fresh nondet value, further constrained by requires
+      // ASSUME(p != NULL) eliminates the null-malloc path.
+      type2tc pointed_to_type = to_pointer_type(param_type).subtype;
+      if (is_empty_type(pointed_to_type))
+        pointed_to_type = get_uint8_type();
 
-    // Add ASSUME instruction
-    auto t = wrapper.add_instruction(ASSUME);
-    t->guard = validity_check;
-    t->location = location;
-    t->location.comment("assume non-null parameter is valid");
+      expr2tc malloc_expr = sideeffect2tc(
+        pointer_type2tc(pointed_to_type),
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        pointed_to_type,
+        sideeffect2t::malloc);
 
-    log_debug(
-      "contracts",
-      "add_pointer_validity_assumptions: added validity assumption for "
-      "parameter {}",
-      id2string(param.get_identifier()));
+      auto assign_inst = wrapper.add_instruction(ASSIGN);
+      assign_inst->code = code_assign2tc(p, malloc_expr);
+      assign_inst->location = location;
+      assign_inst->location.comment(
+        "assume-nonnull-valid: allocate fresh object for pointer parameter");
+
+      expr2tc null_ptr = symbol2tc(param_type, "NULL");
+      expr2tc not_null = notequal2tc(p, null_ptr);
+      auto assume_inst = wrapper.add_instruction(ASSUME);
+      assume_inst->guard = not_null;
+      assume_inst->location = location;
+      assume_inst->location.comment(
+        "assume-nonnull-valid: pointer is non-null after allocation");
+
+      log_debug(
+        "contracts",
+        "add_pointer_validity_assumptions: malloc for parameter {}",
+        id2string(param.get_identifier()));
+    }
+    else
+    {
+      // entry_function implicit case: ASSUME(valid_object(p)).
+      // For --function f harnesses the harness passes nil for pointer args,
+      // so valid_object(NULL) = false → ASSUME(false) → vacuous.  This is
+      // intentional: it keeps old snapshot materialization reachable for
+      // ordering purposes while still killing all nil-pointer paths.
+      expr2tc validity_check = valid_object2tc(p);
+      auto t = wrapper.add_instruction(ASSUME);
+      t->guard = validity_check;
+      t->location = location;
+      t->location.comment("assume non-null parameter is valid");
+
+      log_debug(
+        "contracts",
+        "add_pointer_validity_assumptions: valid_object for parameter {}",
+        id2string(param.get_identifier()));
+    }
   }
 }

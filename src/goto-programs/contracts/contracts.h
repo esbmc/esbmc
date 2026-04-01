@@ -164,7 +164,8 @@ private:
     const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
     bool assume_nonnull_valid = false,
     const std::vector<expr2tc> &assigns_targets = {},
-    bool check_assigns_compliance = false);
+    bool check_assigns_compliance = false,
+    bool use_malloc_for_ptrs = false);
 
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called
@@ -424,7 +425,8 @@ private:
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
-    const locationt &location);
+    const locationt &location,
+    bool use_malloc = false);
 };
 
 #endif // ESBMC_CONTRACTS_H

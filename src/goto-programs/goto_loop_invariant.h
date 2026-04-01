@@ -10,6 +10,9 @@
 #include <unordered_set>
 #include <vector>
 
+// Forward declaration: full definition is in frame_enforcer.h (included in .cpp)
+class frame_enforcert;
+
 /// \brief Entry point: process loop invariants for all functions.
 /// When use_frame_rule is true, enables the Operational Frame Rule
 /// (Snapshot → Havoc → Assume) for enhanced inductive verification.
@@ -53,6 +56,15 @@ public:
 protected:
   contextt &context;
   bool use_frame_rule;
+
+  /// Frame enforcer shared between the havoc step (ASSUME) and the inductive
+  /// step (ASSERT compliance check) for the currently-processed loop.
+  /// Allocated in insert_havoc_and_assume_before_condition, freed in
+  /// convert_loop_with_invariant after insert_inductive_step_and_termination.
+  frame_enforcert *active_frame_enforcer = nullptr;
+  /// Assigns targets for the current loop (mirrors loop_assigns passed to
+  /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT step).
+  std::vector<expr2tc> active_loop_assigns;
   /// Maximum number of instructions to search backwards from the loop head
   /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
   /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room

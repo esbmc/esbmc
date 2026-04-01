@@ -851,43 +851,49 @@ void goto_convertt::do_function_call_symbol(
         actual_arg.pretty());
     }
   }
-  else if (base_name == "__ESBMC_old")
+  else if (base_name == "__ESBMC_old_raw")
   {
-    // __ESBMC_old(expr): captures the pre-state value of expr in ensures clauses
-    // This function should only be used within __ESBMC_ensures clauses
+    // __ESBMC_old_raw(void* addr): low-level implementation of __ESBMC_old().
+    // Called via the macro: #define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw(&(x)))
     //
-    // Type handling: Declared as `int __ESBMC_old(int)` in frontend, which causes
-    // Clang to insert implicit typecasts. For example, __ESBMC_old(global_value)
-    // where global_value is double becomes __ESBMC_old((int)global_value).
-    // We need to strip this typecast and use the original expression's type.
+    // The argument is (void*)(&x) — a pointer to the lvalue x.
+    // We strip the void* cast and address_of to recover the original expression x,
+    // then create an old_snapshot sideeffect with x as operand (type T).
+    // The sideeffect is typed as void* (matching the lhs) to avoid type mismatch;
+    // the contracts processing uses the operand's type T to create the snapshot.
     if (arguments.size() != 1)
     {
-      log_error("`__ESBMC_old' expected to have one argument");
+      log_error("`__ESBMC_old_raw' expected to have one argument");
       abort();
     }
 
     if (lhs.is_nil())
     {
-      log_error("`__ESBMC_old' must be used in an expression (requires LHS)");
+      log_error("`__ESBMC_old_raw' must be used in an expression (requires LHS)");
       abort();
     }
 
-    // Strip typecast if present (due to int declaration in frontend)
-    exprt actual_arg = arguments[0];
-    if (actual_arg.id() == "typecast" && actual_arg.operands().size() == 1)
-    {
-      // Use the inner expression (before typecast)
-      actual_arg = actual_arg.op0();
-    }
+    // Strip all typecasts from the argument: (void*)&x → &x
+    exprt addr_arg = arguments[0];
+    while (addr_arg.id() == "typecast" && addr_arg.operands().size() == 1)
+      addr_arg = addr_arg.op0();
 
-    // Create a special sideeffect expression to mark this as an old() call
-    // Type is inherited from the actual argument (after stripping typecast)
-    exprt old_expr("sideeffect", actual_arg.type());
+    // Extract the inner expression from address_of: &x → x (type T)
+    exprt inner_expr;
+    if (addr_arg.id() == "address_of" && addr_arg.operands().size() == 1)
+      inner_expr = addr_arg.op0();
+    else
+      inner_expr = addr_arg; // Fallback: use addr_arg as-is
+
+
+    // Create old_snapshot sideeffect with lhs type (void*) to avoid assignment
+    // type mismatch. The operand retains the original expression type T so that
+    // collect_old_snapshots_from_body can create a correctly-typed snapshot.
+    exprt old_expr("sideeffect", lhs.type());
     old_expr.set("statement", "old_snapshot");
-    old_expr.copy_to_operands(actual_arg);
+    old_expr.copy_to_operands(inner_expr);
     old_expr.location() = function.location();
 
-    // Generate assignment: lhs = old_expr
     code_assignt assignment(lhs, old_expr);
     assignment.location() = function.location();
     copy(assignment, ASSIGN, dest);

@@ -152,6 +152,11 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 
   // 3. Insert inductive step verification and loop termination
   insert_inductive_step_and_termination(loop, invariants, side_effects);
+
+  // Cleanup: free the frame enforcer after both steps are done.
+  delete active_frame_enforcer;
+  active_frame_enforcer = nullptr;
+  active_loop_assigns.clear();
 }
 
 std::vector<expr2tc>
@@ -499,18 +504,19 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
   // =========================================================
   // Frame Rule Step 1: Materialize Snapshots (if enabled)
-  // Capture pre-state before havoc for frame rule enforcement
+  // Capture pre-state before havoc for frame rule enforcement.
+  // The snapshots are also used in the inductive step for ASSERT compliance.
   // =========================================================
-  frame_enforcert *frame_enforcer = nullptr;
   if (use_frame_rule)
   {
-    frame_enforcer = new frame_enforcert(context);
+    active_frame_enforcer = new frame_enforcert(context);
+    active_loop_assigns = loop_assigns;
 
     std::vector<expr2tc> vars_to_snapshot;
     for (const auto &v : loop_vars)
       vars_to_snapshot.push_back(v);
 
-    frame_enforcer->materialize_snapshots(
+    active_frame_enforcer->materialize_snapshots(
       vars_to_snapshot, dest, loop_head->location, "loop");
   }
 
@@ -538,11 +544,12 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
   // =========================================================
   // Frame Rule Step 3: Enforce Frame Conditions (if enabled)
-  // For vars NOT in assigns set, assume var == snapshot
+  // ASSUME: for vars NOT in assigns set, assume var == snapshot (k-induction hypothesis)
   // =========================================================
-  if (use_frame_rule && frame_enforcer && !loop_assigns.empty())
+  if (use_frame_rule && active_frame_enforcer && !loop_assigns.empty())
   {
-    frame_enforcer->enforce_frame_rule(loop_assigns, dest, loop_head->location);
+    active_frame_enforcer->enforce_frame_rule(
+      loop_assigns, dest, loop_head->location);
   }
 
   // Emit side-effect instructions (use havoc'd variables).
@@ -555,9 +562,10 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     expr2tc inst_invariant = invariant;
 
     // If frame rule is enabled, replace any old() references with snapshots
-    if (use_frame_rule && frame_enforcer)
+    if (use_frame_rule && active_frame_enforcer)
     {
-      inst_invariant = frame_enforcer->replace_old_with_snapshots(invariant);
+      inst_invariant =
+        active_frame_enforcer->replace_old_with_snapshots(invariant);
     }
 
     // Create assume instruction: just the invariant
@@ -567,8 +575,9 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->location.comment("loop invariant step case");
   }
 
-  // Clean up
-  delete frame_enforcer;
+  // Note: active_frame_enforcer is NOT deleted here.
+  // It is reused in insert_inductive_step_and_termination for the ASSERT
+  // compliance check, then freed in convert_loop_with_invariant.
 
   // Insert before the loop condition
   goto_function.body.insert_swap(insert_point, dest);
@@ -589,7 +598,18 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
   for (const auto &instr : side_effects.instructions)
     dest.instructions.push_back(instr);
 
-  // 2. ASSERT for inductive step.
+  // 2. ASSERT loop assigns compliance (frame rule ASSERT mode).
+  // After one loop body iteration, assert that variables NOT in the assigns
+  // clause still equal their pre-iteration snapshots.
+  // This verifies the user's __ESBMC_loop_assigns annotation is accurate,
+  // analogous to the function-contract assigns compliance check (Phase 2A).
+  if (use_frame_rule && active_frame_enforcer && !active_loop_assigns.empty())
+  {
+    active_frame_enforcer->enforce_frame_rule(
+      active_loop_assigns, dest, loop_exit->location, frame_modet::ASSERT);
+  }
+
+  // 3. ASSERT for inductive step.
   for (const auto &invariant : invariants)
   {
     // Create assert instruction for each invariant
@@ -599,7 +619,7 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     t->location.comment("loop invariant inductive step");
   }
 
-  // 3. Insert ASSUME(FALSE) to terminate the loop
+  // 4. Insert ASSUME(FALSE) to terminate the loop
   goto_programt::targett t = dest.add_instruction(ASSUME);
   t->guard = gen_false_expr();
   t->location = loop_exit->location;
