@@ -410,7 +410,7 @@ install_gmp_linux() {
 
 install_python_deps_linux() {
   log "Installing Python dependencies"
-  python3 -m pip install --user meson ast2json mypy pyparsing toml tomli
+  python3 -m pip install --break-system-packages --user meson ast2json mypy pyparsing toml tomli
   meson --version
 }
 
@@ -617,6 +617,7 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       require_on_off "-k" "$OPTARG"
       COVERAGE="$OPTARG"
       BASE_ARGS+=("-DENABLE_COVERAGE=${OPTARG}")
+      COMPILER_ENV=(CC=clang CXX=clang++)
       ;;
     x)
       require_on_off "-x" "$OPTARG"
