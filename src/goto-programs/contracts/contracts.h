@@ -136,6 +136,19 @@ public:
     expr2tc snapshot_sym;  ///< Snapshot symbol holding the pre-call value
   };
 
+  /// \brief Snapshot for array element assigns compliance (Phase 2B).
+  /// For __ESBMC_assigns(arr[declared_idx]), use a nondet witness index j
+  /// to check that no other element arr[j] (j != declared_idx) was modified.
+  struct arr_elem_snapshot_t
+  {
+    expr2tc arr_ptr;       ///< Array pointer symbol (e.g. symbol2tc for "arr")
+    type2tc arr_add_type;  ///< Result type of (arr + j) pointer-arithmetic
+    type2tc elem_type;     ///< Element type (pointee of arr_ptr)
+    expr2tc declared_idx;  ///< Declared index expression (from assigns clause)
+    expr2tc witness_idx;   ///< Nondet witness index symbol j
+    expr2tc snapshot_sym;  ///< Snapshot symbol holding arr[j] pre-call value
+  };
+
 private:
   goto_functionst &goto_functions;
   contextt &context;
@@ -143,6 +156,11 @@ private:
   frame_enforcert frame_enforcer;
   size_t ptr_field_snap_counter = 0; ///< Counter for unique ptr-field snapshot names
   size_t ptr_deref_snap_counter = 0; ///< Counter for unique ptr-deref snapshot names (Phase 2C)
+  size_t arr_elem_snap_counter = 0;  ///< Counter for unique array-element snapshot names (Phase 2B)
+
+  /// Number of elements to allocate for pointer params that serve as arrays
+  /// (i.e., appear in array_elem_targets). Must match the ASSUME(j < N) bound.
+  static constexpr size_t ARRAY_ALLOC_ELEMS = 100;
 
   /// \brief Check if a function is compiler-generated and should be skipped
   /// \param function_name Function name or ID
@@ -352,6 +370,35 @@ private:
     goto_programt &wrapper,
     const locationt &location);
 
+  // ========== Phase 2B: array element assigns compliance ==========
+
+  /// \brief Materialize nondet witness snapshots for array element assigns compliance.
+  /// For each dereference(add(arr, declared_idx)) in classified.pointer_targets:
+  ///   - Creates a nondet witness index j (same type as declared_idx)
+  ///   - Snapshots arr[j] before the function call
+  /// \param classified Classified assigns targets (provides pointer_targets)
+  /// \param assigns_targets Full assigns target list (must be non-empty to enable check)
+  /// \param wrapper GOTO program to append snapshot instructions to
+  /// \param location Source location
+  /// \param func_name Function name for unique snapshot naming
+  /// \return Vector of snapshot records for use in emit_arr_elem_assertions
+  std::vector<arr_elem_snapshot_t> materialize_arr_elem_snapshots(
+    const frame_enforcert::classified_assignst &classified,
+    const std::vector<expr2tc> &assigns_targets,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name);
+
+  /// \brief Emit ASSERT instructions for array element assigns compliance.
+  /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
+  /// \param snapshots Snapshots produced by materialize_arr_elem_snapshots
+  /// \param wrapper GOTO program to append assertions to
+  /// \param location Source location
+  void emit_arr_elem_assertions(
+    const std::vector<arr_elem_snapshot_t> &snapshots,
+    goto_programt &wrapper,
+    const locationt &location);
+
   /// \brief Materialize old snapshots in wrapper function (enforce-contract mode)
   /// Creates DECL and ASSIGN instructions for snapshot variables before function call
   /// \param old_snapshots Vector of snapshots to materialize (modified in-place)
@@ -467,11 +514,14 @@ private:
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
+  /// \param use_malloc If true, allocate memory via malloc
+  /// \param array_params Set of param IDs that need array allocation (ARRAY_ALLOC_ELEMS elements)
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
     const locationt &location,
-    bool use_malloc = false);
+    bool use_malloc = false,
+    const std::set<irep_idt> &array_params = {});
 };
 
 #endif // ESBMC_CONTRACTS_H

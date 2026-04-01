@@ -936,8 +936,26 @@ goto_programt code_contractst::generate_checking_wrapper(
   //    tests that do not declare memory via is_fresh).
   if (assume_nonnull_valid)
   {
+    // Phase 2B: pre-classify assigns targets to identify array params that need
+    // larger allocations (ARRAY_ALLOC_ELEMS elements instead of 1).
+    std::set<irep_idt> array_param_ids;
+    if (check_assigns_compliance && !assigns_targets.empty())
+    {
+      auto pre_classified =
+        frame_enforcert::classify_assigns_targets(assigns_targets);
+      for (const auto &t : pre_classified.pointer_targets)
+      {
+        if (!is_add2t(t))
+          continue;
+        const add2t &add = to_add2t(t);
+        if (is_pointer_type(add.side_1) && is_symbol2t(add.side_1))
+          array_param_ids.insert(to_symbol2t(add.side_1).thename);
+        else if (is_pointer_type(add.side_2) && is_symbol2t(add.side_2))
+          array_param_ids.insert(to_symbol2t(add.side_2).thename);
+      }
+    }
     add_pointer_validity_assumptions(
-      wrapper, original_func, location, use_malloc_for_ptrs);
+      wrapper, original_func, location, use_malloc_for_ptrs, array_param_ids);
   }
 
   // 2. Extract and create snapshots for __ESBMC_old() expressions.
@@ -997,6 +1015,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   //     (before function call)
   std::vector<ptr_field_snapshot_t> ptr_field_snaps;
   std::vector<ptr_deref_snapshot_t> ptr_deref_snaps;
+  std::vector<arr_elem_snapshot_t> arr_elem_snaps;
   frame_enforcert::classified_assignst classified_assigns;
   if (check_assigns_compliance)
   {
@@ -1043,6 +1062,19 @@ goto_programt code_contractst::generate_checking_wrapper(
         "generate_checking_wrapper: created {} ptr-deref snapshots for {} "
         "(Phase 2C)",
         ptr_deref_snaps.size(),
+        func_name);
+    }
+
+    // 3b-v. Phase 2B: nondet-witness snapshot for array element assigns
+    arr_elem_snaps = materialize_arr_elem_snapshots(
+      classified_assigns, assigns_targets, wrapper, location, func_name);
+    if (!arr_elem_snaps.empty())
+    {
+      log_debug(
+        "contracts",
+        "generate_checking_wrapper: created {} array-elem snapshots for {} "
+        "(Phase 2B)",
+        arr_elem_snaps.size(),
         func_name);
     }
   }
@@ -1201,6 +1233,9 @@ goto_programt code_contractst::generate_checking_wrapper(
     // 3c-iii. Phase 2C: assert *p assigns compliance for uncovered pointer params
     if (!ptr_deref_snaps.empty())
       emit_ptr_deref_assertions(ptr_deref_snaps, wrapper, location);
+    // 3c-iv. Phase 2B: assert array element assigns compliance
+    if (!arr_elem_snaps.empty())
+      emit_arr_elem_assertions(arr_elem_snaps, wrapper, location);
   }
 
   // 4. Assert ensures clause (replace __ESBMC_return_value and __ESBMC_old)
@@ -2246,6 +2281,172 @@ void code_contractst::emit_ptr_deref_assertions(
     t->location = location;
     t->location.comment(
       "assigns compliance: " + var_label + " not in assigns clause");
+    t->location.property("assigns compliance");
+  }
+}
+
+// ========== Phase 2B: array element assigns compliance ==========
+
+std::vector<code_contractst::arr_elem_snapshot_t>
+code_contractst::materialize_arr_elem_snapshots(
+  const frame_enforcert::classified_assignst &classified,
+  const std::vector<expr2tc> &assigns_targets,
+  goto_programt &wrapper,
+  const locationt &location,
+  const std::string &func_name)
+{
+  std::vector<arr_elem_snapshot_t> result;
+
+  if (assigns_targets.empty())
+    return result;
+
+  for (const auto &t : classified.pointer_targets)
+  {
+    // Only process pointer-arithmetic targets: add2t(arr_sym, idx_expr)
+    if (!is_add2t(t))
+      continue;
+
+    const add2t &add = to_add2t(t);
+
+    // Identify which side is the array pointer and which is the index
+    expr2tc arr_ptr, idx_expr;
+    if (is_pointer_type(add.side_1) && is_symbol2t(add.side_1))
+    {
+      arr_ptr = add.side_1;
+      idx_expr = add.side_2;
+    }
+    else if (is_pointer_type(add.side_2) && is_symbol2t(add.side_2))
+    {
+      arr_ptr = add.side_2;
+      idx_expr = add.side_1;
+    }
+    else
+    {
+      // Complex pointer expression — skip
+      continue;
+    }
+
+    // Resolve element type
+    const pointer_type2t &ptr_type = to_pointer_type(arr_ptr->type);
+    type2tc elem_type = ptr_type.subtype;
+    if (is_symbol_type(elem_type))
+      elem_type = ns.follow(elem_type);
+
+    // Skip void, function, or pointer element types
+    if (
+      is_empty_type(elem_type) || is_code_type(elem_type) ||
+      is_nil_type(elem_type) || is_pointer_type(elem_type))
+      continue;
+
+    type2tc j_type = idx_expr->type;
+    std::string cnt_str = std::to_string(arr_elem_snap_counter);
+    std::string arr_name = id2string(to_symbol2t(arr_ptr).thename);
+
+    // Create nondet witness index j
+    std::string j_sym_name =
+      "__ESBMC_frame_arr_j_" + func_name + "_" + arr_name + "_" + cnt_str;
+
+    symbolt j_obj;
+    j_obj.name = j_sym_name;
+    j_obj.id = j_sym_name;
+    j_obj.type = migrate_type_back(j_type);
+    j_obj.lvalue = true;
+    j_obj.static_lifetime = false;
+    j_obj.file_local = false;
+    symbolt *j_added = context.move_symbol_to_context(j_obj);
+    expr2tc witness_j = symbol2tc(j_type, j_added->id);
+
+    goto_programt::targett j_decl = wrapper.add_instruction(DECL);
+    j_decl->code = code_decl2tc(j_type, j_added->id);
+    j_decl->location = location;
+    j_decl->location.comment("frame: array-elem witness index (Phase 2B)");
+
+    goto_programt::targett j_assign = wrapper.add_instruction(ASSIGN);
+    j_assign->code = code_assign2tc(witness_j, gen_nondet(j_type));
+    j_assign->location = location;
+    j_assign->location.comment("frame: nondet witness index (Phase 2B)");
+
+    // Constrain j to the allocated range so that arr[j] is a valid access.
+    // The allocation in add_pointer_validity_assumptions uses ARRAY_ALLOC_ELEMS
+    // elements, so j must be in [0, ARRAY_ALLOC_ELEMS).
+    {
+      expr2tc j_lo = gen_zero(j_type);
+      expr2tc j_hi = constant_int2tc(j_type, BigInt(ARRAY_ALLOC_ELEMS));
+      expr2tc in_range =
+        and2tc(greaterthanequal2tc(witness_j, j_lo), lessthan2tc(witness_j, j_hi));
+      goto_programt::targett range_assume = wrapper.add_instruction(ASSUME);
+      range_assume->guard = in_range;
+      range_assume->location = location;
+      range_assume->location.comment(
+        "frame: constrain witness index to valid array range (Phase 2B)");
+    }
+
+    // Create snapshot arr[j] = *(arr + j)
+    std::string snap_sym_name =
+      "__ESBMC_frame_arr_snap_" + func_name + "_" + arr_name + "_" + cnt_str;
+
+    symbolt snap_obj;
+    snap_obj.name = snap_sym_name;
+    snap_obj.id = snap_sym_name;
+    snap_obj.type = migrate_type_back(elem_type);
+    snap_obj.lvalue = true;
+    snap_obj.static_lifetime = false;
+    snap_obj.file_local = false;
+    symbolt *snap_added = context.move_symbol_to_context(snap_obj);
+    expr2tc snapshot_sym = symbol2tc(elem_type, snap_added->id);
+
+    // arr + j (pointer arithmetic, same result type as arr + idx)
+    type2tc arr_add_type = add.type;
+    expr2tc arr_plus_j = add2tc(arr_add_type, arr_ptr, witness_j);
+    expr2tc arr_at_j = dereference2tc(elem_type, arr_plus_j);
+
+    goto_programt::targett snap_decl = wrapper.add_instruction(DECL);
+    snap_decl->code = code_decl2tc(elem_type, snap_added->id);
+    snap_decl->location = location;
+    snap_decl->location.comment("frame: array-elem snapshot (Phase 2B)");
+
+    goto_programt::targett snap_assign = wrapper.add_instruction(ASSIGN);
+    snap_assign->code = code_assign2tc(snapshot_sym, arr_at_j);
+    snap_assign->location = location;
+    snap_assign->location.comment("frame: capture arr[j] pre-state (Phase 2B)");
+
+    arr_elem_snapshot_t entry;
+    entry.arr_ptr = arr_ptr;
+    entry.arr_add_type = arr_add_type;
+    entry.elem_type = elem_type;
+    entry.declared_idx = idx_expr;
+    entry.witness_idx = witness_j;
+    entry.snapshot_sym = snapshot_sym;
+    result.push_back(entry);
+
+    arr_elem_snap_counter++;
+  }
+
+  return result;
+}
+
+void code_contractst::emit_arr_elem_assertions(
+  const std::vector<arr_elem_snapshot_t> &snapshots,
+  goto_programt &wrapper,
+  const locationt &location)
+{
+  for (const auto &snap : snapshots)
+  {
+    // Re-read arr[j] after the call (same j, new SSA version of arr)
+    expr2tc arr_plus_j = add2tc(snap.arr_add_type, snap.arr_ptr, snap.witness_idx);
+    expr2tc arr_at_j_after = dereference2tc(snap.elem_type, arr_plus_j);
+
+    // Guard: (j == declared_idx) || (arr[j] == snap)
+    expr2tc eq_idx = equality2tc(snap.witness_idx, snap.declared_idx);
+    expr2tc eq_val = equality2tc(arr_at_j_after, snap.snapshot_sym);
+    expr2tc guard = or2tc(eq_idx, eq_val);
+
+    goto_programt::targett t = wrapper.add_instruction(ASSERT);
+    t->guard = guard;
+    t->location = location;
+    std::string arr_name = id2string(to_symbol2t(snap.arr_ptr).thename);
+    t->location.comment(
+      "assigns compliance: " + arr_name + "[j] not in assigns clause (Phase 2B)");
     t->location.property("assigns compliance");
   }
 }
@@ -3346,7 +3547,8 @@ void code_contractst::add_pointer_validity_assumptions(
   goto_programt &wrapper,
   const symbolt &func,
   const locationt &location,
-  bool use_malloc)
+  bool use_malloc,
+  const std::set<irep_idt> &array_params)
 {
   if (!func.type.is_code())
     return;
@@ -3374,10 +3576,17 @@ void code_contractst::add_pointer_validity_assumptions(
       if (is_empty_type(pointed_to_type))
         pointed_to_type = get_uint8_type();
 
+      // Phase 2B: for array params, allocate ARRAY_ALLOC_ELEMS elements so that
+      // the nondet-witness index j can address individual array elements.
+      bool is_array_param = array_params.count(param.get_identifier()) > 0;
+      expr2tc alloc_size;
+      if (is_array_param)
+        alloc_size = constant_int2tc(size_type2(), BigInt(ARRAY_ALLOC_ELEMS));
+
       expr2tc malloc_expr = sideeffect2tc(
         pointer_type2tc(pointed_to_type),
         expr2tc(),
-        expr2tc(),
+        alloc_size, // nil → 1 element; constant → N elements
         std::vector<expr2tc>(),
         pointed_to_type,
         sideeffect2t::malloc);
@@ -3386,7 +3595,9 @@ void code_contractst::add_pointer_validity_assumptions(
       assign_inst->code = code_assign2tc(p, malloc_expr);
       assign_inst->location = location;
       assign_inst->location.comment(
-        "assume-nonnull-valid: allocate fresh object for pointer parameter");
+        is_array_param
+          ? "assume-nonnull-valid: allocate array for pointer parameter (Phase 2B)"
+          : "assume-nonnull-valid: allocate fresh object for pointer parameter");
 
       expr2tc null_ptr = symbol2tc(param_type, "NULL");
       expr2tc not_null = notequal2tc(p, null_ptr);
@@ -3398,8 +3609,9 @@ void code_contractst::add_pointer_validity_assumptions(
 
       log_debug(
         "contracts",
-        "add_pointer_validity_assumptions: malloc for parameter {}",
-        id2string(param.get_identifier()));
+        "add_pointer_validity_assumptions: malloc for parameter {} (is_array={})",
+        id2string(param.get_identifier()),
+        is_array_param);
     }
     else
     {
