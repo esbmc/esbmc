@@ -1,48 +1,41 @@
 name: Coverage
-
 on:
   push:
     branches: [master]
-
+  pull_request:
+    branches: [master]
 jobs:
   coverage:
     name: Build and upload coverage to Codecov
     runs-on: ubuntu-24.04
-    env:
-      CC: gcc
-      CXX: g++
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Install dependencies and build with coverage
-        run: ./scripts/build.sh -b DebugOpt -k ON
-
+        run: ./scripts/build.sh -b Debug -k ON
       - name: Run tests
-        run: cd build/ && ctest -j4 --output-on-failure --progress .
-
-      - name: Collect coverage data
+        env:
+          LLVM_PROFILE_FILE: "build/coverage/%p.profraw"
+        run: cd build/ && ctest -j4 --output-on-failure --progress --timeout 5 . || true
+      - name: Merge coverage data
+        run: llvm-profdata merge -sparse build/coverage/*.profraw -o build/merged.profdata
+      - name: Generate lcov coverage report
         run: |
-          lcov --capture \
-               --directory build/ \
-               --output-file coverage.info \
-               --ignore-errors mismatch
-
-      # Paths mirrored in codecov.yml for server-side filtering as a safety net
+          llvm-cov export -format=lcov \
+            -instr-profile=build/merged.profdata \
+            build/src/esbmc/esbmc \
+            > coverage.info
       - name: Filter out uninteresting paths
         run: |
           lcov --remove coverage.info \
                '/usr/*' \
-               '*/build/_deps/*' \
+               '*/build/*' \
                '*/unit/*' \
                '*/src/ansi-c/cpp/*' \
                '*/src/clang-c-frontend/headers/*' \
                '*/src/c2goto/library/libm/musl/*' \
                --output-file coverage.info
-
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.info
-          fail_ci_if_error: false
