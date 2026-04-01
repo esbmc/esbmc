@@ -302,6 +302,51 @@ public:
   }
 
 private:
+  bool has_annotation(const Json &node)
+  {
+    return !node.empty() && node.contains("annotation") &&
+           !node["annotation"].is_null();
+  }
+
+  Json find_var_node_for_inference(const std::string &var_name)
+  {
+    Json var_node =
+      json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+    if (
+      !has_annotation(var_node) &&
+      (var_node.empty() ||
+       (var_node.contains("_type") && var_node["_type"] == "arg")) &&
+      parent_func != nullptr)
+    {
+      if (
+        (*parent_func).contains("args") &&
+        (*parent_func)["args"].contains("args"))
+      {
+        var_node =
+          find_annotated_assign(var_name, (*parent_func)["args"]["args"]);
+      }
+
+      if (!has_annotation(var_node) && (*parent_func).contains("body"))
+        var_node = find_annotated_assign(var_name, (*parent_func)["body"]);
+    }
+
+    if (
+      !has_annotation(var_node) &&
+      (var_node.empty() ||
+       (var_node.contains("_type") && var_node["_type"] == "arg")))
+    {
+      Json global_var_node = json_utils::find_var_decl(var_name, "", ast_);
+      if (!global_var_node.empty())
+        var_node = global_var_node;
+    }
+
+    if (!has_annotation(var_node) && var_node.empty())
+      var_node = find_annotated_assign(var_name, ast_["body"]);
+
+    return var_node;
+  }
+
   // Infer return type from non-recursive return statements
   std::string
   infer_from_return_statements(const Json &body, const std::string &func_name)
@@ -435,7 +480,6 @@ private:
     std::string call_site_context;
     if (parent_func != nullptr)
     {
-      // Strip the last "@F@" to get the parent function path
       std::string cur = current_func_name_context_;
       size_t pos = cur.rfind("@F@");
       if (pos != std::string::npos)
@@ -484,8 +528,6 @@ private:
         // Try to infer type from function calls if available
         if (needs_inference && !function_calls.empty())
         {
-          // Temporarily switch to call-site context so Name resolution uses
-          // the scope where the call occurs (not the callee scope).
           std::string saved_ctx = current_func_name_context_;
           current_func_name_context_ = call_site_context;
           inferred_type = infer_parameter_type_from_calls(i, function_calls);
@@ -686,18 +728,14 @@ private:
       return get_type_from_constant(arg);
     else if (arg["_type"] == "Subscript")
     {
-      // Handle subscripts like tokens[0]; try to derive element type from the
-      // container annotation.
+      // Handle subscripts like tokens[0] and slices like tokens[:1].
       const auto &val = arg["value"];
       if (val["_type"] == "Name")
       {
         std::string var_name = val["id"].template get<std::string>();
-        Json var_node =
-          json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+        Json var_node = find_var_node_for_inference(var_name);
 
-        if (
-          !var_node.empty() && var_node.contains("annotation") &&
-          !var_node["annotation"].is_null())
+        if (has_annotation(var_node))
         {
           const auto &annot = var_node["annotation"];
           // list[T] -> return T
@@ -706,6 +744,18 @@ private:
             annot.contains("value") && annot["value"].contains("id") &&
             annot["value"]["id"] == "list")
           {
+            if (
+              arg.contains("slice") && arg["slice"].contains("_type") &&
+              arg["slice"]["_type"] == "Slice")
+            {
+              if (
+                annot.contains("slice") && annot["slice"].contains("id") &&
+                annot["slice"]["id"].is_string())
+                return "list[" +
+                       annot["slice"]["id"].template get<std::string>() + "]";
+              return "list";
+            }
+
             if (annot.contains("slice"))
             {
               const auto &slice = annot["slice"];
@@ -736,58 +786,15 @@ private:
       const std::string &var_name = arg["id"];
 
       // Try to find the type of the variable in current scope
-      Json var_node =
-        json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
-
-      // Check if we found a node with annotation
-      bool has_annotation = !var_node.empty() &&
-                            var_node.contains("annotation") &&
-                            !var_node["annotation"].is_null();
-
-      // If not found or found without annotation, and we're in a nested function,
-      // try to find in parent function's parameters and body
-      if (!has_annotation && parent_func != nullptr)
-      {
-        // Check parent function's parameters
-        if (
-          (*parent_func).contains("args") &&
-          (*parent_func)["args"].contains("args"))
-        {
-          var_node =
-            find_annotated_assign(var_name, (*parent_func)["args"]["args"]);
-        }
-
-        // If still not found, check parent function's body for local variables
-        if (var_node.empty() && (*parent_func).contains("body"))
-        {
-          var_node = find_annotated_assign(var_name, (*parent_func)["body"]);
-        }
-      }
-
-      // If still not found in local/parent scope, check global scope
-      if (!has_annotation)
-      {
-        var_node = find_annotated_assign(var_name, ast_["body"]);
-        has_annotation = !var_node.empty() && var_node.contains("annotation") &&
-                         !var_node["annotation"].is_null();
-      }
+      Json var_node = find_var_node_for_inference(var_name);
 
       // Extract type from the found variable node
-      if (
-        !var_node.empty() && var_node.contains("annotation") &&
-        !var_node["annotation"].is_null())
+      if (has_annotation(var_node))
       {
         // Handle arg nodes (function parameters)
         if (var_node["_type"] == "arg")
         {
-          // Parameters can have annotation as {"id": "int"} or
-          // {"value": {"id": "int"}} for generic types
-          if (var_node["annotation"].contains("id"))
-            return var_node["annotation"]["id"];
-          else if (
-            var_node["annotation"].contains("value") &&
-            var_node["annotation"]["value"].contains("id"))
-            return var_node["annotation"]["value"]["id"];
+          return json_utils::get_annotation_type_name(var_node["annotation"]);
         }
         // Handle generic type annotations like list[int] (Subscript nodes)
         else if (
@@ -796,8 +803,7 @@ private:
           var_node["annotation"].contains("value") &&
           var_node["annotation"]["value"].contains("id"))
         {
-          std::string base_type = var_node["annotation"]["value"]["id"];
-          return base_type; // Return base type if slice info unavailable
+          return json_utils::get_annotation_type_name(var_node["annotation"]);
         }
         // Handle simple type annotations like int, str (Name nodes)
         else if (var_node["annotation"].contains("id"))
@@ -820,6 +826,15 @@ private:
           }
           return base_type;
         }
+      }
+
+      if (
+        !var_node.empty() && var_node.contains("value") &&
+        !var_node["value"].is_null())
+      {
+        std::string inferred_type = get_argument_type(var_node["value"]);
+        if (!inferred_type.empty())
+          return inferred_type;
       }
     }
     else if (arg["_type"] == "BinOp")

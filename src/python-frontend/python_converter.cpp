@@ -3129,22 +3129,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // Handle str.join() method calls
-  // Python syntax: separator.join(iterable), e.g., " ".join(["a", "b"])
-  if (
-    element["func"]["_type"] == "Attribute" &&
-    element["func"]["attr"] == "join")
-  {
-    const auto &func = element["func"];
-    // Check if the caller is a string (Constant like " " or a Name variable)
-    if (
-      func.contains("value") && (func["value"]["_type"] == "Constant" ||
-                                 func["value"]["_type"] == "Name"))
-    {
-      return string_handler_.handle_str_join(element);
-    }
-  }
-
   // Compile-time evaluation for parse_nested_parens on constant strings.
   if (
     element["func"]["_type"] == "Name" && element["func"].contains("id") &&
@@ -3381,6 +3365,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Create an empty set (modeled as list)
     python_set set_handler(*this, element);
     return set_handler.get_empty_set();
+  }
+
+  // TypeVar(...) is only used to build typing aliases and has no runtime
+  // effect in the frontend, so model it as an opaque placeholder value.
+  if (element["func"]["_type"] == "Name" && element["func"]["id"] == "TypeVar")
+  {
+    return gen_zero(any_type());
   }
 
   const std::string function = config.options.get_option("function");
