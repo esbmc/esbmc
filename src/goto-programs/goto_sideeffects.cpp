@@ -31,27 +31,33 @@ static exprt rebuild_and_chain(const exprt::operandst &conjuncts, std::size_t i)
   return result;
 }
 
-/// Recursively flatten a (possibly nested) binary || expression into a flat
-/// list of disjuncts.  Clang represents A || B || C as or(or(A,B),C).
-static void collect_or_disjuncts(const exprt &expr, exprt::operandst &out)
-{
-  if (expr.is_or())
-    for (const auto &op : expr.operands())
-      collect_or_disjuncts(op, out);
-  else
-    out.push_back(expr);
-}
 
-/// Rebuild a right-associative nested binary || from a flat list of disjuncts
-/// starting at index @p i.
-static exprt rebuild_or_chain(const exprt::operandst &disjuncts, std::size_t i)
+void goto_convertt::remove_sideeffects_for_quantifier_body(
+  exprt &body,
+  goto_programt &dest)
 {
-  assert(i < disjuncts.size());
-  if (i + 1 == disjuncts.size())
-    return disjuncts[i];
-  exprt result = exprt("or", bool_type());
-  result.copy_to_operands(disjuncts[i], rebuild_or_chain(disjuncts, i + 1));
-  return result;
+  if (!has_sideeffect(body))
+    return;
+
+  // Look through any implicit typecasts that Clang may insert (e.g. an
+  // explicit (int) cast on the body followed by an implicit _Bool conversion
+  // for the function parameter produces two typecast layers).
+  exprt *expr = &body;
+  while (expr->id() == "typecast" && expr->operands().size() == 1)
+    expr = &expr->op0();
+
+  // Recurse into || and && without converting them to short-circuit ITE chains.
+  // This preserves the logical structure so that replace_name_in_body() in
+  // smt_conv.cpp can substitute the bound variable throughout the full body.
+  if (expr->is_or() || expr->is_and())
+  {
+    for (auto &op : expr->operands())
+      remove_sideeffects_for_quantifier_body(op, dest);
+    return;
+  }
+
+  // Leaf that is not a boolean connector: use the standard handler.
+  remove_sideeffects(body, dest, /*result_is_used=*/true);
 }
 
 void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
@@ -388,21 +394,24 @@ void goto_convertt::remove_sideeffects(
         }
       }
 
-      // Special handling for __ESBMC_forall/__ESBMC_exists(ptr, A || B || ...):
+      // Special handling for __ESBMC_forall/__ESBMC_exists(ptr, body):
       //
-      // The normal Forall_operands path below would convert a || or && body
-      // expression containing nested __ESBMC_forall/__ESBMC_exists calls into
-      // a short-circuit ITE GOTO chain, replacing the compound boolean
-      // expression with a single temp symbol.  The outer quantifier then gets
-      // forall(&b, t_result) where b no longer appears in t_result, so
-      // replace_name_in_body() in smt_conv.cpp cannot substitute the bound
-      // variable throughout the nested body — producing a vacuously true formula.
+      // When the body is a || or && expression containing nested quantifier
+      // calls, the normal Forall_operands path below would convert it into a
+      // short-circuit ITE GOTO chain, replacing the compound expression with a
+      // single temp symbol.  The outer quantifier then gets forall(&b, t)
+      // where b no longer appears in t, so replace_name_in_body() in
+      // smt_conv.cpp cannot substitute the bound variable — producing an
+      // incorrect (vacuously true or false) formula.
       //
-      // Instead: flatten the top-level || or && chain, call
-      // remove_sideeffects() on each operand independently (lifting nested
-      // function calls to temp vars), and rebuild the plain or/and expression.
-      // This preserves the logical structure so smt_conv can properly
-      // substitute the bound variable through the entire body.
+      // This applies at ALL levels: a disjunct that is itself an && expression
+      // containing a nested quantifier would also be ITE-converted, hiding the
+      // bound variable in a temp symbol.
+      //
+      // Instead: walk the || and && sub-tree recursively without ITE-converting
+      // it, processing only the leaf function calls individually.  This
+      // preserves the logical structure so smt_conv can substitute the bound
+      // variable throughout the full body.
       if (
         fsym &&
         (fsym->name == "__ESBMC_forall" || fsym->name == "__ESBMC_exists"))
@@ -411,25 +420,12 @@ void goto_convertt::remove_sideeffects(
         if (args.size() == 2 && has_sideeffect(args[1]))
         {
           exprt *body_expr = &args[1];
-          // Look through any implicit typecast that Clang may insert
-          if (body_expr->id() == "typecast" && body_expr->operands().size() == 1)
+          while (body_expr->id() == "typecast" && body_expr->operands().size() == 1)
             body_expr = &body_expr->op0();
 
           if (body_expr->is_or() || body_expr->is_and())
           {
-            bool is_or = body_expr->is_or();
-            exprt::operandst operands;
-            if (is_or)
-              collect_or_disjuncts(*body_expr, operands);
-            else
-              collect_and_conjuncts(*body_expr, operands);
-
-            for (auto &op : operands)
-              remove_sideeffects(op, dest);
-
-            *body_expr =
-              is_or ? rebuild_or_chain(operands, 0) : rebuild_and_chain(operands, 0);
-
+            remove_sideeffects_for_quantifier_body(*body_expr, dest);
             remove_function_call(expr, dest, result_is_used);
             return;
           }
