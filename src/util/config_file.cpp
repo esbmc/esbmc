@@ -125,7 +125,7 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
         if (!bool_flag_options.count(key_name))
         {
           log_error(
-            "config: key '{}' expects a value (e.g. {} = \"auto\") but got"
+            "config: key '{}' expects a value (e.g. {} = \"...\") but got"
             " boolean",
             key_name,
             key_name);
