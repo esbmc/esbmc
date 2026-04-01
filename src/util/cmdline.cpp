@@ -16,6 +16,15 @@
 #  define HOME_ENV_NAME "USERPROFILE"
 #  define DEFAULT_CONFIG_PATH "%userprofile%\\esbmc.toml"
 #  include <windows.h>
+#elifdef __APPLE__
+#  define HOME_ENV_NAME "HOME"
+#  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
+#  include <sys/ttycom.h> // TIOCGWINSZ, struct winsize
+#  include <unistd.h>     // STDERR_FILENO
+// ioctl() is declared in <sys/ioctl.h>, but that header chain includes
+// net/if_var.h which defines 'struct if_data', conflicting with ESBMC's
+// class if_data in irep2_expr.h (pulled in via the precompiled header).
+extern "C" int ioctl(int, unsigned long, ...);
 #else
 #  define HOME_ENV_NAME "HOME"
 #  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
