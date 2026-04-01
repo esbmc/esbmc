@@ -11,6 +11,15 @@
 
 namespace json_utils
 {
+/// Convert a dotted Python module name to a filesystem path segment.
+/// Example: "pkg.mod4" -> "pkg/mod4", "l.ks.foo" -> "l/ks/foo"
+inline std::string dotted_to_path(const std::string &module_name)
+{
+  std::string result = module_name;
+  std::replace(result.begin(), result.end(), '.', '/');
+  return result;
+}
+
 template <typename JsonType>
 bool search_function_in_ast(const JsonType &node, const std::string &func_name)
 {
@@ -81,7 +90,8 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   // Use continue after a negative result
   // so that all Import&ImportFrom nodes are scanned
   auto load_and_check = [&](const std::string &module_name) -> bool {
-    const std::string path = output_dir + "/" + module_name + ".json";
+    const std::string path =
+      output_dir + "/" + dotted_to_path(module_name) + ".json";
     auto it = module_cache.find(path);
     if (it == module_cache.end())
     {
@@ -124,7 +134,7 @@ bool is_module(const std::string &module_name, const JsonType &ast)
     return false;
 
   const std::string path = ast["ast_output_dir"].template get<std::string>() +
-                           "/" + module_name + ".json";
+                           "/" + dotted_to_path(module_name) + ".json";
 
   auto it = is_module_cache.find(path);
   if (it != is_module_cache.end())
@@ -433,6 +443,30 @@ const JsonType find_var_decl(
 
   // Fallback: search in global scope
   return get_var_node(var_name, ast);
+}
+
+template <typename JsonType>
+std::string get_annotation_type_name(const JsonType &annotation)
+{
+  if (annotation.contains("id"))
+    return annotation["id"];
+
+  if (
+    annotation.contains("_type") && annotation["_type"] == "Subscript" &&
+    annotation.contains("value") && annotation["value"].contains("id"))
+  {
+    std::string base_type =
+      annotation["value"]["id"].template get<std::string>();
+    if (annotation.contains("slice") && annotation["slice"].contains("id"))
+      return base_type + "[" +
+             annotation["slice"]["id"].template get<std::string>() + "]";
+    return base_type;
+  }
+
+  if (annotation.contains("value") && annotation["value"].contains("id"))
+    return annotation["value"]["id"];
+
+  return "";
 }
 
 template <typename JsonType>

@@ -322,10 +322,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("ir"))
     options.set_option("int-encoding", true);
 
-  if (cmdline.isset("ir-ra"))
+  if (cmdline.isset("ir-ieee"))
   {
     options.set_option("int-encoding", true);
-    options.set_option("ir-ra", true);
+    options.set_option("ir-ieee", true);
   }
   if (cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
@@ -1896,6 +1896,21 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
+    // Expand --no-standard-checks into individual options before goto_convert,
+    // because VLA size checks are generated during goto conversion.
+    if (
+      cmdline.isset("no-standard-checks") ||
+      options.get_bool_option("no-standard-checks"))
+    {
+      options.set_option("no-pointer-check", true);
+      options.set_option("no-div-by-zero-check", true);
+      options.set_option("no-pointer-relation-check", true);
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option("no-vla-size-check", true);
+      options.set_option("no-align-check", true);
+      options.set_option("no-bounds-check", true);
+    }
+
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
   }
@@ -1955,7 +1970,15 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("branch-function-coverage") ||
                   cmdline.isset("branch-function-coverage-claims");
 
-    // this should be before goto_check()
+    // For coverage mode, treat extra input files (cmdline.args[1:]) as include
+    // files so that the coverage location_pool covers all input sources.
+    if (is_coverage && cmdline.args.size() > 1)
+      for (size_t i = 1; i < cmdline.args.size(); i++)
+        config.ansi_c.include_files.push_back(cmdline.args[i]);
+
+    // Expand --no-standard-checks before goto_check (also expanded before
+    // goto_convert in parse_goto_program; re-expanding here is idempotent
+    // and covers the read_goto_binary path).
     if (
       cmdline.isset("no-standard-checks") ||
       options.get_bool_option("no-standard-checks"))
@@ -1967,9 +1990,6 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("no-vla-size-check", true);
       options.set_option("no-align-check", true);
       options.set_option("no-bounds-check", true);
-      //?
-      // options.set_option("no-abnormal-memory-leak", true);
-      // options.set_option("no-reachable-memory-leak", true);
     }
 
     // Start by removing all no-op instructions and unreachable code
@@ -2217,7 +2237,13 @@ bool esbmc_parseoptionst::process_goto_program(
 
       // if we do not want to count the guard in the assertions
       if (cmdline.isset("no-cov-asserts"))
-        tmp.replace_all_asserts_to_guard(gen_true_expr());
+      {
+        if (cmdline.isset("cov-assume-asserts"))
+          tmp.replace_all_asserts_to_assume();
+        else
+          tmp.replace_all_asserts_to_guard(gen_true_expr());
+      }
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.condition_coverage();
 
       // redo conversion to remove_sideeffect
@@ -2246,7 +2272,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
-
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.branch_coverage();
     }
     if (
@@ -2265,7 +2291,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.branch_function_coverage();
     }
 

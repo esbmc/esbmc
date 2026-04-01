@@ -373,7 +373,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "use solver with integer/real arithmetic. Integer/real have an unbounded "
      "range, overapproximating normal integers/reals while significantly "
      "boosting performance"},
-    {"ir-ra",
+    {"ir-ieee",
      NULL,
      "use integer/real arithmetic with real-arithmetic enclosure constraints "
      "for floating-point operations"},
@@ -653,6 +653,10 @@ const struct group_opt_templ all_cmd_options[] = {
       "use '--condition-coverage-claims' while disable "
       "'--no-remove-unreachable'"},
      {"no-cov-asserts", NULL, "does not count the guard in the assertions"},
+     {"cov-assume-asserts",
+      NULL,
+      "convert assertions to assumptions in coverage mode "
+      "to preserve path constraints"},
      {"branch-coverage", NULL, "shows the coverage of branch"},
      {"branch-coverage-claims",
       NULL,
@@ -667,6 +671,9 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "explicitly assign every function parameters to NONDET in function "
       "mode"},
+     {"cov-report-json",
+      NULL,
+      "output coverage report as JSON file (cov-report.json)"},
    }},
   {"DEBUG options",
    {

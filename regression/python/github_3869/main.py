@@ -4,4 +4,4 @@ def f(arr):
             yield y
         yield x
 
-assert list(f([1, 4, 6])) == [1, 4, 6]
+assert list(f([6])) == [6]

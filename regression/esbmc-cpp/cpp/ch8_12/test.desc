@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
-String1.cpp --unwind 2 --no-unwinding-assertions  --no-bounds-checkk --timeout 900
+String1.cpp --unwind 2 --no-unwinding-assertions  --no-bounds-check --timeout 900
 ^VERIFICATION SUCCESSFUL$

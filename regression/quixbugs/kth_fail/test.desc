@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.py
---unwind 4 --no-standard-checks --smt-during-symex --smt-symex-guard --bitwuzla
+--bitwuzla --unwind 1 --no-bounds-check --no-pointer-check --no-align-check --no-div-by-zero-check
 ^VERIFICATION FAILED$

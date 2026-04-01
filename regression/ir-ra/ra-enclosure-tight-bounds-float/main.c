@@ -1,10 +1,10 @@
-/* Regression test: theorem-driven tight enclosure under --ir-ra, single precision.
+/* Regression test: theorem-driven tight enclosure under --ir-ieee, single precision.
  *
  * PURPOSE
  * -------
  * Mirrors ra-enclosure-tight-bounds/ but exercises the IEEE single-precision
  * (float) path instead of double.  Verifies that the SMT formula emitted by
- * --ir-ra for a float addition contains the structural hallmarks of the NEW
+ * --ir-ieee for a float addition contains the structural hallmarks of the NEW
  * theorem-driven encoding, not just the old containment-only (weak) encoding.
  *
  * OLD weak encoding:

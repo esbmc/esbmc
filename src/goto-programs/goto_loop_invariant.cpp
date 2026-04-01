@@ -648,44 +648,41 @@ void goto_loop_invariant_combinedt::process_loops_combined()
     insert_invariant_verification_branch(loop);
 }
 
-bool goto_loop_invariant_combinedt::copy_loop_body(
+void goto_loop_invariant_combinedt::copy_loop_body(
   goto_programt::targett loop_head,
   goto_programt::targett loop_exit,
   goto_programt &out) const
 {
-  using const_targett = goto_programt::const_targett;
-  using targett = goto_programt::targett;
-
-  std::map<const_targett, targett> target_map;
-
-  // First pass: copy instructions in (loop_head, loop_exit) and record a
-  // mapping from original iterators to their copies in @p out.
-  for (auto it = std::next(loop_head); it != loop_exit; ++it)
+  // Build target map for intra-loop jumps (similar to loop_unroll.cpp)
+  std::map<goto_programt::targett, unsigned> target_map;
   {
-    targett new_it = out.add_instruction();
-    *new_it = *it;
-    const_targett orig_it = it;
-    target_map[orig_it] = new_it;
+    unsigned count = 0;
+    for (auto t = std::next(loop_head); t != loop_exit; ++t, ++count)
+      target_map[t] = count;
   }
 
-  // Second pass: rewrite GOTO targets to point inside the copied body.  If any
-  // target cannot be resolved within the copied slice (including jumps to the
-  // original loop head/exit or outside the loop), we conservatively bail out
-  // and skip Branch 1 for this loop.
-  for (auto &instr : out.instructions)
-  {
-    for (auto &tgt : instr.targets)
-    {
-      auto m_it = target_map.find(tgt);
-      if (m_it == target_map.end())
-        return false; // complex control flow — skip Branch 1
+  // copy instructions and store in vector
+  std::vector<goto_programt::targett> target_vector;
+  target_vector.reserve(target_map.size());
 
-      tgt = m_it->second;
+  for (auto t = std::next(loop_head); t != loop_exit; ++t)
+  {
+    goto_programt::targett copied_t = out.add_instruction(*t);
+    target_vector.push_back(copied_t);
+  }
+
+  // rewrite targets using index-based mapping
+  for (unsigned i = 0; i < target_vector.size(); i++)
+  {
+    goto_programt::targett t = target_vector[i];
+    for (auto &target : t->targets)
+    {
+      std::map<goto_programt::targett, unsigned>::const_iterator m_it =
+        target_map.find(target);
+      if (m_it != target_map.end()) // intra-loop?
+        target = target_vector[m_it->second];
     }
   }
-
-  out.compute_target_numbers();
-  return true;
 }
 
 void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
@@ -708,10 +705,9 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   extract_and_remove_side_effects_impl(
     goto_function, loop_head, loop, invariants, side_effects);
 
-  // ── 2. Copy loop body (fail gracefully for complex loops) ─────────────────
+  // ── 2. Copy loop body
   goto_programt body_copy;
-  if (!copy_loop_body(loop_head, loop_exit, body_copy))
-    return; // Fall back to ASSUME-only mode in goto_k_induction
+  copy_loop_body(loop_head, loop_exit, body_copy);
 
   // ── 3. Extract the loop entry condition ───────────────────────────────────
   // loop_head is "IF !(cond) GOTO exit", so the entry condition is "cond"
@@ -773,8 +769,7 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   }
 
   // [4e] One iteration of the loop body
-  branch1.instructions.splice(
-    branch1.instructions.end(), body_copy.instructions);
+  branch1.destructive_insert(branch1.instructions.end(), body_copy);
 
   // [4f] Inductive-step ASSERT(INV)
   for (const auto &instr : side_effects.instructions)
@@ -806,19 +801,19 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     t->location = loop_head->location;
 
     // Splice the gate at the front of branch1
-    branch1.instructions.splice(
-      branch1.instructions.begin(), gate.instructions);
+    branch1.destructive_insert(branch1.instructions.begin(), gate);
   }
 
-  // ── 6. Insert before loop_head using splice (NOT insert_swap) ─────────────
-  // splice() inserts before loop_head without moving it, so any existing
-  // backward-GOTO target that points to loop_head continues to do so.
-  goto_function.body.instructions.splice(loop_head, branch1.instructions);
-
-  // ── 7. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
+  // ── 6. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
   // Inserting ASSUME(INV) just before loop_exit (the backward GOTO) means
   // k-induction will see the assumption at the end of every iteration without
   // any modification to goto_k_induction itself.
+
+  // ── 7. Insert before loop_head using splice (NOT insert_swap) ─────────────
+  // splice() inserts before loop_head without moving it, so any existing
+  // backward-GOTO target that points to loop_head continues to do so.
+  goto_function.body.destructive_insert(loop_head, branch1);
+
   for (const auto &inv : invariants)
   {
     goto_programt assume_inv;
@@ -826,8 +821,9 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
       assume_inv.instructions.push_back(instr);
     auto t = assume_inv.add_instruction(ASSUME);
     t->guard = inv;
-    t->location = loop_exit->location;
+    t->location = loop_head->location;
     t->location.comment("loop invariant assume (k-induction hint)");
-    goto_function.body.instructions.splice(loop_exit, assume_inv.instructions);
+    loop_head++;
+    goto_function.body.insert_swap(loop_head, assume_inv);
   }
 }

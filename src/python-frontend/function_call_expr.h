@@ -46,6 +46,8 @@ public:
   strip_ctor_self_parameters(const exprt::operandst &args);
 
 private:
+  friend class function_call_expr_test_access;
+
   /*
   * Check if the current function call is to math.comb() function
   * Returns true if this is a call to math.comb
@@ -158,6 +160,8 @@ private:
   exprt handle_isinstance() const;
 
   exprt handle_hasattr() const;
+
+  exprt handle_type_call() const;
 
   /*
    * Handles str-to-int conversions (e.g., int('65')) by reconstructing

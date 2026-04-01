@@ -147,6 +147,8 @@ public:
    */
   exprt get_dict_literal(const nlohmann::json &element);
 
+  exprt get_dict_comprehension(const nlohmann::json &element);
+
   /**
    * @brief Creates and initializes a dictionary from a literal expression.
    *
@@ -221,8 +223,10 @@ public:
    */
   void handle_dict_subscript_assign(
     const exprt &dict_expr,
-    const nlohmann::json &slice_node,
+    const exprt &key_expr,
     const exprt &value,
+    const locationt &location,
+    const nlohmann::json &node,
     codet &target_block);
 
   /**

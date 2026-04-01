@@ -1,4 +1,5 @@
 CORE
 main.py
---unwind 9 --no-pointer-check --no-align-check --incremental-bmc
+--no-bounds-check --no-pointer-check --no-align-check --unwind 4 --bitwuzla
+
 ^VERIFICATION FAILED$

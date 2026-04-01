@@ -13,13 +13,12 @@ TEST_CASE("function_call_cache API correctness", "[python-frontend][cache]")
 
     auto result = cache.get_possible_class_types("sym::obj");
     REQUIRE(result.has_value());
-    REQUIRE(result.value() == types);
+    REQUIRE(*result == types);
   }
 
-  SECTION("miss on unknown key returns nullopt")
+  SECTION("miss on unknown key returns nullptr")
   {
-    auto result = cache.get_possible_class_types("no_such_key");
-    REQUIRE_FALSE(result.has_value());
+    REQUIRE_FALSE(cache.get_possible_class_types("no_such_key").has_value());
   }
 
   SECTION("store and retrieve method exists")
@@ -46,11 +45,14 @@ TEST_CASE("function_call_cache API correctness", "[python-frontend][cache]")
   {
     cache.set_possible_class_types("k1", {"A"});
     cache.set_method_exists("A::foo", true);
+    cache.set_math_dispatch_classification("math::sin", true);
 
     cache.clear();
 
     REQUIRE_FALSE(cache.get_possible_class_types("k1").has_value());
     REQUIRE_FALSE(cache.get_method_exists("A::foo").has_value());
+    REQUIRE_FALSE(
+      cache.get_math_dispatch_classification("math::sin").has_value());
   }
 
   SECTION("overwrite existing entries")
@@ -60,7 +62,7 @@ TEST_CASE("function_call_cache API correctness", "[python-frontend][cache]")
 
     auto result = cache.get_possible_class_types("key");
     REQUIRE(result.has_value());
-    REQUIRE(result.value() == std::vector<std::string>{"New"});
+    REQUIRE(*result == std::vector<std::string>{"New"});
 
     cache.set_method_exists("C::m", false);
     cache.set_method_exists("C::m", true);
@@ -68,5 +70,22 @@ TEST_CASE("function_call_cache API correctness", "[python-frontend][cache]")
     auto val = cache.get_method_exists("C::m");
     REQUIRE(val.has_value());
     REQUIRE(val.value() == true);
+  }
+
+  SECTION("store and retrieve math dispatch classification")
+  {
+    cache.set_math_dispatch_classification("math::sin", true);
+    cache.set_math_dispatch_classification("other::sin", false);
+
+    auto math_hit = cache.get_math_dispatch_classification("math::sin");
+    REQUIRE(math_hit.has_value());
+    REQUIRE(math_hit.value() == true);
+
+    auto non_math_hit = cache.get_math_dispatch_classification("other::sin");
+    REQUIRE(non_math_hit.has_value());
+    REQUIRE(non_math_hit.value() == false);
+
+    auto miss = cache.get_math_dispatch_classification("math::unknown");
+    REQUIRE_FALSE(miss.has_value());
   }
 }

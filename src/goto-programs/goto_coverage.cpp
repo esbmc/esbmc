@@ -5,6 +5,7 @@ size_t goto_coveraget::total_assert_ins = 0;
 std::set<std::pair<std::string, std::string>> goto_coveraget::total_cond;
 size_t goto_coveraget::total_branch = 0;
 size_t goto_coveraget::total_func_branch = 0;
+std::set<std::pair<std::string, std::string>> goto_coveraget::all_claims;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
 {
@@ -67,6 +68,49 @@ void goto_coveraget::replace_assert_to_guard(
 }
 
 /*
+  convert assert(cond) to assume(cond)
+  preserving the original condition as a path constraint
+*/
+void goto_coveraget::replace_assert_to_assume(
+  goto_programt::instructiont::targett &it)
+{
+  const expr2tc guard = it->guard;
+  it->make_assumption(guard);
+  it->location.property("replaced assertion");
+  it->location.user_provided(true);
+}
+
+/*
+  convert all assertions to assumptions
+*/
+void goto_coveraget::replace_all_asserts_to_assume()
+{
+  std::unordered_set<std::string> location_pool = {};
+  location_pool.insert(get_filename_from_path(filename));
+  for (auto const &inc : config.ansi_c.include_files)
+    location_pool.insert(get_filename_from_path(inc));
+
+  Forall_goto_functions (f_it, goto_functions)
+    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
+    {
+      goto_programt &goto_program = f_it->second.body;
+      if (filter(f_it->first, goto_program))
+        continue;
+
+      std::string cur_filename;
+      Forall_goto_program_instructions (it, goto_program)
+      {
+        cur_filename = get_filename_from_path(it->location.file().as_string());
+        if (location_pool.count(cur_filename) == 0)
+          continue;
+
+        if (it->is_assert())
+          replace_assert_to_assume(it);
+      }
+    }
+}
+
+/*
 Algo:
 - convert all assertions to false and enable multi-property
 */
@@ -75,6 +119,7 @@ void goto_coveraget::assertion_coverage()
   replace_all_asserts_to_guard(gen_false_expr(), true);
   total_assert = get_total_instrument();
   total_assert_ins = get_total_assert_instance();
+  all_claims = get_total_cond_assert();
 }
 
 /*
@@ -139,12 +184,17 @@ void goto_coveraget::branch_function_coverage()
           // this stands for the auxiliary condition/branch we added.
           continue;
 
-        // convert assertions to true
+        // convert assertions to true (or assume)
         if (
           it->is_assert() &&
           it->location.property().as_string() != "replaced assertion" &&
           it->location.property().as_string() != "instrumented assertion")
-          replace_assert_to_guard(gen_true_expr(), it, false);
+        {
+          if (cov_assume_asserts)
+            replace_assert_to_assume(it);
+          else
+            replace_assert_to_guard(gen_true_expr(), it, false);
+        }
 
         // e.g. IF !(a > 1) THEN GOTO 3
         else if (it->is_goto() && !is_true(it->guard))
@@ -166,6 +216,7 @@ void goto_coveraget::branch_function_coverage()
   // fix for branch coverage with kind/incr
   // It seems in kind/incr, the goto_functions used during the BMC is simplified and incomplete
   total_func_branch = get_total_instrument();
+  all_claims = get_total_cond_assert();
 
   // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
   goto_functions.update();
@@ -204,12 +255,17 @@ void goto_coveraget::branch_coverage()
           // this stands for the auxiliary condition/branch we added.
           continue;
 
-        // convert assertions to true
+        // convert assertions to true (or assume)
         if (
           it->is_assert() &&
           it->location.property().as_string() != "replaced assertion" &&
           it->location.property().as_string() != "instrumented assertion")
-          replace_assert_to_guard(gen_true_expr(), it, false);
+        {
+          if (cov_assume_asserts)
+            replace_assert_to_assume(it);
+          else
+            replace_assert_to_guard(gen_true_expr(), it, false);
+        }
 
         // e.g. IF !(a > 1) THEN GOTO 3
         else if (it->is_goto() && !is_true(it->guard))
@@ -225,6 +281,7 @@ void goto_coveraget::branch_coverage()
     }
 
   total_branch = get_total_instrument();
+  all_claims = get_total_cond_assert();
 
   // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
   goto_functions.update();
@@ -402,10 +459,15 @@ void goto_coveraget::condition_coverage()
             exprt pre_cond = nil_exprt();
             pre_cond.location() = it->location;
             gen_cond_cov_assert(guard, pre_cond, goto_program, it);
-            // after adding the instrumentation, we convert it to constant_true
+            // after adding the instrumentation, we neutralize the original assert
             if (!it->is_assume())
+            {
               // do not change assume, as it will modify program's logic
-              replace_assert_to_guard(gen_true_expr(), it, false);
+              if (cov_assume_asserts)
+                replace_assert_to_assume(it);
+              else
+                replace_assert_to_guard(gen_true_expr(), it, false);
+            }
           }
         }
 
@@ -488,6 +550,7 @@ void goto_coveraget::condition_coverage()
     }
 
   total_cond = get_total_cond_assert();
+  all_claims = total_cond;
 
   // recalculate line number/ target number
   goto_functions.update();

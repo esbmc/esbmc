@@ -242,6 +242,7 @@ private:
   friend class python_dict_handler;
   friend class python_set;
   friend class python_exception_handler;
+  friend class python_converter_test_access;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -256,6 +257,8 @@ private:
   void load_c_intrisics(code_blockt &block);
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
+
+  void preregister_global_variables(const nlohmann::json &ast_body);
 
   typet
   resolve_variable_type(const std::string &var_name, const locationt &loc);

@@ -187,25 +187,45 @@ void smt_convt::push_ctx()
   ctx_level++;
 }
 
-/* Iterate over "body" expression looking for symbols with the same name
-   as lhs. Then, replaces it. */
-void replace_name_in_body(
+/** Replace all occurrences of the named symbol @p lhs with @p replacement
+ *  throughout @p body (in-place). */
+static void replace_name_in_body(
   const expr2tc &lhs,
   const expr2tc &replacement,
   expr2tc &body)
 {
-  // TODO: lhs and replacement should be a list of pairs to deal with multiple symbols
   assert(is_symbol2t(lhs));
   if (is_symbol2t(body))
   {
     if (to_symbol2t(body).thename == to_symbol2t(lhs).thename)
       body = replacement;
-
     return;
   }
-  body->Foreach_operand([lhs, replacement](expr2tc &e) {
+  body->Foreach_operand([&lhs, &replacement](expr2tc &e) {
     replace_name_in_body(lhs, replacement, e);
   });
+}
+
+/** Recursively expand any symbol in @p e that is a key in @p defs, replacing
+ *  it with (a clone of) its associated forall/exists expression.  This
+ *  inlines nested quantifier bodies so that replace_name_in_body can
+ *  substitute the outer bound variable into their predicates. */
+static void expand_quantifier_defs_in(
+  expr2tc &e,
+  const std::unordered_map<irep_idt, expr2tc, irep_id_hash> &defs)
+{
+  if (is_symbol2t(e))
+  {
+    auto it = defs.find(to_symbol2t(e).thename);
+    if (it != defs.end())
+    {
+      e = it->second->clone();
+      expand_quantifier_defs_in(e, defs);
+    }
+    return;
+  }
+  e->Foreach_operand(
+    [&defs](expr2tc &sub) { expand_quantifier_defs_in(sub, defs); });
 }
 
 void smt_convt::pop_ctx()
@@ -301,6 +321,14 @@ smt_astt smt_convt::convert_concat_int_mode(
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
+
+  // Record forall/exists assignments so nested quantifier handlers can
+  // inline the inner body before substituting the outer bound variable.
+  if (
+    is_symbol2t(eq.side_1) &&
+    (is_forall2t(eq.side_2) || is_exists2t(eq.side_2)))
+    forall_defs_[to_symbol2t(eq.side_1).thename] = eq.side_2;
+
   smt_astt side1 = convert_ast(eq.side_1); // LHS
   smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
@@ -340,8 +368,9 @@ smt_astt smt_convt::get_double_min_subnormal()
 
 // Returns true iff the rounding mode expression is a concrete integer constant
 // equal to ieee_floatt::ROUND_TO_EVEN (round-to-nearest-ties-to-even).
-// Directed modes (ROUND_TO_AWAY, ROUND_TO_PLUS_INF, ROUND_TO_MINUS_INF,
-// ROUND_TO_ZERO), symbolic rounding modes, and nil expr2tc all return false.
+// Directed modes (ROUND_TO_PLUS_INF, ROUND_TO_MINUS_INF, ROUND_TO_ZERO),
+// ROUND_TO_AWAY (handled by its own guard), symbolic rounding modes, and nil
+// expr2tc all return false.
 static bool is_nearest_rounding_mode(const expr2tc &rounding_mode)
 {
   if (is_nil_expr(rounding_mode))
@@ -372,13 +401,87 @@ static bool is_round_to_minus_inf(const expr2tc &rounding_mode)
          BigInt(ieee_floatt::ROUND_TO_MINUS_INF);
 }
 
+static bool is_round_to_zero(const expr2tc &rounding_mode)
+{
+  if (is_nil_expr(rounding_mode))
+    return false;
+  if (!is_constant_int2t(rounding_mode))
+    return false;
+  return to_constant_int2t(rounding_mode).value ==
+         BigInt(ieee_floatt::ROUND_TO_ZERO);
+}
+
+static bool is_round_to_away(const expr2tc &rounding_mode)
+{
+  if (is_nil_expr(rounding_mode))
+    return false;
+  if (!is_constant_int2t(rounding_mode))
+    return false;
+  return to_constant_int2t(rounding_mode).value ==
+         BigInt(ieee_floatt::ROUND_TO_AWAY);
+}
+
+std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_interval_add(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  // Caller guarantees fbv_type is double or single precision.
+  const auto double_spec = ieee_float_spect::double_precision();
+  smt_astt eps_rel, eps_abs;
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel = get_double_eps_rel();       // 2^-53
+    eps_abs = get_double_min_subnormal(); // 2^-1074
+  }
+  else
+  {
+    // single precision (caller verified double-or-single)
+    eps_rel = get_single_eps_rel();       // 2^-24
+    eps_abs = get_single_min_subnormal(); // 2^-149
+  }
+
+  smt_sortt rs = mk_real_sort();
+  smt_astt zero = mk_smt_real("0.0");
+
+  // B_near^-(R) = eps_rel * |lo_r| + eps_abs  (bound using lower endpoint)
+  smt_astt abs_lo = mk_ite(mk_lt(lo_r, zero), mk_sub(zero, lo_r), lo_r);
+  smt_astt bound_lo = mk_add(mk_mul(eps_rel, abs_lo), eps_abs);
+
+  // B_near^+(R) = eps_rel * |hi_r| + eps_abs  (bound using upper endpoint)
+  smt_astt abs_hi = mk_ite(mk_lt(hi_r, zero), mk_sub(zero, hi_r), hi_r);
+  smt_astt bound_hi = mk_add(mk_mul(eps_rel, abs_hi), eps_abs);
+
+  // ra_lo = lo_r - B_near^-(R),  ra_hi = hi_r + B_near^+(R)
+  smt_astt ra_lo_expr = mk_sub(lo_r, bound_lo);
+  smt_astt ra_hi_expr = mk_add(hi_r, bound_hi);
+
+  // Named enclosure variables, pinned via bidirectional inequalities to
+  // survive Z3's solve-eqs tactic (same technique as the single-step path).
+  smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
+  smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
+
+  assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= lo_r - B_near^-(R)
+  assert_ast(mk_le(ra_lo_expr, ra_lo)); // lo_r - B_near^-(R) <= ra_lo
+  assert_ast(mk_le(ra_hi, ra_hi_expr)); // ra_hi <= hi_r + B_near^+(R)
+  assert_ast(mk_le(ra_hi_expr, ra_hi)); // hi_r + B_near^+(R) <= ra_hi
+
+  // Containment: ra_lo <= real_result <= ra_hi  and  ra_lo <= ra_hi
+  assert_ast(mk_le(ra_lo, real_result));
+  assert_ast(mk_le(real_result, ra_hi));
+  assert_ast(mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
   const floatbv_type2t &fbv_type,
   smt_astt operand_zero_check,
   const expr2tc &rounding_mode)
 {
-  if (this->options.get_bool_option("ir-ra"))
+  if (this->options.get_bool_option("ir-ieee"))
   {
     if (is_nearest_rounding_mode(rounding_mode))
     {
@@ -601,9 +704,170 @@ smt_astt smt_convt::apply_ieee754_semantics(
 
       return real_result;
     }
+    else if (is_round_to_zero(rounding_mode))
+    {
+      // Asymmetric tight enclosure for ROUND_TO_ZERO (truncation toward zero).
+      //
+      // RTZ is sign-dependent: it rounds down for r >= 0 and rounds up for r < 0.
+      //   r >= 0:  fl_RTZ(r) in [r - B_dir(r),  r]   (same shape as RDN)
+      //   r <  0:  fl_RTZ(r) in [r,  r + B_dir(r)]   (same shape as RUP)
+      //
+      // Unified via ITE on sign:
+      //   ra_lo = ite(r >= 0,  r - B_dir(r),  r)
+      //   ra_hi = ite(r >= 0,  r,              r + B_dir(r))
+      //
+      // where B_dir(r) = eps_rel_dir * |r| + eps_abs
+      //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon
+
+      unsigned int fraction_bits = fbv_type.fraction;
+      unsigned int exponent_bits = fbv_type.exponent;
+
+      auto double_spec = ieee_float_spect::double_precision();
+      auto single_spec = ieee_float_spect::single_precision();
+
+      smt_sortt rs = mk_real_sort();
+      smt_astt eps_rel_dir, eps_abs;
+
+      if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+      {
+        eps_rel_dir = get_double_eps_up(); // 2^-52, same value as RUP/RDN
+        eps_abs = get_double_min_subnormal();
+      }
+      else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
+      {
+        eps_rel_dir = get_single_eps_up(); // 2^-23, same value as RUP/RDN
+        eps_abs = get_single_min_subnormal();
+      }
+      else
+      {
+        // Unsupported format: fall back to unconstrained weak enclosure.
+        smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
+        smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
+        assert_ast(mk_le(ra_lo, real_result));
+        assert_ast(mk_le(real_result, ra_hi));
+        assert_ast(mk_le(ra_lo, ra_hi));
+        return real_result;
+      }
+
+      smt_astt zero = mk_smt_real("0.0");
+      smt_astt abs_r = mk_ite(
+        mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+
+      // B_dir(r) = eps_rel_dir * |r| + eps_abs
+      smt_astt b_dir = mk_add(mk_mul(eps_rel_dir, abs_r), eps_abs);
+
+      // Sign-dependent enclosure bounds via ITE:
+      //   r >= 0: lower is computed, upper is exact (truncate-down shape)
+      //   r <  0: lower is exact,    upper is computed (truncate-up shape)
+      smt_astt r_nonneg = mk_le(zero, real_result); // r >= 0
+      smt_astt ra_lo_expr =
+        mk_ite(r_nonneg, mk_sub(real_result, b_dir), real_result);
+      smt_astt ra_hi_expr =
+        mk_ite(r_nonneg, real_result, mk_add(real_result, b_dir));
+
+      // Introduce named enclosure variables. Use bidirectional inequalities to
+      // survive Z3's solve-eqs tactic (same technique as the other tight paths).
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_tz::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_tz::", nullptr);
+
+      // Pin ra_lo = ite(r >= 0, r - B_dir(r), r)
+      assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= ra_lo_expr
+      assert_ast(mk_le(ra_lo_expr, ra_lo)); // ra_lo_expr <= ra_lo
+
+      // Pin ra_hi = ite(r >= 0, r, r + B_dir(r))
+      assert_ast(mk_le(ra_hi, ra_hi_expr)); // ra_hi <= ra_hi_expr
+      assert_ast(mk_le(ra_hi_expr, ra_hi)); // ra_hi_expr <= ra_hi
+
+      // Containment: ra_lo <= result <= ra_hi
+      assert_ast(mk_le(ra_lo, real_result));
+      assert_ast(mk_le(real_result, ra_hi));
+      assert_ast(mk_le(ra_lo, ra_hi));
+
+      return real_result;
+    }
+    else if (is_round_to_away(rounding_mode))
+    {
+      // Tight path for ROUND_TO_AWAY (round-to-nearest, ties away from zero).
+      //
+      // ROUND_TO_AWAY is a nearest-rounding mode: the rounding error is
+      // bounded by the unit roundoff u = 1/2 * machine-epsilon, exactly as
+      // for ROUND_TO_EVEN.  The enclosure is therefore symmetric:
+      //   |fl_RTA(r) - r| <= eps_rel * |r| + eps_abs
+      //
+      // So:
+      //   B(r)  = eps_rel * |r| + eps_abs    (same formula as nearest)
+      //   ra_lo = r - B(r)
+      //   ra_hi = r + B(r)
+      //
+      // The epsilon constants are the same as ROUND_TO_EVEN:
+      //   eps_rel = 2^-53 (double) or 2^-24 (single) -- unit roundoff u
+      //
+      // NOTE: the Z3 numerator for eps_rel is the same as for the nearest
+      // path (5551115123125783 for double, 5960464477539063 for single).
+      // This is expected and correct -- the bound is identical.
+
+      unsigned int fraction_bits = fbv_type.fraction;
+      unsigned int exponent_bits = fbv_type.exponent;
+
+      auto double_spec = ieee_float_spect::double_precision();
+      auto single_spec = ieee_float_spect::single_precision();
+
+      smt_sortt rs = mk_real_sort();
+      smt_astt eps_rel, eps_abs;
+
+      if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+      {
+        eps_rel = get_double_eps_rel(); // 2^-53, same as ROUND_TO_EVEN
+        eps_abs = get_double_min_subnormal();
+      }
+      else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
+      {
+        eps_rel = get_single_eps_rel(); // 2^-24, same as ROUND_TO_EVEN
+        eps_abs = get_single_min_subnormal();
+      }
+      else
+      {
+        // Unsupported format: fall back to unconstrained weak enclosure.
+        smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
+        smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
+        assert_ast(mk_le(ra_lo, real_result));
+        assert_ast(mk_le(real_result, ra_hi));
+        assert_ast(mk_le(ra_lo, ra_hi));
+        return real_result;
+      }
+
+      smt_astt zero = mk_smt_real("0.0");
+      smt_astt abs_r = mk_ite(
+        mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+
+      // B(r) = eps_rel * |r| + eps_abs
+      smt_astt bound = mk_add(mk_mul(eps_rel, abs_r), eps_abs);
+      smt_astt ra_lo_expr = mk_sub(real_result, bound);
+      smt_astt ra_hi_expr = mk_add(real_result, bound);
+
+      // Introduce named enclosure variables. Use bidirectional inequalities to
+      // survive Z3's solve-eqs tactic (same technique as the other tight paths).
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_aw::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_aw::", nullptr);
+
+      // Pin ra_lo = r - B(r)
+      assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= r - B(r)
+      assert_ast(mk_le(ra_lo_expr, ra_lo)); // r - B(r) <= ra_lo
+
+      // Pin ra_hi = r + B(r)
+      assert_ast(mk_le(ra_hi, ra_hi_expr)); // ra_hi <= r + B(r)
+      assert_ast(mk_le(ra_hi_expr, ra_hi)); // r + B(r) <= ra_hi
+
+      // Containment: ra_lo <= result <= ra_hi
+      assert_ast(mk_le(ra_lo, real_result));
+      assert_ast(mk_le(real_result, ra_hi));
+      assert_ast(mk_le(ra_lo, ra_hi));
+
+      return real_result;
+    }
     else
     {
-      // weak fallback
+      // weak fallback: symbolic or unrecognised rounding mode
       smt_sortt rs = mk_real_sort();
       smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
       smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
@@ -1038,10 +1302,49 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt side1 = convert_ast(to_ieee_add2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_add2t(expr).side_2);
       smt_astt real_result = mk_add(side1, side2);
-
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(
-        real_result, fbv_type, nullptr, to_ieee_add2t(expr).rounding_mode);
+      const expr2tc &rounding_mode = to_ieee_add2t(expr).rounding_mode;
+
+      // Interval-lifted RNE enclosure for ieee_add (--ir-ieee only).
+      // For RNE + known format (double/single): look up each operand's stored
+      // interval, falling back to a point interval {side, side} for fresh or
+      // untracked operands.  Compute L_R = lo1+lo2, U_R = hi1+hi2, call the
+      // interval helper, then store the resulting {ra_lo, ra_hi} pair.
+      // Non-RNE modes, non-standard formats, and --ir-ieee disabled all fall
+      // through to apply_ieee754_semantics unchanged.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ieee") &&
+        is_nearest_rounding_mode(rounding_mode))
+      {
+        const auto double_spec = ieee_float_spect::double_precision();
+        const auto single_spec = ieee_float_spect::single_precision();
+        if (
+          (fbv_type.exponent == double_spec.e &&
+           fbv_type.fraction == double_spec.f) ||
+          (fbv_type.exponent == single_spec.e &&
+           fbv_type.fraction == single_spec.f))
+        {
+          // Lookup with unconditional point-interval fallback.
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
+            auto it = ir_ra_interval_map.find(t);
+            return it != ir_ra_interval_map.end() ? it->second
+                                                  : ra_interval_t{t, t};
+          };
+          ra_interval_t iv1 = get_iv(side1);
+          ra_interval_t iv2 = get_iv(side2);
+          smt_astt lo_r = mk_add(iv1.lo, iv2.lo); // L_R = L_x + L_y
+          smt_astt hi_r = mk_add(iv1.hi, iv2.hi); // U_R = U_x + U_y
+          auto [ra_lo, ra_hi] =
+            apply_ieee754_rne_interval_add(real_result, lo_r, hi_r, fbv_type);
+          ir_ra_interval_map[real_result] = {ra_lo, ra_hi};
+          a = real_result;
+          interval_lifted = true;
+        }
+      }
+      if (!interval_lifted)
+        a = apply_ieee754_semantics(
+          real_result, fbv_type, nullptr, rounding_mode);
     }
     else
     {
@@ -1814,7 +2117,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::forall_id:
   case expr2t::exists_id:
   {
-    // TODO: We should detect (and forbid) recursive calls to any quantifier (eg., forall i . forall j. i < j).
     // TODO: technically the forall could be a list of symbols
     // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
     expr2tc symbol;
@@ -1849,25 +2151,25 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       }
     }
 
-    /* A bit of spaghetti here: the RHS might have different names due to SSA magic.
-     * int i = 0;
-     * i = 1;
-     * forall(&i . i + 1 > i)
-     *
-     * We are mixing references and values so "i" has different meanings:
-     * i0 = 0
-     * i1 = 1
-     * forall(address-of(i), i1 + 1 > i1)
-     *
-     * Even worse though, we need to create a new function (smt) for all bounded symbols
-     * Some solvers have direct support (Z3) but we may do ourselfes
-     */
-
+    // Create a fresh symbol to use as the bound variable.  Using the
+    // original SSA symbol would be wrong whenever it already has a
+    // concrete value in the smt_cache (e.g. a loop counter reused as a
+    // quantifier variable); a fresh name is always unassigned.
     const expr2tc bound_symbol = symbol2tc(
       symbol->type, fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
-    replace_name_in_body(symbol, bound_symbol, predicate);
+
+    // Inline any nested forall/exists definition so that
+    // replace_name_in_body can substitute `bound_symbol` for the outer
+    // variable throughout the entire (possibly nested) predicate.  Without
+    // this step the original SSA symbol would remain free inside the
+    // cached inner-forall formula and the outer quantifier would be vacuous.
+    expr2tc expanded = predicate->clone();
+    expand_quantifier_defs_in(expanded, forall_defs_);
+
+    replace_name_in_body(symbol, bound_symbol, expanded);
+
     a = mk_quantifier(
-      is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(predicate));
+      is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(expanded));
     break;
   }
   default:

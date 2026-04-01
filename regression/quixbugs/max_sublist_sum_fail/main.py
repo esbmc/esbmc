@@ -1,4 +1,5 @@
-def max_sublist_sum(arr:list[int]) -> int:
+
+def max_sublist_sum(arr):
     max_ending_here = 0
     max_so_far = 0
 
@@ -8,4 +9,30 @@ def max_sublist_sum(arr:list[int]) -> int:
 
     return max_so_far
 
-assert max_sublist_sum([4, -5, 2, 1, -1, 3]) == 5
+
+"""
+Max Sublist Sum
+max-sublist-sum
+
+Efficient equivalent to max(sum(arr[i:j]) for 0 <= i <= j <= len(arr))
+
+Algorithm source: WordAligned.org by Thomas Guest
+
+
+Input:
+    arr: A list of ints
+
+Output:
+    The maximum sublist sum
+
+Example:
+    >>> max_sublist_sum([4, -5, 2, 1, -1, 3])
+    5
+"""
+
+assert max_sublist_sum(4, -5, 2, 1, -1, 3) == 5
+assert max_sublist_sum(0, -1, 2, -1, 3, -1, 0) == 4
+assert max_sublist_sum(3, 4, 5) == 12
+assert max_sublist_sum(4, -2, -8, 5, -2, 7, 7, 2, -6, 5) == 19
+assert max_sublist_sum(-4, -4, -5) == 0
+assert max_sublist_sum(-2, 1, -3, 4, -1, 2, 1, -5, 4) == 6

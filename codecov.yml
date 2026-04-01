@@ -1,0 +1,12 @@
+coverage:
+  precision: 2
+  round: down
+  range: "50...80"
+
+# Mirrors the lcov --remove filters in .github/workflows/coverage.yml
+ignore:
+  - "src/ansi-c/cpp/**"
+  - "src/clang-c-frontend/headers/**"
+  - "src/c2goto/library/libm/musl/**"
+  - "build/**"
+  - "**/unit/**"
