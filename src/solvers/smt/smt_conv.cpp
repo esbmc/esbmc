@@ -1409,7 +1409,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           if (is_nearest_rounding_mode(rounding_mode))
             bounds =
               apply_ieee754_rne_interval_add(real_result, lo_r, hi_r, fbv_type);
-          else
+          else if (is_round_to_away(rounding_mode))
             bounds =
               apply_ieee754_rna_interval_add(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
