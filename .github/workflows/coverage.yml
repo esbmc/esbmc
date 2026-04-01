@@ -14,10 +14,15 @@ jobs:
         run: ./scripts/build.sh -b Debug -k ON
       - name: Run tests
         env:
-          LLVM_PROFILE_FILE: "build/coverage/%p.profraw"
-        run: cd build/ && ctest -j4 --output-on-failure --progress --timeout 5 . || true
+          LLVM_PROFILE_FILE: "coverage/%p.profraw"
+        run: mkdir -p build/coverage && cd build/ && ctest -j4 --output-on-failure --progress --timeout 5 . || true
       - name: Merge coverage data
-        run: llvm-profdata merge -sparse build/coverage/*.profraw -o build/merged.profdata
+        run: |
+          if ls build/coverage/*.profraw 1> /dev/null 2>&1; then
+            llvm-profdata merge -sparse build/coverage/*.profraw -o build/merged.profdata
+          else
+            echo "No .profraw files found in build/coverage; skipping llvm-profdata merge."
+          fi
       - name: Generate lcov coverage report
         run: |
           llvm-cov export -format=lcov \

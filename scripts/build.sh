@@ -410,7 +410,7 @@ install_gmp_linux() {
 
 install_python_deps_linux() {
   log "Installing Python dependencies"
-  python3 -m pip install --break-system-packages --user meson ast2json mypy pyparsing toml tomli
+  python3 -m pip install --user meson ast2json mypy pyparsing toml tomli
   meson --version
 }
 
