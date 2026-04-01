@@ -34,6 +34,7 @@ add_library(pythonfrontend STATIC
             function_call_builder.cpp
             string_builder.cpp
             string_handler.cpp
+            string_handler_utils.cpp
             exception_utils.cpp
             char_utils.cpp
             math_guard_utils.cpp

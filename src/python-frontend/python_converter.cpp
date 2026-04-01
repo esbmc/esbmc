@@ -3129,22 +3129,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // Handle str.join() method calls
-  // Python syntax: separator.join(iterable), e.g., " ".join(["a", "b"])
-  if (
-    element["func"]["_type"] == "Attribute" &&
-    element["func"]["attr"] == "join")
-  {
-    const auto &func = element["func"];
-    // Check if the caller is a string (Constant like " " or a Name variable)
-    if (
-      func.contains("value") && (func["value"]["_type"] == "Constant" ||
-                                 func["value"]["_type"] == "Name"))
-    {
-      return string_handler_.handle_str_join(element);
-    }
-  }
-
   // Compile-time evaluation for parse_nested_parens on constant strings.
   if (
     element["func"]["_type"] == "Name" && element["func"].contains("id") &&
