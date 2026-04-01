@@ -1440,8 +1440,47 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt real_result = mk_sub(side1, side2);
 
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(
-        real_result, fbv_type, nullptr, to_ieee_sub2t(expr).rounding_mode);
+      const expr2tc &rounding_mode = to_ieee_sub2t(expr).rounding_mode;
+
+      // Interval-lifted RNE enclosure for ieee_sub (--ir-ieee only).
+      // Subtraction interval hull:
+      //   L_R = L_x - U_y,  U_R = U_x - L_y
+      //   ra_lo = L_R - B_near^-(L_R),  ra_hi = U_R + B_near^+(U_R)
+      // Non-RNE modes, non-standard formats, and --ir-ieee disabled all
+      // fall through to apply_ieee754_semantics unchanged.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ieee") &&
+        is_nearest_rounding_mode(rounding_mode))
+      {
+        const auto double_spec = ieee_float_spect::double_precision();
+        const auto single_spec = ieee_float_spect::single_precision();
+        if (
+          (fbv_type.exponent == double_spec.e &&
+           fbv_type.fraction == double_spec.f) ||
+          (fbv_type.exponent == single_spec.e &&
+           fbv_type.fraction == single_spec.f))
+        {
+          // Lookup with unconditional point-interval fallback.
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
+            auto it = ir_ra_interval_map.find(t);
+            return it != ir_ra_interval_map.end() ? it->second
+                                                  : ra_interval_t{t, t};
+          };
+          ra_interval_t iv1 = get_iv(side1);
+          ra_interval_t iv2 = get_iv(side2);
+          smt_astt lo_r = mk_sub(iv1.lo, iv2.hi); // L_R = L_x - U_y
+          smt_astt hi_r = mk_sub(iv1.hi, iv2.lo); // U_R = U_x - L_y
+          auto bounds =
+            apply_ieee754_rne_interval_add(real_result, lo_r, hi_r, fbv_type);
+          ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
+          a = real_result;
+          interval_lifted = true;
+        }
+      }
+      if (!interval_lifted)
+        a = apply_ieee754_semantics(
+          real_result, fbv_type, nullptr, rounding_mode);
     }
     else
     {
