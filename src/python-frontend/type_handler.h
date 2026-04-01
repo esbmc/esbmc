@@ -8,15 +8,29 @@
 
 class python_converter;
 
-inline struct_typet get_complex_struct_type()
+// P26: Cached double type — avoids constructing a new floatbv_typet on every call.
+// Initialized once on first use; thread-safe (C++11 static local semantics).
+inline const typet &cached_double_type()
 {
-  struct_typet complex_type;
-  complex_type.tag("complex");
-  complex_type.components().push_back(
-    struct_typet::componentt("real", "real", double_type()));
-  complex_type.components().push_back(
-    struct_typet::componentt("imag", "imag", double_type()));
-  return complex_type;
+  static const typet instance = double_type();
+  return instance;
+}
+
+// P4: Static-local struct type — eliminates repeated heap allocations.
+// Returns a const reference to the single global instance.
+inline const struct_typet &get_complex_struct_type()
+{
+  static const struct_typet instance = []()
+  {
+    struct_typet t;
+    t.tag("complex");
+    t.components().push_back(
+      struct_typet::componentt("real", "real", double_type()));
+    t.components().push_back(
+      struct_typet::componentt("imag", "imag", double_type()));
+    return t;
+  }();
+  return instance;
 }
 
 inline bool is_complex_type(const typet &type)
@@ -35,10 +49,11 @@ inline bool is_complex_type(const typet &type)
 inline exprt make_complex(const exprt &real, const exprt &imag)
 {
   struct_exprt complex_expr(get_complex_struct_type());
+  const typet &dt = cached_double_type();
   complex_expr.operands().push_back(
-    real.type() == double_type() ? real : typecast_exprt(real, double_type()));
+    real.type() == dt ? real : typecast_exprt(real, dt));
   complex_expr.operands().push_back(
-    imag.type() == double_type() ? imag : typecast_exprt(imag, double_type()));
+    imag.type() == dt ? imag : typecast_exprt(imag, dt));
   return complex_expr;
 }
 
@@ -50,14 +65,21 @@ inline exprt promote_to_complex(const exprt &value)
   if (is_complex_type(value.type()))
     return value;
 
-  return make_complex(value, from_double(0.0, double_type()));
+  // Bool cannot be directly typecast to float64 in the SMT encoder.
+  // Convert bool → int first; make_complex will then typecast int → double.
+  exprt real = value;
+  if (real.type().is_bool())
+    real = typecast_exprt(real, long_long_int_type());
+
+  return make_complex(real, from_double(0.0, cached_double_type()));
 }
 
 inline exprt complex_to_bool_expr(const exprt &complex_expr)
 {
-  exprt real = member_exprt(complex_expr, "real", double_type());
-  exprt imag = member_exprt(complex_expr, "imag", double_type());
-  exprt zero = from_double(0.0, double_type());
+  const typet &dt = cached_double_type();
+  exprt real = member_exprt(complex_expr, "real", dt);
+  exprt imag = member_exprt(complex_expr, "imag", dt);
+  exprt zero = from_double(0.0, dt);
   return or_exprt(
     not_exprt(equality_exprt(real, zero)),
     not_exprt(equality_exprt(imag, zero)));
