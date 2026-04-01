@@ -1,3 +1,7 @@
+def TypeVar(name, *args, **kwargs) -> type:
+    return object
+
+
 class List:
     pass
 

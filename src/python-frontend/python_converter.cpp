@@ -3367,6 +3367,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return set_handler.get_empty_set();
   }
 
+  // TypeVar(...) is only used to build typing aliases and has no runtime
+  // effect in the frontend, so model it as an opaque placeholder value.
+  if (element["func"]["_type"] == "Name" && element["func"]["id"] == "TypeVar")
+  {
+    return gen_zero(any_type());
+  }
+
   const std::string function = config.options.get_option("function");
   // To verify a specific function, it is necessary to load the definitions of functions it calls.
   if (!function.empty() && !is_loading_models)
