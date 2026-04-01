@@ -1568,6 +1568,24 @@ bool clang_c_convertert::get_bitfield_type(
   return false;
 }
 
+// Returns true if stmt or any of its descendants (excluding nested compound
+// statements, which are processed by their own CompoundStmtClass handler)
+// contains a cast to/from an _Atomic type.  Nested compound statements are
+// skipped to avoid double-wrapping.
+static bool has_atomic_cast(const clang::Stmt &stmt)
+{
+  if (const auto *cast = llvm::dyn_cast<clang::CastExpr>(&stmt))
+  {
+    clang::CastKind k = cast->getCastKind();
+    if (k == clang::CK_AtomicToNonAtomic || k == clang::CK_NonAtomicToAtomic)
+      return true;
+  }
+  for (const clang::Stmt *child : stmt.children())
+    if (child && !llvm::isa<clang::CompoundStmt>(child) && has_atomic_cast(*child))
+      return true;
+  return false;
+}
+
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -2387,7 +2405,31 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
       convert_expression_to_code(statement);
-      block.operands().push_back(statement);
+
+      // Wrap accesses to _Atomic variables in atomic begin/end so that the
+      // data-race checker does not flag sequentially-consistent atomic
+      // operations as races (C11 §5.1.2.4p4: atomic accesses are not races).
+      // TODO: bare atomic accesses in unbraced if/for/while bodies are not
+      // covered here; they require similar wrapping in the respective handlers.
+      if (has_atomic_cast(*stmt))
+      {
+        side_effect_expr_function_callt atomic_begin;
+        atomic_begin.function() =
+          symbol_exprt("c:@F@__ESBMC_atomic_begin");
+        convert_expression_to_code(atomic_begin);
+        block.operands().push_back(atomic_begin);
+
+        block.operands().push_back(statement);
+
+        side_effect_expr_function_callt atomic_end;
+        atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
+        convert_expression_to_code(atomic_end);
+        block.operands().push_back(atomic_end);
+      }
+      else
+      {
+        block.operands().push_back(statement);
+      }
     }
 
     // Set the end location for blocks
