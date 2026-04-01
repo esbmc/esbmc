@@ -308,7 +308,7 @@ static void extract_and_remove_side_effects_impl(
       irep_idt lhs_sym = to_symbol2t(assign.target).get_symbol_name();
       if (dep_symbols.count(lhs_sym) == 0)
         break;
-      if (inv_symbols.count(lhs_sym) && !is_likely_compiler_temp(lhs_sym))
+      if (!is_likely_compiler_temp(lhs_sym))
         break;
       if (is_trivial_rhs(assign.source))
         continue;
