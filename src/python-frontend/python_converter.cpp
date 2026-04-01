@@ -554,7 +554,20 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     if (!rhs_type.is_floatbv())
       rhs.type() = float_type;
   }
-  // Case 5: Align bit-widths between LHS and RHS if they differ
+  // Case 5 (P19): Promote real RHS to complex when LHS is complex.
+  // Must come BEFORE the width-alignment case: a complex struct is 128-bit
+  // while a scalar float is 64-bit, so width alignment would otherwise fire
+  // first and corrupt the float by assigning struct type to it.
+  // Handles: z = 1.0, z = n, z = True where z is declared as complex.
+  // Note: is_bool() must be explicit since is_integer_type() excludes bool.
+  else if (
+    is_complex_type(lhs_type) && !is_complex_type(rhs_type) &&
+    (rhs_type.is_floatbv() || type_utils::is_integer_type(rhs_type) ||
+     rhs_type.is_bool()))
+  {
+    rhs = promote_to_complex(rhs);
+  }
+  // Case 6: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
     try
