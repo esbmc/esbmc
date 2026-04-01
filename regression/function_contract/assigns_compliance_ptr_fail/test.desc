@@ -1,4 +1,4 @@
 CORE
 main.c
---enforce-contract foo --enforce-assigns-check
+--enforce-contract foo
 ^VERIFICATION FAILED$

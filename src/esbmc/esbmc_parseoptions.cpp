@@ -2874,9 +2874,10 @@ void esbmc_parseoptionst::process_function_contracts(
       // assumptions for the harness-called function (which receives nil args)
       std::string entry_function =
         cmdline.isset("function") ? cmdline.getval("function") : "";
-      bool check_assigns = cmdline.isset("enforce-assigns-check");
+      // Assigns compliance check is always enabled: without it, functions can
+      // lie about their assigns clause, causing false VERIFICATION SUCCESSFUL.
       contracts.enforce_contracts(
-        to_enforce, assume_nonnull_valid, entry_function, check_assigns);
+        to_enforce, assume_nonnull_valid, entry_function, true);
     }
   }
 

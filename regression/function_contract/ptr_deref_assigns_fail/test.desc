@@ -1,4 +1,4 @@
 CORE
 main.c
---enforce-contract update --function update --enforce-assigns-check --no-pointer-check --assume-nonnull-valid
+--enforce-contract update --function update --no-pointer-check --assume-nonnull-valid
 ^VERIFICATION FAILED$

@@ -1,4 +1,4 @@
 CORE
 main.c
---enforce-contract arr_write --function arr_write --enforce-assigns-check --no-pointer-check --assume-nonnull-valid
+--enforce-contract arr_write --function arr_write --no-pointer-check --assume-nonnull-valid
 ^VERIFICATION SUCCESSFUL$

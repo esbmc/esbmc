@@ -1012,12 +1012,14 @@ goto_programt code_contractst::generate_checking_wrapper(
   }
 
   // 3b. Snapshot globals and ptr->field targets for assigns compliance
-  //     (before function call)
+  //     (before function call).
+  // Only runs when assigns clause is explicitly declared: without an assigns
+  // clause the function may modify anything, so there is nothing to check.
   std::vector<ptr_field_snapshot_t> ptr_field_snaps;
   std::vector<ptr_deref_snapshot_t> ptr_deref_snaps;
   std::vector<arr_elem_snapshot_t> arr_elem_snaps;
   frame_enforcert::classified_assignst classified_assigns;
-  if (check_assigns_compliance)
+  if (check_assigns_compliance && !assigns_targets.empty())
   {
     std::string func_name = id2string(original_func.name);
 
@@ -1218,7 +1220,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   }
 
   // 3c. Assert assigns compliance (after function call, before ensures)
-  if (check_assigns_compliance)
+  if (check_assigns_compliance && !assigns_targets.empty())
   {
     log_debug(
       "contracts",
@@ -2157,6 +2159,37 @@ code_contractst::materialize_ptr_deref_snapshots(
     // If specific fields of *p are declared → already handled by ptr_field_snaps
     if (classified.ptr_field_targets.count(param_id))
       continue;
+
+    // Skip if any direct_target contains this param symbol.
+    // This handles patterns like p[0].x, p[1].y in assigns which are
+    // classified as direct_targets (member through pointer-arithmetic dereference).
+    // In that case the assigns clause already covers writes through p at some
+    // index, so Phase 2C's whole-object snapshot would produce false positives.
+    {
+      bool param_in_direct = false;
+      for (const auto &dt : classified.direct_targets)
+      {
+        // Recursively search for param_id symbol in the expression.
+        std::function<bool(const expr2tc &)> contains_param =
+          [&](const expr2tc &e) -> bool {
+          if (!e)
+            return false;
+          if (is_symbol2t(e) && to_symbol2t(e).thename == param_id)
+            return true;
+          for (unsigned i = 0; i < e->get_num_sub_exprs(); ++i)
+            if (contains_param(*e->get_sub_expr(i)))
+              return true;
+          return false;
+        };
+        if (contains_param(dt))
+        {
+          param_in_direct = true;
+          break;
+        }
+      }
+      if (param_in_direct)
+        goto next_param;
+    }
 
     // This pointer param is NOT in the assigns clause at all → snapshot *p.
     if (is_struct_type(pointee) || is_union_type(pointee))
