@@ -15,8 +15,7 @@ struct TestFixture
   {
     namespace po = boost::program_options;
     desc = new boost::program_options::options_description("Allowed options");
-    desc->add_options()(
-      "floatbv,b", po::bool_switch(), "Use floatbv")(
+    desc->add_options()("floatbv,b", po::bool_switch(), "Use floatbv")(
       "unlimited-k-steps,s", po::bool_switch(), "Use unlimited k-steps")(
       "context-bound,c",
       po::value<int>()->default_value(2),

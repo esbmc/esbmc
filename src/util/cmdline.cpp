@@ -16,7 +16,7 @@
 #  define HOME_ENV_NAME "USERPROFILE"
 #  define DEFAULT_CONFIG_PATH "%userprofile%\\esbmc.toml"
 #  include <windows.h>
-#elifdef __APPLE__
+#  elifdef __APPLE__
 #  define HOME_ENV_NAME "HOME"
 #  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
 #  include <sys/ttycom.h> // TIOCGWINSZ, struct winsize
