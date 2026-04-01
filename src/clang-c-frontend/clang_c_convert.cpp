@@ -3224,10 +3224,12 @@ bool clang_c_convertert::get_cast_expr(
     break;
 #endif
 
+  case clang::CK_AtomicToNonAtomic:
   case clang::CK_NonAtomicToAtomic:
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-      break;
-    [[fallthrough]];
+    // get_type() strips _Atomic wrappers (clang::Type::Atomic case; see FIXME
+    // there about irep2 representation), so source and target types are already
+    // identical in ESBMC's IR. Both cast directions are no-ops.
+    break;
 
   default:
   {
