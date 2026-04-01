@@ -141,8 +141,8 @@ simple_shell_unescape(const char *s, const char *var)
 }
 
 cmdlinet::cmdlinet()
-  : m_term_width(get_terminal_width())
-  , cmdline_options(m_term_width, m_term_width / 2)
+  : m_term_width(get_terminal_width()),
+    cmdline_options(m_term_width, m_term_width / 2)
 {
 }
 
