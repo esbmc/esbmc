@@ -427,19 +427,23 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_interval_add(
   smt_astt hi_r,
   const floatbv_type2t &fbv_type)
 {
-  // Caller guarantees fbv_type is double or single precision.
   const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
   smt_astt eps_rel, eps_abs;
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel = get_double_eps_rel();       // 2^-53
     eps_abs = get_double_min_subnormal(); // 2^-1074
   }
-  else
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
   {
-    // single precision (caller verified double-or-single)
     eps_rel = get_single_eps_rel();       // 2^-24
     eps_abs = get_single_min_subnormal(); // 2^-149
+  }
+  else
+  {
+    assert(!"apply_ieee754_rne_interval_add: unsupported FP format");
   }
 
   smt_sortt rs = mk_real_sort();
@@ -485,20 +489,23 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_interval_add(
   // ROUND_TO_AWAY uses the same B_near constants and formula shape as
   // ROUND_TO_EVEN (same unit roundoff); the only difference is the symbol
   // name prefix: ra_lo_aw:: / ra_hi_aw:: to match the RNA single-step path.
-  //
-  // Caller guarantees fbv_type is double or single precision.
   const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
   smt_astt eps_rel, eps_abs;
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel = get_double_eps_rel();       // 2^-53
     eps_abs = get_double_min_subnormal(); // 2^-1074
   }
-  else
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
   {
-    // single precision (caller verified double-or-single)
     eps_rel = get_single_eps_rel();       // 2^-24
     eps_abs = get_single_min_subnormal(); // 2^-149
+  }
+  else
+  {
+    assert(!"apply_ieee754_rna_interval_add: unsupported FP format");
   }
 
   smt_sortt rs = mk_real_sort();
