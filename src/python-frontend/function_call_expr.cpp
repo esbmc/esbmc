@@ -3597,7 +3597,11 @@ function_call_expr::get_dispatch_table()
          exprt b = member_exprt(num, "imag", double_type());
          exprt c = member_exprt(den, "real", double_type());
          exprt d = member_exprt(den, "imag", double_type());
-
+         // P21: ZeroDivisionError guard — CPython raises when divisor == (0+0j).
+         exprt zero = from_double(0.0, double_type());
+         if (c == zero && d == zero)
+           return converter_.get_exception_handler().gen_exception_raise(
+             "ZeroDivisionError", "complex division by zero");
          exprt ac = ieee_bin("ieee_mul", a, c);
          exprt bd = ieee_bin("ieee_mul", b, d);
          exprt bc = ieee_bin("ieee_mul", b, c);

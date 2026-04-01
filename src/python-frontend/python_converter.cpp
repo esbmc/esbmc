@@ -1769,6 +1769,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       const exprt xi = member(x, "imag");
       const exprt yr = member(y, "real");
       const exprt yi = member(y, "imag");
+      // P21: ZeroDivisionError guard — CPython raises when divisor == (0+0j).
+      // |den|^2 = yr^2 + yi^2; it is zero iff yr == 0.0 AND yi == 0.0.
+      const typet &dt = cached_double_type();
+      exprt zero = from_double(0.0, dt);
+      if (yr == zero && yi == zero)
+        return get_exception_handler().gen_exception_raise(
+          "ZeroDivisionError", "complex division by zero");
       exprt ac = ieee_binop("ieee_mul", xr, yr);
       exprt bd = ieee_binop("ieee_mul", xi, yi);
       exprt bc = ieee_binop("ieee_mul", xi, yr);
@@ -1955,7 +1962,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt positive_power = pow_nonnegative(exponent_abs);
       exprt one = make_complex(
         from_double(1.0, double_type()), from_double(0.0, double_type()));
-      return complex_div(one, positive_power);
+      exprt result = complex_div(one, positive_power);
+      // P21: complex_div can return a ZeroDivisionError throw when divisor==0+0j.
+      // (z**n with n<0 and z==0+0j falls here.)
+      return result;
     }
 
     if (
@@ -2020,7 +2030,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         return make_complex(real, imag);
       }
 
-      // op == "Div"
+      // op == "Div" (inline, mixed complex/real path)
+      // P21: ZeroDivisionError guard — same check as complex_div lambda above.
+      {
+        const typet &dt = cached_double_type();
+        exprt zero = from_double(0.0, dt);
+        if (c == zero && d == zero)
+          return get_exception_handler().gen_exception_raise(
+            "ZeroDivisionError", "complex division by zero");
+      }
       exprt ac = ieee_binop("ieee_mul", a, c);
       exprt bd = ieee_binop("ieee_mul", b, d);
       exprt bc = ieee_binop("ieee_mul", b, c);
