@@ -12,13 +12,31 @@
 #include <util/message.h>
 #include <util/config_file.h>
 
-#ifdef WIN32
+#ifdef _WIN32
 #  define HOME_ENV_NAME "USERPROFILE"
 #  define DEFAULT_CONFIG_PATH "%userprofile%\\esbmc.toml"
+#  include <windows.h>
 #else
 #  define HOME_ENV_NAME "HOME"
 #  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
+#  include <sys/ioctl.h>
+#  include <unistd.h>
 #endif
+
+static unsigned get_terminal_width()
+{
+  unsigned width = 0;
+#ifdef _WIN32
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  if (GetConsoleScreenBufferInfo(GetStdHandle(STD_ERROR_HANDLE), &csbi))
+    width = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+#else
+  struct winsize w;
+  if (ioctl(STDERR_FILENO, TIOCGWINSZ, &w) == 0)
+    width = w.ws_col;
+#endif
+  return std::max(width, 80u);
+}
 
 /* Parses 's' according to a simple interpretation of shell rules, taking only
  * whitespace and the characters ', " and \ into account. */
@@ -122,6 +140,12 @@ simple_shell_unescape(const char *s, const char *var)
   return split;
 }
 
+cmdlinet::cmdlinet()
+  : m_term_width(get_terminal_width())
+  , cmdline_options(m_term_width, m_term_width / 2)
+{
+}
+
 cmdlinet::~cmdlinet()
 {
   clear();
@@ -206,7 +230,8 @@ bool cmdlinet::parse(
   unsigned int i = 0;
   for (; opts[i].groupname != "end"; i++)
   {
-    boost::program_options::options_description op_desc(opts[i].groupname);
+    boost::program_options::options_description op_desc(
+      opts[i].groupname, m_term_width, m_term_width / 2);
     std::vector<opt_templ> groupoptions = opts[i].options;
     for (std::vector<opt_templ>::iterator it = groupoptions.begin();
          it != groupoptions.end();
