@@ -1896,6 +1896,21 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
+    // Expand --no-standard-checks into individual options before goto_convert,
+    // because VLA size checks are generated during goto conversion.
+    if (
+      cmdline.isset("no-standard-checks") ||
+      options.get_bool_option("no-standard-checks"))
+    {
+      options.set_option("no-pointer-check", true);
+      options.set_option("no-div-by-zero-check", true);
+      options.set_option("no-pointer-relation-check", true);
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option("no-vla-size-check", true);
+      options.set_option("no-align-check", true);
+      options.set_option("no-bounds-check", true);
+    }
+
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
   }
@@ -1961,7 +1976,9 @@ bool esbmc_parseoptionst::process_goto_program(
       for (size_t i = 1; i < cmdline.args.size(); i++)
         config.ansi_c.include_files.push_back(cmdline.args[i]);
 
-    // this should be before goto_check()
+    // Expand --no-standard-checks before goto_check (also expanded before
+    // goto_convert in parse_goto_program; re-expanding here is idempotent
+    // and covers the read_goto_binary path).
     if (
       cmdline.isset("no-standard-checks") ||
       options.get_bool_option("no-standard-checks"))
@@ -1973,9 +1990,6 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("no-vla-size-check", true);
       options.set_option("no-align-check", true);
       options.set_option("no-bounds-check", true);
-      //?
-      // options.set_option("no-abnormal-memory-leak", true);
-      // options.set_option("no-reachable-memory-leak", true);
     }
 
     // Start by removing all no-op instructions and unreachable code
