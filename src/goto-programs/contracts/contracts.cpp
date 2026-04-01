@@ -2086,10 +2086,36 @@ code_contractst::materialize_ptr_deref_snapshots(
     irep_idt param_id = param.get_identifier();
     expr2tc ptr_sym = symbol2tc(param_type, param_id);
 
-    // If *p is fully covered by the assigns clause → skip
+    // If *p is fully covered by the assigns clause → skip.
+    // Also skip when a pointer-arithmetic target involves this param
+    // (e.g. arr[idx] = *(arr+idx) yields pointer_target = arr+idx, which
+    // contains param_id as a sub-expression).
     for (const auto &t : classified.pointer_targets)
     {
+      // Direct: pointer_target IS the param symbol
       if (is_symbol2t(t) && to_symbol2t(t).thename == param_id)
+        goto next_param;
+
+      // Pointer arithmetic (arr+idx, arr-off, ...): check both operands
+      // arr[idx] compiles to *(arr+idx), so pointer_target = arr + idx.
+      // We check whether the base operand is the param.
+      auto has_param_base = [&param_id](const expr2tc &e) -> bool {
+        const expr2tc *lhs = nullptr;
+        if (is_add2t(e))
+          lhs = &to_add2t(e).side_1;
+        else if (is_sub2t(e))
+          lhs = &to_sub2t(e).side_1;
+        if (lhs && is_symbol2t(*lhs) && to_symbol2t(*lhs).thename == param_id)
+          return true;
+        // Also check side_2 in case compiler swapped operands
+        const expr2tc *rhs = nullptr;
+        if (is_add2t(e))
+          rhs = &to_add2t(e).side_2;
+        if (rhs && is_symbol2t(*rhs) && to_symbol2t(*rhs).thename == param_id)
+          return true;
+        return false;
+      };
+      if (has_param_base(t))
         goto next_param;
     }
 

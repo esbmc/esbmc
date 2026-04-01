@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--enforce-contract arr_write2 --function arr_write2 --enforce-assigns-check --no-pointer-check --assume-nonnull-valid
+^VERIFICATION FAILED$
