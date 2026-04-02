@@ -16,6 +16,7 @@ extern "C"
 }
 #endif
 
+#include <format>
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <cctype>
@@ -3023,7 +3024,7 @@ void esbmc_parseoptionst::help()
   bool use_color = resolve_color_option();
 
   // Print the "* * *     ESBMC x.y.z     * * *"
-  auto const esbmc_string = std::format(" ESBMC {} ", ESBMC_VERSION);
+  auto const esbmc_string = fmt::format(" ESBMC {} ", ESBMC_VERSION);
   auto const title_start = std::string("* * * ");
   auto const title_end = std::string(" * * *");
   auto const inner =
