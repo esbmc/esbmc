@@ -3,6 +3,7 @@ main.c
 --ir-ieee --z3 --smt-formula-too
 \(declare-fun \|smt_conv::ra_lo_aw::0\| \(\) Real\)
 \(declare-fun \|smt_conv::ra_lo_aw::1\| \(\) Real\)
+\(\+ \|smt_conv::ra_lo_aw::0\| \|smt_conv::ra_lo_aw::0\|\)
 \(ite
 5551115123125783
 ^VERIFICATION FAILED$
