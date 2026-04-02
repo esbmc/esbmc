@@ -16,7 +16,6 @@ extern "C"
 }
 #endif
 
-#include <format>
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <cctype>
