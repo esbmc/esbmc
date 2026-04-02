@@ -215,6 +215,7 @@ All functions are modelled using nondeterministic values with appropriate constr
 - `random.randrange(start, stop, step=1)` → randomly selected integer from the specified range
 
 See also: [Random Operational Model](./Random-Operational-Model-in-ESBMC.md)
+{{< /details >}}
 
 ## OS Module (`os`)
 

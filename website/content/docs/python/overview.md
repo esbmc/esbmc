@@ -8,7 +8,7 @@ The Python frontend converts Python source files into ESBMC's internal represent
 > The pipeline has three stages: **AST generation** (Python) → **type annotation** (Python) → **symbol table generation** (C++). Each stage feeds into the next before ESBMC's backend takes over.
 
 <p align="center">
-  <img src="/images/python-arch.png" alt="ESBMC Python Frontend Architecture" style="max-width:65%;" />
+  <img src="https://raw.githubusercontent.com/esbmc/esbmc/master/src/python-frontend/images/arch.png" alt="ESBMC Python Frontend Architecture" style="max-width:65%;" />
 </p>
 <p align="center"><em>Python Frontend Architecture</em></p>
 
