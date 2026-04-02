@@ -1,7 +1,7 @@
 #ifndef UTIL_IREP2_UTILS_H_
 #define UTIL_IREP2_UTILS_H_
 
-#include "irep2/irep2.h"
+#include <rep2/irep2.h>
 #include <util/c_types.h>
 
 #include <irep2/irep2_expr.h>
