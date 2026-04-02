@@ -1782,13 +1782,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       const exprt xi = member(x, "imag");
       const exprt yr = member(y, "real");
       const exprt yi = member(y, "imag");
-      // P21: ZeroDivisionError guard — CPython raises when divisor == (0+0j).
-      // |den|^2 = yr^2 + yi^2; it is zero iff yr == 0.0 AND yi == 0.0.
       const typet &dt = cached_double_type();
       exprt zero = from_double(0.0, dt);
-      if (yr == zero && yi == zero)
-        return get_exception_handler().gen_exception_raise(
-          "ZeroDivisionError", "complex division by zero");
       exprt ac = ieee_binop("ieee_mul", xr, yr);
       exprt bd = ieee_binop("ieee_mul", xi, yi);
       exprt bc = ieee_binop("ieee_mul", xi, yr);
@@ -1798,9 +1793,26 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt numer_real = ieee_binop("ieee_add", ac, bd);
       exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
       exprt denom = ieee_binop("ieee_add", c2, d2);
-      return make_complex(
+      exprt normal_result = make_complex(
         ieee_binop("ieee_div", numer_real, denom),
         ieee_binop("ieee_div", numer_imag, denom));
+      // P21: Runtime ZeroDivisionError guard — denom==0 iff yr==0 AND yi==0.
+      exprt yr_zero = equality_exprt(yr, zero);
+      exprt yi_zero = equality_exprt(yi, zero);
+      exprt denom_is_zero = and_exprt(yr_zero, yi_zero);
+      exprt raise_zdiv = get_exception_handler().gen_exception_raise(
+        "ZeroDivisionError", "complex division by zero");
+      locationt loc = get_location_from_decl(element);
+      raise_zdiv.location() = loc;
+      raise_zdiv.location().user_provided(true);
+      code_expressiont raise_code(raise_zdiv);
+      raise_code.location() = loc;
+      code_ifthenelset guard;
+      guard.cond() = denom_is_zero;
+      guard.then_case() = raise_code;
+      guard.location() = loc;
+      current_block->copy_to_operands(guard);
+      return normal_result;
     };
     auto complex_log = [&](const exprt &z) -> exprt {
       const exprt zr = member(z, "real");
@@ -2044,14 +2056,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       }
 
       // op == "Div" (inline, mixed complex/real path)
-      // P21: ZeroDivisionError guard — same check as complex_div lambda above.
-      {
-        const typet &dt = cached_double_type();
-        exprt zero = from_double(0.0, dt);
-        if (c == zero && d == zero)
-          return get_exception_handler().gen_exception_raise(
-            "ZeroDivisionError", "complex division by zero");
-      }
       exprt ac = ieee_binop("ieee_mul", a, c);
       exprt bd = ieee_binop("ieee_mul", b, d);
       exprt bc = ieee_binop("ieee_mul", b, c);
@@ -2063,9 +2067,30 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
       exprt denom = ieee_binop("ieee_add", c2, d2);
 
-      exprt real = ieee_binop("ieee_div", numer_real, denom);
-      exprt imag = ieee_binop("ieee_div", numer_imag, denom);
-      return make_complex(real, imag);
+      exprt real_div = ieee_binop("ieee_div", numer_real, denom);
+      exprt imag_div = ieee_binop("ieee_div", numer_imag, denom);
+      exprt normal_div_result = make_complex(real_div, imag_div);
+      // P21: Runtime ZeroDivisionError guard — denom==0 iff c==0 AND d==0.
+      {
+        const typet &dt = cached_double_type();
+        exprt zero = from_double(0.0, dt);
+        exprt c_zero = equality_exprt(c, zero);
+        exprt d_zero = equality_exprt(d, zero);
+        exprt denom_is_zero = and_exprt(c_zero, d_zero);
+        exprt raise_zdiv = get_exception_handler().gen_exception_raise(
+          "ZeroDivisionError", "complex division by zero");
+        locationt loc = get_location_from_decl(element);
+        raise_zdiv.location() = loc;
+        raise_zdiv.location().user_provided(true);
+        code_expressiont raise_code(raise_zdiv);
+        raise_code.location() = loc;
+        code_ifthenelset guard;
+        guard.cond() = denom_is_zero;
+        guard.then_case() = raise_code;
+        guard.location() = loc;
+        current_block->copy_to_operands(guard);
+        return normal_div_result;
+      }
     }
 
     return raise_complex_type_error(
@@ -6988,7 +7013,8 @@ void python_converter::get_compound_assign(
   // check, `z += 1.0` / `z *= 2` produce a struct/scalar type mismatch in IR.
   if (
     is_complex_type(lhs.type()) && !is_complex_type(rhs.type()) &&
-    (rhs.type().is_floatbv() || type_utils::is_integer_type(rhs.type())))
+    (rhs.type().is_floatbv() || type_utils::is_integer_type(rhs.type()) ||
+     rhs.type().is_bool()))
   {
     rhs = promote_to_complex(rhs);
   }

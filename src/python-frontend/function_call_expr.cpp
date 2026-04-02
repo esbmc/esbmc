@@ -3597,11 +3597,6 @@ function_call_expr::get_dispatch_table()
          exprt b = member_exprt(num, "imag", double_type());
          exprt c = member_exprt(den, "real", double_type());
          exprt d = member_exprt(den, "imag", double_type());
-         // P21: ZeroDivisionError guard — CPython raises when divisor == (0+0j).
-         exprt zero = from_double(0.0, double_type());
-         if (c == zero && d == zero)
-           return converter_.get_exception_handler().gen_exception_raise(
-             "ZeroDivisionError", "complex division by zero");
          exprt ac = ieee_bin("ieee_mul", a, c);
          exprt bd = ieee_bin("ieee_mul", b, d);
          exprt bc = ieee_bin("ieee_mul", b, c);
@@ -3612,9 +3607,29 @@ function_call_expr::get_dispatch_table()
          exprt denom = ieee_bin("ieee_add", cc, dd);
          exprt real_num = ieee_bin("ieee_add", ac, bd);
          exprt imag_num = ieee_bin("ieee_sub", bc, ad);
-         exprt real = ieee_bin("ieee_div", real_num, denom);
-         exprt imag = ieee_bin("ieee_div", imag_num, denom);
-         return make_complex(real, imag);
+         exprt real_r = ieee_bin("ieee_div", real_num, denom);
+         exprt imag_r = ieee_bin("ieee_div", imag_num, denom);
+         exprt normal_result = make_complex(real_r, imag_r);
+         // P21: Runtime ZeroDivisionError guard — denom==0 iff c==0 AND d==0.
+         const typet &dt = cached_double_type();
+         exprt zero = from_double(0.0, dt);
+         exprt c_zero = equality_exprt(c, zero);
+         exprt d_zero = equality_exprt(d, zero);
+         exprt denom_is_zero = and_exprt(c_zero, d_zero);
+         exprt raise_zdiv =
+           converter_.get_exception_handler().gen_exception_raise(
+             "ZeroDivisionError", "complex division by zero");
+         locationt loc = converter_.get_location_from_decl(call_);
+         raise_zdiv.location() = loc;
+         raise_zdiv.location().user_provided(true);
+         code_expressiont raise_code(raise_zdiv);
+         raise_code.location() = loc;
+         code_ifthenelset guard;
+         guard.cond() = denom_is_zero;
+         guard.then_case() = raise_code;
+         guard.location() = loc;
+         converter_.current_block->copy_to_operands(guard);
+         return normal_result;
        };
 
        auto complex_log_or_throw = [&](const exprt &z) -> exprt {
