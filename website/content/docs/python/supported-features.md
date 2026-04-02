@@ -19,14 +19,10 @@ This page is a reference of all Python language constructs, data structures, and
 - **Function definitions**: Parameters, return values, and calls
 - **Variadic parameters**: `*args` syntax for variable-length positional argument lists
 - **Type annotations**: Basic types (`int`, `float`, `bool`, `str`), `Any`, `Union[T1, T2]`, PEP 604 `T1 | T2` syntax
-
-{{< details title="Union and Any type details" closed="true" >}}
 - **Union types**: Both `Union[int, bool]` and `int | bool` syntax are supported, including chained unions with multiple members
 - **Type widening**: ESBMC selects the widest type from Union members using the hierarchy `float > int > bool`
 - **Any type**: When a function is annotated `-> Any`, ESBMC infers the actual return type by analyzing return statements in the function body; supports `int`, `float`, `bool`, and expressions evaluating to those types
 - **Variable inference**: Variables annotated with `Any` that are assigned from function calls inherit the function's inferred return type
-{{< /details >}}
-
 - **Lambda expressions**: Single-expression lambdas with multiple parameters; converted to regular functions and stored as function pointers; can be assigned to variables and called indirectly
 
 ## Object-Oriented Programming
@@ -39,22 +35,19 @@ This page is a reference of all Python language constructs, data structures, and
 
 ## String Formatting and Literals
 
-{{< details title="F-string support" closed="true" >}}
 - Basic variable interpolation: `f"Hello {name}!"`; multiple variables in one f-string
-- Built-in variable access: `f"Running as: {__name__}"`
+- Built-in variable access in f-strings: `f"Running as: {__name__}"`
 - Integer format specs: `f"{num:d}"`, `f"{num:i}"`
 - Float format specs: `f"{val:.2f}"`, `f"{price:.1f}"`
 - Boolean formatting: automatic conversion to `True`/`False` strings
 - Empty and literal f-strings: `f""`, `f"Just a string"`
 - F-string concatenation with other strings
 - IEEE 754–compliant 32-bit and 64-bit float-to-string conversion
-{{< /details >}}
 
 ## Data Structures
 
 ### Lists
 
-{{< details title="List operations" closed="true" >}}
 - `append(x)`: Add element to end
 - `clear()`: Remove all elements
 - `pop([i])`: Remove and return element at index (default: last)
@@ -68,11 +61,9 @@ This page is a reference of all Python language constructs, data structures, and
 - **Repetition**: `lst * n` with both literal and variable lists
 - **Nested lists**: Method calls on subscripted elements (e.g., `nested[i].append(v)`)
 - **Typed instance attributes**: `self.attr: List[T]` instance attributes with full method support
-{{< /details >}}
 
 ### Strings
 
-{{< details title="String operations" closed="true" >}}
 **Predicates**: `startswith()`, `endswith()`, `isspace()`, `isalpha()`, `isdigit()`, `islower()`, `isupper()`, `isalnum()`, `isnumeric()`, `isidentifier()`
 
 **Case conversion**: `lower()`, `upper()`, `capitalize()`, `title()`, `swapcase()`, `casefold()`
@@ -90,11 +81,9 @@ This page is a reference of all Python language constructs, data structures, and
 **Slicing**: `s[start:end]`, omitted bounds (`s[:end]`, `s[start:]`), negative indices (`s[-3:]`), empty slices
 
 **Operators**: `in` (substring test), `*` (repetition: `"a" * 3`, `3 * "a"`, boolean multipliers)
-{{< /details >}}
 
 ### Tuples
 
-{{< details title="Tuple support" closed="true" >}}
 - Literals: `(1, 2, 3)`, `()`, `(5,)` (single-element)
 - Mixed types: `(42, "hello", 3.14)`
 - Nested tuples: `((1, 2), (3, 4))`
@@ -103,11 +92,9 @@ This page is a reference of all Python language constructs, data structures, and
 - Equality comparison: `t1 == (1, 2, 3)`
 - `len()` built-in
 - `isinstance(obj, tuple)` type checking
-{{< /details >}}
 
 ### Dictionaries
 
-{{< details title="Dictionary operations" closed="true" >}}
 - **Literals**: `{"a": 1, "b": 2}`
 - **Subscript access**: `d["a"]`; raises `KeyError` if absent
 - **Subscript assignment**: `d["c"] = 3`
@@ -122,7 +109,6 @@ This page is a reference of all Python language constructs, data structures, and
 - **`popitem()`**: Remove and return last inserted `(key, value)` pair; raises `KeyError` if empty
 - **Nested dicts**: `dict[int, dict[int, int]]`
 - **`Optional[T]` values**: `dict[str, Optional[T]]` storage and retrieval
-{{< /details >}}
 
 ## Bytes and Integers
 
@@ -136,12 +122,11 @@ Supports byte and integer operations including type conversions and bit-length q
 - **`__ESBMC_assume`** for constraining non-deterministic inputs
 - **`ImportError` guards**: Imports inside `try/except ImportError` are handled statically
 
-{{< details title="Built-in exception types" closed="true" >}}
+**Built-in exception hierarchy**:
 - `BaseException` → `Exception` → `AssertionError`, `ValueError`, `TypeError`, `IndexError`, `KeyError`, `ZeroDivisionError`, `ImportError`
 - `OSError` → `FileNotFoundError`, `FileExistsError`, `PermissionError`
 
 Exception instances expose a message attribute and support `__str__()`.
-{{< /details >}}
 
 ## Cover Properties and Reachability
 
@@ -186,7 +171,6 @@ The `--strict-types` flag enables type compatibility validation for function arg
 
 ## Math Module (`math`)
 
-{{< details title="math module functions" closed="true" >}}
 **Constants**: `pi`, `e`, `inf`, `tau`, `nan`
 
 **Rounding**: `floor(x)`, `ceil(x)`, `trunc(x)`, `fabs(x)`, `modf(x)`
@@ -202,11 +186,9 @@ The `--strict-types` flag enables type compatibility validation for function arg
 **Geometry**: `hypot(x, y)`, `dist(p, q)` (expects `list[float]`)
 
 **Utilities**: `fmod(x, y)`, `copysign(x, y)`, `degrees(x)`, `radians(x)`, `isclose(a, b)`, `isfinite(x)`, `isnan(x)`, `isinf(x)`
-{{< /details >}}
 
 ## Regular Expression Module (`re`)
 
-{{< details title="re module support" closed="true" >}}
 **Functions**: `re.match(pattern, string)`, `re.search(pattern, string)`, `re.fullmatch(pattern, string)`
 
 **Supported pattern features**:
@@ -222,11 +204,9 @@ The `--strict-types` flag enables type compatibility validation for function arg
 **Type validation**: Both arguments must be string or bytes-like; invalid types raise `TypeError`.
 
 **Verification approach**: Uses operational models combining direct pattern recognition, literal string matching, and nondeterministic behavior for complex patterns.
-{{< /details >}}
 
 ## Random Module (`random`)
 
-{{< details title="random module support" closed="true" >}}
 All functions are modelled using nondeterministic values with appropriate constraints via `__ESBMC_assume`, allowing ESBMC to explore all possible values within the specified ranges.
 
 - `random.random()` → nondeterministic `float` in `[0.0, 1.0)`
@@ -234,12 +214,10 @@ All functions are modelled using nondeterministic values with appropriate constr
 - `random.getrandbits(k)` → nondeterministic integer with k random bits
 - `random.randrange(start, stop, step=1)` → randomly selected integer from the specified range
 
-See also: [Random Operational Model](./random-operational-model-in-esbmc)
-{{< /details >}}
+See also: [Random Operational Model](./Random-Operational-Model-in-ESBMC.md)
 
 ## OS Module (`os`)
 
-{{< details title="os module support" closed="true" >}}
 All `os` functions use nondeterministic modelling to verify both success and failure paths.
 
 **Path**: `os.path.exists(path)`, `os.path.basename(path)`
@@ -253,4 +231,3 @@ All `os` functions use nondeterministic modelling to verify both success and fai
 **File operations**:
 - `os.remove(path)`: Removes file; may raise `FileNotFoundError`
 - `os.popen(cmd)`: Opens a pipe (modelled for verification)
-{{< /details >}}

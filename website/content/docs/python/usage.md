@@ -259,6 +259,4 @@ Violated property:
 VERIFICATION FAILED
 ```
 
-{{< callout type="info" >}}
-Missing return detection only applies to functions with explicit non-void return type annotations. Constructors (`__init__`) are automatically excluded.
-{{< /callout >}}
+> **Note**: Missing return detection only applies to functions with explicit non-void return type annotations. Constructors (`__init__`) are automatically excluded.
