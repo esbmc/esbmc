@@ -28,11 +28,11 @@ def get_row(lst, x):
 
 # Direct assertions for ESBMC verification
 if __name__ == "__main__":
-    assert get_row([
+    # assert get_row([], 1) == []
     # assert get_row([
     # assert get_row([
     # assert get_row([], 1) == []
-    # assert get_row([[1]], 2) == []
+    assert get_row([[1]], 2) == []
     # assert get_row([[], [1], [1, 2, 3]], 3) == [(2, 2)]
     # assert True
     print("✅ HumanEval/87 - All assertions completed!")

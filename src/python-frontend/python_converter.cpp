@@ -2920,6 +2920,32 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   return nullptr;
 }
 
+symbolt *
+python_converter::find_nested_function_symbol(const std::string &name) const
+{
+  if (name.empty() || current_func_name_.empty())
+    return nullptr;
+
+  for (std::string scope = current_func_name_; !scope.empty();)
+  {
+    ::symbol_id nested_func_sid(current_python_file, "", scope + "@F@" + name);
+    if (
+      symbolt *nested_func_symbol =
+        symbol_table_.find_symbol(nested_func_sid.to_string()))
+    {
+      if (nested_func_symbol->type.is_code())
+        return nested_func_symbol;
+    }
+
+    const std::size_t sep = scope.rfind("@F@");
+    if (sep == std::string::npos)
+      break;
+    scope.resize(sep);
+  }
+
+  return nullptr;
+}
+
 symbolt *python_converter::find_symbol(const std::string &sym_id) const
 {
   // When not loading models, check imports first so that user imports
@@ -4587,6 +4613,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         // Check if this Name refers to a function
         if (!is_class_attr && element["_type"] == "Name")
         {
+          if (
+            symbolt *nested_func_symbol = find_nested_function_symbol(var_name))
+          {
+            expr = symbol_expr(*nested_func_symbol);
+            break;
+          }
+
           symbol_id func_sid(current_python_file, "", var_name);
           symbolt *func_symbol =
             symbol_table_.find_symbol(func_sid.to_string());
@@ -8361,8 +8394,26 @@ size_t python_converter::register_function_argument(
   if (
     stored_param != nullptr && element.contains("annotation") &&
     !element["annotation"].is_null())
+  {
     get_typechecker().cache_annotation_types(
       *stored_param, element["annotation"]);
+
+    if (
+      element["annotation"].contains("_type") &&
+      element["annotation"]["_type"] == "Subscript" &&
+      element["annotation"].contains("value") &&
+      element["annotation"]["value"].contains("id"))
+    {
+      const std::string container_name =
+        element["annotation"]["value"]["id"].get<std::string>();
+      if (container_name == "List" || container_name == "list")
+      {
+        typet elem_type = type_handler_.get_list_type(element).subtype();
+        if (!elem_type.is_empty())
+          python_list::add_type_info_entry(arg_id, "", elem_type);
+      }
+    }
+  }
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via

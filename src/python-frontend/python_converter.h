@@ -454,6 +454,7 @@ private:
     bool is_ctor) const;
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
+  symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
 
   void copy_instance_attributes(
