@@ -1,4 +1,4 @@
 CORE
 main.c
---enforce-contract increment --function increment --no-pointer-check --assume-nonnull-valid
+--enforce-contract increment --function increment --no-pointer-check
 ^VERIFICATION SUCCESSFUL$

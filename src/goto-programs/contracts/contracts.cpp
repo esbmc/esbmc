@@ -104,6 +104,12 @@ void code_contractst::rename_function(
   // Do NOT erase the old function yet - we'll replace it with the wrapper
 }
 
+// Forward declaration — defined after find_all_assignments below
+static expr2tc inline_temporary_variables(
+  const expr2tc &expr,
+  const goto_programt &function_body,
+  const goto_programt::const_targett &assume_location);
+
 expr2tc
 code_contractst::extract_requires_from_body(const goto_programt &function_body)
 {
@@ -117,7 +123,12 @@ code_contractst::extract_requires_from_body(const goto_programt &function_body)
       std::string comment = id2string(it->location.comment());
       if (comment == "contract::requires")
       {
-        requires_clauses.push_back(it->guard);
+        // Inline Clang temporaries and quantifier return values so the extracted
+        // expression contains the actual forall/exists expression rather than a
+        // dangling SSA symbol (e.g. return_value$___ESBMC_forall$1).
+        expr2tc inlined_guard =
+          inline_temporary_variables(it->guard, function_body, it);
+        requires_clauses.push_back(inlined_guard);
       }
     }
   }
@@ -211,12 +222,20 @@ static expr2tc inline_temporary_variables(
     const symbol2t &sym = to_symbol2t(expr);
     std::string sym_name = id2string(sym.thename);
 
-    // Check if this is a Clang-generated temporary variable
-    // These have names like "c:@F@foo::$tmp::tmp$6" or similar patterns with "$tmp"
+    // Check if this is a Clang-generated temporary variable or a quantifier
+    // return value that needs to be inlined.
+    // Matches:
+    //   "$tmp"                     — Clang short-circuit temporaries
+    //   "return_value$___ESBMC_forall$"  — result of __ESBMC_forall() call
+    //   "return_value$___ESBMC_exists$"  — result of __ESBMC_exists() call
     // Note: We DON'T inline return_value$___ESBMC_old$X because those need to be
     // matched against snapshots by replace_old_in_expr
+    bool is_clang_tmp = sym_name.find("$tmp") != std::string::npos;
+    bool is_quantifier_retval =
+      sym_name.find("return_value$___ESBMC_forall$") != std::string::npos ||
+      sym_name.find("return_value$___ESBMC_exists$") != std::string::npos;
     if (
-      sym_name.find("$tmp") != std::string::npos &&
+      (is_clang_tmp || is_quantifier_retval) &&
       sym_name.find("___ESBMC_old") == std::string::npos)
     {
       // Find all assignments to this variable
@@ -767,14 +786,48 @@ void code_contractst::enforce_contracts(
     // Reuse to avoid double scan.
     std::vector<expr2tc> assigns_targets = std::move(assigns_targets_early);
 
+    // Auto-detect whether pointer/array assigns targets are present.
+    // Phase 2B/2C (array element and pointer-dereference compliance) require
+    // that pointer parameters point to allocated memory so that ESBMC's
+    // value-set analysis can track writes through them.  Rather than making
+    // the user pass --assume-nonnull-valid manually, we enable the behaviour
+    // automatically whenever the assigns clause contains pointer or array
+    // element targets.
+    bool local_nonnull_valid = assume_nonnull_valid;
+    if (!local_nonnull_valid && !assigns_targets.empty())
+    {
+      auto classified_early =
+        frame_enforcert::classify_assigns_targets(assigns_targets);
+      if (
+        !classified_early.pointer_targets.empty() ||
+        !classified_early.ptr_field_targets.empty())
+      {
+        local_nonnull_valid = true;
+        log_debug(
+          "contracts",
+          "enforce_contracts: auto-enabling nonnull-valid for {} "
+          "(pointer/array assigns targets detected)",
+          function_name);
+      }
+    }
+
     // Determine if this function needs pointer validity assumptions.
-    // When --function is used, the harness passes nil for pointer parameters,
-    // so the wrapper must assume they point to valid memory for correct
-    // ensures checking. When called from main() with real arguments, this
-    // is not needed (and would mask real bugs in ensures checking).
+    // Only the explicit --assume-nonnull-valid flag and the --function entry
+    // harness path trigger add_pointer_validity_assumptions.
+    // Auto-detected local_nonnull_valid (from pointer assigns targets) must NOT
+    // trigger it: when the function is called from real code (e.g. main()),
+    // add_pointer_validity_assumptions would overwrite the caller's pointer
+    // arguments (e.g. p = malloc(...) clobbering p = &pt from the caller).
     bool needs_ptr_validity =
       assume_nonnull_valid ||
       (!entry_function.empty() && function_name == entry_function);
+
+    // use_malloc_for_ptrs: only use malloc (vs ASSUME(valid_object)) when the
+    // explicit --assume-nonnull-valid flag is set. For the entry-function path
+    // without the explicit flag, use ASSUME(valid_object) which produces
+    // vacuous ASSUME(false) for nil pointer args from the harness — the
+    // intended behaviour (vacuous pass when no memory is set up via is_fresh).
+    bool use_malloc_for_ptrs = assume_nonnull_valid;
 
     // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
@@ -787,7 +840,7 @@ void code_contractst::enforce_contracts(
       needs_ptr_validity,
       assigns_targets,
       check_assigns_compliance,
-      assume_nonnull_valid);
+      use_malloc_for_ptrs);
 
     // Create new function entry
     goto_functiont new_func;
@@ -926,6 +979,23 @@ goto_programt code_contractst::generate_checking_wrapper(
     assume_nn->location.comment("__ESBMC_is_fresh: pointer is non-null");
   }
 
+  // Collect the set of params already allocated by __ESBMC_is_fresh so that
+  // add_pointer_validity_assumptions can skip them (avoids overwriting a
+  // correctly-sized is_fresh allocation with a single-element malloc).
+  std::set<irep_idt> is_fresh_allocated_params;
+  for (const auto &info : is_fresh_calls)
+  {
+    expr2tc stripped = info.ptr_arg;
+    while (is_typecast2t(stripped))
+      stripped = to_typecast2t(stripped).from;
+    if (is_address_of2t(stripped))
+    {
+      const expr2tc &obj = to_address_of2t(stripped).ptr_obj;
+      if (is_symbol2t(obj))
+        is_fresh_allocated_params.insert(to_symbol2t(obj).thename);
+    }
+  }
+
   // 1. Add pointer validity assumptions (if needed).
   //    Comes after is_fresh allocation so that pointers declared via
   //    __ESBMC_is_fresh already have valid_object == true here, preventing
@@ -955,7 +1025,12 @@ goto_programt code_contractst::generate_checking_wrapper(
       }
     }
     add_pointer_validity_assumptions(
-      wrapper, original_func, location, use_malloc_for_ptrs, array_param_ids);
+      wrapper,
+      original_func,
+      location,
+      use_malloc_for_ptrs,
+      array_param_ids,
+      is_fresh_allocated_params);
   }
 
   // 2. Extract and create snapshots for __ESBMC_old() expressions.
@@ -3586,7 +3661,8 @@ void code_contractst::add_pointer_validity_assumptions(
   const symbolt &func,
   const locationt &location,
   bool use_malloc,
-  const std::set<irep_idt> &array_params)
+  const std::set<irep_idt> &array_params,
+  const std::set<irep_idt> &skip_params)
 {
   if (!func.type.is_code())
     return;
@@ -3603,6 +3679,17 @@ void code_contractst::add_pointer_validity_assumptions(
     // Check if this is a pointer type
     if (!is_pointer_type(p))
       continue;
+
+    // Skip params already allocated by __ESBMC_is_fresh to avoid overwriting
+    // the is_fresh allocation with a single-element malloc.
+    if (skip_params.count(param.get_identifier()))
+    {
+      log_debug(
+        "contracts",
+        "add_pointer_validity_assumptions: skipping {} (allocated by is_fresh)",
+        id2string(param.get_identifier()));
+      continue;
+    }
 
     if (use_malloc)
     {

@@ -524,7 +524,8 @@ private:
     const symbolt &func,
     const locationt &location,
     bool use_malloc = false,
-    const std::set<irep_idt> &array_params = {});
+    const std::set<irep_idt> &array_params = {},
+    const std::set<irep_idt> &skip_params = {});
 };
 
 #endif // ESBMC_CONTRACTS_H
