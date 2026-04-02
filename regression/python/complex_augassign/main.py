@@ -20,3 +20,7 @@ assert z4 == complex(2.5, 2.0)
 z5 = complex(0, 0)
 z5 += 0
 assert z5 == complex(0, 0)
+
+z6 = complex(2, 3)
+z6 += True
+assert z6 == complex(3, 3)
