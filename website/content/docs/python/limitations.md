@@ -10,7 +10,7 @@ The following limitations apply to the current version of ESBMC-Python. Many are
 ## Control Flow and Loops
 
 - Only `for` loops using the `range()` function are supported; direct iteration over lists (`for x in my_list:`) is not — use index-based access with `range(len(my_list))` instead.
-- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
+- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported (see [Supported Features — Dictionaries](./supported-features.md#dictionaries)).
 
 ## Lists and Strings
 

@@ -34,7 +34,7 @@ esbmc main.py --unwind 10
 | `--unwind N` | Set the global loop unwind bound to N iterations |
 | `--multi-property` | Continue verification after the first failure, reporting all violated properties |
 | `--strict-types` | Enable strict type checking for function arguments at verification time |
-| `--generate-pytest-testcase` | Generate pytest test cases from counterexamples (see [Pytest Test Generation](./pytest_testgen)) |
+| `--generate-pytest-testcase` | Generate pytest test cases from counterexamples (see [Pytest Test Generation](./PYTEST_TESTGEN.md)) |
 
 ## Writing Verification Harnesses
 
