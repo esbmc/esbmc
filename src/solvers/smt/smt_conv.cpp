@@ -2913,23 +2913,13 @@ static unsigned long size_to_bit_width(unsigned long sz)
   return dombits;
 }
 
-/** Compute the minimum bit-width needed to index a constant-size array.
- *  Precondition: arr.array_size must be a constant integer. */
-static unsigned long calculate_array_domain_width(const array_type2t &arr)
-{
-  assert(
-    !is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size) &&
-    "calculate_array_domain_width requires a constant array size");
-  return size_to_bit_width(to_constant_int2t(arr.array_size).value.to_uint64());
-}
-
 unsigned long array_domain_width_or_word_size(const array_type2t &arr)
 {
   // For constant-size arrays compute the minimal index width; for dynamic/VLA
   // or infinite arrays the size is not known statically, so fall back to the
   // machine word size which is always a valid index width.
   if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size))
-    return calculate_array_domain_width(arr);
+    return size_to_bit_width(to_constant_int2t(arr.array_size).value.to_uint64());
   return config.ansi_c.word_size;
 }
 
