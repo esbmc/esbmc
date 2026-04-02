@@ -1144,8 +1144,9 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 #if CLANG_VERSION_MAJOR >= 22
   case clang::Type::PredefinedSugar:
   {
-    if (get_type(
-          *the_type.getLocallyUnqualifiedSingleStepDesugaredType(), new_type))
+    if (
+      get_type(
+        *the_type.getLocallyUnqualifiedSingleStepDesugaredType(), new_type))
       return true;
     break;
   }
@@ -1264,6 +1265,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if (get_type(dt.getValueType(), new_type))
       return true;
 
+    new_type.set("#atomic", true);
     break;
   }
 
@@ -3434,12 +3436,55 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_Assign:
+  {
+    if (rhs.type().get_bool("#atomic"))
+    {
+      side_effect_expr_function_callt call;
+      call.function() = symbol_exprt("c:@F@__atomic_load", empty_typet());
+      call.function().name("__atomic_load");
+      exprt this_object = exprt("new_object");
+      this_object.set("#lvalue", true);
+      this_object.type() = lhs.type();
+
+      address_of_exprt tmp_expr(this_object);
+      call.arguments().push_back(tmp_expr);
+      call.arguments().push_back(address_of_exprt(rhs));
+      call.arguments().push_back(gen_zero(int_type()));
+
+      side_effect_exprt tmp_obj("temporary_object", lhs.type());
+      tmp_obj.location() = call.location();
+
+      codet code_expr("expression");
+      code_expr.operands().push_back(call);
+      tmp_obj.initializer(code_expr);
+
+      rhs = tmp_obj;
+    }
+
+    if (lhs.type().get_bool("#atomic"))
+    {
+      side_effect_expr_function_callt call;
+      call.function() = symbol_exprt("c:@F@__atomic_store", t);
+      call.function().name("__atomic_store");
+      side_effect_exprt tmp_obj("temporary_object", rhs.type());
+      tmp_obj.location() = call.location();
+      tmp_obj.move_to_operands(rhs);
+
+      call.arguments().push_back(address_of_exprt(lhs));
+      call.arguments().push_back(address_of_exprt(tmp_obj));
+      call.arguments().push_back(gen_zero(int_type()));
+
+      new_expr = call;
+      return false;
+    }
+
     // If we use code_assignt, it will reserve two operands,
     // and the copy_to_operands method call at the end of
     // this method will put lhs and rhs in positions 2 and 3,
     // instead of 0 and 1 :/
     new_expr = side_effect_exprt("assign", t);
     break;
+  }
 
   case clang::BO_Comma:
     new_expr = exprt("comma", t);

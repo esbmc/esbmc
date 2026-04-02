@@ -268,6 +268,13 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
       /* Bypassing side effects with `nondet` as a statement since
        * the goto layer can handle it. */
     }
+    else if (statement == "temporary_object")
+    {
+      adjust_operands(expr);
+
+      exprt &initializer = (exprt &)expr.find("initializer");
+      adjust_expr(initializer);
+    }
     else
     {
       log_error("unknown side effect: {} at {}", statement, expr.location());
