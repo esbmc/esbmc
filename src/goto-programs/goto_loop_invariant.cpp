@@ -76,9 +76,11 @@ static std::vector<expr2tc> extract_invariants_near(
     }
   };
 
-  // Returns true if the instruction is a compiler-generated DECL or ASSIGN
-  // (name contains '$', e.g. return_value$___ESBMC_forall$N).  These may
-  // legitimately appear between consecutive __ESBMC_loop_invariant() calls.
+  // Returns true if the instruction is a compiler-generated DECL, ASSIGN, or
+  // FUNCTION_CALL (name contains '$', e.g. return_value$___ESBMC_forall$N).
+  // These may legitimately appear between consecutive __ESBMC_loop_invariant()
+  // calls.  FUNCTION_CALL instructions arise when remove_function_call emits a
+  // DECL + FUNCTION_CALL pair for helper functions called inside an invariant.
   auto is_compiler_temp = [](goto_programt::const_targett t) -> bool {
     if (t->is_decl() && is_code_decl2t(t->code))
       return id2string(to_code_decl2t(t->code).value).find('$') !=
@@ -88,6 +90,13 @@ static std::vector<expr2tc> extract_invariants_near(
       const auto &assign = to_code_assign2t(t->code);
       return is_symbol2t(assign.target) &&
              id2string(to_symbol2t(assign.target).thename).find('$') !=
+               std::string::npos;
+    }
+    if (t->is_function_call() && is_code_function_call2t(t->code))
+    {
+      const auto &call = to_code_function_call2t(t->code);
+      return !is_nil_expr(call.ret) && is_symbol2t(call.ret) &&
+             id2string(to_symbol2t(call.ret).thename).find('$') !=
                std::string::npos;
     }
     return false;
@@ -115,9 +124,12 @@ static std::vector<expr2tc> extract_invariants_near(
     // that may appear between consecutive same-loop invariants are compiler-
     // generated temporaries; any real instruction means we have crossed into
     // a different context (e.g. outer-loop body), so we stop immediately.
-    while (it != begin)
+    // Reuse `dist` so that Phase 1 + Phase 2 together respect the same
+    // kMaxInvariantSearchBack bound and avoid an O(n) scan in large functions.
+    while (it != begin && dist < kMaxInvariantSearchBack)
     {
       --it;
+      ++dist;
       if (it->is_loop_invariant())
       {
         const std::list<expr2tc> &extra = it->get_loop_invariants();
