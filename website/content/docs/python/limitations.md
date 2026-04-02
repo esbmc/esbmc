@@ -3,9 +3,7 @@ title: Limitations
 weight: 4
 ---
 
-{{< callout type="warning" >}}
-The following limitations apply to the current version of ESBMC-Python. Many are actively being addressed. Check the [issue tracker](https://github.com/esbmc/esbmc/issues) for the latest status.
-{{< /callout >}}
+> **Note**: The following limitations apply to the current version of ESBMC-Python. Many are actively being addressed. Check the [issue tracker](https://github.com/esbmc/esbmc/issues) for the latest status.
 
 ## Control Flow and Loops
 

@@ -5,9 +5,7 @@ weight: 1
 
 The Python frontend converts Python source files into ESBMC's internal representation (IRep), enabling the engine's bounded model checker and SMT backend to verify program properties.
 
-{{< callout type="info" >}}
-The pipeline has three stages: **AST generation** (Python) → **type annotation** (Python) → **symbol table generation** (C++). Each stage feeds into the next before ESBMC's backend takes over.
-{{< /callout >}}
+> The pipeline has three stages: **AST generation** (Python) → **type annotation** (Python) → **symbol table generation** (C++). Each stage feeds into the next before ESBMC's backend takes over.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/esbmc/esbmc/master/src/python-frontend/images/arch.png" alt="ESBMC Python Frontend Architecture" style="max-width:65%;" />
