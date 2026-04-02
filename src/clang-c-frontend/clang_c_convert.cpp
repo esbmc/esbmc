@@ -1573,7 +1573,6 @@ bool clang_c_convertert::get_bitfield_type(
   return false;
 }
 
-
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
