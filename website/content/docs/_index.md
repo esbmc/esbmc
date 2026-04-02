@@ -300,62 +300,157 @@ esbmc file.c --k-induction
 esbmc file.c --loop-invariant
 ```
 
+ESBMC supports user-provided loop invariants as an alternative to expensive loop
+unwinding. This is particularly beneficial for programs with large loop bounds or
+unbounded loops, where traditional k-induction may become computationally
+prohibitive or hit iteration limits.
 
-<p>ESBMC now supports user-provided loop invariants as an alternative to expensive loop unwinding. This approach is particularly beneficial for programs with large loop bounds or unbounded loops, where traditional k-induction may become computationally prohibitive or hit iteration limits.</p>
+Loop invariants are specified using the built-in function
+`__ESBMC_loop_invariant(condition)` placed within the loop body.
 
-<p>Loop invariants are specified using the built-in function <code>__ESBMC_loop_invariant(condition)</code> placed within the loop body. When the <i>--loop-invariant</i> option is enabled, ESBMC transforms the loop using the standard k-induction approach:</p>
+---
 
-<ol>
-  <li><strong>Base case verification:</strong> Check that the invariant holds upon loop entry</li>
-  <li><strong>Inductive step:</strong> Assume the invariant holds, execute one loop iteration, and verify the invariant still holds</li>
-  <li><strong>Property verification:</strong> After loop exit, use the invariant to prove the target property</li>
-</ol>
+### Verification Modes
 
-#### Example: Basic Loop Invariant Usage</h5>
+As of the latest release, ESBMC provides **two distinct modes** for loop
+invariant verification:
 
+---
+
+#### `--loop-invariant` — Combined Mode (Default, Recommended)
+
+This is the recommended mode. It integrates invariant checking with k-induction
+for robust analysis, eliminating the spurious counterexamples that the legacy
+mode could produce for correct-but-weak invariants.
+
+> **Note:** `--loop-invariant` now implicitly enables k-induction. No extra
+> flags are required.
+
+**How it works — two-branch transformation:**
+```
+IF !nondet_bool() GOTO loop_head       // Non-deterministically skip to Branch 2
+
+// --- Branch 1: Inductivity Check ---
+ASSERT(INV)                            // Base case: invariant holds on entry
+HAVOC(loop_vars)
+ASSUME(INV)
+ASSUME(loop_entry_cond)
+ASSERT(INV)                            // Inductive step: invariant still holds
+ASSUME(false)                          // Terminate Branch 1
+
+loop_head:
+// --- Branch 2: K-Induction ---
+ASSUME(INV)                            // Use invariant as a hint for k-induction
+GOTO loop_head
+```
+
+**Expected outcomes:**
+
+| Invariant Quality | Branch 1 Result | K-Induction Result |
+|---|---|---|
+| Wrong (not inductive) | ASSERT fails — clear "invariant not inductive" error | — |
+| Correct but weak | Passes | Proves property via forward condition |
+| Correct and strong | Passes | Closes at inductive step |
+
+---
+
+#### `--loop-invariant-check` — Legacy Mode
+
+The original three-part havoc abstraction is preserved under this flag for
+backward compatibility. It replaces the annotated loop with:
+
+1. **Base-case assertion** — invariant holds on entry
+2. **Havoc + Assume** — abstracts the loop body nondeterministically
+3. **Inductive-step assertion** — invariant still holds after one iteration
+
+This mode avoids loop unrolling entirely, making it faster when the only goal
+is checking invariant inductivity without k-induction overhead. However, it
+**may produce spurious counterexamples** for invariants that are correct but
+weak, because the havoc step can assign values outside the expected program
+state without proper constraint propagation.
+
+> Use `--loop-invariant-check` only when speed is the priority and you
+> understand the false-positive risk.
+
+---
+
+### Example: Basic Loop Invariant Usage
 ```c
 int main() {
-int i = 0;
-int sum = 0;
+    int i = 0;
+    int sum = 0;
 
-__ESBMC_loop_invariant(i >= 0 && i <= 1000 && sum == i * 10);
-while (i < 1000) {
-  sum += 10;
-  i++;
-}
+    __ESBMC_loop_invariant(i >= 0 && i <= 1000 && sum == i * 10);
+    while (i < 1000) {
+        sum += 10;
+        i++;
+    }
 
-assert(sum == 10000);  // Successfully verified
-  return 0;
+    assert(sum == 10000);  // Successfully verified
+    return 0;
 }
 ```
 
-<p>The loop invariant approach has been tested on various benchmark programs from the k-induction test suite, successfully verifying several cases that previously resulted in "VERIFICATION UNKNOWN" verdicts due to unwinding limitations, including <code>check_if</code>, <code>count_down</code>, and <code>count_up_down</code>.</p>
+Verify with:
+```bash
+esbmc file.c --loop-invariant
+```
 
-## Known Limitations
+---
 
-<div class="warning">
-  <p><strong>Integer Overflow False Positives:</strong> The current implementation may generate false positive overflow errors due to aggressive havoc operations that create values outside expected bounds. This occurs when nondeterministic values are assigned without proper constraint propagation.</p>
+### Companion Options
 
-  <p><strong>Nested Loop Support:</strong> The current implementation does not correctly handle nested loops with multiple invariants. State management between inner and outer loops requires further refinement.</p>
+The following options can be combined with the k-induction proof rule to
+produce or strengthen inductive invariants:
 
-  <p><strong>Manual Invariant Specification:</strong> Users must manually specify correct loop invariants since ESBMC will not validate or infer them before verifying the program's correctness.</p>
-</div>
+- `--interval-analysis` — Enable interval analysis for integer variables and
+  inject assume statements into the program.
+- `--add-symex-value-sets` — Enable value-set analysis for pointers and inject
+  assume statements.
+- `--loop-invariant` — Use user-provided loop invariants with the combined
+  k-induction mode (described above).
 
-<p>We can also use additional options together with the k-induction proof rule to produce (inductive) invariants:</p>
-<ol>
-  <li><i>--interval-analysis</i>: enable interval analysis for integer variables and add assumes to the program.</li>
-  <li><i>--add-symex-value-sets</i>: enable value set analysis for pointers and add assumes to the program.</li>
-  <li><i>--loop-invariant</i>: enable user-provided loop invariants to avoid expensive loop unwinding.</li>
-</ol>
+---
 
-<p>The loop invariant feature is completely opt-in and maintains backward compatibility with existing verification workflows. Programs without loop invariant annotations continue to use the standard k-induction unwinding approach.</p>
+### Known Limitations
 
-<p>[1] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: Checking Safety Properties Using Induction and a SAT-Solver. FMCAD 2000: 108-125</p>
-<p>[2] Alastair F. Donaldson, Leopold Haller, Daniel Kroening, Philipp Rümmer: Software Verification Using k-Induction. SAS 2011: 351-368
+**Nested Loop Support:** The current implementation does not correctly handle
+nested loops with multiple invariants. State management between inner and outer
+loops requires further refinement.
+
+**Manual Invariant Specification:** Users must manually specify correct loop
+invariants. ESBMC will not infer or validate invariants before verification. An
+incorrect invariant will lead to a failed base-case assertion in
+`--loop-invariant` mode, or potentially a spurious result in
+`--loop-invariant-check` mode.
+
+> **Note:** The integer overflow false-positive issue present in the legacy
+> mode (caused by unconstrained havoc operations) has been resolved in the new
+> `--loop-invariant` combined mode. If you observe such false positives, ensure
+> you are not using `--loop-invariant-check`.
+
+---
+
+### Backward Compatibility
+
+The `--loop-invariant` flag now routes to the new combined mode. The legacy
+behavior is accessible via `--loop-invariant-check`. Programs without loop
+invariant annotations continue to use the standard k-induction unwinding
+approach.
+
+---
+
+### References
+
+[1] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: *Checking Safety Properties
+Using Induction and a SAT-Solver.* FMCAD 2000: 108–125
+
+[2] Alastair F. Donaldson, Leopold Haller, Daniel Kroening, Philipp Rümmer:
+*Software Verification Using k-Induction.* SAS 2011: 351–368
   
 <h3 id="multiple-files">Verification of modules that rely on larger structures</h3>
 
-<p>ESBMC can verify code that relies on existing infrastructures and must be compliant with those. Consider the following C program where the verification engineer wants to check whether the assert-statement in line 8 holds.</p>
+<p>ESBMC can verify code that relies on existing infrastructures and must be compliant with those. Consider the following C program where the verification engineer wants to check whether the assert-statement in line 8 holds.</p> 
 
 
 ```
