@@ -1,7 +1,7 @@
 /*
  * Regression test for GitHub issue #2789.
  * The shift UB check should be enabled by default so that a nondet
- * shift distance is flagged without requiring --ub-shift-check.
+ * shift distance is flagged without requiring.
  *
  * According to C99 6.5.7: "If the value of the right operand is
  * negative or is greater than or equal to the width of the promoted
