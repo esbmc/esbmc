@@ -10,7 +10,7 @@ The pipeline has three stages: **AST generation** (Python) → **type annotation
 {{< /callout >}}
 
 <p align="center">
-  <img src="/images/python-arch.png" alt="ESBMC Python Frontend Architecture" style="max-width:65%;" />
+  <img src="https://raw.githubusercontent.com/esbmc/esbmc/master/src/python-frontend/images/arch.png" alt="ESBMC Python Frontend Architecture" style="max-width:65%;" />
 </p>
 <p align="center"><em>Python Frontend Architecture</em></p>
 
