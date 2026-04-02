@@ -59,6 +59,42 @@ static std::vector<expr2tc> extract_invariants_near(
   goto_programt::targett it = loop_head;
   size_t dist = 0;
 
+  // Fold a LOOP_INVARIANT instruction's expression list into `invariants`.
+  // Multiple sub-expressions are combined with &&.
+  auto collect = [&](const std::list<expr2tc> &lst) {
+    if (lst.size() == 1)
+    {
+      invariants.push_back(lst.front());
+    }
+    else
+    {
+      auto jt = lst.begin();
+      expr2tc combined = *jt;
+      for (++jt; jt != lst.end(); ++jt)
+        combined = and2tc(combined, *jt);
+      invariants.push_back(combined);
+    }
+  };
+
+  // Returns true if the instruction is a compiler-generated DECL or ASSIGN
+  // (name contains '$', e.g. return_value$___ESBMC_forall$N).  These may
+  // legitimately appear between consecutive __ESBMC_loop_invariant() calls.
+  auto is_compiler_temp = [](goto_programt::const_targett t) -> bool {
+    if (t->is_decl() && is_code_decl2t(t->code))
+      return id2string(to_code_decl2t(t->code).value).find('$') !=
+             std::string::npos;
+    if (t->is_assign() && is_code_assign2t(t->code))
+    {
+      const auto &assign = to_code_assign2t(t->code);
+      return is_symbol2t(assign.target) &&
+             id2string(to_symbol2t(assign.target).thename).find('$') !=
+               std::string::npos;
+    }
+    return false;
+  };
+
+  // Phase 1: skip non-invariant instructions (including for-init assignments)
+  // until we find the closest LOOP_INVARIANT for this loop.
   while (it != begin && dist < kMaxInvariantSearchBack)
   {
     --it;
@@ -71,19 +107,29 @@ static std::vector<expr2tc> extract_invariants_near(
     if (inv_list.empty())
       continue;
 
-    if (inv_list.size() == 1)
+    collect(inv_list);
+
+    // Phase 2: collect any additional LOOP_INVARIANT instructions that belong
+    // to the same loop.  These arise when the user writes multiple separate
+    // __ESBMC_loop_invariant() calls (issue #3936).  The only instructions
+    // that may appear between consecutive same-loop invariants are compiler-
+    // generated temporaries; any real instruction means we have crossed into
+    // a different context (e.g. outer-loop body), so we stop immediately.
+    while (it != begin)
     {
-      invariants.push_back(inv_list.front());
+      --it;
+      if (it->is_loop_invariant())
+      {
+        const std::list<expr2tc> &extra = it->get_loop_invariants();
+        if (!extra.empty())
+          collect(extra);
+        continue;
+      }
+      if (is_compiler_temp(it))
+        continue;
+      break; // real instruction — stop clustering
     }
-    else
-    {
-      auto jt = inv_list.begin();
-      expr2tc combined = *jt;
-      for (++jt; jt != inv_list.end(); ++jt)
-        combined = and2tc(combined, *jt);
-      invariants.push_back(combined);
-    }
-    break;
+    break; // done: found the invariant group for this loop
   }
 
   return invariants;
