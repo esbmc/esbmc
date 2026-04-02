@@ -1039,7 +1039,7 @@ type2tc make_array_domain_type(const array_type2t &arr);
  *  For constant-size arrays this is the minimum bit-width needed to represent
  *  every valid index.  For VLA, dynamic, or infinite arrays the size is not
  *  statically known, so the machine word size is returned as a safe default. */
-unsigned long array_domain_width(const array_type2t &arr);
+unsigned long array_domain_width_or_word_size(const array_type2t &arr);
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
