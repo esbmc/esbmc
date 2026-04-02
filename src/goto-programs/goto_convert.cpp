@@ -566,10 +566,12 @@ void goto_convertt::generate_dynamic_size_vla(
   };
 
   array_typet arr_type = to_array_type(var.type());
-  // Capture the original dimension expression before the size_t cast so the
-  // zero-size check operates on the pre-cast (possibly signed) value and
-  // correctly catches both zero and negative dimensions.
-  exprt dim_expr = to_array_type(var.type()).size();
+  // Use arr_type.size() directly -- rewrite_vla_decl_size has already run and
+  // materialised any side-effecting size expression into an __ESBMC_tmp_ symbol,
+  // so arr_type.size() is a plain symbol (no side effects).  We keep a copy
+  // of the pre-cast expression so the zero-size check operates on the original
+  // (possibly signed) type and correctly catches both zero and negative dimensions.
+  exprt dim_expr = arr_type.size();
   exprt size = typecast_exprt(dim_expr, size_type());
 
   irep_idt ovfl_cast_id =
