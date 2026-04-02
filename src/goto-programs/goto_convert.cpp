@@ -579,7 +579,7 @@ void goto_convertt::generate_dynamic_size_vla(
   assert_not(ovfl_cast_id, size);
 
   // Zero-size and negative-size VLAs are undefined behaviour (C11 §6.7.6.2p1).
-  // Always checked regardless of --no-vla-size-check since this is always UB.
+  if (!disable_check)
   {
     expr2tc dim2;
     migrate_expr(dim_expr, dim2);
