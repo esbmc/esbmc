@@ -566,11 +566,26 @@ void goto_convertt::generate_dynamic_size_vla(
   };
 
   array_typet arr_type = to_array_type(var.type());
-  exprt size = typecast_exprt(to_array_type(var.type()).size(), size_type());
+  // Capture the original dimension expression before the size_t cast so the
+  // zero-size check operates on the pre-cast (possibly signed) value and
+  // correctly catches both zero and negative dimensions.
+  exprt dim_expr = to_array_type(var.type()).size();
+  exprt size = typecast_exprt(dim_expr, size_type());
 
   irep_idt ovfl_cast_id =
     "overflow-typecast-" + size.type().width().as_string();
   assert_not(ovfl_cast_id, size);
+
+  // Zero-size and negative-size VLAs are undefined behaviour (C11 §6.7.6.2p1).
+  // Always checked regardless of --no-vla-size-check since this is always UB.
+  {
+    expr2tc dim2;
+    migrate_expr(dim_expr, dim2);
+    goto_programt::targett gt_tgt = dest.add_instruction(ASSERT);
+    gt_tgt->guard = greaterthan2tc(dim2, gen_zero(dim2->type));
+    gt_tgt->location = loc;
+    gt_tgt->location.comment("VLA array dimension must be greater than zero");
+  }
 
   // First, if it's a multidimensional vla, the size will be the
   // multiplication of the dimensions

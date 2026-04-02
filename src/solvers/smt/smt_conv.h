@@ -1035,10 +1035,11 @@ private:
 /** Given an array type, create a type2tc representing its domain. */
 type2tc make_array_domain_type(const array_type2t &arr);
 
-/** Given an array type, calculate the domain bitwidth it should have. For
- *  nondeterministically or infinite sized arrays, this defaults to the
- *  machine integer width. */
-unsigned long calculate_array_domain_width(const array_type2t &arr);
+/** Return the SMT domain bit-width for an array type.
+ *  For constant-size arrays this is the minimum bit-width needed to represent
+ *  every valid index.  For VLA, dynamic, or infinite arrays the size is not
+ *  statically known, so the machine word size is returned as a safe default. */
+unsigned long array_domain_width(const array_type2t &arr);
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
