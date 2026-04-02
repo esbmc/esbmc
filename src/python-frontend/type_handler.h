@@ -20,8 +20,7 @@ inline const typet &cached_double_type()
 // Returns a const reference to the single global instance.
 inline const struct_typet &get_complex_struct_type()
 {
-  static const struct_typet instance = []()
-  {
+  static const struct_typet instance = []() {
     struct_typet t;
     t.tag("complex");
     t.components().push_back(
