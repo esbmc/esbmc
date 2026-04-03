@@ -3669,6 +3669,12 @@ private:
         ((elem["_type"] == "AnnAssign" && elem.contains("target") &&
           elem["target"].contains("id") &&
           elem["target"]["id"].template get<std::string>() == node_name) ||
+         (elem["_type"] == "Assign" && elem.contains("targets") &&
+          elem["targets"].is_array() && !elem["targets"].empty() &&
+          elem["targets"][0].contains("_type") &&
+          elem["targets"][0]["_type"] == "Name" &&
+          elem["targets"][0].contains("id") &&
+          elem["targets"][0]["id"].template get<std::string>() == node_name) ||
          (elem["_type"] == "arg" && elem["arg"] == node_name)))
       {
         return elem;

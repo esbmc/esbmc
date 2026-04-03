@@ -3676,8 +3676,14 @@ class Preprocessor(ast.NodeTransformer):
                 node.args.append(keywords[expectedArgs[i]])
             elif (functionName, expectedArgs[i]) in self.functionDefaults:
                 default_val = self.functionDefaults[(functionName, expectedArgs[i])]
-                if isinstance(default_val, ast.Name):
-                    node.args.append(default_val)
+                if isinstance(default_val, (ast.List, ast.Dict, ast.Set)):
+                    node.args.append(ast.Constant(value=None))
+                    continue
+                if isinstance(default_val, ast.AST):
+                    default_expr = copy.deepcopy(default_val)
+                    if isinstance(default_expr, ast.Name):
+                        default_expr.ctx = ast.Load()
+                    node.args.append(default_expr)
                 else:
                     node.args.append(ast.Constant(value=default_val))
 
@@ -3742,6 +3748,8 @@ class Preprocessor(ast.NodeTransformer):
                     assignment_node, target_var = self.generate_variable_copy(qualified_name,node.args.args[-i],node.args.defaults[-i])
                     self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = target_var
                     return_nodes.append(assignment_node)
+                else:
+                    self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = node.args.defaults[-i]
 
         # Handle keyword-only defaults
         for i, default in enumerate(node.args.kw_defaults):
@@ -3753,6 +3761,8 @@ class Preprocessor(ast.NodeTransformer):
                     assignment_node, target_var = self.generate_variable_copy(qualified_name, node.args.kwonlyargs[i], default)
                     self.functionDefaults[(qualified_name, kwarg_name)] = target_var
                     return_nodes.append(assignment_node)
+                else:
+                    self.functionDefaults[(qualified_name, kwarg_name)] = default
 
         self.generic_visit(node)
         if is_generator:
