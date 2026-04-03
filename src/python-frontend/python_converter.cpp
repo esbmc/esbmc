@@ -4290,18 +4290,20 @@ exprt python_converter::create_member_expression(
 {
   typet clean_type = clean_attribute_type(attr_type);
   exprt source = symbol_exprt(symbol.id, symbol.type);
-  member_exprt member_expr(source, attr_name, clean_type);
-
-  // Apply adjust_member logic (from Clang frontend): insert dereference if source is pointer
-  exprt &base = member_expr.struct_op();
-  if (base.type().is_pointer())
+  if (source.type().is_pointer())
   {
     exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
+    deref.type() = source.type().subtype();
+    deref.move_to_operands(source);
+    source = std::move(deref);
   }
+  typet source_type = source.type();
+  if (source_type.id() == "symbol")
+    source_type = ns.follow(source_type);
+  if (!source_type.is_struct() && !source_type.is_union())
+    return gen_zero(clean_type);
 
+  member_exprt member_expr(source, attr_name, clean_type);
   return member_expr;
 }
 
@@ -4543,7 +4545,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             opt_st.has_component("value") && !opt_st.has_component(attr_name))
           {
             const typet &inner_raw = opt_st.get_component("value").type();
-            base_expr = member_exprt(base_expr, "value", inner_raw);
+            exprt optional_base = base_expr;
+            if (optional_base.type().is_pointer())
+            {
+              exprt deref("dereference");
+              deref.type() = optional_base.type().subtype();
+              deref.move_to_operands(optional_base);
+              optional_base = std::move(deref);
+            }
+            base_expr = member_exprt(optional_base, "value", inner_raw);
             base_type = inner_raw;
             if (base_type.is_pointer())
               base_type = base_type.subtype();
@@ -4573,19 +4583,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             const typet &attr_type =
               struct_type.get_component(attr_name).type();
             typet clean_type = clean_attribute_type(attr_type);
-
-            member_exprt member_expr(base_expr, attr_name, clean_type);
-
-            // Insert dereference if needed
-            exprt &base = member_expr.struct_op();
-            if (base.type().is_pointer())
+            exprt member_base = base_expr;
+            if (member_base.type().is_pointer())
             {
               exprt deref("dereference");
-              deref.type() = base.type().subtype();
-              deref.move_to_operands(base);
-              base.swap(deref);
+              deref.type() = member_base.type().subtype();
+              deref.move_to_operands(member_base);
+              member_base = std::move(deref);
             }
 
+            member_exprt member_expr(member_base, attr_name, clean_type);
             expr = member_expr;
             break;
           }
@@ -4801,8 +4808,25 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
       }
 
-      // Get class definition from symbols table
-      symbolt *class_symbol = symbol_table_.find_symbol(obj_type_name);
+      // Get class definition from symbols table.
+      symbolt *class_symbol =
+        obj_type_name.empty() ? nullptr : symbol_table_.find_symbol(obj_type_name);
+      if (!class_symbol)
+      {
+        std::string fallback_class_id;
+        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
+          if (!fallback_class_id.empty())
+            return;
+          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+          {
+            const struct_typet &st = to_struct_type(s.type);
+            if (st.has_component(attr_name))
+              fallback_class_id = s.id.as_string();
+          }
+        });
+        if (!fallback_class_id.empty())
+          class_symbol = symbol_table_.find_symbol(fallback_class_id);
+      }
       if (!class_symbol)
       {
         throw std::runtime_error("Class \"" + obj_type_name + "\" not found");
@@ -4810,6 +4834,36 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       struct_typet &class_type =
         static_cast<struct_typet &>(class_symbol->type);
+      auto build_member_expr_from_class =
+        [&](const typet &attr_type) -> exprt {
+        typet clean_type = clean_attribute_type(attr_type);
+        exprt base = symbol_expr(*symbol);
+        typet base_type = base.type();
+        if (base_type.id() == "symbol")
+          base_type = ns.follow(base_type);
+
+        bool points_to_struct = false;
+        if (base_type.is_pointer())
+        {
+          typet pointee = base_type.subtype();
+          if (pointee.id() == "symbol")
+            pointee = ns.follow(pointee);
+          points_to_struct = pointee.is_struct() || pointee.is_union();
+        }
+
+        if (!(base_type.is_struct() || base_type.is_union() || points_to_struct))
+          base = typecast_exprt(base, gen_pointer_type(class_type));
+
+        if (base.type().is_pointer())
+        {
+          exprt deref("dereference");
+          deref.type() = base.type().subtype();
+          deref.move_to_operands(base);
+          base = std::move(deref);
+        }
+
+        return member_exprt(base, attr_name, clean_type);
+      };
 
       if (is_converting_lhs)
       {
@@ -4840,7 +4894,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       if (is_converting_lhs && class_type.has_component(attr_name))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
-        expr = create_member_expression(*symbol, attr_name, attr_type);
+        expr = build_member_expr_from_class(attr_type);
 
         // Register as instance attribute
         register_instance_attribute(
@@ -4857,7 +4911,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
          is_complex_type(class_type)))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
-        expr = create_member_expression(*symbol, attr_name, attr_type);
+        expr = build_member_expr_from_class(attr_type);
       }
       // Otherwise use class attribute
       else
@@ -4901,7 +4955,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           if (class_type.has_component(attr_name))
           {
             const typet &attr_type = class_type.get_component(attr_name).type();
-            expr = create_member_expression(*symbol, attr_name, attr_type);
+            expr = build_member_expr_from_class(attr_type);
           }
           else
           {
@@ -7679,6 +7733,8 @@ typet python_converter::get_type_from_annotation(
     if (annotation_node.contains("id"))
     {
       std::string type_id = annotation_node["id"].get<std::string>();
+      if (type_id == "NoneType")
+        return any_type();
 
       if (type_id == "dict" || type_id == "Dict")
       {
@@ -8171,6 +8227,8 @@ typet python_converter::get_type_from_annotation(
   else if (annotation_node.contains("id"))
   {
     std::string type_id = annotation_node["id"].get<std::string>();
+    if (type_id == "NoneType")
+      return any_type();
 
     // Special handling for dict type — but only if not shadowed by a user class
     if (
@@ -9139,7 +9197,7 @@ void python_converter::get_attributes_from_self(
             resolved = get_type_from_annotation(it->second, stmt);
         }
         type = (!resolved.is_nil() && !resolved.is_empty()) ? resolved
-                                                            : pointer_type();
+                                                            : any_type();
       }
       else
         type = type_handler_.get_typet(annotated_type);
