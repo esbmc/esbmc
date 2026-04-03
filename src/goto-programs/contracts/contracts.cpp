@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <algorithm>
 #include <goto-programs/contracts/contracts.h>
 #include <goto-programs/remove_no_op.h>
 #include <util/base_type.h>
@@ -11,6 +12,54 @@
 #include <irep2/irep2_utils.h>
 #include <util/message.h>
 #include <util/options.h>
+
+/// Determine whether a contract clause instruction (ASSERT or ASSUME) should be
+/// emitted for the given clause expression.
+///
+/// Returns false for trivially-redundant constant-bool clauses:
+///   - ASSERT false_constant → always failing; keep it (returns true)
+///   - ASSERT true_constant  → no-op assertion; skip it (returns false)
+///   - ASSUME true_constant  → trivially satisfied; skip it (returns false)
+///   - ASSUME false_constant → unsatisfiable; still meaningful; keep it (returns true)
+///   - Non-constant          → always emit (returns true)
+static bool should_add_clause_instruction(
+  const expr2tc &clause,
+  goto_program_instruction_typet inst_type)
+{
+  if (is_nil_expr(clause))
+    return false;
+  if (is_constant_bool2t(clause))
+  {
+    bool val = to_constant_bool2t(clause).value;
+    return (inst_type == ASSERT) ? !val : val;
+  }
+  return true;
+}
+
+/// Apply a recursive transformation to all operands of an expression,
+/// returning a (possibly modified) clone only when a change actually occurred.
+/// This avoids an unnecessary clone when the transformation is a no-op.
+///
+/// \param expr  Source expression (not modified)
+/// \param transform  Function applied to each direct sub-expression;
+///                   if it returns the same pointer, no change is recorded
+/// \return Either \p expr unchanged or a clone with updated operands
+static expr2tc transform_operands_if_changed(
+  const expr2tc &expr,
+  const std::function<expr2tc(const expr2tc &)> &transform)
+{
+  expr2tc result = expr->clone();
+  bool changed = false;
+  result->Foreach_operand([&](expr2tc &op) {
+    expr2tc new_op = transform(op);
+    if (new_op != op)
+    {
+      op = new_op;
+      changed = true;
+    }
+  });
+  return changed ? result : expr;
+}
 
 /// Check if function name is __ESBMC_is_fresh (handles Clang USR format)
 static bool is_fresh_function(const std::string &funcname)
@@ -1048,32 +1097,13 @@ goto_programt code_contractst::generate_checking_wrapper(
                                const expr2tc &clause,
                                const goto_program_instruction_typet inst_type,
                                const std::string &comment) {
-    if (is_nil_expr(clause))
+    if (!should_add_clause_instruction(clause, inst_type))
       return;
 
-    bool should_add = false;
-    if (is_constant_bool2t(clause))
-    {
-      const constant_bool2t &b = to_constant_bool2t(clause);
-      // For ASSERT: only add if false (violation)
-      // For ASSUME: only add if true (trivially true clauses are skipped)
-      if (inst_type == ASSERT)
-        should_add = !b.value;
-      else // ASSUME
-        should_add = b.value;
-    }
-    else
-    {
-      should_add = true;
-    }
-
-    if (should_add)
-    {
-      goto_programt::targett t = wrapper.add_instruction(inst_type);
-      t->guard = clause;
-      t->location = location;
-      t->location.comment(comment);
-    }
+    goto_programt::targett t = wrapper.add_instruction(inst_type);
+    t->guard = clause;
+    t->location = location;
+    t->location.comment(comment);
   };
 
   // 3. Assume requires clause (after memory allocation for is_fresh)
@@ -1366,27 +1396,13 @@ goto_programt code_contractst::generate_checking_wrapper(
     normalize_ensures_guard_for_return_value(ensures_guard, ret_val);
 
   // Add ASSERT instruction for ensures clause with property
-  if (!is_nil_expr(ensures_guard))
+  if (should_add_clause_instruction(ensures_guard, ASSERT))
   {
-    bool should_add = false;
-    if (is_constant_bool2t(ensures_guard))
-    {
-      const constant_bool2t &b = to_constant_bool2t(ensures_guard);
-      should_add = !b.value; // Only assert if false (violation)
-    }
-    else
-    {
-      should_add = true;
-    }
-
-    if (should_add)
-    {
-      goto_programt::targett t = wrapper.add_instruction(ASSERT);
-      t->guard = ensures_guard;
-      t->location = location;
-      t->location.comment("contract ensures");
-      t->location.property("contract ensures");
-    }
+    goto_programt::targett t = wrapper.add_instruction(ASSERT);
+    t->guard = ensures_guard;
+    t->location = location;
+    t->location.comment("contract ensures");
+    t->location.property("contract ensures");
   }
 
   // 5. Return the value (if function has return type)
@@ -1658,14 +1674,9 @@ expr2tc code_contractst::extract_struct_members_to_temps(
       const member2t &member = to_member2t(e);
 
       // Check if the source is ret_val
-      bool is_ret_val_member = false;
-      if (is_symbol2t(member.source_value))
-      {
-        const symbol2t &src_sym = to_symbol2t(member.source_value);
-        is_ret_val_member = (ret_sym.thename == src_sym.thename);
-      }
-
-      if (is_ret_val_member)
+      if (
+        is_symbol2t(member.source_value) &&
+        ret_sym.thename == to_symbol2t(member.source_value).thename)
       {
         // Check if we already created a temp for this member
         auto it = member_to_temp.find(member.member);
@@ -2243,28 +2254,22 @@ code_contractst::materialize_ptr_deref_snapshots(
     // In that case the assigns clause already covers writes through p at some
     // index, so Phase 2C's whole-object snapshot would produce false positives.
     {
-      bool param_in_direct = false;
-      for (const auto &dt : classified.direct_targets)
-      {
-        // Recursively search for param_id symbol in the expression.
-        std::function<bool(const expr2tc &)> contains_param =
-          [&](const expr2tc &e) -> bool {
-          if (!e)
-            return false;
-          if (is_symbol2t(e) && to_symbol2t(e).thename == param_id)
-            return true;
-          for (unsigned i = 0; i < e->get_num_sub_exprs(); ++i)
-            if (contains_param(*e->get_sub_expr(i)))
-              return true;
+      // Recursively search for param_id symbol in an expression tree.
+      std::function<bool(const expr2tc &)> contains_param =
+        [&](const expr2tc &e) -> bool {
+        if (!e)
           return false;
-        };
-        if (contains_param(dt))
-        {
-          param_in_direct = true;
-          break;
-        }
-      }
-      if (param_in_direct)
+        if (is_symbol2t(e) && to_symbol2t(e).thename == param_id)
+          return true;
+        for (unsigned i = 0; i < e->get_num_sub_exprs(); ++i)
+          if (contains_param(*e->get_sub_expr(i)))
+            return true;
+        return false;
+      };
+      if (std::any_of(
+            classified.direct_targets.begin(),
+            classified.direct_targets.end(),
+            contains_param))
         goto next_param;
     }
 
@@ -2967,21 +2972,10 @@ expr2tc code_contractst::fix_comparison_types(
   // Recurse into every operand so that nested logical sub-expressions (e.g.
   // and(or(equality(rv, 0), ...), equality(...))) are fully processed.
   if (is_and2t(expr) || is_or2t(expr))
-  {
-    expr2tc new_expr = expr->clone();
-    bool changed = false;
-
-    new_expr->Foreach_operand([this, &ret_val, &changed](expr2tc &op) {
-      expr2tc fixed = fix_comparison_types(op, ret_val);
-      if (fixed != op)
-      {
-        op = fixed;
-        changed = true;
-      }
-    });
-
-    return changed ? new_expr : expr;
-  }
+    return transform_operands_if_changed(
+      expr, [this, &ret_val](const expr2tc &op) {
+        return fix_comparison_types(op, ret_val);
+      });
 
   // Step 3: For all other expressions, return unchanged
   // We don't recursively process arbitrary expression trees to avoid infinite loops
@@ -3022,21 +3016,10 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
   // For non-add expressions or non-floating-point types, process operands
   // but only one level deep to avoid recursion issues
   if (is_and2t(expr) || is_or2t(expr))
-  {
-    expr2tc new_expr = expr->clone();
-    bool changed = false;
-
-    new_expr->Foreach_operand([this, &changed](expr2tc &op) {
-      expr2tc normalized = normalize_fp_add_in_ensures(op);
-      if (normalized != op)
-      {
-        op = normalized;
-        changed = true;
-      }
-    });
-
-    return changed ? new_expr : expr;
-  }
+    return transform_operands_if_changed(
+      expr, [this](const expr2tc &op) {
+        return normalize_fp_add_in_ensures(op);
+      });
 
   // For comparison expressions, process both sides
   if (is_comp_expr(expr))
@@ -3397,37 +3380,15 @@ void code_contractst::generate_replacement_at_call(
                                const goto_program_instruction_typet inst_type,
                                const std::string &comment,
                                const std::string &property = "") {
-    if (is_nil_expr(clause))
+    if (!should_add_clause_instruction(clause, inst_type))
       return;
 
-    bool should_add = false;
-    if (is_constant_bool2t(clause))
-    {
-      const constant_bool2t &b = to_constant_bool2t(clause);
-
-      // For ASSERT: only add if false (violation). A true constant would be
-      // a no-op assertion, so we skip it to avoid cluttering the GOTO program.
-      // For ASSUME: only add if true (skip trivially false assumptions).
-      if (inst_type == ASSERT)
-        should_add = !b.value;
-      else // ASSUME
-        should_add = b.value;
-    }
-    else
-    {
-      // Non-constant expressions should always be added
-      should_add = true;
-    }
-
-    if (should_add)
-    {
-      goto_programt::targett t = replacement.add_instruction(inst_type);
-      t->guard = clause;
-      t->location = call_location;
-      t->location.comment(comment);
-      if (!property.empty())
-        t->location.property(property);
-    }
+    goto_programt::targett t = replacement.add_instruction(inst_type);
+    t->guard = clause;
+    t->location = call_location;
+    t->location.comment(comment);
+    if (!property.empty())
+      t->location.property(property);
   };
 
   // 1. Assert requires clause (check precondition at call site)
