@@ -1,4 +1,5 @@
 #include <cassert>
+#include <map>
 #include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/remove_no_op.h>
@@ -10,6 +11,7 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
+#include <util/replace_symbol.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
@@ -734,6 +736,97 @@ void goto_convertt::convert_decl_block(const codet &code, goto_programt &dest)
     convert(to_code(it), dest);
 }
 
+/// Returns true if @p expr is a direct reference to a C11 _Atomic-qualified
+/// variable (symbol with the "#atomic" flag set on its type).
+static bool is_atomic_symbol(const exprt &expr, const namespacet &ns)
+{
+  if (expr.id() != "symbol")
+    return false;
+  const symbolt *sym = ns.lookup(expr.identifier());
+  return sym && sym->type.get_bool("#atomic");
+}
+
+/// Returns true if @p expr contains a direct read of any C11 _Atomic variable
+/// (stops early at the first match; does not recurse into address_of).
+static bool has_atomic_read(const exprt &expr, const namespacet &ns)
+{
+  if (expr.is_address_of())
+    return false;
+  if (is_atomic_symbol(expr, ns))
+    return true;
+  forall_operands(it, expr)
+    if (has_atomic_read(*it, ns))
+      return true;
+  return false;
+}
+
+/// Walks @p expr depth-first and inserts into @p out one entry per distinct
+/// _Atomic symbol that is actually *read* (i.e. not under address_of).
+/// The map key is the symbol identifier; the value is its type.
+static void collect_atomic_reads(
+  const exprt &expr,
+  const namespacet &ns,
+  std::map<irep_idt, typet> &out)
+{
+  if (expr.is_address_of())
+    return;
+  if (is_atomic_symbol(expr, ns))
+  {
+    out.emplace(expr.identifier(), expr.type());
+    return;
+  }
+  forall_operands(it, expr)
+    collect_atomic_reads(*it, ns, out);
+}
+
+void goto_convertt::convert_assign_atomic(
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location,
+  goto_programt &dest)
+{
+  exprt working_rhs = rhs;
+
+  // Phase 1: for each distinct _Atomic symbol read in rhs, emit an atomic load
+  // into a fresh temporary and substitute it throughout working_rhs.
+  // collect_atomic_reads deduplicates by identifier, so a + a produces one tmp.
+  std::map<irep_idt, typet> atomic_reads;
+  collect_atomic_reads(working_rhs, ns, atomic_reads);
+
+  replace_symbolt subst;
+  for (const auto &[atom_id, atom_type] : atomic_reads)
+  {
+    symbolt &tmp = new_tmp_symbol(atom_type);
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = location;
+    convert_decl(decl, dest);
+
+    dest.add_instruction(ATOMIC_BEGIN);
+    code_assignt load(symbol_expr(tmp), symbol_exprt(atom_id, atom_type));
+    load.location() = location;
+    copy(load, ASSIGN, dest);
+    dest.add_instruction(ATOMIC_END);
+
+    subst.insert(atom_id, symbol_expr(tmp));
+  }
+  subst.replace(working_rhs);
+
+  // Phase 2: emit the store, wrapped in ATOMIC_BEGIN/END only when lhs is _Atomic.
+  // A context switch is allowed between Phase 1 and Phase 2 (between the
+  // ATOMIC_END above and the ATOMIC_BEGIN below), which is exactly the C11
+  // requirement that atomic load and atomic store are separate operations.
+  bool lhs_atomic = is_atomic_symbol(lhs, ns);
+  if (lhs_atomic)
+    dest.add_instruction(ATOMIC_BEGIN);
+
+  code_assignt store(lhs, working_rhs);
+  store.location() = location;
+  copy(store, ASSIGN, dest);
+
+  if (lhs_atomic)
+    dest.add_instruction(ATOMIC_END);
+}
+
 void goto_convertt::convert_assign(
   const code_assignt &code,
   goto_programt &dest)
@@ -778,6 +871,15 @@ void goto_convertt::convert_assign(
     if (rhs.type().is_code())
     {
       convert(to_code(rhs), dest);
+      return;
+    }
+
+    // C11 _Atomic semantics: each access to an _Atomic object is an
+    // indivisible atomic operation.  Dispatch before atomicity-check so
+    // the two mechanisms remain independent.
+    if (is_atomic_symbol(lhs, ns) || has_atomic_read(rhs, ns))
+    {
+      convert_assign_atomic(lhs, rhs, code.location(), dest);
       return;
     }
 

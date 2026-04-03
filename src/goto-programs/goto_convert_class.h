@@ -153,6 +153,11 @@ protected:
   void convert_decl_block(const codet &code, goto_programt &dest);
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
+  void convert_assign_atomic(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location,
+    goto_programt &dest);
   void convert_cpp_delete(const codet &code, goto_programt &dest);
   void convert_for(const codet &code, goto_programt &dest);
   void convert_while(const codet &code, goto_programt &dest);
