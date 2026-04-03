@@ -3016,10 +3016,9 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
   // For non-add expressions or non-floating-point types, process operands
   // but only one level deep to avoid recursion issues
   if (is_and2t(expr) || is_or2t(expr))
-    return transform_operands_if_changed(
-      expr, [this](const expr2tc &op) {
-        return normalize_fp_add_in_ensures(op);
-      });
+    return transform_operands_if_changed(expr, [this](const expr2tc &op) {
+      return normalize_fp_add_in_ensures(op);
+    });
 
   // For comparison expressions, process both sides
   if (is_comp_expr(expr))
