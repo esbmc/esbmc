@@ -4891,6 +4891,31 @@ exprt function_call_expr::handle_general_function_call()
         }
         arg = typecast_exprt(address_of_exprt(arg), param_type);
       }
+
+      // General object-reference coercion:
+      // when a pointer parameter receives a struct object argument, pass the
+      // object's address (materializing temporaries when required).
+      if (
+        function_type_ == FunctionType::Constructor && param_type.is_pointer() &&
+        arg_followed_type.is_struct() && !arg.is_address_of())
+      {
+        if (!arg.is_symbol())
+        {
+          symbolt &tmp = converter_.create_tmp_symbol(
+            call_, "$ptr_arg$", arg.type(), gen_zero(arg.type()));
+          code_declt tmp_decl(symbol_expr(tmp));
+          tmp_decl.location() = location;
+          converter_.current_block->copy_to_operands(tmp_decl);
+          code_assignt tmp_assign(symbol_expr(tmp), arg);
+          tmp_assign.location() = location;
+          converter_.current_block->copy_to_operands(tmp_assign);
+          arg = symbol_expr(tmp);
+        }
+
+        arg = address_of_exprt(arg);
+        if (!base_type_eq(arg.type(), param_type, converter_.ns))
+          arg = typecast_exprt(arg, param_type);
+      }
     }
 
     // Handle string literal constants
