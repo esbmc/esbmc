@@ -11,18 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies and build with coverage
+        env:
+          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
         run: ./scripts/build.sh -b Debug -k ON
       - name: Run tests
         env:
-          LLVM_PROFILE_FILE: "coverage/%p.profraw"
-        run: mkdir -p build/coverage && cd build/ && ctest -j4 --output-on-failure --progress --timeout 5 . || true
+          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
+        run: mkdir -p build/coverage && cd build/ && ctest -j4 --progress --timeout 5 . || true
       - name: Merge coverage data
-        run: |
-          if ls build/coverage/*.profraw 1> /dev/null 2>&1; then
-            llvm-profdata merge -sparse build/coverage/*.profraw -o build/merged.profdata
-          else
-            echo "No .profraw files found in build/coverage; skipping llvm-profdata merge."
-          fi
+        run: llvm-profdata merge -sparse /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
       - name: Generate lcov coverage report
         run: |
           llvm-cov export -format=lcov \
@@ -31,13 +28,10 @@ jobs:
             > coverage.info
       - name: Filter out uninteresting paths
         run: |
-          lcov --remove coverage.info \
+          lcov --ignore-errors range --ignore-errors inconsistent --ignore-errors corrupt \
+               -ignore-errors unused --remove coverage.info \
                '/usr/*' \
                '*/build/*' \
-               '*/unit/*' \
-               '*/src/ansi-c/cpp/*' \
-               '*/src/clang-c-frontend/headers/*' \
-               '*/src/c2goto/library/libm/musl/*' \
                --output-file coverage.info
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
