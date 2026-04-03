@@ -241,6 +241,7 @@ collect_ubuntu_packages() {
     cmake
     bison
     flex
+    llvm
     linux-libc-dev
     libboost-date-time-dev
     libboost-program-options-dev
