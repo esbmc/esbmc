@@ -284,12 +284,15 @@ void frame_enforcert::patch_old_snapshot_assigns(goto_programt &prog) const
     {
       if (!is_symbol2t(operand) || !is_symbol2t(entry.original_expr))
         continue;
-      if (to_symbol2t(operand).thename != to_symbol2t(entry.original_expr).thename)
+      if (
+        to_symbol2t(operand).thename !=
+        to_symbol2t(entry.original_expr).thename)
         continue;
 
       // Replace RHS with (void*)&snapshot_sym
       // address_of2tc(T, snap) produces type T*; typecast to lhs type (void*)
-      expr2tc addr = address_of2tc(entry.snapshot_sym->type, entry.snapshot_sym);
+      expr2tc addr =
+        address_of2tc(entry.snapshot_sym->type, entry.snapshot_sym);
       expr2tc patched_rhs = (addr->type != assign.target->type)
                               ? typecast2tc(assign.target->type, addr)
                               : addr;
