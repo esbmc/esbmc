@@ -1016,15 +1016,30 @@ private:
     smt_astt lo_r,
     smt_astt hi_r,
     const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RNA enclosure helper for ieee_add (--ir-ieee only).
+   *  Parallel to apply_ieee754_rne_interval_add; uses the same B_near
+   *  constants (eps_rel = 2^-53 double / 2^-24 single) and identical formula
+   *  shape because ROUND_TO_AWAY is a nearest-rounding mode with the same
+   *  unit roundoff as ROUND_TO_EVEN.
+   *  Inputs / behavior / returns: identical to the RNE helper above,
+   *  except fresh symbols are named ra_lo_aw::N / ra_hi_aw::N to match
+   *  the RNA single-step naming convention. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rna_interval_add(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
 };
 
 /** Given an array type, create a type2tc representing its domain. */
 type2tc make_array_domain_type(const array_type2t &arr);
 
-/** Given an array type, calculate the domain bitwidth it should have. For
- *  nondeterministically or infinite sized arrays, this defaults to the
- *  machine integer width. */
-unsigned long calculate_array_domain_width(const array_type2t &arr);
+/** Return the SMT domain bit-width for an array type.
+ *  For constant-size arrays this is the minimum bit-width needed to represent
+ *  every valid index.  For VLA, dynamic, or infinite arrays the size is not
+ *  statically known, so the machine word size is returned as a safe default. */
+unsigned long array_domain_width_or_word_size(const array_type2t &arr);
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)

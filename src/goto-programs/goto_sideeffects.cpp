@@ -19,9 +19,8 @@ static void collect_and_conjuncts(const exprt &expr, exprt::operandst &out)
     out.push_back(expr);
 }
 
-/// Rebuild a right-to-left nested binary && from a flat list of conjuncts
-/// starting at index @p i.  Mirrors the binary shape Clang produces so that
-/// downstream code (is_boolean checks, migrate_expr) behaves identically.
+/// Rebuild a right-associative nested binary && from a flat list of conjuncts
+/// starting at index @p i.
 static exprt rebuild_and_chain(const exprt::operandst &conjuncts, std::size_t i)
 {
   assert(i < conjuncts.size());
@@ -53,6 +52,34 @@ static exprt rebuild_or_chain(const exprt::operandst &disjuncts, std::size_t i)
   exprt result = exprt("or", bool_type());
   result.copy_to_operands(disjuncts[i], rebuild_or_chain(disjuncts, i + 1));
   return result;
+}
+
+void goto_convertt::remove_sideeffects_for_quantifier_body(
+  exprt &body,
+  goto_programt &dest)
+{
+  if (!has_sideeffect(body))
+    return;
+
+  // Look through any implicit typecasts that Clang may insert (e.g. an
+  // explicit (int) cast on the body followed by an implicit _Bool conversion
+  // for the function parameter produces two typecast layers).
+  exprt *expr = &body;
+  while (expr->id() == "typecast" && expr->operands().size() == 1)
+    expr = &expr->op0();
+
+  // Recurse into || and && without converting them to short-circuit ITE chains.
+  // This preserves the logical structure so that replace_name_in_body() in
+  // smt_conv.cpp can substitute the bound variable throughout the full body.
+  if (expr->is_or() || expr->is_and())
+  {
+    for (auto &op : expr->operands())
+      remove_sideeffects_for_quantifier_body(op, dest);
+    return;
+  }
+
+  // Leaf that is not a boolean connector: use the standard handler.
+  remove_sideeffects(body, dest, /*result_is_used=*/true);
 }
 
 void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
@@ -390,17 +417,7 @@ void goto_convertt::remove_sideeffects(
       }
 
       // Special handling for __ESBMC_ensures and __ESBMC_requires with
-      // && or || chains.
-      //
-      // Clang lowers A || B and A && B into short-circuit GOTO patterns
-      // (if-then-else control flow) whenever either operand has a side
-      // effect.  When the contract clause is later extracted from the GOTO
-      // program, only one branch of the short-circuit survives, producing
-      // an incomplete boolean expression.
-      //
-      // Fix: flatten the top-level && / || chain, call remove_sideeffects()
-      // on each operand independently, and rebuild a plain and/or expression.
-      // This keeps the full formula intact in the stored contract instruction.
+      // && or || chains containing side effects (e.g. __ESBMC_old()).
       if (
         fsym &&
         (fsym->name == "__ESBMC_ensures" || fsym->name == "__ESBMC_requires"))
@@ -409,7 +426,6 @@ void goto_convertt::remove_sideeffects(
         bool rewrote = false;
         if (args.size() == 1 && has_sideeffect(args.front()))
         {
-          // Look through any implicit typecast (_Bool cast on the argument).
           exprt *inner = &args.front();
           if (
             inner->id() == "typecast" && inner->operands().size() == 1 &&
@@ -439,6 +455,30 @@ void goto_convertt::remove_sideeffects(
         {
           remove_function_call(expr, dest, result_is_used);
           return;
+        }
+      }
+
+      // Special handling for __ESBMC_forall/__ESBMC_exists(ptr, body):
+      // preserve logical structure of || / && body so the bound variable
+      // remains visible for substitution in smt_conv.cpp.
+      if (
+        fsym &&
+        (fsym->name == "__ESBMC_forall" || fsym->name == "__ESBMC_exists"))
+      {
+        exprt::operandst &args = expr.op1().operands();
+        if (args.size() == 2 && has_sideeffect(args[1]))
+        {
+          exprt *body_expr = &args[1];
+          while (body_expr->id() == "typecast" &&
+                 body_expr->operands().size() == 1)
+            body_expr = &body_expr->op0();
+
+          if (body_expr->is_or() || body_expr->is_and())
+          {
+            remove_sideeffects_for_quantifier_body(*body_expr, dest);
+            remove_function_call(expr, dest, result_is_used);
+            return;
+          }
         }
       }
     }

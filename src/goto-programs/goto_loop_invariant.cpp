@@ -64,6 +64,51 @@ static std::vector<expr2tc> extract_invariants_near(
   goto_programt::targett it = loop_head;
   size_t dist = 0;
 
+  // Fold a LOOP_INVARIANT instruction's expression list into `invariants`.
+  // Multiple sub-expressions are combined with &&.
+  auto collect = [&](const std::list<expr2tc> &lst) {
+    if (lst.size() == 1)
+    {
+      invariants.push_back(lst.front());
+    }
+    else
+    {
+      auto jt = lst.begin();
+      expr2tc combined = *jt;
+      for (++jt; jt != lst.end(); ++jt)
+        combined = and2tc(combined, *jt);
+      invariants.push_back(combined);
+    }
+  };
+
+  // Returns true if the instruction is a compiler-generated DECL, ASSIGN, or
+  // FUNCTION_CALL (name contains '$', e.g. return_value$___ESBMC_forall$N).
+  // These may legitimately appear between consecutive __ESBMC_loop_invariant()
+  // calls.  FUNCTION_CALL instructions arise when remove_function_call emits a
+  // DECL + FUNCTION_CALL pair for helper functions called inside an invariant.
+  auto is_compiler_temp = [](goto_programt::const_targett t) -> bool {
+    if (t->is_decl() && is_code_decl2t(t->code))
+      return id2string(to_code_decl2t(t->code).value).find('$') !=
+             std::string::npos;
+    if (t->is_assign() && is_code_assign2t(t->code))
+    {
+      const auto &assign = to_code_assign2t(t->code);
+      return is_symbol2t(assign.target) &&
+             id2string(to_symbol2t(assign.target).thename).find('$') !=
+               std::string::npos;
+    }
+    if (t->is_function_call() && is_code_function_call2t(t->code))
+    {
+      const auto &call = to_code_function_call2t(t->code);
+      return !is_nil_expr(call.ret) && is_symbol2t(call.ret) &&
+             id2string(to_symbol2t(call.ret).thename).find('$') !=
+               std::string::npos;
+    }
+    return false;
+  };
+
+  // Phase 1: skip non-invariant instructions (including for-init assignments)
+  // until we find the closest LOOP_INVARIANT for this loop.
   while (it != begin && dist < kMaxInvariantSearchBack)
   {
     --it;
@@ -76,19 +121,32 @@ static std::vector<expr2tc> extract_invariants_near(
     if (inv_list.empty())
       continue;
 
-    if (inv_list.size() == 1)
+    collect(inv_list);
+
+    // Phase 2: collect any additional LOOP_INVARIANT instructions that belong
+    // to the same loop.  These arise when the user writes multiple separate
+    // __ESBMC_loop_invariant() calls (issue #3936).  The only instructions
+    // that may appear between consecutive same-loop invariants are compiler-
+    // generated temporaries; any real instruction means we have crossed into
+    // a different context (e.g. outer-loop body), so we stop immediately.
+    // Reuse `dist` so that Phase 1 + Phase 2 together respect the same
+    // kMaxInvariantSearchBack bound and avoid an O(n) scan in large functions.
+    while (it != begin && dist < kMaxInvariantSearchBack)
     {
-      invariants.push_back(inv_list.front());
+      --it;
+      ++dist;
+      if (it->is_loop_invariant())
+      {
+        const std::list<expr2tc> &extra = it->get_loop_invariants();
+        if (!extra.empty())
+          collect(extra);
+        continue;
+      }
+      if (is_compiler_temp(it))
+        continue;
+      break; // real instruction — stop clustering
     }
-    else
-    {
-      auto jt = inv_list.begin();
-      expr2tc combined = *jt;
-      for (++jt; jt != inv_list.end(); ++jt)
-        combined = and2tc(combined, *jt);
-      invariants.push_back(combined);
-    }
-    break;
+    break; // done: found the invariant group for this loop
   }
 
   return invariants;
@@ -364,7 +422,7 @@ static void extract_and_remove_side_effects_impl(
       irep_idt lhs_sym = to_symbol2t(assign.target).get_symbol_name();
       if (dep_symbols.count(lhs_sym) == 0)
         break;
-      if (inv_symbols.count(lhs_sym) && !is_likely_compiler_temp(lhs_sym))
+      if (!is_likely_compiler_temp(lhs_sym))
         break;
       if (is_trivial_rhs(assign.source))
         continue;

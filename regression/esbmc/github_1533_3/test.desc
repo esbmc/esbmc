@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 1 --no-unwinding-assertions --overflow-check --z3 --no-slice
+^VERIFICATION FAILED$
+VLA array dimension must be greater than zero

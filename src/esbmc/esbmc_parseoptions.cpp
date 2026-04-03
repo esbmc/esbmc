@@ -73,6 +73,11 @@ extern "C"
 
 #define BT_BUF_SIZE 256
 
+// ANSI color/style escape sequences for terminal output
+#define CLR_BOLD_CYAN "\033[1;36m"
+#define CLR_BOLD "\033[1m"
+#define CLR_RESET "\033[0m"
+
 extern "C" const char buildidstring_buf[];
 extern "C" const unsigned int buildidstring_buf_size;
 
@@ -298,6 +303,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // Copy all flags that are set to non-default values in CMD into options
   options.cmdline(cmdline);
   set_verbosity_msg();
+
+  // Resolve --color option: validate and convert to boolean
+  options.set_option("color", resolve_color_option());
 
   if (cmdline.isset("git-hash"))
   {
@@ -2970,12 +2978,99 @@ void esbmc_parseoptionst::process_function_contracts(
   }
 }
 
+bool esbmc_parseoptionst::resolve_color_option() const
+{
+  const char *raw = cmdline.getval("color");
+  std::string val = (raw && *raw) ? raw : "auto";
+  if (val != "auto" && val != "always" && val != "never")
+  {
+    log_error(
+      "Invalid value for --color: '{}'. Must be auto, always, or never.", val);
+    exit(1);
+  }
+  return ENABLE_COLOR(val);
+}
+
+// Colorize --flag references found in description text with bold formatting.
+// Matches "--" followed by one or more alphanumeric/hyphen characters,
+// stopping at delimiters like '.', ',', ' ', ')', '\'', '"', or end of string.
+static std::string colorize_flag_refs(const std::string &text)
+{
+  std::string result;
+  size_t i = 0;
+  while (i < text.size())
+  {
+    if (
+      i + 2 < text.size() && text[i] == '-' && text[i + 1] == '-' &&
+      (std::isalnum(text[i + 2]) || text[i + 2] == '-'))
+    {
+      size_t start = i;
+      i += 2;
+      while (i < text.size() && (std::isalnum(text[i]) || text[i] == '-'))
+        i++;
+      result += CLR_BOLD;
+      result += text.substr(start, i - start);
+      result += CLR_RESET;
+    }
+    else
+    {
+      result += text[i];
+      i++;
+    }
+  }
+  return result;
+}
+
 // This prints the ESBMC version and a list of CMD options
 // available in ESBMC.
 void esbmc_parseoptionst::help()
 {
-  log_status("\n* * *           ESBMC {}          * * *", ESBMC_VERSION);
+  bool use_color = resolve_color_option();
+
+  // Print the "* * *     ESBMC x.y.z     * * *"
+  auto const esbmc_string = fmt::format(" ESBMC {} ", ESBMC_VERSION);
+  auto const title_start = std::string("* * * ");
+  auto const title_end = std::string(" * * *");
+  auto const inner =
+    80 - title_start.length() - title_end.length() - esbmc_string.length();
+  auto const left_pad = std::string(inner / 2, '=');
+  auto const right_pad = std::string(inner - inner / 2, '=');
+  log_status(
+    "\n{}{}{}{}{}", title_start, left_pad, esbmc_string, right_pad, title_end);
+
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
-  log_status("{}", oss.str());
+
+  if (!use_color)
+  {
+    log_status("{}", oss.str());
+    return;
+  }
+
+  // Colorize: group headers in bold cyan, option names in bold,
+  // and --flag references in descriptions in bold
+  std::istringstream iss(oss.str());
+  std::string line;
+  while (std::getline(iss, line))
+  {
+    if (!line.empty() && line[0] != ' ' && line.back() == ':')
+      // Group header (e.g. "Printing options:")
+      fmt::print(stderr, CLR_BOLD_CYAN "{}" CLR_RESET "\n", line);
+    else if (
+      line.size() >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] == '-')
+    {
+      // Option line: colorize the flag portion (up to the description)
+      auto desc_pos = line.find("  ", 4);
+      if (desc_pos != std::string::npos)
+        fmt::print(
+          stderr,
+          CLR_BOLD "{}" CLR_RESET "{}\n",
+          line.substr(0, desc_pos),
+          colorize_flag_refs(line.substr(desc_pos)));
+      else
+        fmt::print(stderr, CLR_BOLD "{}" CLR_RESET "\n", line);
+    }
+    else
+      fmt::print(stderr, "{}\n", colorize_flag_refs(line));
+  }
 }
