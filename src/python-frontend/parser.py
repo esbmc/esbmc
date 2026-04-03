@@ -37,7 +37,7 @@ def check_usage():
         sys.exit(2)
 
 def is_imported_model(module_name):
-    models = ["math", "os", "numpy", "esbmc", "decimal", "collections"]
+    models = ["math", "os", "numpy", "esbmc", "decimal", "collections", "typing"]
     return module_name in models
 
 def is_unsupported_module(module_name):
@@ -58,10 +58,6 @@ def import_module_by_name(module_name, output_dir):
         sys.exit(3)
 
     base_module = module_name.split(".")[0]
-
-    # Skip typing module - it's for type annotations only and doesn't need AST processing.
-    if base_module == "typing":
-        return None
 
     # Skip testing frameworks - they don't contain logic to verify
     if is_testing_framework(base_module):
@@ -598,7 +594,7 @@ def main():
         filename = os.path.basename(python_file)
         module_name = filename[:-3]
 
-        if is_imported_model(module_name):
+        if is_imported_model(module_name) and module_name != "typing":
             continue;
 
         with open(python_file) as model:

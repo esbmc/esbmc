@@ -554,7 +554,20 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     if (!rhs_type.is_floatbv())
       rhs.type() = float_type;
   }
-  // Case 5: Align bit-widths between LHS and RHS if they differ
+  // Case 5 (P19): Promote real RHS to complex when LHS is complex.
+  // Must come BEFORE the width-alignment case: a complex struct is 128-bit
+  // while a scalar float is 64-bit, so width alignment would otherwise fire
+  // first and corrupt the float by assigning struct type to it.
+  // Handles: z = 1.0, z = n, z = True where z is declared as complex.
+  // Note: is_bool() must be explicit since is_integer_type() excludes bool.
+  else if (
+    is_complex_type(lhs_type) && !is_complex_type(rhs_type) &&
+    (rhs_type.is_floatbv() || type_utils::is_integer_type(rhs_type) ||
+     rhs_type.is_bool()))
+  {
+    rhs = promote_to_complex(rhs);
+  }
+  // Case 6: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
     try
@@ -1769,6 +1782,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       const exprt xi = member(x, "imag");
       const exprt yr = member(y, "real");
       const exprt yi = member(y, "imag");
+      const typet &dt = cached_double_type();
+      exprt zero = from_double(0.0, dt);
       exprt ac = ieee_binop("ieee_mul", xr, yr);
       exprt bd = ieee_binop("ieee_mul", xi, yi);
       exprt bc = ieee_binop("ieee_mul", xi, yr);
@@ -1778,9 +1793,26 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt numer_real = ieee_binop("ieee_add", ac, bd);
       exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
       exprt denom = ieee_binop("ieee_add", c2, d2);
-      return make_complex(
+      exprt normal_result = make_complex(
         ieee_binop("ieee_div", numer_real, denom),
         ieee_binop("ieee_div", numer_imag, denom));
+      // P21: Runtime ZeroDivisionError guard — denom==0 iff yr==0 AND yi==0.
+      exprt yr_zero = equality_exprt(yr, zero);
+      exprt yi_zero = equality_exprt(yi, zero);
+      exprt denom_is_zero = and_exprt(yr_zero, yi_zero);
+      exprt raise_zdiv = get_exception_handler().gen_exception_raise(
+        "ZeroDivisionError", "complex division by zero");
+      locationt loc = get_location_from_decl(element);
+      raise_zdiv.location() = loc;
+      raise_zdiv.location().user_provided(true);
+      code_expressiont raise_code(raise_zdiv);
+      raise_code.location() = loc;
+      code_ifthenelset guard;
+      guard.cond() = denom_is_zero;
+      guard.then_case() = raise_code;
+      guard.location() = loc;
+      current_block->copy_to_operands(guard);
+      return normal_result;
     };
     auto complex_log = [&](const exprt &z) -> exprt {
       const exprt zr = member(z, "real");
@@ -1955,7 +1987,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt positive_power = pow_nonnegative(exponent_abs);
       exprt one = make_complex(
         from_double(1.0, double_type()), from_double(0.0, double_type()));
-      return complex_div(one, positive_power);
+      exprt result = complex_div(one, positive_power);
+      // P21: complex_div can return a ZeroDivisionError throw when divisor==0+0j.
+      // (z**n with n<0 and z==0+0j falls here.)
+      return result;
     }
 
     if (
@@ -2020,7 +2055,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         return make_complex(real, imag);
       }
 
-      // op == "Div"
+      // op == "Div" (inline, mixed complex/real path)
       exprt ac = ieee_binop("ieee_mul", a, c);
       exprt bd = ieee_binop("ieee_mul", b, d);
       exprt bc = ieee_binop("ieee_mul", b, c);
@@ -2032,9 +2067,30 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
       exprt denom = ieee_binop("ieee_add", c2, d2);
 
-      exprt real = ieee_binop("ieee_div", numer_real, denom);
-      exprt imag = ieee_binop("ieee_div", numer_imag, denom);
-      return make_complex(real, imag);
+      exprt real_div = ieee_binop("ieee_div", numer_real, denom);
+      exprt imag_div = ieee_binop("ieee_div", numer_imag, denom);
+      exprt normal_div_result = make_complex(real_div, imag_div);
+      // P21: Runtime ZeroDivisionError guard — denom==0 iff c==0 AND d==0.
+      {
+        const typet &dt = cached_double_type();
+        exprt zero = from_double(0.0, dt);
+        exprt c_zero = equality_exprt(c, zero);
+        exprt d_zero = equality_exprt(d, zero);
+        exprt denom_is_zero = and_exprt(c_zero, d_zero);
+        exprt raise_zdiv = get_exception_handler().gen_exception_raise(
+          "ZeroDivisionError", "complex division by zero");
+        locationt loc = get_location_from_decl(element);
+        raise_zdiv.location() = loc;
+        raise_zdiv.location().user_provided(true);
+        code_expressiont raise_code(raise_zdiv);
+        raise_code.location() = loc;
+        code_ifthenelset guard;
+        guard.cond() = denom_is_zero;
+        guard.then_case() = raise_code;
+        guard.location() = loc;
+        current_block->copy_to_operands(guard);
+        return normal_div_result;
+      }
     }
 
     return raise_complex_type_error(
@@ -2915,6 +2971,32 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
           return func_symbol;
       }
     }
+  }
+
+  return nullptr;
+}
+
+symbolt *
+python_converter::find_nested_function_symbol(const std::string &name) const
+{
+  if (name.empty() || current_func_name_.empty())
+    return nullptr;
+
+  for (std::string scope = current_func_name_; !scope.empty();)
+  {
+    ::symbol_id nested_func_sid(current_python_file, "", scope + "@F@" + name);
+    if (
+      symbolt *nested_func_symbol =
+        symbol_table_.find_symbol(nested_func_sid.to_string()))
+    {
+      if (nested_func_symbol->type.is_code())
+        return nested_func_symbol;
+    }
+
+    const std::size_t sep = scope.rfind("@F@");
+    if (sep == std::string::npos)
+      break;
+    scope.resize(sep);
   }
 
   return nullptr;
@@ -4587,6 +4669,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         // Check if this Name refers to a function
         if (!is_class_attr && element["_type"] == "Name")
         {
+          if (
+            symbolt *nested_func_symbol = find_nested_function_symbol(var_name))
+          {
+            expr = symbol_expr(*nested_func_symbol);
+            break;
+          }
+
           symbol_id func_sid(current_python_file, "", var_name);
           symbolt *func_symbol =
             symbol_table_.find_symbol(func_sid.to_string());
@@ -6919,6 +7008,17 @@ void python_converter::get_compound_assign(
   // Reset RHS flag
   is_converting_rhs = false;
 
+  // P27: Promote real RHS to complex when LHS is complex (AugAssign path).
+  // adjust_statement_types() is NOT called on this path, so without this
+  // check, `z += 1.0` / `z *= 2` produce a struct/scalar type mismatch in IR.
+  if (
+    is_complex_type(lhs.type()) && !is_complex_type(rhs.type()) &&
+    (rhs.type().is_floatbv() || type_utils::is_integer_type(rhs.type()) ||
+     rhs.type().is_bool()))
+  {
+    rhs = promote_to_complex(rhs);
+  }
+
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = loc;
   target_block.copy_to_operands(code_assign);
@@ -7359,17 +7459,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     }
   }
 
-  // Python truthiness for complex in conditional contexts:
+  // P12: Python truthiness for complex in conditional contexts:
   // bool(z) == (z.real != 0.0 or z.imag != 0.0).
+  // Delegates to the single canonical implementation in type_handler.h.
   if (is_complex_type(cond.type()))
   {
-    exprt real = member_exprt(cond, "real", double_type());
-    exprt imag = member_exprt(cond, "imag", double_type());
-    exprt zero = from_double(0.0, double_type());
-    cond = or_exprt(
-      not_exprt(equality_exprt(real, zero)),
-      not_exprt(equality_exprt(imag, zero)));
-    cond.location() = get_location_from_decl(ast_node["test"]);
+    locationt loc = get_location_from_decl(ast_node["test"]);
+    cond = complex_to_bool_expr(cond);
+    cond.location() = loc;
   }
 
   // Recover type
@@ -8361,8 +8458,26 @@ size_t python_converter::register_function_argument(
   if (
     stored_param != nullptr && element.contains("annotation") &&
     !element["annotation"].is_null())
+  {
     get_typechecker().cache_annotation_types(
       *stored_param, element["annotation"]);
+
+    if (
+      element["annotation"].contains("_type") &&
+      element["annotation"]["_type"] == "Subscript" &&
+      element["annotation"].contains("value") &&
+      element["annotation"]["value"].contains("id"))
+    {
+      const std::string container_name =
+        element["annotation"]["value"]["id"].get<std::string>();
+      if (container_name == "List" || container_name == "list")
+      {
+        typet elem_type = type_handler_.get_list_type(element).subtype();
+        if (!elem_type.is_empty())
+          python_list::add_type_info_entry(arg_id, "", elem_type);
+      }
+    }
+  }
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via
