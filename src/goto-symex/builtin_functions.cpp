@@ -2305,6 +2305,32 @@ void goto_symext::intrinsic_memset(
 
   unsigned long number_of_bytes = to_constant_int2t(arg2).as_ulong();
 
+  // If any potential target is read-only (string literal or const global/static),
+  // fall back to __memset_impl, which uses WRITE-mode dereferences and reports
+  // the proper violation via valid_check() in dereference.cpp.
+  for (const auto &item : internal_deref_items)
+  {
+    const expr2tc *base = &item.object;
+    while (is_member2t(*base))
+      base = &to_member2t(*base).source_value;
+    while (is_index2t(*base))
+      base = &to_index2t(*base).source_value;
+    if (is_constant_string2t(*base))
+    {
+      bump_call(func_call, "c:@F@__memset_impl");
+      return;
+    }
+    if (is_symbol2t(*base))
+    {
+      const symbolt &sym = *ns.lookup(to_symbol2t(*base).thename);
+      if (sym.static_lifetime && sym.type.cmt_constant())
+      {
+        bump_call(func_call, "c:@F@__memset_impl");
+        return;
+      }
+    }
+  }
+
   // Where are we pointing to?
   for (auto &item : internal_deref_items)
   {
