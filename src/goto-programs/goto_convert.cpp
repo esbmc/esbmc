@@ -754,7 +754,7 @@ static bool has_atomic_read(const exprt &expr, const namespacet &ns)
     return false;
   if (is_atomic_symbol(expr, ns))
     return true;
-  forall_operands(it, expr)
+  forall_operands (it, expr)
     if (has_atomic_read(*it, ns))
       return true;
   return false;
@@ -775,7 +775,7 @@ static void collect_atomic_reads(
     out.emplace(expr.identifier(), expr.type());
     return;
   }
-  forall_operands(it, expr)
+  forall_operands (it, expr)
     collect_atomic_reads(*it, ns, out);
 }
 
