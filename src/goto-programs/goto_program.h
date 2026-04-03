@@ -461,6 +461,7 @@ public:
 
     void add_loop_assigns_target(const expr2tc &target)
     {
+      assert(is_loop_invariant());
       loop_assigns_targets.push_back(target);
     }
     std::list<expr2tc> get_loop_assigns_targets() const

@@ -484,7 +484,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
   const std::vector<expr2tc> &loop_assigns,
-  const goto_programt &side_effects)
+  goto_programt &side_effects)
 {
   // Find the loop condition (IF instruction) - this should be right at loop_head
   goto_programt::targett condition_it = loop_head;
@@ -518,6 +518,13 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
     active_frame_enforcer->materialize_snapshots(
       vars_to_snapshot, dest, loop_head->location, "loop");
+
+    // Patch old_snapshot side-effect assignments to use the frame snapshots.
+    // Replaces: return_value$___ESBMC_old_raw$N = old_snapshot(var)
+    // With:     return_value$___ESBMC_old_raw$N = (void*)&snapshot_of_var
+    // This also propagates to insert_inductive_step_and_termination which is
+    // called after this function and receives the same side_effects object.
+    active_frame_enforcer->patch_old_snapshot_assigns(side_effects);
   }
 
   // =========================================================

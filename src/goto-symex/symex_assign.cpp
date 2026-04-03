@@ -245,9 +245,8 @@ void goto_symext::handle_sideeffect(
     // modifies anything, so address_of(inner) gives the correct pre-state value.
     {
       expr2tc inner = effect.operand;
-      // Build address_of(inner): type T* from inner of type T
-      type2tc ptr_type = pointer_type2tc(inner->type);
-      expr2tc addr = address_of2tc(ptr_type, inner);
+      // address_of2tc(subtype, expr): subtype is T, result type is T*
+      expr2tc addr = address_of2tc(inner->type, inner);
       // Cast to lhs type (void*)
       expr2tc result = addr;
       if (result->type != lhs->type)

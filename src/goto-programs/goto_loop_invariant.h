@@ -105,13 +105,16 @@ protected:
     const goto_programt &side_effects);
 
   // Insert HAVOC and ASSUME before loop condition (inserts side_effects
-  // between the HAVOC block and the ASSUME)
+  // between the HAVOC block and the ASSUME).
+  // side_effects is non-const: if frame rule is active, old_snapshot assigns
+  // are patched in-place so insert_inductive_step_and_termination (called
+  // after this) sees the patched version too.
   void insert_havoc_and_assume_before_condition(
     goto_programt::targett &loop_head,
     const loopst &loop,
     const std::vector<expr2tc> &invariants,
     const std::vector<expr2tc> &loop_assigns,
-    const goto_programt &side_effects);
+    goto_programt &side_effects);
 
   // Insert inductive step verification and loop termination
   // (prepends side_effects before the ASSERT)

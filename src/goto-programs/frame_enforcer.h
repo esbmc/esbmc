@@ -86,6 +86,17 @@ public:
   /// \return Expression with old() replaced by snapshot symbols
   expr2tc replace_old_with_snapshots(const expr2tc &expr) const;
 
+  /// \brief Patch old_snapshot side effects in a GOTO program to use frame snapshots.
+  ///
+  /// Scans all ASSIGN instructions in \p prog for the pattern:
+  ///   return_value$___ESBMC_old_raw$N = old_snapshot(var)
+  /// where \p var matches an active snapshot entry.  The RHS is replaced with
+  ///   (void*)&snapshot_of_var
+  /// so that *(T*)return_value$... naturally dereferences the snapshot value.
+  ///
+  /// Must be called after materialize_snapshots() has populated active_snapshots.
+  void patch_old_snapshot_assigns(goto_programt &prog) const;
+
   /// \brief Get the active snapshots (for debugging/inspection)
   const std::vector<snapshot_entryt> &get_active_snapshots() const
   {

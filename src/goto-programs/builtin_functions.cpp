@@ -658,13 +658,11 @@ void goto_convertt::do_function_call_symbol(
     // then create an ASSIGN to a sideeffect "assigns_target". This stores the expression
     // tree for later evaluation during replace-call with proper parameter substitution.
     //
-    // Special case: __ESBMC_assigns(0) means function has NO side effects
-
     if (arguments.empty())
     {
       log_error(
         "`__ESBMC_assigns' expected to have at least one argument (use "
-        "__ESBMC_assigns(0) for empty assigns)");
+        "__ESBMC_assigns() for empty assigns)");
       abort();
     }
 
