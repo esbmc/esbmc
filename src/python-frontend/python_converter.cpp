@@ -4809,8 +4809,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
 
       // Get class definition from symbols table.
-      symbolt *class_symbol =
-        obj_type_name.empty() ? nullptr : symbol_table_.find_symbol(obj_type_name);
+      symbolt *class_symbol = obj_type_name.empty()
+                                ? nullptr
+                                : symbol_table_.find_symbol(obj_type_name);
       if (!class_symbol)
       {
         std::string fallback_class_id;
@@ -4834,8 +4835,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       struct_typet &class_type =
         static_cast<struct_typet &>(class_symbol->type);
-      auto build_member_expr_from_class =
-        [&](const typet &attr_type) -> exprt {
+      auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
         typet clean_type = clean_attribute_type(attr_type);
         exprt base = symbol_expr(*symbol);
         typet base_type = base.type();
@@ -4851,7 +4851,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           points_to_struct = pointee.is_struct() || pointee.is_union();
         }
 
-        if (!(base_type.is_struct() || base_type.is_union() || points_to_struct))
+        if (!(base_type.is_struct() || base_type.is_union() ||
+              points_to_struct))
           base = typecast_exprt(base, gen_pointer_type(class_type));
 
         if (base.type().is_pointer())
@@ -9196,8 +9197,8 @@ void python_converter::get_attributes_from_self(
           if (it != param_annotations.end())
             resolved = get_type_from_annotation(it->second, stmt);
         }
-        type = (!resolved.is_nil() && !resolved.is_empty()) ? resolved
-                                                            : any_type();
+        type =
+          (!resolved.is_nil() && !resolved.is_empty()) ? resolved : any_type();
       }
       else
         type = type_handler_.get_typet(annotated_type);

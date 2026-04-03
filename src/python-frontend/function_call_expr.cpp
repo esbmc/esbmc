@@ -4896,8 +4896,9 @@ exprt function_call_expr::handle_general_function_call()
       // when a pointer parameter receives a struct object argument, pass the
       // object's address (materializing temporaries when required).
       if (
-        function_type_ == FunctionType::Constructor && param_type.is_pointer() &&
-        arg_followed_type.is_struct() && !arg.is_address_of())
+        function_type_ == FunctionType::Constructor &&
+        param_type.is_pointer() && arg_followed_type.is_struct() &&
+        !arg.is_address_of())
       {
         if (!arg.is_symbol())
         {
