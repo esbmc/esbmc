@@ -38,10 +38,9 @@ public:
   typedef std::vector<std::string> argst;
   argst args;
   boost::program_options::variables_map vm;
+  unsigned m_term_width;
   boost::program_options::options_description cmdline_options;
-  cmdlinet()
-  {
-  }
+  cmdlinet();
   ~cmdlinet();
   typedef std::map<std::string, std::list<std::string>> options_mapt;
   options_mapt options_map;
