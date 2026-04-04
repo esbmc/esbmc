@@ -64,18 +64,6 @@ bool is_cpp_throw_expr(const exprt &e)
   return e.statement() == "cpp-throw";
 }
 
-exprt raise_math_real_type_error_expr(python_converter &converter)
-{
-  return converter.get_exception_handler().gen_exception_raise(
-    "TypeError", "must be real number, not complex");
-}
-
-exprt raise_math_int_type_error_expr(python_converter &converter)
-{
-  return converter.get_exception_handler().gen_exception_raise(
-    "TypeError", "'complex' object cannot be interpreted as an integer");
-}
-
 double round_ties_to_even(const double value)
 {
   const double lower = std::floor(value);
@@ -3417,7 +3405,7 @@ function_call_expr::get_dispatch_table()
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
-           return raise_math_real_type_error_expr(converter_);
+           return complex_utils::raise_math_real_type_error_expr(converter_);
          exprt isnan_expr("isnan", bool_typet());
          isnan_expr.copy_to_operands(arg_expr);
          return isnan_expr;
@@ -3431,7 +3419,7 @@ function_call_expr::get_dispatch_table()
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
-           return raise_math_real_type_error_expr(converter_);
+           return complex_utils::raise_math_real_type_error_expr(converter_);
          exprt isinf_expr("isinf", bool_typet());
          isinf_expr.copy_to_operands(arg_expr);
          return isinf_expr;
@@ -3735,12 +3723,10 @@ function_call_expr::get_dispatch_table()
                                        ? raw_func_name.substr(8)
                                        : raw_func_name;
        const auto &args = call_["args"];
-       auto raise_math_real_type_error = [this]() -> exprt {
-         return raise_math_real_type_error_expr(converter_);
-       };
-       auto raise_math_int_type_error = [this]() -> exprt {
-         return raise_math_int_type_error_expr(converter_);
-       };
+       auto raise_math_real_type_error = [this]() -> exprt
+       { return complex_utils::raise_math_real_type_error_expr(converter_); };
+       auto raise_math_int_type_error = [this]() -> exprt
+       { return complex_utils::raise_math_int_type_error_expr(converter_); };
        auto has_complex_arg = [](const exprt &arg_expr) -> bool {
          return is_complex_type(arg_expr.type());
        };
