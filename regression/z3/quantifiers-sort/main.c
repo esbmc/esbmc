@@ -5,10 +5,9 @@ extern _Bool __ESBMC_exists(void *, _Bool);
 int main()
 {
   unsigned n;
+  __ESBMC_assume(n > 1 && n < 10);
   int arr[n];
   unsigned i;
-
-  __ESBMC_assume(n > 1 && n < 10);
 
   int array_is_sorted =
     __ESBMC_forall(&i, !(i >= 0 && i < (n - 1)) || arr[i] <= arr[i + 1]);

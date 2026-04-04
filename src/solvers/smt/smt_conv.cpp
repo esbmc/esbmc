@@ -344,6 +344,19 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
     smt_cache.insert(e);
   }
 
+  // Propagate ir-ieee interval metadata from RHS to LHS SSA variable.
+  // smt_cache uses hashed_unique on the expression key, so the insert above
+  // is a no-op when side_1 was already cached by convert_ast(eq.side_1).
+  // As a result, future convert_ast calls on the LHS symbol return side1
+  // (the fresh SMT variable), not side2 (the interval-keyed real_result).
+  // Copying the interval here ensures get_iv lookups on the LHS variable
+  // find the stored interval for compositional lifting.
+  {
+    auto it = ir_ra_interval_map.find(side2);
+    if (it != ir_ra_interval_map.end())
+      ir_ra_interval_map[side1] = it->second;
+  }
+
   return side2;
 }
 
@@ -1251,7 +1264,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       // Domain sort may be mesed with:
       smt_sortt domain = mk_int_bv_sort(
         int_encoding ? config.ansi_c.int_width
-                     : calculate_array_domain_width(arr));
+                     : array_domain_width_or_word_size(arr));
 
       a = tuple_array_create_despatch(flat_expr, domain);
     }
@@ -2952,22 +2965,14 @@ static unsigned long size_to_bit_width(unsigned long sz)
   return dombits;
 }
 
-unsigned long calculate_array_domain_width(const array_type2t &arr)
+unsigned long array_domain_width_or_word_size(const array_type2t &arr)
 {
-  // Index arrays by the smallest integer required to represent its size.
-  // Unless it's either infinite or dynamic in size, in which case use the
-  // machine word size.
-  if (!is_nil_expr(arr.array_size))
-  {
-    if (is_constant_int2t(arr.array_size))
-    {
-      const constant_int2t &thesize = to_constant_int2t(arr.array_size);
-      return size_to_bit_width(thesize.value.to_uint64());
-    }
-
-    return arr.array_size->type->get_width();
-  }
-
+  // For constant-size arrays compute the minimal index width; for dynamic/VLA
+  // or infinite arrays the size is not known statically, so fall back to the
+  // machine word size which is always a valid index width.
+  if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size))
+    return size_to_bit_width(
+      to_constant_int2t(arr.array_size).value.to_uint64());
   return config.ansi_c.word_size;
 }
 
@@ -2980,18 +2985,18 @@ type2tc make_array_domain_type(const array_type2t &arr)
     if (config.options.get_bool_option("int-encoding"))
       return get_uint_type(config.ansi_c.int_width);
 
-    return get_uint_type(calculate_array_domain_width(arr));
+    return get_uint_type(array_domain_width_or_word_size(arr));
   }
 
   // This is an array of arrays -- we're going to convert this into a single
   // array that has an extended domain. Work out that width.
 
-  unsigned int domwidth = calculate_array_domain_width(arr);
+  unsigned int domwidth = array_domain_width_or_word_size(arr);
 
   type2tc subarr = arr.subtype;
   while (is_array_type(subarr))
   {
-    domwidth += calculate_array_domain_width(to_array_type(subarr));
+    domwidth += array_domain_width_or_word_size(to_array_type(subarr));
     subarr = to_array_type(subarr).subtype;
   }
 
@@ -3977,7 +3982,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
     {
       type2tc flat_type = flatten_array_type(expr->type);
       const array_type2t &arrtype2 = to_array_type(flat_type);
-      array_size = calculate_array_domain_width(arrtype2);
+      array_size = array_domain_width_or_word_size(arrtype2);
 
       while (is_constant_array_of2t(rec_expr))
         rec_expr = to_constant_array_of2t(rec_expr).initializer;
@@ -4022,7 +4027,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
   else
   {
     base_init = arrof.initializer;
-    array_size = calculate_array_domain_width(arrtype);
+    array_size = array_domain_width_or_word_size(arrtype);
   }
 
   if (is_struct_type(base_init->type))
