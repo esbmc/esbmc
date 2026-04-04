@@ -2268,6 +2268,8 @@ private:
         // Map specific class methods to their return types
         if (class_name == "int" && method_name == "from_bytes")
           return "int";
+        else if (class_name == "int" && method_name == "to_bytes")
+          return "bytes";
         else if (
           class_name == "str" &&
           (method_name == "join" || method_name == "format"))
