@@ -1241,7 +1241,7 @@ void goto_check(
 
   for (auto &it : goto_functions.function_map)
   {
-    if (!it.second.body.empty())
+    if (!it.second.body.empty() && !it.second.body.hide)
       goto_check.goto_check(it.second.body);
   }
 }

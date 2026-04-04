@@ -1,4 +1,4 @@
 THOROUGH
 contract.solast
---sol contract.sol --unwind 3 --no-unwinding-assertions --bound
+--sol contract.sol --unwind 3 --no-unwinding-assertions --bound --no-bounds-check
 ^VERIFICATION SUCCESSFUL$

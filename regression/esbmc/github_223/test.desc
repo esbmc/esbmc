@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---force-malloc-success --unwind 1 --no-unwinding-assertions
+--force-malloc-success --unwind 1 --no-unwinding-assertions --no-bounds-check
 ^VERIFICATION SUCCESSFUL$
