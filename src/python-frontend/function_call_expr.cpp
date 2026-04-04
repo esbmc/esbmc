@@ -1696,33 +1696,35 @@ exprt function_call_expr::handle_complex() const
   if (arguments.size() >= 2)
     imag_json = &arguments[1];
 
-  if (keywords.is_array())
+  if (keywords.is_array() && !keywords.empty())
   {
-    for (const auto &kw : keywords)
+    try
     {
-      if (!kw.contains("arg") || kw["arg"].is_null() || !kw.contains("value"))
-        return raise_type_error("complex() does not support **kwargs");
+      auto kw_vals =
+        string_call_utils::collect_keyword_values("complex", keywords);
+      string_call_utils::ensure_allowed_keywords(
+        "complex", kw_vals, {"real", "imag"});
 
-      const std::string name = kw["arg"].get<std::string>();
-      if (name == "real")
+      if (
+        auto *real_kw = string_call_utils::find_keyword_value(kw_vals, "real"))
       {
         if (real_json != nullptr)
           return raise_type_error(
             "complex() got multiple values for argument 'real'");
-        real_json = &kw["value"];
+        real_json = real_kw;
       }
-      else if (name == "imag")
+      if (
+        auto *imag_kw = string_call_utils::find_keyword_value(kw_vals, "imag"))
       {
         if (imag_json != nullptr)
           return raise_type_error(
             "complex() got multiple values for argument 'imag'");
-        imag_json = &kw["value"];
+        imag_json = imag_kw;
       }
-      else
-      {
-        return raise_type_error(
-          "complex() got an unexpected keyword argument '" + name + "'");
-      }
+    }
+    catch (const std::runtime_error &e)
+    {
+      return raise_type_error(e.what());
     }
   }
 
