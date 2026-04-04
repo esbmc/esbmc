@@ -8,10 +8,8 @@
 
 namespace complex_utils
 {
-
 namespace
 {
-
 std::string trim(const std::string &s)
 {
   size_t b = 0;

@@ -1569,8 +1569,9 @@ exprt function_call_expr::handle_complex() const
 
     return value;
   };
-  auto is_cpp_throw = [](const exprt &e) -> bool
-  { return e.statement() == "cpp-throw"; };
+  auto is_cpp_throw = [](const exprt &e) -> bool {
+    return e.statement() == "cpp-throw";
+  };
   auto extract_constant_string =
     [&](const nlohmann::json &arg, std::string &out) -> bool {
     if (!arg.contains("value"))
@@ -1676,8 +1677,7 @@ exprt function_call_expr::handle_complex() const
 
     return std::nullopt;
   };
-  auto is_unsigned_byte_array = [](const typet &type) -> bool
-  {
+  auto is_unsigned_byte_array = [](const typet &type) -> bool {
     if (!type.is_array())
       return false;
     const typet &subtype = type.subtype();
@@ -3725,10 +3725,12 @@ function_call_expr::get_dispatch_table()
                                        ? raw_func_name.substr(8)
                                        : raw_func_name;
        const auto &args = call_["args"];
-       auto raise_math_real_type_error = [this]() -> exprt
-       { return complex_utils::raise_math_real_type_error_expr(converter_); };
-       auto raise_math_int_type_error = [this]() -> exprt
-       { return complex_utils::raise_math_int_type_error_expr(converter_); };
+       auto raise_math_real_type_error = [this]() -> exprt {
+         return complex_utils::raise_math_real_type_error_expr(converter_);
+       };
+       auto raise_math_int_type_error = [this]() -> exprt {
+         return complex_utils::raise_math_int_type_error_expr(converter_);
+       };
        auto has_complex_arg = [](const exprt &arg_expr) -> bool {
          return is_complex_type(arg_expr.type());
        };

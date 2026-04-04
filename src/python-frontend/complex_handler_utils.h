@@ -8,7 +8,6 @@ class python_converter;
 
 namespace complex_utils
 {
-
 /**
  * Parses a Python complex literal string into (real, imag) components.
  * Handles all CPython-accepted formats: "1+2j", "(3-4.5j)", "2j", "1.5",
