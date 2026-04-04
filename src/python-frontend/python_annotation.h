@@ -3674,7 +3674,13 @@ private:
           elem["targets"][0].contains("_type") &&
           elem["targets"][0]["_type"] == "Name" &&
           elem["targets"][0].contains("id") &&
-          elem["targets"][0]["id"].template get<std::string>() == node_name) ||
+          elem["targets"][0]["id"].template get<std::string>() == node_name &&
+          elem.contains("value") && elem["value"].is_object() &&
+          elem["value"].contains("_type") &&
+          // Keep assign-based lookup for simple RHS forms used by frontend
+          // inference (e.g. Name/Attribute/BinOp), but avoid Call-based
+          // expressions that can trigger heavy paths in known buggy cases.
+          elem["value"]["_type"] != "Call") ||
          (elem["_type"] == "arg" && elem["arg"] == node_name)))
       {
         return elem;
