@@ -6,6 +6,7 @@
 #include <boost/filesystem.hpp>
 #include <cstdlib>
 #include <fstream>
+#include <set>
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/goto_functions.h>
 #include <util/context.h>
@@ -310,6 +311,27 @@ static void generate_symbol_deps(
   }
 }
 
+static void collect_irep_symbol_refs(
+  const irept &irep,
+  std::set<irep_idt> &refs)
+{
+  if (irep.id() == "symbol")
+    refs.insert(irep.identifier());
+
+  forall_irep(it, irep.get_sub())
+  {
+    // "argument" nodes store their identifier in cmt_identifier, not as a
+    // child symbol node — mirror the same handling as generate_symbol_deps.
+    if (it->id() == "argument")
+      refs.insert(it->cmt_identifier());
+    else
+      collect_irep_symbol_refs(*it, refs);
+  }
+
+  forall_named_irep(it, irep.get_named_sub())
+    collect_irep_symbol_refs(it->second, refs);
+}
+
 static void ingest_symbol(
   irep_idt name,
   std::multimap<irep_idt, irep_idt> &deps,
@@ -486,6 +508,18 @@ void add_cprover_library(contextt &context, const languaget *language)
     }
   }
 
+  // Collect all symbol IDs referenced in user-compiled code. This MUST happen
+  // before c_link so that only user symbols are in context; after the merge
+  // library-internal references would pollute the set and suppress legitimate
+  // warnings. Used below to suppress spurious warnings for extern variables
+  // that are transitively declared (e.g. via <list> -> <ostream>) but never
+  // actually used by the program.
+  std::set<irep_idt> user_referenced_syms;
+  context.foreach_operand([&user_referenced_syms](const symbolt &s) {
+    collect_irep_symbol_refs(s.value, user_referenced_syms);
+    collect_irep_symbol_refs(s.type, user_referenced_syms);
+  });
+
   // Bring store_ctx symbols into context
   if (c_link(context, store_ctx, "<built-in-library>"))
   {
@@ -499,14 +533,15 @@ void add_cprover_library(contextt &context, const languaget *language)
   // library. Only when linking to the libc library, we know that all unresolved extern symbols (those whose
   // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
   // those and initialize the extern variables to nondet.
-  context.Foreach_operand([&context](symbolt &s) {
-    if (s.is_extern && !s.type.is_code())
+  context.Foreach_operand([&context, &user_referenced_syms](symbolt &s) {
+    if (s.is_extern && !s.type.is_code() && s.value.is_nil())
     {
-      log_warning(
-        "extern variable with id {} not found, initializing value to "
-        "nondet! "
-        "This code would not compile with an actual compiler.",
-        s.id);
+      if (user_referenced_syms.count(s.id))
+        log_warning(
+          "extern variable with id {} not found, initializing value to "
+          "nondet! "
+          "This code would not compile with an actual compiler.",
+          s.id);
       exprt value =
         exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
       value.statement("nondet");
