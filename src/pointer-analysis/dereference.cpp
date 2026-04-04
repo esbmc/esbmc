@@ -1721,29 +1721,34 @@ void dereferencet::construct_struct_ref_from_const_offset(
       BigInt offs = member_offset_bits(value->type, data->member_names[i]);
       BigInt size = type_byte_size_bits(it);
 
-      if (
-        !is_scalar_type(it) && intref.value >= offs &&
-        intref.value < (offs + size))
+      // Zero-sized members span an empty range, so the normal range check
+      // [offs, offs+size) never matches. Handle them by requiring an exact
+      // offset match, then dispatching separately from non-zero-sized ones.
+      bool in_range = (size != 0)
+                        ? (intref.value >= offs && intref.value < (offs + size))
+                        : (intref.value == offs);
+
+      if (!is_scalar_type(it) && in_range)
       {
-        // It's this field. However, zero sized structs may have conspired
-        // to make life miserable: we might be creating a reference to one,
-        // or there might be one preceding the desired struct.
+        if (size == 0)
+        {
+          // Zero-sized member and we don't want a zero-sized type: skip.
+          if (type_size != 0)
+            goto cont;
 
-        // Zero sized struct and we don't want one,
-        if (size == 0 && type_size != 0)
-          goto cont;
+          // Both the member and the target are zero-sized. Access this member
+          // only if its type matches; otherwise try the next member.
+          expr2tc member = member2tc(it, value, data->member_names[i]);
+          if (!dereference_type_compare(member, type))
+            goto cont;
+          value = member;
+          return;
+        }
 
-        // Zero sized struct and it's not the right one (!):
-        if (
-          size == 0 && type_size == 0 && !dereference_type_compare(value, type))
-          goto cont;
-
-        // OK, it's this substruct, and we've eliminated the zero-sized-struct
-        // menace. Recurse to continue our checks.
+        // Non-zero-sized substruct: recurse to continue the search.
         BigInt new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs);
         value = member2tc(it, value, data->member_names[i]);
-
         build_reference_rec(value, offs_expr, type, guard, mode);
         return;
       }
